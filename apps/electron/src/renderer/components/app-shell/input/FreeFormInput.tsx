@@ -72,8 +72,10 @@ import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceSelectorPopover } from '@/components/ui/SourceSelectorPopover'
+import { CompactSourceSelector } from '@/components/ui/CompactSourceSelector'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
+import { derivePickerMode } from './picker-mode'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelNameKey } from '@craft-agent/shared/agent/thinking-levels'
@@ -331,6 +333,16 @@ export function FreeFormInput({
     if (conn.models && conn.models.length > 1) return null
     return conn.defaultModel ?? null
   }, [currentConnection, workspaceDefaultConnection, llmConnections])
+
+  // Decide which of the four picker UIs to render. The `switcher` branch
+  // wins over `locked-single` so users with a single-model pi_compat default
+  // can still reach the connection list on a fresh session (#727).
+  const pickerMode = derivePickerMode({
+    connectionUnavailable,
+    connectionDefaultModel,
+    isEmptySession,
+    connectionCount: llmConnections.length,
+  })
 
   // Compute available models from the effective connection.
   // All connections have models populated by backfillAllConnectionModels().
@@ -1872,10 +1884,9 @@ export function FreeFormInput({
                 onClick={() => setSourceDropdownOpen(prev => !prev)}
                 tooltip={t("chat.sourcesTooltip")}
               />
-              <SourceSelectorPopover
+              <CompactSourceSelector
                 open={sourceDropdownOpen}
                 onOpenChange={setSourceDropdownOpen}
-                anchorRef={sourceButtonRef}
                 sources={sources}
                 selectedSlugs={optimisticSourceSlugs}
                 onToggleSlug={(slug) => {
@@ -2037,7 +2048,7 @@ export function FreeFormInput({
                       <>
                         {effectiveConnectionDetails && llmConnections.length > 1 && storage.get(storage.KEYS.showConnectionIcons, true) && <ConnectionIcon connection={effectiveConnectionDetails} size={14} showTooltip />}
                         {currentModelDisplayName}
-                        {!connectionDefaultModel && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
+                        {pickerMode !== 'locked-single' && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
                       </>
                     )}
                   </button>
@@ -2049,7 +2060,7 @@ export function FreeFormInput({
             </Tooltip>
             <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[260px]">
               {/* Connection unavailable message */}
-              {connectionUnavailable ? (
+              {pickerMode === 'unavailable' ? (
                 <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
                   <AlertCircle className="h-8 w-8 text-destructive mb-2" />
                   <div className="font-medium text-sm mb-1">{t('chat.connectionUnavailable')}</div>
@@ -2057,10 +2068,12 @@ export function FreeFormInput({
                     {t('chat.connectionUnavailableDescription')}
                   </div>
                 </div>
-              ) : connectionDefaultModel ? (
+              ) : pickerMode === 'locked-single' && connectionDefaultModel ? (
                 (() => {
-                  // Single-model pi_compat connection: model row is disabled (you
-                  // can't switch), but vision toggle is still a separate control.
+                  // Single-model pi_compat connection on a non-empty session (or
+                  // when there's only one connection, so no switcher to show).
+                  // Model row is disabled (locked to this session); vision toggle
+                  // remains interactive.
                   const showVisionToggle =
                     !!effectiveConnectionDetails && isCompatProvider(effectiveConnectionDetails.providerType)
                   const visionOn = showVisionToggle && modelSupportsImages(effectiveConnectionDetails!, connectionDefaultModel)
@@ -2115,8 +2128,8 @@ export function FreeFormInput({
                     </StyledDropdownMenuItem>
                   )
                 })()
-              ) : isEmptySession && llmConnections.length > 1 ? (
-                /* Hierarchical view: Provider → Connection → Models (for new sessions with multiple connections) */
+              ) : pickerMode === 'switcher' ? (
+                /* Hierarchical view: Provider → Connection → Models (empty session with multiple connections — lets the user switch BEFORE the first message locks the connection) */
                 connectionsByProvider.map(([providerName, connections], index) => (
                   <React.Fragment key={providerName}>
                     {/* Provider group label */}
@@ -2659,6 +2672,7 @@ function WorkingDirectoryBadge({
                   <button
                     type="button"
                     onClick={(e) => handleRemoveRecent(e, path)}
+                    data-touch-reveal="true"
                     className="shrink-0 h-3 w-3 rounded-[3px] flex items-center justify-center opacity-0 group-hover/item:opacity-100 text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-all"
                   >
                     <X className="h-3 w-3" />

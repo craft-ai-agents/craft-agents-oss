@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { ISessionManager } from '@craft-agent/server-core/handlers'
 import { MessagingGateway } from '../gateway'
+import type { SessionEvent } from '../renderer'
 import type {
   ButtonPress,
   IncomingMessage,
@@ -124,6 +125,33 @@ function buildPress(overrides: Partial<ButtonPress> = {}): ButtonPress {
   }
 }
 
+/**
+ * Drive a `permission_request` event through the gateway so the renderer
+ * sends the inline keyboard and the gateway records a `permissionMessages`
+ * entry for `requestId`. Required setup for any `perm:` button-press test
+ * post-#726 — without it the press is correctly dropped as stale.
+ */
+async function registerPermissionPrompt(
+  gateway: MessagingGateway,
+  args: { sessionId: string; requestId: string; channelId?: string },
+): Promise<void> {
+  const event: SessionEvent = {
+    type: 'permission_request',
+    sessionId: args.sessionId,
+    request: {
+      requestId: args.requestId,
+      toolName: 'bash',
+      description: 'run tests',
+    },
+  }
+  gateway.onSessionEvent('session:event', { to: 'workspace', workspaceId: 'ws-test' }, event)
+  // renderer.handle is dispatched as fire-and-forget; let the
+  // sendButtons → recordPermissionMessage chain settle before the test
+  // simulates the user tapping the button.
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
 describe('MessagingGateway button-press access gate', () => {
   it('rejects bind: button press from non-owner on locked-down workspace', async () => {
     const h = await makeHarness({
@@ -179,6 +207,11 @@ describe('MessagingGateway button-press access gate', () => {
       undefined,
       { accessMode: 'allow-list', allowedSenderIds: ['alice'] },
     )
+    await registerPermissionPrompt(h.gateway, {
+      sessionId: 'sess-A',
+      requestId: 'request-1',
+      channelId: 'chat-1',
+    })
 
     await h.adapter.fireButton(
       buildPress({
@@ -208,6 +241,11 @@ describe('MessagingGateway button-press access gate', () => {
       undefined,
       { accessMode: 'allow-list', allowedSenderIds: ['alice'] },
     )
+    await registerPermissionPrompt(h.gateway, {
+      sessionId: 'sess-A',
+      requestId: 'request-1',
+      channelId: 'chat-1',
+    })
     await h.adapter.fireButton(
       buildPress({
         buttonId: 'perm:allow:request-1',

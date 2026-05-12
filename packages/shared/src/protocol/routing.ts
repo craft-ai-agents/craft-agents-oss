@@ -417,6 +417,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.messaging.WA_DISCONNECT,
   RPC_CHANNELS.messaging.BINDING_CHANGED,
   RPC_CHANNELS.messaging.PLATFORM_STATUS,
+  RPC_CHANNELS.messaging.PENDING_CHANGED,
   RPC_CHANNELS.messaging.GET_CONFIG,
   RPC_CHANNELS.messaging.UPDATE_CONFIG,
   RPC_CHANNELS.messaging.TEST_TELEGRAM,
@@ -435,6 +436,15 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.messaging.WA_START_CONNECT,
   RPC_CHANNELS.messaging.WA_SUBMIT_PHONE,
   RPC_CHANNELS.messaging.WA_UI_EVENT,
+  // messaging access control — UI ↔ Server, per-platform owners + per-binding allow-list
+  RPC_CHANNELS.messaging.GET_PLATFORM_OWNERS,
+  RPC_CHANNELS.messaging.SET_PLATFORM_OWNERS,
+  RPC_CHANNELS.messaging.GET_PLATFORM_ACCESS_MODE,
+  RPC_CHANNELS.messaging.SET_PLATFORM_ACCESS_MODE,
+  RPC_CHANNELS.messaging.GET_PENDING_SENDERS,
+  RPC_CHANNELS.messaging.DISMISS_PENDING_SENDER,
+  RPC_CHANNELS.messaging.ALLOW_PENDING_SENDER,
+  RPC_CHANNELS.messaging.SET_BINDING_ACCESS,
 ])
 
 // ---------------------------------------------------------------------------

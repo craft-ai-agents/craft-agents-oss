@@ -113,7 +113,7 @@ body:
       description: |
         For **non-UI issues** (crashes, errors, connection problems), please attach relevant logs from a debug session.
 
-        Launch the app with `-- --debug` and reproduce the issue. See the [Troubleshooting section in the README](https://github.com/lukilabs/craft-agents-oss#troubleshooting) for platform-specific commands and log file locations.
+        Launch the app with `-- --debug` and reproduce the issue. See the [Troubleshooting section in the README](https://github.com/craft-ai-agents/craft-agents-oss#troubleshooting) for platform-specific commands and log file locations.
       render: shell
 
   - type: textarea

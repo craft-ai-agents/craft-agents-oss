@@ -77,6 +77,7 @@ function AttachmentBubble({ attachment, onRemove, disabled }: AttachmentBubblePr
       {!disabled && (
         <button
           onClick={onRemove}
+          data-touch-reveal="true"
           className={cn(
             "absolute -top-1.5 -right-1.5 z-10",
             "h-5 w-5 rounded-full",

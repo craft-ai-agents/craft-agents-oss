@@ -109,18 +109,34 @@ export type PlanMessageRecorder = (
   messageId: string,
 ) => void
 
+/**
+ * Hook the renderer calls when a permission prompt with inline buttons has
+ * just been posted. Mirrors {@link PlanMessageRecorder}; the gateway uses
+ * this to track live prompts so it can (a) idempotently claim the prompt on
+ * tap, and (b) clear the inline keyboard when the agent moves on (resolved
+ * from any channel — desktop, MCP, etc.).
+ */
+export type PermissionMessageRecorder = (
+  binding: ChannelBinding,
+  requestId: string,
+  messageId: string,
+) => void
+
 export class Renderer {
   /** Per-binding render state. Keyed by binding.id */
   private states = new Map<string, RenderState>()
   private readonly planTokens: PlanTokenRegistry | undefined
   private readonly recordPlanMessage: PlanMessageRecorder | undefined
+  private readonly recordPermissionMessage: PermissionMessageRecorder | undefined
 
   constructor(deps?: {
     planTokens?: PlanTokenRegistry
     recordPlanMessage?: PlanMessageRecorder
+    recordPermissionMessage?: PermissionMessageRecorder
   }) {
     this.planTokens = deps?.planTokens
     this.recordPlanMessage = deps?.recordPlanMessage
+    this.recordPermissionMessage = deps?.recordPermissionMessage
   }
 
   private getState(bindingId: string): RenderState {
@@ -481,7 +497,8 @@ Approve it in the desktop app to continue.`,
         { id: `perm:allow:${request.requestId}`, label: '✅ Allow' },
         { id: `perm:deny:${request.requestId}`, label: '❌ Deny' },
       ]
-      await adapter.sendButtons(binding.channelId, text, buttons, bindingOpts(binding))
+      const sent = await adapter.sendButtons(binding.channelId, text, buttons, bindingOpts(binding))
+      this.recordPermissionMessage?.(binding, request.requestId, sent.messageId)
     } else {
       await adapter.sendText(
         binding.channelId,
