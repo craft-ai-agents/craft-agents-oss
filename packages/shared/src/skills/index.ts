@@ -32,10 +32,12 @@ export {
   MARKETPLACE_ORIGIN_METADATA_FILE,
   downloadMarketplaceBundle,
   installMarketplaceSkill,
+  installMarketplaceSkillFromIntent,
   readMarketplaceOriginMetadata,
 } from './marketplace-install.ts';
 export type {
   MarketplaceInstallApi,
+  MarketplaceInstallConflictResolution,
   MarketplaceInstallIntent,
   MarketplaceInstallRequest,
   MarketplaceInstallResult,

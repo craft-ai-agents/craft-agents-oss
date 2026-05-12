@@ -15,6 +15,7 @@ import { invalidateSkillsCache, skillExists } from './storage.ts'
 
 export type MarketplaceOriginSafetyStatus = 'ok' | 'unavailable' | 'safety-blocked'
 
+/** Metadata stored beside an installed Local Skill that came from Marketplace. */
 export interface MarketplaceOriginMetadata {
   marketplaceId: string
   marketplaceSlug: string
@@ -33,6 +34,7 @@ export interface MarketplaceOriginMetadata {
   }
 }
 
+/** Marketplace Skill identity and version fields needed for a local install. */
 export interface MarketplaceInstallSkill {
   marketplaceId: string
   marketplaceSlug: string
@@ -43,12 +45,14 @@ export interface MarketplaceInstallSkill {
   basedOn?: MarketplaceOriginMetadata['basedOn']
 }
 
+/** Short-lived Marketplace install authorization and bundle integrity data. */
 export interface MarketplaceInstallIntent {
   intentId: string
   downloadUrl: string
   expectedSha256: string
 }
 
+/** Service boundary used to authorize, complete, and report Marketplace installs. */
 export interface MarketplaceInstallApi {
   createInstallIntent(input: {
     marketplaceId: string
@@ -65,8 +69,10 @@ export interface MarketplaceInstallApi {
   }): Promise<void>
 }
 
+/** User choice when the Marketplace Skill slug already exists locally. */
 export type MarketplaceInstallConflictResolution = 'skip' | 'overwrite'
 
+/** Dependencies and install payload for the full Marketplace install orchestrator. */
 export interface MarketplaceInstallRequest {
   workspaceRoot: string
   user: { id: string } | null
@@ -77,6 +83,7 @@ export interface MarketplaceInstallRequest {
   now?: () => Date
 }
 
+/** Renderer-to-main payload for installing a Marketplace bundle from an existing intent. */
 export interface MarketplaceSkillInstallInput {
   userId: string
   skill: MarketplaceInstallSkill
@@ -84,6 +91,7 @@ export interface MarketplaceSkillInstallInput {
   conflictResolution?: MarketplaceInstallConflictResolution
 }
 
+/** Observable local install outcomes reported back to the Marketplace UI. */
 export type MarketplaceInstallResult =
   | { status: 'installed'; slug: string }
   | { status: 'conflict'; slug: string }
@@ -92,12 +100,14 @@ export type MarketplaceInstallResult =
 
 export const MARKETPLACE_ORIGIN_METADATA_FILE = '.marketplace-origin.json'
 
+/** Reads Marketplace origin metadata for an installed Local Skill when present. */
 export function readMarketplaceOriginMetadata(workspaceRoot: string, slug: string): MarketplaceOriginMetadata | null {
   const path = join(getWorkspaceSkillsPath(workspaceRoot), slug, MARKETPLACE_ORIGIN_METADATA_FILE)
   if (!existsSync(path)) return null
   return JSON.parse(readFileSync(path, 'utf-8')) as MarketplaceOriginMetadata
 }
 
+/** Downloads the authorized Marketplace bundle bytes from a short-lived URL. */
 export async function downloadMarketplaceBundle(url: string): Promise<Uint8Array> {
   const response = await fetch(url)
   if (!response.ok) {
@@ -106,6 +116,7 @@ export async function downloadMarketplaceBundle(url: string): Promise<Uint8Array
   return new Uint8Array(await response.arrayBuffer())
 }
 
+/** Installs an authenticated Marketplace Skill bundle into Local Skills. */
 export async function installMarketplaceSkill(request: MarketplaceInstallRequest): Promise<MarketplaceInstallResult> {
   if (!request.user) {
     throw new Error('Sign in is required to install Marketplace Skills.')
@@ -173,6 +184,7 @@ export async function installMarketplaceSkill(request: MarketplaceInstallRequest
   }
 }
 
+/** Installs a Marketplace Skill locally from an intent already issued to the renderer. */
 export async function installMarketplaceSkillFromIntent(
   workspaceRoot: string,
   input: MarketplaceSkillInstallInput,

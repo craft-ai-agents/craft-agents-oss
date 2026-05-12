@@ -461,6 +461,45 @@ function disabledActionLabel(state: MarketplaceInstallState): string {
   }
 }
 
+function marketplaceInstallStateFromResult(
+  result: MarketplaceInstallResult | { status: 'auth-required'; message: string } | { status: 'error'; message: string },
+): MarketplaceDetailInstallState {
+  switch (result.status) {
+    case 'installed':
+      return { status: 'installed', message: 'Installed into Local Skills.' }
+    case 'conflict':
+      return { status: 'conflict', message: 'A Local Skill with this slug already exists.' }
+    case 'skipped':
+      return { status: 'skipped', message: 'Marketplace install skipped. Existing Local Skill was kept.' }
+    case 'install-complete-failed':
+    case 'auth-required':
+    case 'error':
+      return { status: 'error', message: result.message }
+  }
+}
+
+function getMarketplaceInstallActionLabel(
+  detailInstallState: MarketplaceInstallState,
+  installState: MarketplaceDetailInstallState,
+  canInstall: boolean,
+): string {
+  if (installState.status === 'installing') return 'Installing...'
+  if (!canInstall) return 'Sign in to install'
+  return disabledActionLabel(detailInstallState)
+}
+
+function marketplaceInstallAlertClassName(status: Exclude<MarketplaceDetailInstallState['status'], 'idle' | 'installing'>): string {
+  switch (status) {
+    case 'installed':
+      return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+    case 'conflict':
+      return 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
+    case 'skipped':
+    case 'error':
+      return 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300'
+  }
+}
+
 /** Read-only Marketplace browsing page with catalog filters and detail inspection. */
 export function SkillMarketplacePage({
   api = defaultMarketplaceApi,
@@ -520,15 +559,7 @@ export function SkillMarketplacePage({
       conflictResolution,
     })
 
-    const nextState: MarketplaceDetailInstallState =
-      result.status === 'installed'
-        ? { status: 'installed', message: 'Installed into Local Skills.' }
-        : result.status === 'conflict'
-          ? { status: 'conflict', message: 'A Local Skill with this slug already exists.' }
-          : result.status === 'skipped'
-            ? { status: 'skipped', message: 'Marketplace install skipped. Existing Local Skill was kept.' }
-            : { status: 'error', message: result.message }
-    setInstallStateBySlug((previous) => ({ ...previous, [detail.slug]: nextState }))
+    setInstallStateBySlug((previous) => ({ ...previous, [detail.slug]: marketplaceInstallStateFromResult(result) }))
   }, [api, currentUserId, workspaceId])
 
   return (
@@ -701,6 +732,7 @@ export function MarketplaceDetail({
 }) {
   const isBlocked = detail.installState === 'safety-blocked' || detail.installState === 'unavailable'
   const isInstalling = installState.status === 'installing'
+  const actionLabel = getMarketplaceInstallActionLabel(detail.installState, installState, canInstall)
 
   return (
     <div className="space-y-5 p-5">
@@ -730,7 +762,7 @@ export function MarketplaceDetail({
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
             >
               <Download className="h-3.5 w-3.5" />
-              {isInstalling ? 'Installing...' : canInstall ? disabledActionLabel(detail.installState) : 'Sign in to install'}
+              {actionLabel}
             </button>
           )}
           <DisabledAction icon={<Flag className="h-3.5 w-3.5" />} label="Report placeholder" />
@@ -739,13 +771,7 @@ export function MarketplaceDetail({
       </div>
 
       {installState.status !== 'idle' && installState.status !== 'installing' && (
-        <div className={`rounded-md border p-3 text-sm ${
-          installState.status === 'installed'
-            ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-            : installState.status === 'conflict'
-              ? 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
-              : 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300'
-        }`}>
+        <div className={`rounded-md border p-3 text-sm ${marketplaceInstallAlertClassName(installState.status)}`}>
           <div className="flex flex-wrap items-center gap-2">
             <span>{installState.message}</span>
             {installState.status === 'conflict' && (
