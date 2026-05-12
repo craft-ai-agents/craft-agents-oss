@@ -9,6 +9,8 @@ import {
   MarketplaceDetail,
   MarketplaceError,
   MarketplaceListingCard,
+  publishMarketplaceSkill,
+  SkillMarketplacePageHeader,
   updateMarketplaceSkillFromDetail,
 } from '../SkillMarketplacePage'
 
@@ -126,6 +128,76 @@ describe('SkillMarketplacePage API boundary', () => {
       status: 'auth-required',
       message: 'Sign in is required to install Marketplace Skills.',
     })
+  })
+
+  test('renders install actions as sign-in blocked for anonymous detail viewers', async () => {
+    const api = createStaticMarketplaceApi()
+    const installResult = await loadMarketplaceDetail(api, 'test-writer')
+    const updateResult = await loadMarketplaceDetail(api, 'release-notes')
+    if (installResult.status !== 'ready' || updateResult.status !== 'ready') throw new Error('Expected ready detail state')
+
+    const installHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: installResult.detail,
+      canInstall: false,
+      currentUserId: null,
+    }))
+    const updateHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: updateResult.detail,
+      canInstall: false,
+      currentUserId: null,
+    }))
+
+    expect(installHtml).toContain('Sign in to install')
+    expect(updateHtml).toContain('Sign in to update')
+  })
+
+  test('requires authenticated user context before Marketplace publish handoff', async () => {
+    const anonymousResult = await publishMarketplaceSkill({
+      userId: null,
+      skillSlug: 'local-helper',
+      api: {
+        async publishSkill() {
+          throw new Error('should not publish')
+        },
+      },
+    })
+
+    expect(anonymousResult).toEqual({
+      status: 'auth-required',
+      message: 'Sign in is required to publish Marketplace Skills.',
+    })
+
+    const published: unknown[] = []
+    const authenticatedResult = await publishMarketplaceSkill({
+      userId: 'user_1',
+      skillSlug: 'local-helper',
+      api: {
+        async publishSkill(input) {
+          published.push(input)
+          return { status: 'published', marketplaceSlug: 'local-helper' }
+        },
+      },
+    })
+
+    expect(authenticatedResult).toEqual({ status: 'published', marketplaceSlug: 'local-helper' })
+    expect(published).toEqual([{ userId: 'user_1', skillSlug: 'local-helper' }])
+  })
+
+  test('renders Marketplace publish as sign-in blocked for anonymous users', () => {
+    const anonymousHtml = renderToStaticMarkup(React.createElement(SkillMarketplacePageHeader, {
+      currentUserId: null,
+      serviceEnvironmentLabel: 'Production',
+    }))
+    const authenticatedHtml = renderToStaticMarkup(React.createElement(SkillMarketplacePageHeader, {
+      currentUserId: 'user_1',
+      serviceEnvironmentLabel: 'Production',
+    }))
+
+    expect(anonymousHtml).toContain('Browse public Marketplace Skills anonymously.')
+    expect(anonymousHtml).toContain('Sign in to publish')
+    expect(anonymousHtml).toContain('Production')
+    expect(authenticatedHtml).toContain('Publish Skill')
+    expect(authenticatedHtml).not.toContain('Sign in to publish')
   })
 
   test('updates Marketplace Skill detail only after authenticated update intent and local update succeed', async () => {

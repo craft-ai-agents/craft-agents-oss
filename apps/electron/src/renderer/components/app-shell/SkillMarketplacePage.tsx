@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { AlertTriangle, CheckCircle2, Download, Flag, Search, ShieldAlert, Store, UserCog } from 'lucide-react'
 import { strToU8, zipSync } from 'fflate'
+import { resolveMarketplaceServiceConfig } from '@craft-agent/shared/skills'
 import type {
   MarketplaceInstallConflictResolution,
   MarketplaceInstallIntent,
@@ -73,6 +74,15 @@ export interface MarketplaceApi {
   createUpdateIntent: (detail: MarketplaceSkillDetail, userId: string) => Promise<MarketplaceInstallIntent>
   recordUpdateComplete: (intentId: string) => Promise<void>
 }
+
+export interface MarketplacePublishApi {
+  publishSkill: (input: { userId: string; skillSlug: string }) => Promise<MarketplacePublishResult>
+}
+
+export type MarketplacePublishResult =
+  | { status: 'published'; marketplaceSlug: string }
+  | { status: 'auth-required'; message: string }
+  | { status: 'error'; message: string }
 
 export interface MarketplaceInstallElectronApi {
   installMarketplaceSkill(workspaceId: string, input: MarketplaceSkillInstallInput): Promise<MarketplaceInstallResult>
@@ -464,7 +474,32 @@ export async function updateMarketplaceSkillFromDetail({
   }
 }
 
+/** Starts the Marketplace publish handoff only when an authenticated user is available. */
+export async function publishMarketplaceSkill({
+  userId,
+  skillSlug,
+  api,
+}: {
+  userId: string | null
+  skillSlug: string
+  api: MarketplacePublishApi
+}): Promise<MarketplacePublishResult> {
+  if (!userId) {
+    return { status: 'auth-required', message: 'Sign in is required to publish Marketplace Skills.' }
+  }
+
+  try {
+    return await api.publishSkill({ userId, skillSlug })
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Marketplace publish failed.',
+    }
+  }
+}
+
 const defaultMarketplaceApi = createStaticMarketplaceApi()
+const defaultMarketplaceServiceConfig = resolveMarketplaceServiceConfig()
 
 type MarketplaceDetailInstallState =
   | { status: 'idle' }
@@ -589,10 +624,12 @@ export function SkillMarketplacePage({
   api = defaultMarketplaceApi,
   workspaceId = '',
   currentUserId = null,
+  serviceEnvironmentLabel = defaultMarketplaceServiceConfig.label,
 }: {
   api?: MarketplaceApi
   workspaceId?: string
   currentUserId?: string | null
+  serviceEnvironmentLabel?: string
 }) {
   const [search, setSearch] = React.useState('')
   const [category, setCategory] = React.useState('')
@@ -657,25 +694,10 @@ export function SkillMarketplacePage({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
       <div className="border-b border-border px-5 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Store className="h-4 w-4" />
-              <span>Marketplace</span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Browse public Marketplace Skills anonymously. Install, update, report, and owner actions are placeholders in this slice.
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted px-3 text-xs font-medium text-muted-foreground"
-          >
-            <UserCog className="h-3.5 w-3.5" />
-            Publish Skill
-          </button>
-        </div>
+        <SkillMarketplacePageHeader
+          currentUserId={currentUserId}
+          serviceEnvironmentLabel={serviceEnvironmentLabel}
+        />
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(300px,420px)_minmax(0,1fr)]">
@@ -764,6 +786,43 @@ export function SkillMarketplacePage({
           )}
         </section>
       </div>
+    </div>
+  )
+}
+
+export function SkillMarketplacePageHeader({
+  currentUserId,
+  serviceEnvironmentLabel,
+}: {
+  currentUserId: string | null
+  serviceEnvironmentLabel: string
+}) {
+  const canPublish = Boolean(currentUserId)
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+          <span className="inline-flex items-center gap-2">
+            <Store className="h-4 w-4" />
+            <span>Marketplace</span>
+          </span>
+          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            {serviceEnvironmentLabel}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Browse public Marketplace Skills anonymously. Sign in to install, update, publish, report, or manage owner actions.
+        </p>
+      </div>
+      <button
+        type="button"
+        disabled={!canPublish}
+        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
+      >
+        <UserCog className="h-3.5 w-3.5" />
+        {canPublish ? 'Publish Skill' : 'Sign in to publish'}
+      </button>
     </div>
   )
 }

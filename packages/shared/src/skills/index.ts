@@ -38,6 +38,9 @@ export {
   installMarketplaceSkillFromIntent,
   readMarketplaceOriginMetadata,
 } from './marketplace-install.ts';
+export {
+  resolveMarketplaceServiceConfig,
+} from './marketplace-config.ts';
 export type {
   MarketplaceInstallApi,
   MarketplaceInstallConflictResolution,
@@ -56,3 +59,9 @@ export type {
   MarketplaceUpdateCheckResult,
   MarketplaceUpdateStatus,
 } from './marketplace-install.ts';
+export type {
+  MarketplaceBuildChannel,
+  MarketplaceServiceConfig,
+  MarketplaceServiceConfigInput,
+  MarketplaceServiceEnvironment,
+} from './marketplace-config.ts';
