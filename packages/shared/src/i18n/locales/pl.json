@@ -493,6 +493,7 @@
   "menu.resetZoom": "Resetuj zoom",
   "menu.selectAll": "Zaznacz wszystko",
   "menu.settings": "Ustawienia...",
+  "menu.toggleDevTools": "Przełącz DevTools",
   "menu.toggleFocusMode": "Przełącz tryb skupienia",
   "menu.toggleRightSidebar": "Przełącz prawy panel boczny",
   "menu.toggleSidebar": "Przełącz panel boczny",

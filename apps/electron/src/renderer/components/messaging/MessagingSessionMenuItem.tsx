@@ -27,7 +27,9 @@ import { navigate, routes } from '@/lib/navigate'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { messagingDialogAtom } from '@/atoms/messaging'
 
-export interface MessagingSessionMenuItemProps {
+export type MessagingPlatform = 'telegram' | 'whatsapp' | 'lark'
+
+export interface UseMessagingConnectOptions {
   /** Session to bind the pairing code to. */
   sessionId: string
   /**
@@ -44,16 +46,19 @@ export interface MessagingSessionMenuItemProps {
   classifyError?: (err: unknown, t: TFunction) => string
 }
 
-export function MessagingSessionMenuItem({
+/**
+ * Shared connect-and-pair handler used by both the dropdown/context-menu
+ * `MessagingSessionMenuItem` and the drawer-based `CompactSessionMenu`.
+ */
+export function useMessagingConnect({
   sessionId,
   onTelegramNotConfigured,
   classifyError = classifyMessagingError,
-}: MessagingSessionMenuItemProps) {
+}: UseMessagingConnectOptions) {
   const { t } = useTranslation()
   const setMessagingDialog = useSetAtom(messagingDialogAtom)
-  const { MenuItem, Sub, SubTrigger, SubContent } = useMenuComponents()
 
-  const handleConnectMessaging = async (platform: 'telegram' | 'whatsapp' | 'lark') => {
+  return React.useCallback(async (platform: MessagingPlatform) => {
     // First-run check — avoid hitting the server if the platform is not
     // connected. Failure to read config is treated as "unknown" and falls
     // through to attempting pairing so the server surfaces a real error.
@@ -105,7 +110,15 @@ export function MessagingSessionMenuItem({
         error: classifyError(err, t),
       })
     }
-  }
+  }, [sessionId, onTelegramNotConfigured, classifyError, setMessagingDialog, t])
+}
+
+export interface MessagingSessionMenuItemProps extends UseMessagingConnectOptions {}
+
+export function MessagingSessionMenuItem(props: MessagingSessionMenuItemProps) {
+  const { t } = useTranslation()
+  const { MenuItem, Sub, SubTrigger, SubContent } = useMenuComponents()
+  const handleConnectMessaging = useMessagingConnect(props)
 
   return (
     <Sub>

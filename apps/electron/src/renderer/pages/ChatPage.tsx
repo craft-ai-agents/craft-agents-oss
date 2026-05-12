@@ -12,6 +12,7 @@ import { AlertCircle, Globe, Copy, RefreshCw, Link2Off, Info } from 'lucide-reac
 import { ChatDisplay, type ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { SessionMenu } from '@/components/app-shell/SessionMenu'
+import { CompactSessionMenu } from '@/components/app-shell/CompactSessionMenu'
 import { SessionInfoPopover } from '@/components/app-shell/SessionInfoPopover'
 import { RenameDialog } from '@/components/ui/rename-dialog'
 import { toast } from 'sonner'
@@ -601,8 +602,11 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
   const headerActions = isCompactMode ? compactInfoButton : shareButton
 
-  // Build title menu content for chat sessions using shared SessionMenu
-  const titleMenu = React.useMemo(() => sessionMeta ? (
+  // Build title menu content for chat sessions using shared SessionMenu.
+  // Desktop uses Radix DropdownMenu via PanelHeader; compact mode uses a
+  // vaul Drawer (CompactSessionMenu) so submenus aren't clipped by the
+  // panel container query on narrow viewports.
+  const titleMenu = React.useMemo(() => (sessionMeta && !isCompactMode) ? (
     <SessionMenu
       item={sessionMeta}
       sessionStatuses={sessionStatuses ?? []}
@@ -620,6 +624,44 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     />
   ) : null, [
     sessionMeta,
+    isCompactMode,
+    sessionStatuses,
+    labels,
+    handleLabelsChange,
+    handleRename,
+    handleFlag,
+    handleUnflag,
+    handleArchive,
+    handleUnarchive,
+    handleMarkUnread,
+    handleSessionStatusChange,
+    handleOpenInNewWindow,
+    handleDelete,
+  ])
+
+  const compactTitleMenu = React.useMemo(() => (sessionMeta && isCompactMode) ? (
+    <CompactSessionMenu
+      title={displayTitle}
+      isRegeneratingTitle={isAsyncOperationOngoing}
+      item={sessionMeta}
+      sessionStatuses={sessionStatuses ?? []}
+      labels={labels ?? []}
+      onLabelsChange={handleLabelsChange}
+      onRename={handleRename}
+      onFlag={handleFlag}
+      onUnflag={handleUnflag}
+      onArchive={handleArchive}
+      onUnarchive={handleUnarchive}
+      onMarkUnread={handleMarkUnread}
+      onSessionStatusChange={handleSessionStatusChange}
+      onOpenInNewWindow={handleOpenInNewWindow}
+      onDelete={handleDelete}
+    />
+  ) : null, [
+    sessionMeta,
+    isCompactMode,
+    displayTitle,
+    isAsyncOperationOngoing,
     sessionStatuses,
     labels,
     handleLabelsChange,
@@ -655,7 +697,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       return (
         <>
           <div className="h-full flex flex-col">
-            <PanelHeader  title={displayTitle} titleMenu={titleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+            <PanelHeader  title={displayTitle} titleMenu={titleMenu} compactTitleMenu={compactTitleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
             <div className="flex-1 flex flex-col min-h-0">
               <ChatDisplay
                 ref={chatDisplayRef}
@@ -727,7 +769,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   return (
     <>
       <div className="h-full flex flex-col">
-        <PanelHeader  title={displayTitle} titleMenu={titleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+        <PanelHeader  title={displayTitle} titleMenu={titleMenu} compactTitleMenu={compactTitleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
         <div className="flex-1 flex flex-col min-h-0">
           <ChatDisplay
             ref={chatDisplayRef}

@@ -171,6 +171,9 @@ export class TelegramAdapter implements PlatformAdapter {
   private messageHandler: ((msg: IncomingMessage) => Promise<void>) | null = null
   private buttonHandler: ((press: ButtonPress) => Promise<void>) | null = null
   private connected = false
+  private destroyed = false
+  private reconnectAttempts = 0
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private log: MessagingLogger = NOOP_LOGGER
   /**
    * The supergroup chatId this adapter accepts non-DM messages from.
@@ -407,7 +410,25 @@ export class TelegramAdapter implements PlatformAdapter {
         data: ctx.callbackQuery.data ?? undefined,
       }
 
-      await this.buttonHandler(press)
+      // Diagnostic for #726: timestamp callback receipt vs. handler return so
+      // we can tell from logs whether the gateway is slow or grammY's
+      // sequential polling is stalling on a previous update.
+      const receivedAt = Date.now()
+      this.log.info('[telegram] callback_query received', {
+        event: 'telegram_callback_received',
+        buttonId: press.buttonId,
+        senderId: press.senderId,
+      })
+      try {
+        await this.buttonHandler(press)
+      } finally {
+        this.log.info('[telegram] callback_query handler returned', {
+          event: 'telegram_callback_handled',
+          buttonId: press.buttonId,
+          senderId: press.senderId,
+          elapsedMs: Date.now() - receivedAt,
+        })
+      }
     })
 
     this.log.info('[telegram] initializing')
@@ -443,29 +464,9 @@ export class TelegramAdapter implements PlatformAdapter {
       throw err
     }
 
-    // Launch polling in the background. grammY's bot.start() returns a
-    // long-lived Promise that only resolves on stop() and rejects on fatal
-    // polling errors (most commonly 409 Conflict from overlapping pollers
-    // sharing the same token). We MUST catch it so the rejection doesn't
-    // become an unhandled promise and so `connected` reflects reality.
-    this.bot.start({
-      onStart: () => {
-        this.connected = true
-        this.log.info('[telegram] polling started')
-        // Diagnostic: confirm webhook is really gone + show backlog once.
-        // Fire-and-forget; errors here are not fatal to polling.
-        this.bot?.api.getWebhookInfo().then(
-          (info) => this.log.info('[telegram] webhook state after start:', {
-            url: info.url || null,
-            pending_update_count: info.pending_update_count,
-          }),
-          () => {},
-        )
-      },
-    }).catch((err: unknown) => {
-      this.connected = false
-      this.log.error('[telegram] polling stopped with error:', describeError(err))
-    })
+    this.destroyed = false
+    this.reconnectAttempts = 0
+    this.startPolling()
     // Do NOT set this.connected = true here — wait for onStart.
   }
 
@@ -598,8 +599,75 @@ export class TelegramAdapter implements PlatformAdapter {
     return { localPath, fileName, fileSize: buf.byteLength }
   }
 
+  /**
+   * Launch polling. grammY's bot.start() runs until stop() is called or a
+   * fatal error occurs. On unexpected failure we schedule a reconnect with
+   * exponential backoff so transient issues (network blip, 409 from a
+   * competing instance that quickly exits) self-heal without user action.
+   *
+   * 409 Conflict means another poller is active — we wait longer on the first
+   * attempt to give the other instance time to exit before we retry.
+   */
+  private startPolling(): void {
+    if (this.destroyed || !this.bot) return
+
+    this.bot.start({
+      onStart: () => {
+        this.connected = true
+        this.reconnectAttempts = 0
+        this.log.info('[telegram] polling started')
+        this.bot?.api.getWebhookInfo().then(
+          (info) => this.log.info('[telegram] webhook state after start:', {
+            url: info.url || null,
+            pending_update_count: info.pending_update_count,
+          }),
+          () => {},
+        )
+      },
+    }).catch((err: unknown) => {
+      this.connected = false
+      this.log.error('[telegram] polling stopped with error:', describeError(err))
+      if (!this.destroyed) {
+        this.scheduleReconnect(err)
+      }
+    })
+  }
+
+  private scheduleReconnect(err: unknown): void {
+    if (this.destroyed || !this.bot) return
+
+    this.reconnectAttempts++
+    // 409 = another poller is competing; wait 30 s before first retry so the
+    // other process has a chance to exit. Other errors start at 5 s.
+    const is409 = err instanceof Error && err.message.includes('409')
+    const baseDelay = is409 ? 30_000 : 5_000
+    const delay = Math.min(baseDelay * Math.pow(2, this.reconnectAttempts - 1), 5 * 60_000)
+
+    this.log.warn('[telegram] scheduling reconnect', {
+      event: 'telegram_reconnect_scheduled',
+      attempt: this.reconnectAttempts,
+      delayMs: delay,
+      is409,
+    })
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
+      if (this.destroyed || !this.bot) return
+      this.log.info('[telegram] attempting reconnect', {
+        event: 'telegram_reconnect_attempt',
+        attempt: this.reconnectAttempts,
+      })
+      this.startPolling()
+    }, delay)
+  }
+
   async destroy(): Promise<void> {
+    this.destroyed = true
     this.connected = false
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
     if (this.bot) {
       await this.bot.stop()
       this.bot = null

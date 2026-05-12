@@ -493,6 +493,7 @@
   "menu.resetZoom": "重置缩放",
   "menu.selectAll": "全选",
   "menu.settings": "设置...",
+  "menu.toggleDevTools": "切换开发者工具",
   "menu.toggleFocusMode": "切换专注模式",
   "menu.toggleRightSidebar": "切换右侧栏",
   "menu.toggleSidebar": "切换侧栏",

@@ -493,6 +493,7 @@
   "menu.resetZoom": "Restablecer zoom",
   "menu.selectAll": "Seleccionar todo",
   "menu.settings": "Configuración...",
+  "menu.toggleDevTools": "Alternar DevTools",
   "menu.toggleFocusMode": "Alternar modo enfoque",
   "menu.toggleRightSidebar": "Alternar barra lateral derecha",
   "menu.toggleSidebar": "Alternar barra lateral",

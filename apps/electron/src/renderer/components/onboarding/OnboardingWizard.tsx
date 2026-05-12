@@ -192,16 +192,17 @@ export function OnboardingWizard({
   return (
     <div
       className={cn(
-        "flex flex-col bg-foreground-2",
-        !className?.includes('h-full') && "min-h-screen",
+        "bg-foreground-2 overflow-y-auto",
+        !className?.includes('h-full') && "h-dvh",
         className
       )}
     >
       {/* Draggable title bar region for transparent window (macOS) */}
       <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-titlebar" />
 
-      {/* Main content */}
-      <main className="flex flex-1 items-center justify-center p-8">
+      {/* Main content — min-h-full + flex center means: center when content fits,
+          natural flow + scroll when content is taller than the viewport (mobile). */}
+      <main className="flex min-h-full items-center justify-center p-4 sm:p-8">
         {renderStep()}
       </main>
     </div>

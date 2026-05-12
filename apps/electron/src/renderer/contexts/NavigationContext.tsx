@@ -70,7 +70,6 @@ import {
   isAutomationsNavigation,
   DEFAULT_NAVIGATION_STATE,
 } from '../../shared/types'
-import { isValidSettingsSubpage, type SettingsSubpage } from '../../shared/settings-registry'
 import { sessionMetaMapAtom, updateSessionMetaAtom, type SessionMeta } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
@@ -876,21 +875,11 @@ export function NavigationProvider({
         return
       }
 
-      // Parse route to NavigationState
-      let newNavState = parseRouteToNavigationState(route)
-
-      // Settings subpage persistence
-      if (newNavState && isSettingsNavigation(newNavState)) {
-        const isBareSettingsRoute = route === 'settings'
-        if (isBareSettingsRoute) {
-          const savedSubpage = storage.get<string>(storage.KEYS.lastSettingsSubpage, 'app')
-          if (isValidSettingsSubpage(savedSubpage) && savedSubpage !== 'app') {
-            newNavState = { ...newNavState, subpage: savedSubpage as SettingsSubpage }
-          }
-        } else {
-          storage.set(storage.KEYS.lastSettingsSubpage, newNavState.subpage)
-        }
-      }
+      // Parse route to NavigationState. Bare `settings` produces `subpage: null` —
+      // navigator-only view in compact mode, App-page fallback on desktop. We
+      // intentionally do NOT auto-redirect to the last-visited subpage; doing so
+      // would defeat the compact-mode drill-in UX.
+      const newNavState = parseRouteToNavigationState(route)
 
       // Suppress auto-select effect
       if (options?.skipAutoSelect) {

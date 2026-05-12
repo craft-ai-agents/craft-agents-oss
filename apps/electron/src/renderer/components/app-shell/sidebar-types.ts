@@ -11,11 +11,14 @@ export type { SessionFilter, SettingsSubpage }
 
 /**
  * Sidebar mode - determines what content is shown in the 2nd sidebar
+ *
+ * Settings `subpage: null` matches the bare `settings` route — used when the user
+ * is on the navigator-only view in compact mode.
  */
 export type SidebarMode =
   | { type: 'sessions'; filter: SessionFilter }
   | { type: 'sources' }
-  | { type: 'settings'; subpage: SettingsSubpage }
+  | { type: 'settings'; subpage: SettingsSubpage | null }
 
 /**
  * Type guard to check if mode is sessions mode
@@ -36,7 +39,7 @@ export const isSourcesMode = (
  */
 export const isSettingsMode = (
   mode: SidebarMode
-): mode is { type: 'settings'; subpage: SettingsSubpage } => mode.type === 'settings'
+): mode is { type: 'settings'; subpage: SettingsSubpage | null } => mode.type === 'settings'
 
 /**
  * Get a persistence key for localStorage
@@ -44,7 +47,9 @@ export const isSettingsMode = (
  */
 export const getSidebarModeKey = (mode: SidebarMode): string => {
   if (mode.type === 'sources') return 'sources'
-  if (mode.type === 'settings') return `settings:${mode.subpage}`
+  if (mode.type === 'settings') {
+    return mode.subpage === null ? 'settings' : `settings:${mode.subpage}`
+  }
   const f = mode.filter
   if (f.kind === 'state') return `state:${f.stateId}`
   return f.kind
@@ -68,7 +73,7 @@ export const parseSidebarModeKey = (key: string): SidebarMode | null => {
       return { type: 'settings', subpage }
     }
   }
-  if (key === 'settings') return { type: 'settings', subpage: 'app' }
+  if (key === 'settings') return { type: 'settings', subpage: null }
   return null
 }
 

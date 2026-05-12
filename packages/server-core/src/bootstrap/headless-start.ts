@@ -182,7 +182,8 @@ function acquireServerLock(logger: PlatformServices['logger']): void {
           } else {
             throw new Error(
               `Another server instance is already running (PID ${lock.pid}). ` +
-              `If this is stale, delete ${LOCK_FILE} and retry.`
+              `If this is stale, delete ${LOCK_FILE} and retry. ` +
+              `To run a parallel instance (e.g. for dev), set CRAFT_CONFIG_DIR to a different path.`
             )
           }
         } else {

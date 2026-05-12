@@ -64,7 +64,7 @@ export interface ToolDisplayMeta {
 /**
  * Attachment type categories
  */
-export type AttachmentType = 'image' | 'text' | 'pdf' | 'office' | 'unknown';
+export type AttachmentType = 'image' | 'text' | 'pdf' | 'office' | 'audio' | 'unknown';
 
 /**
  * Attachment preview for display in user messages (runtime, before storage)
