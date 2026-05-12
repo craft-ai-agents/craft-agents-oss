@@ -11,6 +11,7 @@
  * Provides consistent skill actions:
  * - Open in New Window
  * - Show in file manager
+ * - Publish Skill
  * - Delete
  */
 
@@ -21,6 +22,7 @@ import {
   FolderOpen,
   AppWindow,
   Send,
+  UserCog,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getFileManagerName } from '@/lib/platform'
@@ -37,6 +39,9 @@ export interface SkillMenuProps {
   canShowInFinder?: boolean
   canDelete?: boolean
   deleteLabel?: string
+  /** Publish this Local Skill to Marketplace (omit to hide the option) */
+  onPublishSkill?: () => void
+  canPublishSkill?: boolean
   /** Send to another workspace (omit to hide the option) */
   onSendToWorkspace?: () => void
 }
@@ -54,6 +59,8 @@ export function SkillMenu({
   canShowInFinder = true,
   canDelete = true,
   deleteLabel,
+  onPublishSkill,
+  canPublishSkill = true,
   onSendToWorkspace,
 }: SkillMenuProps) {
   const { t } = useTranslation()
@@ -80,6 +87,13 @@ export function SkillMenu({
         <MenuItem onClick={onSendToWorkspace}>
           <Send className="h-3.5 w-3.5" />
           <span className="flex-1">{t("sessionMenu.sendToWorkspace")}</span>
+        </MenuItem>
+      )}
+
+      {onPublishSkill && (
+        <MenuItem onClick={canPublishSkill ? onPublishSkill : undefined} disabled={!canPublishSkill}>
+          <UserCog className="h-3.5 w-3.5" />
+          <span className="flex-1">Publish Skill</span>
         </MenuItem>
       )}
 

@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import {
   createStaticMarketplaceApi,
   installMarketplaceSkillFromDetail,
@@ -9,6 +11,7 @@ import {
   MarketplaceDetail,
   MarketplaceError,
   MarketplaceListingCard,
+  LocalSkillMarketplaceStatus,
   publishMarketplaceSkill,
   SkillMarketplacePageHeader,
   updateMarketplaceSkillFromDetail,
@@ -198,6 +201,43 @@ describe('SkillMarketplacePage API boundary', () => {
     expect(anonymousHtml).toContain('Production')
     expect(authenticatedHtml).toContain('Publish Skill')
     expect(authenticatedHtml).not.toContain('Sign in to publish')
+  })
+
+  test('renders Publish Skill in Local Skill row and detail menus', () => {
+    const skillMenuSource = readFileSync(join(import.meta.dir, '..', 'SkillMenu.tsx'), 'utf-8')
+    const skillsListSource = readFileSync(join(import.meta.dir, '..', 'SkillsListPanel.tsx'), 'utf-8')
+    const skillInfoSource = readFileSync(join(import.meta.dir, '..', '..', '..', 'pages', 'SkillInfoPage.tsx'), 'utf-8')
+
+    expect(skillMenuSource).toContain('onPublishSkill')
+    expect(skillMenuSource).toContain('Publish Skill')
+    expect(skillsListSource).toContain('onPublishSkill={skill.source ===')
+    expect(skillInfoSource).toContain('onPublishSkill={canDeleteSkill')
+  })
+
+  test('renders Local Skill Marketplace status after a successful publish', () => {
+    const publishedHtml = renderToStaticMarkup(React.createElement(LocalSkillMarketplaceStatus, {
+      publishState: { status: 'published', marketplaceSlug: 'local-helper' },
+    }))
+    const linkedHtml = renderToStaticMarkup(React.createElement(LocalSkillMarketplaceStatus, {
+      metadata: {
+        marketplaceId: 'mkt_skill_local_helper',
+        marketplaceSlug: 'local-helper',
+        ownerId: 'owner_1',
+        ownerDisplayName: 'Avery Lee',
+        installedVersion: '1.2.0',
+        installedAt: '2026-05-12T10:00:00.000Z',
+        lastCheckedAt: '2026-05-12T10:00:00.000Z',
+        modified: true,
+        sourceBundleHash: 'hash',
+        safetyStatus: 'ok',
+      },
+    }))
+
+    expect(publishedHtml).toContain('Published to Marketplace')
+    expect(publishedHtml).toContain('/local-helper')
+    expect(linkedHtml).toContain('Marketplace linked')
+    expect(linkedHtml).toContain('v1.2.0')
+    expect(linkedHtml).toContain('Unpublished changes')
   })
 
   test('updates Marketplace Skill detail only after authenticated update intent and local update succeed', async () => {

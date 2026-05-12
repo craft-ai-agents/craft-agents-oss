@@ -243,6 +243,7 @@ export const CHANNEL_MAP = {
   resolveRemoteSkills: invoke(RPC_CHANNELS.skills.RESOLVE_REMOTE),
   installMarketplaceSkill: invoke(RPC_CHANNELS.skills.INSTALL_MARKETPLACE),
   updateMarketplaceSkill: invoke(RPC_CHANNELS.skills.UPDATE_MARKETPLACE),
+  publishMarketplaceSkill: invoke(RPC_CHANNELS.skills.PUBLISH_MARKETPLACE),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
 
   // Statuses

@@ -14,6 +14,7 @@ export interface SkillsListPanelProps {
   skills: LoadedSkill[]
   onDeleteSkill: (skillSlug: string) => void
   onAddSkill?: () => void
+  onPublishSkill?: (skill: LoadedSkill) => void
   onSkillClick: (skill: LoadedSkill) => void
   selectedSkillSlug?: string | null
   workspaceId?: string
@@ -25,6 +26,7 @@ export function SkillsListPanel({
   skills,
   onDeleteSkill,
   onAddSkill,
+  onPublishSkill,
   onSkillClick,
   selectedSkillSlug,
   workspaceId,
@@ -96,6 +98,8 @@ export function SkillsListPanel({
             onDelete={skill.source === 'workspace' ? () => onDeleteSkill(skill.slug) : undefined}
             canDelete={skill.source === 'workspace'}
             deleteLabel={skill.source === 'workspace' ? t('skillsList.deleteSkill') : t('skillsList.managedByProject')}
+            onPublishSkill={skill.source === 'workspace' && onPublishSkill ? () => onPublishSkill(skill) : undefined}
+            canPublishSkill={skill.source === 'workspace'}
             onSendToWorkspace={hasOtherWorkspaces && skill.source === 'workspace' ? () => {
               setSendResourceSlug(skill.slug)
               setSendResourceLabel(skill.metadata.name)

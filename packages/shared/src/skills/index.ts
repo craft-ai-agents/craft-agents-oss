@@ -39,6 +39,23 @@ export {
   readMarketplaceOriginMetadata,
 } from './marketplace-install.ts';
 export {
+  PRODUCT_MARKETPLACE_CATEGORIES,
+  createHttpMarketplacePublishApi,
+  publishLocalSkillToMarketplace,
+  publishLocalSkillToMarketplaceService,
+  suggestMarketplaceSlug,
+  validateMarketplacePublishRequest,
+} from './marketplace-publish.ts';
+export type {
+  MarketplacePublishApi,
+  MarketplacePublishApiInput,
+  MarketplacePublishApiResult,
+  MarketplaceLocalSkillPublishInput,
+  MarketplacePublishLocalResult,
+  MarketplacePublishRequest,
+  ProductMarketplaceCategory,
+} from './marketplace-publish.ts';
+export {
   resolveMarketplaceServiceConfig,
 } from './marketplace-config.ts';
 export type {

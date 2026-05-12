@@ -13,9 +13,15 @@ import { Check, X, Minus } from 'lucide-react'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { toast } from 'sonner'
 import { SkillMenu } from '@/components/app-shell/SkillMenu'
+import { LocalSkillMarketplaceStatus } from '@/components/app-shell/SkillMarketplacePage'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { routes, navigate } from '@/lib/navigate'
 import { useActiveWorkspace } from '@/context/AppShellContext'
+import {
+  PRODUCT_MARKETPLACE_CATEGORIES,
+  suggestMarketplaceSlug,
+  type MarketplacePublishLocalResult,
+} from '@craft-agent/shared/skills'
 import {
   Info_Page,
   Info_Section,
@@ -28,13 +34,21 @@ interface SkillInfoPageProps {
   skillSlug: string
   workspaceId: string
   workingDirectory?: string
+  currentUserId?: string | null
 }
 
-export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory }: SkillInfoPageProps) {
+export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory, currentUserId = workspaceId ? 'local-marketplace-user' : null }: SkillInfoPageProps) {
   const { t } = useTranslation()
   const [skill, setSkill] = useState<LoadedSkill | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false)
+  const [marketplaceSlug, setMarketplaceSlug] = useState('')
+  const [version, setVersion] = useState('1.0.0')
+  const [category, setCategory] = useState<string>(PRODUCT_MARKETPLACE_CATEGORIES[0])
+  const [tags, setTags] = useState('')
+  const [releaseNotes, setReleaseNotes] = useState('')
+  const [publishState, setPublishState] = useState<MarketplacePublishLocalResult | { status: 'idle' | 'publishing' }>({ status: 'idle' })
   const activeWorkspace = useActiveWorkspace()
   const canRevealLocally = !activeWorkspace?.remoteServer
 
@@ -54,6 +68,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
         const found = skills.find((s) => s.slug === skillSlug)
         if (found) {
           setSkill(found)
+          setMarketplaceSlug(suggestMarketplaceSlug(found.metadata))
         } else {
           setError(t('skillInfo.notFound'))
         }
@@ -115,6 +130,40 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
     window.electronAPI.openUrl(`craftagents://skills/skill/${skillSlug}?window=focused`)
   }, [skillSlug])
 
+  const handlePublish = useCallback(async () => {
+    if (!skill) return
+    if (!currentUserId) {
+      setPublishState({ status: 'idle' })
+      toast.error('Sign in is required to publish Marketplace Skills.')
+      return
+    }
+
+    setPublishState({ status: 'publishing' })
+    try {
+      const result = await window.electronAPI.publishMarketplaceSkill(workspaceId, {
+        userId: currentUserId,
+        skillSlug: skill.slug,
+        marketplaceSlug,
+        version,
+        category,
+        tags: tags.split(',').map((tag) => tag.trim()).filter(Boolean),
+        releaseNotes: releaseNotes.trim() || undefined,
+      })
+      setPublishState(result)
+      if (result.status === 'published') {
+        setPublishDialogOpen(false)
+        toast.success('Published Skill to Marketplace')
+      } else {
+        toast.error(result.message)
+      }
+    } catch (err) {
+      setPublishState({ status: 'idle' })
+      toast.error('Failed to publish Skill', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    }
+  }, [category, currentUserId, marketplaceSlug, releaseNotes, skill, tags, version, workspaceId])
+
   // Get skill name for header
   const skillName = skill?.metadata.name || skillSlug
   const canDeleteSkill = skill?.source === 'workspace'
@@ -154,6 +203,8 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             onDelete={canDeleteSkill ? handleDelete : undefined}
             canDelete={canDeleteSkill}
             deleteLabel={canDeleteSkill ? t('skillInfo.deleteSkill') : t('skillInfo.managedByProject')}
+            onPublishSkill={canDeleteSkill ? () => setPublishDialogOpen(true) : undefined}
+            canPublishSkill={canDeleteSkill}
           />
         }
       />
@@ -166,6 +217,24 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             title={skill.metadata.name}
             tagline={skill.metadata.description}
           />
+
+          <Info_Section
+            title="Marketplace"
+            actions={
+              <button
+                type="button"
+                onClick={() => setPublishDialogOpen(true)}
+                className="inline-flex h-7 items-center rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
+                disabled={skill.source !== 'workspace'}
+              >
+                Publish Skill
+              </button>
+            }
+          >
+            <div className="px-4 py-3">
+              <LocalSkillMarketplaceStatus publishState={publishState} />
+            </div>
+          </Info_Section>
 
           {/* Metadata */}
           <Info_Section
@@ -268,6 +337,60 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
           </Info_Section>
 
         </Info_Page.Content>
+      )}
+
+      {skill && publishDialogOpen && (
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-lg rounded-lg border border-border bg-background p-4 shadow-lg">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold">Publish Skill</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Publish {skill.metadata.name} as an immutable Marketplace version.
+                </p>
+              </div>
+              <button type="button" className="text-sm text-muted-foreground hover:text-foreground" onClick={() => setPublishDialogOpen(false)}>
+                Close
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3">
+              <label className="grid gap-1 text-xs font-medium">
+                Marketplace slug
+                <input className="h-8 rounded-md border border-border bg-background px-2 font-normal" value={marketplaceSlug} onChange={(event) => setMarketplaceSlug(event.target.value)} />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="grid gap-1 text-xs font-medium">
+                  Version
+                  <input className="h-8 rounded-md border border-border bg-background px-2 font-normal" value={version} onChange={(event) => setVersion(event.target.value)} />
+                </label>
+                <label className="grid gap-1 text-xs font-medium">
+                  Category
+                  <select className="h-8 rounded-md border border-border bg-background px-2 font-normal" value={category} onChange={(event) => setCategory(event.target.value)}>
+                    {PRODUCT_MARKETPLACE_CATEGORIES.map((candidate) => (
+                      <option key={candidate} value={candidate}>{candidate}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label className="grid gap-1 text-xs font-medium">
+                Tags
+                <input className="h-8 rounded-md border border-border bg-background px-2 font-normal" value={tags} onChange={(event) => setTags(event.target.value)} placeholder="review, ci" />
+              </label>
+              <label className="grid gap-1 text-xs font-medium">
+                Release notes
+                <textarea className="min-h-20 rounded-md border border-border bg-background px-2 py-2 font-normal" value={releaseNotes} onChange={(event) => setReleaseNotes(event.target.value)} />
+              </label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" className="h-8 rounded-md border border-border px-3 text-xs font-medium hover:bg-muted" onClick={() => setPublishDialogOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" className="h-8 rounded-md border border-border bg-foreground px-3 text-xs font-medium text-background disabled:bg-muted disabled:text-muted-foreground" disabled={publishState.status === 'publishing'} onClick={handlePublish}>
+                {publishState.status === 'publishing' ? 'Publishing...' : 'Publish Skill'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </Info_Page>
   )

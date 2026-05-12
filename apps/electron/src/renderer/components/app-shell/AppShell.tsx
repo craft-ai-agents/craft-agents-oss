@@ -3401,6 +3401,7 @@ function AppShellContent({
                 workspaceRootPath={activeWorkspace?.rootPath}
                 onAddSkill={openAddSkill}
                 onSkillClick={handleSkillSelect}
+                onPublishSkill={handleSkillSelect}
                 onDeleteSkill={handleDeleteSkill}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
               />

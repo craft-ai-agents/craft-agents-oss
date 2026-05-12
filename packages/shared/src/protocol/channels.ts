@@ -272,6 +272,7 @@ export const RPC_CHANNELS = {
     RESOLVE_REMOTE: 'skills:resolveRemote',
     INSTALL_MARKETPLACE: 'skills:installMarketplace',
     UPDATE_MARKETPLACE: 'skills:updateMarketplace',
+    PUBLISH_MARKETPLACE: 'skills:publishMarketplace',
     CHANGED: 'skills:changed',
   },
   statuses: {

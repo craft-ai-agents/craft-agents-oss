@@ -6,6 +6,7 @@ import type {
   MarketplaceInstallConflictResolution,
   MarketplaceInstallIntent,
   MarketplaceInstallResult,
+  MarketplaceOriginMetadata,
   MarketplaceSkillInstallInput,
   MarketplaceSkillUpdateInput,
 } from '@craft-agent/shared/skills'
@@ -83,6 +84,7 @@ export interface MarketplacePublishApi {
 /** UI-safe result returned after attempting a Marketplace publish handoff. */
 export type MarketplacePublishResult =
   | { status: 'published'; marketplaceSlug: string }
+  | { status: 'slug-conflict'; marketplaceSlug: string; message: string }
   | { status: 'auth-required'; message: string }
   | { status: 'error'; message: string }
 
@@ -831,6 +833,66 @@ export function SkillMarketplacePageHeader({
   )
 }
 
+/** Marketplace status block shown on Local Skill detail after publish/link. */
+export function LocalSkillMarketplaceStatus({
+  metadata,
+  publishState = { status: 'idle' },
+}: {
+  metadata?: MarketplaceOriginMetadata | null
+  publishState?: MarketplacePublishResult | { status: 'idle' | 'publishing' }
+}) {
+  if (publishState.status === 'publishing') {
+    return (
+      <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+        <span className="font-medium">Publishing to Marketplace...</span>
+      </div>
+    )
+  }
+
+  if (publishState.status === 'published') {
+    return (
+      <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-800 dark:text-emerald-200">
+        <span className="font-medium">Published to Marketplace</span>
+        <span className="ml-2">/{publishState.marketplaceSlug}</span>
+      </div>
+    )
+  }
+
+  if (publishState.status === 'auth-required' || publishState.status === 'error' || publishState.status === 'slug-conflict') {
+    return (
+      <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+        {publishState.message}
+      </div>
+    )
+  }
+
+  if (!metadata) {
+    return (
+      <div className="rounded-md border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+        Not published to Marketplace.
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">Marketplace linked</span>
+        <span className="text-muted-foreground">/{metadata.marketplaceSlug}</span>
+        <span className="text-muted-foreground">v{metadata.installedVersion}</span>
+        {metadata.modified && (
+          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-200">
+            Unpublished changes
+          </span>
+        )}
+      </div>
+      <div className="mt-2 text-xs text-muted-foreground">
+        Marketplace ID {metadata.marketplaceId}
+      </div>
+    </div>
+  )
+}
+
 /** Read-only Marketplace listing card used in catalog results. */
 export function MarketplaceListingCard({
   listing,
@@ -1025,8 +1087,12 @@ export function MarketplaceDetail({
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes)
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', toArrayBuffer(bytes))
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
 }
 
 function toBase64(bytes: Uint8Array): string {

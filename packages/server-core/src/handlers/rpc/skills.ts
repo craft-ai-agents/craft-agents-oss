@@ -18,6 +18,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.RESOLVE_REMOTE,
   RPC_CHANNELS.skills.INSTALL_MARKETPLACE,
   RPC_CHANNELS.skills.UPDATE_MARKETPLACE,
+  RPC_CHANNELS.skills.PUBLISH_MARKETPLACE,
 ] as const
 
 export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -192,6 +193,21 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const { applyMarketplaceSkillUpdateFromIntent } = await import('@craft-agent/shared/skills')
     const result = await applyMarketplaceSkillUpdateFromIntent(workspace.rootPath, input)
     if (result.status === 'installed' || result.status === 'install-complete-failed') {
+      await pushSkillsChanged(workspace.id, workspace.rootPath)
+    }
+    return result
+  })
+
+  server.handle(RPC_CHANNELS.skills.PUBLISH_MARKETPLACE, async (_ctx, workspaceId: string, input: import('@craft-agent/shared/skills').MarketplaceLocalSkillPublishInput) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { publishLocalSkillToMarketplaceService, resolveMarketplaceServiceConfig } = await import('@craft-agent/shared/skills')
+    const serviceConfig = resolveMarketplaceServiceConfig()
+    const result = await publishLocalSkillToMarketplaceService(workspace.rootPath, input, {
+      baseUrl: serviceConfig.baseUrl,
+    })
+    if (result.status === 'published') {
       await pushSkillsChanged(workspace.id, workspace.rootPath)
     }
     return result
