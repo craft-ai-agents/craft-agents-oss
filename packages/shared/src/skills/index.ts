@@ -41,6 +41,8 @@ export {
 export {
   PRODUCT_MARKETPLACE_CATEGORIES,
   createHttpMarketplacePublishApi,
+  publishDirectSkillToMarketplace,
+  publishDirectSkillToMarketplaceService,
   publishLocalSkillToMarketplace,
   publishLocalSkillToMarketplaceService,
   suggestMarketplaceSlug,
@@ -51,6 +53,9 @@ export type {
   MarketplacePublishApiInput,
   MarketplacePublishApiResult,
   MarketplaceLocalSkillPublishInput,
+  MarketplaceDirectPublishRequest,
+  MarketplaceDirectSkillPublishInput,
+  MarketplacePublishDirectResult,
   MarketplacePublishLocalResult,
   MarketplacePublishRequest,
   ProductMarketplaceCategory,

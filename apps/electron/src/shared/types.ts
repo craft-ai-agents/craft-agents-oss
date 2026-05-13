@@ -60,8 +60,8 @@ import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
 // Skill types
-import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult } from '@craft-agent/shared/skills';
-export type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult };
+import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult } from '@craft-agent/shared/skills';
+export type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult };
 
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
@@ -493,6 +493,7 @@ export interface ElectronAPI {
   installMarketplaceSkill(workspaceId: string, input: MarketplaceSkillInstallInput): Promise<MarketplaceInstallResult>
   updateMarketplaceSkill(workspaceId: string, input: MarketplaceSkillUpdateInput): Promise<MarketplaceInstallResult>
   publishMarketplaceSkill(workspaceId: string, input: MarketplaceLocalSkillPublishInput): Promise<MarketplacePublishLocalResult>
+  publishDirectMarketplaceSkill(workspaceId: string, input: MarketplaceDirectSkillPublishInput): Promise<MarketplacePublishDirectResult>
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void

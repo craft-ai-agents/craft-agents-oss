@@ -1,8 +1,9 @@
 import { createHash } from 'crypto'
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs'
 import { join, normalize } from 'path'
-import { zipSync } from 'fflate'
+import { strToU8, zipSync } from 'fflate'
 import { valid as validSemver } from 'semver'
+import matter from 'gray-matter'
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts'
 import { deriveSkillSlug, loadSkill } from './storage.ts'
 import type { SkillMetadata } from './types.ts'
@@ -71,10 +72,41 @@ export interface MarketplacePublishRequest {
   now?: () => Date
 }
 
+/** Complete direct Marketplace publish request for Skills that should not be installed locally. */
+export interface MarketplaceDirectPublishRequest {
+  user: { id: string } | null
+  skill: {
+    slug: string
+    metadata: SkillMetadata
+    content: string
+  }
+  marketplaceSlug: string
+  version: string
+  category: string
+  tags?: string[]
+  releaseNotes?: string
+  api: MarketplacePublishApi
+}
+
 /** Renderer-safe input for publishing a Local Skill through workspace-owned RPC. */
 export interface MarketplaceLocalSkillPublishInput {
   userId: string
   skillSlug: string
+  marketplaceSlug: string
+  version: string
+  category: string
+  tags?: string[]
+  releaseNotes?: string
+}
+
+/** Renderer-safe input for publishing a Marketplace Skill without creating a Local Skill. */
+export interface MarketplaceDirectSkillPublishInput {
+  userId: string
+  skill: {
+    slug: string
+    metadata: SkillMetadata
+    content: string
+  }
   marketplaceSlug: string
   version: string
   category: string
@@ -95,6 +127,9 @@ export type MarketplacePublishLocalResult =
       marketplaceSlug: string
       message: string
     }
+
+/** Renderer-safe result returned after direct Marketplace publish through RPC. */
+export type MarketplacePublishDirectResult = MarketplacePublishLocalResult
 
 /** Suggest the editable Marketplace slug from SKILL.md frontmatter metadata. */
 export function suggestMarketplaceSlug(metadata: Pick<SkillMetadata, 'name'>): string {
@@ -199,6 +234,43 @@ export async function publishLocalSkillToMarketplace(
   }
 }
 
+/** Bundle and publish a Skill directly to Marketplace without writing Local Skill files or sidecar metadata. */
+export async function publishDirectSkillToMarketplace(
+  request: MarketplaceDirectPublishRequest,
+): Promise<MarketplacePublishDirectResult> {
+  if (!request.user) {
+    throw new Error('Sign in is required to publish Marketplace Skills.')
+  }
+
+  const validationErrors = [
+    ...validateDirectSkill(request.skill),
+    ...validateMarketplacePublishRequest(request),
+  ]
+  if (validationErrors.length > 0) {
+    throw new Error(validationErrors.join(' '))
+  }
+
+  const category = request.category as ProductMarketplaceCategory
+  const published = await request.api.publishSkill({
+    userId: request.user.id,
+    bundle: bundleDirectSkill(request.skill),
+    marketplaceSlug: request.marketplaceSlug,
+    version: request.version,
+    category,
+    tags: cleanOptionalStringArray(request.tags),
+    releaseNotes: cleanOptionalString(request.releaseNotes),
+  })
+
+  if (published.status === 'slug-conflict') return published
+
+  return {
+    status: 'published',
+    marketplaceId: published.marketplaceId,
+    marketplaceSlug: published.marketplaceSlug,
+    version: published.version,
+  }
+}
+
 /** Publish a Local Skill to the configured Marketplace HTTP service from an owning workspace. */
 export async function publishLocalSkillToMarketplaceService(
   workspaceRoot: string,
@@ -219,6 +291,26 @@ export async function publishLocalSkillToMarketplaceService(
     tags: input.tags,
     releaseNotes: input.releaseNotes,
     now: options.now,
+    api: createHttpMarketplacePublishApi(options.baseUrl, options.fetchImpl ?? fetch),
+  })
+}
+
+/** Publish a Skill directly to the configured Marketplace HTTP service without Local Skill installation. */
+export async function publishDirectSkillToMarketplaceService(
+  input: MarketplaceDirectSkillPublishInput,
+  options: {
+    baseUrl: string
+    fetchImpl?: typeof fetch
+  },
+): Promise<MarketplacePublishDirectResult> {
+  return publishDirectSkillToMarketplace({
+    user: { id: input.userId },
+    skill: input.skill,
+    marketplaceSlug: input.marketplaceSlug,
+    version: input.version,
+    category: input.category,
+    tags: input.tags,
+    releaseNotes: input.releaseNotes,
     api: createHttpMarketplacePublishApi(options.baseUrl, options.fetchImpl ?? fetch),
   })
 }
@@ -280,6 +372,21 @@ function bundleLocalSkill(workspaceRoot: string, skillSlug: string): Uint8Array 
     throw new Error('Local Skill bundle must include SKILL.md.')
   }
   return zipSync(files)
+}
+
+function bundleDirectSkill(skill: MarketplaceDirectPublishRequest['skill']): Uint8Array {
+  return zipSync({
+    'SKILL.md': strToU8(matter.stringify(skill.content.trim(), skill.metadata)),
+  })
+}
+
+function validateDirectSkill(skill: MarketplaceDirectPublishRequest['skill']): string[] {
+  const errors: string[] = []
+  if (!skill.slug.trim()) errors.push('Skill slug is required.')
+  if (!skill.metadata.name.trim()) errors.push('Skill name is required.')
+  if (!skill.metadata.description.trim()) errors.push('Skill description is required.')
+  if (!skill.content.trim()) errors.push('Skill instructions are required.')
+  return errors
 }
 
 function listPublishableSkillFiles(root: string, dir = root): string[] {

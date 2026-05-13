@@ -19,6 +19,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.INSTALL_MARKETPLACE,
   RPC_CHANNELS.skills.UPDATE_MARKETPLACE,
   RPC_CHANNELS.skills.PUBLISH_MARKETPLACE,
+  RPC_CHANNELS.skills.PUBLISH_DIRECT_MARKETPLACE,
 ] as const
 
 export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -211,5 +212,16 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       await pushSkillsChanged(workspace.id, workspace.rootPath)
     }
     return result
+  })
+
+  server.handle(RPC_CHANNELS.skills.PUBLISH_DIRECT_MARKETPLACE, async (_ctx, workspaceId: string, input: import('@craft-agent/shared/skills').MarketplaceDirectSkillPublishInput) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { publishDirectSkillToMarketplaceService, resolveMarketplaceServiceConfig } = await import('@craft-agent/shared/skills')
+    const serviceConfig = resolveMarketplaceServiceConfig()
+    return publishDirectSkillToMarketplaceService(input, {
+      baseUrl: serviceConfig.baseUrl,
+    })
   })
 }

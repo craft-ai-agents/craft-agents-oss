@@ -8,8 +8,11 @@ import {
   loadMarketplaceDetail,
   MarketplaceDetail,
   MarketplaceError,
+  MarketplaceEmptyState,
   MarketplaceListingCard,
+  MarketplacePublishSkillDialog,
   LocalSkillMarketplaceStatus,
+  publishDirectMarketplaceSkill,
   publishMarketplaceSkill,
   reportMarketplaceSkillFromDetail,
   SkillMarketplacePageHeader,
@@ -31,6 +34,8 @@ mock.module('@/components/ui/menu-context', () => ({
     Separator: () => React.createElement('hr'),
   }),
 }))
+
+const marketplacePageSource = await Bun.file(new URL('../SkillMarketplacePage.tsx', import.meta.url)).text()
 
 async function loadReadyReportDetail() {
   const api = createStaticMarketplaceApi()
@@ -340,6 +345,128 @@ describe('SkillMarketplacePage API boundary', () => {
     expect(anonymousHtml).toContain('Production')
     expect(authenticatedHtml).toContain('Publish Skill')
     expect(authenticatedHtml).not.toContain('Sign in to publish')
+  })
+
+  test('direct Marketplace publish calls publish-only RPC without creating Local Skills', async () => {
+    const calls: unknown[] = []
+    const result = await publishDirectMarketplaceSkill({
+      workspaceId: 'workspace_1',
+      userId: 'user_1',
+      skill: {
+        slug: 'direct-helper',
+        metadata: { name: 'Direct Helper', description: 'Published directly.' },
+        content: 'Direct publish body.',
+        sourcePath: 'marketplace-create',
+      },
+      marketplaceSlug: 'direct-helper',
+      version: '1.0.0',
+      category: 'Quality',
+      tags: ['direct'],
+      releaseNotes: 'Initial release.',
+      electronAPI: {
+        async publishDirectMarketplaceSkill(workspaceId, input) {
+          calls.push({ workspaceId, input })
+          return {
+            status: 'published',
+            marketplaceId: 'mkt_direct_helper',
+            marketplaceSlug: input.marketplaceSlug,
+            version: input.version,
+          }
+        },
+      },
+    })
+
+    expect(result).toEqual({
+      status: 'published',
+      marketplaceId: 'mkt_direct_helper',
+      marketplaceSlug: 'direct-helper',
+      version: '1.0.0',
+    })
+    expect(calls).toEqual([{
+      workspaceId: 'workspace_1',
+      input: {
+        userId: 'user_1',
+        skill: {
+          slug: 'direct-helper',
+          metadata: { name: 'Direct Helper', description: 'Published directly.' },
+          content: 'Direct publish body.',
+        },
+        marketplaceSlug: 'direct-helper',
+        version: '1.0.0',
+        category: 'Quality',
+        tags: ['direct'],
+        releaseNotes: 'Initial release.',
+      },
+    }])
+  })
+
+  test('direct Marketplace publish validates auth and form fields before RPC', async () => {
+    const result = await publishDirectMarketplaceSkill({
+      workspaceId: 'workspace_1',
+      userId: null,
+      skill: {
+        slug: 'direct-helper',
+        metadata: { name: 'Direct Helper', description: 'Published directly.' },
+        content: 'Direct publish body.',
+        sourcePath: 'marketplace-create',
+      },
+      marketplaceSlug: 'direct-helper',
+      version: '1.0.0',
+      category: 'Quality',
+      electronAPI: {
+        async publishDirectMarketplaceSkill() {
+          throw new Error('should not publish')
+        },
+      },
+    })
+    const invalid = await publishDirectMarketplaceSkill({
+      workspaceId: 'workspace_1',
+      userId: 'user_1',
+      skill: {
+        slug: '',
+        metadata: { name: '', description: '' },
+        content: '',
+        sourcePath: '',
+      },
+      marketplaceSlug: 'Bad Slug',
+      version: '1',
+      category: 'Other',
+      electronAPI: {
+        async publishDirectMarketplaceSkill() {
+          throw new Error('should not publish')
+        },
+      },
+    })
+
+    expect(result).toEqual({
+      status: 'auth-required',
+      message: 'Sign in is required to publish Marketplace Skills.',
+    })
+    expect(invalid.status).toBe('validation-error')
+    if (invalid.status !== 'validation-error') throw new Error('Expected validation error')
+    expect(invalid.message).toContain('Skill name is required.')
+    expect(invalid.message).toContain('Marketplace slug must use lowercase')
+  })
+
+  test('renders direct Marketplace publish entry points and keeps AI Assist out of the dialog', () => {
+    const headerHtml = renderToStaticMarkup(React.createElement(SkillMarketplacePageHeader, {
+      currentUserId: 'user_1',
+      serviceEnvironmentLabel: 'Production',
+      onPublishClick: () => {},
+    }))
+    const emptyHtml = renderToStaticMarkup(React.createElement(MarketplaceEmptyState, {
+      canPublish: true,
+      onPublishClick: () => {},
+    }))
+
+    expect(headerHtml).toContain('Publish Skill')
+    expect(emptyHtml).toContain('Publish Skill')
+    expect(MarketplacePublishSkillDialog.name).toBe('MarketplacePublishSkillDialog')
+    expect(marketplacePageSource).toContain('publishDirectMarketplaceSkill')
+    expect(marketplacePageSource).toContain('value="create"')
+    expect(marketplacePageSource).toContain('value="remote"')
+    expect(marketplacePageSource).toContain('value="upload"')
+    expect(marketplacePageSource).not.toContain('AI Assist')
   })
 
   test('renders Publish Skill when a Local Skill menu provides a publish action', async () => {

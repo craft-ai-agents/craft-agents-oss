@@ -1,8 +1,12 @@
 import * as React from 'react'
-import { AlertTriangle, CheckCircle2, Download, Flag, Search, ShieldAlert, Store, UserCog } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Download, FileArchive, Flag, Globe2, PencilLine, Search, ShieldAlert, Store, UserCog } from 'lucide-react'
 import { strToU8, zipSync } from 'fflate'
 import { resolveMarketplaceServiceConfig } from '@craft-agent/shared/skills'
+import { deriveSkillSlug } from '@craft-agent/shared/skills/slug'
 import type {
+  DiscoveredSkill,
+  MarketplaceDirectSkillPublishInput,
+  MarketplacePublishDirectResult,
   MarketplaceInstallConflictResolution,
   MarketplaceInstallIntent,
   MarketplaceInstallResult,
@@ -10,6 +14,19 @@ import type {
   MarketplaceSkillInstallInput,
   MarketplaceSkillUpdateInput,
 } from '@craft-agent/shared/skills'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { SkillPicker } from './SkillPicker'
+import { getRemoteResolvePhase } from './remote-skill-import-state'
 
 /** Install/update state shown for a Marketplace Skill in the catalog and detail views. */
 export type MarketplaceInstallState =
@@ -112,6 +129,11 @@ export interface MarketplaceInstallElectronApi {
 /** Electron bridge used to apply Marketplace updates to Local Skills. */
 export interface MarketplaceUpdateElectronApi {
   updateMarketplaceSkill(workspaceId: string, input: MarketplaceSkillUpdateInput): Promise<MarketplaceInstallResult>
+}
+
+/** Electron bridge used to publish Marketplace Skills without installing them locally. */
+export interface MarketplaceDirectPublishElectronApi {
+  publishDirectMarketplaceSkill(workspaceId: string, input: MarketplaceDirectSkillPublishInput): Promise<MarketplacePublishDirectResult>
 }
 
 /** Result of loading and filtering the Marketplace catalog. */
@@ -558,6 +580,62 @@ export async function reportMarketplaceSkillFromDetail({
   }
 }
 
+/** Publishes a Skill directly from Marketplace without creating or updating a Local Skill. */
+export async function publishDirectMarketplaceSkill({
+  workspaceId,
+  userId,
+  skill,
+  marketplaceSlug,
+  version,
+  category,
+  tags,
+  releaseNotes,
+  electronAPI,
+}: {
+  workspaceId: string
+  userId: string | null
+  skill: DiscoveredSkill
+  marketplaceSlug: string
+  version: string
+  category: string
+  tags?: string[]
+  releaseNotes?: string
+  electronAPI: MarketplaceDirectPublishElectronApi
+}): Promise<DirectPublishState> {
+  if (!userId) {
+    return { status: 'auth-required', message: 'Sign in is required to publish Marketplace Skills.' }
+  }
+  if (!workspaceId) {
+    return { status: 'error', message: 'Open a workspace before publishing Marketplace Skills.' }
+  }
+
+  const errors = validateDirectPublishFields({ skill, marketplaceSlug, version, category, tags, releaseNotes })
+  if (errors.length > 0) {
+    return { status: 'validation-error', message: errors.join(' ') }
+  }
+
+  try {
+    return await electronAPI.publishDirectMarketplaceSkill(workspaceId, {
+      userId,
+      skill: {
+        slug: skill.slug,
+        metadata: skill.metadata,
+        content: skill.content,
+      },
+      marketplaceSlug: marketplaceSlug.trim(),
+      version: version.trim(),
+      category,
+      tags: cleanTags(tags),
+      releaseNotes: releaseNotes?.trim() || undefined,
+    })
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Marketplace publish failed.',
+    }
+  }
+}
+
 const defaultMarketplaceApi = createStaticMarketplaceApi()
 const defaultMarketplaceServiceConfig = resolveMarketplaceServiceConfig()
 
@@ -574,8 +652,58 @@ type MarketplaceDetailReportState =
   | { status: 'submitting' }
   | MarketplaceReportResult
 
+type DirectPublishState =
+  | { status: 'idle' }
+  | { status: 'publishing' }
+  | MarketplacePublishDirectResult
+  | { status: 'auth-required'; message: string }
+  | { status: 'validation-error'; message: string }
+  | { status: 'error'; message: string }
+
+type DirectPublishPathPhase =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'picker'; skills: DiscoveredSkill[] }
+
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b))
+}
+
+function validateDirectPublishFields(input: {
+  skill: DiscoveredSkill | null
+  marketplaceSlug: string
+  version: string
+  category: string
+  tags?: string[]
+  releaseNotes?: string
+}): string[] {
+  const errors: string[] = []
+  if (!input.skill) errors.push('Choose or create a Skill before publishing.')
+  if (input.skill && !input.skill.metadata.name.trim()) errors.push('Skill name is required.')
+  if (input.skill && !input.skill.metadata.description.trim()) errors.push('Skill description is required.')
+  if (input.skill && !input.skill.content.trim()) errors.push('Skill instructions are required.')
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.marketplaceSlug.trim())) {
+    errors.push('Marketplace slug must use lowercase letters, numbers, and single hyphens.')
+  }
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(input.version.trim())) {
+    errors.push('Version must be a valid SemVer version.')
+  }
+  if (!PRODUCT_MARKETPLACE_CATEGORIES.includes(input.category as typeof PRODUCT_MARKETPLACE_CATEGORIES[number])) {
+    errors.push(`Category must be one of ${PRODUCT_MARKETPLACE_CATEGORIES.join(', ')}.`)
+  }
+  if (input.tags?.some((tag) => tag.trim() && !/^[a-z0-9][a-z0-9-]{0,39}$/.test(tag.trim()))) {
+    errors.push('Tags must use lowercase letters, numbers, and hyphens.')
+  }
+  if (input.releaseNotes && input.releaseNotes.length > 5000) {
+    errors.push('Release notes must be 5000 characters or fewer.')
+  }
+  return errors
+}
+
+function cleanTags(tags: string[] | undefined): string[] | undefined {
+  const cleaned = tags?.map((tag) => tag.trim()).filter(Boolean)
+  return cleaned && cleaned.length > 0 ? cleaned : undefined
 }
 
 function formatInstallCount(count: number): string {
@@ -721,6 +849,7 @@ export function SkillMarketplacePage({
   const [detailState, setDetailState] = React.useState<MarketplaceDetailState | { status: 'idle' | 'loading' }>({ status: 'idle' })
   const [installStateBySlug, setInstallStateBySlug] = React.useState<Record<string, MarketplaceDetailInstallState>>({})
   const [reportStateBySlug, setReportStateBySlug] = React.useState<Record<string, MarketplaceDetailReportState>>({})
+  const [publishDialogOpen, setPublishDialogOpen] = React.useState(false)
 
   const refreshCatalog = React.useCallback(() => {
     setCatalogState({ status: 'loading' })
@@ -785,12 +914,20 @@ export function SkillMarketplacePage({
     setReportStateBySlug((previous) => ({ ...previous, [detail.slug]: result }))
   }, [api, currentUserId])
 
+  const finishDirectPublish = React.useCallback((marketplaceSlug: string) => {
+    setPublishDialogOpen(false)
+    setSelectedSlug(marketplaceSlug)
+    refreshCatalog()
+    refreshDetail(marketplaceSlug)
+  }, [refreshCatalog, refreshDetail])
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
       <div className="border-b border-border px-5 py-4">
         <SkillMarketplacePageHeader
           currentUserId={currentUserId}
           serviceEnvironmentLabel={serviceEnvironmentLabel}
+          onPublishClick={() => setPublishDialogOpen(true)}
         />
       </div>
 
@@ -838,7 +975,10 @@ export function SkillMarketplacePage({
               <MarketplaceError message={catalogState.message} onRetry={refreshCatalog} />
             )}
             {catalogState.status === 'ready' && catalogState.listings.length === 0 && (
-              <p className="p-3 text-sm text-muted-foreground">No Marketplace Skills match these filters.</p>
+              <MarketplaceEmptyState
+                canPublish={Boolean(currentUserId)}
+                onPublishClick={() => setPublishDialogOpen(true)}
+              />
             )}
             {catalogState.status === 'ready' && catalogState.listings.map((listing) => (
               <MarketplaceListingCard
@@ -858,6 +998,15 @@ export function SkillMarketplacePage({
                 <Store className="mx-auto h-5 w-5" />
                 <p className="mt-2 text-sm font-medium text-foreground">Select a Marketplace Skill</p>
                 <p className="mt-1 text-xs">Open a listing to inspect its published SKILL.md, version history, release notes, required sources, and metadata.</p>
+                <button
+                  type="button"
+                  disabled={!currentUserId}
+                  onClick={() => setPublishDialogOpen(true)}
+                  className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
+                >
+                  <UserCog className="h-3.5 w-3.5" />
+                  {currentUserId ? 'Publish Skill' : 'Sign in to publish'}
+                </button>
               </div>
             </div>
           )}
@@ -883,6 +1032,14 @@ export function SkillMarketplacePage({
           )}
         </section>
       </div>
+
+      <MarketplacePublishSkillDialog
+        open={publishDialogOpen}
+        onOpenChange={setPublishDialogOpen}
+        workspaceId={workspaceId}
+        currentUserId={currentUserId}
+        onPublished={finishDirectPublish}
+      />
     </div>
   )
 }
@@ -891,9 +1048,11 @@ export function SkillMarketplacePage({
 export function SkillMarketplacePageHeader({
   currentUserId,
   serviceEnvironmentLabel,
+  onPublishClick,
 }: {
   currentUserId: string | null
   serviceEnvironmentLabel: string
+  onPublishClick?: () => void
 }) {
   const canPublish = Boolean(currentUserId)
 
@@ -916,12 +1075,362 @@ export function SkillMarketplacePageHeader({
       <button
         type="button"
         disabled={!canPublish}
+        onClick={onPublishClick}
         className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
       >
         <UserCog className="h-3.5 w-3.5" />
         {canPublish ? 'Publish Skill' : 'Sign in to publish'}
       </button>
     </div>
+  )
+}
+
+export function MarketplaceEmptyState({
+  canPublish,
+  onPublishClick,
+}: {
+  canPublish: boolean
+  onPublishClick: () => void
+}) {
+  return (
+    <div className="p-3 text-sm text-muted-foreground">
+      <p>No Marketplace Skills match these filters.</p>
+      <button
+        type="button"
+        disabled={!canPublish}
+        onClick={onPublishClick}
+        className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
+      >
+        <UserCog className="h-3.5 w-3.5" />
+        {canPublish ? 'Publish Skill' : 'Sign in to publish'}
+      </button>
+    </div>
+  )
+}
+
+export function MarketplacePublishSkillDialog({
+  open,
+  onOpenChange,
+  workspaceId,
+  currentUserId,
+  onPublished,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  workspaceId: string
+  currentUserId: string | null
+  onPublished: (marketplaceSlug: string) => void
+}) {
+  const [activeTab, setActiveTab] = React.useState('create')
+  const [name, setName] = React.useState('')
+  const [description, setDescription] = React.useState('')
+  const [content, setContent] = React.useState('')
+  const [selectedSkill, setSelectedSkill] = React.useState<DiscoveredSkill | null>(null)
+  const [marketplaceSlug, setMarketplaceSlug] = React.useState('')
+  const [version, setVersion] = React.useState('1.0.0')
+  const [category, setCategory] = React.useState<string>(PRODUCT_MARKETPLACE_CATEGORIES[0])
+  const [tags, setTags] = React.useState('')
+  const [releaseNotes, setReleaseNotes] = React.useState('')
+  const [publishState, setPublishState] = React.useState<DirectPublishState>({ status: 'idle' })
+  const [uploadPhase, setUploadPhase] = React.useState<DirectPublishPathPhase>({ kind: 'idle' })
+  const [remoteInput, setRemoteInput] = React.useState('')
+  const [remotePhase, setRemotePhase] = React.useState<DirectPublishPathPhase>({ kind: 'idle' })
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+  const reset = React.useCallback(() => {
+    setActiveTab('create')
+    setName('')
+    setDescription('')
+    setContent('')
+    setSelectedSkill(null)
+    setMarketplaceSlug('')
+    setVersion('1.0.0')
+    setCategory(PRODUCT_MARKETPLACE_CATEGORIES[0])
+    setTags('')
+    setReleaseNotes('')
+    setPublishState({ status: 'idle' })
+    setUploadPhase({ kind: 'idle' })
+    setRemoteInput('')
+    setRemotePhase({ kind: 'idle' })
+  }, [])
+
+  const closeDialog = React.useCallback(() => {
+    reset()
+    onOpenChange(false)
+  }, [onOpenChange, reset])
+
+  const chooseSkill = React.useCallback((skill: DiscoveredSkill) => {
+    setSelectedSkill(skill)
+    setMarketplaceSlug((current) => current.trim() || skill.slug)
+    setPublishState({ status: 'idle' })
+  }, [])
+
+  const getSkillForPublish = React.useCallback((): DiscoveredSkill | null => {
+    if (activeTab !== 'create') return selectedSkill
+    const slug = deriveSkillSlug(name)
+    return {
+      slug,
+      metadata: {
+        name: name.trim(),
+        description: description.trim(),
+      },
+      content: content.trim(),
+      sourcePath: 'marketplace-create',
+    }
+  }, [activeTab, content, description, name, selectedSkill])
+
+  React.useEffect(() => {
+    if (activeTab !== 'create') return
+    setMarketplaceSlug(deriveSkillSlug(name))
+  }, [activeTab, name])
+
+  const submitPublish = React.useCallback(async () => {
+    const skill = getSkillForPublish()
+    setPublishState({ status: 'publishing' })
+    const result = await publishDirectMarketplaceSkill({
+      workspaceId,
+      userId: currentUserId,
+      skill: skill ?? {
+        slug: '',
+        metadata: { name: '', description: '' },
+        content: '',
+        sourcePath: '',
+      },
+      marketplaceSlug,
+      version,
+      category,
+      tags: tags.split(','),
+      releaseNotes,
+      electronAPI: window.electronAPI,
+    })
+    setPublishState(result)
+    if (result.status === 'published') {
+      onPublished(result.marketplaceSlug)
+      reset()
+    }
+  }, [category, currentUserId, getSkillForPublish, marketplaceSlug, onPublished, releaseNotes, reset, tags, version, workspaceId])
+
+  const processZipFile = React.useCallback(async (file: File) => {
+    const filePath = window.electronAPI.getFilePath?.(file)
+    if (!filePath) {
+      setUploadPhase({ kind: 'error', message: 'Could not determine file path.' })
+      return
+    }
+    setUploadPhase({ kind: 'loading' })
+    try {
+      const skills = await window.electronAPI.extractSkillsFromZip(filePath)
+      if (skills.length === 0) {
+        setUploadPhase({ kind: 'error', message: 'No skills found in this zip.' })
+        return
+      }
+      if (skills.length === 1) {
+        chooseSkill(skills[0])
+        setUploadPhase({ kind: 'idle' })
+        return
+      }
+      setUploadPhase({ kind: 'picker', skills })
+    } catch (error) {
+      setUploadPhase({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
+    }
+  }, [chooseSkill])
+
+  const resolveRemote = React.useCallback(async () => {
+    const input = remoteInput.trim()
+    if (!input) return
+    setRemotePhase({ kind: 'loading' })
+    try {
+      const resolved = await window.electronAPI.resolveRemoteSkills(input)
+      const phase = getRemoteResolvePhase(resolved)
+      if (phase.kind === 'single') {
+        chooseSkill(phase.skill)
+        setRemotePhase({ kind: 'idle' })
+        return
+      }
+      if (phase.kind === 'picker') {
+        setRemotePhase({ kind: 'picker', skills: phase.skills })
+        return
+      }
+      setRemotePhase({ kind: 'error', message: phase.message })
+    } catch (error) {
+      setRemotePhase({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
+    }
+  }, [chooseSkill, remoteInput])
+
+  function handleFileInputChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (file) void processZipFile(file)
+    event.target.value = ''
+  }
+
+  const publishDisabled = publishState.status === 'publishing' || !currentUserId
+  const publishMessage = publishState.status !== 'idle' && publishState.status !== 'publishing'
+    ? publishState.status === 'published'
+      ? `Published to Marketplace /${publishState.marketplaceSlug}`
+      : publishState.message
+    : null
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      if (!isOpen) reset()
+      onOpenChange(isOpen)
+    }}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Publish Skill</DialogTitle>
+          <DialogDescription>
+            Publish a new Marketplace Skill without installing it into Local Skills.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Tabs value={activeTab} onValueChange={(value) => {
+          setActiveTab(value)
+          setSelectedSkill(null)
+          setPublishState({ status: 'idle' })
+        }}>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="create" className="gap-1.5">
+              <PencilLine className="h-3.5 w-3.5" />
+              Create
+            </TabsTrigger>
+            <TabsTrigger value="remote" className="gap-1.5">
+              <Globe2 className="h-3.5 w-3.5" />
+              Remote
+            </TabsTrigger>
+            <TabsTrigger value="upload" className="gap-1.5">
+              <FileArchive className="h-3.5 w-3.5" />
+              Upload
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="create" className="mt-4 space-y-3">
+            <label className="grid gap-1 text-xs font-medium">
+              Name
+              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Code Reviewer" />
+            </label>
+            <label className="grid gap-1 text-xs font-medium">
+              Description
+              <Input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Reviews code for correctness" />
+            </label>
+            <label className="grid gap-1 text-xs font-medium">
+              Instructions
+              <textarea
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+                className="min-h-28 rounded-md border border-border bg-background px-3 py-2 text-sm font-normal outline-none focus:border-foreground/30"
+                placeholder="Write the behavior, workflow, and constraints this skill should add."
+              />
+            </label>
+          </TabsContent>
+
+          <TabsContent value="remote" className="mt-4 space-y-3">
+            {remotePhase.kind === 'picker' ? (
+              <SkillPicker
+                skills={remotePhase.skills}
+                onConfirm={(skills) => {
+                  if (skills[0]) chooseSkill(skills[0])
+                  setRemotePhase({ kind: 'idle' })
+                }}
+                onCancel={() => setRemotePhase({ kind: 'idle' })}
+              />
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  <Input
+                    value={remoteInput}
+                    onChange={(event) => setRemoteInput(event.target.value)}
+                    placeholder="owner/repo  or  https://github.com/owner/repo"
+                    onKeyDown={(event) => { if (event.key === 'Enter') void resolveRemote() }}
+                  />
+                  <Button type="button" onClick={() => void resolveRemote()} disabled={!remoteInput.trim() || remotePhase.kind === 'loading'}>
+                    {remotePhase.kind === 'loading' ? 'Resolving...' : 'Resolve'}
+                  </Button>
+                </div>
+                {remotePhase.kind === 'error' && <p className="text-xs text-destructive">{remotePhase.message}</p>}
+              </>
+            )}
+          </TabsContent>
+
+          <TabsContent value="upload" className="mt-4 space-y-3">
+            {uploadPhase.kind === 'picker' ? (
+              <SkillPicker
+                skills={uploadPhase.skills}
+                onConfirm={(skills) => {
+                  if (skills[0]) chooseSkill(skills[0])
+                  setUploadPhase({ kind: 'idle' })
+                }}
+                onCancel={() => setUploadPhase({ kind: 'idle' })}
+              />
+            ) : (
+              <div className="flex min-h-28 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-foreground/15 bg-foreground/[0.02] p-4 text-center">
+                <input ref={fileInputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={handleFileInputChange} />
+                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploadPhase.kind === 'loading'}>
+                  <FileArchive className="h-4 w-4" />
+                  {uploadPhase.kind === 'loading' ? 'Reading zip...' : 'Choose zip'}
+                </Button>
+                {uploadPhase.kind === 'error' && <p className="text-xs text-destructive">{uploadPhase.message}</p>}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        {activeTab !== 'create' && selectedSkill && (
+          <div className="rounded-md border border-border bg-muted/20 p-3 text-sm">
+            <span className="font-medium">{selectedSkill.metadata.name}</span>
+            <span className="ml-2 text-muted-foreground">{selectedSkill.slug}</span>
+          </div>
+        )}
+
+        <div className="grid gap-3">
+          <label className="grid gap-1 text-xs font-medium">
+            Marketplace slug
+            <Input value={marketplaceSlug} onChange={(event) => setMarketplaceSlug(event.target.value)} />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="grid gap-1 text-xs font-medium">
+              Version
+              <Input value={version} onChange={(event) => setVersion(event.target.value)} />
+            </label>
+            <label className="grid gap-1 text-xs font-medium">
+              Category
+              <select className="h-9 rounded-md border border-border bg-background px-2 text-sm font-normal" value={category} onChange={(event) => setCategory(event.target.value)}>
+                {PRODUCT_MARKETPLACE_CATEGORIES.map((candidate) => (
+                  <option key={candidate} value={candidate}>{candidate}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label className="grid gap-1 text-xs font-medium">
+            Tags
+            <Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="review, ci" />
+          </label>
+          <label className="grid gap-1 text-xs font-medium">
+            Release notes
+            <textarea
+              value={releaseNotes}
+              onChange={(event) => setReleaseNotes(event.target.value)}
+              className="min-h-16 rounded-md border border-border bg-background px-3 py-2 text-sm font-normal outline-none focus:border-foreground/30"
+            />
+          </label>
+        </div>
+
+        {publishMessage && (
+          <p className={`rounded-md border p-3 text-sm ${
+            publishState.status === 'published'
+              ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+              : 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
+          }`}>
+            {publishMessage}
+          </p>
+        )}
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={closeDialog}>Cancel</Button>
+          <Button type="button" onClick={() => void submitPublish()} disabled={publishDisabled}>
+            {publishState.status === 'publishing' ? 'Publishing...' : currentUserId ? 'Publish Skill' : 'Sign in to publish'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
