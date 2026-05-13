@@ -56,6 +56,37 @@ function setElectronApiMock(api: Partial<typeof window.electronAPI>) {
   })
 }
 
+function createGitRequestsByPath() {
+  const statusByPath = new Map<string, Deferred<GitStatusEntry[]>>()
+  const logByPath = new Map<string, Deferred<GitCommit[]>>()
+
+  setElectronApiMock({
+    getGitStatus: (workspacePath) => {
+      const request = createDeferred<GitStatusEntry[]>()
+      statusByPath.set(workspacePath, request)
+      return request.promise
+    },
+    getGitLog: (workspacePath) => {
+      const request = createDeferred<GitCommit[]>()
+      logByPath.set(workspacePath, request)
+      return request.promise
+    },
+  })
+
+  return {
+    statusFor(workspacePath: string) {
+      const request = statusByPath.get(workspacePath)
+      if (!request) throw new Error(`Expected git status request for ${workspacePath}`)
+      return request
+    },
+    logFor(workspacePath: string) {
+      const request = logByPath.get(workspacePath)
+      if (!request) throw new Error(`Expected git log request for ${workspacePath}`)
+      return request
+    },
+  }
+}
+
 function expectSpinner(container: HTMLElement, visible: boolean) {
   expect(container.getElementsByClassName('animate-spin').length > 0).toBe(visible)
 }
@@ -253,20 +284,7 @@ describe('GitPanel cache behaviour', () => {
       gitPanelCacheAtomFamily('/repo-a'),
       warmCache([statusEntry('src/old-root.ts')], [commit('Old root commit')])
     )
-    const statusByPath = new Map<string, Deferred<GitStatusEntry[]>>()
-    const logByPath = new Map<string, Deferred<GitCommit[]>>()
-    setElectronApiMock({
-      getGitStatus: (workspacePath) => {
-        const request = createDeferred<GitStatusEntry[]>()
-        statusByPath.set(workspacePath, request)
-        return request.promise
-      },
-      getGitLog: (workspacePath) => {
-        const request = createDeferred<GitCommit[]>()
-        logByPath.set(workspacePath, request)
-        return request.promise
-      },
-    })
+    const requests = createGitRequestsByPath()
 
     const result = render(
       <Provider store={store}>
@@ -287,8 +305,8 @@ describe('GitPanel cache behaviour', () => {
     expect(result.queryByText('src/old-root.ts')).toBeNull()
     expect(result.queryByText('Old root commit')).toBeNull()
 
-    statusByPath.get('/repo-b')?.resolve([statusEntry('src/new-root.ts')])
-    logByPath.get('/repo-b')?.resolve([commit('New root commit')])
+    requests.statusFor('/repo-b').resolve([statusEntry('src/new-root.ts')])
+    requests.logFor('/repo-b').resolve([commit('New root commit')])
 
     await waitFor(() => expect(result.getByText('src/new-root.ts')).toBeTruthy())
     expect(result.getByText('New root commit')).toBeTruthy()
@@ -326,20 +344,7 @@ describe('GitPanel cache behaviour', () => {
   })
 
   it('does not render stale results from a cancelled in-flight fetch after the CWD root changes', async () => {
-    const statusByPath = new Map<string, Deferred<GitStatusEntry[]>>()
-    const logByPath = new Map<string, Deferred<GitCommit[]>>()
-    setElectronApiMock({
-      getGitStatus: (workspacePath) => {
-        const request = createDeferred<GitStatusEntry[]>()
-        statusByPath.set(workspacePath, request)
-        return request.promise
-      },
-      getGitLog: (workspacePath) => {
-        const request = createDeferred<GitCommit[]>()
-        logByPath.set(workspacePath, request)
-        return request.promise
-      },
-    })
+    const requests = createGitRequestsByPath()
     const store = createStore()
 
     const result = render(
@@ -355,15 +360,15 @@ describe('GitPanel cache behaviour', () => {
       </Provider>
     )
 
-    statusByPath.get('/repo-a')?.resolve([statusEntry('src/stale-result.ts')])
-    logByPath.get('/repo-a')?.resolve([commit('Stale commit')])
+    requests.statusFor('/repo-a').resolve([statusEntry('src/stale-result.ts')])
+    requests.logFor('/repo-a').resolve([commit('Stale commit')])
 
     await Promise.resolve()
     expect(result.queryByText('src/stale-result.ts')).toBeNull()
     expect(result.queryByText('Stale commit')).toBeNull()
 
-    statusByPath.get('/repo-b')?.resolve([statusEntry('src/current-result.ts')])
-    logByPath.get('/repo-b')?.resolve([commit('Current commit')])
+    requests.statusFor('/repo-b').resolve([statusEntry('src/current-result.ts')])
+    requests.logFor('/repo-b').resolve([commit('Current commit')])
 
     await waitFor(() => expect(result.getByText('src/current-result.ts')).toBeTruthy())
     expect(result.getByText('Current commit')).toBeTruthy()
