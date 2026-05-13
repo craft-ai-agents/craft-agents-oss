@@ -185,12 +185,12 @@ interface ChatDisplayProps {
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
   skills?: LoadedSkill[]
-  // Label selection (for #labels)
-  /** Available label configs (tree) for label menu and badge display */
+  // Label badges
+  /** Available label configs (tree) for badge display */
   labels?: import('@craft-agent/shared/labels').LabelConfig[]
   /** Callback when labels change */
   onLabelsChange?: (labels: string[]) => void
-  // State/status selection (for # menu and ActiveOptionBadges)
+  // State/status badge
   /** Available workflow states */
   sessionStatuses?: import('@/config/session-status-config').SessionStatus[]
   /** Callback when session state changes */
@@ -459,10 +459,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   onSourcesChange,
   // Skills (for @mentions)
   skills,
-  // Labels (for #labels)
+  // Label badges
   labels,
   onLabelsChange,
-  // States (for # menu and badge)
+  // State badge
   sessionStatuses,
   onSessionStatusChange,
   workspaceId,
