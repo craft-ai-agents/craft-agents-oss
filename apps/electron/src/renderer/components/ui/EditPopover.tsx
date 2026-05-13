@@ -1027,6 +1027,7 @@ export function EditPopover({
               background: 'transparent',
               border: 'none',
               boxShadow: 'none',
+              zIndex: 'var(--z-floating-menu)',
             }}
             onInteractOutside={handleInteractOutside}
             onEscapeKeyDown={handleEscapeKeyDown}
