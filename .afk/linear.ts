@@ -96,19 +96,26 @@ switch (cmd) {
     }
 
     case "resolve": {
-        const [viewer, teams, projects, labels] = await Promise.all([
+        const [viewer, teams, projects, teamLabels, workspaceLabels] = await Promise.all([
             linear.viewer,
             linear.teams(),
             linear.projects(),
             linear.issueLabels({ filter: { team: { key: { eq: TEAM_KEY } } } }),
+            linear.issueLabels({ filter: { isGroup: { eq: false } } }),
         ]);
         const team = teams.nodes.find(t => t.key === TEAM_KEY);
         const project = projects.nodes.find(p => p.name === PROJECT_NAME);
+        const seenIds = new Set<string>();
+        const allLabels = [...teamLabels.nodes, ...workspaceLabels.nodes].filter(l => {
+            if (seenIds.has(l.id)) return false;
+            seenIds.add(l.id);
+            return true;
+        });
         print({
             viewer: { id: viewer.id, name: viewer.name },
             team: team ? { id: team.id, key: team.key } : null,
             project: project ? { id: project.id, name: project.name } : null,
-            labels: labels.nodes.map(l => ({ id: l.id, name: l.name })),
+            labels: allLabels.map(l => ({ id: l.id, name: l.name })),
         });
         break;
     }
