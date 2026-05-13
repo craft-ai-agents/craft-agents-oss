@@ -10,9 +10,15 @@ export interface McpImportFieldError {
   message: string;
 }
 
+/** Source config field that may contain imported secret-like values. */
 export type McpImportSecretLocation = 'env' | 'header';
+
+/** Persistence choice for an imported secret-like value. */
 export type McpImportSecretHandling = 'credential-store' | 'config';
 
+/**
+ * Secret-like env or header value detected while parsing an MCP import candidate.
+ */
 export interface McpImportSecret {
   /** Stable candidate-local ID for persisting a handling choice before creation. */
   id: string;
@@ -28,6 +34,9 @@ export interface McpImportSecret {
   handling: McpImportSecretHandling;
 }
 
+/**
+ * Options that affect MCP import candidate parsing.
+ */
 export interface McpImportParseOptions {
   /** Per-secret handling overrides keyed by McpImportSecret.id. */
   secretHandling?: Record<string, McpImportSecretHandling>;
@@ -126,7 +135,9 @@ function buildCandidate(key: string, server: unknown, options: McpImportParseOpt
     }
     if (serverObject.env !== undefined) {
       if (isStringRecord(serverObject.env)) {
-        mcp.env = buildConfigRecordPreview(key, 'env', serverObject.env, options, secrets);
+        const classifiedEnv = classifyConfigRecord(key, 'env', serverObject.env, options);
+        mcp.env = classifiedEnv.preview;
+        secrets.push(...classifiedEnv.secrets);
       } else {
         errors.push({ field: 'env', message: 'Env must be an object with string values.' });
       }
@@ -139,7 +150,9 @@ function buildCandidate(key: string, server: unknown, options: McpImportParseOpt
     }
     if (serverObject.headers !== undefined) {
       if (isStringRecord(serverObject.headers)) {
-        mcp.headers = buildConfigRecordPreview(key, 'header', serverObject.headers, options, secrets);
+        const classifiedHeaders = classifyConfigRecord(key, 'header', serverObject.headers, options);
+        mcp.headers = classifiedHeaders.preview;
+        secrets.push(...classifiedHeaders.secrets);
       } else {
         errors.push({ field: 'headers', message: 'Headers must be an object with string values.' });
       }
@@ -170,14 +183,19 @@ function buildCandidate(key: string, server: unknown, options: McpImportParseOpt
   return candidate;
 }
 
-function buildConfigRecordPreview(
+interface ClassifiedConfigRecord {
+  preview: Record<string, string>;
+  secrets: McpImportSecret[];
+}
+
+function classifyConfigRecord(
   candidateKey: string,
   location: McpImportSecretLocation,
   values: Record<string, string>,
   options: McpImportParseOptions,
-  secrets: McpImportSecret[],
-): Record<string, string> {
+): ClassifiedConfigRecord {
   const preview: Record<string, string> = {};
+  const secrets: McpImportSecret[] = [];
   for (const [name, value] of Object.entries(values)) {
     if (!isProbableSecretName(name)) {
       preview[name] = value;
@@ -197,7 +215,7 @@ function buildConfigRecordPreview(
       handling,
     });
   }
-  return preview;
+  return { preview, secrets };
 }
 
 function inferTransport(server: Record<string, unknown>, errors: McpImportFieldError[]): McpTransport {
