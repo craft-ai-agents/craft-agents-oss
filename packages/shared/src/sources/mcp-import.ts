@@ -1,21 +1,40 @@
 import type { CreateSourceInput, McpSourceConfig, McpTransport } from './types.ts';
 
+/**
+ * Field-level error reported while parsing pasted MCP JSON.
+ */
 export interface McpImportFieldError {
+  /** JSON field path or property name that caused the error. */
   field: string;
+  /** Human-readable validation message for the field. */
   message: string;
 }
 
+/**
+ * Normalized source creation preview for one MCP server entry.
+ */
 export interface McpImportCandidate {
+  /** Original server key from mcpServers, or the generated key for single-server JSON. */
   key: string;
+  /** Source input that can be previewed before creating the source. */
   input: CreateSourceInput;
+  /** Candidate-specific validation errors. */
   errors: McpImportFieldError[];
 }
 
+/**
+ * Result of parsing pasted MCP JSON into import candidates.
+ */
 export interface McpImportParseResult {
+  /** Parsed server candidates. Empty when top-level JSON is invalid. */
   candidates: McpImportCandidate[];
+  /** Top-level parse or shape errors that prevent candidate creation. */
   errors: McpImportFieldError[];
 }
 
+/**
+ * Parse pasted MCP JSON into normalized import candidates for preview and later source creation.
+ */
 export function parseMcpJsonImportCandidates(json: string): McpImportParseResult {
   let parsed: unknown;
   try {
@@ -41,14 +60,19 @@ export function parseMcpJsonImportCandidates(json: string): McpImportParseResult
     };
   }
 
-  const servers = parsed.mcpServers !== undefined
-    ? parsed.mcpServers as Record<string, unknown>
-    : { 'imported-mcp-server': parsed };
+  const servers = getServerEntries(parsed);
 
   return {
     candidates: Object.entries(servers).map(([key, server]) => buildCandidate(key, server)),
     errors: [],
   };
+}
+
+function getServerEntries(parsed: Record<string, unknown>): Record<string, unknown> {
+  if (parsed.mcpServers !== undefined) {
+    return parsed.mcpServers as Record<string, unknown>;
+  }
+  return { 'imported-mcp-server': parsed };
 }
 
 function buildCandidate(key: string, server: unknown): McpImportCandidate {
@@ -122,7 +146,8 @@ function inferTransport(server: Record<string, unknown>, errors: McpImportFieldE
     return explicitTransport;
   }
   if (explicitTransport !== undefined) {
-    errors.push({ field: server.transport !== undefined ? 'transport' : 'type', message: 'Transport must be one of: stdio, sse, http.' });
+    const field = server.transport !== undefined ? 'transport' : 'type';
+    errors.push({ field, message: 'Transport must be one of: stdio, sse, http.' });
   }
   if (server.command) {
     return 'stdio';
@@ -146,6 +171,13 @@ function titleizeKey(key: string): string {
   return key
     .split(/[-_\s]+/)
     .filter(Boolean)
-    .map((part) => part.toLowerCase() === 'mcp' ? 'MCP' : part.charAt(0).toUpperCase() + part.slice(1))
+    .map(capitalizeKeyPart)
     .join(' ');
+}
+
+function capitalizeKeyPart(part: string): string {
+  if (part.toLowerCase() === 'mcp') {
+    return 'MCP';
+  }
+  return part.charAt(0).toUpperCase() + part.slice(1);
 }
