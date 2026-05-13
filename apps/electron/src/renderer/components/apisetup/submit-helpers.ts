@@ -61,7 +61,7 @@ export function resolvePresetStateForBaseUrlChange(params: {
  *
  * Three submit branches:
  *  - branded openai-compat preset (e.g. Manifest)  → pinned to openai-completions
- *  - generic custom preset with a base URL         → honors the protocol toggle
+ *  - generic custom preset with a base URL         → honors the protocol toggle, including openai-responses
  *  - everything else                               → no customEndpoint, passthrough piAuth
  */
 export function resolveCustomEndpointPayload(params: {

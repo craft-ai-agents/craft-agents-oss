@@ -17,6 +17,7 @@ import type {
 import type { PermissionMode } from '../agent/mode-types'
 import type { ThinkingLevel } from '../agent/thinking-levels'
 import type { CustomEndpointConfig } from '../config/llm-connections'
+import type { ModelDefinition } from '../config/models'
 import type {
   AuthRequest as SharedAuthRequest,
   CredentialInputMode as SharedCredentialInputMode,
@@ -347,7 +348,7 @@ export interface LlmConnectionSetup {
   credential?: string
   baseUrl?: string | null
   defaultModel?: string | null
-  models?: string[] | null
+  models?: Array<string | ModelDefinition> | null
   piAuthProvider?: string
   modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
   /** When true, reject setup if the connection doesn't already exist (reauth guard). */
