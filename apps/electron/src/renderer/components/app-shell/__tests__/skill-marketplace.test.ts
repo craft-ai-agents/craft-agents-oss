@@ -11,6 +11,7 @@ import {
   MarketplaceListingCard,
   LocalSkillMarketplaceStatus,
   publishMarketplaceSkill,
+  reportMarketplaceSkillFromDetail,
   SkillMarketplacePageHeader,
   updateMarketplaceSkillFromDetail,
 } from '../SkillMarketplacePage'
@@ -83,8 +84,114 @@ describe('SkillMarketplacePage API boundary', () => {
     expect(html).toContain('GitHub repository')
     expect(html).toContain('Marketplace ID')
     expect(html).toContain('Install')
-    expect(html).toContain('Report placeholder')
+    expect(html).toContain('Report')
     expect(html).toContain('Owner actions')
+  })
+
+  test('submits Marketplace Skill reports with authenticated user context and report details', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'test-writer')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+    const reports: unknown[] = []
+
+    const reportResult = await reportMarketplaceSkillFromDetail({
+      userId: 'user_1',
+      detail: result.detail,
+      context: 'This skill asks users to paste production credentials into chat.',
+      api: {
+        ...api,
+        async reportSkill(input) {
+          reports.push(input)
+          return { status: 'submitted', reportId: 'report_1' }
+        },
+      },
+    })
+
+    expect(reportResult).toEqual({ status: 'submitted', reportId: 'report_1' })
+    expect(reports).toEqual([{
+      userId: 'user_1',
+      marketplaceId: 'mkt_skill_test_writer',
+      marketplaceSlug: 'test-writer',
+      context: 'This skill asks users to paste production credentials into chat.',
+    }])
+  })
+
+  test('does not submit Marketplace Skill reports for anonymous users', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'test-writer')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+
+    const reportResult = await reportMarketplaceSkillFromDetail({
+      userId: null,
+      detail: result.detail,
+      context: 'Unsafe behavior.',
+      api: {
+        ...api,
+        async reportSkill() {
+          throw new Error('should not submit report')
+        },
+      },
+    })
+
+    expect(reportResult).toEqual({
+      status: 'auth-required',
+      message: 'Sign in is required to report Marketplace Skills.',
+    })
+  })
+
+  test('shows Marketplace Skill report validation, success, and service failure states', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'test-writer')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+
+    const validationResult = await reportMarketplaceSkillFromDetail({
+      userId: 'user_1',
+      detail: result.detail,
+      context: '   ',
+      api,
+    })
+    const failureResult = await reportMarketplaceSkillFromDetail({
+      userId: 'user_1',
+      detail: result.detail,
+      context: 'This skill links to a suspicious credential collection page.',
+      api: {
+        ...api,
+        async reportSkill() {
+          throw new Error('Marketplace reports are temporarily unavailable.')
+        },
+      },
+    })
+
+    const validationHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: result.detail,
+      reportState: validationResult,
+    }))
+    const successHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: result.detail,
+      reportState: { status: 'submitted', reportId: 'report_1' },
+    }))
+    const failureHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: result.detail,
+      reportState: failureResult,
+    }))
+    const anonymousHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: result.detail,
+      canReport: false,
+      currentUserId: null,
+    }))
+
+    expect(validationResult).toEqual({
+      status: 'validation-error',
+      message: 'Add report details before submitting.',
+    })
+    expect(failureResult).toEqual({
+      status: 'error',
+      message: 'Marketplace reports are temporarily unavailable.',
+    })
+    expect(validationHtml).toContain('Add report details before submitting.')
+    expect(successHtml).toContain('Report submitted')
+    expect(failureHtml).toContain('Marketplace reports are temporarily unavailable.')
+    expect(anonymousHtml).toContain('Sign in to report')
   })
 
   test('installs Marketplace Skill detail only after authenticated intent and local install succeed', async () => {

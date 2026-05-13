@@ -70,6 +70,7 @@ export interface MarketplaceCatalogFilters {
 export interface MarketplaceApi {
   listSkills: () => Promise<MarketplaceSkillListing[]>
   getSkillDetail: (slug: string) => Promise<MarketplaceSkillDetail>
+  reportSkill: (input: MarketplaceSkillReportInput) => Promise<MarketplaceReportResult>
   createInstallIntent: (detail: MarketplaceSkillDetail, userId: string) => Promise<MarketplaceInstallIntent>
   recordInstallComplete: (intentId: string) => Promise<void>
   createUpdateIntent: (detail: MarketplaceSkillDetail, userId: string) => Promise<MarketplaceInstallIntent>
@@ -85,6 +86,21 @@ export interface MarketplacePublishApi {
 export type MarketplacePublishResult =
   | { status: 'published'; marketplaceSlug: string }
   | { status: 'slug-conflict'; marketplaceSlug: string; message: string }
+  | { status: 'auth-required'; message: string }
+  | { status: 'error'; message: string }
+
+/** User-authenticated report payload sent to the Marketplace service for abuse review. */
+export interface MarketplaceSkillReportInput {
+  userId: string
+  marketplaceId: string
+  marketplaceSlug: string
+  context: string
+}
+
+/** UI-safe result returned after attempting a Marketplace Skill report. */
+export type MarketplaceReportResult =
+  | { status: 'submitted'; reportId: string }
+  | { status: 'validation-error'; message: string }
   | { status: 'auth-required'; message: string }
   | { status: 'error'; message: string }
 
@@ -296,6 +312,9 @@ export function createStaticMarketplaceApi(options?: StaticMarketplaceApiOptions
       if (!detail) throw new Error('Marketplace Skill not found.')
       return detail
     },
+    async reportSkill(input) {
+      return { status: 'submitted', reportId: `report_${input.marketplaceId}` }
+    },
     async createInstallIntent(detail) {
       const bytes = zipSync({ 'SKILL.md': strToU8(detail.skillMarkdown) })
       return {
@@ -503,6 +522,42 @@ export async function publishMarketplaceSkill({
   }
 }
 
+/** Submits a user report for one published Marketplace Skill after auth and context validation. */
+export async function reportMarketplaceSkillFromDetail({
+  userId,
+  detail,
+  context,
+  api,
+}: {
+  userId: string | null
+  detail: MarketplaceSkillDetail
+  context: string
+  api: MarketplaceApi
+}): Promise<MarketplaceReportResult> {
+  if (!userId) {
+    return { status: 'auth-required', message: 'Sign in is required to report Marketplace Skills.' }
+  }
+
+  const trimmedContext = context.trim()
+  if (!trimmedContext) {
+    return { status: 'validation-error', message: 'Add report details before submitting.' }
+  }
+
+  try {
+    return await api.reportSkill({
+      userId,
+      marketplaceId: detail.metadata.marketplaceId,
+      marketplaceSlug: detail.metadata.marketplaceSlug,
+      context: trimmedContext,
+    })
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Marketplace report failed.',
+    }
+  }
+}
+
 const defaultMarketplaceApi = createStaticMarketplaceApi()
 const defaultMarketplaceServiceConfig = resolveMarketplaceServiceConfig()
 
@@ -513,6 +568,11 @@ type MarketplaceDetailInstallState =
   | { status: 'conflict'; message: string }
   | { status: 'skipped'; message: string }
   | { status: 'error'; message: string }
+
+type MarketplaceDetailReportState =
+  | { status: 'idle' }
+  | { status: 'submitting' }
+  | MarketplaceReportResult
 
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b))
@@ -624,6 +684,23 @@ function marketplaceInstallAlertClassName(status: Exclude<MarketplaceDetailInsta
   }
 }
 
+function marketplaceReportAlertClassName(status: Exclude<MarketplaceDetailReportState['status'], 'idle' | 'submitting'>): string {
+  switch (status) {
+    case 'submitted':
+      return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+    case 'validation-error':
+    case 'auth-required':
+      return 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
+    case 'error':
+      return 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300'
+  }
+}
+
+function marketplaceReportMessage(state: Exclude<MarketplaceDetailReportState, { status: 'idle' } | { status: 'submitting' }>): string {
+  if (state.status === 'submitted') return 'Report submitted. Marketplace moderators will review this Skill.'
+  return state.message
+}
+
 /** Read-only Marketplace browsing page with catalog filters and detail inspection. */
 export function SkillMarketplacePage({
   api = defaultMarketplaceApi,
@@ -643,6 +720,7 @@ export function SkillMarketplacePage({
   const [selectedSlug, setSelectedSlug] = React.useState<string | null>(null)
   const [detailState, setDetailState] = React.useState<MarketplaceDetailState | { status: 'idle' | 'loading' }>({ status: 'idle' })
   const [installStateBySlug, setInstallStateBySlug] = React.useState<Record<string, MarketplaceDetailInstallState>>({})
+  const [reportStateBySlug, setReportStateBySlug] = React.useState<Record<string, MarketplaceDetailReportState>>({})
 
   const refreshCatalog = React.useCallback(() => {
     setCatalogState({ status: 'loading' })
@@ -695,6 +773,17 @@ export function SkillMarketplacePage({
 
     setInstallStateBySlug((previous) => ({ ...previous, [detail.slug]: marketplaceInstallStateFromResult(result) }))
   }, [api, currentUserId, workspaceId])
+
+  const reportDetail = React.useCallback(async (detail: MarketplaceSkillDetail, context: string) => {
+    setReportStateBySlug((previous) => ({ ...previous, [detail.slug]: { status: 'submitting' } }))
+    const result = await reportMarketplaceSkillFromDetail({
+      userId: currentUserId,
+      detail,
+      context,
+      api,
+    })
+    setReportStateBySlug((previous) => ({ ...previous, [detail.slug]: result }))
+  }, [api, currentUserId])
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
@@ -785,7 +874,10 @@ export function SkillMarketplacePage({
               detail={detailState.detail}
               installState={installStateBySlug[detailState.detail.slug] ?? { status: 'idle' }}
               onInstall={(conflictResolution) => installDetail(detailState.detail, conflictResolution)}
+              reportState={reportStateBySlug[detailState.detail.slug] ?? { status: 'idle' }}
+              onReport={(context) => reportDetail(detailState.detail, context)}
               canInstall={Boolean(currentUserId)}
+              canReport={Boolean(currentUserId)}
               currentUserId={currentUserId}
             />
           )}
@@ -940,22 +1032,32 @@ export function MarketplaceListingCard({
 export function MarketplaceDetail({
   detail,
   installState = { status: 'idle' },
+  reportState = { status: 'idle' },
   onInstall,
+  onReport,
   canInstall = true,
+  canReport = true,
   currentUserId = null,
 }: {
   detail: MarketplaceSkillDetail
   installState?: MarketplaceDetailInstallState
+  reportState?: MarketplaceDetailReportState
   onInstall?: (conflictResolution?: MarketplaceInstallConflictResolution) => void
+  onReport?: (context: string) => void
   canInstall?: boolean
+  canReport?: boolean
   currentUserId?: string | null
 }) {
+  const [reportOpen, setReportOpen] = React.useState(false)
+  const [reportContext, setReportContext] = React.useState('')
   const isBlocked = detail.installState === 'safety-blocked' || detail.installState === 'unavailable'
   const isInstalling = installState.status === 'installing'
+  const isReportSubmitting = reportState.status === 'submitting'
   const ownerLinked = isOwnerLinked(detail, currentUserId)
   const hasUnpublishedChanges = ownerLinked && detail.installState === 'modified-locally'
   const canRunPrimaryAction = !isInstalling && !hasUnpublishedChanges
   const actionLabel = getMarketplaceInstallActionLabel(detail, installState, canInstall, currentUserId)
+  const reportLabel = canReport ? 'Report' : 'Sign in to report'
 
   return (
     <div className="space-y-5 p-5">
@@ -988,10 +1090,52 @@ export function MarketplaceDetail({
               {actionLabel}
             </button>
           )}
-          <DisabledAction icon={<Flag className="h-3.5 w-3.5" />} label="Report placeholder" />
+          <button
+            type="button"
+            disabled={!canReport || isReportSubmitting}
+            onClick={() => setReportOpen((open) => !open)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
+          >
+            <Flag className="h-3.5 w-3.5" />
+            {isReportSubmitting ? 'Submitting...' : reportLabel}
+          </button>
           <DisabledAction icon={<UserCog className="h-3.5 w-3.5" />} label="Owner actions" />
         </div>
       </div>
+
+      {(reportOpen || reportState.status !== 'idle') && (
+        <div className="rounded-md border border-border bg-muted/20 p-3">
+          <label className="text-xs font-medium" htmlFor={`marketplace-report-${detail.slug}`}>
+            Report details
+          </label>
+          <textarea
+            id={`marketplace-report-${detail.slug}`}
+            value={reportContext}
+            onChange={(event) => setReportContext(event.target.value)}
+            disabled={!canReport || isReportSubmitting}
+            placeholder="Describe the abusive, unsafe, or policy-violating behavior."
+            className="mt-2 min-h-24 w-full resize-y rounded-md border border-border bg-background p-2 text-sm outline-none focus:border-foreground/30 disabled:bg-muted"
+          />
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">Reports include this Marketplace Skill identity and your account.</p>
+            <button
+              type="button"
+              disabled={!canReport || isReportSubmitting}
+              onClick={() => onReport?.(reportContext)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
+            >
+              <Flag className="h-3.5 w-3.5" />
+              Submit report
+            </button>
+          </div>
+        </div>
+      )}
+
+      {reportState.status !== 'idle' && reportState.status !== 'submitting' && (
+        <div className={`rounded-md border p-3 text-sm ${marketplaceReportAlertClassName(reportState.status)}`}>
+          {marketplaceReportMessage(reportState)}
+        </div>
+      )}
 
       {installState.status !== 'idle' && installState.status !== 'installing' && (
         <div className={`rounded-md border p-3 text-sm ${marketplaceInstallAlertClassName(installState.status)}`}>
