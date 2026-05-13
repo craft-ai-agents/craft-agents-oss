@@ -20,7 +20,6 @@ import {
   Plus,
   Trash2,
   DatabaseZap,
-  Zap,
   Inbox,
   Globe,
   FolderOpen,
@@ -33,7 +32,6 @@ import {
   Bot,
   Info,
   MailOpen,
-  Store,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -149,6 +147,11 @@ import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 import { resolveSidebarDrilldownLayout } from "./sidebar-drilldown-layout"
+import {
+  createSkillsSidebarItems,
+  LOCAL_SKILLS_NAV_ID,
+  SKILL_MARKETPLACE_NAV_ID,
+} from "./skills-sidebar-items"
 import {
   loadRightSidebarOpenPreference,
   persistRightSidebarOpenPreference,
@@ -2066,8 +2069,8 @@ function AppShellContent({
 
     // 3. Sources, Skills, Marketplace, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
-    result.push({ id: 'nav:local-skills', type: 'nav', action: handleLocalSkillsClick })
-    result.push({ id: 'nav:marketplace', type: 'nav', action: handleSkillMarketplaceClick })
+    result.push({ id: LOCAL_SKILLS_NAV_ID, type: 'nav', action: handleLocalSkillsClick })
+    result.push({ id: SKILL_MARKETPLACE_NAV_ID, type: 'nav', action: handleSkillMarketplaceClick })
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick() })
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
@@ -2609,25 +2612,15 @@ function AppShellContent({
                         },
                       ],
                     },
-                    {
-                      id: "nav:local-skills",
-                      title: t("sidebar.skills"),
-                      label: String(skills.length),
-                      icon: Zap,
-                      variant: isLocalSkillsNav ? "default" : "ghost",
-                      onClick: handleLocalSkillsClick,
-                      contextMenu: {
-                        type: 'skills',
-                        onAddSkill: openAddSkill,
-                      },
-                    },
-                    {
-                      id: "nav:marketplace",
-                      title: t("sidebar.marketplace"),
-                      icon: Store,
-                      variant: isSkillMarketplaceNav ? "default" : "ghost",
-                      onClick: handleSkillMarketplaceClick,
-                    },
+                    ...createSkillsSidebarItems({
+                      skillsCount: skills.length,
+                      isLocalSkillsNav,
+                      isSkillMarketplaceNav,
+                      onLocalSkillsClick: handleLocalSkillsClick,
+                      onSkillMarketplaceClick: handleSkillMarketplaceClick,
+                      onAddSkill: openAddSkill,
+                      t,
+                    }),
                     {
                       id: "nav:automations",
                       title: t("sidebar.automations"),
