@@ -43,6 +43,7 @@ export {
   createHttpMarketplacePublishApi,
   publishLocalSkillToMarketplace,
   publishLocalSkillToMarketplaceService,
+  suggestMarketplacePublishSlug,
   suggestMarketplaceSlug,
   validateMarketplacePublishRequest,
 } from './marketplace-publish.ts';

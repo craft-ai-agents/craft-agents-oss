@@ -175,6 +175,32 @@ describe('loadSkill', () => {
     expect(skill!.metadata.globs).toEqual(['*.tsx', '*.css']);
   });
 
+  it('should load Marketplace origin metadata for workspace skills', () => {
+    const skillDir = createSkill(join(workspaceRoot, 'skills'), 'derived-helper');
+    writeFileSync(join(skillDir, '.marketplace-origin.json'), JSON.stringify({
+      marketplaceId: 'mkt_skill_original',
+      marketplaceSlug: 'original-skill',
+      ownerId: 'owner_2',
+      ownerDisplayName: 'Original Owner',
+      installedVersion: '1.2.3',
+      installedAt: '2026-05-01T00:00:00.000Z',
+      lastCheckedAt: '2026-05-01T00:00:00.000Z',
+      modified: true,
+      sourceBundleHash: 'hash',
+      safetyStatus: 'ok',
+    }));
+
+    const skill = loadSkill(workspaceRoot, 'derived-helper');
+
+    expect(skill).not.toBeNull();
+    expect(skill!.marketplaceOrigin).toMatchObject({
+      marketplaceId: 'mkt_skill_original',
+      marketplaceSlug: 'original-skill',
+      ownerId: 'owner_2',
+      installedVersion: '1.2.3',
+    });
+  });
+
   it('should load skill with normalized requiredSources', () => {
     createSkill(join(workspaceRoot, 'skills'), 'with-sources', {
       requiredSources: ['linear', ' github ', 'linear'],

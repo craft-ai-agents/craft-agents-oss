@@ -5,6 +5,8 @@
  * Skills are specialized instructions that extend Claude's capabilities.
  */
 
+import type { MarketplaceOriginMetadata } from './marketplace-install.ts';
+
 /**
  * Skill metadata from SKILL.md YAML frontmatter
  */
@@ -56,6 +58,8 @@ export interface LoadedSkill {
   path: string;
   /** Where this skill was loaded from */
   source: SkillSource;
+  /** Marketplace origin sidecar metadata when this workspace skill was installed from Marketplace */
+  marketplaceOrigin?: MarketplaceOriginMetadata;
 }
 
 /**

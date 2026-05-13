@@ -19,7 +19,7 @@ import { routes, navigate } from '@/lib/navigate'
 import { useActiveWorkspace } from '@/context/AppShellContext'
 import {
   PRODUCT_MARKETPLACE_CATEGORIES,
-  suggestMarketplaceSlug,
+  suggestMarketplacePublishSlug,
   type MarketplacePublishLocalResult,
 } from '@craft-agent/shared/skills'
 import {
@@ -68,7 +68,11 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
         const found = skills.find((s) => s.slug === skillSlug)
         if (found) {
           setSkill(found)
-          setMarketplaceSlug(suggestMarketplaceSlug(found.metadata))
+          setMarketplaceSlug(suggestMarketplacePublishSlug({
+            metadata: found.metadata,
+            origin: found.marketplaceOrigin,
+            currentUserId,
+          }))
         } else {
           setError(t('skillInfo.notFound'))
         }
@@ -95,7 +99,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
       isMounted = false
       unsubscribe?.()
     }
-  }, [workspaceId, skillSlug, workingDirectory])
+  }, [workspaceId, skillSlug, workingDirectory, currentUserId])
 
   // Handle open in finder
   const handleOpenInFinder = useCallback(async () => {
@@ -232,7 +236,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             }
           >
             <div className="px-4 py-3">
-              <LocalSkillMarketplaceStatus publishState={publishState} />
+              <LocalSkillMarketplaceStatus metadata={skill.marketplaceOrigin} publishState={publishState} />
             </div>
           </Info_Section>
 
@@ -346,7 +350,9 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
               <div>
                 <h2 className="text-sm font-semibold">Publish Skill</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Publish {skill.metadata.name} as an immutable Marketplace version.
+                  {skill.marketplaceOrigin?.ownerId && skill.marketplaceOrigin.ownerId !== currentUserId
+                    ? `Publish your edits to ${skill.metadata.name} as a new Marketplace Skill.`
+                    : `Publish ${skill.metadata.name} as an immutable Marketplace version.`}
                 </p>
               </div>
               <button type="button" className="text-sm text-muted-foreground hover:text-foreground" onClick={() => setPublishDialogOpen(false)}>
