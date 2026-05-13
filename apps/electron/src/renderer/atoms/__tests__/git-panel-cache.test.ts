@@ -7,6 +7,7 @@ describe('git panel cache atoms', () => {
     const store = createStore()
 
     expect(store.get(gitPanelCacheAtomFamily('/repo'))).toEqual({
+      hasLoaded: false,
       statusEntries: [],
       commits: [],
       error: null,
@@ -17,17 +18,20 @@ describe('git panel cache atoms', () => {
     const store = createStore()
 
     store.set(gitPanelCacheAtomFamily('/repo-a'), {
+      hasLoaded: true,
       statusEntries: [{ path: 'src/index.ts', status: 'modified' }],
       commits: [],
       error: 'Unable to load git data',
     })
 
     expect(store.get(gitPanelCacheAtomFamily('/repo-a'))).toEqual({
+      hasLoaded: true,
       statusEntries: [{ path: 'src/index.ts', status: 'modified' }],
       commits: [],
       error: 'Unable to load git data',
     })
     expect(store.get(gitPanelCacheAtomFamily('/repo-b'))).toEqual({
+      hasLoaded: false,
       statusEntries: [],
       commits: [],
       error: null,
@@ -38,6 +42,7 @@ describe('git panel cache atoms', () => {
     const store = createStore()
 
     store.set(gitPanelCacheAtomFamily(''), {
+      hasLoaded: true,
       statusEntries: [{ path: 'README.md', status: 'staged' }],
       commits: [
         {
@@ -53,6 +58,7 @@ describe('git panel cache atoms', () => {
     })
 
     expect(store.get(gitPanelCacheAtomFamily(''))).toEqual({
+      hasLoaded: false,
       statusEntries: [],
       commits: [],
       error: null,

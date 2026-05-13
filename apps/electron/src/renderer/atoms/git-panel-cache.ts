@@ -6,12 +6,14 @@ import type { GitCommit, GitStatusEntry } from '../../shared/types'
  * Cached git panel data for a workspace root.
  */
 export type GitPanelCache = {
+  hasLoaded: boolean
   statusEntries: GitStatusEntry[]
   commits: GitCommit[]
   error: string | null
 }
 
 const ZERO_GIT_PANEL_CACHE: GitPanelCache = {
+  hasLoaded: false,
   statusEntries: [],
   commits: [],
   error: null,
@@ -19,6 +21,7 @@ const ZERO_GIT_PANEL_CACHE: GitPanelCache = {
 
 function createZeroGitPanelCache(): GitPanelCache {
   return {
+    hasLoaded: false,
     statusEntries: [],
     commits: [],
     error: null,

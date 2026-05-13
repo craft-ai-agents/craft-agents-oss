@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileDiff, GitCommitHorizontal, GitPullRequestClosed, Loader2 } from 'lucide-react'
 import { formatDistanceToNowStrict } from 'date-fns'
-import { useSetAtom } from 'jotai'
+import { useAtom, useSetAtom } from 'jotai'
 import type { GitCommit, GitStatusEntry } from '../../../shared/types'
 import { openCommitTabAtom, openWorkingTreeDiffTabAtom } from '@/atoms/editor-tabs'
+import { gitPanelCacheAtomFamily, type GitPanelCache } from '@/atoms/git-panel-cache'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_STATUS_HEIGHT = 42
@@ -13,6 +14,61 @@ const MAX_STATUS_HEIGHT = 72
 interface GitPanelProps {
   workspacePath?: string
   className?: string
+}
+
+type GitPanelFetchApi = Pick<typeof window.electronAPI, 'getGitStatus' | 'getGitLog'>
+
+interface RefreshGitPanelCacheOptions {
+  workspacePath: string
+  cached: GitPanelCache
+  api: GitPanelFetchApi
+  setCache: (next: GitPanelCache) => void
+  setIsLoading: (next: boolean) => void
+  setIsRefreshing: (next: boolean) => void
+  isCancelled: () => boolean
+}
+
+export async function refreshGitPanelCache({
+  workspacePath,
+  cached,
+  api,
+  setCache,
+  setIsLoading,
+  setIsRefreshing,
+  isCancelled,
+}: RefreshGitPanelCacheOptions) {
+  const isWarmCache = cached.hasLoaded
+
+  setIsLoading(!isWarmCache)
+  setIsRefreshing(isWarmCache)
+
+  try {
+    const [nextStatus, nextCommits] = await Promise.all([
+      api.getGitStatus(workspacePath),
+      api.getGitLog(workspacePath),
+    ])
+    if (isCancelled()) return
+    setCache({
+      hasLoaded: true,
+      statusEntries: nextStatus,
+      commits: nextCommits,
+      error: null,
+    })
+  } catch (err) {
+    if (isCancelled()) return
+    const error = err instanceof Error ? err.message : 'Unable to load git data'
+    setCache({
+      hasLoaded: true,
+      statusEntries: isWarmCache ? cached.statusEntries : [],
+      commits: isWarmCache ? cached.commits : [],
+      error,
+    })
+  } finally {
+    if (!isCancelled()) {
+      setIsLoading(false)
+      setIsRefreshing(false)
+    }
+  }
 }
 
 function statusLabel(status: GitStatusEntry['status']): string {
@@ -187,49 +243,42 @@ function GitHistorySection({
 export function GitPanel({ workspacePath, className }: GitPanelProps) {
   const openWorkingTreeDiffTab = useSetAtom(openWorkingTreeDiffTabAtom)
   const openCommitTab = useSetAtom(openCommitTabAtom)
-  const [statusEntries, setStatusEntries] = useState<GitStatusEntry[]>([])
-  const [commits, setCommits] = useState<GitCommit[]>([])
+  const cacheAtom = useMemo(() => gitPanelCacheAtomFamily(workspacePath ?? ''), [workspacePath])
+  const [cache, setCache] = useAtom(cacheAtom)
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [statusHeight, setStatusHeight] = useState(DEFAULT_STATUS_HEIGHT)
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null)
+  const cacheRef = useRef(cache)
+
+  useEffect(() => {
+    cacheRef.current = cache
+  }, [cache])
 
   useEffect(() => {
     let cancelled = false
-
-    async function loadGitData() {
-      if (!workspacePath) {
-        setStatusEntries([])
-        setCommits([])
-        setError(null)
-        return
-      }
-
-      setIsLoading(true)
-      setError(null)
-      try {
-        const [nextStatus, nextCommits] = await Promise.all([
-          window.electronAPI.getGitStatus(workspacePath),
-          window.electronAPI.getGitLog(workspacePath),
-        ])
-        if (cancelled) return
-        setStatusEntries(nextStatus)
-        setCommits(nextCommits)
-      } catch (err) {
-        if (cancelled) return
-        setStatusEntries([])
-        setCommits([])
-        setError(err instanceof Error ? err.message : 'Unable to load git data')
-      } finally {
-        if (!cancelled) setIsLoading(false)
+    if (!workspacePath) {
+      setIsLoading(false)
+      setIsRefreshing(false)
+      return () => {
+        cancelled = true
       }
     }
 
-    loadGitData()
+    void refreshGitPanelCache({
+      workspacePath,
+      cached: cacheRef.current,
+      api: window.electronAPI,
+      setCache,
+      setIsLoading,
+      setIsRefreshing,
+      isCancelled: () => cancelled,
+    })
+
     return () => {
       cancelled = true
     }
-  }, [workspacePath])
+  }, [setCache, workspacePath])
 
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -253,7 +302,10 @@ export function GitPanel({ workspacePath, className }: GitPanelProps) {
     document.addEventListener('mouseup', handleMouseUp)
   }, [statusHeight])
 
-  const noRepository = !!workspacePath && !isLoading && !error && statusEntries.length === 0 && commits.length === 0
+  const { statusEntries, commits, error } = cache
+  const hasVisibleCachedData = statusEntries.length > 0 || commits.length > 0
+  const showLoading = !!workspacePath && (isLoading || !cache.hasLoaded)
+  const noRepository = !!workspacePath && cache.hasLoaded && !showLoading && !error && !hasVisibleCachedData
 
   const handleOpenDiff = useCallback((filePath: string) => {
     if (!workspacePath) return
@@ -273,7 +325,7 @@ export function GitPanel({ workspacePath, className }: GitPanelProps) {
     )
   }
 
-  if (isLoading) {
+  if (showLoading) {
     return (
       <div className={cn('h-full bg-background flex items-center justify-center text-muted-foreground', className)}>
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -281,7 +333,7 @@ export function GitPanel({ workspacePath, className }: GitPanelProps) {
     )
   }
 
-  if (error) {
+  if (error && !hasVisibleCachedData) {
     return (
       <div className={cn('h-full bg-background', className)}>
         <div className="h-full flex flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted-foreground">
@@ -294,6 +346,16 @@ export function GitPanel({ workspacePath, className }: GitPanelProps) {
 
   return (
     <div className={cn('h-full min-h-0 bg-background flex flex-col', className)}>
+      {isRefreshing && (
+        <div className="h-0.5 shrink-0 overflow-hidden bg-muted">
+          <div className="h-full w-full animate-pulse bg-muted-foreground/30" />
+        </div>
+      )}
+      {error && (
+        <div className="shrink-0 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          {error}
+        </div>
+      )}
       <div className="min-h-0" style={{ height: `${statusHeight}%` }}>
         <GitStatusSection
           entries={statusEntries}
