@@ -77,6 +77,16 @@ export type {
   BasicAuthCredential,
 } from './credential-manager.ts';
 
+// MCP JSON import parsing
+export {
+  parseMcpJsonImportCandidates,
+} from './mcp-import.ts';
+export type {
+  McpImportCandidate,
+  McpImportFieldError,
+  McpImportParseResult,
+} from './mcp-import.ts';
+
 // Server Builder (builds MCP/API servers from sources)
 export {
   SourceServerBuilder,
