@@ -10,6 +10,7 @@ interface CreateAllSessionsSidebarItemInput {
   contextMenu?: SidebarContextMenuConfig
 }
 
+/** Creates the flat All Sessions sidebar item that opens session drill-down mode. */
 export function createAllSessionsSidebarItem({
   title,
   label,
