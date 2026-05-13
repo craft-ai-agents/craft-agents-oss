@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { createAllSessionsSidebarItem } from '../all-sessions-sidebar-item'
 import { resolveSidebarDrilldownLayout } from '../sidebar-drilldown-layout'
 import type { NavigationState } from '../../../../shared/types'
 
@@ -95,5 +96,27 @@ describe('resolveSidebarDrilldownLayout', () => {
       showSessionListResizeHandle: false,
       isRightSidebarVisible: false,
     })
+  })
+
+  test('creates all sessions as a flat drilldown trigger without expandable children', () => {
+    const item = createAllSessionsSidebarItem({
+      title: 'All Sessions',
+      label: '3',
+      isActive: true,
+      onClick: () => {},
+      contextMenu: { type: 'allSessions' },
+    })
+
+    expect(item).toMatchObject({
+      id: 'nav:allSessions',
+      title: 'All Sessions',
+      label: '3',
+      variant: 'default',
+    })
+    expect(item.expandable).toBeUndefined()
+    expect(item.expanded).toBeUndefined()
+    expect(item.onToggle).toBeUndefined()
+    expect(item.sortable).toBeUndefined()
+    expect(item.items).toBeUndefined()
   })
 })
