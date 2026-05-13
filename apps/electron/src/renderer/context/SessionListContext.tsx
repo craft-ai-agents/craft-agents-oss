@@ -1,5 +1,4 @@
 import { createContext, useContext } from "react"
-import type { LabelConfig } from "@craft-agent/shared/labels"
 import type { SessionStatusId, SessionStatus } from "@/config/session-status-config"
 import type { SessionMeta } from "@/atoms/sessions"
 import type { SessionOptions } from "@/hooks/useSessionOptions"
@@ -15,7 +14,6 @@ export interface SessionListContextValue {
   onUnarchive?: (sessionId: string) => void
   onMarkUnread: (sessionId: string) => void
   onDelete: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
-  onLabelsChange?: (sessionId: string, labels: string[]) => void
   onSelectSessionById: (sessionId: string) => void
   onOpenInNewWindow: (item: SessionMeta) => void
   onSendToWorkspace?: (sessionIds: string[]) => void
@@ -24,8 +22,6 @@ export interface SessionListContextValue {
 
   // Shared config
   sessionStatuses: SessionStatus[]
-  flatLabels: LabelConfig[]
-  labels: LabelConfig[]
   searchQuery?: string
   selectedSessionId?: string | null
   isMultiSelectActive: boolean

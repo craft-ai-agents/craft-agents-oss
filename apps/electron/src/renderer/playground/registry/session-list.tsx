@@ -93,8 +93,6 @@ function createMockContext(overrides: Partial<SessionListContextValue> = {}): Se
     onFocusZone: () => {},
     onKeyDown: () => {},
     sessionStatuses: mockSessionStatuses,
-    flatLabels: [],
-    labels: [],
     isMultiSelectActive: false,
     contentSearchResults: new Map(),
     ...overrides,

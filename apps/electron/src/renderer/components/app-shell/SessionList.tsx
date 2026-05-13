@@ -9,8 +9,6 @@ import { Inbox, Archive } from "lucide-react"
 import { getSessionStatus } from "@/utils/session"
 import * as storage from "@/lib/local-storage"
 import { KEYS } from "@/lib/local-storage"
-import type { LabelConfig } from "@craft-agent/shared/labels"
-import { flattenLabels } from "@craft-agent/shared/labels"
 import * as MultiSelect from "@/hooks/useMultiSelect"
 import { Spinner } from "@craft-agent/ui"
 import { EntityListEmptyScreen } from "@/components/ui/entity-list-empty"
@@ -71,10 +69,6 @@ interface SessionListProps {
   sessionStatuses?: SessionStatus[]
   /** View evaluator — evaluates a session and returns matching view configs */
   evaluateViews?: (meta: SessionMeta) => ViewConfig[]
-  /** Label configs for resolving session label IDs to display info */
-  labels?: LabelConfig[]
-  /** Callback when session labels are toggled (for labels submenu in SessionMenu) */
-  onLabelsChange?: (sessionId: string, labels: string[]) => void
   /** How to group sessions: 'date' (default) or 'status' */
   groupingMode?: ChatGroupingMode
   /** Workspace ID for content search (optional - if not provided, content search is disabled) */
@@ -131,8 +125,6 @@ export function SessionList({
   onSearchClose,
   sessionStatuses = [],
   evaluateViews,
-  labels = [],
-  onLabelsChange,
   groupingMode = 'date',
   workspaceId,
   statusFilter,
@@ -158,9 +150,6 @@ export function SessionList({
   const navigateToSession = onNavigateToSession ?? navigateToSessionPrimary
   const navState = useNavigationState()
   const { showEscapeOverlay } = useEscapeInterrupt()
-
-  // Pre-flatten label tree once for efficient ID lookups in each SessionItem
-  const flatLabels = useMemo(() => flattenLabels(labels), [labels])
 
   // Get current filter from navigation state (for preserving context in tab routes)
   const currentFilter = isSessionsNavigation(navState) ? navState.filter : undefined
@@ -622,15 +611,12 @@ export function SessionList({
     onUnarchive: onUnarchive ? handleUnarchiveWithToast : undefined,
     onMarkUnread,
     onDelete: handleDeleteWithToast,
-    onLabelsChange,
     onSelectSessionById: handleSelectSessionById,
     onOpenInNewWindow: handleOpenInNewWindow,
     onSendToWorkspace: (ids: string[]) => setSendToWorkspace(ids),
     onFocusZone: handleFocusZone,
     onKeyDown: handleKeyDown,
     sessionStatuses,
-    flatLabels,
-    labels,
     searchQuery: resolvedSearchQuery,
     selectedSessionId: focusedSessionId !== undefined ? focusedSessionId : selectionStore.state.selected,
     isMultiSelectActive,
@@ -642,9 +628,9 @@ export function SessionList({
     handleRenameClick, onSessionStatusChange,
     onFlag, handleFlagWithToast, onUnflag, handleUnflagWithToast,
     onArchive, handleArchiveWithToast, onUnarchive, handleUnarchiveWithToast,
-    onMarkUnread, handleDeleteWithToast, onLabelsChange,
+    onMarkUnread, handleDeleteWithToast,
     handleSelectSessionById, handleOpenInNewWindow, setSendToWorkspace, handleFocusZone, handleKeyDown,
-    sessionStatuses, flatLabels, labels, resolvedSearchQuery,
+    sessionStatuses, resolvedSearchQuery,
     focusedSessionId, selectionStore.state.selected, isMultiSelectActive,
     sessionOptions, contentSearchResults, activeChatMatchInfo, hasPendingPrompt,
   ])
