@@ -53,6 +53,17 @@ export function resolveSidebarDrilldownLayout({
     }
   }
 
+  if (navState.navigator === 'skill-marketplace') {
+    return {
+      isDrilldown,
+      sidebarWidth: isSidebarVisible ? sidebarWidth : 0,
+      navigatorWidth: 0,
+      showSidebarResizeHandle: true,
+      showSessionListResizeHandle: false,
+      isRightSidebarVisible: false,
+    }
+  }
+
   return {
     isDrilldown,
     sidebarWidth: isSidebarVisible ? sidebarWidth : 0,

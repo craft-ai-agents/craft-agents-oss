@@ -606,7 +606,6 @@ function AppShellContent({
   const navState = useNavigationState()
   const isLocalSkillsNav = isLocalSkillsNavigation(navState)
   const isSkillMarketplaceNav = isSkillMarketplaceNavigation(navState)
-  const isAnySkillsNavigation = isLocalSkillsNav || isSkillMarketplaceNav
   const [isRightSidebarOpen, setIsRightSidebarOpen] = React.useState(() => {
     return loadRightSidebarOpenPreference(activeWorkspaceId ?? undefined)
   })
@@ -2065,11 +2064,10 @@ function AppShellContent({
     }
     flattenTree(labelTree)
 
-    // 3. Sources, Skills, Settings
+    // 3. Sources, Skills, Marketplace, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
-    result.push({ id: 'nav:skills', type: 'nav', action: handleLocalSkillsClick })
-    result.push({ id: 'nav:skills:local', type: 'nav', action: handleLocalSkillsClick })
-    result.push({ id: 'nav:skills:marketplace', type: 'nav', action: handleSkillMarketplaceClick })
+    result.push({ id: 'nav:local-skills', type: 'nav', action: handleLocalSkillsClick })
+    result.push({ id: 'nav:marketplace', type: 'nav', action: handleSkillMarketplaceClick })
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick() })
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
@@ -2553,7 +2551,7 @@ function AppShellContent({
                     },
                     // --- Separator ---
                     { id: "separator:chats-sources", type: "separator" },
-                    // --- Sources & Skills Section ---
+                    // --- Sources, Skills & Marketplace Section ---
                     {
                       id: "nav:sources",
                       title: t("sidebar.sources"),
@@ -2612,40 +2610,23 @@ function AppShellContent({
                       ],
                     },
                     {
-                      id: "nav:skills",
+                      id: "nav:local-skills",
                       title: t("sidebar.skills"),
                       label: String(skills.length),
                       icon: Zap,
-                      variant: isAnySkillsNavigation ? "default" : "ghost",
+                      variant: isLocalSkillsNav ? "default" : "ghost",
                       onClick: handleLocalSkillsClick,
-                      expandable: true,
-                      expanded: isExpanded('nav:skills'),
-                      onToggle: () => toggleExpanded('nav:skills'),
                       contextMenu: {
                         type: 'skills',
                         onAddSkill: openAddSkill,
                       },
-                      items: [
-                        {
-                          id: "nav:skills:local",
-                          title: t("sidebar.localSkills"),
-                          label: String(skills.length),
-                          icon: Zap,
-                          variant: isLocalSkillsNav ? "default" : "ghost",
-                          onClick: handleLocalSkillsClick,
-                          contextMenu: {
-                            type: 'skills' as const,
-                            onAddSkill: openAddSkill,
-                          },
-                        },
-                        {
-                          id: "nav:skills:marketplace",
-                          title: t("sidebar.marketplace"),
-                          icon: Store,
-                          variant: isSkillMarketplaceNav ? "default" : "ghost",
-                          onClick: handleSkillMarketplaceClick,
-                        },
-                      ],
+                    },
+                    {
+                      id: "nav:marketplace",
+                      title: t("sidebar.marketplace"),
+                      icon: Store,
+                      variant: isSkillMarketplaceNav ? "default" : "ghost",
+                      onClick: handleSkillMarketplaceClick,
                     },
                     {
                       id: "nav:automations",
