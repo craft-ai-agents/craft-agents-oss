@@ -12,14 +12,15 @@ import {
   readMarketplaceOriginMetadata,
   type MarketplaceOriginMetadata,
 } from './marketplace-install.ts'
+import { PRODUCT_MARKETPLACE_CATEGORIES, type ProductMarketplaceCategory } from './marketplace-config.ts'
 
 export { MARKETPLACE_ORIGIN_METADATA_FILE, readMarketplaceOriginMetadata } from './marketplace-install.ts'
 
-/** Product-owned Marketplace categories that Local Skills can be published under. */
-export const PRODUCT_MARKETPLACE_CATEGORIES = ['Documentation', 'Product', 'Quality', 'Security'] as const
-
-/** Category accepted by the product Marketplace publish workflow. */
-export type ProductMarketplaceCategory = typeof PRODUCT_MARKETPLACE_CATEGORIES[number]
+export {
+  PRODUCT_MARKETPLACE_CATEGORIES,
+  type ProductMarketplaceCategory,
+  suggestMarketplacePublishSlug,
+} from './marketplace-config.ts'
 
 /** Payload sent to the Marketplace service when publishing a Local Skill bundle. */
 export interface MarketplacePublishApiInput {
@@ -169,18 +170,6 @@ export type MarketplaceUnpublishResult = MarketplaceUnpublishApiResult
 /** Suggest the editable Marketplace slug from SKILL.md frontmatter metadata. */
 export function suggestMarketplaceSlug(metadata: Pick<SkillMetadata, 'name'>): string {
   return deriveSkillSlug(metadata.name)
-}
-
-/** Suggest a publish slug that preserves owner versioning and avoids original slugs for derived publishes. */
-export function suggestMarketplacePublishSlug(input: {
-  metadata: Pick<SkillMetadata, 'name'>
-  origin?: Pick<MarketplaceOriginMetadata, 'ownerId' | 'marketplaceSlug'> | null
-  currentUserId?: string | null
-}): string {
-  const baseSlug = deriveSkillSlug(input.metadata.name)
-  if (!input.origin || input.origin.ownerId === input.currentUserId) return baseSlug
-  if (baseSlug !== input.origin.marketplaceSlug) return baseSlug
-  return `${baseSlug}-derived`
 }
 
 /** Validate product-level Marketplace publish fields before uploading the bundle. */

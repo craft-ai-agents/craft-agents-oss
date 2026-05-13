@@ -1,3 +1,7 @@
+import { deriveSkillSlug } from './slug.ts'
+import type { SkillMetadata } from './types.ts'
+import type { MarketplaceOriginMetadata } from './marketplace-install.ts'
+
 /** Approved Marketplace service environments controlled by the product build. */
 export type MarketplaceServiceEnvironment = 'production' | 'staging' | 'local'
 
@@ -52,4 +56,25 @@ export function resolveMarketplaceServiceConfig(input: MarketplaceServiceConfigI
 function parseMarketplaceServiceEnvironment(value?: string | null): MarketplaceServiceEnvironment | null {
   if (value === 'production' || value === 'staging' || value === 'local') return value
   return null
+}
+
+// ── Browser-safe Marketplace constants and slug helpers ─────────────────────
+// These are re-exported from marketplace-publish.ts for server-side use.
+// Kept here (no Node.js imports) so renderer components can import them
+// via the @craft-agent/shared/skills/marketplace-config subpath without
+// pulling in fs/os/path/crypto modules.
+
+export const PRODUCT_MARKETPLACE_CATEGORIES = ['Documentation', 'Product', 'Quality', 'Security'] as const
+export type ProductMarketplaceCategory = typeof PRODUCT_MARKETPLACE_CATEGORIES[number]
+
+/** Suggest a publish slug that preserves owner versioning and avoids original slugs for derived publishes. */
+export function suggestMarketplacePublishSlug(input: {
+  metadata: Pick<SkillMetadata, 'name'>
+  origin?: Pick<MarketplaceOriginMetadata, 'ownerId' | 'marketplaceSlug'> | null
+  currentUserId?: string | null
+}): string {
+  const baseSlug = deriveSkillSlug(input.metadata.name)
+  if (!input.origin || input.origin.ownerId === input.currentUserId) return baseSlug
+  if (baseSlug !== input.origin.marketplaceSlug) return baseSlug
+  return `${baseSlug}-derived`
 }

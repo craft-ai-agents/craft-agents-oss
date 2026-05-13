@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { AlertTriangle, CheckCircle2, Download, FileArchive, Flag, Globe2, PencilLine, Search, ShieldAlert, Store, UserCog } from 'lucide-react'
 import { strToU8, zipSync } from 'fflate'
-import { resolveMarketplaceServiceConfig } from '@craft-agent/shared/skills'
+import { resolveMarketplaceServiceConfig } from '@craft-agent/shared/skills/marketplace-config'
 import { deriveSkillSlug } from '@craft-agent/shared/skills/slug'
 import type {
   DiscoveredSkill,

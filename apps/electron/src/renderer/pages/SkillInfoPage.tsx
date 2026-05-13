@@ -20,8 +20,8 @@ import { useActiveWorkspace } from '@/context/AppShellContext'
 import {
   PRODUCT_MARKETPLACE_CATEGORIES,
   suggestMarketplacePublishSlug,
-  type MarketplacePublishLocalResult,
-} from '@craft-agent/shared/skills'
+} from '@craft-agent/shared/skills/marketplace-config'
+import type { MarketplacePublishLocalResult } from '@craft-agent/shared/skills'
 import {
   Info_Page,
   Info_Section,
