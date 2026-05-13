@@ -4,7 +4,7 @@ Here are the open issues in Linear ready for an agent:
 
 <issues-json>
 
-!`bun "{{LINEAR_CLI}}" list --label ready-for-agent --all --full`
+!`bun "{{LINEAR_CLI}}" list --label ready-for-agent --full`
 
 </issues-json>
 
