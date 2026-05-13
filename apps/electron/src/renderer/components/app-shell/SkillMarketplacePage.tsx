@@ -40,6 +40,11 @@ export type MarketplaceInstallState =
 /** Product-owned category vocabulary for Marketplace browsing filters. */
 export const PRODUCT_MARKETPLACE_CATEGORIES = ['Documentation', 'Product', 'Quality', 'Security'] as const
 
+/** Direct Marketplace publish paths supported by the publish-only dialog. */
+export const MARKETPLACE_DIRECT_PUBLISH_TABS = ['create', 'remote', 'upload'] as const
+
+type DirectPublishTab = typeof MARKETPLACE_DIRECT_PUBLISH_TABS[number]
+
 /** Summary data shown on Marketplace listing cards. */
 export interface MarketplaceSkillListing {
   id: string
@@ -829,6 +834,21 @@ function marketplaceReportMessage(state: Exclude<MarketplaceDetailReportState, {
   return state.message
 }
 
+function directPublishMessage(state: DirectPublishState): string | null {
+  switch (state.status) {
+    case 'published':
+      return `Published to Marketplace /${state.marketplaceSlug}`
+    case 'slug-conflict':
+    case 'auth-required':
+    case 'validation-error':
+    case 'error':
+      return state.message
+    case 'idle':
+    case 'publishing':
+      return null
+  }
+}
+
 /** Read-only Marketplace browsing page with catalog filters and detail inspection. */
 export function SkillMarketplacePage({
   api = defaultMarketplaceApi,
@@ -1085,6 +1105,7 @@ export function SkillMarketplacePageHeader({
   )
 }
 
+/** Empty Marketplace catalog state with a publish-only entry point. */
 export function MarketplaceEmptyState({
   canPublish,
   onPublishClick,
@@ -1108,6 +1129,7 @@ export function MarketplaceEmptyState({
   )
 }
 
+/** Publish-only Marketplace dialog for creating, resolving, or uploading Skills without Local Skill installation. */
 export function MarketplacePublishSkillDialog({
   open,
   onOpenChange,
@@ -1121,7 +1143,7 @@ export function MarketplacePublishSkillDialog({
   currentUserId: string | null
   onPublished: (marketplaceSlug: string) => void
 }) {
-  const [activeTab, setActiveTab] = React.useState('create')
+  const [activeTab, setActiveTab] = React.useState<DirectPublishTab>('create')
   const [name, setName] = React.useState('')
   const [description, setDescription] = React.useState('')
   const [content, setContent] = React.useState('')
@@ -1162,6 +1184,13 @@ export function MarketplacePublishSkillDialog({
   const chooseSkill = React.useCallback((skill: DiscoveredSkill) => {
     setSelectedSkill(skill)
     setMarketplaceSlug((current) => current.trim() || skill.slug)
+    setPublishState({ status: 'idle' })
+  }, [])
+
+  const switchPublishTab = React.useCallback((value: string) => {
+    if (!MARKETPLACE_DIRECT_PUBLISH_TABS.includes(value as DirectPublishTab)) return
+    setActiveTab(value as DirectPublishTab)
+    setSelectedSkill(null)
     setPublishState({ status: 'idle' })
   }, [])
 
@@ -1263,11 +1292,7 @@ export function MarketplacePublishSkillDialog({
   }
 
   const publishDisabled = publishState.status === 'publishing' || !currentUserId
-  const publishMessage = publishState.status !== 'idle' && publishState.status !== 'publishing'
-    ? publishState.status === 'published'
-      ? `Published to Marketplace /${publishState.marketplaceSlug}`
-      : publishState.message
-    : null
+  const publishMessage = directPublishMessage(publishState)
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
@@ -1282,11 +1307,7 @@ export function MarketplacePublishSkillDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(value) => {
-          setActiveTab(value)
-          setSelectedSkill(null)
-          setPublishState({ status: 'idle' })
-        }}>
+        <Tabs value={activeTab} onValueChange={switchPublishTab}>
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="create" className="gap-1.5">
               <PencilLine className="h-3.5 w-3.5" />

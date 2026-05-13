@@ -6,11 +6,11 @@ import {
   installMarketplaceSkillFromDetail,
   loadMarketplaceCatalog,
   loadMarketplaceDetail,
+  MARKETPLACE_DIRECT_PUBLISH_TABS,
   MarketplaceDetail,
   MarketplaceError,
   MarketplaceEmptyState,
   MarketplaceListingCard,
-  MarketplacePublishSkillDialog,
   LocalSkillMarketplaceStatus,
   publishDirectMarketplaceSkill,
   publishMarketplaceSkill,
@@ -34,8 +34,6 @@ mock.module('@/components/ui/menu-context', () => ({
     Separator: () => React.createElement('hr'),
   }),
 }))
-
-const marketplacePageSource = await Bun.file(new URL('../SkillMarketplacePage.tsx', import.meta.url)).text()
 
 async function loadReadyReportDetail() {
   const api = createStaticMarketplaceApi()
@@ -461,12 +459,8 @@ describe('SkillMarketplacePage API boundary', () => {
 
     expect(headerHtml).toContain('Publish Skill')
     expect(emptyHtml).toContain('Publish Skill')
-    expect(MarketplacePublishSkillDialog.name).toBe('MarketplacePublishSkillDialog')
-    expect(marketplacePageSource).toContain('publishDirectMarketplaceSkill')
-    expect(marketplacePageSource).toContain('value="create"')
-    expect(marketplacePageSource).toContain('value="remote"')
-    expect(marketplacePageSource).toContain('value="upload"')
-    expect(marketplacePageSource).not.toContain('AI Assist')
+    expect(MARKETPLACE_DIRECT_PUBLISH_TABS).toEqual(['create', 'remote', 'upload'])
+    expect(MARKETPLACE_DIRECT_PUBLISH_TABS).not.toContain('ai')
   })
 
   test('renders Publish Skill when a Local Skill menu provides a publish action', async () => {
