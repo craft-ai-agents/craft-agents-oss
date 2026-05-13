@@ -206,7 +206,6 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
 
           const link = item
           const itemProps = getItemProps?.(link.id)
-          const isFocused = focusedItemId === link.id
 
           // Button element shared by both expandable and non-expandable items
           const buttonElement = (
@@ -217,11 +216,7 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
           )
 
           // Determine which expanded content to render (sortable vs regular)
-          const expandedContent = link.expandable && link.items && link.expanded
-            ? renderExpandedContent(link, getItemProps, focusedItemId, isNested)
-            : link.expandable && link.expanded && link.expandedContent
-              ? link.expandedContent
-            : null
+          const expandedContent = getExpandedContent(link, getItemProps, focusedItemId, isNested)
 
           // Wrap with context menu if configured, scoped to button only.
           // ContextMenuTrigger with asChild sets data-state="open" on the button
@@ -335,6 +330,23 @@ function renderExpandedContent(
       links={link.items!}
     />
   )
+}
+
+function getExpandedContent(
+  link: LinkItem,
+  getItemProps: LeftSidebarProps['getItemProps'],
+  focusedItemId: string | null | undefined,
+  isNested: boolean | undefined,
+): React.ReactNode {
+  if (!link.expandable || !link.expanded) {
+    return null
+  }
+
+  if (link.items) {
+    return renderExpandedContent(link, getItemProps, focusedItemId, isNested)
+  }
+
+  return link.expandedContent ?? null
 }
 
 // ============================================================

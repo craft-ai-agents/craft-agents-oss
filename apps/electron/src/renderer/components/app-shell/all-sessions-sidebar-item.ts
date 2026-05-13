@@ -2,6 +2,7 @@ import { Inbox } from "lucide-react"
 import type { ReactNode } from "react"
 
 import type { LinkItem, SidebarContextMenuConfig } from "./LeftSidebar"
+import { ALL_SESSIONS_NAV_ITEM_ID } from "./sidebar-expanded-state"
 
 interface CreateAllSessionsSidebarItemInput {
   title: string
@@ -26,7 +27,7 @@ export function createAllSessionsSidebarItem({
   contextMenu,
 }: CreateAllSessionsSidebarItemInput): LinkItem {
   return {
-    id: "nav:allSessions",
+    id: ALL_SESSIONS_NAV_ITEM_ID,
     title,
     label,
     icon: Inbox,

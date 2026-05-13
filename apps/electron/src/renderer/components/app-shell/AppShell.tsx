@@ -129,6 +129,12 @@ import {
 } from "./editor-panel-state"
 import { createAllSessionsSidebarItem } from "./all-sessions-sidebar-item"
 import { createArchivedSidebarItem, ARCHIVED_NAV_ID } from "./archived-sidebar-item"
+import {
+  ALL_SESSIONS_NAV_ITEM_ID,
+  createCollapsedSidebarItems,
+  isSidebarItemExpanded,
+  toggleCollapsedSidebarItem,
+} from "./sidebar-expanded-state"
 /**
  * AppShellProps - Minimal props interface for AppShell component
  *
@@ -308,19 +314,15 @@ function AppShellContent({
   // An empty set means every expandable item, including All Sessions, starts expanded.
   const [collapsedItems, setCollapsedItems] = React.useState<Set<string>>(() => {
     const saved = storage.get<string[] | null>(storage.KEYS.collapsedSidebarItems, null)
-    if (saved !== null) return new Set(saved)
-    return new Set()
+    return createCollapsedSidebarItems(saved)
   })
-  const isExpanded = React.useCallback((id: string) => !collapsedItems.has(id), [collapsedItems])
+  const isExpanded = React.useCallback((id: string) => {
+    return isSidebarItemExpanded(collapsedItems, id)
+  }, [collapsedItems])
   const toggleExpanded = React.useCallback((id: string) => {
-    setCollapsedItems(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+    setCollapsedItems(prev => toggleCollapsedSidebarItem(prev, id))
   }, [])
-  const isAllSessionsExpanded = isExpanded('nav:allSessions')
+  const isAllSessionsExpanded = isExpanded(ALL_SESSIONS_NAV_ITEM_ID)
   const sidebarLayout = resolveSidebarLayout({
     navState,
     isSidebarAndNavigatorHidden: effectiveSidebarAndNavigatorHidden,
@@ -504,7 +506,7 @@ function AppShellContent({
       setExpandedFolders(new Set(newExpandedFolders))
 
       const newCollapsedItems = storage.get<string[] | null>(storage.KEYS.collapsedSidebarItems, null, activeWorkspaceId)
-      setCollapsedItems(newCollapsedItems !== null ? new Set(newCollapsedItems) : new Set())
+      setCollapsedItems(createCollapsedSidebarItems(newCollapsedItems))
     }
 
     previousWorkspaceRef.current = activeWorkspaceId
@@ -1396,7 +1398,7 @@ function AppShellContent({
     const result: SidebarItem[] = []
 
     // 1. Sessions section
-    result.push({ id: 'nav:allSessions', type: 'nav', action: handleAllSessionsClick })
+    result.push({ id: ALL_SESSIONS_NAV_ITEM_ID, type: 'nav', action: handleAllSessionsClick })
     result.push({ id: ARCHIVED_NAV_ID, type: 'nav', action: handleArchivedClick })
 
     // 2. Sources, Skills, Marketplace, Settings
@@ -1634,10 +1636,10 @@ function AppShellContent({
 
   const sessionListNavigateToSession = panelCount > 1 ? navigateToSessionInPanel : undefined
 
-  const allSessionsList = (
+  const renderSessionList = (key: string, items: SessionMeta[]) => (
     <SessionList
-      key="all-sessions-sidebar"
-      items={searchActive ? workspaceSessionMetas : activeSessionMetas}
+      key={key}
+      items={items}
       onDelete={handleDeleteSession}
       onFlag={onFlagSession}
       onUnflag={onUnflagSession}
@@ -1676,46 +1678,16 @@ function AppShellContent({
     />
   )
 
+  const allSessionsList = renderSessionList(
+    'all-sessions-sidebar',
+    searchActive ? workspaceSessionMetas : activeSessionMetas,
+  )
+
   const sessionListContent = isSessionsNavigation(navState) && !(sessionFilter?.kind === 'allSessions' && isAllSessionsExpanded) ? (
-    <SessionList
-      key={`navigator-${sessionFilter?.kind}`}
-      items={searchActive ? workspaceSessionMetas : filteredSessionMetas}
-      onDelete={handleDeleteSession}
-      onFlag={onFlagSession}
-      onUnflag={onUnflagSession}
-      onArchive={onArchiveSession}
-      onUnarchive={onUnarchiveSession}
-      onMarkUnread={onMarkSessionUnread}
-      onSessionStatusChange={onSessionStatusChange}
-      onRename={onRenameSession}
-      onFocusChatInput={(targetSessionId) => {
-        focusChatInputForSession(targetSessionId ?? focusedSessionId ?? session.selected)
-      }}
-      onSessionSelect={(selectedMeta) => {
-        navigateToSession(selectedMeta.id)
-      }}
-      onOpenInNewWindow={(selectedMeta) => {
-        if (activeWorkspaceId) {
-          window.electronAPI.openSessionInNewWindow(activeWorkspaceId, selectedMeta.id)
-        }
-      }}
-      onNavigateToView={handleSessionListNavigateToView}
-      sessionOptions={sessionOptions}
-      searchActive={searchActive}
-      searchQuery={searchQuery}
-      onSearchChange={setSearchQuery}
-      onSearchClose={() => {
-        setSearchActive(false)
-        setSearchQuery('')
-      }}
-      sessionStatuses={effectiveSessionStatuses}
-      evaluateViews={evaluateViews}
-      workspaceId={activeWorkspaceId ?? undefined}
-      focusedSessionId={sessionListFocusedSessionId}
-      onNavigateToSession={sessionListNavigateToSession}
-      hasPendingPrompt={hasPendingPrompt}
-      activeChatMatchInfo={chatMatchInfo}
-    />
+    renderSessionList(
+      `navigator-${sessionFilter?.kind}`,
+      searchActive ? workspaceSessionMetas : filteredSessionMetas,
+    )
   ) : null
 
   return (
@@ -1818,7 +1790,7 @@ function AppShellContent({
                       isActive: sessionFilter?.kind === 'allSessions',
                       onClick: handleAllSessionsClick,
                       isExpanded: isAllSessionsExpanded,
-                      onToggle: () => toggleExpanded('nav:allSessions'),
+                      onToggle: () => toggleExpanded(ALL_SESSIONS_NAV_ITEM_ID),
                       expandedContent: (
                         <div className="mt-1 h-[min(560px,calc(100vh-150px))] min-h-[260px] overflow-hidden rounded-[6px] bg-background/70">
                           {allSessionsList}
