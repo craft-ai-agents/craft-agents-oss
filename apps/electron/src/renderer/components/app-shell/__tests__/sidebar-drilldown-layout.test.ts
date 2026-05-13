@@ -74,4 +74,26 @@ describe('resolveSidebarDrilldownLayout', () => {
       isRightSidebarVisible: false,
     })
   })
+
+  test('hides the middle navigator panel for skill marketplace navigation', () => {
+    const navState: NavigationState = {
+      navigator: 'skill-marketplace',
+    }
+
+    expect(resolveSidebarDrilldownLayout({
+      navState,
+      isAutoCompact: false,
+      isSidebarAndNavigatorHidden: false,
+      isSidebarVisible: true,
+      sidebarWidth: 220,
+      sessionListWidth: 300,
+    })).toEqual({
+      isDrilldown: false,
+      sidebarWidth: 220,
+      navigatorWidth: 0,
+      showSidebarResizeHandle: true,
+      showSessionListResizeHandle: false,
+      isRightSidebarVisible: false,
+    })
+  })
 })

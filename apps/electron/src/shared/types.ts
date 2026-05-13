@@ -847,14 +847,19 @@ export interface SettingsNavigationState {
 }
 
 /**
- * Skills navigation state
+ * Local skills navigation state
  */
-export type SkillDestination = 'local' | 'marketplace'
-
-export interface SkillsNavigationState {
-  navigator: 'skills'
-  destination: SkillDestination
+export interface LocalSkillsNavigationState {
+  navigator: 'local-skills'
   details: { type: 'skill'; skillSlug: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
+ * Skill Marketplace navigation state
+ */
+export interface SkillMarketplaceNavigationState {
+  navigator: 'skill-marketplace'
   rightSidebar?: RightSidebarPanel
 }
 
@@ -875,7 +880,8 @@ export type NavigationState =
   | SessionsNavigationState
   | SourcesNavigationState
   | SettingsNavigationState
-  | SkillsNavigationState
+  | LocalSkillsNavigationState
+  | SkillMarketplaceNavigationState
   | AutomationsNavigationState
 
 export const isSessionsNavigation = (
@@ -896,9 +902,13 @@ export const isSettingsNavigation = (
   state: NavigationState
 ): state is SettingsNavigationState => state.navigator === 'settings'
 
-export const isSkillsNavigation = (
+export const isLocalSkillsNavigation = (
   state: NavigationState
-): state is SkillsNavigationState => state.navigator === 'skills'
+): state is LocalSkillsNavigationState => state.navigator === 'local-skills'
+
+export const isSkillMarketplaceNavigation = (
+  state: NavigationState
+): state is SkillMarketplaceNavigationState => state.navigator === 'skill-marketplace'
 
 export const isAutomationsNavigation = (
   state: NavigationState
@@ -917,12 +927,14 @@ export const getNavigationStateKey = (state: NavigationState): string => {
     }
     return 'sources'
   }
-  if (state.navigator === 'skills') {
-    if (state.destination === 'marketplace') return 'skills/marketplace'
+  if (state.navigator === 'local-skills') {
     if (state.details?.type === 'skill') {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills/local'
+  }
+  if (state.navigator === 'skill-marketplace') {
+    return 'skills/marketplace'
   }
   if (state.navigator === 'automations') {
     if (state.details?.type === 'automation') {
@@ -959,14 +971,14 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   }
 
   // Handle skills
-  if (key === 'skills' || key === 'skills/local') return { navigator: 'skills', destination: 'local', details: null }
-  if (key === 'skills/marketplace') return { navigator: 'skills', destination: 'marketplace', details: null }
+  if (key === 'skills' || key === 'skills/local') return { navigator: 'local-skills', details: null }
+  if (key === 'skills/marketplace') return { navigator: 'skill-marketplace' }
   if (key.startsWith('skills/skill/')) {
     const skillSlug = key.slice(13)
     if (skillSlug) {
-      return { navigator: 'skills', destination: 'local', details: { type: 'skill', skillSlug } }
+      return { navigator: 'local-skills', details: { type: 'skill', skillSlug } }
     }
-    return { navigator: 'skills', destination: 'local', details: null }
+    return { navigator: 'local-skills', details: null }
   }
 
   // Handle automations

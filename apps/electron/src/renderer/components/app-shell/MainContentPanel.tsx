@@ -29,7 +29,8 @@ import {
   isSessionsNavigation,
   isSourcesNavigation,
   isSettingsNavigation,
-  isSkillsNavigation,
+  isLocalSkillsNavigation,
+  isSkillMarketplaceNavigation,
   isAutomationsNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
@@ -279,16 +280,17 @@ export function MainContentPanel({
     )
   }
 
-  // Skills navigator - show skill info, multi-select panel, or empty state
-  if (isSkillsNavigation(navState)) {
-    if (navState.destination === 'marketplace') {
-      return wrapWithStoplight(
-        <Panel variant="grow" className={className}>
-          <SkillMarketplacePage workspaceId={activeWorkspaceId || ''} currentUserId={activeWorkspaceId ? 'local-marketplace-user' : null} />
-        </Panel>
-      )
-    }
+  // Marketplace navigator
+  if (isSkillMarketplaceNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <SkillMarketplacePage workspaceId={activeWorkspaceId || ''} currentUserId={activeWorkspaceId ? 'local-marketplace-user' : null} />
+      </Panel>
+    )
+  }
 
+  // Local Skills navigator - show skill info, multi-select panel, or empty state
+  if (isLocalSkillsNavigation(navState)) {
     if (isSkillMultiSelectActive) {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>

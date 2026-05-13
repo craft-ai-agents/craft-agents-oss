@@ -23,9 +23,16 @@ describe('isSidebarDrilldownMode', () => {
 
   it('returns false for skills navigation', () => {
     const navState: NavigationState = {
-      navigator: 'skills',
-      destination: 'local',
+      navigator: 'local-skills',
       details: null,
+    }
+
+    expect(isSidebarDrilldownMode(navState)).toBe(false)
+  })
+
+  it('returns false for skill marketplace navigation', () => {
+    const navState: NavigationState = {
+      navigator: 'skill-marketplace',
     }
 
     expect(isSidebarDrilldownMode(navState)).toBe(false)

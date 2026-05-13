@@ -49,7 +49,6 @@ export const KEYS = {
 
   // Settings navigation
   lastSettingsSubpage: 'last-settings-subpage',
-  lastSkillDestination: 'last-skill-destination',
 
   // Appearance
   showConnectionIcons: 'show-connection-icons',

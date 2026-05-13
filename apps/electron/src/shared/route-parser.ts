@@ -537,11 +537,13 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
   if (compound.navigator === 'skills') {
     const destination = compound.skillDestination ?? 'local'
     if (!compound.details) {
-      return { navigator: 'skills', destination, details: null }
+      if (destination === 'marketplace') {
+        return { navigator: 'skill-marketplace' }
+      }
+      return { navigator: 'local-skills', details: null }
     }
     return {
-      navigator: 'skills',
-      destination: 'local',
+      navigator: 'local-skills',
       details: { type: 'skill', skillSlug: compound.details.id },
     }
   }
@@ -614,19 +616,18 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       }
       return { navigator: 'sources', details: null }
     case 'skills':
-      return { navigator: 'skills', destination: 'local', details: null }
+      return { navigator: 'local-skills', details: null }
     case 'skill-info':
       if (parsed.id) {
         return {
-          navigator: 'skills',
-          destination: 'local',
+          navigator: 'local-skills',
           details: {
             type: 'skill',
             skillSlug: parsed.id,
           },
         }
       }
-      return { navigator: 'skills', destination: 'local', details: null }
+      return { navigator: 'local-skills', details: null }
     case 'automations':
       return { navigator: 'automations', details: null }
     case 'automation-info':
@@ -733,11 +734,19 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
     }
   }
 
-  if (state.navigator === 'skills') {
+  if (state.navigator === 'local-skills') {
     return {
       navigator: 'skills',
-      skillDestination: state.destination,
+      skillDestination: 'local',
       details: state.details?.type === 'skill' ? { type: 'skill', id: state.details.skillSlug } : null,
+    }
+  }
+
+  if (state.navigator === 'skill-marketplace') {
+    return {
+      navigator: 'skills',
+      skillDestination: 'marketplace',
+      details: null,
     }
   }
 
