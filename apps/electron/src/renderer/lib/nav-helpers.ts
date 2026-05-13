@@ -34,5 +34,7 @@ export function isDetailNavState(navState: NavigationState | null): boolean {
       return navState.details !== null
     case 'skill-marketplace':
       return false
+    case 'archived':
+      return navState.details !== null
   }
 }

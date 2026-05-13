@@ -1,4 +1,5 @@
 import * as storage from '@/lib/local-storage'
+import type { NavigationState } from '../../../shared/types'
 
 /** Loads the workspace-scoped right sidebar open preference. */
 export function loadRightSidebarOpenPreference(workspaceId?: string): boolean {
@@ -16,4 +17,9 @@ export function resolvePanelStackRightSidebarVisible(
   isOpen: boolean,
 ): boolean {
   return isContextuallyAvailable && isOpen
+}
+
+/** Returns true when the right sidebar must be suppressed for the given navigation state. */
+export function shouldSuppressRightSidebarForNavState(navState: NavigationState): boolean {
+  return navState.navigator === 'archived'
 }

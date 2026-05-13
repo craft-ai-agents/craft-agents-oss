@@ -4,6 +4,7 @@ import {
   loadRightSidebarOpenPreference,
   persistRightSidebarOpenPreference,
   resolvePanelStackRightSidebarVisible,
+  shouldSuppressRightSidebarForNavState,
 } from '../right-sidebar-state'
 
 function makeLocalStorage() {
@@ -49,5 +50,12 @@ describe('right sidebar AppShell state', () => {
     expect(resolvePanelStackRightSidebarVisible(true, true)).toBe(true)
     expect(resolvePanelStackRightSidebarVisible(true, false)).toBe(false)
     expect(resolvePanelStackRightSidebarVisible(false, true)).toBe(false)
+  })
+
+  test('suppresses right sidebar for archived navigation state only', () => {
+    expect(shouldSuppressRightSidebarForNavState({ navigator: 'archived', details: null })).toBe(true)
+    expect(shouldSuppressRightSidebarForNavState({ navigator: 'sessions', filter: { kind: 'allSessions' }, details: null })).toBe(false)
+    expect(shouldSuppressRightSidebarForNavState({ navigator: 'sources', details: null })).toBe(false)
+    expect(shouldSuppressRightSidebarForNavState({ navigator: 'settings', subpage: null })).toBe(false)
   })
 })

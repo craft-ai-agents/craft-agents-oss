@@ -81,10 +81,12 @@ import {
   isLocalSkillsNavigation,
   isSkillMarketplaceNavigation,
   isAutomationsNavigation,
+  isArchivedNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
+import { ArchivedSessionsPanel } from "./ArchivedSessionsPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
 import { SkillImportModal } from "./SkillImportModal"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
@@ -120,12 +122,14 @@ import {
   loadRightSidebarOpenPreference,
   persistRightSidebarOpenPreference,
   resolvePanelStackRightSidebarVisible,
+  shouldSuppressRightSidebarForNavState,
 } from "./right-sidebar-state"
 import {
   loadEditorPanelOpenPreference,
   persistEditorPanelOpenPreference,
 } from "./editor-panel-state"
 import { createAllSessionsSidebarItem } from "./all-sessions-sidebar-item"
+import { createArchivedSidebarItem, ARCHIVED_NAV_ID } from "./archived-sidebar-item"
 /**
  * AppShellProps - Minimal props interface for AppShell component
  *
@@ -307,7 +311,8 @@ function AppShellContent({
     sidebarWidth,
     sessionListWidth,
   })
-  const isRightSidebarContextuallyAvailable = sidebarDrilldownLayout.isRightSidebarVisible
+  const isRightSidebarContextuallyAvailable =
+    sidebarDrilldownLayout.isRightSidebarVisible && !shouldSuppressRightSidebarForNavState(navState)
   const hasOpenTabs = useAtomValue(hasOpenTabsAtom)
   const prevHasOpenTabsRef = React.useRef(hasOpenTabs)
   useEffect(() => {
@@ -926,7 +931,11 @@ function AppShellContent({
     return cleanup
   }, [workspaces])
 
-  const archivedCount = workspaceSessionMetas.filter(s => s.isArchived).length
+  const archivedSessions = useMemo(
+    () => workspaceSessionMetas.filter(s => s.isArchived),
+    [workspaceSessionMetas]
+  )
+  const archivedCount = archivedSessions.length
 
   // Compute session counts per label (cumulative: parent includes descendants).
   // Flatten the tree for iteration, use the tree for descendant lookups.
@@ -1423,7 +1432,7 @@ function AppShellContent({
 
     // 1. Sessions section
     result.push({ id: 'nav:allSessions', type: 'nav', action: handleAllSessionsClick })
-    result.push({ id: 'nav:archived', type: 'nav', action: handleArchivedClick })
+    result.push({ id: ARCHIVED_NAV_ID, type: 'nav', action: handleArchivedClick })
 
     // 2. Sources, Skills, Marketplace, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
@@ -1543,6 +1552,11 @@ function AppShellContent({
 
   // Get title based on navigation state
   const listTitle = React.useMemo(() => {
+    // Archived navigator
+    if (isArchivedNavigation(navState)) {
+      return t("sidebar.archived")
+    }
+
     // Sources navigator
     if (isSourcesNavigation(navState)) {
       return t("sidebar.sources")
@@ -1839,14 +1853,12 @@ function AppShellContent({
                         },
                       },
                     }),
-                    {
-                      id: "nav:archived",
+                    createArchivedSidebarItem({
                       title: t("sidebar.archived"),
                       label: archivedCount > 0 ? String(archivedCount) : undefined,
-                      icon: Archive,
-                      variant: (sessionFilter?.kind === 'archived' ? "default" : "ghost") as "default" | "ghost",
+                      isActive: isArchivedNavigation(navState),
                       onClick: handleArchivedClick,
-                    },
+                    }),
                     // --- Separator ---
                     { id: "separator:chats-sources", type: "separator" },
                     // --- Sources, Skills & Marketplace Section ---
@@ -2057,7 +2069,15 @@ function AppShellContent({
                 </>
               }
             />
-            {/* Content: SessionList, SourcesListPanel, or SettingsNavigator based on navigation state */}
+            {/* Content: SessionList, SourcesListPanel, ArchivedSessionsPanel, or SettingsNavigator based on navigation state */}
+            {isArchivedNavigation(navState) && (
+              /* Archived Sessions List */
+              <ArchivedSessionsPanel
+                sessions={archivedSessions}
+                onSessionClick={(session) => navigateToSessionInPanel(session.id)}
+                selectedSessionId={focusedSessionId}
+              />
+            )}
             {isSourcesNavigation(navState) && (
               /* Sources List - filtered by type if sourceFilter is active */
               <SourcesListPanel

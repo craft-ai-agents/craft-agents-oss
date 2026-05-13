@@ -874,6 +874,15 @@ export interface AutomationsNavigationState {
 }
 
 /**
+ * Archived sessions navigation state — Icon Strip Mode, no drill-down, no right sidebar.
+ */
+export interface ArchivedNavigationState {
+  navigator: 'archived'
+  details: { type: 'session'; sessionId: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state
  */
 export type NavigationState =
@@ -883,6 +892,7 @@ export type NavigationState =
   | LocalSkillsNavigationState
   | SkillMarketplaceNavigationState
   | AutomationsNavigationState
+  | ArchivedNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -913,6 +923,10 @@ export const isSkillMarketplaceNavigation = (
 export const isAutomationsNavigation = (
   state: NavigationState
 ): state is AutomationsNavigationState => state.navigator === 'automations'
+
+export const isArchivedNavigation = (
+  state: NavigationState
+): state is ArchivedNavigationState => state.navigator === 'archived'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -945,6 +959,10 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   if (state.navigator === 'settings') {
     if (state.subpage === null) return 'settings'
     return `settings:${state.subpage}`
+  }
+  if (state.navigator === 'archived') {
+    if (state.details) return `archived/session/${state.details.sessionId}`
+    return 'archived'
   }
   // Chats
   const f = state.filter
@@ -1000,12 +1018,18 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
     }
   }
 
+  // Handle archived
+  if (key === 'archived') return { navigator: 'archived', details: null }
+  if (key.startsWith('archived/session/')) {
+    const sessionId = key.slice(17)
+    return { navigator: 'archived', details: sessionId ? { type: 'session', sessionId } : null }
+  }
+
   // Handle sessions
   const parseSessionsKey = (filterKey: string, sessionId?: string): NavigationState | null => {
     let filter: SessionFilter
     if (filterKey === 'allSessions') filter = { kind: 'allSessions' }
     else if (filterKey === 'flagged') filter = { kind: 'flagged' }
-    else if (filterKey === 'archived') filter = { kind: 'archived' }
     else if (filterKey.startsWith('state:')) {
       const stateId = filterKey.slice(6)
       if (!stateId) return null

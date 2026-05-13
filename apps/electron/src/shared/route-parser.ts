@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings' | 'archived'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -221,10 +221,14 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       sessionFilter = { kind: 'flagged' }
       detailsStartIndex = 1
       break
-    case 'archived':
-      sessionFilter = { kind: 'archived' }
-      detailsStartIndex = 1
-      break
+    case 'archived': {
+      // Archived view is its own navigator, not a sessions filter
+      const sessionId = segments[1] === 'session' ? segments[2] : undefined
+      return {
+        navigator: 'archived',
+        details: sessionId ? { type: 'session', id: sessionId } : null,
+      }
+    }
     case 'state':
       if (!segments[1]) return null
       // Cast is safe because we're constructing from URL
@@ -290,6 +294,11 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
     if (parsed.skillDestination === 'local' && !parsed.details) return 'skills/local'
     if (!parsed.details) return 'skills'
     return `skills/skill/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'archived') {
+    if (!parsed.details) return 'archived'
+    return `archived/session/${parsed.details.id}`
   }
 
   if (parsed.navigator === 'automations') {
@@ -564,6 +573,14 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  // Archived
+  if (compound.navigator === 'archived') {
+    return {
+      navigator: 'archived',
+      details: compound.details ? { type: 'session', sessionId: compound.details.id } : null,
+    }
+  }
+
   // Sessions
   const filter = compound.sessionFilter || { kind: 'allSessions' as const }
   if (compound.details) {
@@ -644,7 +661,10 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
     case 'session':
       if (parsed.id) {
         // Reconstruct filter from params
-        const filterKind = (parsed.params.filter || 'allSessions') as SessionFilter['kind']
+        const filterKind = (parsed.params.filter || 'allSessions') as SessionFilter['kind'] | 'archived'
+        if (filterKind === 'archived') {
+          return { navigator: 'archived', details: { type: 'session', sessionId: parsed.id } }
+        }
         let filter: SessionFilter
         if (filterKind === 'state' && parsed.params.stateId) {
           filter = { kind: 'state', stateId: parsed.params.stateId }
@@ -653,7 +673,7 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         } else if (filterKind === 'view' && parsed.params.viewId) {
           filter = { kind: 'view', viewId: parsed.params.viewId }
         } else {
-          filter = { kind: filterKind as 'allSessions' | 'flagged' | 'archived' }
+          filter = { kind: filterKind as 'allSessions' | 'flagged' }
         }
         return {
           navigator: 'sessions',
@@ -676,8 +696,7 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       }
     case 'archived':
       return {
-        navigator: 'sessions',
-        filter: { kind: 'archived' },
+        navigator: 'archived',
         details: null,
       }
     case 'state':
@@ -755,6 +774,13 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
       navigator: 'automations',
       automationFilter: state.filter ?? undefined,
       details: state.details ? { type: 'automation', id: state.details.automationId } : null,
+    }
+  }
+
+  if (state.navigator === 'archived') {
+    return {
+      navigator: 'archived',
+      details: state.details ? { type: 'session', id: state.details.sessionId } : null,
     }
   }
 
