@@ -42,12 +42,12 @@ describe('AppShell editor panel auto-show', () => {
     expect(effectSource).toContain('if (hasOpenTabs && !prevHasOpenTabsRef.current)')
     expect(effectSource).toContain('setIsEditorPanelOpen(true)')
     expect(dependencyList).toBe('hasOpenTabs')
-    expect(effectSource).not.toContain('isRightSidebarContextuallyAvailable')
+    expect(effectSource).not.toContain('areContextualPanelsAvailable')
   })
 
   test('gates the rendered editor panel and top bar toggle behind active-session availability', () => {
-    expect(appShellSource).toContain('const activeSessionIdForContextualPanels = focusedSessionId')
-    expect(appShellSource).toContain('isEditorPanelToggleVisible={isRightSidebarContextuallyAvailable}')
-    expect(appShellSource).toContain('isRightSidebarContextuallyAvailable && (\n          <EditorDetailPanel')
+    expect(appShellSource).toContain('activeSessionId: focusedSessionId')
+    expect(appShellSource).toContain('isEditorPanelToggleVisible={areContextualPanelsAvailable}')
+    expect(appShellSource).toContain('areContextualPanelsAvailable && (\n          <EditorDetailPanel')
   })
 })

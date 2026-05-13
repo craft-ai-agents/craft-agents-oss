@@ -24,7 +24,7 @@ export function resolveRightSidebarContextualAvailability({
   activeSessionId,
   navState,
 }: {
-  activeSessionId?: string | null
+  activeSessionId: string | null
   navState: NavigationState
 }): boolean {
   return Boolean(activeSessionId) && !shouldSuppressRightSidebarForNavState(navState)

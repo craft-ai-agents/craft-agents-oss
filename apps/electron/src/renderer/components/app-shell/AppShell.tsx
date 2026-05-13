@@ -327,7 +327,6 @@ function AppShellContent({
   const panelStack = useAtomValue(panelStackAtom)
   const panelCount = useAtomValue(panelCountAtom)
   const focusedSessionId = useAtomValue(focusedSessionIdAtom)
-  const activeSessionIdForContextualPanels = focusedSessionId
   const sidebarLayout = resolveSidebarLayout({
     navState,
     isSidebarAndNavigatorHidden: effectiveSidebarAndNavigatorHidden,
@@ -335,8 +334,8 @@ function AppShellContent({
     sidebarWidth,
     isAllSessionsExpanded,
   })
-  const isRightSidebarContextuallyAvailable = resolveRightSidebarContextualAvailability({
-    activeSessionId: activeSessionIdForContextualPanels,
+  const areContextualPanelsAvailable = resolveRightSidebarContextualAvailability({
+    activeSessionId: focusedSessionId,
     navState,
   })
   const hasOpenTabs = useAtomValue(hasOpenTabsAtom)
@@ -348,7 +347,7 @@ function AppShellContent({
     prevHasOpenTabsRef.current = hasOpenTabs
   }, [hasOpenTabs])
   const isPanelStackRightSidebarVisible = resolvePanelStackRightSidebarVisible(
-    isRightSidebarContextuallyAvailable,
+    areContextualPanelsAvailable,
     isRightSidebarOpen,
   )
 
@@ -1719,8 +1718,8 @@ function AppShellContent({
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
           onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
-          isRightSidebarToggleVisible={isRightSidebarContextuallyAvailable}
-          isEditorPanelToggleVisible={isRightSidebarContextuallyAvailable}
+          isRightSidebarToggleVisible={areContextualPanelsAvailable}
+          isEditorPanelToggleVisible={areContextualPanelsAvailable}
           isEditorPanelOpen={isEditorPanelOpen}
           onEditorPanelToggle={handleToggleEditorPanel}
           isCompact={isAutoCompact}
@@ -2104,7 +2103,7 @@ function AppShellContent({
           isResizing={!!isResizing}
         />
 
-        {isRightSidebarContextuallyAvailable && (
+        {areContextualPanelsAvailable && (
           <EditorDetailPanel
             workspaceId={activeWorkspaceId ?? undefined}
             sessionId={focusedSessionId ?? undefined}
@@ -2112,7 +2111,7 @@ function AppShellContent({
           />
         )}
 
-        {isRightSidebarContextuallyAvailable && (
+        {areContextualPanelsAvailable && (
           <RightSidebarPanel
             workspaceId={activeWorkspaceId ?? undefined}
             sessionId={focusedSessionId ?? undefined}
