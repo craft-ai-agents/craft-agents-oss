@@ -31,11 +31,6 @@ import {
   type MentionItem,
   type MentionItemType,
 } from '@/components/ui/mention-menu'
-import {
-  InlineLabelMenu,
-  useInlineLabelMenu,
-} from '@/components/ui/label-menu'
-import type { LabelConfig } from '@craft-agent/shared/labels'
 import { parseMentions } from '@/lib/mentions'
 import { RichTextInput, type RichTextInputHandle } from '@/components/ui/rich-text-input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
@@ -69,7 +64,6 @@ import {
   type LlmConnection,
 } from '@config/llm-connections'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
-import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceSelectorPopover } from '@/components/ui/SourceSelectorPopover'
 import { CompactSourceSelector } from '@/components/ui/CompactSourceSelector'
@@ -198,13 +192,6 @@ export interface FreeFormInputProps {
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
   skills?: LoadedSkill[]
-  // Label selection (for #labels)
-  /** Available labels for #label autocomplete */
-  labels?: LabelConfig[]
-  /** Currently applied session labels */
-  sessionLabels?: string[]
-  /** Callback when a label is added via # menu */
-  onLabelAdd?: (labelId: string) => void
   /** Workspace ID for loading skill icons */
   workspaceId?: string
   /** Current working directory path */
@@ -215,8 +202,6 @@ export interface FreeFormInputProps {
   sessionFolderPath?: string
   /** Session ID for scoping events like approve-plan */
   sessionId?: string
-  /** Current session status of the session (for # menu state selection) */
-  currentSessionStatus?: string
   /** Disable send action (for tutorial guidance) */
   disableSend?: boolean
   /** Whether the session is empty (no messages yet) - affects context badge prominence */
@@ -282,15 +267,11 @@ export function FreeFormInput({
   enabledSourceSlugs = [],
   onSourcesChange,
   skills = [],
-  labels = [],
-  sessionLabels = [],
-  onLabelAdd,
   workspaceId,
   workingDirectory,
   onWorkingDirectoryChange,
   sessionFolderPath,
   sessionId,
-  currentSessionStatus,
   disableSend = false,
   isEmptySession = false,
   contextStatus,
@@ -313,7 +294,6 @@ export function FreeFormInput({
     t("chatInput.placeholder.workOn"),
     t("chatInput.placeholder.shiftTab"),
     t("chatInput.placeholder.mention"),
-    t("chatInput.placeholder.labels"),
     t("chatInput.placeholder.newLine"),
     t("chatInput.placeholder.sidebar", { key: cmdKey }),
     t("chatInput.placeholder.focusMode", { key: cmdKey }),
@@ -433,16 +413,6 @@ export function FreeFormInput({
     if (!effectiveConnection) return null
     return llmConnections.find(c => c.slug === effectiveConnection) ?? null
   }, [llmConnections, effectiveConnection])
-
-
-  // Access sessionStatuses and onSessionStatusChange from context for the # menu state picker
-  const sessionStatuses = appShellCtx?.sessionStatuses ?? []
-  const onSessionStatusChange = appShellCtx?.onSessionStatusChange
-  // Resolve workspace rootPath for "Add New Label" deep link
-  const workspaceRootPath = React.useMemo(() => {
-    if (!appShellCtx || !workspaceId) return null
-    return appShellCtx.workspaces.find(w => w.id === workspaceId)?.rootPath ?? null
-  }, [appShellCtx, workspaceId])
 
   // Workspace slug for SDK skill qualification (server-computed)
   // SDK expects "workspaceSlug:skillSlug" format, NOT UUID
@@ -1034,47 +1004,6 @@ export function FreeFormInput({
     workspaceId: workspaceSlug,
   })
 
-  // Inline label menu hook (for #labels)
-  const handleLabelSelect = React.useCallback((labelId: string) => {
-    onLabelAdd?.(labelId)
-  }, [onLabelAdd])
-
-  const inlineLabel = useInlineLabelMenu({
-    inputRef: richInputRef,
-    labels,
-    sessionLabels,
-    onSelect: handleLabelSelect,
-    sessionStatuses,
-    activeStateId: currentSessionStatus,
-  })
-
-  // "Add New Label" handler: cleans up the #trigger text and opens a controlled
-  // EditPopover so the user can describe the label before the agent creates it.
-  const [addLabelPopoverOpen, setAddLabelPopoverOpen] = React.useState(false)
-  const [addLabelPrefill, setAddLabelPrefill] = React.useState('')
-  const handleAddLabel = React.useCallback((prefill: string) => {
-    if (!workspaceRootPath) return
-
-    // Remove the #trigger text from input
-    const cleaned = inlineLabel.handleSelect('')
-    setInput(cleaned)
-    syncToParent(cleaned)
-    inlineLabel.close()
-
-    // Store the prefill text (e.g., "Test" from "#Test") to pre-fill the popover
-    // Format: "Add new label {prefill}" so user can just press enter or modify
-    setAddLabelPrefill(prefill ? t('labels.addNewLabel', { prefill }) : '')
-
-    // Open the EditPopover for label creation
-    setAddLabelPopoverOpen(true)
-  }, [workspaceRootPath, inlineLabel, syncToParent, t])
-
-  // Memoize the add-label config so the EditPopover doesn't recreate on every render
-  const addLabelEditConfig = React.useMemo(() => {
-    if (!workspaceRootPath) return null
-    return getEditConfig('add-label', workspaceRootPath)
-  }, [workspaceRootPath])
-
   // Report height changes to parent (for external animation sync)
   React.useLayoutEffect(() => {
     if (!onHeightChange || !containerRef.current) return
@@ -1392,18 +1321,6 @@ export function FreeFormInput({
       }
     }
 
-    // Don't submit when label menu is open - let it handle navigation keys
-    if (inlineLabel.isOpen) {
-      if (e.key === 'Enter' || e.key === 'Tab' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        return
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        inlineLabel.close()
-        return
-      }
-    }
-
     // Skip submission during IME composition - user is confirming composed characters, not sending
     // Handle send key based on user preference:
     // - 'enter': Enter sends (Shift+Enter for newline)
@@ -1475,10 +1392,7 @@ export function FreeFormInput({
     // Update inline mention state (for @mentions - skills, sources, folders)
     inlineMention.handleInputChange(nextValue, cursorPosition)
 
-    // Update inline label state (for #labels)
-    inlineLabel.handleInputChange(nextValue, cursorPosition)
-
-    // Auto-capitalize first letter (but not for slash commands, @mentions, or #labels)
+    // Auto-capitalize first letter (but not for slash commands or @mentions)
     // Only if autoCapitalisation setting is enabled
     let newValue = nextValue
     if (autoCapitalisation && nextValue.length > 0 && nextValue.charAt(0) !== '/' && nextValue.charAt(0) !== '@' && nextValue.charAt(0) !== '#') {
@@ -1502,7 +1416,7 @@ export function FreeFormInput({
       setInput(newValue)
       syncToParent(newValue)
     }
-  }, [inlineSlash, inlineMention, inlineLabel, syncToParent, autoCapitalisation])
+  }, [inlineSlash, inlineMention, syncToParent, autoCapitalisation])
 
   // Handle inline slash command selection (removes the /command text)
   const handleInlineSlashCommandSelect = React.useCallback((commandId: SlashCommandId) => {
@@ -1531,25 +1445,6 @@ export function FreeFormInput({
       richInputRef.current?.setSelectionRange(cursorPosition, cursorPosition)
     }, 0)
   }, [inlineMention, syncToParent])
-
-  // Handle inline label selection (removes the #label text from input)
-  const handleInlineLabelSelect = React.useCallback((labelId: string) => {
-    const newValue = inlineLabel.handleSelect(labelId)
-    setInput(newValue)
-    syncToParent(newValue)
-    richInputRef.current?.focus()
-  }, [inlineLabel, syncToParent])
-
-  // Handle inline state selection from # menu (removes #text, changes session state)
-  const handleInlineStateSelect = React.useCallback((stateId: string) => {
-    const newValue = inlineLabel.handleSelect('')
-    setInput(newValue)
-    syncToParent(newValue)
-    if (sessionId) {
-      onSessionStatusChange?.(sessionId, stateId)
-    }
-    richInputRef.current?.focus()
-  }, [inlineLabel, syncToParent, sessionId, onSessionStatusChange])
 
   const followUpLayoutKey = React.useMemo(
     () => followUpItems.map(item => [
@@ -1631,44 +1526,6 @@ export function FreeFormInput({
           maxWidth={280}
           isSearching={inlineMention.isSearching}
         />
-
-        {/* Inline Label & State Autocomplete (#labels / #states) */}
-        <InlineLabelMenu
-          open={inlineLabel.isOpen}
-          onOpenChange={(open) => !open && inlineLabel.close()}
-          items={inlineLabel.items}
-          onSelect={handleInlineLabelSelect}
-          onAddLabel={handleAddLabel}
-          filter={inlineLabel.filter}
-          position={inlineLabel.position}
-          states={inlineLabel.states}
-          activeStateId={inlineLabel.activeStateId}
-          onSelectState={handleInlineStateSelect}
-        />
-
-        {/* Controlled EditPopover for "Add New Label" — opens when user selects
-            the option from the # menu with no matches.
-            Spread the full config so optional fields like `inlineExecution`,
-            `displayLabel`, and `displayLabelKey` reach the popover. The previous
-            cherry-pick dropped `inlineExecution: true`, which made the popover
-            fall back to the same-window deep-link path; that worked inside
-            Electron but launched the desktop app from the WebUI via `craftagents://`.
-            Match the AppShell pattern (which already uses spread). */}
-        {addLabelEditConfig && (
-          <EditPopover
-            trigger={<span className="absolute top-0 left-0 w-0 h-0 overflow-hidden" />}
-            open={addLabelPopoverOpen}
-            onOpenChange={setAddLabelPopoverOpen}
-            {...addLabelEditConfig}
-            defaultValue={addLabelPrefill}
-            secondaryAction={workspaceRootPath ? {
-              label: 'Edit File',
-              filePath: `${workspaceRootPath}/labels/config.json`,
-            } : undefined}
-            side="top"
-            align="start"
-          />
-        )}
 
         {/* Pre-flight image-support warning — only for pi_compat connections
             where the renderer can both detect text-only models and offer to
