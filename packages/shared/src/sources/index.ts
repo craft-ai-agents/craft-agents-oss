@@ -79,10 +79,15 @@ export type {
 
 // MCP JSON import parsing
 export {
+  createMcpSourcesFromCandidates,
   parseMcpJsonImportCandidates,
 } from './mcp-import.ts';
 export type {
   McpImportCandidate,
+  McpImportBatchCreateResult,
+  McpImportCreateOptions,
+  McpImportCreateResult,
+  McpImportCredentialManager,
   McpImportFieldError,
   McpImportParseResult,
   McpImportParseOptions,

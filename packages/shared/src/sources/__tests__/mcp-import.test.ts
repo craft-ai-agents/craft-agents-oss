@@ -1,5 +1,11 @@
+import { mkdtempSync, readFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { describe, expect, test } from 'bun:test';
-import { parseMcpJsonImportCandidates } from '../mcp-import.ts';
+import { createMcpSourcesFromCandidates, parseMcpJsonImportCandidates } from '../mcp-import.ts';
+import { loadSourceConfig, loadSourceGuide } from '../storage.ts';
+import type { LoadedSource } from '../types.ts';
+import type { StoredCredential } from '../../credentials/types.ts';
 
 describe('parseMcpJsonImportCandidates', () => {
   test('parses a single stdio server object into one import candidate', () => {
@@ -288,3 +294,163 @@ describe('parseMcpJsonImportCandidates', () => {
     ]);
   });
 });
+
+describe('createMcpSourcesFromCandidates', () => {
+  test('creates a workspace MCP source from a valid candidate and persists selected credentials outside config', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    const savedCredentials: Array<{ source: LoadedSource; credential: StoredCredential }> = [];
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          linear: {
+            url: 'https://mcp.linear.app/mcp',
+            description: 'Issue tracking for product work.',
+            headers: {
+              Authorization: 'Bearer lin_secret',
+              'X-Trace-ID': 'trace-123',
+            },
+          },
+        },
+      }));
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, parsed.candidates, {
+        credentialManager: {
+          save: async (source, credential) => {
+            savedCredentials.push({ source, credential });
+          },
+        },
+      });
+
+      expect(result.results).toEqual([
+        { key: 'linear', success: true, sourceSlug: 'linear' },
+      ]);
+      expect(savedCredentials).toHaveLength(1);
+      expect(savedCredentials[0]?.source.config.slug).toBe('linear');
+      expect(savedCredentials[0]?.credential.value).toBe(JSON.stringify({ Authorization: 'Bearer lin_secret' }));
+
+      const config = loadSourceConfig(workspaceRootPath, 'linear');
+      expect(config?.type).toBe('mcp');
+      expect(config?.tagline).toBe('Issue tracking for product work.');
+      expect(config?.mcp).toEqual({
+        transport: 'http',
+        authType: 'none',
+        url: 'https://mcp.linear.app/mcp',
+        headers: { 'X-Trace-ID': 'trace-123' },
+        headerNames: ['Authorization'],
+      });
+
+      const guide = loadSourceGuide(workspaceRootPath, 'linear');
+      expect(guide?.raw).toContain('# Linear');
+      expect(guide?.raw).toContain('## Context');
+      expect(readFileSync(join(workspaceRootPath, 'sources', 'linear', 'config.json'), 'utf-8')).not.toContain('lin_secret');
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('blocks creating a source when credential persistence fails', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          secured: {
+            url: 'https://example.com/mcp',
+            headers: { 'X-API-Key': 'secret-key' },
+          },
+        },
+      }));
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, parsed.candidates, {
+        credentialManager: {
+          save: async () => {
+            throw new Error('credential store unavailable');
+          },
+        },
+      });
+
+      expect(result.results).toEqual([
+        {
+          key: 'secured',
+          success: false,
+          errors: [{ field: '$', message: 'credential store unavailable' }],
+        },
+      ]);
+      expect(loadSourceConfig(workspaceRootPath, 'secured')).toBeNull();
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('returns per-candidate results for partial batch success', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          valid: { command: 'npx', args: ['server'] },
+          invalid: { transport: 'stdio', args: ['missing-command'] },
+        },
+      }));
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, parsed.candidates, {
+        credentialManager: {
+          save: async () => {
+            throw new Error('unexpected credential save');
+          },
+        },
+      });
+
+      expect(result.results).toEqual([
+        { key: 'valid', success: true, sourceSlug: 'valid' },
+        {
+          key: 'invalid',
+          success: false,
+          errors: [{ field: 'command', message: 'Stdio MCP servers require a command string.' }],
+        },
+      ]);
+      expect(loadSourceConfig(workspaceRootPath, 'valid')?.mcp).toEqual({
+        transport: 'stdio',
+        command: 'npx',
+        args: ['server'],
+      });
+      expect(loadSourceConfig(workspaceRootPath, 'invalid')).toBeNull();
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('places long imported descriptions into guide context instead of config tagline', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    const longDescription = 'This MCP server exposes customer support case search, escalation workflows, account lookup, and internal runbook retrieval for the support operations team.';
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          support: {
+            url: 'https://support.example.com/mcp',
+            description: longDescription,
+          },
+        },
+      }));
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, parsed.candidates, {
+        credentialManager: {
+          save: async () => {
+            throw new Error('unexpected credential save');
+          },
+        },
+      });
+
+      expect(result.results).toEqual([
+        { key: 'support', success: true, sourceSlug: 'support' },
+      ]);
+      expect(loadSourceConfig(workspaceRootPath, 'support')?.tagline).toBeUndefined();
+      const guide = loadSourceGuide(workspaceRootPath, 'support');
+      expect(guide?.context).toBe(longDescription);
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+});
+
+function makeTempWorkspace(): string {
+  return mkdtempSync(join(tmpdir(), 'mcp-import-'));
+}
