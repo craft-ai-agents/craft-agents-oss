@@ -65,18 +65,24 @@ export interface McpImportCandidate {
 
 /** Minimal credential persistence interface used by MCP import creation. */
 export interface McpImportCredentialManager {
+  /** Persist the credential for a source before the source config is written. */
   save(source: LoadedSource, credential: StoredCredential): Promise<void>;
 }
 
+/** Optional dependencies for creating MCP sources from import candidates. */
 export interface McpImportCreateOptions {
+  /** Credential manager override, primarily for tests and alternate storage backends. */
   credentialManager?: McpImportCredentialManager;
 }
 
+/** Per-candidate result from MCP import source creation. */
 export type McpImportCreateResult =
   | { key: string; success: true; sourceSlug: string }
   | { key: string; success: false; errors: McpImportFieldError[] };
 
+/** Batch creation result that preserves one result per input candidate. */
 export interface McpImportBatchCreateResult {
+  /** Ordered results corresponding to the input candidates. */
   results: McpImportCreateResult[];
 }
 
@@ -287,7 +293,7 @@ function buildCreationMcpConfig(candidate: McpImportCandidate): McpSourceConfig 
   if (mcp.transport !== 'stdio' && !mcp.authType) {
     mcp.authType = 'none';
   }
-  const credentialStoreSecrets = (candidate.secrets ?? []).filter((secret) => secret.handling === 'credential-store');
+  const credentialStoreSecrets = getCredentialStoreSecrets(candidate);
   const envSecretNames = new Set(credentialStoreSecrets.filter((secret) => secret.location === 'env').map((secret) => secret.name));
   const headerSecretNames = new Set(credentialStoreSecrets.filter((secret) => secret.location === 'header').map((secret) => secret.name));
 
@@ -309,7 +315,7 @@ function buildCreationMcpConfig(candidate: McpImportCandidate): McpSourceConfig 
 }
 
 function buildCredentialStoreValue(candidate: McpImportCandidate): string | null {
-  const credentialStoreSecrets = (candidate.secrets ?? []).filter((secret) => secret.handling === 'credential-store');
+  const credentialStoreSecrets = getCredentialStoreSecrets(candidate);
   if (credentialStoreSecrets.length === 0) return null;
 
   const values: Record<string, string> = {};
@@ -317,6 +323,10 @@ function buildCredentialStoreValue(candidate: McpImportCandidate): string | null
     values[secret.name] = secret.value;
   }
   return JSON.stringify(values);
+}
+
+function getCredentialStoreSecrets(candidate: McpImportCandidate): McpImportSecret[] {
+  return (candidate.secrets ?? []).filter((secret) => secret.handling === 'credential-store');
 }
 
 function buildLoadedSource(workspaceRootPath: string, config: FolderSourceConfig, guide: SourceGuide): LoadedSource {
@@ -330,9 +340,11 @@ function buildLoadedSource(workspaceRootPath: string, config: FolderSourceConfig
 }
 
 function buildImportedGuide(name: string, description: string | undefined): SourceGuide {
-  const context = description && !isShortDescription(description)
-    ? description
-    : '(Add context about this source)';
+  let context = '(Add context about this source)';
+  if (description && !isShortDescription(description)) {
+    context = description;
+  }
+
   return {
     raw: `# ${name}
 
