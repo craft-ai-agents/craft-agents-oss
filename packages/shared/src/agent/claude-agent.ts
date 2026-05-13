@@ -867,7 +867,15 @@ export class ClaudeAgent extends BaseAgent {
       // - EnterPlanMode/ExitPlanMode: We use safe mode instead (user-controlled via UI)
       // - AskUserQuestion: Requires interactive UI to show question options to user
       // Note: Mini agents use a minimal tool list directly, so no additional blocking needed
-      const disallowedTools: string[] = ['EnterPlanMode', 'ExitPlanMode', 'AskUserQuestion', 'Skill'];
+      //
+      // `Skill` is intentionally allowed (paired with the discoverEnabledClaudePlugins()
+      // patch above): without it, plugin-provided SKILL.md files load into the model's
+      // context but the model has no way to invoke them. Trade-off: plugin skills bypass
+      // craft's PrerequisiteManager read-before-execute gate that protects craft-native
+      // `[skill:slug]` invocations. Acceptable here because plugins are user-installed
+      // and inspected via the marketplace; toggle off by adding `'Skill'` back if a
+      // stricter policy is required.
+      const disallowedTools: string[] = ['EnterPlanMode', 'ExitPlanMode', 'AskUserQuestion'];
 
       // Build MCP servers config
       // Mini agents: only session tools (config_validate) to minimize token usage
