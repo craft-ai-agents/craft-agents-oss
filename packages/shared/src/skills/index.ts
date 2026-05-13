@@ -40,6 +40,7 @@ export {
 } from './marketplace-install.ts';
 export {
   PRODUCT_MARKETPLACE_CATEGORIES,
+  createHttpMarketplaceOwnerActionsApi,
   createHttpMarketplacePublishApi,
   publishDirectSkillToMarketplace,
   publishDirectSkillToMarketplaceService,
@@ -47,9 +48,12 @@ export {
   publishLocalSkillToMarketplaceService,
   suggestMarketplacePublishSlug,
   suggestMarketplaceSlug,
+  unpublishMarketplaceSkillFromDiscovery,
+  unpublishMarketplaceSkillFromDiscoveryService,
   validateMarketplacePublishRequest,
 } from './marketplace-publish.ts';
 export type {
+  MarketplaceOwnerActionsApi,
   MarketplacePublishApi,
   MarketplacePublishApiInput,
   MarketplacePublishApiResult,
@@ -59,6 +63,10 @@ export type {
   MarketplacePublishDirectResult,
   MarketplacePublishLocalResult,
   MarketplacePublishRequest,
+  MarketplaceUnpublishApiInput,
+  MarketplaceUnpublishApiResult,
+  MarketplaceUnpublishRequest,
+  MarketplaceUnpublishResult,
   ProductMarketplaceCategory,
 } from './marketplace-publish.ts';
 export {

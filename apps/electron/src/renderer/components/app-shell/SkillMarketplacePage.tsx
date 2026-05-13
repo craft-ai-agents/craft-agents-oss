@@ -94,6 +94,7 @@ export interface MarketplaceApi {
   listSkills: () => Promise<MarketplaceSkillListing[]>
   getSkillDetail: (slug: string) => Promise<MarketplaceSkillDetail>
   reportSkill: (input: MarketplaceSkillReportInput) => Promise<MarketplaceReportResult>
+  unpublishSkill: (input: MarketplaceOwnerUnpublishInput) => Promise<MarketplaceOwnerUnpublishResult>
   createInstallIntent: (detail: MarketplaceSkillDetail, userId: string) => Promise<MarketplaceInstallIntent>
   recordInstallComplete: (intentId: string) => Promise<void>
   createUpdateIntent: (detail: MarketplaceSkillDetail, userId: string) => Promise<MarketplaceInstallIntent>
@@ -120,11 +121,25 @@ export interface MarketplaceSkillReportInput {
   context: string
 }
 
+/** Owner-authenticated unpublish payload sent to remove a Marketplace Skill from discovery. */
+export interface MarketplaceOwnerUnpublishInput {
+  userId: string
+  marketplaceId: string
+  marketplaceSlug: string
+}
+
 /** UI-safe result returned after attempting a Marketplace Skill report. */
 export type MarketplaceReportResult =
   | { status: 'submitted'; reportId: string }
   | { status: 'validation-error'; message: string }
   | { status: 'auth-required'; message: string }
+  | { status: 'error'; message: string }
+
+/** UI-safe result returned after an owner unpublishes a Marketplace Skill. */
+export type MarketplaceOwnerUnpublishResult =
+  | { status: 'unpublished'; marketplaceSlug: string; message: string }
+  | { status: 'auth-required'; message: string }
+  | { status: 'forbidden'; message: string }
   | { status: 'error'; message: string }
 
 /** Electron bridge used to install Marketplace Skills into Local Skills. */
@@ -328,11 +343,12 @@ const DEFAULT_MARKETPLACE_DETAILS: Record<string, MarketplaceSkillDetail> = {
 export function createStaticMarketplaceApi(options?: StaticMarketplaceApiOptions): MarketplaceApi {
   const listings = options?.listings ?? DEFAULT_MARKETPLACE_LISTINGS
   const details = options?.details ?? DEFAULT_MARKETPLACE_DETAILS
+  const unpublishedSlugs = new Set<string>()
 
   return {
     async listSkills() {
       if (options?.listError) throw new Error(options.listError)
-      return listings
+      return listings.filter((listing) => !unpublishedSlugs.has(listing.slug))
     },
     async getSkillDetail(slug) {
       if (options?.detailError) throw new Error(options.detailError)
@@ -342,6 +358,14 @@ export function createStaticMarketplaceApi(options?: StaticMarketplaceApiOptions
     },
     async reportSkill(input) {
       return { status: 'submitted', reportId: `report_${input.marketplaceId}` }
+    },
+    async unpublishSkill(input) {
+      unpublishedSlugs.add(input.marketplaceSlug)
+      return {
+        status: 'unpublished',
+        marketplaceSlug: input.marketplaceSlug,
+        message: 'Removed from Marketplace discovery. Published versions are preserved.',
+      }
     },
     async createInstallIntent(detail) {
       const bytes = zipSync({ 'SKILL.md': strToU8(detail.skillMarkdown) })
@@ -587,6 +611,79 @@ export async function reportMarketplaceSkillFromDetail({
   }
 }
 
+/** Unpublishes a Marketplace Skill from discovery through the owner-only service action. */
+export async function unpublishOwnerMarketplaceSkillFromDetail({
+  userId,
+  detail,
+  api,
+}: {
+  userId: string | null
+  detail: MarketplaceSkillDetail
+  api: MarketplaceApi
+}): Promise<MarketplaceOwnerUnpublishResult> {
+  if (!userId) {
+    return { status: 'auth-required', message: 'Sign in is required to manage Marketplace Skills.' }
+  }
+  if (userId !== detail.ownerId) {
+    return { status: 'forbidden', message: 'Only the Marketplace Skill owner can unpublish this Skill.' }
+  }
+
+  try {
+    return await api.unpublishSkill({
+      userId,
+      marketplaceId: detail.metadata.marketplaceId,
+      marketplaceSlug: detail.metadata.marketplaceSlug,
+    })
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Marketplace unpublish failed.',
+    }
+  }
+}
+
+/** Publishes a new immutable owner version from the currently published Marketplace detail. */
+export async function publishOwnerMarketplaceVersionFromDetail({
+  workspaceId,
+  userId,
+  detail,
+  version,
+  releaseNotes,
+  electronAPI,
+}: {
+  workspaceId: string
+  userId: string | null
+  detail: MarketplaceSkillDetail
+  version: string
+  releaseNotes?: string
+  electronAPI: MarketplaceDirectPublishElectronApi
+}): Promise<DirectPublishState> {
+  if (!userId) {
+    return { status: 'auth-required', message: 'Sign in is required to publish Marketplace Skills.' }
+  }
+  if (userId !== detail.ownerId) {
+    return { status: 'error', message: 'Only the Marketplace Skill owner can publish a new version.' }
+  }
+
+  const parsed = parsePublishedSkillMarkdown(detail.skillMarkdown, detail)
+  return publishDirectMarketplaceSkill({
+    workspaceId,
+    userId,
+    skill: {
+      slug: detail.slug,
+      metadata: parsed.metadata,
+      content: parsed.content,
+      sourcePath: 'marketplace-owner-detail',
+    },
+    marketplaceSlug: detail.metadata.marketplaceSlug,
+    version,
+    category: detail.category,
+    tags: detail.tags,
+    releaseNotes,
+    electronAPI,
+  })
+}
+
 /** Publishes a Skill directly from Marketplace without creating or updating a Local Skill. */
 export async function publishDirectMarketplaceSkill({
   workspaceId,
@@ -659,6 +756,13 @@ type MarketplaceDetailReportState =
   | { status: 'submitting' }
   | MarketplaceReportResult
 
+type MarketplaceDetailOwnerState =
+  | { status: 'idle' }
+  | { status: 'publishing' }
+  | { status: 'unpublishing' }
+  | DirectPublishState
+  | MarketplaceOwnerUnpublishResult
+
 type DirectPublishState =
   | { status: 'idle' }
   | { status: 'publishing' }
@@ -713,6 +817,35 @@ function cleanTags(tags: string[] | undefined): string[] | undefined {
   return cleaned && cleaned.length > 0 ? cleaned : undefined
 }
 
+function parsePublishedSkillMarkdown(
+  skillMarkdown: string,
+  detail: Pick<MarketplaceSkillDetail, 'name' | 'description'>,
+): { metadata: { name: string; description: string }; content: string } {
+  const frontmatterMatch = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/m.exec(skillMarkdown.trim())
+  if (!frontmatterMatch) {
+    return {
+      metadata: { name: detail.name, description: detail.description },
+      content: skillMarkdown.trim(),
+    }
+  }
+
+  const metadata: { name: string; description: string } = {
+    name: detail.name,
+    description: detail.description,
+  }
+  for (const line of frontmatterMatch[1].split('\n')) {
+    const [key, ...valueParts] = line.split(':')
+    const value = valueParts.join(':').trim()
+    if (key.trim() === 'name' && value) metadata.name = value
+    if (key.trim() === 'description' && value) metadata.description = value
+  }
+
+  return {
+    metadata,
+    content: frontmatterMatch[2].trim(),
+  }
+}
+
 function formatInstallCount(count: number): string {
   return new Intl.NumberFormat(undefined, { notation: count >= 10000 ? 'compact' : 'standard' }).format(count)
 }
@@ -726,7 +859,7 @@ function installStateLabel(state: MarketplaceInstallState): string {
     case 'modified-locally':
       return 'Modified locally'
     case 'unavailable':
-      return 'Unavailable'
+      return 'Owner unpublished'
     case 'safety-blocked':
       return 'Safety blocked'
     case 'install':
@@ -758,7 +891,7 @@ function disabledActionLabel(state: MarketplaceInstallState): string {
     case 'modified-locally':
       return 'Update'
     case 'unavailable':
-      return 'Unavailable'
+      return 'Owner unpublished'
     case 'safety-blocked':
       return 'Safety blocked'
     case 'install':
@@ -851,6 +984,25 @@ function directPublishMessage(state: DirectPublishState): string | null {
   }
 }
 
+function ownerActionMessage(state: MarketplaceDetailOwnerState): string | null {
+  switch (state.status) {
+    case 'published':
+      return `Published new Marketplace version v${state.version}`
+    case 'unpublished':
+      return state.message
+    case 'slug-conflict':
+    case 'auth-required':
+    case 'validation-error':
+    case 'forbidden':
+    case 'error':
+      return state.message
+    case 'idle':
+    case 'publishing':
+    case 'unpublishing':
+      return null
+  }
+}
+
 /** Read-only Marketplace browsing page with catalog filters and detail inspection. */
 export function SkillMarketplacePage({
   api = defaultMarketplaceApi,
@@ -871,6 +1023,7 @@ export function SkillMarketplacePage({
   const [detailState, setDetailState] = React.useState<MarketplaceDetailState | { status: 'idle' | 'loading' }>({ status: 'idle' })
   const [installStateBySlug, setInstallStateBySlug] = React.useState<Record<string, MarketplaceDetailInstallState>>({})
   const [reportStateBySlug, setReportStateBySlug] = React.useState<Record<string, MarketplaceDetailReportState>>({})
+  const [ownerStateBySlug, setOwnerStateBySlug] = React.useState<Record<string, MarketplaceDetailOwnerState>>({})
   const [publishDialogOpen, setPublishDialogOpen] = React.useState(false)
 
   const refreshCatalog = React.useCallback(() => {
@@ -935,6 +1088,37 @@ export function SkillMarketplacePage({
     })
     setReportStateBySlug((previous) => ({ ...previous, [detail.slug]: result }))
   }, [api, currentUserId])
+
+  const publishOwnerVersion = React.useCallback(async (detail: MarketplaceSkillDetail) => {
+    const version = window.prompt('New Marketplace version', detail.latestVersion)?.trim()
+    if (!version) return
+    const releaseNotes = window.prompt('Release notes', '')?.trim()
+    setOwnerStateBySlug((previous) => ({ ...previous, [detail.slug]: { status: 'publishing' } }))
+    const result = await publishOwnerMarketplaceVersionFromDetail({
+      workspaceId,
+      userId: currentUserId,
+      detail,
+      version,
+      releaseNotes,
+      electronAPI: window.electronAPI,
+    })
+    setOwnerStateBySlug((previous) => ({ ...previous, [detail.slug]: result }))
+    if (result.status === 'published') {
+      refreshCatalog()
+      refreshDetail(result.marketplaceSlug)
+    }
+  }, [currentUserId, refreshCatalog, refreshDetail, workspaceId])
+
+  const unpublishOwnerSkill = React.useCallback(async (detail: MarketplaceSkillDetail) => {
+    setOwnerStateBySlug((previous) => ({ ...previous, [detail.slug]: { status: 'unpublishing' } }))
+    const result = await unpublishOwnerMarketplaceSkillFromDetail({
+      userId: currentUserId,
+      detail,
+      api,
+    })
+    setOwnerStateBySlug((previous) => ({ ...previous, [detail.slug]: result }))
+    if (result.status === 'unpublished') refreshCatalog()
+  }, [api, currentUserId, refreshCatalog])
 
   const finishDirectPublish = React.useCallback((marketplaceSlug: string) => {
     setPublishDialogOpen(false)
@@ -1047,6 +1231,9 @@ export function SkillMarketplacePage({
               onInstall={(conflictResolution) => installDetail(detailState.detail, conflictResolution)}
               reportState={reportStateBySlug[detailState.detail.slug] ?? { status: 'idle' }}
               onReport={(context) => reportDetail(detailState.detail, context)}
+              ownerState={ownerStateBySlug[detailState.detail.slug] ?? { status: 'idle' }}
+              onOwnerPublishVersion={() => publishOwnerVersion(detailState.detail)}
+              onOwnerUnpublish={() => unpublishOwnerSkill(detailState.detail)}
               canInstall={Boolean(currentUserId)}
               canReport={Boolean(currentUserId)}
               currentUserId={currentUserId}
@@ -1504,6 +1691,21 @@ export function LocalSkillMarketplaceStatus({
         <span className="font-medium">Marketplace linked</span>
         <span className="text-muted-foreground">/{metadata.marketplaceSlug}</span>
         <span className="text-muted-foreground">v{metadata.installedVersion}</span>
+        {metadata.safetyStatus === 'unavailable' && (
+          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-200">
+            Owner unpublished
+          </span>
+        )}
+        {metadata.safetyStatus === 'safety-blocked' && (
+          <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-xs text-red-700 dark:text-red-300">
+            Admin unpublished
+          </span>
+        )}
+        {metadata.safetyStatus === 'safety-blocked' && (
+          <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-xs text-red-700 dark:text-red-300">
+            Safety blocked
+          </span>
+        )}
         {metadata.modified && (
           <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-200">
             Unpublished changes
@@ -1512,6 +1714,7 @@ export function LocalSkillMarketplaceStatus({
       </div>
       <div className="mt-2 text-xs text-muted-foreground">
         Marketplace ID {metadata.marketplaceId}
+        {metadata.safetyStatus !== 'ok' && <span className="ml-2">Local files preserved</span>}
       </div>
     </div>
   )
@@ -1570,8 +1773,11 @@ export function MarketplaceDetail({
   detail,
   installState = { status: 'idle' },
   reportState = { status: 'idle' },
+  ownerState = { status: 'idle' },
   onInstall,
   onReport,
+  onOwnerPublishVersion,
+  onOwnerUnpublish,
   canInstall = true,
   canReport = true,
   currentUserId = null,
@@ -1579,8 +1785,11 @@ export function MarketplaceDetail({
   detail: MarketplaceSkillDetail
   installState?: MarketplaceDetailInstallState
   reportState?: MarketplaceDetailReportState
+  ownerState?: MarketplaceDetailOwnerState
   onInstall?: (conflictResolution?: MarketplaceInstallConflictResolution) => void
   onReport?: (context: string) => void
+  onOwnerPublishVersion?: () => void
+  onOwnerUnpublish?: () => void
   canInstall?: boolean
   canReport?: boolean
   currentUserId?: string | null
@@ -1591,10 +1800,12 @@ export function MarketplaceDetail({
   const isInstalling = installState.status === 'installing'
   const isReportSubmitting = reportState.status === 'submitting'
   const ownerLinked = isOwnerLinked(detail, currentUserId)
+  const ownerActionBusy = ownerState.status === 'publishing' || ownerState.status === 'unpublishing'
   const hasUnpublishedChanges = ownerLinked && detail.installState === 'modified-locally'
   const canRunPrimaryAction = !isInstalling && !hasUnpublishedChanges
   const actionLabel = getMarketplaceInstallActionLabel(detail, installState, canInstall, currentUserId)
   const reportLabel = canReport ? 'Report' : 'Sign in to report'
+  const ownerMessage = ownerActionMessage(ownerState)
 
   return (
     <div className="space-y-5 p-5">
@@ -1636,7 +1847,32 @@ export function MarketplaceDetail({
             <Flag className="h-3.5 w-3.5" />
             {isReportSubmitting ? 'Submitting...' : reportLabel}
           </button>
-          <DisabledAction icon={<UserCog className="h-3.5 w-3.5" />} label="Owner actions" />
+          {ownerLinked && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted px-3 text-xs font-medium text-muted-foreground">
+                <UserCog className="h-3.5 w-3.5" />
+                Owner actions
+              </span>
+              <button
+                type="button"
+                disabled={ownerActionBusy}
+                onClick={onOwnerPublishVersion}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
+              >
+                <UserCog className="h-3.5 w-3.5" />
+                {ownerState.status === 'publishing' ? 'Publishing...' : 'Publish version'}
+              </button>
+              <button
+                type="button"
+                disabled={ownerActionBusy}
+                onClick={onOwnerUnpublish}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-500/30 bg-background px-3 text-xs font-medium text-red-700 hover:bg-red-500/10 disabled:bg-muted disabled:text-muted-foreground dark:text-red-300"
+              >
+                <ShieldAlert className="h-3.5 w-3.5" />
+                {ownerState.status === 'unpublishing' ? 'Unpublishing...' : 'Unpublish'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1674,6 +1910,16 @@ export function MarketplaceDetail({
         </div>
       )}
 
+      {ownerMessage && (
+        <div className={`rounded-md border p-3 text-sm ${
+          ownerState.status === 'published' || ownerState.status === 'unpublished'
+            ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+            : 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
+        }`}>
+          {ownerMessage}
+        </div>
+      )}
+
       {installState.status !== 'idle' && installState.status !== 'installing' && (
         <div className={`rounded-md border p-3 text-sm ${marketplaceInstallAlertClassName(installState.status)}`}>
           <div className="flex flex-wrap items-center gap-2">
@@ -1695,7 +1941,11 @@ export function MarketplaceDetail({
       {isBlocked && (
         <div className="flex gap-2 rounded-md border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{installStateLabel(detail.installState)} prevents Marketplace install and update distribution. Existing Local Skills remain separate.</span>
+          {detail.installState === 'unavailable' ? (
+            <span>Owner unpublished stops future Marketplace install and update distribution. Existing Local Skill files are preserved.</span>
+          ) : (
+            <span>Safety blocked prevents Marketplace install and update distribution. Existing Local Skill files are preserved.</span>
+          )}
         </div>
       )}
 

@@ -53,9 +53,33 @@ export type MarketplacePublishApiResult =
       message: string
     }
 
+/** Owner request to remove a Marketplace Skill from future discovery and distribution. */
+export interface MarketplaceUnpublishApiInput {
+  userId: string
+  marketplaceId: string
+  marketplaceSlug: string
+}
+
+/** Marketplace service response for an owner unpublish action. */
+export type MarketplaceUnpublishApiResult =
+  | {
+      status: 'unpublished'
+      marketplaceSlug: string
+      message: string
+    }
+  | {
+      status: 'forbidden'
+      message: string
+    }
+
 /** Boundary used by publish orchestration to create Marketplace Skill versions. */
 export interface MarketplacePublishApi {
   publishSkill(input: MarketplacePublishApiInput): Promise<MarketplacePublishApiResult>
+}
+
+/** Boundary used by owner lifecycle actions on Marketplace Skills. */
+export interface MarketplaceOwnerActionsApi {
+  unpublishSkill(input: MarketplaceUnpublishApiInput): Promise<MarketplaceUnpublishApiResult>
 }
 
 /** Complete Local Skill publish request, including workspace context and service boundary. */
@@ -86,6 +110,14 @@ export interface MarketplaceDirectPublishRequest {
   tags?: string[]
   releaseNotes?: string
   api: MarketplacePublishApi
+}
+
+/** Complete owner unpublish request, preserving Marketplace versions remotely. */
+export interface MarketplaceUnpublishRequest {
+  user: { id: string } | null
+  marketplaceId: string
+  marketplaceSlug: string
+  api: MarketplaceOwnerActionsApi
 }
 
 /** Renderer-safe input for publishing a Local Skill through workspace-owned RPC. */
@@ -130,6 +162,9 @@ export type MarketplacePublishLocalResult =
 
 /** Renderer-safe result returned after direct Marketplace publish through RPC. */
 export type MarketplacePublishDirectResult = MarketplacePublishLocalResult
+
+/** Renderer-safe result returned after unpublishing a Marketplace Skill. */
+export type MarketplaceUnpublishResult = MarketplaceUnpublishApiResult
 
 /** Suggest the editable Marketplace slug from SKILL.md frontmatter metadata. */
 export function suggestMarketplaceSlug(metadata: Pick<SkillMetadata, 'name'>): string {
@@ -273,6 +308,24 @@ export async function publishDirectSkillToMarketplace(
   }
 }
 
+/** Removes a Marketplace Skill from discovery and future distribution without deleting versions. */
+export async function unpublishMarketplaceSkillFromDiscovery(
+  request: MarketplaceUnpublishRequest,
+): Promise<MarketplaceUnpublishResult> {
+  if (!request.user) {
+    throw new Error('Sign in is required to manage Marketplace Skills.')
+  }
+  if (!request.marketplaceId.trim() || !request.marketplaceSlug.trim()) {
+    throw new Error('Marketplace Skill identity is required before unpublishing.')
+  }
+
+  return request.api.unpublishSkill({
+    userId: request.user.id,
+    marketplaceId: request.marketplaceId,
+    marketplaceSlug: request.marketplaceSlug,
+  })
+}
+
 /** Publish a Local Skill to the configured Marketplace HTTP service from an owning workspace. */
 export async function publishLocalSkillToMarketplaceService(
   workspaceRoot: string,
@@ -314,6 +367,26 @@ export async function publishDirectSkillToMarketplaceService(
     tags: input.tags,
     releaseNotes: input.releaseNotes,
     api: createHttpMarketplacePublishApi(options.baseUrl, options.fetchImpl ?? fetch),
+  })
+}
+
+/** Unpublish a Marketplace Skill from the configured Marketplace HTTP service. */
+export async function unpublishMarketplaceSkillFromDiscoveryService(
+  input: {
+    userId: string
+    marketplaceId: string
+    marketplaceSlug: string
+  },
+  options: {
+    baseUrl: string
+    fetchImpl?: typeof fetch
+  },
+): Promise<MarketplaceUnpublishResult> {
+  return unpublishMarketplaceSkillFromDiscovery({
+    user: { id: input.userId },
+    marketplaceId: input.marketplaceId,
+    marketplaceSlug: input.marketplaceSlug,
+    api: createHttpMarketplaceOwnerActionsApi(options.baseUrl, options.fetchImpl ?? fetch),
   })
 }
 
@@ -359,6 +432,41 @@ export function createHttpMarketplacePublishApi(baseUrl: string, fetchImpl: type
         version: data.version,
         ownerId: data.ownerId,
         ownerDisplayName: data.ownerDisplayName,
+      }
+    },
+  }
+}
+
+/** Create the HTTP Marketplace owner actions boundary used by production handlers. */
+export function createHttpMarketplaceOwnerActionsApi(baseUrl: string, fetchImpl: typeof fetch = fetch): MarketplaceOwnerActionsApi {
+  return {
+    async unpublishSkill(input) {
+      const response = await fetchImpl(`${baseUrl.replace(/\/$/, '')}/v1/skills/${encodeURIComponent(input.marketplaceSlug)}/unpublish`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Craft-User-Id': input.userId,
+        },
+        body: JSON.stringify({ marketplaceId: input.marketplaceId }),
+      })
+      const data = await response.json().catch(() => ({})) as Partial<MarketplaceUnpublishApiResult> & { message?: string }
+
+      if (response.status === 403) {
+        return {
+          status: 'forbidden',
+          message: data.message ?? 'Only the Marketplace Skill owner can unpublish this Skill.',
+        }
+      }
+      if (!response.ok) {
+        throw new Error(data.message ?? `Marketplace unpublish failed with HTTP ${response.status}.`)
+      }
+      if (data.status !== 'unpublished' || !data.marketplaceSlug || !data.message) {
+        throw new Error('Marketplace unpublish response is missing Skill metadata.')
+      }
+      return {
+        status: 'unpublished',
+        marketplaceSlug: data.marketplaceSlug,
+        message: data.message,
       }
     },
   }

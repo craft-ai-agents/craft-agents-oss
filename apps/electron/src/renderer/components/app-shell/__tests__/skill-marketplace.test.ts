@@ -14,8 +14,10 @@ import {
   LocalSkillMarketplaceStatus,
   publishDirectMarketplaceSkill,
   publishMarketplaceSkill,
+  publishOwnerMarketplaceVersionFromDetail,
   reportMarketplaceSkillFromDetail,
   SkillMarketplacePageHeader,
+  unpublishOwnerMarketplaceSkillFromDetail,
   updateMarketplaceSkillFromDetail,
 } from '../SkillMarketplacePage'
 
@@ -115,7 +117,33 @@ describe('SkillMarketplacePage API boundary', () => {
     expect(html).toContain('Marketplace ID')
     expect(html).toContain('Install')
     expect(html).toContain('Report')
-    expect(html).toContain('Owner actions')
+    expect(html).not.toContain('Owner actions')
+  })
+
+  test('renders owner actions only for the Marketplace Skill owner', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'release-notes')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+
+    const ownerHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: result.detail,
+      currentUserId: 'owner_1',
+      onOwnerPublishVersion: () => {},
+      onOwnerUnpublish: () => {},
+    }))
+    const nonOwnerHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: result.detail,
+      currentUserId: 'user_2',
+      onOwnerPublishVersion: () => {},
+      onOwnerUnpublish: () => {},
+    }))
+
+    expect(ownerHtml).toContain('Owner actions')
+    expect(ownerHtml).toContain('Publish version')
+    expect(ownerHtml).toContain('Unpublish')
+    expect(nonOwnerHtml).not.toContain('Owner actions')
+    expect(nonOwnerHtml).not.toContain('Publish version')
+    expect(nonOwnerHtml).not.toContain('Unpublish')
   })
 
   test('submits Marketplace Skill reports with authenticated user context and report details', async () => {
@@ -444,6 +472,112 @@ describe('SkillMarketplacePage API boundary', () => {
     }])
   })
 
+  test('owner Marketplace detail publish sends a new immutable SemVer version through publish RPC', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'release-notes')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+    const calls: unknown[] = []
+
+    const publishResult = await publishOwnerMarketplaceVersionFromDetail({
+      workspaceId: 'workspace_1',
+      userId: 'owner_1',
+      detail: result.detail,
+      version: '1.9.0',
+      releaseNotes: 'Owner release notes.',
+      electronAPI: {
+        async publishDirectMarketplaceSkill(workspaceId, input) {
+          calls.push({ workspaceId, input })
+          return {
+            status: 'published',
+            marketplaceId: result.detail.metadata.marketplaceId,
+            marketplaceSlug: input.marketplaceSlug,
+            version: input.version,
+          }
+        },
+      },
+    })
+
+    expect(publishResult).toEqual({
+      status: 'published',
+      marketplaceId: 'mkt_skill_release-notes',
+      marketplaceSlug: 'release-notes',
+      version: '1.9.0',
+    })
+    expect(calls).toEqual([{
+      workspaceId: 'workspace_1',
+      input: {
+        userId: 'owner_1',
+        skill: {
+          slug: 'release-notes',
+          metadata: {
+            name: 'Release Notes',
+            description: 'Turns merged changes into concise release notes for product teams.',
+          },
+          content: '# Release Notes\n\nSummarize completed work by user-visible outcome and include migration notes when needed.',
+        },
+        marketplaceSlug: 'release-notes',
+        version: '1.9.0',
+        category: 'Product',
+        tags: ['release', 'writing'],
+        releaseNotes: 'Owner release notes.',
+      },
+    }])
+  })
+
+  test('owner Marketplace detail unpublish calls owner-only service boundary', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'release-notes')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+    const calls: unknown[] = []
+
+    const unpublishResult = await unpublishOwnerMarketplaceSkillFromDetail({
+      userId: 'owner_1',
+      detail: result.detail,
+      api: {
+        ...api,
+        async unpublishSkill(input) {
+          calls.push(input)
+          return {
+            status: 'unpublished',
+            marketplaceSlug: input.marketplaceSlug,
+            message: 'Removed from Marketplace discovery. Published versions are preserved.',
+          }
+        },
+      },
+    })
+
+    expect(unpublishResult).toEqual({
+      status: 'unpublished',
+      marketplaceSlug: 'release-notes',
+      message: 'Removed from Marketplace discovery. Published versions are preserved.',
+    })
+    expect(calls).toEqual([{
+      userId: 'owner_1',
+      marketplaceId: 'mkt_skill_release-notes',
+      marketplaceSlug: 'release-notes',
+    }])
+  })
+
+  test('owner unpublish removes Marketplace Skill from discovery while preserving detail versions', async () => {
+    const api = createStaticMarketplaceApi()
+    const detailBefore = await loadMarketplaceDetail(api, 'release-notes')
+    if (detailBefore.status !== 'ready') throw new Error('Expected ready detail state')
+
+    await unpublishOwnerMarketplaceSkillFromDetail({
+      userId: 'owner_1',
+      detail: detailBefore.detail,
+      api,
+    })
+    const catalogAfter = await loadMarketplaceCatalog(api, {})
+    const detailAfter = await loadMarketplaceDetail(api, 'release-notes')
+
+    if (catalogAfter.status !== 'ready' || detailAfter.status !== 'ready') {
+      throw new Error('Expected ready Marketplace state')
+    }
+    expect(catalogAfter.listings.map((listing) => listing.slug)).not.toContain('release-notes')
+    expect(detailAfter.detail.versions.map((version) => version.version)).toEqual(['1.8.0', '1.7.1'])
+  })
+
   test('direct Marketplace publish validates auth and form fields before RPC', async () => {
     const result = await publishDirectMarketplaceSkill({
       workspaceId: 'workspace_1',
@@ -594,6 +728,57 @@ describe('SkillMarketplacePage API boundary', () => {
     expect(updateHtml).not.toContain('Update placeholder')
     expect(blockedHtml).toContain('Safety blocked')
     expect(blockedHtml).toContain('prevents Marketplace install and update distribution')
+  })
+
+  test('renders owner-unpublished state as unavailable without deleting Local Skill files', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'release-notes')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+
+    const detailHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: { ...result.detail, installState: 'unavailable' },
+    }))
+    const localHtml = renderToStaticMarkup(React.createElement(LocalSkillMarketplaceStatus, {
+      metadata: {
+        marketplaceId: 'mkt_skill_release_notes',
+        marketplaceSlug: 'release-notes',
+        ownerId: 'owner_1',
+        ownerDisplayName: 'Launch Team',
+        installedVersion: '1.7.1',
+        installedAt: '2026-05-12T10:00:00.000Z',
+        lastCheckedAt: '2026-05-12T12:00:00.000Z',
+        modified: false,
+        sourceBundleHash: 'hash',
+        safetyStatus: 'unavailable',
+      },
+    }))
+
+    expect(detailHtml).toContain('Owner unpublished')
+    expect(detailHtml).toContain('stops future Marketplace install and update distribution')
+    expect(detailHtml).toContain('Existing Local Skill files are preserved.')
+    expect(localHtml).toContain('Owner unpublished')
+    expect(localHtml).toContain('Local files preserved')
+  })
+
+  test('renders admin-unpublished safety-blocked Local Skill status', () => {
+    const html = renderToStaticMarkup(React.createElement(LocalSkillMarketplaceStatus, {
+      metadata: {
+        marketplaceId: 'mkt_skill_security_review',
+        marketplaceSlug: 'security-review',
+        ownerId: 'owner_2',
+        ownerDisplayName: 'Secure Build',
+        installedVersion: '3.0.0',
+        installedAt: '2026-05-12T10:00:00.000Z',
+        lastCheckedAt: '2026-05-12T12:00:00.000Z',
+        modified: false,
+        sourceBundleHash: 'hash',
+        safetyStatus: 'safety-blocked',
+      },
+    }))
+
+    expect(html).toContain('Admin unpublished')
+    expect(html).toContain('Safety blocked')
+    expect(html).toContain('Local files preserved')
   })
 
   test('renders an overwrite warning before updating modified Marketplace-installed Local Skills', async () => {

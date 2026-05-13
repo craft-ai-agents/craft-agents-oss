@@ -6,6 +6,7 @@ import { unzipSync, strFromU8 } from 'fflate'
 import {
   MARKETPLACE_ORIGIN_METADATA_FILE,
   publishDirectSkillToMarketplace,
+  unpublishMarketplaceSkillFromDiscovery,
   publishLocalSkillToMarketplace,
   readMarketplaceOriginMetadata,
   suggestMarketplacePublishSlug,
@@ -313,6 +314,52 @@ describe('publishLocalSkillToMarketplace', () => {
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true })
     }
+  })
+})
+
+describe('unpublishMarketplaceSkillFromDiscovery', () => {
+  test('calls the owner-only unpublish endpoint without deleting published versions', async () => {
+    const requests: unknown[] = []
+
+    const result = await unpublishMarketplaceSkillFromDiscovery({
+      user: { id: 'owner_1' },
+      marketplaceId: 'mkt_skill_review_helper',
+      marketplaceSlug: 'review-helper',
+      api: {
+        async unpublishSkill(input) {
+          requests.push(input)
+          return {
+            status: 'unpublished',
+            marketplaceSlug: input.marketplaceSlug,
+            message: 'Removed from Marketplace discovery. Published versions are preserved.',
+          }
+        },
+      },
+    })
+
+    expect(result).toEqual({
+      status: 'unpublished',
+      marketplaceSlug: 'review-helper',
+      message: 'Removed from Marketplace discovery. Published versions are preserved.',
+    })
+    expect(requests).toEqual([{
+      userId: 'owner_1',
+      marketplaceId: 'mkt_skill_review_helper',
+      marketplaceSlug: 'review-helper',
+    }])
+  })
+
+  test('requires authenticated owner context before unpublishing', async () => {
+    await expect(unpublishMarketplaceSkillFromDiscovery({
+      user: null,
+      marketplaceId: 'mkt_skill_review_helper',
+      marketplaceSlug: 'review-helper',
+      api: {
+        async unpublishSkill() {
+          throw new Error('should not unpublish')
+        },
+      },
+    })).rejects.toThrow('Sign in is required')
   })
 })
 
