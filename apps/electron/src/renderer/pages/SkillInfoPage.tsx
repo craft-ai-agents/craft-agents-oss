@@ -171,6 +171,12 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
   // Get skill name for header
   const skillName = skill?.metadata.name || skillSlug
   const canDeleteSkill = skill?.source === 'workspace'
+  const isDerivedMarketplacePublish = Boolean(
+    skill?.marketplaceOrigin?.ownerId && skill.marketplaceOrigin.ownerId !== currentUserId,
+  )
+  const publishDialogDescription = isDerivedMarketplacePublish
+    ? `Publish your edits to ${skillName} as a new Marketplace Skill.`
+    : `Publish ${skillName} as an immutable Marketplace version.`
 
   // Format path to show just the skill-relative portion (skills/{slug}/)
   const formatPath = (path: string) => {
@@ -350,9 +356,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
               <div>
                 <h2 className="text-sm font-semibold">Publish Skill</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {skill.marketplaceOrigin?.ownerId && skill.marketplaceOrigin.ownerId !== currentUserId
-                    ? `Publish your edits to ${skill.metadata.name} as a new Marketplace Skill.`
-                    : `Publish ${skill.metadata.name} as an immutable Marketplace version.`}
+                  {publishDialogDescription}
                 </p>
               </div>
               <button type="button" className="text-sm text-muted-foreground hover:text-foreground" onClick={() => setPublishDialogOpen(false)}>

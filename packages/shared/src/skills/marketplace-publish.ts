@@ -161,15 +161,7 @@ export async function publishLocalSkillToMarketplace(
 
   const bundle = bundleLocalSkill(request.workspaceRoot, request.skillSlug)
   const origin = readMarketplaceOriginMetadata(request.workspaceRoot, request.skillSlug)
-  const attributableOrigin = getAttributableOrigin(origin)
-  const isDerivedPublish = Boolean(attributableOrigin && attributableOrigin.ownerId !== request.user.id)
-  const basedOn = isDerivedPublish && attributableOrigin
-    ? {
-        marketplaceId: attributableOrigin.marketplaceId,
-        marketplaceSlug: attributableOrigin.marketplaceSlug,
-        version: attributableOrigin.installedVersion,
-      }
-    : undefined
+  const basedOn = getDerivedPublishAttribution(origin, request.user.id)
 
   const published = await request.api.publishSkill({
     userId: request.user.id,
@@ -332,6 +324,20 @@ function cleanOptionalString(value: string | undefined): string | undefined {
 function cleanOptionalStringArray(value: string[] | undefined): string[] | undefined {
   const cleaned = value?.map((entry) => entry.trim()).filter(Boolean)
   return cleaned && cleaned.length > 0 ? cleaned : undefined
+}
+
+function getDerivedPublishAttribution(
+  origin: MarketplaceOriginMetadata | null,
+  userId: string,
+): MarketplacePublishApiInput['basedOn'] {
+  const attributableOrigin = getAttributableOrigin(origin)
+  if (!attributableOrigin || attributableOrigin.ownerId === userId) return undefined
+
+  return {
+    marketplaceId: attributableOrigin.marketplaceId,
+    marketplaceSlug: attributableOrigin.marketplaceSlug,
+    version: attributableOrigin.installedVersion,
+  }
 }
 
 function getAttributableOrigin(origin: MarketplaceOriginMetadata | null): MarketplaceOriginMetadata | null {
