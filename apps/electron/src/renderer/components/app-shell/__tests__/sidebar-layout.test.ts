@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import { createAllSessionsSidebarItem } from '../all-sessions-sidebar-item'
-import { resolveSidebarDrilldownLayout } from '../sidebar-drilldown-layout'
+import { resolveSidebarLayout } from '../sidebar-layout'
 import type { NavigationState } from '../../../../shared/types'
 
-describe('resolveSidebarDrilldownLayout', () => {
+describe('resolveSidebarLayout', () => {
   test('keeps the wide sidebar and navigator visible in sessions mode', () => {
     const navState: NavigationState = {
       navigator: 'sessions',
@@ -11,14 +11,12 @@ describe('resolveSidebarDrilldownLayout', () => {
       details: null,
     }
 
-    expect(resolveSidebarDrilldownLayout({
+    expect(resolveSidebarLayout({
       navState,
-      isAutoCompact: false,
       isSidebarAndNavigatorHidden: false,
       isSidebarVisible: true,
       sidebarWidth: 300,
     })).toEqual({
-      isDrilldown: false,
       sidebarWidth: 300,
       navigatorWidth: 300,
       showSidebarResizeHandle: true,
@@ -33,14 +31,12 @@ describe('resolveSidebarDrilldownLayout', () => {
       details: null,
     }
 
-    expect(resolveSidebarDrilldownLayout({
+    expect(resolveSidebarLayout({
       navState,
-      isAutoCompact: false,
       isSidebarAndNavigatorHidden: false,
       isSidebarVisible: true,
       sidebarWidth: 300,
     })).toEqual({
-      isDrilldown: false,
       sidebarWidth: 300,
       navigatorWidth: 300,
       showSidebarResizeHandle: true,
@@ -48,21 +44,19 @@ describe('resolveSidebarDrilldownLayout', () => {
     })
   })
 
-  test('does not enter drilldown while compact mode has hidden the left panels', () => {
+  test('hides the left panels when compact mode has hidden them', () => {
     const navState: NavigationState = {
       navigator: 'sessions',
       filter: { kind: 'allSessions' },
       details: null,
     }
 
-    expect(resolveSidebarDrilldownLayout({
+    expect(resolveSidebarLayout({
       navState,
-      isAutoCompact: true,
       isSidebarAndNavigatorHidden: true,
       isSidebarVisible: true,
       sidebarWidth: 300,
     })).toEqual({
-      isDrilldown: false,
       sidebarWidth: 0,
       navigatorWidth: 0,
       showSidebarResizeHandle: false,
@@ -75,14 +69,12 @@ describe('resolveSidebarDrilldownLayout', () => {
       navigator: 'skill-marketplace',
     }
 
-    expect(resolveSidebarDrilldownLayout({
+    expect(resolveSidebarLayout({
       navState,
-      isAutoCompact: false,
       isSidebarAndNavigatorHidden: false,
       isSidebarVisible: true,
       sidebarWidth: 300,
     })).toEqual({
-      isDrilldown: false,
       sidebarWidth: 300,
       navigatorWidth: 0,
       showSidebarResizeHandle: true,

@@ -45,7 +45,7 @@ describe('AppShell editor panel auto-show', () => {
     expect(effectSource).not.toContain('isRightSidebarContextuallyAvailable')
   })
 
-  test('gates the rendered editor panel and top bar toggle behind session detail availability', () => {
+  test('gates the rendered editor panel and top bar toggle behind session navigation availability', () => {
     expect(appShellSource).toContain('isEditorPanelToggleVisible={isRightSidebarContextuallyAvailable}')
     expect(appShellSource).toContain('isRightSidebarContextuallyAvailable && (\n          <EditorDetailPanel')
   })

@@ -1,15 +1,13 @@
 import { isSessionsNavigation, type NavigationState } from '../../../shared/types'
 
-interface ResolveSidebarDrilldownLayoutInput {
+interface ResolveSidebarLayoutInput {
   navState: NavigationState
-  isAutoCompact: boolean
   isSidebarAndNavigatorHidden: boolean
   isSidebarVisible: boolean
   sidebarWidth: number
 }
 
-interface SidebarDrilldownLayout {
-  isDrilldown: boolean
+interface SidebarLayout {
   sidebarWidth: number
   navigatorWidth: number
   showSidebarResizeHandle: boolean
@@ -19,17 +17,14 @@ interface SidebarDrilldownLayout {
 /**
  * Resolves the left-panel widths, resize handles, and right-sidebar gate.
  */
-export function resolveSidebarDrilldownLayout({
+export function resolveSidebarLayout({
   navState,
   isSidebarAndNavigatorHidden,
   isSidebarVisible,
   sidebarWidth,
-}: ResolveSidebarDrilldownLayoutInput): SidebarDrilldownLayout {
-  const isDrilldown = false
-
+}: ResolveSidebarLayoutInput): SidebarLayout {
   if (isSidebarAndNavigatorHidden) {
     return {
-      isDrilldown,
       sidebarWidth: 0,
       navigatorWidth: 0,
       showSidebarResizeHandle: false,
@@ -39,7 +34,6 @@ export function resolveSidebarDrilldownLayout({
 
   if (navState.navigator === 'skill-marketplace') {
     return {
-      isDrilldown,
       sidebarWidth: isSidebarVisible ? sidebarWidth : 0,
       navigatorWidth: 0,
       showSidebarResizeHandle: true,
@@ -48,7 +42,6 @@ export function resolveSidebarDrilldownLayout({
   }
 
   return {
-    isDrilldown,
     sidebarWidth: isSidebarVisible ? sidebarWidth : 0,
     navigatorWidth: sidebarWidth,
     showSidebarResizeHandle: true,

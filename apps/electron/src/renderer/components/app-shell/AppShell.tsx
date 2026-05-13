@@ -111,7 +111,7 @@ import {
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
-import { resolveSidebarDrilldownLayout } from "./sidebar-drilldown-layout"
+import { resolveSidebarLayout } from "./sidebar-layout"
 import {
   createSkillsSidebarItems,
   LOCAL_SKILLS_NAV_ID,
@@ -296,15 +296,14 @@ function AppShellContent({
   const handleToggleEditorPanel = useCallback(() => {
     setIsEditorPanelOpen(prev => !prev)
   }, [])
-  const sidebarDrilldownLayout = resolveSidebarDrilldownLayout({
+  const sidebarLayout = resolveSidebarLayout({
     navState,
-    isAutoCompact,
     isSidebarAndNavigatorHidden: effectiveSidebarAndNavigatorHidden,
     isSidebarVisible,
     sidebarWidth,
   })
   const isRightSidebarContextuallyAvailable =
-    sidebarDrilldownLayout.isRightSidebarVisible && !shouldSuppressRightSidebarForNavState(navState)
+    sidebarLayout.isRightSidebarVisible && !shouldSuppressRightSidebarForNavState(navState)
   const hasOpenTabs = useAtomValue(hasOpenTabsAtom)
   const prevHasOpenTabsRef = React.useRef(hasOpenTabs)
   useEffect(() => {
@@ -1724,7 +1723,7 @@ function AppShellContent({
           sidebarSlot={
             <div
               ref={sidebarRef}
-              style={{ width: sidebarDrilldownLayout.sidebarWidth }}
+              style={{ width: sidebarLayout.sidebarWidth }}
               className="h-full font-sans relative"
               data-focus-zone="sidebar"
               tabIndex={sidebarFocused ? 0 : -1}
@@ -1945,10 +1944,10 @@ function AppShellContent({
             </div>
           </div>
           }
-          sidebarWidth={sidebarDrilldownLayout.sidebarWidth}
+          sidebarWidth={sidebarLayout.sidebarWidth}
           navigatorSlot={
             <div
-              style={{ width: isAutoCompact ? '100%' : sidebarDrilldownLayout.navigatorWidth }}
+              style={{ width: isAutoCompact ? '100%' : sidebarLayout.navigatorWidth }}
               className="h-full flex flex-col min-w-0 relative z-panel"
             >
             <PanelHeader
@@ -2072,7 +2071,7 @@ function AppShellContent({
             )}
             </div>
           }
-          navigatorWidth={sidebarDrilldownLayout.navigatorWidth}
+          navigatorWidth={sidebarLayout.navigatorWidth}
           isSidebarAndNavigatorHidden={effectiveSidebarAndNavigatorHidden}
           isRightSidebarVisible={isPanelStackRightSidebarVisible}
           isCompact={isAutoCompact}
@@ -2096,7 +2095,7 @@ function AppShellContent({
         )}
 
         {/* Sidebar Resize Handle (absolute, hidden in focused mode) */}
-        {sidebarDrilldownLayout.showSidebarResizeHandle && (
+        {sidebarLayout.showSidebarResizeHandle && (
         <div
           ref={resizeHandleRef}
           onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
@@ -2113,7 +2112,7 @@ function AppShellContent({
             top: PANEL_STACK_VERTICAL_OVERFLOW,
             bottom: PANEL_STACK_VERTICAL_OVERFLOW,
             left: isSidebarVisible
-              ? sidebarDrilldownLayout.sidebarWidth + (PANEL_GAP / 2) - PANEL_SASH_HALF_HIT_WIDTH
+              ? sidebarLayout.sidebarWidth + (PANEL_GAP / 2) - PANEL_SASH_HALF_HIT_WIDTH
               : -PANEL_GAP,
             transition: isResizing === 'sidebar' ? undefined : 'left 0.15s ease-out',
           }}
