@@ -10,6 +10,29 @@ export interface McpImportFieldError {
   message: string;
 }
 
+export type McpImportSecretLocation = 'env' | 'header';
+export type McpImportSecretHandling = 'credential-store' | 'config';
+
+export interface McpImportSecret {
+  /** Stable candidate-local ID for persisting a handling choice before creation. */
+  id: string;
+  /** Source field where the secret-like value was imported from. */
+  location: McpImportSecretLocation;
+  /** Env var or header name. */
+  name: string;
+  /** Original value, retained for credential persistence. */
+  value: string;
+  /** Value safe to render in import previews. */
+  previewValue: string;
+  /** Whether to persist this value in the credential store or keep it in config. */
+  handling: McpImportSecretHandling;
+}
+
+export interface McpImportParseOptions {
+  /** Per-secret handling overrides keyed by McpImportSecret.id. */
+  secretHandling?: Record<string, McpImportSecretHandling>;
+}
+
 /**
  * Normalized source creation preview for one MCP server entry.
  */
@@ -18,6 +41,8 @@ export interface McpImportCandidate {
   key: string;
   /** Source input that can be previewed before creating the source. */
   input: CreateSourceInput;
+  /** Classified secret-like env/header values, including originals for persistence. */
+  secrets?: McpImportSecret[];
   /** Candidate-specific validation errors. */
   errors: McpImportFieldError[];
 }
@@ -35,7 +60,7 @@ export interface McpImportParseResult {
 /**
  * Parse pasted MCP JSON into normalized import candidates for preview and later source creation.
  */
-export function parseMcpJsonImportCandidates(json: string): McpImportParseResult {
+export function parseMcpJsonImportCandidates(json: string, options: McpImportParseOptions = {}): McpImportParseResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -63,7 +88,7 @@ export function parseMcpJsonImportCandidates(json: string): McpImportParseResult
   const servers = getServerEntries(parsed);
 
   return {
-    candidates: Object.entries(servers).map(([key, server]) => buildCandidate(key, server)),
+    candidates: Object.entries(servers).map(([key, server]) => buildCandidate(key, server, options)),
     errors: [],
   };
 }
@@ -75,8 +100,9 @@ function getServerEntries(parsed: Record<string, unknown>): Record<string, unkno
   return { 'imported-mcp-server': parsed };
 }
 
-function buildCandidate(key: string, server: unknown): McpImportCandidate {
+function buildCandidate(key: string, server: unknown, options: McpImportParseOptions): McpImportCandidate {
   const errors: McpImportFieldError[] = [];
+  const secrets: McpImportSecret[] = [];
   const serverObject = isPlainObject(server) ? server : {};
   if (!isPlainObject(server)) {
     errors.push({ field: '$', message: 'Server config must be an object.' });
@@ -100,7 +126,7 @@ function buildCandidate(key: string, server: unknown): McpImportCandidate {
     }
     if (serverObject.env !== undefined) {
       if (isStringRecord(serverObject.env)) {
-        mcp.env = serverObject.env;
+        mcp.env = buildConfigRecordPreview(key, 'env', serverObject.env, options, secrets);
       } else {
         errors.push({ field: 'env', message: 'Env must be an object with string values.' });
       }
@@ -113,7 +139,7 @@ function buildCandidate(key: string, server: unknown): McpImportCandidate {
     }
     if (serverObject.headers !== undefined) {
       if (isStringRecord(serverObject.headers)) {
-        mcp.headers = serverObject.headers;
+        mcp.headers = buildConfigRecordPreview(key, 'header', serverObject.headers, options, secrets);
       } else {
         errors.push({ field: 'headers', message: 'Headers must be an object with string values.' });
       }
@@ -127,7 +153,7 @@ function buildCandidate(key: string, server: unknown): McpImportCandidate {
     }
   }
 
-  return {
+  const candidate: McpImportCandidate = {
     key,
     input: {
       name: titleizeKey(key),
@@ -138,6 +164,40 @@ function buildCandidate(key: string, server: unknown): McpImportCandidate {
     },
     errors,
   };
+  if (secrets.length > 0) {
+    candidate.secrets = secrets;
+  }
+  return candidate;
+}
+
+function buildConfigRecordPreview(
+  candidateKey: string,
+  location: McpImportSecretLocation,
+  values: Record<string, string>,
+  options: McpImportParseOptions,
+  secrets: McpImportSecret[],
+): Record<string, string> {
+  const preview: Record<string, string> = {};
+  for (const [name, value] of Object.entries(values)) {
+    if (!isProbableSecretName(name)) {
+      preview[name] = value;
+      continue;
+    }
+
+    const id = `${candidateKey}:${location}:${name}`;
+    const handling = options.secretHandling?.[id] ?? 'credential-store';
+    const previewValue = handling === 'config' ? value : REDACTED_PREVIEW_VALUE;
+    preview[name] = previewValue;
+    secrets.push({
+      id,
+      location,
+      name,
+      value,
+      previewValue,
+      handling,
+    });
+  }
+  return preview;
 }
 
 function inferTransport(server: Record<string, unknown>, errors: McpImportFieldError[]): McpTransport {
@@ -165,6 +225,33 @@ function isStringArray(value: unknown): value is string[] {
 
 function isStringRecord(value: unknown): value is Record<string, string> {
   return isPlainObject(value) && Object.values(value).every((item) => typeof item === 'string');
+}
+
+const REDACTED_PREVIEW_VALUE = '••••••••';
+const CREDENTIAL_NAME_SIGNALS = [
+  'api_key',
+  'apikey',
+  'authorization',
+  'auth',
+  'bearer',
+  'client_secret',
+  'credential',
+  'key',
+  'password',
+  'private_key',
+  'secret',
+  'token',
+] as const;
+
+function isProbableSecretName(name: string): boolean {
+  const normalized = name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  const compact = normalized.replaceAll('_', '');
+  const parts = normalized.split('_').filter(Boolean);
+
+  return CREDENTIAL_NAME_SIGNALS.some((signal) => (
+    compact.includes(signal.replaceAll('_', '')) ||
+    parts.includes(signal)
+  ));
 }
 
 function titleizeKey(key: string): string {

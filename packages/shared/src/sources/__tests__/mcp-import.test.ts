@@ -155,4 +155,136 @@ describe('parseMcpJsonImportCandidates', () => {
       },
     ]);
   });
+
+  test('classifies credential-like env and header values as redacted credential-store secrets', () => {
+    const result = parseMcpJsonImportCandidates(JSON.stringify({
+      mcpServers: {
+        secured: {
+          command: 'npx',
+          env: {
+            API_TOKEN: 'tok_live_123',
+            PUBLIC_HOST: 'localhost',
+            NOTSECRET_BUT_MATCHES: 'accepted-false-positive',
+          },
+        },
+        remote: {
+          url: 'https://example.com/mcp',
+          headers: {
+            Authorization: 'Bearer secret-token',
+            'X-API-Key': 'api-key-123',
+            'X-Trace-ID': 'trace-123',
+          },
+        },
+      },
+    }));
+
+    expect(result.errors).toEqual([]);
+    expect(result.candidates.map((candidate) => ({
+      key: candidate.key,
+      mcp: candidate.input.mcp,
+      secrets: candidate.secrets,
+    }))).toEqual([
+      {
+        key: 'secured',
+        mcp: {
+          transport: 'stdio',
+          command: 'npx',
+          env: {
+            API_TOKEN: '••••••••',
+            PUBLIC_HOST: 'localhost',
+            NOTSECRET_BUT_MATCHES: '••••••••',
+          },
+        },
+        secrets: [
+          {
+            id: 'secured:env:API_TOKEN',
+            location: 'env',
+            name: 'API_TOKEN',
+            value: 'tok_live_123',
+            previewValue: '••••••••',
+            handling: 'credential-store',
+          },
+          {
+            id: 'secured:env:NOTSECRET_BUT_MATCHES',
+            location: 'env',
+            name: 'NOTSECRET_BUT_MATCHES',
+            value: 'accepted-false-positive',
+            previewValue: '••••••••',
+            handling: 'credential-store',
+          },
+        ],
+      },
+      {
+        key: 'remote',
+        mcp: {
+          transport: 'http',
+          url: 'https://example.com/mcp',
+          headers: {
+            Authorization: '••••••••',
+            'X-API-Key': '••••••••',
+            'X-Trace-ID': 'trace-123',
+          },
+        },
+        secrets: [
+          {
+            id: 'remote:header:Authorization',
+            location: 'header',
+            name: 'Authorization',
+            value: 'Bearer secret-token',
+            previewValue: '••••••••',
+            handling: 'credential-store',
+          },
+          {
+            id: 'remote:header:X-API-Key',
+            location: 'header',
+            name: 'X-API-Key',
+            value: 'api-key-123',
+            previewValue: '••••••••',
+            handling: 'credential-store',
+          },
+        ],
+      },
+    ]);
+  });
+
+  test('keeps explicit config-handled secrets unredacted in the source preview', () => {
+    const result = parseMcpJsonImportCandidates(JSON.stringify({
+      mcpServers: {
+        remote: {
+          url: 'https://example.com/mcp',
+          headers: {
+            Authorization: 'Bearer secret-token',
+            'X-API-Key': 'api-key-123',
+          },
+        },
+      },
+    }), {
+      secretHandling: {
+        'remote:header:X-API-Key': 'config',
+      },
+    });
+
+    expect(result.candidates[0]?.input.mcp?.headers).toEqual({
+      Authorization: '••••••••',
+      'X-API-Key': 'api-key-123',
+    });
+    expect(result.candidates[0]?.secrets).toEqual([
+      {
+        id: 'remote:header:Authorization',
+        location: 'header',
+        name: 'Authorization',
+        value: 'Bearer secret-token',
+        previewValue: '••••••••',
+        handling: 'credential-store',
+      },
+      {
+        id: 'remote:header:X-API-Key',
+        location: 'header',
+        name: 'X-API-Key',
+        value: 'api-key-123',
+        previewValue: 'api-key-123',
+        handling: 'config',
+      },
+    ]);
+  });
 });
