@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import { createStore, Provider } from 'jotai'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { GitCommit, GitStatusEntry } from '../../../../shared/types'
-import { gitPanelCacheAtomFamily } from '@/atoms/git-panel-cache'
+import { gitPanelCacheAtomFamily, type GitPanelCache } from '@/atoms/git-panel-cache'
 import { GitPanel, refreshGitPanelCache } from '../GitPanel'
 
 describe('GitPanel empty states', () => {
@@ -74,7 +74,7 @@ describe('GitPanel empty states', () => {
     ]
     const loadingStates: boolean[] = []
     const refreshingStates: boolean[] = []
-    const writes: Parameters<Parameters<typeof refreshGitPanelCache>[0]['setCache']>[0][] = []
+    const writes: GitPanelCache[] = []
 
     await refreshGitPanelCache({
       workspacePath: '/repo',

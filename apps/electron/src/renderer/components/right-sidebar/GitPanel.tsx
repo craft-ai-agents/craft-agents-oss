@@ -28,6 +28,9 @@ interface RefreshGitPanelCacheOptions {
   isCancelled: () => boolean
 }
 
+/**
+ * Refreshes the git panel cache for one workspace using stale-while-revalidate semantics.
+ */
 export async function refreshGitPanelCache({
   workspacePath,
   cached,
