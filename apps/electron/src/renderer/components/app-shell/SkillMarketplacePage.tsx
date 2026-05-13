@@ -964,6 +964,23 @@ function marketplaceReportAlertClassName(status: Exclude<MarketplaceDetailReport
   }
 }
 
+function marketplaceOwnerActionAlertClassName(status: MarketplaceDetailOwnerState['status']): string {
+  switch (status) {
+    case 'published':
+    case 'unpublished':
+      return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+    case 'slug-conflict':
+    case 'auth-required':
+    case 'validation-error':
+    case 'forbidden':
+    case 'error':
+    case 'idle':
+    case 'publishing':
+    case 'unpublishing':
+      return 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
+  }
+}
+
 function marketplaceReportMessage(state: Exclude<MarketplaceDetailReportState, { status: 'idle' } | { status: 'submitting' }>): string {
   if (state.status === 'submitted') return 'Report submitted. Marketplace moderators will review this Skill.'
   return state.message
@@ -1000,6 +1017,28 @@ function ownerActionMessage(state: MarketplaceDetailOwnerState): string | null {
     case 'publishing':
     case 'unpublishing':
       return null
+  }
+}
+
+function marketplaceOriginStatusBadges(status: MarketplaceOriginMetadata['safetyStatus']): string[] {
+  switch (status) {
+    case 'unavailable':
+      return ['Owner unpublished']
+    case 'safety-blocked':
+      return ['Admin unpublished', 'Safety blocked']
+    case 'ok':
+      return []
+  }
+}
+
+function marketplaceOriginStatusBadgeClassName(status: MarketplaceOriginMetadata['safetyStatus']): string {
+  switch (status) {
+    case 'unavailable':
+      return 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
+    case 'safety-blocked':
+      return 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300'
+    case 'ok':
+      return ''
   }
 }
 
@@ -1685,27 +1724,20 @@ export function LocalSkillMarketplaceStatus({
     )
   }
 
+  const statusBadgeClassName = marketplaceOriginStatusBadgeClassName(metadata.safetyStatus)
+  const statusBadges = marketplaceOriginStatusBadges(metadata.safetyStatus)
+
   return (
     <div className="rounded-md border border-border bg-muted/20 p-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">Marketplace linked</span>
         <span className="text-muted-foreground">/{metadata.marketplaceSlug}</span>
         <span className="text-muted-foreground">v{metadata.installedVersion}</span>
-        {metadata.safetyStatus === 'unavailable' && (
-          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-200">
-            Owner unpublished
+        {statusBadges.map((label) => (
+          <span key={label} className={`rounded-full border px-2 py-0.5 text-xs ${statusBadgeClassName}`}>
+            {label}
           </span>
-        )}
-        {metadata.safetyStatus === 'safety-blocked' && (
-          <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-xs text-red-700 dark:text-red-300">
-            Admin unpublished
-          </span>
-        )}
-        {metadata.safetyStatus === 'safety-blocked' && (
-          <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-xs text-red-700 dark:text-red-300">
-            Safety blocked
-          </span>
-        )}
+        ))}
         {metadata.modified && (
           <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-200">
             Unpublished changes
@@ -1911,11 +1943,7 @@ export function MarketplaceDetail({
       )}
 
       {ownerMessage && (
-        <div className={`rounded-md border p-3 text-sm ${
-          ownerState.status === 'published' || ownerState.status === 'unpublished'
-            ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-            : 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
-        }`}>
+        <div className={`rounded-md border p-3 text-sm ${marketplaceOwnerActionAlertClassName(ownerState.status)}`}>
           {ownerMessage}
         </div>
       )}
