@@ -85,6 +85,10 @@ export type {
   McpImportCandidate,
   McpImportFieldError,
   McpImportParseResult,
+  McpImportParseOptions,
+  McpImportSecret,
+  McpImportSecretHandling,
+  McpImportSecretLocation,
 } from './mcp-import.ts';
 
 // Server Builder (builds MCP/API servers from sources)
