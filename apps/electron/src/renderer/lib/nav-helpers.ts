@@ -18,7 +18,7 @@ import type { NavigationState } from '../../shared/types'
  * Per-navigator semantics:
  * - sessions: a session is selected
  * - settings: a subpage is selected (bare `settings` route → false)
- * - sources / local skills / automations: a detail item is selected
+ * - sources / local skills / automations / archived: a detail item is selected
  * - skill marketplace: no detail state
  */
 export function isDetailNavState(navState: NavigationState | null): boolean {
@@ -31,10 +31,9 @@ export function isDetailNavState(navState: NavigationState | null): boolean {
     case 'sources':
     case 'local-skills':
     case 'automations':
+    case 'archived':
       return navState.details !== null
     case 'skill-marketplace':
       return false
-    case 'archived':
-      return navState.details !== null
   }
 }
