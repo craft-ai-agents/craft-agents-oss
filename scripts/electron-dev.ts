@@ -178,6 +178,79 @@ async function killProcessOnPort(port: string): Promise<void> {
   }
 }
 
+async function readSubprocessOutput(proc: Subprocess): Promise<string> {
+  if (!proc.stdout) return "";
+  try {
+    return await new Response(proc.stdout).text();
+  } catch {
+    return "";
+  }
+}
+
+async function findProcessIds(pattern: string): Promise<number[]> {
+  if (process.platform === "win32") {
+    return [];
+  }
+
+  try {
+    const proc = spawn({
+      cmd: ["pgrep", "-f", pattern],
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const output = await readSubprocessOutput(proc);
+    await proc.exited;
+    return output
+      .split("\n")
+      .map((line) => Number(line.trim()))
+      .filter((pid) => Number.isInteger(pid) && pid > 0);
+  } catch {
+    return [];
+  }
+}
+
+async function killProcessIds(pids: number[], label: string): Promise<void> {
+  const uniquePids = [...new Set(pids)]
+    .filter((pid) => pid !== process.pid && pid !== process.ppid);
+
+  if (uniquePids.length === 0) return;
+
+  for (const pid of uniquePids) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // Process may already be dead.
+    }
+  }
+
+  await Bun.sleep(750);
+
+  for (const pid of uniquePids) {
+    try {
+      process.kill(pid, 0);
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // Process exited after SIGTERM.
+    }
+  }
+
+  console.log(`🔪 Killed stale ${label}: ${uniquePids.join(", ")}`);
+}
+
+async function cleanupExistingElectronDevInstances(): Promise<void> {
+  if (process.platform === "win32") {
+    return;
+  }
+
+  const escapedRoot = ROOT_DIR.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pids = await Promise.all([
+    findProcessIds(`${escapedRoot}.*node_modules/.bin/electron apps/electron`),
+    findProcessIds(`${escapedRoot}.*node_modules/electron/dist/Electron\\.app/Contents/MacOS/Electron apps/electron`),
+  ]);
+
+  await killProcessIds(pids.flat(), "Electron dev process(es)");
+}
+
 // Clean Vite cache directory
 function cleanViteCache(): void {
   const viteCacheDir = join(ELECTRON_DIR, "node_modules/.vite");
@@ -428,7 +501,12 @@ async function main(): Promise<void> {
   const vitePort = process.env.CRAFT_VITE_PORT || "5173";
   const oauthDefines = getOAuthDefines();
 
-  // Kill any existing process on the Vite port
+  // A second Electron launch exits immediately because of the single-instance
+  // lock. If we kill only the Vite port first, the old window is left loading a
+  // dead dev URL. Remove stale Electron dev instances before replacing Vite.
+  await cleanupExistingElectronDevInstances();
+
+  // Kill any existing process on the Vite port.
   await killProcessOnPort(vitePort);
 
   // =========================================================
@@ -622,8 +700,15 @@ async function main(): Promise<void> {
     process.on("SIGHUP", () => cleanup());
   }
 
-  // Wait for electron to exit (main process)
-  await electronProc.exited;
+  const exitedProcess = await Promise.race([
+    electronProc.exited.then((exitCode) => ({ name: "Electron", exitCode })),
+    viteProc.exited.then((exitCode) => ({ name: "Vite", exitCode })),
+  ]);
+
+  if (exitedProcess.name === "Vite") {
+    console.error(`❌ Vite dev server exited unexpectedly (${exitedProcess.exitCode}); stopping Electron dev.`);
+  }
+
   await cleanup();
 }
 
