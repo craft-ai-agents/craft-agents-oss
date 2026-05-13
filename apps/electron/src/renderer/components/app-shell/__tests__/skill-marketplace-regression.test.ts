@@ -18,6 +18,7 @@ import {
   type MarketplaceApi,
   type MarketplaceCatalogFilters,
   type MarketplacePublishApi,
+  type MarketplaceSkillReportInput,
   type MarketplaceSkillDetail,
   type MarketplaceSkillListing,
 } from '../SkillMarketplacePage'
@@ -52,11 +53,26 @@ interface LocalSkillState {
   marketplaceOrigin?: MarketplaceOriginMetadata
 }
 
+const WORKSPACE_ID = 'workspace_1'
+const USER_ID = 'user_1'
+const RELEASE_NOTES_LOCAL_ORIGIN: MarketplaceOriginMetadata = {
+  marketplaceId: 'mkt_skill_release-notes',
+  marketplaceSlug: 'release-notes',
+  ownerId: 'owner_1',
+  ownerDisplayName: 'Launch Team',
+  installedVersion: '1.7.1',
+  installedAt: '2026-05-12T00:00:00.000Z',
+  lastCheckedAt: '2026-05-12T00:00:00.000Z',
+  modified: false,
+  sourceBundleHash: 'old-hash',
+  safetyStatus: 'ok',
+}
+
 class MockMarketplaceRegressionService implements MarketplaceApi, MarketplacePublishApi {
   private readonly baseApi = createStaticMarketplaceApi()
   private readonly details = new Map<string, MarketplaceSkillDetail>()
   readonly localSkills = new Map<string, LocalSkillState>()
-  readonly reports: unknown[] = []
+  readonly reports: MarketplaceSkillReportInput[] = []
 
   async listSkills(): Promise<MarketplaceSkillListing[]> {
     const base = await this.baseApi.listSkills()
@@ -80,16 +96,16 @@ class MockMarketplaceRegressionService implements MarketplaceApi, MarketplacePub
     return this.baseApi.createInstallIntent(detail, userId)
   }
 
-  async recordInstallComplete() {
-    await this.baseApi.recordInstallComplete('')
+  async recordInstallComplete(intentId: string) {
+    await this.baseApi.recordInstallComplete(intentId)
   }
 
   async createUpdateIntent(detail: MarketplaceSkillDetail, userId: string) {
     return this.baseApi.createUpdateIntent(detail, userId)
   }
 
-  async recordUpdateComplete() {
-    await this.baseApi.recordUpdateComplete('')
+  async recordUpdateComplete(intentId: string) {
+    await this.baseApi.recordUpdateComplete(intentId)
   }
 
   async publishSkill(input: { userId: string; skillSlug: string }) {
@@ -231,6 +247,36 @@ async function loadReadyCatalog(api: MarketplaceApi, filters: MarketplaceCatalog
   return result
 }
 
+function marketplaceInstallElectronApi(service: MockMarketplaceRegressionService) {
+  return {
+    installMarketplaceSkill: async (_workspaceId: string, input: MarketplaceSkillInstallInput) => service.installLocalSkill(input),
+  }
+}
+
+function marketplaceUpdateElectronApi(service: MockMarketplaceRegressionService) {
+  return {
+    updateMarketplaceSkill: async (_workspaceId: string, input: MarketplaceSkillUpdateInput) => service.updateLocalSkill(input),
+  }
+}
+
+function directPublishElectronApi(service: MockMarketplaceRegressionService) {
+  return {
+    publishDirectMarketplaceSkill: async (_workspaceId: string, input: MarketplaceDirectSkillPublishInput) => service.publishDirectSkill(input),
+  }
+}
+
+function seedReleaseNotesLocalInstall(
+  service: MockMarketplaceRegressionService,
+  content = 'Existing local install.',
+) {
+  service.localSkills.set('release-notes', {
+    slug: 'release-notes',
+    name: 'Release Notes',
+    content,
+    marketplaceOrigin: { ...RELEASE_NOTES_LOCAL_ORIGIN },
+  })
+}
+
 describe('Marketplace mocked-service regression suite', () => {
   test('covers browse navigation and read-only detail inspection', async () => {
     const service = new MockMarketplaceRegressionService()
@@ -238,7 +284,7 @@ describe('Marketplace mocked-service regression suite', () => {
     const detail = await loadReadyDetail(service, catalog.listings[0]!.slug)
 
     const headerHtml = renderToStaticMarkup(React.createElement(SkillMarketplacePageHeader, {
-      currentUserId: 'user_1',
+      currentUserId: USER_ID,
       serviceEnvironmentLabel: 'Mock Marketplace',
     }))
     const listingHtml = renderToStaticMarkup(React.createElement(MarketplaceListingCard, {
@@ -264,13 +310,11 @@ describe('Marketplace mocked-service regression suite', () => {
     const detail = await loadReadyDetail(service, 'test-writer')
 
     const result = await installMarketplaceSkillFromDetail({
-      workspaceId: 'workspace_1',
-      userId: 'user_1',
+      workspaceId: WORKSPACE_ID,
+      userId: USER_ID,
       detail,
       api: service,
-      electronAPI: {
-        installMarketplaceSkill: async (_workspaceId, input) => service.installLocalSkill(input),
-      },
+      electronAPI: marketplaceInstallElectronApi(service),
     })
     const local = service.localSkills.get('test-writer')
     const localHtml = renderToStaticMarkup(React.createElement(LocalSkillMarketplaceStatus, {
@@ -285,40 +329,16 @@ describe('Marketplace mocked-service regression suite', () => {
 
   test('covers update available state and a manual Marketplace update', async () => {
     const service = new MockMarketplaceRegressionService()
-    const installDetail = await loadReadyDetail(service, 'test-writer')
-    await installMarketplaceSkillFromDetail({
-      workspaceId: 'workspace_1',
-      userId: 'user_1',
-      detail: installDetail,
-      api: service,
-      electronAPI: { installMarketplaceSkill: async (_workspaceId, input) => service.installLocalSkill(input) },
-    })
     const updateDetail = await loadReadyDetail(service, 'release-notes')
-    service.localSkills.set('release-notes', {
-      slug: 'release-notes',
-      name: 'Release Notes',
-      content: 'Existing local install.',
-      marketplaceOrigin: {
-        marketplaceId: 'mkt_skill_release-notes',
-        marketplaceSlug: 'release-notes',
-        ownerId: 'owner_1',
-        ownerDisplayName: 'Launch Team',
-        installedVersion: '1.7.1',
-        installedAt: '2026-05-12T00:00:00.000Z',
-        lastCheckedAt: '2026-05-12T00:00:00.000Z',
-        modified: false,
-        sourceBundleHash: 'old-hash',
-        safetyStatus: 'ok',
-      },
-    })
+    seedReleaseNotesLocalInstall(service)
 
     const beforeHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, { detail: updateDetail }))
     const updateResult = await updateMarketplaceSkillFromDetail({
-      workspaceId: 'workspace_1',
-      userId: 'user_1',
+      workspaceId: WORKSPACE_ID,
+      userId: USER_ID,
       detail: updateDetail,
       api: service,
-      electronAPI: { updateMarketplaceSkill: async (_workspaceId, input) => service.updateLocalSkill(input) },
+      electronAPI: marketplaceUpdateElectronApi(service),
     })
     const afterHtml = renderToStaticMarkup(React.createElement(LocalSkillMarketplaceStatus, {
       metadata: service.localSkills.get('release-notes')?.marketplaceOrigin,
@@ -332,28 +352,12 @@ describe('Marketplace mocked-service regression suite', () => {
   test('warns before updating modified marketplace-installed Local Skills', async () => {
     const service = new MockMarketplaceRegressionService()
     const detail = await loadReadyDetail(service, 'release-notes')
-    service.localSkills.set('release-notes', {
-      slug: 'release-notes',
-      name: 'Release Notes',
-      content: 'Edited local copy.',
-      marketplaceOrigin: {
-        marketplaceId: 'mkt_skill_release-notes',
-        marketplaceSlug: 'release-notes',
-        ownerId: 'owner_1',
-        ownerDisplayName: 'Launch Team',
-        installedVersion: '1.7.1',
-        installedAt: '2026-05-12T00:00:00.000Z',
-        lastCheckedAt: '2026-05-12T00:00:00.000Z',
-        modified: false,
-        sourceBundleHash: 'old-hash',
-        safetyStatus: 'ok',
-      },
-    })
+    seedReleaseNotesLocalInstall(service, 'Edited local copy.')
     service.markLocalModified('release-notes')
 
     const detailHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
       detail: { ...detail, installState: 'modified-locally' },
-      currentUserId: 'user_1',
+      currentUserId: USER_ID,
     }))
     const localHtml = renderToStaticMarkup(React.createElement(LocalSkillMarketplaceStatus, {
       metadata: service.localSkills.get('release-notes')?.marketplaceOrigin,
@@ -373,7 +377,7 @@ describe('Marketplace mocked-service regression suite', () => {
     })
 
     const result = await publishMarketplaceSkill({
-      userId: 'user_1',
+      userId: USER_ID,
       skillSlug: 'local-helper',
       api: service,
     })
@@ -387,15 +391,13 @@ describe('Marketplace mocked-service regression suite', () => {
 
   test('direct Marketplace publish supports Create, Remote, and Upload paths without creating Local Skills', async () => {
     const service = new MockMarketplaceRegressionService()
-    const electronAPI = {
-      publishDirectMarketplaceSkill: async (_workspaceId: string, input: MarketplaceDirectSkillPublishInput) => service.publishDirectSkill(input),
-    }
+    const electronAPI = directPublishElectronApi(service)
 
     for (const source of ['create', 'remote', 'upload'] as const) {
       const slug = `${source}-helper`
       const result = await publishDirectMarketplaceSkill({
-        workspaceId: 'workspace_1',
-        userId: 'user_1',
+        workspaceId: WORKSPACE_ID,
+        userId: USER_ID,
         skill: {
           slug,
           metadata: { name: `${source} Helper`, description: `Published from ${source}.` },
@@ -419,7 +421,7 @@ describe('Marketplace mocked-service regression suite', () => {
     const detail = await loadReadyDetail(service, 'test-writer')
 
     const result = await reportMarketplaceSkillFromDetail({
-      userId: 'user_1',
+      userId: USER_ID,
       detail,
       context: 'Suspicious behavior in published instructions.',
       api: service,
@@ -443,11 +445,11 @@ describe('Marketplace mocked-service regression suite', () => {
     const service = new MockMarketplaceRegressionService()
     const detail = await loadReadyDetail(service, 'test-writer')
     await installMarketplaceSkillFromDetail({
-      workspaceId: 'workspace_1',
-      userId: 'user_1',
+      workspaceId: WORKSPACE_ID,
+      userId: USER_ID,
       detail,
       api: service,
-      electronAPI: { installMarketplaceSkill: async (_workspaceId, input) => service.installLocalSkill(input) },
+      electronAPI: marketplaceInstallElectronApi(service),
     })
     const outageApi = createStaticMarketplaceApi({ listError: 'Mock Marketplace outage.' })
     const outage = await loadMarketplaceCatalog(outageApi, {})
