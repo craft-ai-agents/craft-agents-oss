@@ -1468,6 +1468,7 @@ const openAiResponsesAdapter: ApiAdapter = {
 export function sanitizeOpenAiHistoryInPlace(body: Record<string, unknown>): {
   droppedToolCalls: number;
   droppedToolResults: number;
+  rewrittenDuplicateIds: number;
 } {
   const messages = body.messages as Array<{
     role?: string;
@@ -1479,18 +1480,40 @@ export function sanitizeOpenAiHistoryInPlace(body: Record<string, unknown>): {
     }>;
   }> | undefined;
   if (!Array.isArray(messages)) {
-    return { droppedToolCalls: 0, droppedToolResults: 0 };
+    return { droppedToolCalls: 0, droppedToolResults: 0, rewrittenDuplicateIds: 0 };
   }
 
   let droppedToolCalls = 0;
+  let rewrittenDuplicateIds = 0;
   const knownIds = new Set<string>();
 
-  for (const message of messages) {
+  // First pass: drop empty-id tool_calls and rewrite duplicate IDs.
+  // For duplicates, generate a deterministic replacement ID and track the
+  // old→new mapping so we can update corresponding tool results.
+  // Track: [msgIndex, newId] so we can match tool results positionally.
+  const idRewrites: Array<{ originalId: string; newId: string; msgIdx: number }> = [];
+
+  for (let msgIdx = 0; msgIdx < messages.length; msgIdx++) {
+    const message = messages[msgIdx];
+    if (!message) continue;
     if (message.role === 'assistant' && Array.isArray(message.tool_calls)) {
-      const cleaned = message.tool_calls.filter(tc => {
+      const cleaned = message.tool_calls.filter((tc, tcIdx) => {
         if (typeof tc.id !== 'string' || tc.id === '') {
           droppedToolCalls++;
           return false;
+        }
+        if (knownIds.has(tc.id)) {
+          // Duplicate ID detected — rewrite to a unique synthetic ID.
+          const originalId = tc.id;
+          const argsHash = typeof tc.function?.arguments === 'string'
+            ? hashShortString(tc.function.arguments)
+            : '0';
+          const newId = `dedup_${msgIdx}_${tcIdx}_${argsHash}`;
+          tc.id = newId;
+          knownIds.add(newId);
+          idRewrites.push({ originalId, newId, msgIdx });
+          rewrittenDuplicateIds++;
+          return true;
         }
         knownIds.add(tc.id);
         return true;
@@ -1505,6 +1528,33 @@ export function sanitizeOpenAiHistoryInPlace(body: Record<string, unknown>): {
     }
   }
 
+  // Second pass: update tool result messages that reference rewritten IDs.
+  // Strategy: for each rewrite, find the FIRST tool result AFTER the rewritten
+  // assistant message that still references the original ID, and update it.
+  // This avoids touching the legitimate first tool result that matches the
+  // original (non-rewritten) tool_call.
+  if (rewrittenDuplicateIds > 0) {
+    const consumed = new Set<number>(); // message indices already rewritten
+
+    for (const { originalId, newId, msgIdx: rewriteMsgIdx } of idRewrites) {
+      // Find the first tool result after rewriteMsgIdx that references originalId
+      // and hasn't already been consumed by a prior rewrite.
+      for (let i = rewriteMsgIdx + 1; i < messages.length; i++) {
+        const msg = messages[i];
+        if (!msg || msg.role !== 'tool') continue;
+        if (consumed.has(i)) continue;
+        if (msg.tool_call_id === originalId) {
+          msg.tool_call_id = newId;
+          consumed.add(i);
+          break;
+        }
+      }
+    }
+
+    debugLog(`[OpenAI History] Rewrote ${rewrittenDuplicateIds} duplicate tool_call id(s)`);
+  }
+
+  // Third pass: drop orphan tool results (empty-id tool_calls were removed).
   let droppedToolResults = 0;
   if (droppedToolCalls > 0) {
     const filtered = messages.filter(message => {
@@ -1522,7 +1572,7 @@ export function sanitizeOpenAiHistoryInPlace(body: Record<string, unknown>): {
     debugLog(`[OpenAI History] Sanitized poisoned history: dropped ${droppedToolCalls} empty-id tool_call(s) and ${droppedToolResults} orphan tool result(s)`);
   }
 
-  return { droppedToolCalls, droppedToolResults };
+  return { droppedToolCalls, droppedToolResults, rewrittenDuplicateIds };
 }
 
 export function validateOpenAiChatBody(body: Record<string, unknown>): void {
