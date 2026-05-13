@@ -50,6 +50,7 @@ export interface MarketplaceSkillListing {
   id: string
   slug: string
   ownerId: string
+  basedOn?: MarketplaceOriginMetadata['basedOn']
   icon: string
   name: string
   description: string
@@ -457,6 +458,7 @@ export async function installMarketplaceSkillFromDetail({
         ownerId: detail.ownerId,
         ownerDisplayName: detail.owner,
         version: detail.latestVersion,
+        basedOn: detail.basedOn,
       },
     })
     if (result.status !== 'installed') return result
@@ -1547,6 +1549,11 @@ export function MarketplaceListingCard({
         <span>v{listing.latestVersion}</span>
         <span>{formatInstallCount(listing.installCount)} installs</span>
       </div>
+      {listing.basedOn && (
+        <div className="text-[11px] text-muted-foreground">
+          Based on /{listing.basedOn.marketplaceSlug} v{listing.basedOn.version}
+        </div>
+      )}
       <div className="flex flex-wrap gap-1.5">
         <Pill>{listing.category}</Pill>
         {listing.tags.map((tag) => <Pill key={tag}>{tag}</Pill>)}
@@ -1721,6 +1728,12 @@ export function MarketplaceDetail({
               <dd>{detail.metadata.marketplaceSlug}</dd>
               <dt className="text-muted-foreground">Latest version</dt>
               <dd>v{detail.latestVersion}</dd>
+              {detail.basedOn && (
+                <>
+                  <dt className="text-muted-foreground">Based on</dt>
+                  <dd>/{detail.basedOn.marketplaceSlug} v{detail.basedOn.version}</dd>
+                </>
+              )}
               <dt className="text-muted-foreground">Installs</dt>
               <dd>{formatInstallCount(detail.installCount)}</dd>
               <dt className="text-muted-foreground">State</dt>

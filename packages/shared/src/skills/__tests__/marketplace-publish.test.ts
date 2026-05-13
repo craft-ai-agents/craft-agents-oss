@@ -8,6 +8,7 @@ import {
   publishDirectSkillToMarketplace,
   publishLocalSkillToMarketplace,
   readMarketplaceOriginMetadata,
+  suggestMarketplacePublishSlug,
   suggestMarketplaceSlug,
   validateMarketplacePublishRequest,
   type MarketplacePublishApi,
@@ -49,6 +50,16 @@ describe('publishLocalSkillToMarketplace', () => {
   test('suggests a marketplace slug from bundled SKILL.md frontmatter name', () => {
     expect(suggestMarketplaceSlug({
       name: 'Review Helper!',
+    })).toBe('review-helper')
+    expect(suggestMarketplacePublishSlug({
+      metadata: { name: 'Review Helper' },
+      origin: { ownerId: 'owner_2', marketplaceSlug: 'review-helper' },
+      currentUserId: 'owner_1',
+    })).toBe('review-helper-derived')
+    expect(suggestMarketplacePublishSlug({
+      metadata: { name: 'Review Helper' },
+      origin: { ownerId: 'owner_1', marketplaceSlug: 'review-helper' },
+      currentUserId: 'owner_1',
     })).toBe('review-helper')
   })
 
@@ -103,6 +114,7 @@ describe('publishLocalSkillToMarketplace', () => {
         tags: ['review', 'ci'],
         releaseNotes: 'Initial Marketplace release.',
       })
+      expect(publishedInputs[0]!.basedOn).toBeUndefined()
       expect(Object.keys(publishedInputs[0] as unknown as Record<string, unknown>)).not.toContain('name')
       expect(Object.keys(publishedInputs[0] as unknown as Record<string, unknown>)).not.toContain('description')
       const files = unzipSync(publishedInputs[0]!.bundle)
@@ -165,6 +177,13 @@ describe('publishLocalSkillToMarketplace', () => {
       }))
 
       expect(basedOn).toEqual([{ marketplaceId: 'mkt_original', marketplaceSlug: 'original-skill', version: '2.3.4' }])
+      expect(readMarketplaceOriginMetadata(workspaceRoot, 'review-helper')).toMatchObject({
+        marketplaceId: 'mkt_review_helper_fork',
+        marketplaceSlug: 'review-helper-fork',
+        ownerId: 'owner_1',
+        installedVersion: '1.0.0',
+        basedOn: { marketplaceId: 'mkt_original', marketplaceSlug: 'original-skill', version: '2.3.4' },
+      })
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true })
     }
@@ -189,6 +208,8 @@ describe('publishLocalSkillToMarketplace', () => {
       }, null, 2),
     )
 
+    const basedOn: unknown[] = []
+
     try {
       const result = await publishLocalSkillToMarketplace(makeRequest(workspaceRoot, {
         version: '1.1.0',
@@ -196,6 +217,7 @@ describe('publishLocalSkillToMarketplace', () => {
           async publishSkill(input) {
             expect(input.marketplaceSlug).toBe('review-helper')
             expect(input.version).toBe('1.1.0')
+            basedOn.push(input.basedOn)
             return {
               status: 'published',
               marketplaceId: 'mkt_skill_review_helper',
@@ -209,6 +231,7 @@ describe('publishLocalSkillToMarketplace', () => {
       }))
 
       expect(result.status).toBe('published')
+      expect(basedOn).toEqual([undefined])
       expect(readMarketplaceOriginMetadata(workspaceRoot, 'review-helper')).toMatchObject({
         marketplaceId: 'mkt_skill_review_helper',
         installedVersion: '1.1.0',

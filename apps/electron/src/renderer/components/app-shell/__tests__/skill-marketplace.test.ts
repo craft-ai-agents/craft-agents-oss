@@ -78,6 +78,26 @@ describe('SkillMarketplacePage API boundary', () => {
     expect(html).toContain('Update available')
   })
 
+  test('renders based-on attribution on Marketplace listings and detail pages', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'test-writer')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+    const basedOn = { marketplaceId: 'mkt_skill_original', marketplaceSlug: 'original-skill', version: '1.2.3' }
+
+    const listingHtml = renderToStaticMarkup(React.createElement(MarketplaceListingCard, {
+      listing: { ...result.detail, basedOn },
+      selected: false,
+      onSelect: () => {},
+    }))
+    const detailHtml = renderToStaticMarkup(React.createElement(MarketplaceDetail, {
+      detail: { ...result.detail, basedOn },
+    }))
+
+    expect(listingHtml).toContain('Based on /original-skill v1.2.3')
+    expect(detailHtml).toContain('Based on')
+    expect(detailHtml).toContain('/original-skill v1.2.3')
+  })
+
   test('loads and renders Marketplace Skill detail content read-only', async () => {
     const api = createStaticMarketplaceApi()
     const result = await loadMarketplaceDetail(api, 'test-writer')
@@ -238,6 +258,7 @@ describe('SkillMarketplacePage API boundary', () => {
         async installMarketplaceSkill(_workspaceId, input) {
           expect(input.userId).toBe('user_1')
           expect(input.skill.marketplaceId).toBe('mkt_skill_test_writer')
+          expect(input.skill.basedOn).toBeUndefined()
           return { status: 'installed', slug: 'test-writer' }
         },
       },
@@ -245,6 +266,31 @@ describe('SkillMarketplacePage API boundary', () => {
 
     expect(installResult).toEqual({ status: 'installed', slug: 'test-writer' })
     expect(completed).toEqual(['intent_1'])
+  })
+
+  test('passes based-on attribution into Marketplace installs when detail metadata includes it', async () => {
+    const api = createStaticMarketplaceApi()
+    const result = await loadMarketplaceDetail(api, 'test-writer')
+    if (result.status !== 'ready') throw new Error('Expected ready detail state')
+    const basedOn = { marketplaceId: 'mkt_skill_original', marketplaceSlug: 'original-skill', version: '1.2.3' }
+
+    await installMarketplaceSkillFromDetail({
+      workspaceId: 'workspace_1',
+      userId: 'user_1',
+      detail: { ...result.detail, basedOn },
+      api: {
+        ...api,
+        async createInstallIntent() {
+          return { intentId: 'intent_1', downloadUrl: 'data:application/zip;base64,AA==', expectedSha256: 'hash' }
+        },
+      },
+      electronAPI: {
+        async installMarketplaceSkill(_workspaceId, input) {
+          expect(input.skill.basedOn).toEqual(basedOn)
+          return { status: 'installed', slug: 'test-writer' }
+        },
+      },
+    })
   })
 
   test('does not request install intent for anonymous Marketplace install action', async () => {

@@ -45,6 +45,7 @@ export {
   publishDirectSkillToMarketplaceService,
   publishLocalSkillToMarketplace,
   publishLocalSkillToMarketplaceService,
+  suggestMarketplacePublishSlug,
   suggestMarketplaceSlug,
   validateMarketplacePublishRequest,
 } from './marketplace-publish.ts';

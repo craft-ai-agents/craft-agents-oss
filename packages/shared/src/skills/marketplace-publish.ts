@@ -136,6 +136,18 @@ export function suggestMarketplaceSlug(metadata: Pick<SkillMetadata, 'name'>): s
   return deriveSkillSlug(metadata.name)
 }
 
+/** Suggest a publish slug that preserves owner versioning and avoids original slugs for derived publishes. */
+export function suggestMarketplacePublishSlug(input: {
+  metadata: Pick<SkillMetadata, 'name'>
+  origin?: Pick<MarketplaceOriginMetadata, 'ownerId' | 'marketplaceSlug'> | null
+  currentUserId?: string | null
+}): string {
+  const baseSlug = deriveSkillSlug(input.metadata.name)
+  if (!input.origin || input.origin.ownerId === input.currentUserId) return baseSlug
+  if (baseSlug !== input.origin.marketplaceSlug) return baseSlug
+  return `${baseSlug}-derived`
+}
+
 /** Validate product-level Marketplace publish fields before uploading the bundle. */
 export function validateMarketplacePublishRequest(input: {
   marketplaceSlug: string
@@ -184,6 +196,8 @@ export async function publishLocalSkillToMarketplace(
 
   const bundle = bundleLocalSkill(request.workspaceRoot, request.skillSlug)
   const origin = readMarketplaceOriginMetadata(request.workspaceRoot, request.skillSlug)
+  const basedOn = getDerivedPublishAttribution(origin, request.user.id)
+
   const published = await request.api.publishSkill({
     userId: request.user.id,
     bundle,
@@ -192,13 +206,7 @@ export async function publishLocalSkillToMarketplace(
     category,
     tags: cleanOptionalStringArray(request.tags),
     releaseNotes: cleanOptionalString(request.releaseNotes),
-    basedOn: origin
-      ? {
-          marketplaceId: origin.marketplaceId,
-          marketplaceSlug: origin.marketplaceSlug,
-          version: origin.installedVersion,
-        }
-      : undefined,
+    basedOn,
   })
 
   if (published.status === 'slug-conflict') return published
@@ -217,13 +225,7 @@ export async function publishLocalSkillToMarketplace(
     sourceBundleHash: bundleHash,
     sourceBundleContentHash: bundleHash,
     safetyStatus: 'ok',
-    basedOn: origin && origin.ownerId !== published.ownerId
-      ? {
-          marketplaceId: origin.marketplaceId,
-          marketplaceSlug: origin.marketplaceSlug,
-          version: origin.installedVersion,
-        }
-      : origin?.basedOn,
+    basedOn: basedOn ?? origin?.basedOn,
   })
 
   return {
@@ -429,6 +431,27 @@ function cleanOptionalString(value: string | undefined): string | undefined {
 function cleanOptionalStringArray(value: string[] | undefined): string[] | undefined {
   const cleaned = value?.map((entry) => entry.trim()).filter(Boolean)
   return cleaned && cleaned.length > 0 ? cleaned : undefined
+}
+
+function getDerivedPublishAttribution(
+  origin: MarketplaceOriginMetadata | null,
+  userId: string,
+): MarketplacePublishApiInput['basedOn'] {
+  const attributableOrigin = getAttributableOrigin(origin)
+  if (!attributableOrigin || attributableOrigin.ownerId === userId) return undefined
+
+  return {
+    marketplaceId: attributableOrigin.marketplaceId,
+    marketplaceSlug: attributableOrigin.marketplaceSlug,
+    version: attributableOrigin.installedVersion,
+  }
+}
+
+function getAttributableOrigin(origin: MarketplaceOriginMetadata | null): MarketplaceOriginMetadata | null {
+  if (!origin?.marketplaceId || !origin.marketplaceSlug || !origin.installedVersion || !origin.ownerId) {
+    return null
+  }
+  return origin
 }
 
 function sha256(bytes: Uint8Array): string {

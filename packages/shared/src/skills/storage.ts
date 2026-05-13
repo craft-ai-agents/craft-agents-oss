@@ -28,6 +28,8 @@ import {
 } from '../utils/icon.ts';
 export { deriveSkillSlug } from './slug.ts';
 
+const MARKETPLACE_ORIGIN_METADATA_FILE = '.marketplace-origin.json';
+
 // ============================================================
 // Agent Skills Paths (Issue #171)
 // ============================================================
@@ -97,6 +99,16 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
   }
 }
 
+function readMarketplaceOriginSidecar(skillDir: string): LoadedSkill['marketplaceOrigin'] {
+  const path = join(skillDir, MARKETPLACE_ORIGIN_METADATA_FILE);
+  if (!existsSync(path)) return undefined;
+  try {
+    return JSON.parse(readFileSync(path, 'utf-8')) as LoadedSkill['marketplaceOrigin'];
+  } catch {
+    return undefined;
+  }
+}
+
 // ============================================================
 // Load Operations
 // ============================================================
@@ -141,6 +153,7 @@ function loadSkillFromDir(skillsDir: string, slug: string, source: SkillSource):
     iconPath: findIconFile(skillDir),
     path: skillDir,
     source,
+    marketplaceOrigin: source === 'workspace' ? readMarketplaceOriginSidecar(skillDir) : undefined,
   };
 }
 
