@@ -164,12 +164,15 @@ Unavailable prevents Marketplace install/update distribution while preserving an
 
 Marketplace v1 surfaces a skill's existing required sources but does not support skill-to-skill dependencies.
 
-### Skills Submenu
-The navigation group that splits skill workflows into **Local Skills** for installed skills and **Skill Marketplace** for browsing and publishing shared skills.
+### Skills Navigation
+Two flat top-level sidebar items for skill workflows, at the same level as Settings:
 
-The submenu labels are **Local Skills** and **Marketplace**.
+- **技能** — navigates to Local Skills.
+- **市场** — navigates to the Skill Marketplace.
 
-Opening the Skills Submenu defaults to **Local Skills** on first use, then remembers the last selected skill destination.
+Neither item is nested under a parent group. The previous "Local Skills" sub-item and the expandable "Skills" group header are removed.
+
+Avoid: Skills Submenu, nesting 市场 under 技能.
 
 ### Editor Panel
 A resizable panel (`EditorDetailPanel`) that renders to the right of the active content panel(s), showing file contents, git diffs, and git-commit details in a tabbed interface. Tabs are opened automatically when session files change during processing.
