@@ -121,7 +121,7 @@ import {
   loadRightSidebarOpenPreference,
   persistRightSidebarOpenPreference,
   resolvePanelStackRightSidebarVisible,
-  shouldSuppressRightSidebarForNavState,
+  resolveRightSidebarContextualAvailability,
 } from "./right-sidebar-state"
 import {
   loadEditorPanelOpenPreference,
@@ -323,6 +323,11 @@ function AppShellContent({
     setCollapsedItems(prev => toggleCollapsedSidebarItem(prev, id))
   }, [])
   const isAllSessionsExpanded = isExpanded(ALL_SESSIONS_NAV_ITEM_ID)
+  const store = useStore()
+  const panelStack = useAtomValue(panelStackAtom)
+  const panelCount = useAtomValue(panelCountAtom)
+  const focusedSessionId = useAtomValue(focusedSessionIdAtom)
+  const activeSessionIdForContextualPanels = focusedSessionId
   const sidebarLayout = resolveSidebarLayout({
     navState,
     isSidebarAndNavigatorHidden: effectiveSidebarAndNavigatorHidden,
@@ -330,8 +335,10 @@ function AppShellContent({
     sidebarWidth,
     isAllSessionsExpanded,
   })
-  const isRightSidebarContextuallyAvailable =
-    sidebarLayout.isRightSidebarVisible && !shouldSuppressRightSidebarForNavState(navState)
+  const isRightSidebarContextuallyAvailable = resolveRightSidebarContextualAvailability({
+    activeSessionId: activeSessionIdForContextualPanels,
+    navState,
+  })
   const hasOpenTabs = useAtomValue(hasOpenTabsAtom)
   const prevHasOpenTabsRef = React.useRef(hasOpenTabs)
   useEffect(() => {
@@ -344,10 +351,6 @@ function AppShellContent({
     isRightSidebarContextuallyAvailable,
     isRightSidebarOpen,
   )
-  const store = useStore()
-  const panelStack = useAtomValue(panelStackAtom)
-  const panelCount = useAtomValue(panelCountAtom)
-  const focusedSessionId = useAtomValue(focusedSessionIdAtom)
 
   // Navigate the focused panel to a session.
   // If the session is already open in another panel, focus that panel instead.

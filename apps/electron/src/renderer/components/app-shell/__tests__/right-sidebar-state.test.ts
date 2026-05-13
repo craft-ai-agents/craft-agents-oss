@@ -3,6 +3,7 @@ import * as storage from '@/lib/local-storage'
 import {
   loadRightSidebarOpenPreference,
   persistRightSidebarOpenPreference,
+  resolveRightSidebarContextualAvailability,
   resolvePanelStackRightSidebarVisible,
   shouldSuppressRightSidebarForNavState,
 } from '../right-sidebar-state'
@@ -50,6 +51,25 @@ describe('right sidebar AppShell state', () => {
     expect(resolvePanelStackRightSidebarVisible(true, true)).toBe(true)
     expect(resolvePanelStackRightSidebarVisible(true, false)).toBe(false)
     expect(resolvePanelStackRightSidebarVisible(false, true)).toBe(false)
+  })
+
+  test('contextual availability depends on an active session instead of session navigation', () => {
+    expect(resolveRightSidebarContextualAvailability({
+      activeSessionId: 'session-1',
+      navState: { navigator: 'sources', details: null },
+    })).toBe(true)
+
+    expect(resolveRightSidebarContextualAvailability({
+      activeSessionId: null,
+      navState: { navigator: 'sessions', filter: { kind: 'allSessions' }, details: null },
+    })).toBe(false)
+  })
+
+  test('contextual availability remains suppressed in archived navigation', () => {
+    expect(resolveRightSidebarContextualAvailability({
+      activeSessionId: 'session-1',
+      navState: { navigator: 'archived', details: null },
+    })).toBe(false)
   })
 
   test('suppresses right sidebar for archived navigation state only', () => {

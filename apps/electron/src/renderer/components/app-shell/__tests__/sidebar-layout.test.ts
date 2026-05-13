@@ -21,7 +21,6 @@ describe('resolveSidebarLayout', () => {
       sidebarWidth: 300,
       navigatorWidth: 0,
       showSidebarResizeHandle: true,
-      isRightSidebarVisible: true,
     })
   })
 
@@ -42,11 +41,10 @@ describe('resolveSidebarLayout', () => {
       sidebarWidth: 300,
       navigatorWidth: 300,
       showSidebarResizeHandle: true,
-      isRightSidebarVisible: true,
     })
   })
 
-  test('keeps the existing sidebar and navigator widths and hides the right sidebar outside sessions mode', () => {
+  test('keeps the existing sidebar and navigator widths outside sessions mode', () => {
     const navState: NavigationState = {
       navigator: 'sources',
       filter: undefined,
@@ -62,7 +60,6 @@ describe('resolveSidebarLayout', () => {
       sidebarWidth: 300,
       navigatorWidth: 300,
       showSidebarResizeHandle: true,
-      isRightSidebarVisible: false,
     })
   })
 
@@ -82,7 +79,6 @@ describe('resolveSidebarLayout', () => {
       sidebarWidth: 0,
       navigatorWidth: 0,
       showSidebarResizeHandle: false,
-      isRightSidebarVisible: false,
     })
   })
 
@@ -100,7 +96,6 @@ describe('resolveSidebarLayout', () => {
       sidebarWidth: 300,
       navigatorWidth: 0,
       showSidebarResizeHandle: true,
-      isRightSidebarVisible: false,
     })
   })
 

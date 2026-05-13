@@ -12,11 +12,10 @@ interface SidebarLayout {
   sidebarWidth: number
   navigatorWidth: number
   showSidebarResizeHandle: boolean
-  isRightSidebarVisible: boolean
 }
 
 /**
- * Resolves the left-panel widths, resize handles, and right-sidebar gate.
+ * Resolves the left-panel widths and resize handles.
  */
 export function resolveSidebarLayout({
   navState,
@@ -30,7 +29,6 @@ export function resolveSidebarLayout({
       sidebarWidth: 0,
       navigatorWidth: 0,
       showSidebarResizeHandle: false,
-      isRightSidebarVisible: false,
     }
   }
 
@@ -39,7 +37,6 @@ export function resolveSidebarLayout({
       sidebarWidth: isSidebarVisible ? sidebarWidth : 0,
       navigatorWidth: 0,
       showSidebarResizeHandle: true,
-      isRightSidebarVisible: false,
     }
   }
 
@@ -52,6 +49,5 @@ export function resolveSidebarLayout({
     sidebarWidth: isSidebarVisible ? sidebarWidth : 0,
     navigatorWidth: embedsAllSessionsList ? 0 : sidebarWidth,
     showSidebarResizeHandle: true,
-    isRightSidebarVisible: isSessionsNavigation(navState),
   }
 }
