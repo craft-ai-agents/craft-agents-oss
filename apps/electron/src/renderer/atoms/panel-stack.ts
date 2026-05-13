@@ -73,7 +73,8 @@ export function getPanelTypeFromRoute(route: ViewRoute): PanelType {
       return 'source'
     case 'settings':
       return 'settings'
-    case 'skills':
+    case 'local-skills':
+    case 'skill-marketplace':
       return 'skills'
     default:
       return 'other'

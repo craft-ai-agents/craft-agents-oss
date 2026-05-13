@@ -66,7 +66,8 @@ import {
   isSessionsNavigation,
   isSourcesNavigation,
   isSettingsNavigation,
-  isSkillsNavigation,
+  isLocalSkillsNavigation,
+  isSkillMarketplaceNavigation,
   isAutomationsNavigation,
   DEFAULT_NAVIGATION_STATE,
 } from '../../shared/types'
@@ -90,7 +91,14 @@ export type { Route }
 
 // Re-export navigation state types for consumers
 export type { NavigationState, SessionFilter }
-export { isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAutomationsNavigation }
+export {
+  isSessionsNavigation,
+  isSourcesNavigation,
+  isSettingsNavigation,
+  isLocalSkillsNavigation,
+  isSkillMarketplaceNavigation,
+  isAutomationsNavigation,
+}
 
 // =============================================================================
 // Context
@@ -648,8 +656,8 @@ export function NavigationProvider({
         return nextState
       }
 
-      // Skills: auto-select first skill
-      if (isSkillsNavigation(nextState) && !nextState.details && !options?.skipAutoSelect) {
+      // Local Skills: auto-select first skill. Marketplace has no drill-down state.
+      if (isLocalSkillsNavigation(nextState) && !nextState.details && !options?.skipAutoSelect) {
         const firstSkillSlug = getFirstSkillSlug()
         if (firstSkillSlug) {
           return { ...nextState, details: { type: 'skill', skillSlug: firstSkillSlug } }

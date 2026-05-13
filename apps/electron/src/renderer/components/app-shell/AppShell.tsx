@@ -116,7 +116,8 @@ import {
   isSessionsNavigation,
   isSourcesNavigation,
   isSettingsNavigation,
-  isSkillsNavigation,
+  isLocalSkillsNavigation,
+  isSkillMarketplaceNavigation,
   isAutomationsNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
@@ -157,11 +158,6 @@ import {
   loadEditorPanelOpenPreference,
   persistEditorPanelOpenPreference,
 } from "./editor-panel-state"
-import {
-  getSkillDestinationRoute,
-  setLastSkillDestination,
-} from "./skill-navigation"
-
 /**
  * AppShellProps - Minimal props interface for AppShell component
  *
@@ -608,6 +604,7 @@ function AppShellContent({
   // UNIFIED NAVIGATION STATE - single source of truth from NavigationContext
   // Derived from focused panel's route — all panels are peers
   const navState = useNavigationState()
+  const isAnySkillsNavigation = isLocalSkillsNavigation(navState) || isSkillMarketplaceNavigation(navState)
   const [isRightSidebarOpen, setIsRightSidebarOpen] = React.useState(() => {
     return loadRightSidebarOpenPreference(activeWorkspaceId ?? undefined)
   })
@@ -1123,7 +1120,6 @@ function AppShellContent({
   // Handle selecting a skill from the list
   const handleSkillSelect = React.useCallback((skill: LoadedSkill) => {
     if (!activeWorkspaceId) return
-    setLastSkillDestination(window.localStorage, 'local')
     navigate(routes.view.skills(skill.slug))
   }, [activeWorkspaceId, navigate])
 
@@ -1781,16 +1777,14 @@ function AppShellContent({
 
   // Handler for skills view
   const handleSkillsClick = useCallback(() => {
-    navigate(getSkillDestinationRoute(window.localStorage))
+    navigate(routes.view.localSkills())
   }, [])
 
   const handleLocalSkillsClick = useCallback(() => {
-    setLastSkillDestination(window.localStorage, 'local')
     navigate(routes.view.localSkills())
   }, [])
 
   const handleSkillMarketplaceClick = useCallback(() => {
-    setLastSkillDestination(window.localStorage, 'marketplace')
     navigate(routes.view.skillMarketplace())
   }, [])
 
@@ -1968,7 +1962,6 @@ function AppShellContent({
     if (!activeWorkspaceId) return
     const loaded = await window.electronAPI.getSkills(activeWorkspaceId, activeSessionWorkingDirectory)
     setSkills(loaded || [])
-    setLastSkillDestination(window.localStorage, 'local')
     navigate(routes.view.skills(skillSlug))
   }, [activeSessionWorkingDirectory, activeWorkspaceId, navigate])
 
@@ -2200,10 +2193,12 @@ function AppShellContent({
     }
 
     // Skills navigator
-    if (isSkillsNavigation(navState)) {
-      return navState.destination === 'marketplace'
-        ? t("sidebar.marketplace")
-        : t("sidebar.localSkills")
+    if (isSkillMarketplaceNavigation(navState)) {
+      return t("sidebar.marketplace")
+    }
+
+    if (isLocalSkillsNavigation(navState)) {
+      return t("sidebar.localSkills")
     }
 
     // Automations navigator
@@ -2624,7 +2619,7 @@ function AppShellContent({
                       title: t("sidebar.skills"),
                       label: String(skills.length),
                       icon: Zap,
-                      variant: isSkillsNavigation(navState) ? "default" : "ghost",
+                      variant: isAnySkillsNavigation ? "default" : "ghost",
                       onClick: handleSkillsClick,
                       expandable: true,
                       expanded: isExpanded('nav:skills'),
@@ -2639,7 +2634,7 @@ function AppShellContent({
                           title: t("sidebar.localSkills"),
                           label: String(skills.length),
                           icon: Zap,
-                          variant: (isSkillsNavigation(navState) && navState.destination === 'local') ? "default" : "ghost",
+                          variant: isLocalSkillsNavigation(navState) ? "default" : "ghost",
                           onClick: handleLocalSkillsClick,
                           contextMenu: {
                             type: 'skills' as const,
@@ -2650,7 +2645,7 @@ function AppShellContent({
                           id: "nav:skills:marketplace",
                           title: t("sidebar.marketplace"),
                           icon: Store,
-                          variant: (isSkillsNavigation(navState) && navState.destination === 'marketplace') ? "default" : "ghost",
+                          variant: isSkillMarketplaceNavigation(navState) ? "default" : "ghost",
                           onClick: handleSkillMarketplaceClick,
                         },
                       ],
@@ -3357,7 +3352,7 @@ function AppShellContent({
                     />
                   )}
                   {/* Add Skill button (only for skills mode) */}
-                  {isSkillsNavigation(navState) && navState.destination === 'local' && activeWorkspace && (
+                  {isLocalSkillsNavigation(navState) && activeWorkspace && (
                     <HeaderIconButton
                       icon={<Plus className="h-4 w-4" />}
                       tooltip={t("sidebarMenu.addSkill")}
@@ -3393,7 +3388,7 @@ function AppShellContent({
                 localMcpEnabled={localMcpEnabled}
               />
             )}
-            {isSkillsNavigation(navState) && navState.destination === 'local' && activeWorkspaceId && (
+            {isLocalSkillsNavigation(navState) && activeWorkspaceId && (
               /* Skills List */
               <SkillsListPanel
                 skills={skills}
@@ -3403,7 +3398,7 @@ function AppShellContent({
                 onSkillClick={handleSkillSelect}
                 onPublishSkill={handleSkillSelect}
                 onDeleteSkill={handleDeleteSkill}
-                selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
+                selectedSkillSlug={isLocalSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
               />
             )}
             {isAutomationsNavigation(navState) && (
