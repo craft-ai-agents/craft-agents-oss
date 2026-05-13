@@ -99,7 +99,7 @@ export type ModelSelectionMode = 'automaticallySyncedFromProvider' | 'userDefine
  * Protocol for custom API endpoints.
  * Determines which streaming adapter the Pi SDK uses for requests.
  */
-export type CustomEndpointApi = 'openai-completions' | 'anthropic-messages';
+export type CustomEndpointApi = 'openai-completions' | 'openai-responses' | 'anthropic-messages';
 
 /**
  * Custom endpoint protocol config.

@@ -2812,9 +2812,12 @@ export class SessionManager implements ISessionManager {
             customModels: connection.models?.map(model => {
               if (typeof model === 'string') return model
               const supportsImages = typeof model.supportsImages === 'boolean' ? model.supportsImages : undefined
-              if (model.contextWindow || supportsImages !== undefined) {
+              const hasDisplayName = typeof model.name === 'string' || typeof model.shortName === 'string'
+              if (model.contextWindow || supportsImages !== undefined || hasDisplayName) {
                 return {
                   id: model.id,
+                  ...(typeof model.name === 'string' ? { name: model.name } : {}),
+                  ...(typeof model.shortName === 'string' ? { shortName: model.shortName } : {}),
                   ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
                   ...(supportsImages !== undefined ? { supportsImages } : {}),
                 }
