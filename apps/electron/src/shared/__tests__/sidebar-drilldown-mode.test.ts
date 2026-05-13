@@ -2,14 +2,14 @@ import { describe, expect, it } from 'bun:test'
 import { isSidebarDrilldownMode, type NavigationState } from '../types'
 
 describe('isSidebarDrilldownMode', () => {
-  it('returns true for sessions navigation', () => {
+  it('returns false for sessions navigation', () => {
     const navState: NavigationState = {
       navigator: 'sessions',
       filter: { kind: 'allSessions' },
       details: null,
     }
 
-    expect(isSidebarDrilldownMode(navState)).toBe(true)
+    expect(isSidebarDrilldownMode(navState)).toBe(false)
   })
 
   it('returns false for sources navigation', () => {

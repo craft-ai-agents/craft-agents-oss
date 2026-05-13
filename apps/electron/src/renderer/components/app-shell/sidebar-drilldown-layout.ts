@@ -1,4 +1,4 @@
-import { isSidebarDrilldownMode, type NavigationState } from '../../../shared/types'
+import { isSessionsNavigation, type NavigationState } from '../../../shared/types'
 
 interface ResolveSidebarDrilldownLayoutInput {
   navState: NavigationState
@@ -6,7 +6,6 @@ interface ResolveSidebarDrilldownLayoutInput {
   isSidebarAndNavigatorHidden: boolean
   isSidebarVisible: boolean
   sidebarWidth: number
-  sessionListWidth: number
 }
 
 interface SidebarDrilldownLayout {
@@ -14,22 +13,19 @@ interface SidebarDrilldownLayout {
   sidebarWidth: number
   navigatorWidth: number
   showSidebarResizeHandle: boolean
-  showSessionListResizeHandle: boolean
   isRightSidebarVisible: boolean
 }
 
 /**
- * Resolves the left-panel widths, resize handles, and right-sidebar gate for sidebar drill-down mode.
+ * Resolves the left-panel widths, resize handles, and right-sidebar gate.
  */
 export function resolveSidebarDrilldownLayout({
   navState,
-  isAutoCompact,
   isSidebarAndNavigatorHidden,
   isSidebarVisible,
   sidebarWidth,
-  sessionListWidth,
 }: ResolveSidebarDrilldownLayoutInput): SidebarDrilldownLayout {
-  const isDrilldown = isSidebarDrilldownMode(navState) && !isAutoCompact
+  const isDrilldown = false
 
   if (isSidebarAndNavigatorHidden) {
     return {
@@ -37,19 +33,7 @@ export function resolveSidebarDrilldownLayout({
       sidebarWidth: 0,
       navigatorWidth: 0,
       showSidebarResizeHandle: false,
-      showSessionListResizeHandle: false,
       isRightSidebarVisible: false,
-    }
-  }
-
-  if (isDrilldown) {
-    return {
-      isDrilldown,
-      sidebarWidth: isSidebarVisible ? sessionListWidth : 0,
-      navigatorWidth: 0,
-      showSidebarResizeHandle: true,
-      showSessionListResizeHandle: false,
-      isRightSidebarVisible: true,
     }
   }
 
@@ -59,7 +43,6 @@ export function resolveSidebarDrilldownLayout({
       sidebarWidth: isSidebarVisible ? sidebarWidth : 0,
       navigatorWidth: 0,
       showSidebarResizeHandle: true,
-      showSessionListResizeHandle: false,
       isRightSidebarVisible: false,
     }
   }
@@ -67,9 +50,8 @@ export function resolveSidebarDrilldownLayout({
   return {
     isDrilldown,
     sidebarWidth: isSidebarVisible ? sidebarWidth : 0,
-    navigatorWidth: sessionListWidth,
+    navigatorWidth: sidebarWidth,
     showSidebarResizeHandle: true,
-    showSessionListResizeHandle: true,
-    isRightSidebarVisible: false,
+    isRightSidebarVisible: isSessionsNavigation(navState),
   }
 }

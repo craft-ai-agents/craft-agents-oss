@@ -899,10 +899,10 @@ export const isSessionsNavigation = (
 ): state is SessionsNavigationState => state.navigator === 'sessions'
 
 /**
- * Returns whether the sidebar should use Sidebar Drill-Down Mode.
+ * Sidebar Drill-Down Mode has been retired; keep the helper while older callers
+ * are removed so session navigation stays on the standard sidebar layout.
  */
-export const isSidebarDrilldownMode = (state: NavigationState): boolean =>
-  isSessionsNavigation(state)
+export const isSidebarDrilldownMode = (_state: NavigationState): boolean => false
 
 export const isSourcesNavigation = (
   state: NavigationState

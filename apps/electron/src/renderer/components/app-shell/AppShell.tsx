@@ -5,7 +5,6 @@ import { useAtomValue, useStore } from "jotai"
 import {
   Archive,
   Settings,
-  ChevronLeft,
   ChevronRight,
   ChevronDown,
   MoreHorizontal,
@@ -218,11 +217,7 @@ function AppShellContent({
     return storage.get(storage.KEYS.sidebarVisible, !defaultCollapsed)
   })
   const [sidebarWidth, setSidebarWidth] = React.useState(() => {
-    return storage.get(storage.KEYS.sidebarWidth, 220)
-  })
-  // Session list width in pixels (min 240, max 480)
-  const [sessionListWidth, setSessionListWidth] = React.useState(() => {
-    return storage.get(storage.KEYS.sessionListWidth, 300)
+    return storage.get(storage.KEYS.sidebarWidth, storage.get(storage.KEYS.sessionListWidth, 300))
   })
 
   // Hides both sidebar and navigator (CMD+. toggle)
@@ -255,11 +250,9 @@ function AppShellContent({
     })
   }, [])
 
-  const [isResizing, setIsResizing] = React.useState<'sidebar' | 'session-list' | null>(null)
+  const [isResizing, setIsResizing] = React.useState<'sidebar' | null>(null)
   const [sidebarHandleY, setSidebarHandleY] = React.useState<number | null>(null)
-  const [sessionListHandleY, setSessionListHandleY] = React.useState<number | null>(null)
   const resizeHandleRef = React.useRef<HTMLDivElement>(null)
-  const sessionListHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
   const { resolvedMode, isDark, setMode } = useTheme()
   const { canGoBack, canGoForward, goBack, goForward, navigateToSource, navigateToSession } = useNavigation()
@@ -309,7 +302,6 @@ function AppShellContent({
     isSidebarAndNavigatorHidden: effectiveSidebarAndNavigatorHidden,
     isSidebarVisible,
     sidebarWidth,
-    sessionListWidth,
   })
   const isRightSidebarContextuallyAvailable =
     sidebarDrilldownLayout.isRightSidebarVisible && !shouldSuppressRightSidebarForNavState(navState)
@@ -325,8 +317,6 @@ function AppShellContent({
     isRightSidebarContextuallyAvailable,
     isRightSidebarOpen,
   )
-  const isSidebarDrilldown = sidebarDrilldownLayout.isDrilldown
-
   const store = useStore()
   const panelStack = useAtomValue(panelStackAtom)
   const panelCount = useAtomValue(panelCountAtom)
@@ -782,44 +772,25 @@ function AppShellContent({
     return () => document.removeEventListener('paste', handleGlobalPaste)
   }, [focusedSessionId, session.selected])
 
-  // Resize effect for sidebar, session list, browser host lane, and metadata right sidebar.
+  // Resize effect for the permanent wide sidebar.
   React.useEffect(() => {
     if (!isResizing) return
 
     const handleMouseMove = (e: MouseEvent) => {
       if (isResizing === 'sidebar') {
-        if (isSidebarDrilldown) {
-          const newWidth = Math.min(Math.max(e.clientX, 240), 480)
-          setSessionListWidth(newWidth)
-        } else {
-          const newWidth = Math.min(Math.max(e.clientX, 180), 320)
-          setSidebarWidth(newWidth)
-        }
+        const newWidth = Math.min(Math.max(e.clientX, 240), 480)
+        setSidebarWidth(newWidth)
         if (resizeHandleRef.current) {
           const rect = resizeHandleRef.current.getBoundingClientRect()
           setSidebarHandleY(e.clientY - rect.top)
-        }
-      } else if (isResizing === 'session-list') {
-        const offset = isSidebarVisible ? sidebarWidth : 0
-        const newWidth = Math.min(Math.max(e.clientX - offset, 240), 480)
-        setSessionListWidth(newWidth)
-        if (sessionListHandleRef.current) {
-          const rect = sessionListHandleRef.current.getBoundingClientRect()
-          setSessionListHandleY(e.clientY - rect.top)
         }
       }
     }
 
     const handleMouseUp = () => {
       if (isResizing === 'sidebar') {
-        storage.set(
-          isSidebarDrilldown ? storage.KEYS.sessionListWidth : storage.KEYS.sidebarWidth,
-          isSidebarDrilldown ? sessionListWidth : sidebarWidth,
-        )
+        storage.set(storage.KEYS.sidebarWidth, sidebarWidth)
         setSidebarHandleY(null)
-      } else if (isResizing === 'session-list') {
-        storage.set(storage.KEYS.sessionListWidth, sessionListWidth)
-        setSessionListHandleY(null)
       }
       setIsResizing(null)
     }
@@ -834,9 +805,6 @@ function AppShellContent({
   }, [
     isResizing,
     sidebarWidth,
-    sessionListWidth,
-    isSidebarVisible,
-    isSidebarDrilldown,
   ])
 
   // Spring transition config - shared between sidebar and header
@@ -1192,10 +1160,6 @@ function AppShellContent({
   // in compact mode, App fallback on desktop). With an arg → `settings/<subpage>`.
   const handleSettingsClick = useCallback((subpage?: SettingsSubpage) => {
     navigate(routes.view.settings(subpage))
-  }, [])
-
-  const handleSidebarBackClick = useCallback(() => {
-    navigate(routes.view.sources())
   }, [])
 
   const handleSessionListNavigateToView = useCallback((view: 'allSessions' | 'flagged') => {
@@ -1766,30 +1730,6 @@ function AppShellContent({
               tabIndex={sidebarFocused ? 0 : -1}
               onKeyDown={handleSidebarKeyDown}
             >
-            {isSidebarDrilldown ? (
-              <div
-                className="flex h-full flex-col min-w-0 select-none bg-background shadow-middle"
-                style={{
-                  borderTopLeftRadius: RADIUS_INNER,
-                  borderBottomLeftRadius: RADIUS_EDGE,
-                  borderTopRightRadius: RADIUS_INNER,
-                  borderBottomRightRadius: RADIUS_INNER,
-                }}
-              >
-                <div className="px-2 py-2 shrink-0">
-                  <Button
-                    variant="ghost"
-                    onClick={handleSidebarBackClick}
-                    className="w-full justify-start gap-2 py-[7px] px-2 text-[13px] font-normal rounded-[6px] shadow-minimal"
-                    aria-label={t("common.back")}
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
-                    {t("common.back")}
-                  </Button>
-                </div>
-                {sessionListContent}
-              </div>
-            ) : (
             <div className="flex h-full flex-col select-none bg-foreground-5">
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
@@ -2003,13 +1943,12 @@ function AppShellContent({
               </div>
 
             </div>
-            )}
           </div>
           }
           sidebarWidth={sidebarDrilldownLayout.sidebarWidth}
           navigatorSlot={
             <div
-              style={{ width: isAutoCompact ? '100%' : sessionListWidth }}
+              style={{ width: isAutoCompact ? '100%' : sidebarDrilldownLayout.navigatorWidth }}
               className="h-full flex flex-col min-w-0 relative z-panel"
             >
             <PanelHeader
@@ -2070,6 +2009,7 @@ function AppShellContent({
               }
             />
             {/* Content: SessionList, SourcesListPanel, ArchivedSessionsPanel, or SettingsNavigator based on navigation state */}
+            {sessionListContent}
             {isArchivedNavigation(navState) && (
               /* Archived Sessions List */
               <ArchivedSessionsPanel
@@ -2182,41 +2122,6 @@ function AppShellContent({
             className="h-full"
             style={{
               ...getResizeGradientStyle(sidebarHandleY, resizeHandleRef.current?.clientHeight ?? null),
-              width: PANEL_SASH_LINE_WIDTH,
-            }}
-          />
-        </div>
-        )}
-
-        {/* Session List Resize Handle (absolute, hidden in focused mode) */}
-        {sidebarDrilldownLayout.showSessionListResizeHandle && (
-        <div
-          ref={sessionListHandleRef}
-          onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
-          onMouseMove={(e) => {
-            if (sessionListHandleRef.current) {
-              const rect = sessionListHandleRef.current.getBoundingClientRect()
-              setSessionListHandleY(e.clientY - rect.top)
-            }
-          }}
-          onMouseLeave={() => { if (isResizing !== 'session-list') setSessionListHandleY(null) }}
-          className="absolute cursor-col-resize z-panel flex justify-center"
-          style={{
-            width: PANEL_SASH_HIT_WIDTH,
-            top: PANEL_STACK_VERTICAL_OVERFLOW,
-            bottom: PANEL_STACK_VERTICAL_OVERFLOW,
-            left:
-              (isSidebarVisible ? sidebarWidth + PANEL_GAP : PANEL_EDGE_INSET) +
-              sessionListWidth +
-              (PANEL_GAP / 2) -
-              PANEL_SASH_HALF_HIT_WIDTH,
-            transition: isResizing === 'session-list' ? undefined : 'left 0.15s ease-out',
-          }}
-        >
-          <div
-            className="h-full"
-            style={{
-              ...getResizeGradientStyle(sessionListHandleY, sessionListHandleRef.current?.clientHeight ?? null),
               width: PANEL_SASH_LINE_WIDTH,
             }}
           />

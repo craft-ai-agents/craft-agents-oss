@@ -4,7 +4,7 @@ import { resolveSidebarDrilldownLayout } from '../sidebar-drilldown-layout'
 import type { NavigationState } from '../../../../shared/types'
 
 describe('resolveSidebarDrilldownLayout', () => {
-  test('uses the session list width as the sidebar and hides the navigator in sessions mode', () => {
+  test('keeps the wide sidebar and navigator visible in sessions mode', () => {
     const navState: NavigationState = {
       navigator: 'sessions',
       filter: { kind: 'allSessions' },
@@ -16,14 +16,12 @@ describe('resolveSidebarDrilldownLayout', () => {
       isAutoCompact: false,
       isSidebarAndNavigatorHidden: false,
       isSidebarVisible: true,
-      sidebarWidth: 220,
-      sessionListWidth: 300,
-    })).toEqual({
-      isDrilldown: true,
       sidebarWidth: 300,
-      navigatorWidth: 0,
+    })).toEqual({
+      isDrilldown: false,
+      sidebarWidth: 300,
+      navigatorWidth: 300,
       showSidebarResizeHandle: true,
-      showSessionListResizeHandle: false,
       isRightSidebarVisible: true,
     })
   })
@@ -40,14 +38,12 @@ describe('resolveSidebarDrilldownLayout', () => {
       isAutoCompact: false,
       isSidebarAndNavigatorHidden: false,
       isSidebarVisible: true,
-      sidebarWidth: 220,
-      sessionListWidth: 300,
+      sidebarWidth: 300,
     })).toEqual({
       isDrilldown: false,
-      sidebarWidth: 220,
+      sidebarWidth: 300,
       navigatorWidth: 300,
       showSidebarResizeHandle: true,
-      showSessionListResizeHandle: true,
       isRightSidebarVisible: false,
     })
   })
@@ -64,14 +60,12 @@ describe('resolveSidebarDrilldownLayout', () => {
       isAutoCompact: true,
       isSidebarAndNavigatorHidden: true,
       isSidebarVisible: true,
-      sidebarWidth: 220,
-      sessionListWidth: 300,
+      sidebarWidth: 300,
     })).toEqual({
       isDrilldown: false,
       sidebarWidth: 0,
       navigatorWidth: 0,
       showSidebarResizeHandle: false,
-      showSessionListResizeHandle: false,
       isRightSidebarVisible: false,
     })
   })
@@ -86,19 +80,17 @@ describe('resolveSidebarDrilldownLayout', () => {
       isAutoCompact: false,
       isSidebarAndNavigatorHidden: false,
       isSidebarVisible: true,
-      sidebarWidth: 220,
-      sessionListWidth: 300,
+      sidebarWidth: 300,
     })).toEqual({
       isDrilldown: false,
-      sidebarWidth: 220,
+      sidebarWidth: 300,
       navigatorWidth: 0,
       showSidebarResizeHandle: true,
-      showSessionListResizeHandle: false,
       isRightSidebarVisible: false,
     })
   })
 
-  test('creates all sessions as a flat drilldown trigger without expandable children', () => {
+  test('creates all sessions as a flat sidebar item without expandable children', () => {
     const item = createAllSessionsSidebarItem({
       title: 'All Sessions',
       label: '3',

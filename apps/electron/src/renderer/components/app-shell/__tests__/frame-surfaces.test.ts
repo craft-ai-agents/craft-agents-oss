@@ -39,7 +39,7 @@ function expectCnBlockToInclude(source: string, pattern: RegExp, className: stri
 describe('Level 1 frame surfaces', () => {
   test('uses bg-foreground-5 on the outer shell, icon strip sidebar, and TopBar', () => {
     expectClassNameToInclude(appShellSource, /ref=\{shellRef\}\s+className="([^"]+)"/, 'bg-foreground-5')
-    expectClassNameToInclude(appShellSource, /\) : \(\s+<div className="([^"]+)"/, 'bg-foreground-5')
+    expectClassNameToInclude(appShellSource, /data-focus-zone="sidebar"[\s\S]*?<div className="([^"]+)"/, 'bg-foreground-5')
     expectClassNameToInclude(topBarSource, /return \(\s+<div\s+className="([^"]+)"/, 'bg-foreground-5')
   })
 })
