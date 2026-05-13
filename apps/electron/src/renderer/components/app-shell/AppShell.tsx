@@ -296,11 +296,37 @@ function AppShellContent({
   const handleToggleEditorPanel = useCallback(() => {
     setIsEditorPanelOpen(prev => !prev)
   }, [])
+  // Unified sidebar keyboard navigation state
+  // Load expanded folders from localStorage (default: all collapsed)
+  const [expandedFolders, setExpandedFolders] = React.useState<Set<string>>(() => {
+    const saved = storage.get<string[]>(storage.KEYS.expandedFolders, [])
+    return new Set(saved)
+  })
+  const [focusedSidebarItemId, setFocusedSidebarItemId] = React.useState<string | null>(null)
+  const sidebarItemRefs = React.useRef<Map<string, HTMLElement>>(new Map())
+  // Track which expandable sidebar items are collapsed.
+  // An empty set means every expandable item, including All Sessions, starts expanded.
+  const [collapsedItems, setCollapsedItems] = React.useState<Set<string>>(() => {
+    const saved = storage.get<string[] | null>(storage.KEYS.collapsedSidebarItems, null)
+    if (saved !== null) return new Set(saved)
+    return new Set()
+  })
+  const isExpanded = React.useCallback((id: string) => !collapsedItems.has(id), [collapsedItems])
+  const toggleExpanded = React.useCallback((id: string) => {
+    setCollapsedItems(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+  const isAllSessionsExpanded = isExpanded('nav:allSessions')
   const sidebarLayout = resolveSidebarLayout({
     navState,
     isSidebarAndNavigatorHidden: effectiveSidebarAndNavigatorHidden,
     isSidebarVisible,
     sidebarWidth,
+    isAllSessionsExpanded,
   })
   const isRightSidebarContextuallyAvailable =
     sidebarLayout.isRightSidebarVisible && !shouldSuppressRightSidebarForNavState(navState)
@@ -401,30 +427,6 @@ function AppShellContent({
   // Cmd+F to activate search
   useAction('app.search', () => setSearchActive(true))
 
-  // Unified sidebar keyboard navigation state
-  // Load expanded folders from localStorage (default: all collapsed)
-  const [expandedFolders, setExpandedFolders] = React.useState<Set<string>>(() => {
-    const saved = storage.get<string[]>(storage.KEYS.expandedFolders, [])
-    return new Set(saved)
-  })
-  const [focusedSidebarItemId, setFocusedSidebarItemId] = React.useState<string | null>(null)
-  const sidebarItemRefs = React.useRef<Map<string, HTMLElement>>(new Map())
-  // Track which expandable sidebar items are collapsed
-  // Labels are collapsed by default; user preference is persisted once toggled
-  const [collapsedItems, setCollapsedItems] = React.useState<Set<string>>(() => {
-    const saved = storage.get<string[] | null>(storage.KEYS.collapsedSidebarItems, null)
-    if (saved !== null) return new Set(saved)
-    return new Set()
-  })
-  const isExpanded = React.useCallback((id: string) => !collapsedItems.has(id), [collapsedItems])
-  const toggleExpanded = React.useCallback((id: string) => {
-    setCollapsedItems(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
   // Sources state (workspace-scoped)
   const [sources, setSources] = React.useState<LoadedSource[]>([])
   // Sync sources to atom for NavigationContext auto-selection
@@ -1632,9 +1634,51 @@ function AppShellContent({
 
   const sessionListNavigateToSession = panelCount > 1 ? navigateToSessionInPanel : undefined
 
-  const sessionListContent = isSessionsNavigation(navState) ? (
+  const allSessionsList = (
     <SessionList
-      key={sessionFilter?.kind}
+      key="all-sessions-sidebar"
+      items={searchActive ? workspaceSessionMetas : activeSessionMetas}
+      onDelete={handleDeleteSession}
+      onFlag={onFlagSession}
+      onUnflag={onUnflagSession}
+      onArchive={onArchiveSession}
+      onUnarchive={onUnarchiveSession}
+      onMarkUnread={onMarkSessionUnread}
+      onSessionStatusChange={onSessionStatusChange}
+      onRename={onRenameSession}
+      onFocusChatInput={(targetSessionId) => {
+        focusChatInputForSession(targetSessionId ?? focusedSessionId ?? session.selected)
+      }}
+      onSessionSelect={(selectedMeta) => {
+        navigateToSession(selectedMeta.id)
+      }}
+      onOpenInNewWindow={(selectedMeta) => {
+        if (activeWorkspaceId) {
+          window.electronAPI.openSessionInNewWindow(activeWorkspaceId, selectedMeta.id)
+        }
+      }}
+      onNavigateToView={handleSessionListNavigateToView}
+      sessionOptions={sessionOptions}
+      searchActive={searchActive}
+      searchQuery={searchQuery}
+      onSearchChange={setSearchQuery}
+      onSearchClose={() => {
+        setSearchActive(false)
+        setSearchQuery('')
+      }}
+      sessionStatuses={effectiveSessionStatuses}
+      evaluateViews={evaluateViews}
+      workspaceId={activeWorkspaceId ?? undefined}
+      focusedSessionId={sessionListFocusedSessionId}
+      onNavigateToSession={sessionListNavigateToSession}
+      hasPendingPrompt={hasPendingPrompt}
+      activeChatMatchInfo={chatMatchInfo}
+    />
+  )
+
+  const sessionListContent = isSessionsNavigation(navState) && !(sessionFilter?.kind === 'allSessions' && isAllSessionsExpanded) ? (
+    <SessionList
+      key={`navigator-${sessionFilter?.kind}`}
       items={searchActive ? workspaceSessionMetas : filteredSessionMetas}
       onDelete={handleDeleteSession}
       onFlag={onFlagSession}
@@ -1773,6 +1817,13 @@ function AppShellContent({
                       label: String(workspaceSessionMetas.length),
                       isActive: sessionFilter?.kind === 'allSessions',
                       onClick: handleAllSessionsClick,
+                      isExpanded: isAllSessionsExpanded,
+                      onToggle: () => toggleExpanded('nav:allSessions'),
+                      expandedContent: (
+                        <div className="mt-1 h-[min(560px,calc(100vh-150px))] min-h-[260px] overflow-hidden rounded-[6px] bg-background/70">
+                          {allSessionsList}
+                        </div>
+                      ),
                       contextMenu: {
                         type: 'allSessions',
                         onConfigureStatuses: openConfigureStatuses,

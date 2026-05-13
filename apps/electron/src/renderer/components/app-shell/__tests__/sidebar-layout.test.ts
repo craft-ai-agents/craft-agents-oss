@@ -4,7 +4,7 @@ import { resolveSidebarLayout } from '../sidebar-layout'
 import type { NavigationState } from '../../../../shared/types'
 
 describe('resolveSidebarLayout', () => {
-  test('keeps the wide sidebar and navigator visible in sessions mode', () => {
+  test('hides the navigator in all sessions mode when the list is embedded in the sidebar', () => {
     const navState: NavigationState = {
       navigator: 'sessions',
       filter: { kind: 'allSessions' },
@@ -16,6 +16,28 @@ describe('resolveSidebarLayout', () => {
       isSidebarAndNavigatorHidden: false,
       isSidebarVisible: true,
       sidebarWidth: 300,
+      isAllSessionsExpanded: true,
+    })).toEqual({
+      sidebarWidth: 300,
+      navigatorWidth: 0,
+      showSidebarResizeHandle: true,
+      isRightSidebarVisible: true,
+    })
+  })
+
+  test('keeps the sessions navigator visible when all sessions is collapsed', () => {
+    const navState: NavigationState = {
+      navigator: 'sessions',
+      filter: { kind: 'allSessions' },
+      details: null,
+    }
+
+    expect(resolveSidebarLayout({
+      navState,
+      isSidebarAndNavigatorHidden: false,
+      isSidebarVisible: true,
+      sidebarWidth: 300,
+      isAllSessionsExpanded: false,
     })).toEqual({
       sidebarWidth: 300,
       navigatorWidth: 300,
@@ -82,12 +104,18 @@ describe('resolveSidebarLayout', () => {
     })
   })
 
-  test('creates all sessions as a flat sidebar item without expandable children', () => {
+  test('creates all sessions as an expanded sidebar item with embedded content', () => {
+    const onToggle = () => {}
+    const expandedContent = 'session-list'
+
     const item = createAllSessionsSidebarItem({
       title: 'All Sessions',
       label: '3',
       isActive: true,
       onClick: () => {},
+      isExpanded: true,
+      onToggle,
+      expandedContent,
       contextMenu: { type: 'allSessions' },
     })
 
@@ -97,9 +125,10 @@ describe('resolveSidebarLayout', () => {
       label: '3',
       variant: 'default',
     })
-    expect(item.expandable).toBeUndefined()
-    expect(item.expanded).toBeUndefined()
-    expect(item.onToggle).toBeUndefined()
+    expect(item.expandable).toBe(true)
+    expect(item.expanded).toBe(true)
+    expect(item.onToggle).toBe(onToggle)
+    expect(item.expandedContent).toBe(expandedContent)
     expect(item.sortable).toBeUndefined()
     expect(item.items).toBeUndefined()
   })

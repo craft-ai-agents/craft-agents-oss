@@ -5,6 +5,7 @@ interface ResolveSidebarLayoutInput {
   isSidebarAndNavigatorHidden: boolean
   isSidebarVisible: boolean
   sidebarWidth: number
+  isAllSessionsExpanded?: boolean
 }
 
 interface SidebarLayout {
@@ -22,6 +23,7 @@ export function resolveSidebarLayout({
   isSidebarAndNavigatorHidden,
   isSidebarVisible,
   sidebarWidth,
+  isAllSessionsExpanded = false,
 }: ResolveSidebarLayoutInput): SidebarLayout {
   if (isSidebarAndNavigatorHidden) {
     return {
@@ -41,9 +43,14 @@ export function resolveSidebarLayout({
     }
   }
 
+  const embedsAllSessionsList =
+    isSessionsNavigation(navState) &&
+    navState.filter.kind === 'allSessions' &&
+    isAllSessionsExpanded
+
   return {
     sidebarWidth: isSidebarVisible ? sidebarWidth : 0,
-    navigatorWidth: sidebarWidth,
+    navigatorWidth: embedsAllSessionsList ? 0 : sidebarWidth,
     showSidebarResizeHandle: true,
     isRightSidebarVisible: isSessionsNavigation(navState),
   }

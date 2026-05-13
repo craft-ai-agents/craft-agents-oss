@@ -71,6 +71,7 @@ export interface LinkItem {
   expanded?: boolean
   onToggle?: () => void
   items?: SidebarItem[]    // Subitems as data (rendered as nested LeftSidebar) - supports separators
+  expandedContent?: React.ReactNode
   // Compact mode: reduced vertical padding (4px less total height)
   compact?: boolean
   // Tutorial system
@@ -218,6 +219,8 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
           // Determine which expanded content to render (sortable vs regular)
           const expandedContent = link.expandable && link.items && link.expanded
             ? renderExpandedContent(link, getItemProps, focusedItemId, isNested)
+            : link.expandable && link.expanded && link.expandedContent
+              ? link.expandedContent
             : null
 
           // Wrap with context menu if configured, scoped to button only.
@@ -257,7 +260,7 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
               )}
               {/* Expandable subitems — outside context menu scope so only the
                 * clicked button gets data-state="open", not nested children */}
-              {link.expandable && link.items && (
+              {link.expandable && (link.items || link.expandedContent) && (
                 <AnimatePresence initial={false}>
                   {link.expanded && (
                     <motion.div
