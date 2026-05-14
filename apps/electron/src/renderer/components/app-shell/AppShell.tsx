@@ -332,7 +332,6 @@ function AppShellContent({
     isSidebarAndNavigatorHidden: effectiveSidebarAndNavigatorHidden,
     isSidebarVisible,
     sidebarWidth,
-    isAllSessionsExpanded,
   })
   const areContextualPanelsAvailable = resolveRightSidebarContextualAvailability({
     activeSessionId: focusedSessionId,
@@ -1685,7 +1684,7 @@ function AppShellContent({
     searchActive ? workspaceSessionMetas : activeSessionMetas,
   )
 
-  const sessionListContent = isSessionsNavigation(navState) && !(sessionFilter?.kind === 'allSessions' && isAllSessionsExpanded) ? (
+  const sessionListContent = isSessionsNavigation(navState) && sessionFilter?.kind !== 'allSessions' ? (
     renderSessionList(
       `navigator-${sessionFilter?.kind}`,
       searchActive ? workspaceSessionMetas : filteredSessionMetas,

@@ -16,7 +16,6 @@ describe('resolveSidebarLayout', () => {
       isSidebarAndNavigatorHidden: false,
       isSidebarVisible: true,
       sidebarWidth: 300,
-      isAllSessionsExpanded: true,
     })).toEqual({
       sidebarWidth: 300,
       navigatorWidth: 0,
@@ -24,7 +23,7 @@ describe('resolveSidebarLayout', () => {
     })
   })
 
-  test('keeps the sessions navigator visible when all sessions is collapsed', () => {
+  test('keeps the sessions navigator hidden when all sessions is collapsed', () => {
     const navState: NavigationState = {
       navigator: 'sessions',
       filter: { kind: 'allSessions' },
@@ -36,10 +35,9 @@ describe('resolveSidebarLayout', () => {
       isSidebarAndNavigatorHidden: false,
       isSidebarVisible: true,
       sidebarWidth: 300,
-      isAllSessionsExpanded: false,
     })).toEqual({
       sidebarWidth: 300,
-      navigatorWidth: 300,
+      navigatorWidth: 0,
       showSidebarResizeHandle: true,
     })
   })
