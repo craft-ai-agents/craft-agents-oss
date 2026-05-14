@@ -232,6 +232,8 @@ export const RPC_CHANNELS = {
   sources: {
     GET: 'sources:get',
     CREATE: 'sources:create',
+    PARSE_MCP_JSON_IMPORT: 'sources:parseMcpJsonImport',
+    IMPORT_MCP_JSON_CANDIDATES: 'sources:importMcpJsonCandidates',
     DELETE: 'sources:delete',
     START_OAUTH: 'sources:startOAuth',
     SAVE_CREDENTIALS: 'sources:saveCredentials',

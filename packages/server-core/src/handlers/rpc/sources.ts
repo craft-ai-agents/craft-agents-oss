@@ -9,6 +9,8 @@ import type { HandlerDeps } from '../handler-deps'
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.GET,
   RPC_CHANNELS.sources.CREATE,
+  RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT,
+  RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES,
   RPC_CHANNELS.sources.DELETE,
   RPC_CHANNELS.sources.START_OAUTH,
   RPC_CHANNELS.sources.SAVE_CREDENTIALS,
@@ -59,6 +61,28 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     })
     pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
     return created
+  })
+
+  // Parse pasted MCP JSON and mark duplicate candidates for preview.
+  server.handle(RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT, async (_ctx, workspaceId: string, json: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { detectDuplicateMcpImportCandidates, parseMcpJsonImportCandidates } = await import('@craft-agent/shared/sources')
+    const parsed = parseMcpJsonImportCandidates(json)
+    return {
+      ...parsed,
+      candidates: detectDuplicateMcpImportCandidates(workspace.rootPath, parsed.candidates),
+    }
+  })
+
+  // Create selected MCP import candidates through the normalized creation path.
+  server.handle(RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES, async (_ctx, workspaceId: string, candidates: import('@craft-agent/shared/sources').McpImportCandidate[]) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { createMcpSourcesFromCandidates } = await import('@craft-agent/shared/sources')
+    const result = await createMcpSourcesFromCandidates(workspace.rootPath, candidates)
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
+    return result
   })
 
   // Delete a source

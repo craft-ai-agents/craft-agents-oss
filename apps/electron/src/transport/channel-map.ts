@@ -213,6 +213,8 @@ export const CHANNEL_MAP = {
   // Sources
   getSources: invoke(RPC_CHANNELS.sources.GET),
   createSource: invoke(RPC_CHANNELS.sources.CREATE),
+  parseMcpJsonImport: invoke(RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT),
+  importMcpJsonCandidates: invoke(RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES),
   deleteSource: invoke(RPC_CHANNELS.sources.DELETE),
   startSourceOAuth: invoke(RPC_CHANNELS.sources.START_OAUTH),
   saveSourceCredentials: invoke(RPC_CHANNELS.sources.SAVE_CREDENTIALS),
