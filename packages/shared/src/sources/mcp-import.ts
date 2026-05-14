@@ -119,6 +119,10 @@ export interface McpImportBatchCreateResult {
   results: McpImportCreateResult[];
 }
 
+interface McpSourceCreationOptions {
+  replacementSlug?: string;
+}
+
 /**
  * Result of parsing pasted MCP JSON into import candidates.
  */
@@ -175,23 +179,11 @@ export function detectDuplicateMcpImportCandidates(
   const existingSources = loadWorkspaceSources(workspaceRootPath);
   return candidates.map((candidate) => {
     const duplicate = findDuplicateMcpSource(candidate, existingSources);
-    if (!duplicate) {
-      return {
-        ...candidate,
-        availableActions: [{ type: 'create' }, { type: 'skip' }],
-        action: candidate.action ?? { type: 'create' },
-      };
-    }
-
     return {
       ...candidate,
-      duplicate,
-      availableActions: [
-        { type: 'create' },
-        { type: 'replace', sourceSlug: duplicate.sourceSlug },
-        { type: 'skip' },
-      ],
-      action: candidate.action ?? { type: 'replace', sourceSlug: duplicate.sourceSlug },
+      ...(duplicate ? { duplicate } : {}),
+      availableActions: buildAvailableImportActions(duplicate),
+      action: candidate.action ?? buildDefaultImportAction(duplicate),
     };
   });
 }
@@ -224,7 +216,7 @@ export async function createMcpSourcesFromCandidates(
 
     try {
       const replacementSlug = candidate.action?.type === 'replace' ? candidate.action.sourceSlug : undefined;
-      const created = await createMcpSourceFromCandidate(workspaceRootPath, candidate, credentialManager, replacementSlug);
+      const created = await createMcpSourceFromCandidate(workspaceRootPath, candidate, credentialManager, { replacementSlug });
       results.push({ key: candidate.key, success: true, sourceSlug: created.slug });
     } catch (error) {
       results.push({
@@ -236,6 +228,26 @@ export async function createMcpSourcesFromCandidates(
   }
 
   return { results };
+}
+
+function buildAvailableImportActions(duplicate: McpImportDuplicateMatch | undefined): McpImportCandidateAction[] {
+  if (!duplicate) {
+    return [{ type: 'create' }, { type: 'skip' }];
+  }
+
+  return [
+    { type: 'create' },
+    { type: 'replace', sourceSlug: duplicate.sourceSlug },
+    { type: 'skip' },
+  ];
+}
+
+function buildDefaultImportAction(duplicate: McpImportDuplicateMatch | undefined): McpImportCandidateAction {
+  if (!duplicate) {
+    return { type: 'create' };
+  }
+
+  return { type: 'replace', sourceSlug: duplicate.sourceSlug };
 }
 
 function getServerEntries(parsed: Record<string, unknown>): Record<string, unknown> {
@@ -374,8 +386,9 @@ async function createMcpSourceFromCandidate(
   workspaceRootPath: string,
   candidate: McpImportCandidate,
   credentialManager: McpImportCredentialManager,
-  replacementSlug?: string,
+  options: McpSourceCreationOptions,
 ): Promise<FolderSourceConfig> {
+  const replacementSlug = options.replacementSlug;
   const slug = replacementSlug ?? generateSourceSlug(workspaceRootPath, candidate.input.name);
   const now = Date.now();
   const config: FolderSourceConfig = {
