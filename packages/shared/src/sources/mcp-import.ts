@@ -12,6 +12,7 @@ import {
 } from './storage.ts';
 import { getSourceCredentialManager } from './credential-manager.ts';
 import type { CreateSourceInput, FolderSourceConfig, LoadedSource, McpSourceConfig, McpTransport, SourceConnectionStatus, SourceGuide } from './types.ts';
+import { isLocalMcpEnabled } from '../workspaces/storage.ts';
 
 /**
  * Field-level error reported while parsing pasted MCP JSON.
@@ -170,6 +171,16 @@ export const defaultMcpPostCreateConnectionTester: McpPostCreateConnectionTester
   });
 };
 
+/**
+ * Compute a stable fingerprint for a stdio command + args combination.
+ * Used to track first-run confirmation state for local MCP servers.
+ * The same command + args will always produce the same fingerprint,
+ * enabling remembered confirmation across creation sessions.
+ */
+export function stdioCommandFingerprint(command: string, args?: string[]): string {
+  return `${command}\0${JSON.stringify(args ?? [])}`;
+}
+
 /** Optional dependencies for creating MCP sources from import candidates. */
 export interface McpImportCreateOptions {
   /** Credential manager override, primarily for tests and alternate storage backends. */
@@ -179,6 +190,18 @@ export interface McpImportCreateOptions {
    * source status but do not turn creation into a failed result.
    */
   connectionTester?: McpPostCreateConnectionTester;
+  /**
+   * Record of confirmed stdio command fingerprints. When present, stdio sources
+   * whose command fingerprint is not in this set skip post-create connection
+   * testing. Defaults to the set of commands being created (auto-confirmed).
+   * Pass an empty record to require explicit confirmation for all stdio sources.
+   */
+  confirmedStdioCommands?: Record<string, true>;
+  /**
+   * When true, the local MCP servers enabled check is skipped. Used for testing
+   * environments where workspace config may not exist. Defaults to false.
+   */
+  skipLocalMcpEnabledCheck?: boolean;
 }
 
 /** Manual form input for creating a single MCP source. */
@@ -211,6 +234,8 @@ export interface McpImportBatchCreateResult {
 interface McpSourceCreationOptions {
   replacementSlug?: string;
   connectionTester?: McpPostCreateConnectionTester;
+  confirmedStdioCommands?: Record<string, true>;
+  skipLocalMcpEnabledCheck?: boolean;
 }
 
 interface ManualCandidateBuildState {
@@ -316,6 +341,8 @@ export async function createMcpSourcesFromCandidates(
       const created = await createMcpSourceFromCandidate(workspaceRootPath, candidate, credentialManager, {
         replacementSlug,
         connectionTester: options.connectionTester,
+        confirmedStdioCommands: options.confirmedStdioCommands,
+        skipLocalMcpEnabledCheck: options.skipLocalMcpEnabledCheck,
       });
       results.push({ key: candidate.key, success: true, sourceSlug: created.slug });
     } catch (error) {
@@ -567,6 +594,13 @@ function buildCandidate(key: string, server: unknown, options: McpImportParseOpt
   if (transport === 'stdio') {
     if (typeof serverObject.command === 'string' && serverObject.command.trim()) {
       mcp.command = serverObject.command;
+      // Flag single-string shell commands that are not split into command and args.
+      if (serverObject.command.includes(' ') && serverObject.args === undefined) {
+        errors.push({
+          field: 'command',
+          message: 'Command appears to be a shell command string. Split into "command" and "args" fields. For example, use "command": "npx" with "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"].',
+        });
+      }
     } else {
       errors.push({ field: 'command', message: 'Stdio MCP servers require a command string.' });
     }
@@ -671,7 +705,7 @@ async function createMcpSourceFromCandidate(
   }
   saveSourceConfig(workspaceRootPath, config);
   saveSourceGuide(workspaceRootPath, slug, guide);
-  await testCreatedMcpSource(workspaceRootPath, slug, guide, credentialValue, options.connectionTester);
+  await testCreatedMcpSource(workspaceRootPath, slug, guide, credentialValue, options.connectionTester, options.confirmedStdioCommands, options.skipLocalMcpEnabledCheck);
   return config;
 }
 
@@ -681,11 +715,34 @@ async function testCreatedMcpSource(
   guide: SourceGuide,
   credentialValue: string | null,
   connectionTester: McpPostCreateConnectionTester | undefined,
+  confirmedStdioCommands?: Record<string, true>,
+  skipLocalMcpEnabledCheck?: boolean,
 ): Promise<void> {
   if (!connectionTester) return;
 
   const config = loadSourceConfig(workspaceRootPath, sourceSlug);
   if (!config) return;
+
+  // Gate: stdio sources require first-run confirmation before spawning.
+  const isStdio = config.type === 'mcp' && config.mcp?.transport === 'stdio';
+  if (isStdio) {
+    // Gate: check if local MCP servers are enabled globally.
+    if (!skipLocalMcpEnabledCheck && !isLocalMcpEnabled(workspaceRootPath)) {
+      config.connectionStatus = 'local_disabled';
+      config.lastTestedAt = Date.now();
+      saveSourceConfig(workspaceRootPath, config);
+      return;
+    }
+
+    // Gate: check first-run confirmation for this command.
+    if (config.mcp?.command && confirmedStdioCommands !== undefined) {
+      const fingerprint = stdioCommandFingerprint(config.mcp.command, config.mcp.args);
+      if (!confirmedStdioCommands[fingerprint]) {
+        // Not confirmed — skip test so the command is never spawned.
+        return;
+      }
+    }
+  }
 
   const source = buildLoadedSource(workspaceRootPath, config, guide);
   const startedAt = Date.now();

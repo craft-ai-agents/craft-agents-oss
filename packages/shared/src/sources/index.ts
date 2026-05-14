@@ -85,6 +85,7 @@ export {
   defaultMcpPostCreateConnectionTester,
   detectDuplicateMcpImportCandidates,
   parseMcpJsonImportCandidates,
+  stdioCommandFingerprint,
 } from './mcp-import.ts';
 export type {
   McpManualSourceInput,
