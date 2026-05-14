@@ -16,60 +16,91 @@ import { execFileSync } from 'node:child_process';
 
 const REQUIRED_MIN_VERSION = { major: 0, minor: 23, patch: 0 } as const;
 
-let cachedPath: string | null | undefined = undefined;
+interface CachedStatus {
+  path: string | null;
+  version: string | null;
+}
+
+let cachedStatus: CachedStatus | undefined = undefined;
+
+/**
+ * Status of the rtk binary for UI display.
+ */
+export interface RtkStatus {
+  installed: boolean;
+  path: string | null;
+  version: string | null;
+}
 
 /**
  * Get the absolute path to the rtk binary, or null if not installed
  * or installed version is below the required minimum.
  */
 export function getRtkPath(): string | null {
-  if (cachedPath !== undefined) return cachedPath;
+  return resolveStatus().path;
+}
 
+/**
+ * Get installation status for the rtk binary. Used by Settings UI to decide
+ * between an "install" prompt and the enable/disable toggle.
+ */
+export function getRtkStatus(opts?: { forceRecheck?: boolean }): RtkStatus {
+  if (opts?.forceRecheck) resetRtkPathCache();
+  const { path, version } = resolveStatus();
+  return { installed: path !== null, path, version };
+}
+
+/** Clears the cached detection result so the next call probes PATH fresh. */
+export function resetRtkPathCache(): void {
+  cachedStatus = undefined;
+}
+
+function resolveStatus(): CachedStatus {
+  if (cachedStatus !== undefined) return cachedStatus;
+
+  const rtkPath = findRtkOnPath();
+  if (!rtkPath) {
+    cachedStatus = { path: null, version: null };
+    return cachedStatus;
+  }
+
+  const version = readRtkVersion(rtkPath);
+  if (!version || !meetsMinVersion(version)) {
+    cachedStatus = { path: null, version };
+    return cachedStatus;
+  }
+
+  cachedStatus = { path: rtkPath, version };
+  return cachedStatus;
+}
+
+function findRtkOnPath(): string | null {
   const whichCmd = process.platform === 'win32' ? 'where' : 'which';
-
-  let rtkPath: string | null = null;
   try {
     const result = execFileSync(whichCmd, ['rtk'], { encoding: 'utf-8', timeout: 2000 }).trim();
     // `where` returns multiple lines on Windows — take the first.
-    const firstLine = result.split('\n')[0]?.trim();
-    if (firstLine) rtkPath = firstLine;
+    return result.split('\n')[0]?.trim() || null;
   } catch {
-    // Binary not on PATH.
-  }
-
-  if (!rtkPath) {
-    cachedPath = null;
     return null;
   }
-
-  if (!checkRtkVersion(rtkPath)) {
-    cachedPath = null;
-    return null;
-  }
-
-  cachedPath = rtkPath;
-  return rtkPath;
 }
 
-function checkRtkVersion(rtkPath: string): boolean {
+function readRtkVersion(rtkPath: string): string | null {
   try {
-    const versionOutput = execFileSync(rtkPath, ['--version'], { encoding: 'utf-8', timeout: 2000 }).trim();
-    const versionMatch = versionOutput.match(/(\d+)\.(\d+)\.(\d+)/);
-    if (!versionMatch) return false;
-
-    const major = Number(versionMatch[1]);
-    const minor = Number(versionMatch[2]);
-    const patch = Number(versionMatch[3]);
-
-    if (major !== REQUIRED_MIN_VERSION.major) return major > REQUIRED_MIN_VERSION.major;
-    if (minor !== REQUIRED_MIN_VERSION.minor) return minor > REQUIRED_MIN_VERSION.minor;
-    return patch >= REQUIRED_MIN_VERSION.patch;
+    const out = execFileSync(rtkPath, ['--version'], { encoding: 'utf-8', timeout: 2000 }).trim();
+    return out.match(/\d+\.\d+\.\d+/)?.[0] ?? null;
   } catch {
-    return false;
+    return null;
   }
 }
 
-/** For tests only — clears the cached path. */
-export function resetRtkPathCache(): void {
-  cachedPath = undefined;
+function meetsMinVersion(version: string): boolean {
+  const m = version.match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!m) return false;
+  const major = Number(m[1]);
+  const minor = Number(m[2]);
+  const patch = Number(m[3]);
+  if (major !== REQUIRED_MIN_VERSION.major) return major > REQUIRED_MIN_VERSION.major;
+  if (minor !== REQUIRED_MIN_VERSION.minor) return minor > REQUIRED_MIN_VERSION.minor;
+  return patch >= REQUIRED_MIN_VERSION.patch;
 }

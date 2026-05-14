@@ -4,9 +4,9 @@
  * Individual utility functions (path expansion, skill qualification, etc.)
  * are used by the centralized `runPreToolUseChecks()` pipeline, which both
  * agent backends (Claude and Pi) call with normalized input and then translate
- * the result to their SDK-specific format. Pi hosts non-Anthropic providers
- * (OpenAI/Codex, Copilot, etc.) as model providers — they are not separate
- * backends and inherit this pipeline transparently.
+ * the result to their SDK-specific format. Pi hosts non-Anthropic model
+ * providers (OpenAI, GitHub Copilot, Bedrock, etc.) under a single backend,
+ * so they inherit this pipeline transparently.
  *
  * Pipeline steps:
  * 1. Permission mode check: Block tools disallowed by current mode
@@ -634,7 +634,7 @@ export interface PreToolUseInput {
   permissionManager: PermissionManagerLike;
   /** PrerequisiteManager for guide.md checking */
   prerequisiteManager?: PrerequisiteManagerLike;
-  /** Backend metadata (from Codex fork params.metadata or Copilot input.metadata) */
+  /** Backend metadata (e.g. Pi forwards intent / displayName via input.metadata) */
   backendMetadata?: { intent?: string; displayName?: string };
   /** RTK Bash-rewrite context (undefined when toggle is off or rtk binary missing) */
   rtkContext?: import('./rtk-rewrite.ts').RtkContext;
@@ -920,7 +920,7 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
 }
 
 // ============================================================
-// ASK-MODE PROMPT DECISION (centralized — fixes Copilot + Pi bugs)
+// ASK-MODE PROMPT DECISION (centralized across backends)
 // ============================================================
 
 interface PromptInfo {
@@ -1015,10 +1015,9 @@ function wrapCommandForMacAdminPrompt(command: string): string {
  *
  * Returns prompt info if user should be asked, null if auto-allowed.
  * This is the single source of truth for ask-mode decisions across all agents.
- *
- * Previously: ClaudeAgent had full inline logic, CodexAgent had shouldPromptForPermission(),
- * CopilotAgent and Pi relied on `check.requiresPermission` which was NEVER set to true
- * by shouldAllowToolInMode() in ask mode (it always returns {allowed: true}).
+ * `shouldAllowToolInMode()` always returns `{allowed: true}` in ask mode, so
+ * the prompt decision lives here rather than being inferred from a permission
+ * check.
  */
 export function shouldPromptInAskMode(
   toolName: string,

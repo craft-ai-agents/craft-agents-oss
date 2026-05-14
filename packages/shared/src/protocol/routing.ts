@@ -159,6 +159,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   // rtk — token-optimization opt-in
   RPC_CHANNELS.rtk.GET_ENABLED,
   RPC_CHANNELS.rtk.SET_ENABLED,
+  RPC_CHANNELS.rtk.GET_STATUS,
 
   // tools — local tool settings
   RPC_CHANNELS.tools.GET_BROWSER_TOOL_ENABLED,

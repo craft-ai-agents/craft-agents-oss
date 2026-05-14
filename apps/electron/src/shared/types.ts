@@ -557,6 +557,7 @@ export interface ElectronAPI {
   // RTK token optimization
   getRtkEnabled(): Promise<boolean>
   setRtkEnabled(enabled: boolean): Promise<void>
+  getRtkStatus(opts?: { forceRecheck?: boolean }): Promise<{ installed: boolean; path: string | null; version: string | null }>
 
   // Network proxy settings
   getNetworkProxySettings(): Promise<NetworkProxySettings | undefined>

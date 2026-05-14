@@ -71,7 +71,7 @@ export class PiEventAdapter extends BaseEventAdapter {
   // Track whether a final (non-intermediate) text_complete has been emitted this turn
   private hasEmittedFinalText: boolean = false;
 
-  // Sub-turnId isolation (same pattern as CopilotEventAdapter)
+  // Sub-turnId isolation for tool calls within a single Pi turn
   private subTurnCounter: number = 0;
   private messageSubTurnId: string | null = null;
 

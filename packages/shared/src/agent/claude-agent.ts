@@ -2522,7 +2522,7 @@ This is a branched conversation. All prior messages in this conversation are par
 
   /**
    * Check if running in mini agent mode.
-   * Uses centralized detection for consistency with CodexAgent.
+   * Uses the centralized `systemPromptPreset` flag from BaseAgent.
    */
   isMiniAgent(): boolean {
     return this.config.systemPromptPreset === 'mini';

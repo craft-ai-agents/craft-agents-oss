@@ -329,6 +329,12 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     setRtkEnabled(enabled)
   })
 
+  // Detect rtk installation (used by Settings UI to swap install prompt ↔ toggle)
+  server.handle(RPC_CHANNELS.rtk.GET_STATUS, async (_ctx, opts?: { forceRecheck?: boolean }) => {
+    const { getRtkStatus } = await import('@craft-agent/shared/agent')
+    return getRtkStatus(opts)
+  })
+
   // ============================================================
   // Tools Settings
   // ============================================================

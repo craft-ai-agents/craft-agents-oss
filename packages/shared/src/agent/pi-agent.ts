@@ -49,7 +49,7 @@ import { getCoAuthorPreference } from '../config/preferences.ts';
 // Credential manager for token storage
 import { getCredentialManager } from '../credentials/manager.ts';
 
-// ChatGPT OAuth token refresh (shared with CodexAgent)
+// ChatGPT OAuth token refresh (used when Pi routes ChatGPT auth)
 import { refreshChatGptTokens } from '../auth/chatgpt-oauth.ts';
 
 // Session-scoped tool callbacks (for SubmitPlan, source auth, etc.)
@@ -147,7 +147,7 @@ export class PiAgent extends BaseAgent {
   // Event adapter
   private adapter: PiEventAdapter;
 
-  // Event queue for streaming (AsyncGenerator pattern -- shared with CodexAgent/CopilotAgent)
+  // Event queue for streaming (AsyncGenerator pattern over subprocess JSONL)
   private eventQueue = new EventQueue();
 
   // Error deduplication — suppress identical consecutive errors after a threshold
@@ -1867,7 +1867,7 @@ export class PiAgent extends BaseAgent {
   }
 
   // ============================================================
-  // Chat (AsyncGenerator with event queue -- mirrors CopilotAgent)
+  // Chat (AsyncGenerator backed by the subprocess event queue)
   // ============================================================
 
   protected async *chatImpl(
@@ -2238,7 +2238,7 @@ export class PiAgent extends BaseAgent {
   }
 
   // ============================================================
-  // Session ID overrides (match CopilotAgent pattern)
+  // Session ID overrides — Pi maintains its own subprocess session id
   // ============================================================
 
   override getSessionId(): string | null {

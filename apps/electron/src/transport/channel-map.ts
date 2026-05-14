@@ -308,6 +308,7 @@ export const CHANNEL_MAP = {
   // RTK token optimization
   getRtkEnabled: invoke(RPC_CHANNELS.rtk.GET_ENABLED),
   setRtkEnabled: invoke(RPC_CHANNELS.rtk.SET_ENABLED),
+  getRtkStatus: invoke(RPC_CHANNELS.rtk.GET_STATUS),
 
   // Badge
   refreshBadge: invoke(RPC_CHANNELS.badge.REFRESH),

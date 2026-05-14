@@ -1522,7 +1522,7 @@ bash scripts/build-linux.sh arm64
 - Run `bun install` from repo root first; the postinstall for `@vscode/ripgrep` must be trusted (`bun pm trust @vscode/ripgrep`).
 
 **Build artifacts (gitignored):**
-- `vendor/bun/`, `vendor/codex/`, `vendor/copilot/` — bundled runtimes / binaries
+- `vendor/bun/` — bundled Bun runtime for non-SDK subprocesses
 - `packages/shared/src/` — copied interceptor (Pi-only; Phase 2 will retire this)
 - `release/` — packaged app and installers
 - `node_modules/@anthropic-ai/claude-agent-sdk{,-binary}` — copied core SDK + staged native binary

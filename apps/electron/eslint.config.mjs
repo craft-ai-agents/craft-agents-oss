@@ -174,20 +174,8 @@ export default [
             message: 'Provider backends must stay behind @craft-agent/shared/agent/backend.',
           },
           {
-            name: '@craft-agent/shared/agent/codex-agent',
-            message: 'Provider backends must stay behind @craft-agent/shared/agent/backend.',
-          },
-          {
-            name: '@craft-agent/shared/agent/copilot-agent',
-            message: 'Provider backends must stay behind @craft-agent/shared/agent/backend.',
-          },
-          {
             name: '@craft-agent/shared/agent/pi-agent',
             message: 'Provider backends must stay behind @craft-agent/shared/agent/backend.',
-          },
-          {
-            name: '@github/copilot-sdk',
-            message: 'Use provider-agnostic model discovery/validation APIs from @craft-agent/shared/agent/backend.',
           },
         ],
       }],
@@ -205,10 +193,6 @@ export default [
         },
         {
           selector: "ImportDeclaration[source.value='@anthropic-ai/claude-agent-sdk']",
-          message: 'Provider SDK usage must stay in backend drivers under packages/shared/src/agent/backend/internal/drivers.',
-        },
-        {
-          selector: "ImportDeclaration[source.value='@github/copilot-sdk']",
           message: 'Provider SDK usage must stay in backend drivers under packages/shared/src/agent/backend/internal/drivers.',
         },
         {

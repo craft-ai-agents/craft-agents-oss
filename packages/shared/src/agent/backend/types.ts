@@ -637,8 +637,6 @@ export interface BackendConfig extends CoreBackendConfig {
    * Provider/SDK to use for this backend.
    * Determines which agent class is instantiated:
    * - 'anthropic' → ClaudeAgent (Anthropic SDK)
-   * - 'openai' → CodexAgent (OpenAI via app-server)
-   * - 'copilot' → CopilotAgent (GitHub Copilot via @github/copilot-sdk)
    * - 'pi' → PiAgent (Pi via @mariozechner/pi-coding-agent)
    */
   provider: AgentProvider;

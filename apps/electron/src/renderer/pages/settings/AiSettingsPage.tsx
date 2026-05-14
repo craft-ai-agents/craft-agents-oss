@@ -46,8 +46,6 @@ import {
   SettingsRow,
   SettingsMenuSelectRow,
   SettingsToggle,
-  SettingsRadioGroup,
-  SettingsRadioCard,
 } from '@/components/settings'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import { useWorkspaceIcon } from '@/hooks/useWorkspaceIcon'
@@ -616,6 +614,8 @@ export default function AiSettingsPage() {
   const [extendedPromptCache, setExtendedPromptCache] = useState(false)
   const [enable1MContext, setEnable1MContext] = useState(false)
   const [rtkEnabled, setRtkEnabled] = useState(false)
+  const [rtkStatus, setRtkStatus] = useState<{ installed: boolean; path: string | null; version: string | null } | null>(null)
+  const [rtkRechecking, setRtkRechecking] = useState(false)
 
   // Validation state per connection
   const [validationStates, setValidationStates] = useState<Record<string, {
@@ -650,6 +650,9 @@ export default function AiSettingsPage() {
 
         const rtkOn = await window.electronAPI.getRtkEnabled()
         setRtkEnabled(rtkOn)
+
+        const status = await window.electronAPI.getRtkStatus()
+        setRtkStatus(status)
 
         // Check credential health for potential issues (corruption, machine migration)
         const health = await window.electronAPI.getCredentialHealth()
@@ -947,10 +950,23 @@ export default function AiSettingsPage() {
     await window.electronAPI?.setEnable1MContext(enabled)
   }, [])
 
-  const handleRtkChange = useCallback(async (value: string) => {
-    const enabled = value === 'on'
+  const handleRtkToggle = useCallback(async (enabled: boolean) => {
     setRtkEnabled(enabled)
     await window.electronAPI?.setRtkEnabled(enabled)
+  }, [])
+
+  const handleRecheckRtk = useCallback(async () => {
+    setRtkRechecking(true)
+    try {
+      const status = await window.electronAPI?.getRtkStatus({ forceRecheck: true })
+      if (status) setRtkStatus(status)
+    } finally {
+      setRtkRechecking(false)
+    }
+  }, [])
+
+  const handleGetRtk = useCallback(() => {
+    window.electronAPI?.openUrl('https://github.com/rtk-ai/rtk')
   }, [])
 
   // Refresh callback for workspace cards
@@ -1087,37 +1103,36 @@ export default function AiSettingsPage() {
                     checked={extendedPromptCache}
                     onCheckedChange={handleExtendedPromptCacheChange}
                   />
-                </SettingsCard>
-              </SettingsSection>
-
-              {/* RTK Token Optimization */}
-              <SettingsSection
-                title={t("settings.ai.rtk.title")}
-                description={
-                  <>
-                    {t("settings.ai.rtk.description")}{' '}
-                    <button
-                      type="button"
-                      onClick={() => window.electronAPI?.openUrl('https://github.com/rtk-ai/rtk')}
-                      className="text-foreground underline underline-offset-2 hover:text-foreground/80 transition-colors"
+                  {rtkStatus?.installed ? (
+                    <SettingsToggle
+                      label={t("settings.ai.rtk.title")}
+                      description={t("settings.ai.rtk.description")}
+                      checked={rtkEnabled}
+                      onCheckedChange={handleRtkToggle}
+                    />
+                  ) : (
+                    <SettingsRow
+                      label={t("settings.ai.rtk.title")}
+                      description={rtkStatus === null ? t("common.checking") : t("settings.ai.rtk.notInstalledDesc")}
                     >
-                      {t("settings.ai.rtk.learnMore")}
-                    </button>
-                  </>
-                }
-              >
-                <SettingsRadioGroup value={rtkEnabled ? 'on' : 'off'} onValueChange={handleRtkChange}>
-                  <SettingsRadioCard
-                    value="off"
-                    label={t("settings.ai.rtk.optionOff")}
-                    description={t("settings.ai.rtk.optionOffDesc")}
-                  />
-                  <SettingsRadioCard
-                    value="on"
-                    label={t("settings.ai.rtk.optionOn")}
-                    description={t("settings.ai.rtk.optionOnDesc")}
-                  />
-                </SettingsRadioGroup>
+                      <Button
+                        size="sm"
+                        onClick={handleGetRtk}
+                        className="bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
+                      >
+                        {t("settings.ai.rtk.getRtk")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleRecheckRtk}
+                        disabled={rtkRechecking || rtkStatus === null}
+                        className="bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
+                      >
+                        {rtkRechecking ? t("common.checking") : t("settings.ai.rtk.recheck")}
+                      </Button>
+                    </SettingsRow>
+                  )}
+                </SettingsCard>
               </SettingsSection>
 
               {/* API Setup Fullscreen Overlay */}

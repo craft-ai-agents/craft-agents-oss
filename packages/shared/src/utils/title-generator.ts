@@ -4,7 +4,7 @@
  * Shared helpers for building title prompts and validating results.
  * Actual title generation is handled by agent classes using their respective SDKs:
  * - ClaudeAgent: Uses Claude SDK query()
- * - CodexAgent: Uses OpenAI SDK
+ * - PiAgent: Uses Pi SDK queryLlm()
  */
 
 /** Slice text at the last word boundary within `max` characters. */
