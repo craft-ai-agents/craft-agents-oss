@@ -105,17 +105,11 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       confirmedStdioCommands: Object.keys(confirmedStdioCommands).length > 0 ? confirmedStdioCommands : undefined,
     })
     // Add successfully created sources with enableInWorkspace to workspace defaults
-    const enabledSlugs = result.results
-      .filter((r) => r.success && !('skipped' in r))
-      .map((r) => r as { key: string; success: true; sourceSlug: string })
-      .filter((r) => {
-        const candidate = candidates.find((c) => c.key === r.key)
-        return candidate?.enableInWorkspace ?? true
-      })
-      .map((r) => r.sourceSlug)
-    if (enabledSlugs.length > 0) {
-      for (const slug of enabledSlugs) {
-        addSlugToWorkspaceDefaults(workspace.rootPath, slug)
+    for (const r of result.results) {
+      if (!r.success || 'skipped' in r) continue
+      const candidate = candidates.find((c) => c.key === r.key)
+      if (candidate?.enableInWorkspace ?? true) {
+        addSlugToWorkspaceDefaults(workspace.rootPath, r.sourceSlug)
       }
     }
     pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
