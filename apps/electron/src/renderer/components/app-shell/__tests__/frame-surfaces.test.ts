@@ -7,6 +7,16 @@ const appShellSource = readFileSync(
   'utf8',
 )
 
+const sessionListSource = readFileSync(
+  join(import.meta.dir, '../SessionList.tsx'),
+  'utf8',
+)
+
+const entityListSource = readFileSync(
+  join(import.meta.dir, '../../ui/entity-list.tsx'),
+  'utf8',
+)
+
 const topBarSource = readFileSync(
   join(import.meta.dir, '../TopBar.tsx'),
   'utf8',
@@ -69,6 +79,17 @@ describe('Level 1 frame surfaces', () => {
   test('renders the embedded All Sessions list with auto height so the wrapper owns overflow', () => {
     expect(appShellSource).toMatch(
       /<SessionList[\s\S]*key=\{key\}[\s\S]*heightBehavior=\{heightBehavior\}[\s\S]*const allSessionsList = renderSessionList\(\s*'all-sessions-sidebar',[\s\S]*'auto',\s*\)/,
+    )
+  })
+
+  test('keeps fill-parent layout as the SessionList default while auto mode uses natural height', () => {
+    expect(sessionListSource).toMatch(/heightBehavior = 'fill'/)
+    expect(sessionListSource).toMatch(
+      /<div className=\{cn\('flex flex-col min-h-0', heightBehavior === 'fill' && 'flex-1'\)\}>/,
+    )
+    expect(entityListSource).toMatch(/heightBehavior = 'fill'/)
+    expect(entityListSource).toMatch(
+      /<ScrollArea className=\{cn\(heightBehavior === 'fill' && 'flex-1', scrollAreaClassName\)\}/,
     )
   })
 })
