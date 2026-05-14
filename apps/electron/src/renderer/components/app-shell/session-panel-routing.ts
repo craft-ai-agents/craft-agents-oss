@@ -6,8 +6,13 @@ import type { ViewRoute } from '../../../shared/routes'
 
 export type SessionPanelNavigation =
   | { type: 'focus'; panelId: string }
-  | { type: 'navigate'; route?: ViewRoute }
+  | { type: 'navigate-route'; route: ViewRoute }
+  | { type: 'navigate-current-filter' }
 
+/**
+ * Resolves whether a session click should focus an existing panel or navigate
+ * the focused panel while preserving navigator-specific session routes.
+ */
 export function resolveSessionPanelNavigation({
   navState,
   panelStack,
@@ -18,7 +23,7 @@ export function resolveSessionPanelNavigation({
   sessionId: string
 }): SessionPanelNavigation {
   if (isArchivedNavigation(navState)) {
-    return { type: 'navigate', route: routes.view.archived(sessionId) }
+    return { type: 'navigate-route', route: routes.view.archived(sessionId) }
   }
 
   for (const entry of panelStack) {
@@ -27,5 +32,5 @@ export function resolveSessionPanelNavigation({
     }
   }
 
-  return { type: 'navigate' }
+  return { type: 'navigate-current-filter' }
 }

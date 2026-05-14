@@ -367,7 +367,7 @@ function AppShellContent({
       return
     }
 
-    if (result.route) {
+    if (result.type === 'navigate-route') {
       navigate(result.route)
       return
     }
