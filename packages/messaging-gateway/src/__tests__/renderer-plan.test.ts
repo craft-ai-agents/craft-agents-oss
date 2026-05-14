@@ -51,7 +51,7 @@ function makeAdapter(platform: PlatformType = 'telegram'): PlatformAdapter & { c
     inlineButtons: supportsButtons,
     maxButtons: 3,
     maxMessageLength: 4096,
-    markdown: markdownByPlatform[platform],
+    markdown: markdownByPlatform[platform] ?? 'plain',
     webhookSupport: false,
   }
 

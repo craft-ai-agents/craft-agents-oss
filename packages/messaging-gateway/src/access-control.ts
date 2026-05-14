@@ -121,8 +121,8 @@ export function readPlatformAccessMode(
   config: MessagingConfig,
   platform: PlatformType,
 ): PlatformAccessMode {
-  if (platform !== 'telegram') return 'open'
-  return config.platforms.telegram?.accessMode ?? 'open'
+  return ((config.platforms[platform] as { accessMode?: PlatformAccessMode } | undefined)
+    ?.accessMode ?? 'open')
 }
 
 /** Read the platform's owners list (empty when not configured). */
@@ -130,8 +130,7 @@ export function readPlatformOwners(
   config: MessagingConfig,
   platform: PlatformType,
 ): PlatformOwner[] {
-  if (platform !== 'telegram') return []
-  return config.platforms.telegram?.owners ?? []
+  return ((config.platforms[platform] as { owners?: PlatformOwner[] } | undefined)?.owners ?? [])
 }
 
 /**
@@ -142,7 +141,6 @@ export function readPlatformOwners(
 export interface RejectableSender {
   platform: PlatformType
   channelId: string
-  threadId?: number
   senderId: string
   senderName?: string
   senderUsername?: string
@@ -175,7 +173,6 @@ export async function executeRejection(
     reason,
     platform: sender.platform,
     channelId: sender.channelId,
-    threadId: sender.threadId,
     senderId: sender.senderId,
     senderUsername: sender.senderUsername,
     bindingId: extra.bindingId,
@@ -197,7 +194,6 @@ export async function executeRejection(
       ...(extra.bindingId ? { bindingId: extra.bindingId } : {}),
       ...(extra.sessionId ? { sessionId: extra.sessionId } : {}),
       ...(sender.channelId ? { channelId: sender.channelId } : {}),
-      ...(sender.threadId !== undefined ? { threadId: sender.threadId } : {}),
     })
   }
 
@@ -210,9 +206,7 @@ export async function executeRejection(
   ctx.recentRejectReplies.set(key, Date.now())
 
   try {
-    await adapter.sendText(sender.channelId, replyText, {
-      ...(sender.threadId !== undefined ? { threadId: sender.threadId } : {}),
-    })
+    await adapter.sendText(sender.channelId, replyText)
   } catch (err) {
     log.warn('failed to send rejection reply (non-fatal)', {
       event: 'reject_reply_failed',

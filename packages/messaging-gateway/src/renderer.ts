@@ -28,21 +28,11 @@
 import type {
   PlatformAdapter,
   ChannelBinding,
-  SendOptions,
   SentMessage,
   InlineButton,
   ResponseMode,
 } from './types'
 
-/**
- * Build the per-call options bag from a binding. Currently only `threadId`
- * (Telegram supergroup forum topic) flows through. WhatsApp and DMs leave
- * `threadId` undefined, which the adapters' `threadParams()` helper turns
- * into a no-op spread.
- */
-function bindingOpts(binding: ChannelBinding): SendOptions {
-  return binding.threadId !== undefined ? { threadId: binding.threadId } : {}
-}
 import type { PlanTokenRegistry } from './plan-tokens'
 
 /** Session event shape (subset of the full SessionEvent from server-core). */
@@ -263,9 +253,9 @@ export class Renderer {
             state.textBuffer = ''
             state.lastEditedLength = 0
           }
-          await adapter.sendText(binding.channelId, `🔧 ${displayName}...`, bindingOpts(binding))
+          await adapter.sendText(binding.channelId, `🔧 ${displayName}...`)
         } else {
-          await adapter.sendTyping(binding.channelId, bindingOpts(binding)).catch(() => {})
+          await adapter.sendTyping(binding.channelId).catch(() => {})
         }
         break
       }
@@ -279,7 +269,7 @@ export class Renderer {
   ): Promise<void> {
     if (!state.streamingMessageId && state.textBuffer.length > 0) {
       try {
-        const sent = await adapter.sendText(binding.channelId, state.textBuffer, bindingOpts(binding))
+        const sent = await adapter.sendText(binding.channelId, state.textBuffer)
         state.streamingMessageId = sent.messageId
         state.lastEditedLength = state.textBuffer.length
         this.scheduleEdit(state, binding, adapter)
@@ -402,7 +392,7 @@ export class Renderer {
   ): Promise<void> {
     if (!state.progressMessageId) {
       try {
-        const sent = await adapter.sendText(binding.channelId, status, bindingOpts(binding))
+        const sent = await adapter.sendText(binding.channelId, status)
         state.progressMessageId = sent.messageId
         state.progressStatus = status
       } catch {
@@ -486,7 +476,6 @@ export class Renderer {
         binding.channelId,
         `⏸ Permission required: ${request.description}
 Approve it in the desktop app to continue.`,
-        bindingOpts(binding),
       )
       return
     }
@@ -497,14 +486,13 @@ Approve it in the desktop app to continue.`,
         { id: `perm:allow:${request.requestId}`, label: '✅ Allow' },
         { id: `perm:deny:${request.requestId}`, label: '❌ Deny' },
       ]
-      const sent = await adapter.sendButtons(binding.channelId, text, buttons, bindingOpts(binding))
+      const sent = await adapter.sendButtons(binding.channelId, text, buttons)
       this.recordPermissionMessage?.(binding, request.requestId, sent.messageId)
     } else {
       await adapter.sendText(
         binding.channelId,
         `⏸ Permission required: ${request.description}
 Approve in the desktop app to continue.`,
-        bindingOpts(binding),
       )
     }
   }
@@ -517,7 +505,6 @@ Approve in the desktop app to continue.`,
     await adapter.sendText(
       binding.channelId,
       '🔐 Credentials are required to continue. Open the desktop app to review and submit them securely.',
-      bindingOpts(binding),
     )
   }
 
@@ -531,7 +518,6 @@ Approve in the desktop app to continue.`,
       await adapter.sendText(
         binding.channelId,
         '📝 A plan is ready for review. Open the desktop app to inspect and approve it.',
-        bindingOpts(binding),
       )
       return
     }
@@ -547,7 +533,6 @@ Approve in the desktop app to continue.`,
       await adapter.sendText(
         binding.channelId,
         '📝 A plan is ready for review. Open the desktop app to inspect and approve it.',
-        bindingOpts(binding),
       )
       return
     }
@@ -574,7 +559,7 @@ Approve in the desktop app to continue.`,
         : `${header}\n\n${firstLines(planContent, 15)}\n\n…full plan attached below.`
 
     try {
-      const sent = await adapter.sendButtons(binding.channelId, bodyText, buttons, bindingOpts(binding))
+      const sent = await adapter.sendButtons(binding.channelId, bodyText, buttons)
       this.recordPlanMessage?.(binding, token, sent.messageId)
 
       if (!fitsInline && planContent.length > 0) {
@@ -583,7 +568,6 @@ Approve in the desktop app to continue.`,
           Buffer.from(planContent, 'utf-8'),
           'plan.md',
           'Full plan',
-          bindingOpts(binding),
         )
       }
     } catch (err) {
@@ -593,7 +577,6 @@ Approve in the desktop app to continue.`,
         `📝 A plan is ready for review (couldn't render inline: ${
           err instanceof Error ? err.message : 'unknown error'
         }). Open the desktop app to approve it.`,
-        bindingOpts(binding),
       )
     }
   }
@@ -606,7 +589,7 @@ Approve in the desktop app to continue.`,
   ): Promise<void> {
     const errorMsg = extractErrorMessage(event.error)
     this.cancelEditTimer(state)
-    await adapter.sendText(binding.channelId, `❌ ${errorMsg}`, bindingOpts(binding))
+    await adapter.sendText(binding.channelId, `❌ ${errorMsg}`)
     this.resetRun(state)
   }
 
@@ -626,7 +609,7 @@ Approve in the desktop app to continue.`,
     try {
       // editMessage on Telegram is keyed by (chat_id, message_id) and ignores
       // message_thread_id, but we pass it for caller uniformity.
-      await adapter.editMessage(binding.channelId, messageId, truncated, bindingOpts(binding))
+      await adapter.editMessage(binding.channelId, messageId, truncated)
       state.currentEditIntervalMs = DEFAULT_EDIT_INTERVAL_MS
     } catch (err: unknown) {
       const is429 =
@@ -668,15 +651,14 @@ Approve in the desktop app to continue.`,
     text: string,
   ): Promise<SentMessage | undefined> {
     const maxLen = adapter.capabilities.maxMessageLength
-    const opts = bindingOpts(binding)
-    if (text.length <= maxLen) {
-      return adapter.sendText(binding.channelId, text, opts)
+        if (text.length <= maxLen) {
+      return adapter.sendText(binding.channelId, text)
     }
 
     const chunks = splitText(text, maxLen)
     let last: SentMessage | undefined
     for (const chunk of chunks) {
-      last = await adapter.sendText(binding.channelId, chunk, opts)
+      last = await adapter.sendText(binding.channelId, chunk)
     }
     return last
   }

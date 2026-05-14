@@ -131,7 +131,10 @@ function buildAccessDeps(harness: AccessHarness): AccessControlDeps {
   return {
     getWorkspaceConfig: () => harness.config,
     seedOwnerOnFirstPair: async (_platform, candidate) => {
-      const existing = harness.config.platforms.telegram?.owners ?? []
+      const current = harness.config.platforms.telegram as
+        | { enabled: boolean; accessMode?: 'open' | 'owner-only'; owners?: PlatformOwner[] }
+        | undefined
+      const existing = current?.owners ?? []
       if (existing.length > 0) return existing
       const next = [candidate]
       harness.seeded = next
@@ -142,7 +145,7 @@ function buildAccessDeps(harness: AccessHarness): AccessControlDeps {
           telegram: {
             ...harness.config.platforms.telegram,
             enabled: true,
-            accessMode: harness.config.platforms.telegram?.accessMode ?? 'owner-only',
+            accessMode: current?.accessMode ?? 'owner-only',
             owners: next,
           },
         },

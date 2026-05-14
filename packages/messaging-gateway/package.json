@@ -2,7 +2,7 @@
   "name": "@craft-agent/messaging-gateway",
   "version": "0.9.3",
   "license": "Apache-2.0",
-  "description": "Messaging gateway for MDP — Telegram & WhatsApp",
+  "description": "Platform-agnostic messaging gateway for MDP",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -15,9 +15,7 @@
   "dependencies": {
     "@craft-agent/core": "workspace:*",
     "@craft-agent/server-core": "workspace:*",
-    "@craft-agent/shared": "workspace:*",
-    "@larksuiteoapi/node-sdk": "^1.62.1",
-    "grammy": "^1.35.0"
+    "@craft-agent/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.2",

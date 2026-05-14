@@ -151,10 +151,6 @@ if (webuiEnabled && serverToken) {
   webuiNodeHandler = nodeHttpAdapter(webuiHandler.fetch)
 }
 
-// Optional external WhatsApp worker entry. No worker is bundled with the server.
-const waWorkerEntry = process.env.CRAFT_MESSAGING_WA_WORKER || undefined
-const waNodeBin = process.env.CRAFT_MESSAGING_NODE_BIN ?? 'node'
-
 // Built inside createHandlerDeps (needs sessionManager), populated with the WS
 // publisher after bootstrapServer resolves.
 let messagingHandle: MessagingBootstrapHandle | null = null
@@ -208,15 +204,6 @@ const instance = await (async () => {
           getMessagingDir: (wsId: string) =>
             join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
           // Headless has no legacy messaging dir — workspaces start clean.
-          ...(waWorkerEntry
-            ? {
-                whatsapp: {
-                  workerEntry: waWorkerEntry,
-                  nodeBin: waNodeBin,
-                  pairingMode: 'qr',
-                },
-              }
-            : {}),
         })
         return {
           sessionManager,
