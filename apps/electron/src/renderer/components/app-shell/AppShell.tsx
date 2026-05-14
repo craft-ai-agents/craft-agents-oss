@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/styled-context-menu"
 import { ContextMenuProvider } from "@/components/ui/menu-context"
 import { SidebarMenu } from "./SidebarMenu"
-import { SessionList } from "./SessionList"
+import { SessionList, type SessionListHeightBehavior } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { PanelStackContainer } from "./PanelStackContainer"
 import { RightSidebarPanel } from "@/components/right-sidebar/RightSidebarPanel"
@@ -1637,7 +1637,7 @@ function AppShellContent({
 
   const sessionListNavigateToSession = panelCount > 1 ? navigateToSessionInPanel : undefined
 
-  const renderSessionList = (key: string, items: SessionMeta[]) => (
+  const renderSessionList = (key: string, items: SessionMeta[], heightBehavior: SessionListHeightBehavior = 'fill') => (
     <SessionList
       key={key}
       items={items}
@@ -1676,12 +1676,14 @@ function AppShellContent({
       onNavigateToSession={sessionListNavigateToSession}
       hasPendingPrompt={hasPendingPrompt}
       activeChatMatchInfo={chatMatchInfo}
+      heightBehavior={heightBehavior}
     />
   )
 
   const allSessionsList = renderSessionList(
     'all-sessions-sidebar',
     searchActive ? workspaceSessionMetas : activeSessionMetas,
+    'auto',
   )
 
   const sessionListContent = isSessionsNavigation(navState) && sessionFilter?.kind !== 'allSessions' ? (
@@ -1793,7 +1795,7 @@ function AppShellContent({
                       isExpanded: isAllSessionsExpanded,
                       onToggle: () => toggleExpanded(ALL_SESSIONS_NAV_ITEM_ID),
                       expandedContent: (
-                        <div className="mt-1 h-[min(560px,calc(100vh-150px))] min-h-[260px] overflow-hidden">
+                        <div className="mt-1 max-h-[min(560px,calc(100vh-150px))] overflow-y-auto">
                           {allSessionsList}
                         </div>
                       ),

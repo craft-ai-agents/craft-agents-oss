@@ -51,15 +51,17 @@ describe('Level 1 frame surfaces', () => {
     )
   })
 
-  test('keeps the embedded All Sessions list flush with the sidebar surface', () => {
+  test('keeps the embedded All Sessions list flush with an outer scroll boundary', () => {
     const match = appShellSource.match(
       /createAllSessionsSidebarItem\(\{[\s\S]*?expandedContent:\s*\(\s*<div className="([^"]+)"/,
     )
     const classes = match?.[1].split(/\s+/) ?? []
 
-    expect(classes).toContain('overflow-hidden')
-    expect(classes).toContain('h-[min(560px,calc(100vh-150px))]')
-    expect(classes).toContain('min-h-[260px]')
+    expect(classes).toContain('overflow-y-auto')
+    expect(classes).toContain('max-h-[min(560px,calc(100vh-150px))]')
+    expect(classes).not.toContain('overflow-hidden')
+    expect(classes).not.toContain('h-[min(560px,calc(100vh-150px))]')
+    expect(classes).not.toContain('min-h-[260px]')
     expect(classes).not.toContain('rounded-[6px]')
     expect(classes).not.toContain('bg-background/70')
   })

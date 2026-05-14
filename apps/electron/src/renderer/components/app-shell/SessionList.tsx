@@ -12,7 +12,7 @@ import { KEYS } from "@/lib/local-storage"
 import * as MultiSelect from "@/hooks/useMultiSelect"
 import { Spinner } from "@craft-agent/ui"
 import { EntityListEmptyScreen } from "@/components/ui/entity-list-empty"
-import { EntityList, type EntityListGroup } from "@/components/ui/entity-list"
+import { EntityList, type EntityListGroup, type EntityListHeightBehavior } from "@/components/ui/entity-list"
 import { RenameDialog } from "@/components/ui/rename-dialog"
 import { SessionSearchHeader } from "./SessionSearchHeader"
 import { SessionItem } from "./SessionItem"
@@ -29,6 +29,7 @@ import { sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@craft-agent/shared/views"
 import type { SessionStatusId, SessionStatus } from "@/config/session-status-config"
 import { buildCollapsedGroupsScopeSuffix } from "@/utils/session-list-collapse"
+import { cn } from "@/lib/utils"
 
 export interface SessionListRow {
   item: SessionMeta
@@ -36,6 +37,7 @@ export interface SessionListRow {
 
 /** Grouping mode for chat list */
 export type ChatGroupingMode = 'date' | 'status' | 'unread'
+export type SessionListHeightBehavior = EntityListHeightBehavior
 
 interface SessionListProps {
   items: SessionMeta[]
@@ -85,6 +87,8 @@ interface SessionListProps {
   hasPendingPrompt?: (sessionId: string) => boolean
   /** DOM-verified match info for the active session (from ChatDisplay) */
   activeChatMatchInfo?: { sessionId: string | null; count: number; isHighlighting?: boolean }
+  /** Whether the list should fill its parent height or size to its content */
+  heightBehavior?: EntityListHeightBehavior
 }
 
 // Re-export SessionStatusId for use by parent components
@@ -133,6 +137,7 @@ export function SessionList({
   onNavigateToSession,
   hasPendingPrompt,
   activeChatMatchInfo,
+  heightBehavior = 'fill',
 }: SessionListProps) {
   const { t, i18n } = useTranslation()
   const setSendToWorkspace = useSetAtom(sendToWorkspaceAtom)
@@ -638,13 +643,15 @@ export function SessionList({
   // --- Empty state (non-search) — render before EntityList ---
   // Don't show empty state when there are collapsed groups with content
   if (flatRows.length === 0 && rowData.groups.length === 0 && !searchActive) {
+    const emptyStateClassName = heightBehavior === 'fill' ? 'h-full' : 'py-8'
+
     if (currentFilter?.kind === 'archived') {
       return (
         <EntityListEmptyScreen
           icon={<Archive />}
           title={t("session.noArchivedSessions")}
           description={t("session.noArchivedSessionsDesc")}
-          className="h-full"
+          className={emptyStateClassName}
         />
       )
     }
@@ -654,7 +661,7 @@ export function SessionList({
         icon={<Inbox />}
         title={t("session.noSessionsYet")}
         description={t("session.noSessionsYetDesc")}
-        className="h-full"
+        className={emptyStateClassName}
       >
         <button
           onClick={() => {
@@ -673,7 +680,7 @@ export function SessionList({
 
   // --- Render ---
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className={cn('flex flex-col min-h-0', heightBehavior === 'fill' && 'flex-1')}>
       <SessionListProvider value={listContext}>
       <EntityList<SessionListRow>
         groups={rowData.groups}
@@ -750,6 +757,7 @@ export function SessionList({
           role: 'listbox',
           'aria-label': 'Sessions',
         }}
+        heightBehavior={heightBehavior}
         scrollAreaClassName="select-none mask-fade-top-short"
         collapsedGroups={collapsedGroups}
         onToggleCollapse={toggleGroupCollapse}
