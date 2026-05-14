@@ -23,9 +23,17 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import type { McpManualAuthCredentialInput, McpManualSourceInput } from '@craft-agent/shared/sources'
+import type {
+  McpImportBatchCreateResult,
+  McpImportCandidate,
+  McpImportCandidateAction,
+  McpImportFieldError,
+  McpImportSecretHandling,
+  McpManualAuthCredentialInput,
+  McpManualSourceInput,
+} from '@craft-agent/shared/sources'
 
-type McpFormMode = 'http' | 'sse' | 'stdio'
+type McpFormMode = 'http' | 'sse' | 'stdio' | 'json'
 type McpFormAuthType = 'none' | 'oauth' | 'bearer' | 'api-key'
 
 interface McpSourceFormDialogProps {
@@ -49,11 +57,18 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
   const [command, setCommand] = React.useState('')
   const [argsText, setArgsText] = React.useState('')
   const [envText, setEnvText] = React.useState('')
+  const [jsonText, setJsonText] = React.useState('')
+  const [jsonErrors, setJsonErrors] = React.useState<McpImportFieldError[]>([])
+  const [candidates, setCandidates] = React.useState<McpImportCandidate[]>([])
+  const [selectedCandidateKeys, setSelectedCandidateKeys] = React.useState<Set<string>>(new Set())
+  const [importResult, setImportResult] = React.useState<McpImportBatchCreateResult | null>(null)
+  const [isParsingJson, setIsParsingJson] = React.useState(false)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
   const isRemote = mode === 'http' || mode === 'sse'
-  const canSubmit = Boolean(name.trim() && provider.trim() && (isRemote ? url.trim() : command.trim()))
+  const canSubmit = mode !== 'json' && Boolean(name.trim() && provider.trim() && (isRemote ? url.trim() : command.trim()))
+  const selectedImportCandidates = candidates.filter((candidate) => selectedCandidateKeys.has(candidate.key) && candidate.errors.length === 0)
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -69,7 +84,7 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
         type: 'mcp',
         enabled,
         icon: icon.trim() || undefined,
-        mcp: buildMcpPayload(mode, {
+        mcp: buildMcpPayload(mode as Exclude<McpFormMode, 'json'>, {
           url,
           authType,
           headersText,
@@ -103,45 +118,97 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
     setCommand('')
     setArgsText('')
     setEnvText('')
+    setJsonText('')
+    setJsonErrors([])
+    setCandidates([])
+    setSelectedCandidateKeys(new Set())
+    setImportResult(null)
     setError(null)
+  }
+
+  const handleParseJson = async () => {
+    if (!jsonText.trim() || isParsingJson) return
+
+    setIsParsingJson(true)
+    setError(null)
+    setImportResult(null)
+    try {
+      const result = await window.electronAPI.parseMcpJsonImport(workspaceId, jsonText)
+      setJsonErrors(result.errors)
+      setCandidates(result.candidates)
+      setSelectedCandidateKeys(new Set(result.candidates.filter((candidate) => candidate.errors.length === 0).map((candidate) => candidate.key)))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setIsParsingJson(false)
+    }
+  }
+
+  const handleImportJson = async () => {
+    if (selectedImportCandidates.length === 0 || isSubmitting) return
+
+    setIsSubmitting(true)
+    setError(null)
+    try {
+      const result = await window.electronAPI.importMcpJsonCandidates(workspaceId, selectedImportCandidates)
+      setImportResult(result)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const updateCandidate = (key: string, update: (candidate: McpImportCandidate) => McpImportCandidate) => {
+    setCandidates((current) => current.map((candidate) => {
+      if (candidate.key !== key) return candidate
+      const next = update(candidate)
+      return { ...next, errors: validateImportCandidate(next) }
+    }))
+  }
+
+  const toggleCandidate = (key: string, selected: boolean) => {
+    setSelectedCandidateKeys((current) => {
+      const next = new Set(current)
+      if (selected) {
+        next.add(key)
+      } else {
+        next.delete(key)
+      }
+      return next
+    })
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-4xl">
         <form onSubmit={handleSubmit} className="space-y-5">
           <DialogHeader>
             <DialogTitle>Add MCP Server</DialogTitle>
             <DialogDescription>Create a remote or command-based MCP source.</DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]">
-            <Field label="Name">
-              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Linear" required />
-            </Field>
-            <Field label="Provider">
-              <Input value={provider} onChange={(event) => setProvider(event.target.value)} placeholder="linear" required />
-            </Field>
-            <Field label="Icon">
-              <Input className="w-20" value={icon} onChange={(event) => setIcon(event.target.value)} placeholder="icon" />
-            </Field>
-          </div>
-
-          <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm">
-            <span>Enabled</span>
-            <Switch checked={enabled} onCheckedChange={setEnabled} />
-          </label>
-
           <Tabs value={mode} onValueChange={(value) => setMode(value as McpFormMode)}>
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="http">HTTP</TabsTrigger>
               <TabsTrigger value="sse">SSE</TabsTrigger>
               <TabsTrigger value="stdio">Command</TabsTrigger>
+              <TabsTrigger value="json">JSON</TabsTrigger>
             </TabsList>
 
             {(['http', 'sse'] as const).map((remoteMode) => (
               <TabsContent key={remoteMode} value={remoteMode} className="space-y-4">
+                <ManualDetails
+                  name={name}
+                  setName={setName}
+                  provider={provider}
+                  setProvider={setProvider}
+                  icon={icon}
+                  setIcon={setIcon}
+                  enabled={enabled}
+                  setEnabled={setEnabled}
+                />
                 <RemoteFields
                   url={url}
                   setUrl={setUrl}
@@ -160,6 +227,16 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
             ))}
 
             <TabsContent value="stdio" className="space-y-4">
+              <ManualDetails
+                name={name}
+                setName={setName}
+                provider={provider}
+                setProvider={setProvider}
+                icon={icon}
+                setIcon={setIcon}
+                enabled={enabled}
+                setEnabled={setEnabled}
+              />
               <Field label="Command">
                 <Input value={command} onChange={(event) => setCommand(event.target.value)} placeholder="npx" />
               </Field>
@@ -170,21 +247,365 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
                 <Textarea value={envText} onChange={(event) => setEnvText(event.target.value)} rows={4} placeholder="API_TOKEN=..." />
               </Field>
             </TabsContent>
+
+            <TabsContent value="json" className="space-y-4">
+              <Field label="MCP JSON">
+                <Textarea
+                  value={jsonText}
+                  onChange={(event) => setJsonText(event.target.value)}
+                  rows={8}
+                  placeholder={'{\n  "mcpServers": {\n    "linear": { "url": "https://mcp.linear.app/mcp" }\n  }\n}'}
+                />
+              </Field>
+              <div className="flex items-center gap-2">
+                <Button type="button" onClick={handleParseJson} disabled={!jsonText.trim() || isParsingJson}>
+                  {isParsingJson && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Parse JSON
+                </Button>
+                <Button type="button" variant="secondary" onClick={handleImportJson} disabled={selectedImportCandidates.length === 0 || isSubmitting}>
+                  {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Import selected
+                </Button>
+                <span className="text-xs text-muted-foreground">{selectedImportCandidates.length} selected</span>
+              </div>
+              {jsonErrors.length > 0 && (
+                <FieldErrors fieldErrors={jsonErrors} />
+              )}
+              {candidates.length > 0 && (
+                <div className="space-y-3">
+                  {candidates.map((candidate) => (
+                    <McpJsonCandidatePreview
+                      key={candidate.key}
+                      candidate={candidate}
+                      selected={selectedCandidateKeys.has(candidate.key)}
+                      onSelectedChange={(selected) => toggleCandidate(candidate.key, selected)}
+                      onChange={(update) => updateCandidate(candidate.key, update)}
+                    />
+                  ))}
+                </div>
+              )}
+              {importResult && (
+                <ImportResults result={importResult} />
+              )}
+            </TabsContent>
           </Tabs>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={!canSubmit || isSubmitting}>
-              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              Create
-            </Button>
+            {mode !== 'json' && (
+              <Button type="submit" disabled={!canSubmit || isSubmitting}>
+                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                Create
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   )
+}
+
+function ManualDetails(props: {
+  name: string
+  setName: (value: string) => void
+  provider: string
+  setProvider: (value: string) => void
+  icon: string
+  setIcon: (value: string) => void
+  enabled: boolean
+  setEnabled: (value: boolean) => void
+}) {
+  return (
+    <>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]">
+        <Field label="Name">
+          <Input value={props.name} onChange={(event) => props.setName(event.target.value)} placeholder="Linear" required />
+        </Field>
+        <Field label="Provider">
+          <Input value={props.provider} onChange={(event) => props.setProvider(event.target.value)} placeholder="linear" required />
+        </Field>
+        <Field label="Icon">
+          <Input className="w-20" value={props.icon} onChange={(event) => props.setIcon(event.target.value)} placeholder="icon" />
+        </Field>
+      </div>
+      <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm">
+        <span>Enabled</span>
+        <Switch checked={props.enabled} onCheckedChange={props.setEnabled} />
+      </label>
+    </>
+  )
+}
+
+function McpJsonCandidatePreview(props: {
+  candidate: McpImportCandidate
+  selected: boolean
+  onSelectedChange: (selected: boolean) => void
+  onChange: (update: (candidate: McpImportCandidate) => McpImportCandidate) => void
+}) {
+  const { candidate } = props
+  const isValid = candidate.errors.length === 0
+  const mcp = candidate.input.mcp ?? {}
+  const isRemote = mcp.transport !== 'stdio'
+
+  return (
+    <section className="rounded-md border border-border/70 p-3">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <label className="flex min-w-0 items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            checked={props.selected}
+            disabled={!isValid}
+            onChange={(event) => props.onSelectedChange(event.target.checked)}
+          />
+          <span className="truncate">{candidate.key}</span>
+        </label>
+        <span className={isValid ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
+          {isValid ? 'Ready' : 'Blocked'}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Name">
+          <Input
+            value={candidate.input.name}
+            onChange={(event) => props.onChange((current) => ({
+              ...current,
+              input: { ...current.input, name: event.target.value },
+            }))}
+          />
+        </Field>
+        <Field label="Transport">
+          <Select
+            value={mcp.transport ?? 'http'}
+            onValueChange={(value) => props.onChange((current) => ({
+              ...current,
+              input: {
+                ...current.input,
+                mcp: buildCandidateMcpForTransport(current, value as Exclude<McpFormMode, 'json'>),
+              },
+            }))}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="http">HTTP</SelectItem>
+              <SelectItem value="sse">SSE</SelectItem>
+              <SelectItem value="stdio">Command</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        {isRemote ? (
+          <Field label="URL">
+            <Input
+              value={mcp.url ?? ''}
+              onChange={(event) => props.onChange((current) => ({
+                ...current,
+                input: { ...current.input, mcp: { ...current.input.mcp, url: event.target.value } },
+              }))}
+            />
+          </Field>
+        ) : (
+          <>
+            <Field label="Command">
+              <Input
+                value={mcp.command ?? ''}
+                onChange={(event) => props.onChange((current) => ({
+                  ...current,
+                  input: { ...current.input, mcp: { ...current.input.mcp, command: event.target.value } },
+                }))}
+              />
+            </Field>
+            <Field label="Args">
+              <Textarea
+                rows={3}
+                value={(mcp.args ?? []).join('\n')}
+                onChange={(event) => props.onChange((current) => ({
+                  ...current,
+                  input: { ...current.input, mcp: { ...current.input.mcp, args: parseListLines(event.target.value) ?? [] } },
+                }))}
+              />
+            </Field>
+          </>
+        )}
+        <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm">
+          <span>Enabled</span>
+          <Switch
+            checked={candidate.input.enabled ?? true}
+            onCheckedChange={(enabled) => props.onChange((current) => ({
+              ...current,
+              input: { ...current.input, enabled },
+            }))}
+          />
+        </label>
+      </div>
+
+      {candidate.secrets && candidate.secrets.length > 0 && (
+        <div className="mt-3 space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">Secret handling</div>
+          {candidate.secrets.map((secret) => (
+            <div key={secret.id} className="grid grid-cols-1 gap-2 rounded-md bg-muted/40 p-2 text-xs sm:grid-cols-[1fr_auto]">
+              <span>{secret.location}:{secret.name} = {secret.previewValue}</span>
+              <Select
+                value={secret.handling}
+                onValueChange={(value) => props.onChange((current) => updateSecretHandling(current, secret.id, value as McpImportSecretHandling))}
+              >
+                <SelectTrigger className="h-7 w-44"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="credential-store">Credential store</SelectItem>
+                  <SelectItem value="config">Keep in config</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {candidate.duplicate && (
+        <div className="mt-3 space-y-2 rounded-md bg-muted/40 p-2 text-xs">
+          <div>Duplicate of {candidate.duplicate.sourceName}: {candidate.duplicate.reasons.join(', ')}</div>
+          <Select
+            value={actionValue(candidate.action)}
+            onValueChange={(value) => props.onChange((current) => ({
+              ...current,
+              action: parseActionValue(value, current.availableActions ?? [{ type: 'create' }, { type: 'skip' }]),
+            }))}
+          >
+            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {(candidate.availableActions ?? []).map((action) => (
+                <SelectItem key={actionValue(action)} value={actionValue(action)}>
+                  {actionLabel(action)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {candidate.errors.length > 0 && (
+        <FieldErrors fieldErrors={candidate.errors} />
+      )}
+    </section>
+  )
+}
+
+function FieldErrors({ fieldErrors }: { fieldErrors: McpImportFieldError[] }) {
+  return (
+    <ul className="mt-2 space-y-1 text-xs text-destructive">
+      {fieldErrors.map((fieldError, index) => (
+        <li key={`${fieldError.field}:${index}`}>{fieldError.field}: {fieldError.message}</li>
+      ))}
+    </ul>
+  )
+}
+
+function ImportResults({ result }: { result: McpImportBatchCreateResult }) {
+  return (
+    <div className="rounded-md border border-border/70 p-3 text-sm">
+      <div className="mb-2 font-medium">Import results</div>
+      <ul className="space-y-1">
+        {result.results.map((item) => (
+          <li key={item.key}>
+            {item.success
+              ? `${item.key}: ${'skipped' in item ? 'skipped' : `created ${item.sourceSlug}`}`
+              : `${item.key}: ${item.errors.map((error) => error.message).join(', ')}`}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function actionValue(action: McpImportCandidateAction | undefined): string {
+  if (!action) return 'create'
+  return action.type === 'replace' ? `replace:${action.sourceSlug}` : action.type
+}
+
+function actionLabel(action: McpImportCandidateAction): string {
+  if (action.type === 'create') return 'Create new source'
+  if (action.type === 'replace') return 'Replace existing source'
+  return 'Skip'
+}
+
+function parseActionValue(value: string, availableActions: McpImportCandidateAction[]): McpImportCandidateAction {
+  return availableActions.find((action) => actionValue(action) === value) ?? { type: 'create' }
+}
+
+function updateSecretHandling(
+  candidate: McpImportCandidate,
+  secretId: string,
+  handling: McpImportSecretHandling,
+): McpImportCandidate {
+  const secret = candidate.secrets?.find((item) => item.id === secretId)
+  if (!secret) return candidate
+
+  const previewValue = handling === 'config' ? secret.value : '••••••••'
+  const secrets = (candidate.secrets ?? []).map((item) => (
+    item.id === secretId ? { ...item, handling, previewValue } : item
+  ))
+  const mcp = { ...candidate.input.mcp }
+  if (secret.location === 'env' && mcp.env) {
+    mcp.env = { ...mcp.env, [secret.name]: previewValue }
+  }
+  if (secret.location === 'header' && mcp.headers) {
+    mcp.headers = { ...mcp.headers, [secret.name]: previewValue }
+  }
+  return {
+    ...candidate,
+    secrets,
+    input: {
+      ...candidate.input,
+      mcp,
+    },
+  }
+}
+
+function buildCandidateMcpForTransport(
+  candidate: McpImportCandidate,
+  transport: Exclude<McpFormMode, 'json'>,
+): McpManualSourceInput['mcp'] {
+  const current = candidate.input.mcp ?? {}
+  if (transport === 'stdio') {
+    return {
+      transport,
+      command: current.command,
+      args: current.args,
+      env: current.env,
+    }
+  }
+  return {
+    transport,
+    url: current.url,
+    authType: current.authType,
+    clientId: current.clientId,
+    headers: current.headers,
+    headerNames: current.headerNames,
+  }
+}
+
+function validateImportCandidate(candidate: McpImportCandidate): McpImportFieldError[] {
+  const errors: McpImportFieldError[] = []
+  const mcp = candidate.input.mcp
+  if (!candidate.input.name.trim()) {
+    errors.push({ field: 'name', message: 'MCP source name is required.' })
+  }
+  if (!mcp) {
+    errors.push({ field: 'mcp', message: 'MCP config is required.' })
+    return errors
+  }
+  if (mcp.transport === 'stdio') {
+    if (!mcp.command?.trim()) {
+      errors.push({ field: 'command', message: 'Stdio MCP servers require a command string.' })
+    }
+  } else if (mcp.transport === 'http' || mcp.transport === 'sse' || !mcp.transport) {
+    if (!mcp.url?.trim()) {
+      errors.push({ field: 'url', message: 'HTTP and SSE MCP servers require a URL string.' })
+    }
+  } else {
+    errors.push({ field: 'transport', message: 'Transport must be one of: stdio, sse, http.' })
+  }
+  return errors
 }
 
 function RemoteFields(props: {
@@ -265,7 +686,7 @@ function parseKeyValueLines(value: string): Record<string, string> | undefined {
 }
 
 function buildMcpPayload(
-  mode: McpFormMode,
+  mode: Exclude<McpFormMode, 'json'>,
   values: {
     url: string
     authType: McpFormAuthType

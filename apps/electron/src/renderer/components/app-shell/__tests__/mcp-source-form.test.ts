@@ -24,4 +24,20 @@ describe('MCP source form flow wiring', () => {
     expect(formSource).not.toContain('.split(" ")')
     expect(formSource).toContain('authCredential')
   })
+
+  test('JSON tab previews parsed import candidates before batch creation', () => {
+    const formSource = readFileSync(join(import.meta.dir, '../McpSourceFormDialog.tsx'), 'utf-8')
+    const apiTypesSource = readFileSync(join(import.meta.dir, '../../../../shared/types.ts'), 'utf-8')
+
+    expect(formSource).toContain('<TabsTrigger value="json">JSON</TabsTrigger>')
+    expect(formSource).toContain('parseMcpJsonImport')
+    expect(formSource).toContain('importMcpJsonCandidates')
+    expect(formSource).toContain('selectedCandidateKeys')
+    expect(formSource).toContain('fieldErrors')
+    expect(formSource).toContain('Replace existing source')
+    expect(formSource).toContain('Secret handling')
+    expect(formSource).toContain('Import selected')
+    expect(apiTypesSource).toContain('parseMcpJsonImport(workspaceId: string, json: string)')
+    expect(apiTypesSource).toContain('importMcpJsonCandidates(workspaceId: string')
+  })
 })
