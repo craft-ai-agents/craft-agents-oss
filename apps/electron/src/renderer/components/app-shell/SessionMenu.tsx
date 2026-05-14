@@ -32,13 +32,13 @@ import {
   Send,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
-import { getStateColor, getStateIcon, type SessionStatusId } from '@/config/session-status-config'
+import { type SessionStatusId } from '@/config/session-status-config'
 import type { SessionStatus } from '@/config/session-status-config'
 import type { LabelConfig } from '@craft-agent/shared/labels'
-import { LabelMenuItems, StatusMenuItems, ShareMenuItems } from './SessionMenuParts'
+import { LabelMenuItems, ShareMenuItems } from './SessionMenuParts'
 import { getFileManagerName } from '@/lib/platform'
 import type { SessionMeta } from '@/atoms/sessions'
-import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
+import { hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
 import { useSessionMenuActions } from '@/hooks/useSessionMenuActions'
 
 export interface SessionMenuProps {
@@ -71,7 +71,6 @@ export interface SessionMenuProps {
  */
 export function SessionMenu({
   item,
-  sessionStatuses,
   labels = [],
   onLabelsChange,
   onRename,
@@ -80,7 +79,6 @@ export function SessionMenu({
   onArchive,
   onUnarchive,
   onMarkUnread,
-  onSessionStatusChange,
   onOpenInNewWindow,
   onSendToWorkspace,
   onDelete,
@@ -92,7 +90,6 @@ export function SessionMenu({
   const isFlagged = item.isFlagged ?? false
   const isArchived = item.isArchived ?? false
   const sharedUrl = item.sharedUrl
-  const currentSessionStatus = getSessionStatus(item)
   const sessionLabels = item.labels ?? []
   const _hasMessages = hasMessagesMeta(item)
   const _hasUnread = hasUnreadMeta(item)
@@ -137,29 +134,6 @@ export function SessionMenu({
       )}
 
       <Separator />
-
-      {/* Status submenu - includes all statuses plus Flag/Unflag at the bottom */}
-      <Sub>
-        <SubTrigger className="pr-2">
-          <span style={{ color: getStateColor(currentSessionStatus, sessionStatuses) ?? 'var(--foreground)' }}>
-            {(() => {
-              const icon = getStateIcon(currentSessionStatus, sessionStatuses)
-              return React.isValidElement(icon)
-                ? React.cloneElement(icon as React.ReactElement<{ bare?: boolean }>, { bare: true })
-                : icon
-            })()}
-          </span>
-          <span className="flex-1">{t("sessionMenu.status")}</span>
-        </SubTrigger>
-        <SubContent>
-          <StatusMenuItems
-            sessionStatuses={sessionStatuses}
-            activeStateId={currentSessionStatus}
-            onSelect={onSessionStatusChange}
-            menu={{ MenuItem }}
-          />
-        </SubContent>
-      </Sub>
 
       {/* Labels submenu - hierarchical label tree with nested sub-menus and toggle checkmarks */}
       {labels.length > 0 && (
