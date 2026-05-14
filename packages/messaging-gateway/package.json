@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
-    "@craft-agent/messaging-whatsapp-worker": "workspace:*",
     "@craft-agent/server-core": "workspace:*",
     "@craft-agent/shared": "workspace:*",
     "@larksuiteoapi/node-sdk": "^1.62.1",

@@ -70,7 +70,7 @@ export interface MessagingGatewayRegistryOptions {
   publishEvent?: (channel: string, target: PushTarget, ...args: unknown[]) => void
   /** Optional WhatsApp worker config — required to enable the WhatsApp adapter. */
   whatsapp?: {
-    /** Absolute path to the worker entry (packaged/unpacked from @craft-agent/messaging-whatsapp-worker). */
+    /** Absolute path to the worker entry. */
     workerEntry: string
     /** Node binary override (defaults to process.execPath with ELECTRON_RUN_AS_NODE). */
     nodeBin?: string
