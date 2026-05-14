@@ -73,7 +73,6 @@ import { navigate, routes } from "@/lib/navigate"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from "@/lib/file-changes"
 import { resolveBranchNewPanelOption } from "./branching"
-import { shouldRenderChatInputZone } from "./chat-display-read-only"
 import { handleErrorMessageAction } from "./error-message-actions"
 
 // ============================================================================
@@ -1896,63 +1895,63 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           </div>
 
           {/* === INPUT CONTAINER: FreeForm or Structured Input === */}
-          {shouldRenderChatInputZone({ readOnly }) && (
-          <ChatInputZone
-            compactMode={compactMode}
-            permissionMode={permissionMode}
-            onPermissionModeChange={onPermissionModeChange}
-            tasks={backgroundTasks}
-            sessionId={session.id}
-            sessionFolderPath={sessionFolderPath}
-            onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type ?? 'shell')}
-            onInsertMessage={onInputChange}
-            sessionLabels={session.labels}
-            labels={labels}
-            onLabelsChange={onLabelsChange}
-            sessionStatuses={sessionStatuses}
-            currentSessionStatus={session.sessionStatus || 'todo'}
-            onSessionStatusChange={onSessionStatusChange}
-            inputProps={{
-              placeholder,
-              disabled: isInputDisabled,
-              isProcessing: session.isProcessing,
-              onAnimatedHeightChange: handleAnimatedHeightChange,
-              onSubmit: handleSubmit,
-              onStop: handleStop,
-              textareaRef,
-              currentModel,
-              onModelChange,
-              thinkingLevel,
-              onThinkingLevelChange,
-              enabledModes,
-              structuredInput,
-              onStructuredResponse: handleStructuredResponse,
-              inputValue,
-              onInputChange,
-              attachmentsValue,
-              onAttachmentsChange,
-              sources,
-              enabledSourceSlugs: session.enabledSourceSlugs,
-              onSourcesChange,
-              skills,
-              workspaceId,
-              workingDirectory,
-              onWorkingDirectoryChange,
-              disableSend: disableSend || connectionUnavailable,
-              connectionUnavailable,
-              isEmptySession: session.messages.length === 0,
-              currentConnection: session.llmConnection,
-              onConnectionChange,
-              contextStatus: {
-                isCompacting: session.currentStatus?.statusType === 'compacting',
-                inputTokens: session.tokenUsage?.inputTokens,
-                contextWindow: session.tokenUsage?.contextWindow,
-              },
-              followUpItems: followUpInputItems,
-              onFollowUpClick: handleFollowUpChipClick,
-              onFollowUpIndexClick: handleFollowUpIndexClick,
-            }}
-          />
+          {!readOnly && (
+            <ChatInputZone
+              compactMode={compactMode}
+              permissionMode={permissionMode}
+              onPermissionModeChange={onPermissionModeChange}
+              tasks={backgroundTasks}
+              sessionId={session.id}
+              sessionFolderPath={sessionFolderPath}
+              onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type ?? 'shell')}
+              onInsertMessage={onInputChange}
+              sessionLabels={session.labels}
+              labels={labels}
+              onLabelsChange={onLabelsChange}
+              sessionStatuses={sessionStatuses}
+              currentSessionStatus={session.sessionStatus || 'todo'}
+              onSessionStatusChange={onSessionStatusChange}
+              inputProps={{
+                placeholder,
+                disabled: isInputDisabled,
+                isProcessing: session.isProcessing,
+                onAnimatedHeightChange: handleAnimatedHeightChange,
+                onSubmit: handleSubmit,
+                onStop: handleStop,
+                textareaRef,
+                currentModel,
+                onModelChange,
+                thinkingLevel,
+                onThinkingLevelChange,
+                enabledModes,
+                structuredInput,
+                onStructuredResponse: handleStructuredResponse,
+                inputValue,
+                onInputChange,
+                attachmentsValue,
+                onAttachmentsChange,
+                sources,
+                enabledSourceSlugs: session.enabledSourceSlugs,
+                onSourcesChange,
+                skills,
+                workspaceId,
+                workingDirectory,
+                onWorkingDirectoryChange,
+                disableSend: disableSend || connectionUnavailable,
+                connectionUnavailable,
+                isEmptySession: session.messages.length === 0,
+                currentConnection: session.llmConnection,
+                onConnectionChange,
+                contextStatus: {
+                  isCompacting: session.currentStatus?.statusType === 'compacting',
+                  inputTokens: session.tokenUsage?.inputTokens,
+                  contextWindow: session.tokenUsage?.contextWindow,
+                },
+                followUpItems: followUpInputItems,
+                onFollowUpClick: handleFollowUpChipClick,
+                onFollowUpIndexClick: handleFollowUpIndexClick,
+              }}
+            />
           )}
           </div>
         </div>
