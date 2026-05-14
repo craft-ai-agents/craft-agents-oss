@@ -74,7 +74,6 @@ describe('ActiveOptionBadges — session state badge hidden (RPI-103)', () => {
       />,
     )
 
-    // Permission mode badge should still be present
-    expect(html).not.toBeEmpty()
+    expect(html).toContain('data-tutorial="permission-mode-dropdown"')
   })
 })

@@ -65,7 +65,6 @@ export interface ActiveOptionBadgesProps {
   autoOpenLabelId?: string | null
   /** Called after the auto-open has been consumed, so the parent can clear the signal */
   onAutoOpenConsumed?: () => void
-  // ── State/status badge (in dynamic stack) ──
   /** Available workflow states */
   sessionStatuses?: SessionStatus[]
   /** Current session state ID */
@@ -134,7 +133,7 @@ export function ActiveOptionBadges({
 
   return (
     <div className={cn("flex items-start gap-2 mb-2 px-px pt-px pb-0.5", className)}>
-      {/* Left side: mode → state → labels stack */}
+      {/* Left side: mode → labels stack */}
       <div className="flex items-start gap-2 min-w-0 flex-1">
         {/* Permission Mode Badge */}
         {permissionMode && (
@@ -146,7 +145,6 @@ export function ActiveOptionBadges({
             />
           </div>
         )}
-
 
         {/* Stacking container for label badges (left side).
          * useDynamicStack sets per-child marginLeft directly via ResizeObserver.
