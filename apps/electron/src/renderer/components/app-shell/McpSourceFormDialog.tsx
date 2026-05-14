@@ -49,6 +49,7 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
   const [provider, setProvider] = React.useState('')
   const [icon, setIcon] = React.useState('')
   const [enabled, setEnabled] = React.useState(true)
+  const [enableInWorkspace, setEnableInWorkspace] = React.useState(true)
   const [url, setUrl] = React.useState('')
   const [authType, setAuthType] = React.useState<McpFormAuthType>('none')
   const [bearerToken, setBearerToken] = React.useState('')
@@ -85,6 +86,7 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
         provider: provider.trim(),
         type: 'mcp',
         enabled,
+        enableInWorkspace,
         icon: icon.trim() || undefined,
         mcp: buildMcpPayload(mode, {
           url,
@@ -111,6 +113,7 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
     setProvider('')
     setIcon('')
     setEnabled(true)
+    setEnableInWorkspace(true)
     setUrl('')
     setAuthType('none')
     setBearerToken('')
@@ -210,6 +213,8 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
                   setIcon={setIcon}
                   enabled={enabled}
                   setEnabled={setEnabled}
+                  enableInWorkspace={enableInWorkspace}
+                  setEnableInWorkspace={setEnableInWorkspace}
                 />
                 <RemoteFields
                   url={url}
@@ -318,6 +323,8 @@ function ManualDetails(props: {
   setIcon: (value: string) => void
   enabled: boolean
   setEnabled: (value: boolean) => void
+  enableInWorkspace: boolean
+  setEnableInWorkspace: (value: boolean) => void
 }) {
   return (
     <>
@@ -335,6 +342,10 @@ function ManualDetails(props: {
       <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm">
         <span>Enabled</span>
         <Switch checked={props.enabled} onCheckedChange={props.setEnabled} />
+      </label>
+      <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm">
+        <span>Enable in workspace</span>
+        <Switch checked={props.enableInWorkspace} onCheckedChange={props.setEnableInWorkspace} />
       </label>
     </>
   )
@@ -437,6 +448,16 @@ function McpJsonCandidatePreview(props: {
             onCheckedChange={(enabled) => props.onChange((current) => ({
               ...current,
               input: { ...current.input, enabled },
+            }))}
+          />
+        </label>
+        <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm">
+          <span>Enable in workspace</span>
+          <Switch
+            checked={candidate.enableInWorkspace ?? true}
+            onCheckedChange={(enableInWorkspace) => props.onChange((current) => ({
+              ...current,
+              enableInWorkspace,
             }))}
           />
         </label>
