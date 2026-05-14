@@ -8,6 +8,7 @@
 export type {
   SourceType,
   SourceMcpAuthType,
+  McpTransport,
   ApiAuthType,
   KnownProvider,
   ApiOAuthProvider,
@@ -79,11 +80,14 @@ export type {
 
 // MCP JSON import parsing
 export {
+  createMcpSourceFromManualInput,
   createMcpSourcesFromCandidates,
   detectDuplicateMcpImportCandidates,
   parseMcpJsonImportCandidates,
 } from './mcp-import.ts';
 export type {
+  McpManualSourceInput,
+  McpManualAuthCredentialInput,
   McpImportCandidateAction,
   McpImportCandidate,
   McpImportBatchCreateResult,

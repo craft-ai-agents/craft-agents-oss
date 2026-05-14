@@ -85,6 +85,8 @@ export interface McpImportCandidate {
   description?: string;
   /** Classified secret-like env/header values, including originals for persistence. */
   secrets?: McpImportSecret[];
+  /** Explicit credential value collected by the manual form. */
+  credential?: StoredCredential;
   /** Existing workspace source this candidate may duplicate. */
   duplicate?: McpImportDuplicateMatch;
   /** Available creation actions for preview UI. */
@@ -106,6 +108,21 @@ export interface McpImportCreateOptions {
   /** Credential manager override, primarily for tests and alternate storage backends. */
   credentialManager?: McpImportCredentialManager;
 }
+
+/** Manual form input for creating a single MCP source. */
+export interface McpManualSourceInput extends Omit<CreateSourceInput, 'type' | 'api' | 'local'> {
+  /** MCP source config collected by the manual form. */
+  mcp: McpSourceConfig;
+  /** Bearer token or header API key collected by auth-specific form controls. */
+  authCredential?: McpManualAuthCredentialInput;
+  /** Optional description used for the generated source tagline or guide context. */
+  description?: string;
+}
+
+/** Credential-like values collected by the manual MCP form. */
+export type McpManualAuthCredentialInput =
+  | { kind: 'bearer'; value: string; handling?: McpImportSecretHandling }
+  | { kind: 'api-key'; headerName: string; value: string; handling?: McpImportSecretHandling };
 
 /** Per-candidate result from MCP import source creation. */
 export type McpImportCreateResult =
@@ -230,6 +247,30 @@ export async function createMcpSourcesFromCandidates(
   return { results };
 }
 
+/**
+ * Create one MCP source from manual form input through the same normalized
+ * candidate creation path used by pasted MCP imports.
+ */
+export async function createMcpSourceFromManualInput(
+  workspaceRootPath: string,
+  input: McpManualSourceInput,
+  options: McpImportCreateOptions = {},
+): Promise<FolderSourceConfig> {
+  const candidate = buildManualCandidate(input);
+  const result = await createMcpSourcesFromCandidates(workspaceRootPath, [candidate], options);
+  const created = result.results[0];
+  if (!created || !created.success || 'skipped' in created) {
+    const errors = created && !created.success ? created.errors : candidate.errors;
+    throw new Error(errors.map((error) => `${error.field}: ${error.message}`).join('\n') || 'Failed to create MCP source.');
+  }
+
+  const config = loadWorkspaceSources(workspaceRootPath).find((source) => source.config.slug === created.sourceSlug)?.config;
+  if (!config) {
+    throw new Error(`Created source not found: ${created.sourceSlug}`);
+  }
+  return config;
+}
+
 function buildAvailableImportActions(duplicate: McpImportDuplicateMatch | undefined): McpImportCandidateAction[] {
   if (!duplicate) {
     return [{ type: 'create' }, { type: 'skip' }];
@@ -255,6 +296,107 @@ function getServerEntries(parsed: Record<string, unknown>): Record<string, unkno
     return parsed.mcpServers as Record<string, unknown>;
   }
   return { 'imported-mcp-server': parsed };
+}
+
+function buildManualCandidate(input: McpManualSourceInput): McpImportCandidate {
+  const errors: McpImportFieldError[] = [];
+  const name = input.name.trim();
+  const provider = input.provider.trim();
+  if (!name) {
+    errors.push({ field: 'name', message: 'MCP source name is required.' });
+  }
+  if (!provider) {
+    errors.push({ field: 'provider', message: 'MCP source provider is required.' });
+  }
+
+  const transport = input.mcp.transport ?? 'http';
+  const mcp: McpSourceConfig = { transport };
+  const secrets: McpImportSecret[] = [];
+  let candidateCredential: StoredCredential | undefined;
+
+  if (transport === 'stdio') {
+    if (typeof input.mcp.command === 'string' && input.mcp.command.trim()) {
+      mcp.command = input.mcp.command.trim();
+    } else {
+      errors.push({ field: 'command', message: 'Stdio MCP servers require a command string.' });
+    }
+    if (input.mcp.args !== undefined) {
+      if (isStringArray(input.mcp.args)) {
+        mcp.args = input.mcp.args;
+      } else {
+        errors.push({ field: 'args', message: 'Args must be an array of strings.' });
+      }
+    }
+    if (input.mcp.env !== undefined) {
+      if (isStringRecord(input.mcp.env)) {
+        const classifiedEnv = classifyConfigRecord(provider || 'manual-mcp-source', 'env', input.mcp.env, {});
+        mcp.env = classifiedEnv.preview;
+        secrets.push(...classifiedEnv.secrets);
+      } else {
+        errors.push({ field: 'env', message: 'Env must be an object with string values.' });
+      }
+    }
+  } else if (transport === 'http' || transport === 'sse') {
+    if (typeof input.mcp.url === 'string' && input.mcp.url.trim()) {
+      mcp.url = input.mcp.url.trim();
+    } else {
+      errors.push({ field: 'url', message: 'HTTP and SSE MCP servers require a URL string.' });
+    }
+    mcp.authType = input.mcp.authType ?? 'none';
+    if (input.mcp.clientId) {
+      mcp.clientId = input.mcp.clientId;
+    }
+    if (input.mcp.headers !== undefined) {
+      if (isStringRecord(input.mcp.headers)) {
+        const classifiedHeaders = classifyConfigRecord(provider || 'manual-mcp-source', 'header', input.mcp.headers, {});
+        mcp.headers = classifiedHeaders.preview;
+        secrets.push(...classifiedHeaders.secrets);
+      } else {
+        errors.push({ field: 'headers', message: 'Headers must be an object with string values.' });
+      }
+    }
+    if (input.mcp.headerNames !== undefined) {
+      if (isStringArray(input.mcp.headerNames)) {
+        mcp.headerNames = input.mcp.headerNames;
+      } else {
+        errors.push({ field: 'headerNames', message: 'Header names must be an array of strings.' });
+      }
+    }
+    const manualAuth = buildManualAuthCredential(input.authCredential, errors);
+    if (manualAuth) {
+      if (manualAuth.headerName) {
+        mcp.headerNames = Array.from(new Set([...(mcp.headerNames ?? []), manualAuth.headerName]));
+      }
+      if (manualAuth.credential) {
+        candidateCredential = manualAuth.credential;
+      }
+    }
+  } else {
+    errors.push({ field: 'transport', message: 'Transport must be one of: stdio, sse, http.' });
+  }
+
+  const candidate: McpImportCandidate = {
+    key: provider || 'manual-mcp-source',
+    input: {
+      name,
+      provider,
+      type: 'mcp',
+      enabled: input.enabled ?? true,
+      mcp,
+      ...(input.icon ? { icon: input.icon } : {}),
+    },
+    errors,
+  };
+  if (input.description?.trim()) {
+    candidate.description = input.description.trim();
+  }
+  if (secrets.length > 0) {
+    candidate.secrets = secrets;
+  }
+  if (candidateCredential) {
+    candidate.credential = candidateCredential;
+  }
+  return candidate;
 }
 
 function findDuplicateMcpSource(
@@ -402,6 +544,9 @@ async function createMcpSourceFromCandidate(
     createdAt: now,
     updatedAt: now,
   };
+  if (candidate.input.icon) {
+    config.icon = candidate.input.icon;
+  }
 
   const description = candidate.description?.trim();
   if (description && isShortDescription(description)) {
@@ -450,6 +595,10 @@ function buildCreationMcpConfig(candidate: McpImportCandidate): McpSourceConfig 
 }
 
 function buildCredentialStoreValue(candidate: McpImportCandidate): string | null {
+  if (candidate.credential?.value) {
+    return candidate.credential.value;
+  }
+
   const credentialStoreSecrets = getCredentialStoreSecrets(candidate);
   if (credentialStoreSecrets.length === 0) return null;
 
@@ -458,6 +607,38 @@ function buildCredentialStoreValue(candidate: McpImportCandidate): string | null
     values[secret.name] = secret.value;
   }
   return JSON.stringify(values);
+}
+
+function buildManualAuthCredential(
+  credential: McpManualAuthCredentialInput | undefined,
+  errors: McpImportFieldError[],
+): { credential?: StoredCredential; headerName?: string } | undefined {
+  if (!credential) return undefined;
+  const handling = credential.handling ?? 'credential-store';
+  if (credential.kind === 'bearer') {
+    if (!credential.value.trim()) {
+      errors.push({ field: 'authCredential.value', message: 'Bearer token is required when bearer auth is selected.' });
+      return undefined;
+    }
+    return handling === 'credential-store' ? { credential: { value: credential.value } } : undefined;
+  }
+
+  if (!credential.headerName.trim()) {
+    errors.push({ field: 'authCredential.headerName', message: 'API key header name is required.' });
+    return undefined;
+  }
+  if (!credential.value.trim()) {
+    errors.push({ field: 'authCredential.value', message: 'API key value is required.' });
+    return undefined;
+  }
+
+  if (handling === 'credential-store') {
+    return {
+      credential: { value: JSON.stringify({ [credential.headerName]: credential.value }) },
+      headerName: credential.headerName,
+    };
+  }
+  return undefined;
 }
 
 function getCredentialStoreSecrets(candidate: McpImportCandidate): McpImportSecret[] {

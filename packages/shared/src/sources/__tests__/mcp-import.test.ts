@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { describe, expect, test } from 'bun:test';
-import { createMcpSourcesFromCandidates, detectDuplicateMcpImportCandidates, parseMcpJsonImportCandidates } from '../mcp-import.ts';
+import { createMcpSourceFromManualInput, createMcpSourcesFromCandidates, detectDuplicateMcpImportCandidates, parseMcpJsonImportCandidates } from '../mcp-import.ts';
 import { loadSourceConfig, loadSourceGuide, saveSourceConfig } from '../storage.ts';
 import type { LoadedSource } from '../types.ts';
 import type { StoredCredential } from '../../credentials/types.ts';
@@ -607,6 +607,118 @@ describe('createMcpSourcesFromCandidates', () => {
         url: 'https://new.example.com/mcp',
       });
       expect(loadSourceConfig(workspaceRootPath, 'skipped')).toBeNull();
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('createMcpSourceFromManualInput', () => {
+  test('creates a command MCP source without shell-splitting argument values', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      const created = await createMcpSourceFromManualInput(workspaceRootPath, {
+        name: 'Local Tools',
+        provider: 'local-tools',
+        icon: 'https://example.com/icon.png',
+        enabled: false,
+        mcp: {
+          transport: 'stdio',
+          command: 'node',
+          args: ['server with spaces.js', '--label', 'two words'],
+          env: {
+            PUBLIC_MODE: 'test',
+          },
+        },
+      }, {
+        credentialManager: {
+          save: async () => {
+            throw new Error('unexpected credential save');
+          },
+        },
+      });
+
+      expect(created.slug).toBe('local-tools');
+      expect(loadSourceConfig(workspaceRootPath, 'local-tools')?.mcp).toEqual({
+        transport: 'stdio',
+        command: 'node',
+        args: ['server with spaces.js', '--label', 'two words'],
+        env: {
+          PUBLIC_MODE: 'test',
+        },
+      });
+      expect(loadSourceConfig(workspaceRootPath, 'local-tools')?.enabled).toBe(false);
+      expect(loadSourceConfig(workspaceRootPath, 'local-tools')?.icon).toBe('https://example.com/icon.png');
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('persists manual bearer and API-key style inputs through the credential store by default', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    const savedCredentials: Array<{ source: LoadedSource; credential: StoredCredential }> = [];
+    try {
+      const bearer = await createMcpSourceFromManualInput(workspaceRootPath, {
+        name: 'Bearer Remote',
+        provider: 'bearer-remote',
+        mcp: {
+          transport: 'http',
+          url: 'https://example.com/mcp',
+          authType: 'bearer',
+        },
+        authCredential: {
+          kind: 'bearer',
+          value: 'bearer-token-123',
+        },
+      }, {
+        credentialManager: {
+          save: async (source, credential) => {
+            savedCredentials.push({ source, credential });
+          },
+        },
+      });
+
+      const apiKey = await createMcpSourceFromManualInput(workspaceRootPath, {
+        name: 'API Key Remote',
+        provider: 'api-key-remote',
+        mcp: {
+          transport: 'sse',
+          url: 'https://example.com/sse',
+          authType: 'none',
+        },
+        authCredential: {
+          kind: 'api-key',
+          headerName: 'X-API-Key',
+          value: 'api-key-123',
+        },
+      }, {
+        credentialManager: {
+          save: async (source, credential) => {
+            savedCredentials.push({ source, credential });
+          },
+        },
+      });
+
+      expect(savedCredentials.map((entry) => ({
+        slug: entry.source.config.slug,
+        value: entry.credential.value,
+      }))).toEqual([
+        { slug: 'bearer-remote', value: 'bearer-token-123' },
+        { slug: 'api-key-remote', value: JSON.stringify({ 'X-API-Key': 'api-key-123' }) },
+      ]);
+      expect(bearer.mcp).toEqual({
+        transport: 'http',
+        authType: 'bearer',
+        url: 'https://example.com/mcp',
+      });
+      expect(apiKey.mcp).toEqual({
+        transport: 'sse',
+        authType: 'none',
+        url: 'https://example.com/sse',
+        headerNames: ['X-API-Key'],
+      });
+      expect(readFileSync(join(workspaceRootPath, 'sources', 'bearer-remote', 'config.json'), 'utf-8')).not.toContain('bearer-token-123');
+      expect(readFileSync(join(workspaceRootPath, 'sources', 'api-key-remote', 'config.json'), 'utf-8')).not.toContain('api-key-123');
     } finally {
       rmSync(workspaceRootPath, { recursive: true, force: true });
     }
