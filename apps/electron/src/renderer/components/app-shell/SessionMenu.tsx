@@ -264,7 +264,7 @@ export function SessionMenu({
       </MenuItem>
 
       {/* Copy Session ID */}
-      <MenuItem onClick={menuActions.copySessionId}>
+      <MenuItem onClick={copySessionId}>
         <Hash className="h-3.5 w-3.5" />
         <span className="flex-1">{t("sessionMenu.copySessionId")}</span>
       </MenuItem>

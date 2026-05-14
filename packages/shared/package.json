@@ -64,7 +64,7 @@
     "./i18n": "./src/i18n/index.ts",
     "./resources": "./src/resources/index.ts",
     "./audio": "./src/audio/index.ts",
-    "./statuses": "./src/statuses/index.ts",
+    "./statuses": "./src/statuses/index.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
