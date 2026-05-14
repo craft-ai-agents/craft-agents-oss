@@ -65,6 +65,12 @@ describe('Level 1 frame surfaces', () => {
     expect(classes).not.toContain('rounded-[6px]')
     expect(classes).not.toContain('bg-background/70')
   })
+
+  test('renders embedded All Sessions with auto height so the wrapper owns overflow', () => {
+    expect(appShellSource).toMatch(
+      /const allSessionsList = renderSessionList\(\s*'all-sessions-sidebar',[\s\S]*?\s*'auto',\s*\)/,
+    )
+  })
 })
 
 describe('Level 2 panel surfaces', () => {
