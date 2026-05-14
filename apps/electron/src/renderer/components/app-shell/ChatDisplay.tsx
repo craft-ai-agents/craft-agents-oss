@@ -73,6 +73,7 @@ import { navigate, routes } from "@/lib/navigate"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from "@/lib/file-changes"
 import { resolveBranchNewPanelOption } from "./branching"
+import { shouldRenderChatInputZone } from "./chat-display-read-only"
 import { handleErrorMessageAction } from "./error-message-actions"
 
 // ============================================================================
@@ -143,6 +144,8 @@ interface ChatDisplayProps {
   textareaRef?: React.RefObject<RichTextInputHandle>
   /** When true, disables input (e.g., when agent needs activation) */
   disabled?: boolean
+  /** When true, renders the transcript without the chat input zone */
+  readOnly?: boolean
   /** Pending permission request for this session */
   pendingPermission?: PermissionRequest
   /** Callback to respond to permission request */
@@ -438,6 +441,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   onConnectionChange,
   textareaRef: externalTextareaRef,
   disabled = false,
+  readOnly = false,
   pendingPermission,
   onRespondToPermission,
   pendingCredential,
@@ -1892,6 +1896,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           </div>
 
           {/* === INPUT CONTAINER: FreeForm or Structured Input === */}
+          {shouldRenderChatInputZone({ readOnly }) && (
           <ChatInputZone
             compactMode={compactMode}
             permissionMode={permissionMode}
@@ -1948,6 +1953,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               onFollowUpIndexClick: handleFollowUpIndexClick,
             }}
           />
+          )}
           </div>
         </div>
       ) : null}
