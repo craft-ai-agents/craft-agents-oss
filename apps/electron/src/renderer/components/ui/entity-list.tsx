@@ -40,6 +40,7 @@ export interface EntityListGroup<T> {
   collapsedCount?: number
 }
 
+/** Controls whether the list owns the vertical scroll viewport or sizes to its content. */
 export type EntityListHeightBehavior = 'fill' | 'auto'
 
 export interface EntityListProps<T> {

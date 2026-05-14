@@ -1637,7 +1637,7 @@ function AppShellContent({
 
   const sessionListNavigateToSession = panelCount > 1 ? navigateToSessionInPanel : undefined
 
-  const renderSessionList = (key: string, items: SessionMeta[], heightBehavior: SessionListHeightBehavior = 'fill') => (
+  const renderSessionList = (key: string, items: SessionMeta[], heightBehavior?: SessionListHeightBehavior) => (
     <SessionList
       key={key}
       items={items}

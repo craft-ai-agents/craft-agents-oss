@@ -37,6 +37,8 @@ export interface SessionListRow {
 
 /** Grouping mode for chat list */
 export type ChatGroupingMode = 'date' | 'status' | 'unread'
+
+/** Controls whether SessionList fills its parent or sizes to its content. */
 export type SessionListHeightBehavior = EntityListHeightBehavior
 
 interface SessionListProps {
@@ -88,7 +90,7 @@ interface SessionListProps {
   /** DOM-verified match info for the active session (from ChatDisplay) */
   activeChatMatchInfo?: { sessionId: string | null; count: number; isHighlighting?: boolean }
   /** Whether the list should fill its parent height or size to its content */
-  heightBehavior?: EntityListHeightBehavior
+  heightBehavior?: SessionListHeightBehavior
 }
 
 // Re-export SessionStatusId for use by parent components
@@ -682,88 +684,88 @@ export function SessionList({
   return (
     <div className={cn('flex flex-col min-h-0', heightBehavior === 'fill' && 'flex-1')}>
       <SessionListProvider value={listContext}>
-      <EntityList<SessionListRow>
-        groups={rowData.groups}
-        getKey={(row) => row.item.id}
-        renderItem={(row, _indexInGroup, isFirstInGroup) => {
-          const flatIndex = rowIndexMap.get(row.item.id) ?? 0
-          const rowProps = interactions.getRowProps(row, flatIndex)
-          return (
-            <SessionItem
-              item={row.item}
-              index={flatIndex}
-              itemProps={rowProps.buttonProps as Record<string, unknown>}
-              isSelected={rowProps.isSelected}
-              isFirstInGroup={isFirstInGroup}
-              isInMultiSelect={rowProps.isInMultiSelect ?? false}
-              onSelect={() => handleSelectSession(row, flatIndex)}
-              onToggleSelect={() => handleToggleSelect(row, flatIndex)}
-              onRangeSelect={() => handleRangeSelect(flatIndex)}
-            />
-          )
-        }}
-        header={
-          <>
-            {searchActive && (
-              <SessionSearchHeader
-                searchQuery={searchQuery}
-                onSearchChange={onSearchChange}
-                onSearchClose={onSearchClose}
-                onKeyDown={handleSearchKeyDown}
-                onFocus={() => setIsSearchInputFocused(true)}
-                onBlur={() => setIsSearchInputFocused(false)}
-                isSearching={isSearchingContent}
-                isUnavailable={isSearchUnavailable}
-                resultCount={matchingFilterItems.length + otherResultItems.length}
-                exceededLimit={exceededSearchLimit}
-                inputRef={searchInputRef}
+        <EntityList<SessionListRow>
+          groups={rowData.groups}
+          getKey={(row) => row.item.id}
+          renderItem={(row, _indexInGroup, isFirstInGroup) => {
+            const flatIndex = rowIndexMap.get(row.item.id) ?? 0
+            const rowProps = interactions.getRowProps(row, flatIndex)
+            return (
+              <SessionItem
+                item={row.item}
+                index={flatIndex}
+                itemProps={rowProps.buttonProps as Record<string, unknown>}
+                isSelected={rowProps.isSelected}
+                isFirstInGroup={isFirstInGroup}
+                isInMultiSelect={rowProps.isInMultiSelect ?? false}
+                onSelect={() => handleSelectSession(row, flatIndex)}
+                onToggleSelect={() => handleToggleSelect(row, flatIndex)}
+                onRangeSelect={() => handleRangeSelect(flatIndex)}
               />
-            )}
-            {isSearchMode && matchingFilterItems.length === 0 && otherResultItems.length > 0 && (
-              <div className="px-4 py-3 text-sm text-muted-foreground">
-                {t("session.noResultsInFilter")}
+            )
+          }}
+          header={
+            <>
+              {searchActive && (
+                <SessionSearchHeader
+                  searchQuery={searchQuery}
+                  onSearchChange={onSearchChange}
+                  onSearchClose={onSearchClose}
+                  onKeyDown={handleSearchKeyDown}
+                  onFocus={() => setIsSearchInputFocused(true)}
+                  onBlur={() => setIsSearchInputFocused(false)}
+                  isSearching={isSearchingContent}
+                  isUnavailable={isSearchUnavailable}
+                  resultCount={matchingFilterItems.length + otherResultItems.length}
+                  exceededLimit={exceededSearchLimit}
+                  inputRef={searchInputRef}
+                />
+              )}
+              {isSearchMode && matchingFilterItems.length === 0 && otherResultItems.length > 0 && (
+                <div className="px-4 py-3 text-sm text-muted-foreground">
+                  {t("session.noResultsInFilter")}
+                </div>
+              )}
+            </>
+          }
+          emptyState={
+            isSearchMode && !isSearchingContent ? (
+              <div className="flex flex-col items-center justify-center py-12 px-4">
+                <p className="text-sm text-muted-foreground">{t("session.noSessionsFound")}</p>
+                <p className="text-xs text-muted-foreground/60 mt-0.5">
+                  {t("session.noSessionsFoundDesc")}
+                </p>
+                <button
+                  onClick={() => onSearchChange?.('')}
+                  className="text-xs text-foreground hover:underline mt-2"
+                >
+                  {t("session.clearSearch")}
+                </button>
               </div>
-            )}
-          </>
-        }
-        emptyState={
-          isSearchMode && !isSearchingContent ? (
-            <div className="flex flex-col items-center justify-center py-12 px-4">
-              <p className="text-sm text-muted-foreground">{t("session.noSessionsFound")}</p>
-              <p className="text-xs text-muted-foreground/60 mt-0.5">
-                {t("session.noSessionsFoundDesc")}
-              </p>
-              <button
-                onClick={() => onSearchChange?.('')}
-                className="text-xs text-foreground hover:underline mt-2"
-              >
-                {t("session.clearSearch")}
-              </button>
-            </div>
-          ) : undefined
-        }
-        footer={
-          hasMore ? (
-            <div className="flex justify-center py-4">
-              <Spinner className="text-muted-foreground" />
-            </div>
-          ) : undefined
-        }
-        viewportRef={scrollViewportRef}
-        containerRef={zoneRef}
-        containerProps={{
-          'data-focus-zone': 'navigator',
-          'data-list-role': 'sessions',
-          role: 'listbox',
-          'aria-label': 'Sessions',
-        }}
-        heightBehavior={heightBehavior}
-        scrollAreaClassName="select-none mask-fade-top-short"
-        collapsedGroups={collapsedGroups}
-        onToggleCollapse={toggleGroupCollapse}
-        onCollapseAll={collapseAllGroups}
-        onExpandAll={expandAllGroups}
-      />
+            ) : undefined
+          }
+          footer={
+            hasMore ? (
+              <div className="flex justify-center py-4">
+                <Spinner className="text-muted-foreground" />
+              </div>
+            ) : undefined
+          }
+          viewportRef={scrollViewportRef}
+          containerRef={zoneRef}
+          containerProps={{
+            'data-focus-zone': 'navigator',
+            'data-list-role': 'sessions',
+            role: 'listbox',
+            'aria-label': 'Sessions',
+          }}
+          heightBehavior={heightBehavior}
+          scrollAreaClassName="select-none mask-fade-top-short"
+          collapsedGroups={collapsedGroups}
+          onToggleCollapse={toggleGroupCollapse}
+          onCollapseAll={collapseAllGroups}
+          onExpandAll={expandAllGroups}
+        />
       </SessionListProvider>
 
       {/* Rename Dialog */}
