@@ -32,14 +32,6 @@ export function resolveSidebarLayout({
     }
   }
 
-  if (navState.navigator === 'skill-marketplace') {
-    return {
-      sidebarWidth: isSidebarVisible ? sidebarWidth : 0,
-      navigatorWidth: 0,
-      showSidebarResizeHandle: true,
-    }
-  }
-
   const embedsAllSessionsList =
     isSessionsNavigation(navState) &&
     navState.filter.kind === 'allSessions' &&

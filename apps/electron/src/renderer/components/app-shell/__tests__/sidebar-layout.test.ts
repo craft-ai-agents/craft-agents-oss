@@ -44,23 +44,47 @@ describe('resolveSidebarLayout', () => {
     })
   })
 
-  test('keeps the existing sidebar and navigator widths outside sessions mode', () => {
-    const navState: NavigationState = {
-      navigator: 'sources',
-      filter: undefined,
-      details: null,
-    }
+  test('keeps additive navigator slots beside the permanent sidebar for secondary workflows', () => {
+    const navStates: NavigationState[] = [
+      {
+        navigator: 'sources',
+        filter: undefined,
+        details: null,
+      },
+      {
+        navigator: 'local-skills',
+        details: null,
+      },
+      {
+        navigator: 'skill-marketplace',
+      },
+      {
+        navigator: 'automations',
+        filter: undefined,
+        details: null,
+      },
+      {
+        navigator: 'settings',
+        subpage: null,
+      },
+      {
+        navigator: 'archived',
+        details: null,
+      },
+    ]
 
-    expect(resolveSidebarLayout({
-      navState,
-      isSidebarAndNavigatorHidden: false,
-      isSidebarVisible: true,
-      sidebarWidth: 300,
-    })).toEqual({
-      sidebarWidth: 300,
-      navigatorWidth: 300,
-      showSidebarResizeHandle: true,
-    })
+    for (const navState of navStates) {
+      expect(resolveSidebarLayout({
+        navState,
+        isSidebarAndNavigatorHidden: false,
+        isSidebarVisible: true,
+        sidebarWidth: 300,
+      })).toEqual({
+        sidebarWidth: 300,
+        navigatorWidth: 300,
+        showSidebarResizeHandle: true,
+      })
+    }
   })
 
   test('hides the left panels when compact mode has hidden them', () => {
@@ -79,23 +103,6 @@ describe('resolveSidebarLayout', () => {
       sidebarWidth: 0,
       navigatorWidth: 0,
       showSidebarResizeHandle: false,
-    })
-  })
-
-  test('hides the middle navigator panel for skill marketplace navigation', () => {
-    const navState: NavigationState = {
-      navigator: 'skill-marketplace',
-    }
-
-    expect(resolveSidebarLayout({
-      navState,
-      isSidebarAndNavigatorHidden: false,
-      isSidebarVisible: true,
-      sidebarWidth: 300,
-    })).toEqual({
-      sidebarWidth: 300,
-      navigatorWidth: 0,
-      showSidebarResizeHandle: true,
     })
   })
 
