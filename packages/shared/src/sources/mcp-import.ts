@@ -94,6 +94,8 @@ export interface McpImportCandidate {
   availableActions?: McpImportCandidateAction[];
   /** Selected creation action. Defaults to create when absent. */
   action?: McpImportCandidateAction;
+  /** Whether to add this source to workspace defaults as an enabled source after creation. */
+  enableInWorkspace?: boolean;
   /** Candidate-specific validation errors. */
   errors: McpImportFieldError[];
 }
@@ -189,6 +191,8 @@ export interface McpManualSourceInput extends Omit<CreateSourceInput, 'type' | '
   authCredential?: McpManualAuthCredentialInput;
   /** Optional description used for the generated source tagline or guide context. */
   description?: string;
+  /** Whether to add this source to workspace defaults as an enabled source after creation. */
+  enableInWorkspace?: boolean;
 }
 
 /** Credential-like values collected by the manual MCP form. */
@@ -417,6 +421,7 @@ function buildManualCandidate(input: McpManualSourceInput): McpImportCandidate {
       mcp: state.mcp,
       ...(input.icon ? { icon: input.icon } : {}),
     },
+    enableInWorkspace: input.enableInWorkspace ?? true,
     errors,
   };
   if (input.description?.trim()) {
@@ -619,6 +624,7 @@ function buildCandidate(key: string, server: unknown, options: McpImportParseOpt
       enabled: true,
       mcp,
     },
+    enableInWorkspace: true,
     errors,
   };
   if (typeof serverObject.description === 'string' && serverObject.description.trim()) {
