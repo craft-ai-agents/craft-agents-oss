@@ -1,17 +1,14 @@
 import { describe, expect, mock, test } from 'bun:test'
+import '../../../__tests__/mock-i18n'
+import { setupI18n } from '@craft-agent/shared/i18n'
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { initReactI18next } from 'react-i18next'
 
 import type { SessionMeta } from '@/atoms/sessions'
 import { SessionListProvider, type SessionListContextValue } from '@/context/SessionListContext'
 
-mock.module('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, options?: Record<string, string>) => (
-      options?.fileManager ? `${key}:${options.fileManager}` : key
-    ),
-  }),
-}))
+setupI18n([initReactI18next])
 
 mock.module('@/components/ui/menu-context', () => ({
   useMenuComponents: () => ({
@@ -156,13 +153,13 @@ describe('session popup status controls', () => {
   test('omits the workflow status submenu from the shared session menu', () => {
     const html = renderToStaticMarkup(<SessionMenu {...menuProps()} />)
 
-    expect(html).not.toContain('sessionMenu.status')
+    expect(html).not.toContain('Status')
     expect(html).not.toContain('In Progress')
     expect(html).not.toContain('Done')
-    expect(html).toContain('common.rename')
-    expect(html).toContain('sessionMenu.archive')
-    expect(html).toContain('sessionMenu.openInNewWindow')
-    expect(html).toContain('common.delete')
+    expect(html).toContain('Rename')
+    expect(html).toContain('Archive')
+    expect(html).toContain('Open in New Window')
+    expect(html).toContain('Delete')
   })
 
   test('omits the clickable status picker button from the session list row', () => {

@@ -1,6 +1,9 @@
 import { describe, expect, mock, test } from 'bun:test'
+import '../../../__tests__/mock-i18n'
+import { setupI18n } from '@craft-agent/shared/i18n'
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { initReactI18next } from 'react-i18next'
 import {
   createStaticMarketplaceApi,
   installMarketplaceSkillFromDetail,
@@ -45,6 +48,8 @@ mock.module('@/components/ui/menu-context', () => ({
     Separator: () => React.createElement('hr'),
   }),
 }))
+
+setupI18n([initReactI18next])
 
 interface LocalSkillState {
   slug: string

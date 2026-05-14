@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import '../../../__tests__/mock-i18n'
+import { setupI18n } from '@craft-agent/shared/i18n'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { Window } from 'happy-dom'
 import { createStore, Provider } from 'jotai'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { initReactI18next } from 'react-i18next'
 import type { GitCommit, GitStatusEntry } from '../../../../shared/types'
 import { gitPanelCacheAtomFamily, type GitPanelCache } from '@/atoms/git-panel-cache'
 import { GitPanel, refreshGitPanelCache } from '../GitPanel'
+
+setupI18n([initReactI18next])
 
 type Deferred<T> = {
   promise: Promise<T>
