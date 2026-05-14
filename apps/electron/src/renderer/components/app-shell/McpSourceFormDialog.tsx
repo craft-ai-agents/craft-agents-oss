@@ -23,7 +23,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import type { McpManualAuthCredentialInput, McpTransport } from '@craft-agent/shared/sources'
+import type { McpManualAuthCredentialInput, McpManualSourceInput } from '@craft-agent/shared/sources'
 
 type McpFormMode = 'http' | 'sse' | 'stdio'
 type McpFormAuthType = 'none' | 'oauth' | 'bearer' | 'api-key'
@@ -53,7 +53,7 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
   const [error, setError] = React.useState<string | null>(null)
 
   const isRemote = mode === 'http' || mode === 'sse'
-  const canSubmit = name.trim() && provider.trim() && (isRemote ? url.trim() : command.trim())
+  const canSubmit = Boolean(name.trim() && provider.trim() && (isRemote ? url.trim() : command.trim()))
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -69,19 +69,14 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
         type: 'mcp',
         enabled,
         icon: icon.trim() || undefined,
-        mcp: isRemote
-          ? {
-              transport: mode as McpTransport,
-              url: url.trim(),
-              authType: authType === 'oauth' || authType === 'bearer' ? authType : 'none',
-              headers: parseKeyValueLines(headersText),
-            }
-          : {
-              transport: 'stdio',
-              command: command.trim(),
-              args: parseListLines(argsText),
-              env: parseKeyValueLines(envText),
-            },
+        mcp: buildMcpPayload(mode, {
+          url,
+          authType,
+          headersText,
+          command,
+          argsText,
+          envText,
+        }),
         authCredential,
       })
       resetForm()
@@ -145,39 +140,24 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
               <TabsTrigger value="stdio">Command</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="http" className="space-y-4">
-              <RemoteFields
-                url={url}
-                setUrl={setUrl}
-                authType={authType}
-                setAuthType={setAuthType}
-                bearerToken={bearerToken}
-                setBearerToken={setBearerToken}
-                apiKeyHeader={apiKeyHeader}
-                setApiKeyHeader={setApiKeyHeader}
-                apiKeyValue={apiKeyValue}
-                setApiKeyValue={setApiKeyValue}
-                headersText={headersText}
-                setHeadersText={setHeadersText}
-              />
-            </TabsContent>
-
-            <TabsContent value="sse" className="space-y-4">
-              <RemoteFields
-                url={url}
-                setUrl={setUrl}
-                authType={authType}
-                setAuthType={setAuthType}
-                bearerToken={bearerToken}
-                setBearerToken={setBearerToken}
-                apiKeyHeader={apiKeyHeader}
-                setApiKeyHeader={setApiKeyHeader}
-                apiKeyValue={apiKeyValue}
-                setApiKeyValue={setApiKeyValue}
-                headersText={headersText}
-                setHeadersText={setHeadersText}
-              />
-            </TabsContent>
+            {(['http', 'sse'] as const).map((remoteMode) => (
+              <TabsContent key={remoteMode} value={remoteMode} className="space-y-4">
+                <RemoteFields
+                  url={url}
+                  setUrl={setUrl}
+                  authType={authType}
+                  setAuthType={setAuthType}
+                  bearerToken={bearerToken}
+                  setBearerToken={setBearerToken}
+                  apiKeyHeader={apiKeyHeader}
+                  setApiKeyHeader={setApiKeyHeader}
+                  apiKeyValue={apiKeyValue}
+                  setApiKeyValue={setApiKeyValue}
+                  headersText={headersText}
+                  setHeadersText={setHeadersText}
+                />
+              </TabsContent>
+            ))}
 
             <TabsContent value="stdio" className="space-y-4">
               <Field label="Command">
@@ -282,6 +262,34 @@ function parseKeyValueLines(value: string): Record<string, string> | undefined {
     return key ? [key, itemValue] as const : null
   }).filter((entry): entry is readonly [string, string] => entry !== null)
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function buildMcpPayload(
+  mode: McpFormMode,
+  values: {
+    url: string
+    authType: McpFormAuthType
+    headersText: string
+    command: string
+    argsText: string
+    envText: string
+  },
+): McpManualSourceInput['mcp'] {
+  if (mode === 'stdio') {
+    return {
+      transport: 'stdio',
+      command: values.command.trim(),
+      args: parseListLines(values.argsText),
+      env: parseKeyValueLines(values.envText),
+    }
+  }
+
+  return {
+    transport: mode,
+    url: values.url.trim(),
+    authType: values.authType === 'oauth' || values.authType === 'bearer' ? values.authType : 'none',
+    headers: parseKeyValueLines(values.headersText),
+  }
 }
 
 function buildAuthCredential(
