@@ -609,7 +609,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const titleMenu = React.useMemo(() => (sessionMeta && !isCompactMode) ? (
     <SessionMenu
       item={sessionMeta}
-      sessionStatuses={sessionStatuses ?? []}
       labels={labels ?? []}
       onLabelsChange={handleLabelsChange}
       onRename={handleRename}
@@ -618,14 +617,12 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       onArchive={handleArchive}
       onUnarchive={handleUnarchive}
       onMarkUnread={handleMarkUnread}
-      onSessionStatusChange={handleSessionStatusChange}
       onOpenInNewWindow={handleOpenInNewWindow}
       onDelete={handleDelete}
     />
   ) : null, [
     sessionMeta,
     isCompactMode,
-    sessionStatuses,
     labels,
     handleLabelsChange,
     handleRename,
@@ -634,7 +631,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     handleArchive,
     handleUnarchive,
     handleMarkUnread,
-    handleSessionStatusChange,
     handleOpenInNewWindow,
     handleDelete,
   ])
@@ -644,7 +640,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       title={displayTitle}
       isRegeneratingTitle={isAsyncOperationOngoing}
       item={sessionMeta}
-      sessionStatuses={sessionStatuses ?? []}
       labels={labels ?? []}
       onLabelsChange={handleLabelsChange}
       onRename={handleRename}
@@ -653,7 +648,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       onArchive={handleArchive}
       onUnarchive={handleUnarchive}
       onMarkUnread={handleMarkUnread}
-      onSessionStatusChange={handleSessionStatusChange}
       onOpenInNewWindow={handleOpenInNewWindow}
       onDelete={handleDelete}
     />
@@ -662,7 +656,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     isCompactMode,
     displayTitle,
     isAsyncOperationOngoing,
-    sessionStatuses,
     labels,
     handleLabelsChange,
     handleRename,
@@ -671,7 +664,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     handleArchive,
     handleUnarchive,
     handleMarkUnread,
-    handleSessionStatusChange,
     handleOpenInNewWindow,
     handleDelete,
   ])

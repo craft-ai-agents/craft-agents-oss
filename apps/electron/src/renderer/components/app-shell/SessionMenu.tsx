@@ -32,8 +32,6 @@ import {
   Send,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
-import { type SessionStatusId } from '@/config/session-status-config'
-import type { SessionStatus } from '@/config/session-status-config'
 import type { LabelConfig } from '@craft-agent/shared/labels'
 import { LabelMenuItems, ShareMenuItems } from './SessionMenuParts'
 import { getFileManagerName } from '@/lib/platform'
@@ -44,8 +42,6 @@ import { useSessionMenuActions } from '@/hooks/useSessionMenuActions'
 export interface SessionMenuProps {
   /** Session data — display state is derived from this */
   item: SessionMeta
-  /** Available todo states */
-  sessionStatuses: SessionStatus[]
   /** All available label configs (tree structure) for the labels submenu */
   labels?: LabelConfig[]
   /** Callback when labels are toggled (receives full updated labels array) */
@@ -59,7 +55,6 @@ export interface SessionMenuProps {
   onArchive: () => void
   onUnarchive: () => void
   onMarkUnread: () => void
-  onSessionStatusChange: (state: SessionStatusId) => void
   onOpenInNewWindow: () => void
   onSendToWorkspace?: () => void
   onDelete: () => void

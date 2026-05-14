@@ -63,7 +63,6 @@ import {
   type LabelMenuItem,
 } from '@/components/ui/label-menu-utils'
 import type { LabelConfig } from '@craft-agent/shared/labels'
-import type { SessionStatus, SessionStatusId } from '@/config/session-status-config'
 import type { SessionMeta } from '@/atoms/sessions'
 import { hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
 import { getFileManagerName } from '@/lib/platform'
@@ -81,7 +80,6 @@ export interface CompactSessionMenuProps {
 
   // Session data — same as SessionMenu
   item: SessionMeta
-  sessionStatuses: SessionStatus[]
   labels?: LabelConfig[]
   hasRemoteWorkspaces?: boolean
 
@@ -93,7 +91,6 @@ export interface CompactSessionMenuProps {
   onArchive: () => void
   onUnarchive: () => void
   onMarkUnread: () => void
-  onSessionStatusChange: (state: SessionStatusId) => void
   onOpenInNewWindow: () => void
   onSendToWorkspace?: () => void
   onDelete: () => void

@@ -121,14 +121,12 @@ const sessionStatuses = [
 function menuProps() {
   return {
     item: session(),
-    sessionStatuses,
     onRename: () => {},
     onFlag: () => {},
     onUnflag: () => {},
     onArchive: () => {},
     onUnarchive: () => {},
     onMarkUnread: () => {},
-    onSessionStatusChange: () => {},
     onOpenInNewWindow: () => {},
     onDelete: async () => true,
   }
