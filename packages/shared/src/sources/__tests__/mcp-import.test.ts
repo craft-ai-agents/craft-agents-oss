@@ -2,8 +2,8 @@ import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { describe, expect, test } from 'bun:test';
-import { createMcpSourcesFromCandidates, parseMcpJsonImportCandidates } from '../mcp-import.ts';
-import { loadSourceConfig, loadSourceGuide } from '../storage.ts';
+import { createMcpSourcesFromCandidates, detectDuplicateMcpImportCandidates, parseMcpJsonImportCandidates } from '../mcp-import.ts';
+import { loadSourceConfig, loadSourceGuide, saveSourceConfig } from '../storage.ts';
 import type { LoadedSource } from '../types.ts';
 import type { StoredCredential } from '../../credentials/types.ts';
 
@@ -295,6 +295,127 @@ describe('parseMcpJsonImportCandidates', () => {
   });
 });
 
+describe('detectDuplicateMcpImportCandidates', () => {
+  test('marks candidates as duplicate when their name and slug match an existing source', () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      writeExistingMcpSource(workspaceRootPath, {
+        name: 'Linear',
+        slug: 'linear',
+        mcp: { transport: 'http', authType: 'none', url: 'https://mcp.linear.app/mcp' },
+      });
+
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          linear: { url: 'https://other.example.com/mcp' },
+        },
+      }));
+
+      const candidates = detectDuplicateMcpImportCandidates(workspaceRootPath, parsed.candidates);
+
+      expect(candidates[0]?.duplicate).toEqual({
+        sourceSlug: 'linear',
+        sourceName: 'Linear',
+        reasons: ['name', 'slug'],
+      });
+      expect(candidates[0]?.action).toEqual({ type: 'replace', sourceSlug: 'linear' });
+      expect(candidates[0]?.availableActions).toEqual([
+        { type: 'create' },
+        { type: 'replace', sourceSlug: 'linear' },
+        { type: 'skip' },
+      ]);
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('marks HTTP and SSE candidates as duplicate when their URL matches an existing MCP source endpoint', () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      writeExistingMcpSource(workspaceRootPath, {
+        name: 'Existing Linear',
+        slug: 'existing-linear',
+        mcp: { transport: 'sse', authType: 'none', url: 'https://mcp.linear.app/sse' },
+      });
+
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          linear: { transport: 'http', url: 'https://mcp.linear.app/sse' },
+        },
+      }));
+
+      const candidates = detectDuplicateMcpImportCandidates(workspaceRootPath, parsed.candidates);
+
+      expect(candidates[0]?.duplicate).toEqual({
+        sourceSlug: 'existing-linear',
+        sourceName: 'Existing Linear',
+        reasons: ['url'],
+      });
+      expect(candidates[0]?.action).toEqual({ type: 'replace', sourceSlug: 'existing-linear' });
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('marks stdio candidates as duplicate when command plus args match an existing MCP source endpoint', () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      writeExistingMcpSource(workspaceRootPath, {
+        name: 'Filesystem MCP',
+        slug: 'filesystem-mcp',
+        mcp: { transport: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'] },
+      });
+
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          fs: {
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+          },
+        },
+      }));
+
+      const candidates = detectDuplicateMcpImportCandidates(workspaceRootPath, parsed.candidates);
+
+      expect(candidates[0]?.duplicate).toEqual({
+        sourceSlug: 'filesystem-mcp',
+        sourceName: 'Filesystem MCP',
+        reasons: ['command-args'],
+      });
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('leaves non-duplicate candidates as new-source imports', () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      writeExistingMcpSource(workspaceRootPath, {
+        name: 'Linear',
+        slug: 'linear',
+        mcp: { transport: 'http', authType: 'none', url: 'https://mcp.linear.app/mcp' },
+      });
+
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          notion: { url: 'https://mcp.notion.com/mcp' },
+        },
+      }));
+
+      const candidates = detectDuplicateMcpImportCandidates(workspaceRootPath, parsed.candidates);
+
+      expect(candidates[0]?.duplicate).toBeUndefined();
+      expect(candidates[0]?.action).toEqual({ type: 'create' });
+      expect(candidates[0]?.availableActions).toEqual([
+        { type: 'create' },
+        { type: 'skip' },
+      ]);
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('createMcpSourcesFromCandidates', () => {
   test('creates a workspace MCP source from a valid candidate and persists selected credentials outside config', async () => {
     const workspaceRootPath = makeTempWorkspace();
@@ -449,8 +570,71 @@ describe('createMcpSourcesFromCandidates', () => {
       rmSync(workspaceRootPath, { recursive: true, force: true });
     }
   });
+
+  test('honors skip and replace actions when creating detected duplicate candidates', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      writeExistingMcpSource(workspaceRootPath, {
+        name: 'Linear',
+        slug: 'linear',
+        mcp: { transport: 'http', authType: 'none', url: 'https://old.example.com/mcp' },
+      });
+
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          linear: { url: 'https://new.example.com/mcp' },
+          skipped: { url: 'https://skipped.example.com/mcp' },
+        },
+      }));
+      const candidates = detectDuplicateMcpImportCandidates(workspaceRootPath, parsed.candidates);
+      candidates[1] = { ...candidates[1]!, action: { type: 'skip' } };
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, candidates, {
+        credentialManager: {
+          save: async () => {
+            throw new Error('unexpected credential save');
+          },
+        },
+      });
+
+      expect(result.results).toEqual([
+        { key: 'linear', success: true, sourceSlug: 'linear' },
+        { key: 'skipped', success: true, skipped: true },
+      ]);
+      expect(loadSourceConfig(workspaceRootPath, 'linear')?.mcp).toEqual({
+        transport: 'http',
+        authType: 'none',
+        url: 'https://new.example.com/mcp',
+      });
+      expect(loadSourceConfig(workspaceRootPath, 'skipped')).toBeNull();
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
 });
 
 function makeTempWorkspace(): string {
   return mkdtempSync(join(tmpdir(), 'mcp-import-'));
+}
+
+function writeExistingMcpSource(
+  workspaceRootPath: string,
+  input: {
+    name: string;
+    slug: string;
+    mcp: NonNullable<LoadedSource['config']['mcp']>;
+  },
+): void {
+  const now = Date.now();
+  saveSourceConfig(workspaceRootPath, {
+    id: `${input.slug}_existing`,
+    name: input.name,
+    slug: input.slug,
+    enabled: true,
+    provider: input.slug,
+    type: 'mcp',
+    mcp: input.mcp,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
