@@ -35,9 +35,6 @@ describe('resolveSidebarLayout', () => {
         details: null,
       },
       {
-        navigator: 'skill-marketplace',
-      },
-      {
         navigator: 'automations',
         filter: undefined,
         details: null,
@@ -64,6 +61,23 @@ describe('resolveSidebarLayout', () => {
         showSidebarResizeHandle: true,
       })
     }
+  })
+
+  test('hides the navigator slot for skill marketplace navigation', () => {
+    const navState: NavigationState = {
+      navigator: 'skill-marketplace',
+    }
+
+    expect(resolveSidebarLayout({
+      navState,
+      isSidebarAndNavigatorHidden: false,
+      isSidebarVisible: true,
+      sidebarWidth: 300,
+    })).toEqual({
+      sidebarWidth: 300,
+      navigatorWidth: 0,
+      showSidebarResizeHandle: true,
+    })
   })
 
   test('hides the left panels when compact mode has hidden them', () => {

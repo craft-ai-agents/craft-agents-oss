@@ -1,4 +1,8 @@
-import { isSessionsNavigation, type NavigationState } from '../../../shared/types'
+import {
+  isSessionsNavigation,
+  isSkillMarketplaceNavigation,
+  type NavigationState,
+} from '../../../shared/types'
 
 interface ResolveSidebarLayoutInput {
   navState: NavigationState
@@ -30,13 +34,14 @@ export function resolveSidebarLayout({
     }
   }
 
-  const hidesSessionsNavigator =
-    isSessionsNavigation(navState) &&
-    navState.filter.kind === 'allSessions'
+  const hidesNavigator =
+    isSkillMarketplaceNavigation(navState) ||
+    (isSessionsNavigation(navState) &&
+      navState.filter.kind === 'allSessions')
 
   return {
     sidebarWidth: isSidebarVisible ? sidebarWidth : 0,
-    navigatorWidth: hidesSessionsNavigator ? 0 : sidebarWidth,
+    navigatorWidth: hidesNavigator ? 0 : sidebarWidth,
     showSidebarResizeHandle: true,
   }
 }
