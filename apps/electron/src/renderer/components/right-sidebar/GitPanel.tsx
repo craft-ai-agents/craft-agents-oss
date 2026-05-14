@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileDiff, GitCommitHorizontal, GitPullRequestClosed, Loader2 } from 'lucide-react'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { useAtom, useSetAtom } from 'jotai'
+import { useTranslation } from 'react-i18next'
 import type { GitCommit, GitStatusEntry } from '../../../shared/types'
 import { openCommitTabAtom, openWorkingTreeDiffTabAtom } from '@/atoms/editor-tabs'
 import { gitPanelCacheAtomFamily, type GitPanelCache } from '@/atoms/git-panel-cache'
@@ -74,16 +75,12 @@ export async function refreshGitPanelCache({
   }
 }
 
-function statusLabel(status: GitStatusEntry['status']): string {
+function statusLabelKey(status: GitStatusEntry['status']): string {
   switch (status) {
-    case 'staged':
-      return 'Staged'
-    case 'untracked':
-      return 'Untracked'
-    case 'deleted':
-      return 'Deleted'
-    default:
-      return 'Modified'
+    case 'staged': return 'git.statusStaged'
+    case 'untracked': return 'git.statusUntracked'
+    case 'deleted': return 'git.statusDeleted'
+    default: return 'git.statusModified'
   }
 }
 
@@ -125,7 +122,8 @@ function EmptyState({ children }: { children: string }) {
 
 function renderStatusEntries(
   entries: GitStatusEntry[],
-  onOpenDiff: (filePath: string) => void
+  onOpenDiff: (filePath: string) => void,
+  t: (key: string) => string,
 ) {
   return entries.map(entry => {
     const canOpenDiff = entry.status !== 'untracked'
@@ -133,7 +131,7 @@ function renderStatusEntries(
       <>
         <FileDiff className={cn('h-3.5 w-3.5 shrink-0', statusClassName(entry.status))} />
         <span className="min-w-0 flex-1 truncate">{entry.path}</span>
-        <span className="shrink-0 text-[10px] text-muted-foreground">{statusLabel(entry.status)}</span>
+        <span className="shrink-0 text-[10px] text-muted-foreground">{t(statusLabelKey(entry.status))}</span>
       </>
     )
 
@@ -166,11 +164,12 @@ function renderStatusEntries(
 function renderStatusBody(
   entries: GitStatusEntry[],
   noRepository: boolean,
-  onOpenDiff: (filePath: string) => void
+  onOpenDiff: (filePath: string) => void,
+  t: (key: string) => string,
 ) {
-  if (noRepository) return <EmptyState>No git repository found</EmptyState>
-  if (entries.length === 0) return <EmptyState>No working tree changes</EmptyState>
-  return renderStatusEntries(entries, onOpenDiff)
+  if (noRepository) return <EmptyState>{t('git.noRepository')}</EmptyState>
+  if (entries.length === 0) return <EmptyState>{t('git.noWorkingTreeChanges')}</EmptyState>
+  return renderStatusEntries(entries, onOpenDiff, t)
 }
 
 function GitStatusSection({
@@ -182,11 +181,12 @@ function GitStatusSection({
   noRepository: boolean
   onOpenDiff: (filePath: string) => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="h-full min-h-0 flex flex-col">
-      <SectionHeader title="Working Tree" count={noRepository ? undefined : entries.length} />
+      <SectionHeader title={t('git.sectionWorkingTree')} count={noRepository ? undefined : entries.length} />
       <div className="min-h-0 flex-1 overflow-auto py-1">
-        {renderStatusBody(entries, noRepository, onOpenDiff)}
+        {renderStatusBody(entries, noRepository, onOpenDiff, t)}
       </div>
     </div>
   )
@@ -217,10 +217,11 @@ function renderCommits(commits: GitCommit[], onOpenCommit: (hash: string) => voi
 function renderHistoryBody(
   commits: GitCommit[],
   noRepository: boolean,
-  onOpenCommit: (hash: string) => void
+  onOpenCommit: (hash: string) => void,
+  t: (key: string) => string,
 ) {
-  if (noRepository) return <EmptyState>No git repository found</EmptyState>
-  if (commits.length === 0) return <EmptyState>No commits yet</EmptyState>
+  if (noRepository) return <EmptyState>{t('git.noRepository')}</EmptyState>
+  if (commits.length === 0) return <EmptyState>{t('git.noCommits')}</EmptyState>
   return renderCommits(commits, onOpenCommit)
 }
 
@@ -233,11 +234,12 @@ function GitHistorySection({
   noRepository: boolean
   onOpenCommit: (hash: string) => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="h-full min-h-0 flex flex-col">
-      <SectionHeader title="History" count={noRepository ? undefined : commits.length} />
+      <SectionHeader title={t('git.sectionHistory')} count={noRepository ? undefined : commits.length} />
       <div className="min-h-0 flex-1 overflow-auto py-1">
-        {renderHistoryBody(commits, noRepository, onOpenCommit)}
+        {renderHistoryBody(commits, noRepository, onOpenCommit, t)}
       </div>
     </div>
   )
@@ -320,10 +322,12 @@ export function GitPanel({ workspacePath, className }: GitPanelProps) {
     void openCommitTab({ workspacePath, hash })
   }, [openCommitTab, workspacePath])
 
+  const { t } = useTranslation()
+
   if (!workspacePath) {
     return (
       <div className={cn('h-full bg-background', className)}>
-        <EmptyState>No working directory set</EmptyState>
+        <EmptyState>{t('git.noWorkingDirectory')}</EmptyState>
       </div>
     )
   }

@@ -330,6 +330,7 @@ function WorkspaceFileRow({
 }
 
 export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, className }: WorkspaceFilesSectionProps) {
+  const { t } = useTranslation()
   const { onOpenFile } = useAppShellContext()
   const [files, setFiles] = useState<SessionFile[]>([])
   const [treeState, setTreeState] = useState<WorkspaceFilesTreeState>(createEmptyWorkspaceFilesTreeState)
@@ -471,14 +472,14 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, cla
   return (
     <div className={cn('flex flex-col h-full min-h-0', className)}>
       <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
-        <span className="text-xs font-medium text-muted-foreground">Workspace</span>
+        <span className="text-xs font-medium text-muted-foreground">{t('rightSidebar.workspaceTab')}</span>
         {viewPath && (
           <button
             type="button"
             onClick={() => window.electronAPI.showInFolder(viewPath)}
             className="text-xs text-foreground/50 hover:text-foreground/80 hover:underline underline-offset-2 transition-colors"
           >
-            View
+            {t('rightSidebar.viewFolder')}
           </button>
         )}
       </div>
@@ -487,7 +488,7 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, cla
         {files.length === 0 ? (
           <div className="px-4 text-muted-foreground select-none">
             <p className="text-xs">
-              {resolveWorkspaceFilesEmptyMessage(isLoading, cwdPath)}
+              {isLoading ? t('common.loading') : !cwdPath ? t('git.noWorkingDirectory') : t('rightSidebar.noWorkspaceFiles')}
             </p>
           </div>
         ) : (

@@ -93,6 +93,9 @@ Keys use **flat dot-notation** with a category prefix:
 | `webui.*` | WebUI-specific strings | `webui.connectionFailed` |
 | `auth.*` | Auth banner/prompts | `auth.connectionRequired` |
 | `browser.*` | Browser empty state | `browser.readyTitle` |
+| `git.*` | Git panel (right sidebar) status and history | `git.sectionWorkingTree` |
+| `rightSidebar.*` | Right sidebar panel tabs and workspace file section | `rightSidebar.filesTab` |
+| `skillMarketplace.*` | Skill Marketplace page, listing, detail, and publish dialog | `skillMarketplace.publishButton` |
 
 ### Rules
 
@@ -102,7 +105,7 @@ Keys use **flat dot-notation** with a category prefix:
 4. **Include `...` in the translation value** if the UI needs an ellipsis — don't append it in JSX.
 5. **Use `<Trans>` component** for translations containing HTML tags (e.g. `<strong>`).
 6. **Use `i18n.resolvedLanguage`** (not `i18n.language`) when comparing against supported language codes.
-7. **Keys must exist in all locale files** (`en.json`, `es.json`, `zh-Hans.json`, and any future locales). Keep alphabetically sorted.
+7. **Keys must exist in all locale files** (`en.json`, `zh-Hans.json`, and any future locales). Keep alphabetically sorted.
 8. **Watch translation length for constrained UI elements.** Translations can be 20-100%+ longer than English. For buttons, badges, tab labels, and dropdown items, keep translations concise — use shorter synonyms if needed. High-risk areas:
    - Permission mode badges (3-5 characters max)
    - Settings tab labels (≤10 characters ideal)
@@ -126,7 +129,7 @@ When resolving locale merge conflicts, run `bun run validate:ci` and trust the r
 ### Adding a new translated string
 
 1. Add the key + English value to `en.json` (alphabetical order)
-2. Add the key + translated value to all other locale files (`es.json`, `zh-Hans.json`)
+2. Add the key + translated value to `zh-Hans.json`
 3. Use `t("your.key")` in the component (add `useTranslation()` hook if not present)
 4. For non-React code, use `i18n.t("your.key")` — but only inside functions, never at module level
 

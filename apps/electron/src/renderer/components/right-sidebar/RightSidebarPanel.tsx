@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Files, GitBranch, FolderTree, type LucideIcon } from 'lucide-react'
 import { useAtomValue } from 'jotai'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import * as storage from '@/lib/local-storage'
 import { sessionAtomFamily } from '@/atoms/sessions'
@@ -30,12 +31,12 @@ type Tab = 'files' | 'git' | 'workspace'
 
 const RIGHT_SIDEBAR_TABS: readonly {
   id: Tab
-  title: string
+  titleKey: string
   Icon: LucideIcon
 }[] = [
-  { id: 'files', title: 'Files', Icon: Files },
-  { id: 'git', title: 'Git', Icon: GitBranch },
-  { id: 'workspace', title: 'Workspace', Icon: FolderTree },
+  { id: 'files', titleKey: 'rightSidebar.filesTab', Icon: Files },
+  { id: 'git', titleKey: 'rightSidebar.gitTab', Icon: GitBranch },
+  { id: 'workspace', titleKey: 'rightSidebar.workspaceTab', Icon: FolderTree },
 ]
 
 export interface RightSidebarPanelProps {
@@ -52,6 +53,7 @@ export function RightSidebarPanel({
   sessionId,
   isOpen,
 }: RightSidebarPanelProps) {
+  const { t } = useTranslation()
   const focusedSession = useAtomValue(sessionAtomFamily(sessionId ?? ''))
   const activeWorkspace = useActiveWorkspace()
   const sessionFolderPath = focusedSession?.sessionFolderPath
@@ -214,7 +216,7 @@ export function RightSidebarPanel({
                 paddingBottom: PANEL_EDGE_INSET,
               }}
             >
-              {RIGHT_SIDEBAR_TABS.map(({ id, title, Icon }) => {
+              {RIGHT_SIDEBAR_TABS.map(({ id, titleKey, Icon }) => {
                 const isActive = activeTab === id
 
                 return (
@@ -230,7 +232,7 @@ export function RightSidebarPanel({
                         ? 'text-foreground bg-sidebar-hover'
                         : 'text-foreground/50 hover:text-foreground hover:bg-sidebar-hover',
                     )}
-                    title={title}
+                    title={t(titleKey)}
                   >
                     <Icon className="h-3.5 w-3.5" />
                   </button>

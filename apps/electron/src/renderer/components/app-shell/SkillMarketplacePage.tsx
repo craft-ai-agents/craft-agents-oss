@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { AlertTriangle, CheckCircle2, Download, FileArchive, Flag, Globe2, PencilLine, Search, ShieldAlert, Store, UserCog } from 'lucide-react'
 import { strToU8, zipSync } from 'fflate'
 import { resolveMarketplaceServiceConfig } from '@craft-agent/shared/skills/marketplace-config'
@@ -850,20 +852,14 @@ function formatInstallCount(count: number): string {
   return new Intl.NumberFormat(undefined, { notation: count >= 10000 ? 'compact' : 'standard' }).format(count)
 }
 
-function installStateLabel(state: MarketplaceInstallState): string {
+function installStateLabelKey(state: MarketplaceInstallState): string {
   switch (state) {
-    case 'installed':
-      return 'Installed'
-    case 'update-available':
-      return 'Update available'
-    case 'modified-locally':
-      return 'Modified locally'
-    case 'unavailable':
-      return 'Owner unpublished'
-    case 'safety-blocked':
-      return 'Safety blocked'
-    case 'install':
-      return 'Install'
+    case 'installed': return 'skillMarketplace.stateInstalled'
+    case 'update-available': return 'skillMarketplace.stateUpdateAvailable'
+    case 'modified-locally': return 'skillMarketplace.stateModifiedLocally'
+    case 'unavailable': return 'skillMarketplace.stateOwnerUnpublished'
+    case 'safety-blocked': return 'skillMarketplace.stateSafetyBlocked'
+    case 'install': return 'skillMarketplace.stateInstall'
   }
 }
 
@@ -883,32 +879,28 @@ function installStateClassName(state: MarketplaceInstallState): string {
   }
 }
 
-function disabledActionLabel(state: MarketplaceInstallState): string {
+function disabledActionLabelKey(state: MarketplaceInstallState): string {
   switch (state) {
-    case 'installed':
-      return 'Installed'
+    case 'installed': return 'skillMarketplace.stateInstalled'
     case 'update-available':
-    case 'modified-locally':
-      return 'Update'
-    case 'unavailable':
-      return 'Owner unpublished'
-    case 'safety-blocked':
-      return 'Safety blocked'
-    case 'install':
-      return 'Install placeholder'
+    case 'modified-locally': return 'skillMarketplace.actionUpdate'
+    case 'unavailable': return 'skillMarketplace.stateOwnerUnpublished'
+    case 'safety-blocked': return 'skillMarketplace.stateSafetyBlocked'
+    case 'install': return 'skillMarketplace.stateInstall'
   }
 }
 
 function marketplaceInstallStateFromResult(
   result: MarketplaceInstallResult | { status: 'auth-required'; message: string } | { status: 'error'; message: string },
+  t: TFunction,
 ): MarketplaceDetailInstallState {
   switch (result.status) {
     case 'installed':
-      return { status: 'installed', message: 'Installed into Local Skills.' }
+      return { status: 'installed', message: t('skillMarketplace.installedMessage') }
     case 'conflict':
-      return { status: 'conflict', message: 'A Local Skill with this slug already exists.' }
+      return { status: 'conflict', message: t('skillMarketplace.conflictMessage') }
     case 'skipped':
-      return { status: 'skipped', message: 'Marketplace install skipped. Existing Local Skill was kept.' }
+      return { status: 'skipped', message: t('skillMarketplace.skippedMessage') }
     case 'install-complete-failed':
     case 'auth-required':
     case 'error':
@@ -916,20 +908,20 @@ function marketplaceInstallStateFromResult(
   }
 }
 
-function getMarketplaceInstallActionLabel(
+function getMarketplaceInstallActionLabelKey(
   detail: MarketplaceSkillDetail,
   installState: MarketplaceDetailInstallState,
   canInstall: boolean,
   currentUserId?: string | null,
 ): string {
-  if (installState.status === 'installing') return 'Installing...'
-  if (isOwnerLinked(detail, currentUserId) && detail.installState === 'modified-locally') return 'Publish or discard changes'
+  if (installState.status === 'installing') return 'skillMarketplace.actionInstalling'
+  if (isOwnerLinked(detail, currentUserId) && detail.installState === 'modified-locally') return 'skillMarketplace.actionPublishOrDiscard'
   if (!canInstall) {
-    if (isMarketplaceUpdateAction(detail.installState)) return 'Sign in to update'
-    return 'Sign in to install'
+    if (isMarketplaceUpdateAction(detail.installState)) return 'skillMarketplace.actionSignInToUpdate'
+    return 'skillMarketplace.actionSignInToInstall'
   }
-  if (isOwnerLinked(detail, currentUserId) && detail.installState === 'update-available') return 'Sync latest'
-  return disabledActionLabel(detail.installState)
+  if (isOwnerLinked(detail, currentUserId) && detail.installState === 'update-available') return 'skillMarketplace.actionSyncLatest'
+  return disabledActionLabelKey(detail.installState)
 }
 
 function isMarketplaceUpdateAction(state: MarketplaceInstallState): boolean {
@@ -981,15 +973,18 @@ function marketplaceOwnerActionAlertClassName(status: MarketplaceDetailOwnerStat
   }
 }
 
-function marketplaceReportMessage(state: Exclude<MarketplaceDetailReportState, { status: 'idle' } | { status: 'submitting' }>): string {
-  if (state.status === 'submitted') return 'Report submitted. Marketplace moderators will review this Skill.'
+function marketplaceReportMessage(
+  state: Exclude<MarketplaceDetailReportState, { status: 'idle' } | { status: 'submitting' }>,
+  t: TFunction,
+): string {
+  if (state.status === 'submitted') return t('skillMarketplace.reportSubmitted')
   return state.message
 }
 
-function directPublishMessage(state: DirectPublishState): string | null {
+function directPublishMessage(state: DirectPublishState, t: TFunction): string | null {
   switch (state.status) {
     case 'published':
-      return `Published to Marketplace /${state.marketplaceSlug}`
+      return t('skillMarketplace.publishedToMarketplaceSlug', { slug: state.marketplaceSlug })
     case 'slug-conflict':
     case 'auth-required':
     case 'validation-error':
@@ -1001,10 +996,10 @@ function directPublishMessage(state: DirectPublishState): string | null {
   }
 }
 
-function ownerActionMessage(state: MarketplaceDetailOwnerState): string | null {
+function ownerActionMessage(state: MarketplaceDetailOwnerState, t: TFunction): string | null {
   switch (state.status) {
     case 'published':
-      return `Published new Marketplace version v${state.version}`
+      return t('skillMarketplace.ownerActionPublished', { version: state.version })
     case 'unpublished':
       return state.message
     case 'slug-conflict':
@@ -1020,12 +1015,12 @@ function ownerActionMessage(state: MarketplaceDetailOwnerState): string | null {
   }
 }
 
-function marketplaceOriginStatusBadges(status: MarketplaceOriginMetadata['safetyStatus']): string[] {
+function marketplaceOriginStatusBadgeKeys(status: MarketplaceOriginMetadata['safetyStatus']): string[] {
   switch (status) {
     case 'unavailable':
-      return ['Owner unpublished']
+      return ['skillMarketplace.originStatusOwnerUnpublished']
     case 'safety-blocked':
-      return ['Admin unpublished', 'Safety blocked']
+      return ['skillMarketplace.originStatusAdminUnpublished', 'skillMarketplace.originStatusSafetyBlocked']
     case 'ok':
       return []
   }
@@ -1064,6 +1059,7 @@ export function SkillMarketplacePage({
   const [reportStateBySlug, setReportStateBySlug] = React.useState<Record<string, MarketplaceDetailReportState>>({})
   const [ownerStateBySlug, setOwnerStateBySlug] = React.useState<Record<string, MarketplaceDetailOwnerState>>({})
   const [publishDialogOpen, setPublishDialogOpen] = React.useState(false)
+  const { t } = useTranslation()
 
   const refreshCatalog = React.useCallback(() => {
     setCatalogState({ status: 'loading' })
@@ -1114,8 +1110,8 @@ export function SkillMarketplacePage({
         conflictResolution,
       })
 
-    setInstallStateBySlug((previous) => ({ ...previous, [detail.slug]: marketplaceInstallStateFromResult(result) }))
-  }, [api, currentUserId, workspaceId])
+    setInstallStateBySlug((previous) => ({ ...previous, [detail.slug]: marketplaceInstallStateFromResult(result, t) }))
+  }, [api, currentUserId, t, workspaceId])
 
   const reportDetail = React.useCallback(async (detail: MarketplaceSkillDetail, context: string) => {
     setReportStateBySlug((previous) => ({ ...previous, [detail.slug]: { status: 'submitting' } }))
@@ -1184,7 +1180,7 @@ export function SkillMarketplacePage({
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search Marketplace Skills"
+                placeholder={t('common.search')}
                 className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-2 text-sm outline-none focus:border-foreground/30"
               />
             </label>
@@ -1194,7 +1190,7 @@ export function SkillMarketplacePage({
                 onChange={(event) => setCategory(event.target.value)}
                 className="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-foreground/30"
               >
-                <option value="">All categories</option>
+                <option value="">{t('skillMarketplace.allCategories')}</option>
                 {catalogState.status === 'ready' && catalogState.availableCategories.map((candidate) => (
                   <option key={candidate} value={candidate}>{candidate}</option>
                 ))}
@@ -1204,7 +1200,7 @@ export function SkillMarketplacePage({
                 onChange={(event) => setTag(event.target.value)}
                 className="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-foreground/30"
               >
-                <option value="">All tags</option>
+                <option value="">{t('skillMarketplace.allTags')}</option>
                 {catalogState.status === 'ready' && catalogState.availableTags.map((candidate) => (
                   <option key={candidate} value={candidate}>{candidate}</option>
                 ))}
@@ -1214,7 +1210,7 @@ export function SkillMarketplacePage({
 
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {catalogState.status === 'loading' && (
-              <p className="p-3 text-sm text-muted-foreground">Loading Marketplace Skills...</p>
+              <p className="p-3 text-sm text-muted-foreground">{t('skillMarketplace.loading')}</p>
             )}
             {catalogState.status === 'error' && (
               <MarketplaceError message={catalogState.message} onRetry={refreshCatalog} />
@@ -1241,8 +1237,8 @@ export function SkillMarketplacePage({
             <div className="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
               <div className="max-w-sm">
                 <Store className="mx-auto h-5 w-5" />
-                <p className="mt-2 text-sm font-medium text-foreground">Select a Marketplace Skill</p>
-                <p className="mt-1 text-xs">Open a listing to inspect its published SKILL.md, version history, release notes, required sources, and metadata.</p>
+                <p className="mt-2 text-sm font-medium text-foreground">{t('skillMarketplace.selectSkill')}</p>
+                <p className="mt-1 text-xs">{t('skillMarketplace.selectSkillDesc')}</p>
                 <button
                   type="button"
                   disabled={!currentUserId}
@@ -1250,13 +1246,13 @@ export function SkillMarketplacePage({
                   className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
                 >
                   <UserCog className="h-3.5 w-3.5" />
-                  {currentUserId ? 'Publish Skill' : 'Sign in to publish'}
+                  {currentUserId ? t('skillMarketplace.publishButton') : t('skillMarketplace.signInToPublish')}
                 </button>
               </div>
             </div>
           )}
           {detailState.status === 'loading' && (
-            <p className="p-5 text-sm text-muted-foreground">Loading Marketplace Skill detail...</p>
+            <p className="p-5 text-sm text-muted-foreground">{t('skillMarketplace.loadingDetail')}</p>
           )}
           {detailState.status === 'error' && (
             <div className="p-5">
@@ -1302,6 +1298,7 @@ export function SkillMarketplacePageHeader({
   serviceEnvironmentLabel: string
   onPublishClick?: () => void
 }) {
+  const { t } = useTranslation()
   const canPublish = Boolean(currentUserId)
 
   return (
@@ -1310,14 +1307,14 @@ export function SkillMarketplacePageHeader({
         <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
           <span className="inline-flex items-center gap-2">
             <Store className="h-4 w-4" />
-            <span>Marketplace</span>
+            <span>{t('skillMarketplace.title')}</span>
           </span>
           <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
             {serviceEnvironmentLabel}
           </span>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          Browse public Marketplace Skills anonymously. Sign in to install, update, publish, report, or manage owner actions.
+          {t('skillMarketplace.headerDescription')}
         </p>
       </div>
       <button
@@ -1327,7 +1324,7 @@ export function SkillMarketplacePageHeader({
         className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
       >
         <UserCog className="h-3.5 w-3.5" />
-        {canPublish ? 'Publish Skill' : 'Sign in to publish'}
+        {canPublish ? t('skillMarketplace.publishButton') : t('skillMarketplace.signInToPublish')}
       </button>
     </div>
   )
@@ -1341,9 +1338,10 @@ export function MarketplaceEmptyState({
   canPublish: boolean
   onPublishClick: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="p-3 text-sm text-muted-foreground">
-      <p>No Marketplace Skills match these filters.</p>
+      <p>{t('skillMarketplace.noMatch')}</p>
       <button
         type="button"
         disabled={!canPublish}
@@ -1351,7 +1349,7 @@ export function MarketplaceEmptyState({
         className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
       >
         <UserCog className="h-3.5 w-3.5" />
-        {canPublish ? 'Publish Skill' : 'Sign in to publish'}
+        {canPublish ? t('skillMarketplace.publishButton') : t('skillMarketplace.signInToPublish')}
       </button>
     </div>
   )
@@ -1519,8 +1517,9 @@ export function MarketplacePublishSkillDialog({
     event.target.value = ''
   }
 
+  const { t } = useTranslation()
   const publishDisabled = publishState.status === 'publishing' || !currentUserId
-  const publishMessage = directPublishMessage(publishState)
+  const publishMessage = directPublishMessage(publishState, t)
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
@@ -1529,9 +1528,9 @@ export function MarketplacePublishSkillDialog({
     }}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Publish Skill</DialogTitle>
+          <DialogTitle>{t('skillMarketplace.publishDialogTitle')}</DialogTitle>
           <DialogDescription>
-            Publish a new Marketplace Skill without installing it into Local Skills.
+            {t('skillMarketplace.publishDialogDesc')}
           </DialogDescription>
         </DialogHeader>
 
@@ -1539,34 +1538,34 @@ export function MarketplacePublishSkillDialog({
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="create" className="gap-1.5">
               <PencilLine className="h-3.5 w-3.5" />
-              Create
+              {t('skillMarketplace.tabCreate')}
             </TabsTrigger>
             <TabsTrigger value="remote" className="gap-1.5">
               <Globe2 className="h-3.5 w-3.5" />
-              Remote
+              {t('skillMarketplace.tabRemote')}
             </TabsTrigger>
             <TabsTrigger value="upload" className="gap-1.5">
               <FileArchive className="h-3.5 w-3.5" />
-              Upload
+              {t('skillMarketplace.tabUpload')}
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="create" className="mt-4 space-y-3">
             <label className="grid gap-1 text-xs font-medium">
-              Name
-              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Code Reviewer" />
+              {t('common.name')}
+              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('skillMarketplace.placeholderName')} />
             </label>
             <label className="grid gap-1 text-xs font-medium">
-              Description
-              <Input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Reviews code for correctness" />
+              {t('common.description')}
+              <Input value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t('skillMarketplace.placeholderDescription')} />
             </label>
             <label className="grid gap-1 text-xs font-medium">
-              Instructions
+              {t('skillMarketplace.fieldInstructions')}
               <textarea
                 value={content}
                 onChange={(event) => setContent(event.target.value)}
                 className="min-h-28 rounded-md border border-border bg-background px-3 py-2 text-sm font-normal outline-none focus:border-foreground/30"
-                placeholder="Write the behavior, workflow, and constraints this skill should add."
+                placeholder={t('skillMarketplace.placeholderInstructions')}
               />
             </label>
           </TabsContent>
@@ -1587,11 +1586,11 @@ export function MarketplacePublishSkillDialog({
                   <Input
                     value={remoteInput}
                     onChange={(event) => setRemoteInput(event.target.value)}
-                    placeholder="owner/repo  or  https://github.com/owner/repo"
+                    placeholder={t('skillMarketplace.placeholderRemote')}
                     onKeyDown={(event) => { if (event.key === 'Enter') void resolveRemote() }}
                   />
                   <Button type="button" onClick={() => void resolveRemote()} disabled={!remoteInput.trim() || remotePhase.kind === 'loading'}>
-                    {remotePhase.kind === 'loading' ? 'Resolving...' : 'Resolve'}
+                    {remotePhase.kind === 'loading' ? t('skillMarketplace.resolving') : t('skillMarketplace.resolve')}
                   </Button>
                 </div>
                 {remotePhase.kind === 'error' && <p className="text-xs text-destructive">{remotePhase.message}</p>}
@@ -1614,7 +1613,7 @@ export function MarketplacePublishSkillDialog({
                 <input ref={fileInputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={handleFileInputChange} />
                 <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploadPhase.kind === 'loading'}>
                   <FileArchive className="h-4 w-4" />
-                  {uploadPhase.kind === 'loading' ? 'Reading zip...' : 'Choose zip'}
+                  {uploadPhase.kind === 'loading' ? t('skillMarketplace.readingZip') : t('skillMarketplace.chooseZip')}
                 </Button>
                 {uploadPhase.kind === 'error' && <p className="text-xs text-destructive">{uploadPhase.message}</p>}
               </div>
@@ -1631,16 +1630,16 @@ export function MarketplacePublishSkillDialog({
 
         <div className="grid gap-3">
           <label className="grid gap-1 text-xs font-medium">
-            Marketplace slug
+            {t('skillMarketplace.fieldMarketplaceSlug')}
             <Input value={marketplaceSlug} onChange={(event) => setMarketplaceSlug(event.target.value)} />
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="grid gap-1 text-xs font-medium">
-              Version
+              {t('skillMarketplace.fieldVersion')}
               <Input value={version} onChange={(event) => setVersion(event.target.value)} />
             </label>
             <label className="grid gap-1 text-xs font-medium">
-              Category
+              {t('skillMarketplace.fieldCategory')}
               <select className="h-9 rounded-md border border-border bg-background px-2 text-sm font-normal" value={category} onChange={(event) => setCategory(event.target.value)}>
                 {PRODUCT_MARKETPLACE_CATEGORIES.map((candidate) => (
                   <option key={candidate} value={candidate}>{candidate}</option>
@@ -1649,11 +1648,11 @@ export function MarketplacePublishSkillDialog({
             </label>
           </div>
           <label className="grid gap-1 text-xs font-medium">
-            Tags
-            <Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="review, ci" />
+            {t('skillMarketplace.fieldTags')}
+            <Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder={t('skillMarketplace.placeholderTags')} />
           </label>
           <label className="grid gap-1 text-xs font-medium">
-            Release notes
+            {t('skillMarketplace.fieldReleaseNotes')}
             <textarea
               value={releaseNotes}
               onChange={(event) => setReleaseNotes(event.target.value)}
@@ -1673,9 +1672,9 @@ export function MarketplacePublishSkillDialog({
         )}
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={closeDialog}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={closeDialog}>{t('common.cancel')}</Button>
           <Button type="button" onClick={() => void submitPublish()} disabled={publishDisabled}>
-            {publishState.status === 'publishing' ? 'Publishing...' : currentUserId ? 'Publish Skill' : 'Sign in to publish'}
+            {publishState.status === 'publishing' ? t('skillMarketplace.publishing') : currentUserId ? t('skillMarketplace.publishButton') : t('skillMarketplace.signInToPublish')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1691,10 +1690,12 @@ export function LocalSkillMarketplaceStatus({
   metadata?: MarketplaceOriginMetadata | null
   publishState?: MarketplacePublishResult | { status: 'idle' | 'publishing' }
 }) {
+  const { t } = useTranslation()
+
   if (publishState.status === 'publishing') {
     return (
       <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
-        <span className="font-medium">Publishing to Marketplace...</span>
+        <span className="font-medium">{t('skillMarketplace.publishingToMarketplace')}</span>
       </div>
     )
   }
@@ -1702,7 +1703,7 @@ export function LocalSkillMarketplaceStatus({
   if (publishState.status === 'published') {
     return (
       <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-800 dark:text-emerald-200">
-        <span className="font-medium">Published to Marketplace</span>
+        <span className="font-medium">{t('skillMarketplace.publishedToMarketplace')}</span>
         <span className="ml-2">/{publishState.marketplaceSlug}</span>
       </div>
     )
@@ -1719,34 +1720,34 @@ export function LocalSkillMarketplaceStatus({
   if (!metadata) {
     return (
       <div className="rounded-md border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
-        Not published to Marketplace.
+        {t('skillMarketplace.notPublished')}
       </div>
     )
   }
 
   const statusBadgeClassName = marketplaceOriginStatusBadgeClassName(metadata.safetyStatus)
-  const statusBadges = marketplaceOriginStatusBadges(metadata.safetyStatus)
+  const statusBadgeKeys = marketplaceOriginStatusBadgeKeys(metadata.safetyStatus)
 
   return (
     <div className="rounded-md border border-border bg-muted/20 p-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium">Marketplace linked</span>
+        <span className="font-medium">{t('skillMarketplace.linkedMarketplace')}</span>
         <span className="text-muted-foreground">/{metadata.marketplaceSlug}</span>
         <span className="text-muted-foreground">v{metadata.installedVersion}</span>
-        {statusBadges.map((label) => (
-          <span key={label} className={`rounded-full border px-2 py-0.5 text-xs ${statusBadgeClassName}`}>
-            {label}
+        {statusBadgeKeys.map((key) => (
+          <span key={key} className={`rounded-full border px-2 py-0.5 text-xs ${statusBadgeClassName}`}>
+            {t(key)}
           </span>
         ))}
         {metadata.modified && (
           <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-200">
-            Unpublished changes
+            {t('skillMarketplace.unpublishedChanges')}
           </span>
         )}
       </div>
       <div className="mt-2 text-xs text-muted-foreground">
-        Marketplace ID {metadata.marketplaceId}
-        {metadata.safetyStatus !== 'ok' && <span className="ml-2">Local files preserved</span>}
+        {t('skillMarketplace.marketplaceId')} {metadata.marketplaceId}
+        {metadata.safetyStatus !== 'ok' && <span className="ml-2">{t('skillMarketplace.localFilesPreserved')}</span>}
       </div>
     </div>
   )
@@ -1762,6 +1763,7 @@ export function MarketplaceListingCard({
   selected: boolean
   onSelect: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <button
       type="button"
@@ -1782,7 +1784,7 @@ export function MarketplaceListingCard({
       <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
         <span>{listing.owner}</span>
         <span>v{listing.latestVersion}</span>
-        <span>{formatInstallCount(listing.installCount)} installs</span>
+        <span>{t('skillMarketplace.installCount', { count: formatInstallCount(listing.installCount) })}</span>
       </div>
       {listing.basedOn && (
         <div className="text-[11px] text-muted-foreground">
@@ -1793,7 +1795,7 @@ export function MarketplaceListingCard({
         <Pill>{listing.category}</Pill>
         {listing.tags.map((tag) => <Pill key={tag}>{tag}</Pill>)}
         <span className={`rounded-full border px-2 py-0.5 text-[11px] ${installStateClassName(listing.installState)}`}>
-          {installStateLabel(listing.installState)}
+          {t(installStateLabelKey(listing.installState))}
         </span>
       </div>
     </button>
@@ -1826,6 +1828,7 @@ export function MarketplaceDetail({
   canReport?: boolean
   currentUserId?: string | null
 }) {
+  const { t } = useTranslation()
   const [reportOpen, setReportOpen] = React.useState(false)
   const [reportContext, setReportContext] = React.useState('')
   const isBlocked = detail.installState === 'safety-blocked' || detail.installState === 'unavailable'
@@ -1835,9 +1838,9 @@ export function MarketplaceDetail({
   const ownerActionBusy = ownerState.status === 'publishing' || ownerState.status === 'unpublishing'
   const hasUnpublishedChanges = ownerLinked && detail.installState === 'modified-locally'
   const canRunPrimaryAction = !isInstalling && !hasUnpublishedChanges
-  const actionLabel = getMarketplaceInstallActionLabel(detail, installState, canInstall, currentUserId)
-  const reportLabel = canReport ? 'Report' : 'Sign in to report'
-  const ownerMessage = ownerActionMessage(ownerState)
+  const actionLabel = t(getMarketplaceInstallActionLabelKey(detail, installState, canInstall, currentUserId))
+  const reportLabel = canReport ? t('skillMarketplace.report') : t('skillMarketplace.signInToReport')
+  const ownerMessage = ownerActionMessage(ownerState, t)
 
   return (
     <div className="space-y-5 p-5">
@@ -1858,7 +1861,7 @@ export function MarketplaceDetail({
         </div>
         <div className="flex flex-wrap gap-2">
           {isBlocked ? (
-            <DisabledAction icon={<Download className="h-3.5 w-3.5" />} label={disabledActionLabel(detail.installState)} />
+            <DisabledAction icon={<Download className="h-3.5 w-3.5" />} label={t(disabledActionLabelKey(detail.installState))} />
           ) : (
             <button
               type="button"
@@ -1877,13 +1880,13 @@ export function MarketplaceDetail({
             className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
           >
             <Flag className="h-3.5 w-3.5" />
-            {isReportSubmitting ? 'Submitting...' : reportLabel}
+            {isReportSubmitting ? t('skillMarketplace.submitting') : reportLabel}
           </button>
           {ownerLinked && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted px-3 text-xs font-medium text-muted-foreground">
                 <UserCog className="h-3.5 w-3.5" />
-                Owner actions
+                {t('skillMarketplace.ownerActions')}
               </span>
               <button
                 type="button"
@@ -1892,7 +1895,7 @@ export function MarketplaceDetail({
                 className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
               >
                 <UserCog className="h-3.5 w-3.5" />
-                {ownerState.status === 'publishing' ? 'Publishing...' : 'Publish version'}
+                {ownerState.status === 'publishing' ? t('skillMarketplace.publishing') : t('skillMarketplace.publishVersion')}
               </button>
               <button
                 type="button"
@@ -1901,7 +1904,7 @@ export function MarketplaceDetail({
                 className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-500/30 bg-background px-3 text-xs font-medium text-red-700 hover:bg-red-500/10 disabled:bg-muted disabled:text-muted-foreground dark:text-red-300"
               >
                 <ShieldAlert className="h-3.5 w-3.5" />
-                {ownerState.status === 'unpublishing' ? 'Unpublishing...' : 'Unpublish'}
+                {ownerState.status === 'unpublishing' ? t('skillMarketplace.unpublishing') : t('skillMarketplace.unpublish')}
               </button>
             </div>
           )}
@@ -1911,18 +1914,18 @@ export function MarketplaceDetail({
       {(reportOpen || reportState.status !== 'idle') && (
         <div className="rounded-md border border-border bg-muted/20 p-3">
           <label className="text-xs font-medium" htmlFor={`marketplace-report-${detail.slug}`}>
-            Report details
+            {t('skillMarketplace.reportDetails')}
           </label>
           <textarea
             id={`marketplace-report-${detail.slug}`}
             value={reportContext}
             onChange={(event) => setReportContext(event.target.value)}
             disabled={!canReport || isReportSubmitting}
-            placeholder="Describe the abusive, unsafe, or policy-violating behavior."
+            placeholder={t('skillMarketplace.placeholderReportDetails')}
             className="mt-2 min-h-24 w-full resize-y rounded-md border border-border bg-background p-2 text-sm outline-none focus:border-foreground/30 disabled:bg-muted"
           />
           <div className="mt-2 flex items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">Reports include this Marketplace Skill identity and your account.</p>
+            <p className="text-xs text-muted-foreground">{t('skillMarketplace.reportDisclaimer')}</p>
             <button
               type="button"
               disabled={!canReport || isReportSubmitting}
@@ -1930,7 +1933,7 @@ export function MarketplaceDetail({
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
             >
               <Flag className="h-3.5 w-3.5" />
-              Submit report
+              {t('skillMarketplace.submitReport')}
             </button>
           </div>
         </div>
@@ -1938,7 +1941,7 @@ export function MarketplaceDetail({
 
       {reportState.status !== 'idle' && reportState.status !== 'submitting' && (
         <div className={`rounded-md border p-3 text-sm ${marketplaceReportAlertClassName(reportState.status)}`}>
-          {marketplaceReportMessage(reportState)}
+          {marketplaceReportMessage(reportState, t)}
         </div>
       )}
 
@@ -1955,10 +1958,10 @@ export function MarketplaceDetail({
             {installState.status === 'conflict' && (
               <>
                 <button type="button" className="rounded-md border border-current px-2 py-1 text-xs font-medium" onClick={() => onInstall?.('overwrite')}>
-                  Overwrite
+                  {t('skillMarketplace.overwrite')}
                 </button>
                 <button type="button" className="rounded-md border border-current px-2 py-1 text-xs font-medium" onClick={() => onInstall?.('skip')}>
-                  Skip
+                  {t('skillMarketplace.skip')}
                 </button>
               </>
             )}
@@ -1970,9 +1973,9 @@ export function MarketplaceDetail({
         <div className="flex gap-2 rounded-md border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           {detail.installState === 'unavailable' ? (
-            <span>Owner unpublished stops future Marketplace install and update distribution. Existing Local Skill files are preserved.</span>
+            <span>{t('skillMarketplace.ownerUnpublishedWarning')}</span>
           ) : (
-            <span>Safety blocked prevents Marketplace install and update distribution. Existing Local Skill files are preserved.</span>
+            <span>{t('skillMarketplace.safetyBlockedWarning')}</span>
           )}
         </div>
       )}
@@ -1981,16 +1984,16 @@ export function MarketplaceDetail({
         <div className="flex gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           {hasUnpublishedChanges ? (
-            <span>Unpublished changes cannot sync latest until they are published or discarded.</span>
+            <span>{t('skillMarketplace.unpublishedChangesWarning')}</span>
           ) : (
-            <span>Updating will overwrite local changes.</span>
+            <span>{t('skillMarketplace.willOverwriteLocal')}</span>
           )}
         </div>
       )}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(280px,0.7fr)]">
         <section>
-          <SectionTitle>Published SKILL.md</SectionTitle>
+          <SectionTitle>{t('skillMarketplace.publishedSkillMd')}</SectionTitle>
           <pre className="mt-2 max-h-[520px] overflow-auto rounded-md border border-border bg-muted/40 p-4 text-xs leading-relaxed text-foreground">
             {detail.skillMarkdown}
           </pre>
@@ -1998,29 +2001,29 @@ export function MarketplaceDetail({
 
         <aside className="space-y-5">
           <section>
-            <SectionTitle>Listing Metadata</SectionTitle>
+            <SectionTitle>{t('skillMarketplace.listingMetadata')}</SectionTitle>
             <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">
-              <dt className="text-muted-foreground">Marketplace ID</dt>
+              <dt className="text-muted-foreground">{t('skillMarketplace.marketplaceId')}</dt>
               <dd className="truncate">{detail.metadata.marketplaceId}</dd>
-              <dt className="text-muted-foreground">Slug</dt>
+              <dt className="text-muted-foreground">{t('skillMarketplace.metadataSlug')}</dt>
               <dd>{detail.metadata.marketplaceSlug}</dd>
-              <dt className="text-muted-foreground">Latest version</dt>
+              <dt className="text-muted-foreground">{t('skillMarketplace.metadataLatestVersion')}</dt>
               <dd>v{detail.latestVersion}</dd>
               {detail.basedOn && (
                 <>
-                  <dt className="text-muted-foreground">Based on</dt>
+                  <dt className="text-muted-foreground">{t('skillMarketplace.metadataBasedOn')}</dt>
                   <dd>/{detail.basedOn.marketplaceSlug} v{detail.basedOn.version}</dd>
                 </>
               )}
-              <dt className="text-muted-foreground">Installs</dt>
+              <dt className="text-muted-foreground">{t('skillMarketplace.metadataInstalls')}</dt>
               <dd>{formatInstallCount(detail.installCount)}</dd>
-              <dt className="text-muted-foreground">State</dt>
-              <dd>{installStateLabel(detail.installState)}</dd>
+              <dt className="text-muted-foreground">{t('skillMarketplace.metadataState')}</dt>
+              <dd>{t(installStateLabelKey(detail.installState))}</dd>
             </dl>
           </section>
 
           <section>
-            <SectionTitle>Required Sources</SectionTitle>
+            <SectionTitle>{t('skillMarketplace.requiredSources')}</SectionTitle>
             <ul className="mt-2 space-y-1 text-xs">
               {detail.requiredSources.map((source) => (
                 <li key={source} className="flex items-center gap-2">
@@ -2032,7 +2035,7 @@ export function MarketplaceDetail({
           </section>
 
           <section>
-            <SectionTitle>Version History</SectionTitle>
+            <SectionTitle>{t('skillMarketplace.versionHistory')}</SectionTitle>
             <ol className="mt-2 space-y-3">
               {detail.versions.map((version) => (
                 <li key={version.version} className="rounded-md border border-border p-3">
@@ -2070,19 +2073,20 @@ function toBase64(bytes: Uint8Array): string {
 
 /** Marketplace-scoped outage display with retry behavior. */
 export function MarketplaceError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useTranslation()
   return (
     <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
       <div className="flex gap-2">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         <div>
-          <p className="font-medium">Marketplace is unavailable</p>
+          <p className="font-medium">{t('skillMarketplace.unavailable')}</p>
           <p className="mt-1 text-xs">{message}</p>
           <button
             type="button"
             onClick={onRetry}
             className="mt-2 rounded-md border border-current px-2 py-1 text-xs font-medium"
           >
-            Retry Marketplace
+            {t('skillMarketplace.retry')}
           </button>
         </div>
       </div>

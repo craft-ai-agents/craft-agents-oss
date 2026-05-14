@@ -1,9 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import * as storage from '@/lib/local-storage'
 import { AppShellProvider, type AppShellContextType } from '@/context/AppShellContext'
 import { RightSidebarPanel } from '../RightSidebarPanel'
+
+mock.module('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}))
 
 // Minimal localStorage shim for tests
 function makeLocalStorage() {
@@ -104,9 +108,9 @@ describe('RightSidebarPanel collapsed layout', () => {
     const markup = renderPanel(false)
 
     expect(markup).toContain('width:0')
-    expect(markup).not.toContain('title="Files"')
-    expect(markup).not.toContain('title="Git"')
-    expect(markup).not.toContain('title="Workspace"')
+    expect(markup).not.toContain('title="rightSidebar.filesTab"')
+    expect(markup).not.toContain('title="rightSidebar.gitTab"')
+    expect(markup).not.toContain('title="rightSidebar.workspaceTab"')
   })
 
   it('renders total width as content width plus tab strip width when controlled open', () => {
@@ -133,8 +137,8 @@ describe('RightSidebarPanel collapsed layout', () => {
   it('renders Files, Git, and Workspace tab icon buttons when controlled open', () => {
     const markup = renderPanel(true)
 
-    expect(markup).toContain('title="Files"')
-    expect(markup).toContain('title="Git"')
-    expect(markup).toContain('title="Workspace"')
+    expect(markup).toContain('title="rightSidebar.filesTab"')
+    expect(markup).toContain('title="rightSidebar.gitTab"')
+    expect(markup).toContain('title="rightSidebar.workspaceTab"')
   })
 })
