@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { describe, expect, test } from 'bun:test';
-import { createMcpSourceFromManualInput, createMcpSourcesFromCandidates, detectDuplicateMcpImportCandidates, parseMcpJsonImportCandidates } from '../mcp-import.ts';
+import { createMcpSourceFromManualInput, createMcpSourcesFromCandidates, detectDuplicateMcpImportCandidates, parseMcpJsonImportCandidates, stdioCommandFingerprint } from '../mcp-import.ts';
 import { loadSourceConfig, loadSourceGuide, saveSourceConfig } from '../storage.ts';
 import type { LoadedSource } from '../types.ts';
 import type { StoredCredential } from '../../credentials/types.ts';
@@ -292,6 +292,81 @@ describe('parseMcpJsonImportCandidates', () => {
         handling: 'config',
       },
     ]);
+  });
+
+  test('flags single-string shell commands that are not split into command and args', () => {
+    const result = parseMcpJsonImportCandidates(JSON.stringify({
+      mcpServers: {
+        bad: {
+          command: 'npx -y @modelcontextprotocol/server-filesystem /tmp',
+        },
+      },
+    }));
+
+    expect(result.errors).toEqual([]);
+    expect(result.candidates[0]?.errors).toHaveLength(1);
+    expect(result.candidates[0]?.errors[0]?.field).toBe('command');
+    expect(result.candidates[0]?.errors[0]?.message).toContain('shell command string');
+  });
+
+  test('does not flag properly split command and args', () => {
+    const result = parseMcpJsonImportCandidates(JSON.stringify({
+      mcpServers: {
+        good: {
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+        },
+      },
+    }));
+
+    expect(result.candidates[0]?.errors).toEqual([]);
+  });
+
+  test('does not flag a command without spaces even when args are missing', () => {
+    const result = parseMcpJsonImportCandidates(JSON.stringify({
+      mcpServers: {
+        simple: {
+          command: 'bun',
+        },
+      },
+    }));
+
+    expect(result.candidates[0]?.errors).toEqual([]);
+  });
+
+  test('does not flag a command with spaces when args are explicitly provided', () => {
+    const result = parseMcpJsonImportCandidates(JSON.stringify({
+      mcpServers: {
+        withArgs: {
+          command: '/path/with space/binary',
+          args: ['--flag'],
+        },
+      },
+    }));
+
+    expect(result.candidates[0]?.errors).toEqual([]);
+  });
+});
+
+describe('stdioCommandFingerprint', () => {
+  test('produces consistent fingerprints for the same command and args', () => {
+    expect(stdioCommandFingerprint('node', ['server.js']))
+      .toBe(stdioCommandFingerprint('node', ['server.js']));
+  });
+
+  test('produces different fingerprints for different commands', () => {
+    expect(stdioCommandFingerprint('node', ['server.js']))
+      .not.toBe(stdioCommandFingerprint('bun', ['server.js']));
+  });
+
+  test('produces different fingerprints for different args', () => {
+    expect(stdioCommandFingerprint('npx', ['-y', 'package']))
+      .not.toBe(stdioCommandFingerprint('npx', ['package']));
+  });
+
+  test('handles undefined args as empty array', () => {
+    expect(stdioCommandFingerprint('node'))
+      .toBe(stdioCommandFingerprint('node', []));
   });
 });
 
@@ -707,6 +782,189 @@ describe('createMcpSourcesFromCandidates', () => {
         url: 'https://new.example.com/mcp',
       });
       expect(loadSourceConfig(workspaceRootPath, 'skipped')).toBeNull();
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('runs post-create connection test for confirmed stdio sources', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    let testRan = false;
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          local: {
+            command: 'node',
+            args: ['server.js'],
+          },
+        },
+      }));
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, parsed.candidates, {
+        credentialManager: { save: async () => { throw new Error('unexpected'); } },
+        connectionTester: async () => {
+          testRan = true;
+          return { success: true };
+        },
+        confirmedStdioCommands: {
+          [stdioCommandFingerprint('node', ['server.js'])]: true,
+        },
+      });
+
+      expect(result.results).toEqual([
+        { key: 'local', success: true, sourceSlug: 'local' },
+      ]);
+      expect(testRan).toBe(true);
+      const config = loadSourceConfig(workspaceRootPath, 'local');
+      expect(config?.connectionStatus).toBe('connected');
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('skips post-create connection test for unconfirmed stdio sources', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    let testRan = false;
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          local: {
+            command: 'node',
+            args: ['server.js'],
+          },
+        },
+      }));
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, parsed.candidates, {
+        credentialManager: { save: async () => { throw new Error('unexpected'); } },
+        connectionTester: async () => {
+          testRan = true;
+          return { success: true };
+        },
+        confirmedStdioCommands: {},
+      });
+
+      expect(result.results).toEqual([
+        { key: 'local', success: true, sourceSlug: 'local' },
+      ]);
+      expect(testRan).toBe(false);
+      const config = loadSourceConfig(workspaceRootPath, 'local');
+      expect(config?.connectionStatus).toBeUndefined();
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('sets local_disabled status when local MCP servers are disabled globally', async () => {
+    const origEnv = process.env.CRAFT_LOCAL_MCP_ENABLED;
+    process.env.CRAFT_LOCAL_MCP_ENABLED = 'false';
+    const workspaceRootPath = makeTempWorkspace();
+    let testRan = false;
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          local: {
+            command: 'node',
+            args: ['server.js'],
+          },
+        },
+      }));
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, parsed.candidates, {
+        credentialManager: { save: async () => { throw new Error('unexpected'); } },
+        connectionTester: async () => {
+          testRan = true;
+          return { success: true };
+        },
+        confirmedStdioCommands: {
+          [stdioCommandFingerprint('node', ['server.js'])]: true,
+        },
+      });
+
+      expect(result.results).toEqual([
+        { key: 'local', success: true, sourceSlug: 'local' },
+      ]);
+      expect(testRan).toBe(false);
+      const config = loadSourceConfig(workspaceRootPath, 'local');
+      expect(config?.connectionStatus).toBe('local_disabled');
+    } finally {
+      process.env.CRAFT_LOCAL_MCP_ENABLED = origEnv;
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('HTTP sources are unaffected by the stdio first-run confirmation gate', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    let testRan = false;
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          remote: {
+            url: 'https://example.com/mcp',
+          },
+        },
+      }));
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, parsed.candidates, {
+        credentialManager: { save: async () => { throw new Error('unexpected'); } },
+        connectionTester: async () => {
+          testRan = true;
+          return { success: true };
+        },
+        confirmedStdioCommands: {},
+      });
+
+      expect(result.results).toEqual([
+        { key: 'remote', success: true, sourceSlug: 'remote' },
+      ]);
+      expect(testRan).toBe(true);
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('remembered confirmation allows same command fingerprint across multiple sources', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    const testedCommands: string[] = [];
+    try {
+      const parsed1 = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          first: { command: 'node', args: ['server.js'] },
+        },
+      }));
+      const parsed2 = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          second: { command: 'node', args: ['server.js'] },
+        },
+      }));
+
+      const confirmed: Record<string, true> = { [stdioCommandFingerprint('node', ['server.js'])]: true };
+
+      const result1 = await createMcpSourcesFromCandidates(workspaceRootPath, parsed1.candidates, {
+        credentialManager: { save: async () => { throw new Error('unexpected'); } },
+        connectionTester: async () => {
+          testedCommands.push('first');
+          return { success: true };
+        },
+        confirmedStdioCommands: confirmed,
+      });
+      expect(result1.results).toEqual([
+        { key: 'first', success: true, sourceSlug: 'first' },
+      ]);
+
+      const result2 = await createMcpSourcesFromCandidates(workspaceRootPath, parsed2.candidates, {
+        credentialManager: { save: async () => { throw new Error('unexpected'); } },
+        connectionTester: async () => {
+          testedCommands.push('second');
+          return { success: true };
+        },
+        confirmedStdioCommands: confirmed,
+      });
+      expect(result2.results).toEqual([
+        { key: 'second', success: true, sourceSlug: 'second' },
+      ]);
+
+      expect(testedCommands).toEqual(['first', 'second']);
     } finally {
       rmSync(workspaceRootPath, { recursive: true, force: true });
     }

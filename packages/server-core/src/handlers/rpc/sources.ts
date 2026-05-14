@@ -37,8 +37,14 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
   server.handle(RPC_CHANNELS.sources.CREATE, async (_ctx, workspaceId: string, config: Partial<import('@craft-agent/shared/sources').CreateSourceInput> & Partial<import('@craft-agent/shared/sources').McpManualSourceInput>) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { createMcpSourceFromManualInput, createSource, defaultMcpPostCreateConnectionTester } = await import('@craft-agent/shared/sources')
+    const { createMcpSourceFromManualInput, createSource, defaultMcpPostCreateConnectionTester, stdioCommandFingerprint } = await import('@craft-agent/shared/sources')
     if ((config.type ?? 'mcp') === 'mcp' && config.mcp) {
+      // Auto-confirm stdio commands — user confirmed by submitting the form.
+      let confirmedStdioCommands: Record<string, true> | undefined;
+      if (config.mcp.transport === 'stdio' && config.mcp.command) {
+        const fingerprint = stdioCommandFingerprint(config.mcp.command, config.mcp.args);
+        confirmedStdioCommands = { [fingerprint]: true };
+      }
       const created = await createMcpSourceFromManualInput(workspace.rootPath, {
         name: config.name || 'New Source',
         provider: config.provider || 'custom',
@@ -48,6 +54,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
         authCredential: config.authCredential,
       }, {
         connectionTester: defaultMcpPostCreateConnectionTester,
+        confirmedStdioCommands,
       })
       pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
       return created
@@ -79,9 +86,18 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
   server.handle(RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES, async (_ctx, workspaceId: string, candidates: import('@craft-agent/shared/sources').McpImportCandidate[]) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { createMcpSourcesFromCandidates, defaultMcpPostCreateConnectionTester } = await import('@craft-agent/shared/sources')
+    const { createMcpSourcesFromCandidates, defaultMcpPostCreateConnectionTester, stdioCommandFingerprint } = await import('@craft-agent/shared/sources')
+    // Auto-confirm stdio commands — user confirmed by selecting and importing in the preview.
+    const confirmedStdioCommands: Record<string, true> = {};
+    for (const candidate of candidates) {
+      if (candidate.input.mcp?.transport === 'stdio' && candidate.input.mcp.command) {
+        const fingerprint = stdioCommandFingerprint(candidate.input.mcp.command, candidate.input.mcp.args);
+        confirmedStdioCommands[fingerprint] = true;
+      }
+    }
     const result = await createMcpSourcesFromCandidates(workspace.rootPath, candidates, {
       connectionTester: defaultMcpPostCreateConnectionTester,
+      confirmedStdioCommands: Object.keys(confirmedStdioCommands).length > 0 ? confirmedStdioCommands : undefined,
     })
     pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
     return result
