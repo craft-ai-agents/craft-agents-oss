@@ -376,6 +376,11 @@ export const CHANNEL_MAP = {
   playSoundTest: invoke(RPC_CHANNELS.sound.PLAY_TEST),
   importSoundFolder: invoke(RPC_CHANNELS.sound.IMPORT_FOLDER),
   importPeonPingPacks: invoke(RPC_CHANNELS.sound.IMPORT_PEON_PING),
+  // Secondary Model (call_llm overrides)
+  getCallLlmSettings: invoke(RPC_CHANNELS.settings.GET_CALL_LLM_SETTINGS),
+  setCallLlmConnection: invoke(RPC_CHANNELS.settings.SET_CALL_LLM_CONNECTION),
+  setCallLlmModel: invoke(RPC_CHANNELS.settings.SET_CALL_LLM_MODEL),
+  setCallLlmThinkingLevel: invoke(RPC_CHANNELS.settings.SET_CALL_LLM_THINKING_LEVEL),
 
   // Automations
   getAutomations: invoke(RPC_CHANNELS.automations.GET),
@@ -391,6 +396,19 @@ export const CHANNEL_MAP = {
   // Resources (cross-workspace export/import)
   exportResources: invoke(RPC_CHANNELS.resources.EXPORT),
   importResources: invoke(RPC_CHANNELS.resources.IMPORT),
+
+  // Sound notifications
+  getSoundSettings: invoke(RPC_CHANNELS.sound.GET_SETTINGS),
+  setSoundSettings: invoke(RPC_CHANNELS.sound.SET_SETTINGS),
+  getSoundPacks: invoke(RPC_CHANNELS.sound.GET_PACKS),
+  setSoundPack: invoke(RPC_CHANNELS.sound.SET_PACK),
+  getSoundRegistry: invoke(RPC_CHANNELS.sound.GET_REGISTRY),
+  installSoundPack: invoke(RPC_CHANNELS.sound.INSTALL_PACK),
+  uninstallSoundPack: invoke(RPC_CHANNELS.sound.UNINSTALL_PACK),
+  previewSoundPack: invoke(RPC_CHANNELS.sound.PREVIEW_PACK),
+  playSoundTest: invoke(RPC_CHANNELS.sound.PLAY_TEST),
+  importSoundFolder: invoke(RPC_CHANNELS.sound.IMPORT_FOLDER),
+  importPeonPingPacks: invoke(RPC_CHANNELS.sound.IMPORT_PEON_PING),
 
   // Messaging gateway
   getMessagingConfig: invoke(RPC_CHANNELS.messaging.GET_CONFIG),

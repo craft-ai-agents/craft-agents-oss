@@ -652,6 +652,11 @@ export interface ElectronAPI {
   playSoundTest(filePath: string): Promise<{ success: boolean }>
   importSoundFolder(folderPath: string): Promise<{ success: boolean; packName: string }>
   importPeonPingPacks(): Promise<{ success: boolean; count: number; packs: string[] }>
+  // Secondary Model (call_llm overrides)
+  getCallLlmSettings(): Promise<{ connection?: string; model?: string; thinkingLevel?: string }>
+  setCallLlmConnection(slug: string | null): Promise<{ success: boolean; error?: string }>
+  setCallLlmModel(model: string | null): Promise<{ success: boolean; error?: string }>
+  setCallLlmThinkingLevel(level: string | null): Promise<{ success: boolean; error?: string }>
 
   // Automations
   getAutomations(workspaceId: string): Promise<unknown>
@@ -676,6 +681,31 @@ export interface ElectronAPI {
   // Resources (cross-workspace export/import)
   exportResources(workspaceId: string, options: ExportResourcesOptions): Promise<ExportResult>
   importResources(workspaceId: string, bundle: ResourceBundle, mode: ResourceImportMode): Promise<ResourceImportResult>
+
+  // Sound notifications
+  getSoundSettings(): Promise<import('@craft-agent/shared/audio').SoundSettings>
+  setSoundSettings(settings: Partial<import('@craft-agent/shared/audio').SoundSettings>): Promise<{ success: boolean }>
+  getSoundPacks(): Promise<Array<{
+    name: string
+    displayName: string
+    version: string
+    soundCount: number
+    totalSizeBytes: number
+    source: string
+    description?: string
+    author?: { name: string; github?: string }
+    language?: string
+    categories: string[]
+    trustTier?: 'official' | 'community'
+  }>>
+  setSoundPack(sessionId: string, packName: string | undefined): Promise<{ success: boolean }>
+  getSoundRegistry(): Promise<{ packs: Array<Record<string, unknown>>; error?: string }>
+  installSoundPack(packName: string): Promise<{ success: boolean; packName: string }>
+  uninstallSoundPack(packName: string): Promise<{ success: boolean }>
+  previewSoundPack(packName: string, soundIndex?: number): Promise<{ success: boolean; totalSounds: number }>
+  playSoundTest(filePath: string): Promise<{ success: boolean }>
+  importSoundFolder(folderPath: string): Promise<{ success: boolean; packName: string }>
+  importPeonPingPacks(): Promise<{ success: boolean; count: number; packs: string[] }>
 
   // Messaging gateway — workspaceId is taken from the client handshake (ctx.workspaceId)
   getMessagingConfig(): Promise<{

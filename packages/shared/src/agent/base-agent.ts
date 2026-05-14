@@ -1135,6 +1135,7 @@ ${formattedMessages}
       backendName: this.backendName,
       sessionPath,
       validateModel: this.validateCallLlmModel?.bind(this),
+      modelOverride: this.config.callLlmModelOverride,
     });
     return this.queryLlm(request);
   }

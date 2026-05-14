@@ -5,7 +5,7 @@ import { pickProviderAppropriateMiniModel } from './pick-mini-model.ts';
  * Minimal mock of PiModelRegistry — mirrors the pattern from model-resolution.test.ts.
  */
 function createMockRegistry(
-  providers: Record<string, Array<{ id: string; name: string; provider?: string }>>,
+  providers: Record<string, Array<{ id: string; name: string; provider?: string; reasoning?: boolean }>>,
 ) {
   const allModels = Object.entries(providers).flatMap(([provider, models]) =>
     models.map(m => ({ ...m, provider })),
@@ -78,7 +78,22 @@ describe('pickProviderAppropriateMiniModel', () => {
     expect(result).toBe('gpt-5.5');
   });
 
-  it('unknown provider: returns undefined', () => {
+  it('unknown provider with no preferred defaults: falls back to registry scan', () => {
+    // Even though 'made-up-provider' has no PI_PREFERRED_DEFAULTS entry,
+    // if models exist in the registry for that provider, we should find one.
+    const registry = createMockRegistry({
+      'made-up-provider': [
+        { id: 'big-model', name: 'Big Model', reasoning: true },
+        { id: 'small-model', name: 'Small Model', reasoning: false },
+      ],
+    });
+
+    const result = pickProviderAppropriateMiniModel('made-up-provider', registry, false);
+    // Should pick small-model (non-reasoning preferred for mini tasks)
+    expect(result).toBe('small-model');
+  });
+
+  it('unknown provider with no models: returns undefined', () => {
     const registry = createMockRegistry({
       openai: [{ id: 'gpt-5.5', name: 'GPT 5.5' }],
     });

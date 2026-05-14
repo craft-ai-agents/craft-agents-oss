@@ -616,6 +616,7 @@ async function loadSessionMessages(
               : loadedSession.messages,
           tokenUsage: loadedSession.tokenUsage ?? existingSession.tokenUsage,
           sessionFolderPath: loadedSession.sessionFolderPath ?? existingSession.sessionFolderPath,
+          soundPack: loadedSession.soundPack ?? existingSession.soundPack,
         }
       : loadedSession
     set(sessionAtomFamily(sessionId), mergedSession)

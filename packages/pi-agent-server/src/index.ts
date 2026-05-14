@@ -105,6 +105,9 @@ interface InitMessage {
   workingDirectory: string;
   plansFolderPath: string;
   miniModel?: string;
+  callLlmModelOverride?: string;
+  callLlmThinkingLevel?: string;
+  callLlmPiAuth?: { provider: string; credential: PiCredential; baseUrl?: string };
   agentDir?: string;
   providerType?: string;
   authType?: string;
@@ -240,6 +243,8 @@ type OutboundMessage =
 let piSession: AgentSession | null = null;
 let piModelRegistry: PiModelRegistry | null = null;
 let moduleAuthStorage: PiAuthStorage | null = null;
+/** Separate auth storage for the Secondary Model connection (callLlmPiAuth). Refreshed by token_update. */
+let callLlmAuthStorage: PiAuthStorage | null = null;
 let unsubscribeEvents: (() => void) | null = null;
 
 // Init config (set on 'init' message)
@@ -464,6 +469,50 @@ function registerCustomEndpointModels(
     )),
   });
   debugLog(`Registered custom endpoint: ${baseUrl} with ${allIds.length} model(s) [${allIds.join(', ')}], api: ${api}`);
+}
+
+/**
+ * Dynamically register a model under a Pi SDK provider by cloning a reference model.
+ * Used when the user configures a model that's too new for the SDK's built-in registry
+ * (e.g. glm-5.1 under provider 'zai'). The new model inherits the reference model's
+ * API type, baseUrl, and cost settings.
+ * Optionally accepts an overrideBaseUrl (e.g. from a secondary connection's custom endpoint).
+ */
+function registerDynamicPiModel(
+  registry: PiModelRegistry,
+  bareId: string,
+  piAuthProvider: string,
+  overrideBaseUrl?: string,
+): ReturnType<PiModelRegistry['find']> | undefined {
+  const existing = registry.getAll().filter(m => m.provider === piAuthProvider);
+  if (existing.length === 0) return undefined;
+
+  const ref = existing[0];
+  const effectiveBaseUrl = overrideBaseUrl ?? ref.baseUrl;
+
+  // Preserve all existing models and add the new one
+  const allModels = existing.map(m => ({
+    id: m.id, name: m.name, reasoning: m.reasoning,
+    input: [...m.input], cost: { ...m.cost },
+    contextWindow: m.contextWindow, maxTokens: m.maxTokens,
+    ...(m.compat ? { compat: m.compat } : {}),
+  }));
+  allModels.push({
+    id: bareId, name: bareId, reasoning: ref.reasoning,
+    input: [...ref.input], cost: { ...ref.cost },
+    contextWindow: ref.contextWindow, maxTokens: ref.maxTokens,
+    ...(ref.compat ? { compat: ref.compat } : {}),
+  });
+
+  registry.registerProvider(piAuthProvider, {
+    baseUrl: effectiveBaseUrl,
+    api: ref.api,
+    apiKey: '', // Will be resolved by authStorage
+    models: allModels,
+  });
+  debugLog(`Dynamically registered model '${bareId}' under provider '${piAuthProvider}' baseUrl=${effectiveBaseUrl} (${allModels.length} total models)`);
+
+  return registry.find(piAuthProvider, bareId) ?? undefined;
 }
 
 /**
@@ -919,36 +968,66 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
 
   debugLog('[queryLlm] Starting');
 
-  // Pick mini model. If the configured miniModel uses a different provider than
-  // what the user authenticated with (e.g. gemini-2.5-pro when only anthropic
-  // credentials exist), fall back to the default summarization model which uses
-  // the same provider family.
-  let model = request.model ?? initConfig.miniModel ?? getDefaultSummarizationModel();
+  // Pick mini model. callLlmModelOverride (from Secondary Model settings) has
+  // highest priority, then the request-specified model, then the connection's
+  // miniModel, then the default summarization model.
+  let model = initConfig.callLlmModelOverride ?? request.model ?? initConfig.miniModel ?? getDefaultSummarizationModel();
 
   // Create authenticated registry upfront — used by both the provider guard and the ephemeral session.
-  const { authStorage, modelRegistry } = createAuthenticatedRegistry();
+  let { authStorage, modelRegistry } = createAuthenticatedRegistry();
 
+  // When a secondary connection is configured (callLlmPiAuth), build a separate auth registry
+  // so queryLlm uses the secondary connection's credentials instead of the main session's.
+  const useCallLlmAuth = !!initConfig.callLlmPiAuth;
+  if (useCallLlmAuth) {
+    if (!callLlmAuthStorage) {
+      callLlmAuthStorage = PiAuthStorage.inMemory();
+    }
+    const { provider, credential } = initConfig.callLlmPiAuth!;
+    callLlmAuthStorage.set(provider, credential);
+    debugLog(`[queryLlm] Using secondary connection auth: provider=${provider}`);
+    authStorage = callLlmAuthStorage;
+    modelRegistry = PiModelRegistry.inMemory(callLlmAuthStorage);
+  }
+
+  // Determine the effective auth provider for the model resolution.
+  // When callLlmPiAuth is active, use the secondary connection's provider instead.
+  const activeProvider = useCallLlmAuth
+    ? initConfig.callLlmPiAuth?.provider
+    : initConfig.piAuth?.provider;
   const piAuthProvider = initConfig.piAuth?.provider;
 
-  // If piAuth is set, ensure the mini model uses the same provider.
+  // Dynamically register the model if it's configured via a secondary connection
+  // and not in the SDK's built-in registry (e.g. glm-5.1:cloud under openai,
+  // or a newly-released model that the SDK doesn't know about yet).
+  // This must happen BEFORE the compatibility check so the model can be resolved.
+  if (useCallLlmAuth && initConfig.callLlmPiAuth?.provider) {
+    const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
+    const existing = resolvePiModel(modelRegistry, bareModel, activeProvider, shouldPreferCustomEndpoint());
+    if (!existing) {
+      const overrideBaseUrl = initConfig.callLlmPiAuth?.baseUrl;
+      registerDynamicPiModel(modelRegistry, bareModel, activeProvider, overrideBaseUrl);
+    }
+  }
+
+  // If an auth provider is active, ensure the mini model uses the same provider.
   // Pi SDK will fail with "No API key found" if the model requires a different provider.
   // Exception: 'custom-endpoint' provider is always compatible because it has its own
   // API key configured via resolveCustomEndpointApiKey() and doesn't use authStorage.
-  if (initConfig.piAuth) {
-    const authProvider = initConfig.piAuth.provider;
+  if (activeProvider) {
     const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
-    const resolved = resolvePiModel(modelRegistry, bareModel, authProvider, shouldPreferCustomEndpoint());
+    const resolved = resolvePiModel(modelRegistry, bareModel, activeProvider, shouldPreferCustomEndpoint());
     const resolvedProvider = (resolved as any)?.provider;
-    const isCompatible = resolvedProvider === authProvider || resolvedProvider === 'custom-endpoint';
-    if (!resolved || !isCompatible || isDeniedMiniModelId(model, piAuthProvider)) {
+    const isCompatible = resolvedProvider === activeProvider || resolvedProvider === 'custom-endpoint';
+    if (!resolved || !isCompatible || isDeniedMiniModelId(model, activeProvider)) {
       // Anthropic: keep Haiku (the cheap/fast mini). For every other provider
       // Haiku is unresolvable, so walk PI_PREFERRED_DEFAULTS for a model that
       // actually works under the user's auth.
-      const providerDefault = authProvider === 'anthropic'
+      const providerDefault = activeProvider === 'anthropic'
         ? undefined
-        : pickProviderAppropriateMiniModel(authProvider, modelRegistry, shouldPreferCustomEndpoint());
+        : pickProviderAppropriateMiniModel(activeProvider, modelRegistry, shouldPreferCustomEndpoint());
       const fallback = providerDefault ?? getDefaultSummarizationModel();
-      debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider} (resolved: ${resolvedProvider}), falling back to ${fallback}`);
+      debugLog(`[queryLlm] Model ${bareModel} incompatible with ${activeProvider} (resolved: ${resolvedProvider}), falling back to ${fallback}`);
       model = fallback;
     }
   }
@@ -956,14 +1035,25 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
   const runQueryWithModel = async (modelId: string): Promise<string> => {
     debugLog(`[queryLlm] Using model: ${modelId}`);
 
-    // Resolve model — fail fast if unresolvable so we don't let the Pi SDK
-    // fall back to its own internal default (which may require a provider
-    // the user hasn't authenticated with, surfacing as a misleading
-    // "No API key found for <provider>" error).
-    const piModel = resolvePiModel(modelRegistry, modelId, initConfig!.piAuth?.provider, shouldPreferCustomEndpoint());
+    // Resolve model — use secondary connection's provider when callLlmPiAuth is active.
+    // Fail fast if unresolvable so we don't let the Pi SDK fall back to its own internal
+    // default (which may require a provider the user hasn't authenticated with).
+    const resolveProvider = useCallLlmAuth
+      ? initConfig!.callLlmPiAuth?.provider
+      : initConfig!.piAuth?.provider;
+    let piModel = resolvePiModel(modelRegistry, modelId, resolveProvider, shouldPreferCustomEndpoint());
+
+    // For secondary connections (e.g. Z.ai), the SDK registers built-in models under the
+    // provider, but the user might configure a model that's too new for the SDK registry.
+    // Dynamically register it using the secondary baseUrl.
+    if (!piModel && resolveProvider) {
+      const overrideBaseUrl = useCallLlmAuth ? initConfig!.callLlmPiAuth?.baseUrl : undefined;
+      piModel = registerDynamicPiModel(modelRegistry, modelId, resolveProvider, overrideBaseUrl);
+    }
+
     if (!piModel) {
       throw new Error(
-        `Could not resolve mini model "${modelId}" for provider "${initConfig!.piAuth?.provider ?? '(unknown)'}"`,
+        `Could not resolve mini model "${modelId}" for provider "${resolveProvider ?? '(unknown)'}"`,
       );
     }
 
@@ -1055,13 +1145,20 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
     }
   };
 
+  const providerFallback = activeProvider && activeProvider !== 'anthropic'
+    ? pickProviderAppropriateMiniModel(activeProvider, modelRegistry, shouldPreferCustomEndpoint())
+    : undefined;
+
   const fallbackCandidates = [
     // Removed 'pi/gpt-5.1-codex-mini' (#596) — stale on several OpenAI catalogs.
     // The connection-configured miniModel is still tried via `initConfig.miniModel`.
+    providerFallback,
     'pi/gpt-5-mini',
     initConfig.miniModel,
     getDefaultSummarizationModel(),
-  ].filter((candidate): candidate is string => !!candidate && !isDeniedMiniModelId(candidate, piAuthProvider));
+  ].filter((candidate): candidate is string =>
+    !!candidate && !isDeniedMiniModelId(candidate, activeProvider ?? piAuthProvider)
+  );
 
   const triedModels = new Set<string>();
   let currentModel = model;
@@ -1082,11 +1179,14 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
       const retryModel = fallbackCandidates.find(candidate => {
         if (triedModels.has(candidate)) return false;
         try {
-          const resolved = resolvePiModel(modelRegistry, candidate, initConfig!.piAuth?.provider, shouldPreferCustomEndpoint());
+          const resolveProvider = useCallLlmAuth
+            ? initConfig!.callLlmPiAuth?.provider
+            : initConfig!.piAuth?.provider;
+          const resolved = resolvePiModel(modelRegistry, candidate, resolveProvider, shouldPreferCustomEndpoint());
           if (!resolved) return false;
-          if (initConfig!.piAuth) {
+          if (resolveProvider) {
             const rp = (resolved as any).provider;
-            if (rp !== initConfig!.piAuth.provider && rp !== 'custom-endpoint') {
+            if (rp !== resolveProvider && rp !== 'custom-endpoint') {
               return false;
             }
           }
@@ -1246,6 +1346,7 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
     piSession.dispose();
     piSession = null;
     moduleAuthStorage = null; // Reset so createAuthenticatedRegistry() creates fresh storage
+    callLlmAuthStorage = null; // Reset secondary auth too
     debugLog('Cleaned up existing session for re-init');
   }
 
@@ -1729,6 +1830,11 @@ async function processMessage(msg: InboundMessage): Promise<void> {
           initConfig.piAuth = msg.piAuth;
         }
         debugLog(`Updated ${credential.type} credential for provider: ${provider}`);
+        // Also refresh the secondary auth storage if it exists and the provider matches
+        if (callLlmAuthStorage && initConfig?.callLlmPiAuth?.provider === provider) {
+          callLlmAuthStorage.set(provider, credential as unknown as AuthCredential);
+          debugLog(`Updated secondary auth credential for provider: ${provider}`);
+        }
       } else {
         debugLog('token_update received but no authStorage initialized');
       }

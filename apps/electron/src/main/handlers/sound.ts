@@ -201,25 +201,46 @@ export function registerSoundHandlers(server: RpcServer, deps: HandlerDeps): voi
       const regPack = index.packs?.find((p: { name: string }) => p.name === packName)
       if (!regPack) throw new Error(`Pack not found in registry: ${packName}`)
 
-      // Use preview_sounds from registry entry (already lists filenames)
-      const previewSounds: string[] = regPack.preview_sounds || []
-      if (previewSounds.length === 0) throw new Error('Pack has no preview sounds available')
-
-      // Cycle through preview_sounds sequentially (wrapping around)
-      const wrapped = ((soundIndex % previewSounds.length) + previewSounds.length) % previewSounds.length
-      const soundFile = previewSounds[wrapped]
       const sourceRepo = regPack.source_repo
       const sourceRef = regPack.source_ref || 'main'
       const sourcePath = regPack.source_path || '.'
 
+      // Try fetching the full manifest to get ALL sounds (not just preview_sounds)
+      // This gives the same sequential preview experience as installed packs.
+      const manifestBaseUrl = `https://raw.githubusercontent.com/${sourceRepo}/${sourceRef}/${sourcePath === '.' ? '' : sourcePath + '/'}`
+      let allSounds: string[] = []
+      try {
+        const manifestResp = await fetch(manifestBaseUrl + 'openpeon.json')
+        if (manifestResp.ok) {
+          const manifest = await manifestResp.json()
+          // Collect all sound files from all categories
+          for (const catDef of Object.values(manifest.categories || {})) {
+            const sounds = (catDef as { sounds?: { file: string }[] }).sounds
+            if (sounds?.length) {
+              allSounds.push(...sounds.map((s: { file: string }) => s.file))
+            }
+          }
+        }
+      } catch {
+        // Manifest fetch failed — fall back to preview_sounds below
+      }
+
+      // Use allSounds if manifest was fetched, otherwise fall back to preview_sounds
+      const soundList = allSounds.length > 0 ? allSounds : (regPack.preview_sounds || [])
+      if (soundList.length === 0) throw new Error('Pack has no sounds available')
+
+      // Cycle through sounds sequentially (wrapping around)
+      const wrapped = ((soundIndex % soundList.length) + soundList.length) % soundList.length
+      const soundFile = soundList[wrapped]
+
       // Build raw.githubusercontent.com URL to the sound file
-      const rawUrl = `https://raw.githubusercontent.com/${sourceRepo}/${sourceRef}/${sourcePath === '.' ? '' : sourcePath + '/'}sounds/${soundFile}`
+      const rawUrl = manifestBaseUrl + 'sounds/' + soundFile
 
       // Download to temp file and play
       const soundResp = await fetch(rawUrl)
       if (!soundResp.ok) {
         // Fallback: try without the sounds/ prefix (some packs may put files at root)
-        const fallbackUrl = `https://raw.githubusercontent.com/${sourceRepo}/${sourceRef}/${sourcePath === '.' ? '' : sourcePath + '/'}${soundFile}`
+        const fallbackUrl = manifestBaseUrl + soundFile
         const fallbackResp = await fetch(fallbackUrl)
         if (!fallbackResp.ok) throw new Error(`Failed to download preview sound: ${soundResp.status}`)
         const tmpFile = join(tmpdir(), `sound-preview-${packName}-${Date.now()}.mp3`)
@@ -227,7 +248,7 @@ export function registerSoundHandlers(server: RpcServer, deps: HandlerDeps): voi
         try { engine.playTest(tmpFile) } finally {
           setTimeout(() => { try { unlinkSync(tmpFile) } catch {} }, 5000)
         }
-        return { success: true, totalSounds: previewSounds.length }
+        return { success: true, totalSounds: soundList.length }
       }
 
       const tmpFile = join(tmpdir(), `sound-preview-${packName}-${Date.now()}.mp3`)
@@ -235,7 +256,7 @@ export function registerSoundHandlers(server: RpcServer, deps: HandlerDeps): voi
       try { engine.playTest(tmpFile) } finally {
         setTimeout(() => { try { unlinkSync(tmpFile) } catch {} }, 5000)
       }
-      return { success: true, totalSounds: previewSounds.length }
+      return { success: true, totalSounds: soundList.length }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       console.error('[sound] Preview failed:', message)

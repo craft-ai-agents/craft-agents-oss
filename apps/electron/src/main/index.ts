@@ -682,6 +682,8 @@ app.whenReady().then(async () => {
                 const category = mapEventToCategory(event)
                 if (category) {
                   // When sessionId is not in the automation payload (e.g. UserPromptSubmit),
+                  // try to find the active session for the workspace from the session manager.
+                  // This ensures sounds play from the correct session pack instead of default.
                   // try to find the active session from the session manager.
                   const sid = sessionId ?? (() => {
                     try {
@@ -1264,6 +1266,11 @@ app.on('before-quit', async (event) => {
         mainLog.error('[messaging] dispose failed:', err)
       }
     }
+
+    // Dispose sound engine (kills utility process)
+    import('./audio/index.js').then(({ disposeSoundEngine }) => {
+      disposeSoundEngine().catch(() => {})
+    })
 
     // Clean up power manager (release power blocker)
     const { cleanup: cleanupPowerManager } = await import('./power-manager')

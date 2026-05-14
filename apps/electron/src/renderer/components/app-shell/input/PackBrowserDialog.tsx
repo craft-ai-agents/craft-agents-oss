@@ -197,7 +197,7 @@ export function PackBrowserDialog({
             </div>
           )}
 
-          {!loading && !error && (
+          {!loading && !error && filteredPacks.length > 0 && (
             <div className="space-y-1 py-1">
               {filteredPacks.map(pack => (
                 <div

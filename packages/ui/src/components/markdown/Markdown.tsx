@@ -25,6 +25,35 @@ import { wrapWithSafeProxy } from './safe-components'
 import { MARKDOWN_MATH_OPTIONS } from './math-options'
 
 /**
+ * Custom URL transform for react-markdown.
+ *
+ * Extends the default safe-protocol list to include `file:` URLs,
+ * which are used for local file links in chat messages.
+ * Without this, react-markdown strips `file://` hrefs to empty strings,
+ * causing file previews to fail with wrong-path errors.
+ */
+const SAFE_PROTOCOL_RE = /^(https?|ircs?|mailto|xmpp|file)$/i
+
+function urlTransform(value: string): string {
+  const colon = value.indexOf(':')
+  const questionMark = value.indexOf('?')
+  const numberSign = value.indexOf('#')
+  const slash = value.indexOf('/')
+
+  if (
+    colon === -1 ||
+    (slash !== -1 && colon > slash) ||
+    (questionMark !== -1 && colon > questionMark) ||
+    (numberSign !== -1 && colon > numberSign) ||
+    SAFE_PROTOCOL_RE.test(value.slice(0, colon))
+  ) {
+    return value
+  }
+
+  return ''
+}
+
+/**
  * Render modes for markdown content:
  *
  * - 'terminal': Raw output with minimal formatting, control chars visible
@@ -560,6 +589,7 @@ export function Markdown({
         remarkPlugins={remarkPlugins}
         rehypePlugins={[rehypeKatex, rehypeRaw]}
         components={components}
+        urlTransform={urlTransform}
       >
         {processedContent}
       </ReactMarkdown>

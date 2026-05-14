@@ -259,4 +259,8 @@ describe('isModelNotFoundError', () => {
     expect(isModelNotFoundError('invalid api key')).toBe(false);
     expect(isModelNotFoundError('')).toBe(false);
   });
+
+  it('matches our model resolution failure', () => {
+    expect(isModelNotFoundError('Could not resolve mini model "glm-5.1" for provider "zai"')).toBe(true);
+  });
 });

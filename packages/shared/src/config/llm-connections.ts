@@ -607,6 +607,7 @@ export const PI_PREFERRED_DEFAULTS: Record<string, string[]> = {
   deepseek: ['deepseek-v4-pro', 'deepseek-v4-flash'],
   'github-copilot': ['claude-sonnet-4-6', 'gpt-5', 'o4-mini', 'claude-haiku-4-5'],
   'amazon-bedrock': ['claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+  zai: ['glm-5', 'glm-4.7'],
 };
 
 export function getDefaultModelsForConnection(providerType: LlmProviderType, piAuthProvider?: string): Array<ModelDefinition | string> {

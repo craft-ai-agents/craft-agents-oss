@@ -48,6 +48,10 @@ export interface WorkspaceConfig {
     workingDirectory?: string;
     thinkingLevel?: ThinkingLevel; // Default thinking level for new sessions (default: 'medium')
     colorTheme?: string; // Color theme override for this workspace (preset ID). Undefined = inherit from app default.
+    // Secondary Model: per-workspace overrides for call_llm tool calls
+    callLlmConnection?: string; // Connection for call_llm (undefined = inherit from app default)
+    callLlmModel?: string; // Model for call_llm (undefined = inherit from app default)
+    callLlmThinkingLevel?: ThinkingLevel; // Thinking level for call_llm (undefined = inherit from app default)
   };
 
   /**

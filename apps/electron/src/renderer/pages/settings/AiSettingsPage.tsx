@@ -441,11 +441,32 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
     updateSetting('thinkingLevel', level === 'global' ? undefined : level as ThinkingLevel)
   }, [updateSetting])
 
+  // --- Secondary Model (call_llm) handlers ---
+  const handleCallLlmConnectionChange = useCallback((slug: string) => {
+    const value = slug === 'global' ? undefined : slug
+    updateSetting('callLlmConnection', value)
+    // When connection changes, clear the model (may not be valid for new connection)
+    if (value !== settings?.callLlmConnection) {
+      updateSetting('callLlmModel', undefined)
+    }
+  }, [updateSetting, settings?.callLlmConnection])
+
+  const handleCallLlmModelChange = useCallback((model: string) => {
+    updateSetting('callLlmModel', model === 'global' ? undefined : model)
+  }, [updateSetting])
+
+  const handleCallLlmThinkingChange = useCallback((level: string) => {
+    updateSetting('callLlmThinkingLevel', level === 'global' ? undefined : level as ThinkingLevel)
+  }, [updateSetting])
+
   // Determine if workspace has any overrides
   const hasOverrides = settings && (
     settings.defaultLlmConnection ||
     settings.model ||
-    settings.thinkingLevel
+    settings.thinkingLevel ||
+    settings.callLlmConnection ||
+    settings.callLlmModel ||
+    settings.callLlmThinkingLevel
   )
 
   // Get display values
@@ -458,6 +479,19 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
     const connSlug = settings?.defaultLlmConnection
     return connSlug ? llmConnections.find(c => c.slug === connSlug) : llmConnections.find(c => c.isDefault)
   }, [settings?.defaultLlmConnection, llmConnections])
+
+  // Secondary Model state
+  const currentCallLlmConnection = settings?.callLlmConnection || 'global'
+  const currentCallLlmModel = settings?.callLlmModel || 'global'
+  const currentCallLlmThinking = settings?.callLlmThinkingLevel || 'global'
+
+  // Derive call_llm effective connection for model dropdown
+  const callLlmEffectiveConnection = useMemo(() => {
+    if (settings?.callLlmConnection) {
+      return llmConnections.find(c => c.slug === settings.callLlmConnection)
+    }
+    return workspaceEffectiveConnection
+  }, [settings?.callLlmConnection, llmConnections, workspaceEffectiveConnection])
 
   // Get summary text for collapsed state
   const getSummary = () => {
@@ -473,6 +507,14 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
     if (settings?.thinkingLevel) {
       const level = THINKING_LEVELS.find(l => l.id === settings.thinkingLevel)
       parts.push(level ? t(level.nameKey) : settings.thinkingLevel)
+    }
+    // Secondary model overrides
+    const secParts: string[] = []
+    if (settings?.callLlmModel) {
+      secParts.push(getModelShortName(settings.callLlmModel))
+    }
+    if (secParts.length > 0) {
+      parts.push(`Secondary: ${secParts.join(' ')}`)
     }
     return parts.join(' · ')
   }
@@ -565,6 +607,53 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
                   })),
                 ]}
               />
+
+              {/* Secondary Model (call_llm) overrides */}
+              <div className="pt-3 mt-1 border-t border-border/30">
+                <div className="px-1 pb-2">
+                  <span className="text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">Secondary Model</span>
+                </div>
+                <SettingsMenuSelectRow
+                  label={t("settings.ai.connection")}
+                  description="Connection for background subtasks"
+                  value={currentCallLlmConnection}
+                  onValueChange={handleCallLlmConnectionChange}
+                  options={[
+                    { value: 'global', label: t("settings.ai.useDefault"), description: t("settings.ai.inheritFromApp") },
+                    ...llmConnections.map(c => ({
+                      value: c.slug,
+                      label: c.name,
+                      description: c.providerType || '',
+                    })),
+                  ]}
+                />
+                <SettingsMenuSelectRow
+                  label={t("settings.ai.model")}
+                  description="Model for call_llm subtasks"
+                  value={currentCallLlmModel}
+                  onValueChange={handleCallLlmModelChange}
+                  options={[
+                    { value: 'global', label: t("settings.ai.useDefault"), description: t("settings.ai.inheritFromApp") },
+                    ...getModelOptionsForConnection(callLlmEffectiveConnection).map(o => ({
+                      ...o, description: '',
+                    })),
+                  ]}
+                />
+                <SettingsMenuSelectRow
+                  label={t("settings.ai.thinking")}
+                  description="Thinking level for call_llm subtasks"
+                  value={currentCallLlmThinking}
+                  onValueChange={handleCallLlmThinkingChange}
+                  options={[
+                    { value: 'global', label: t("settings.ai.useDefault"), description: t("settings.ai.inheritFromApp") },
+                    ...THINKING_LEVELS.map(({ id, nameKey, descriptionKey }) => ({
+                      value: id,
+                      label: t(nameKey),
+                      description: t(descriptionKey),
+                    })),
+                  ]}
+                />
+              </div>
             </div>
           </motion.div>
         )}
@@ -614,6 +703,11 @@ export default function AiSettingsPage() {
   const [extendedPromptCache, setExtendedPromptCache] = useState(false)
   const [enable1MContext, setEnable1MContext] = useState(false)
 
+  // Secondary Model (call_llm) settings state (app-level)
+  const [callLlmConnection, setCallLlmConnection] = useState<string | undefined>(undefined)
+  const [callLlmModel, setCallLlmModel] = useState<string | undefined>(undefined)
+  const [callLlmThinking, setCallLlmThinking] = useState<ThinkingLevel | undefined>(undefined)
+
   // Validation state per connection
   const [validationStates, setValidationStates] = useState<Record<string, {
     state: ValidationState
@@ -650,6 +744,12 @@ export default function AiSettingsPage() {
         if (!health.healthy) {
           setCredentialHealthIssues(health.issues)
         }
+
+        // Load secondary model (call_llm) settings
+        const callLlmSettings = await window.electronAPI.getCallLlmSettings()
+        setCallLlmConnection(callLlmSettings.connection)
+        setCallLlmModel(callLlmSettings.model)
+        setCallLlmThinking(callLlmSettings.thinkingLevel as ThinkingLevel | undefined)
       } catch (error) {
         console.error('Failed to load settings:', error)
       }
@@ -931,6 +1031,59 @@ export default function AiSettingsPage() {
     }
   }, [defaultThinking])
 
+  // Derive the effective connection for call_llm model dropdown
+  const callLlmEffectiveConnection = useMemo(() => {
+    if (callLlmConnection) {
+      return llmConnections.find(c => c.slug === callLlmConnection)
+    }
+    return defaultConnection
+  }, [callLlmConnection, llmConnections, defaultConnection])
+
+  // --- Secondary Model (call_llm) handlers ---
+  const handleCallLlmConnectionChange = useCallback(async (slug: string) => {
+    if (!window.electronAPI) return
+    const value = slug === 'default' ? undefined : slug
+    const previous = callLlmConnection
+    setCallLlmConnection(value)
+    try {
+      await window.electronAPI.setCallLlmConnection(value)
+      // Clear model when connection changes
+      if (value !== previous) {
+        setCallLlmModel(undefined)
+        await window.electronAPI.setCallLlmModel(undefined)
+      }
+    } catch (error) {
+      console.error('Failed to set call_llm connection:', error)
+      setCallLlmConnection(previous)
+    }
+  }, [callLlmConnection])
+
+  const handleCallLlmModelChange = useCallback(async (model: string) => {
+    if (!window.electronAPI) return
+    const value = model === 'default' ? undefined : model
+    const previous = callLlmModel
+    setCallLlmModel(value)
+    try {
+      await window.electronAPI.setCallLlmModel(value)
+    } catch (error) {
+      console.error('Failed to set call_llm model:', error)
+      setCallLlmModel(previous)
+    }
+  }, [callLlmModel])
+
+  const handleCallLlmThinkingChange = useCallback(async (level: string) => {
+    if (!window.electronAPI) return
+    const value = level === 'default' ? undefined : level as ThinkingLevel
+    const previous = callLlmThinking
+    setCallLlmThinking(value)
+    try {
+      await window.electronAPI.setCallLlmThinkingLevel(value)
+    } catch (error) {
+      console.error('Failed to set call_llm thinking level:', error)
+      setCallLlmThinking(previous)
+    }
+  }, [callLlmThinking])
+
   const handleExtendedPromptCacheChange = useCallback(async (enabled: boolean) => {
     setExtendedPromptCache(enabled)
     await window.electronAPI?.setExtendedPromptCache(enabled)
@@ -1015,6 +1168,55 @@ export default function AiSettingsPage() {
                       />
                     ))}
                   </div>
+                </SettingsSection>
+              )}
+
+              {/* Secondary Model (call_llm) - only show if connections exist */}
+              {llmConnections.length > 0 && (
+                <SettingsSection
+                  title="Secondary Model"
+                  description="Model used for background subtasks (summarization, classification, extraction). When set, overrides automatic model selection for all call_llm tool calls."
+                >
+                  <SettingsCard>
+                    <SettingsMenuSelectRow
+                      label={t("settings.ai.connection")}
+                      description="Connection for call_llm subtasks"
+                      value={callLlmConnection ?? 'default'}
+                      onValueChange={handleCallLlmConnectionChange}
+                      options={[
+                        { value: 'default', label: t("settings.ai.automatic"), description: 'Use primary connection' },
+                        ...llmConnections.map(c => ({
+                          value: c.slug,
+                          label: c.name,
+                          description: c.providerType || '',
+                        })),
+                      ]}
+                    />
+                    <SettingsMenuSelectRow
+                      label={t("settings.ai.model")}
+                      description="Model for call_llm subtasks"
+                      value={callLlmModel ?? 'default'}
+                      onValueChange={handleCallLlmModelChange}
+                      options={[
+                        { value: 'default', label: t("settings.ai.automatic"), description: 'Use connection default' },
+                        ...getModelOptionsForConnection(callLlmEffectiveConnection),
+                      ]}
+                    />
+                    <SettingsMenuSelectRow
+                      label={t("settings.ai.thinking")}
+                      description="Thinking level for call_llm subtasks"
+                      value={callLlmThinking ?? 'default'}
+                      onValueChange={(v) => handleCallLlmThinkingChange(v)}
+                      options={[
+                        { value: 'default', label: t("settings.ai.automatic"), description: 'Use default thinking level' },
+                        ...THINKING_LEVELS.map(({ id, nameKey, descriptionKey }) => ({
+                          value: id,
+                          label: t(nameKey),
+                          description: t(descriptionKey),
+                        })),
+                      ]}
+                    />
+                  </SettingsCard>
                 </SettingsSection>
               )}
 

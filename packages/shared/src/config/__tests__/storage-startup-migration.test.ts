@@ -167,7 +167,7 @@ describe('startup migration (integration)', () => {
     expect(modelIds).toContain(connection.defaultModel)
   })
 
-  it('repairs userDefined3Tier lists by removing invalid IDs and fixing default model', () => {
+  it('preserves user-added models unknown to the SDK in userDefined3Tier mode', () => {
     const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
 
     writeRootConfig(configPath, workspaceRoot, [
@@ -189,11 +189,13 @@ describe('startup migration (integration)', () => {
     const connection = readPiApiKeyConnection(configPath)
     expect(connection).toBeDefined()
     expect(connection.modelSelectionMode).toBe('userDefined3Tier')
-    expect(connection.models).toEqual(['pi/claude-opus-4-6', 'pi/claude-haiku-4-5'])
-    expect(connection.defaultModel).toBe('pi/claude-opus-4-6')
+    // User-added models (even those unknown to the SDK) must be preserved.
+    // This is the key behavior: users may add new models before the SDK is updated.
+    expect(connection.models).toEqual(['pi/claude-opus-4-6', 'pi/not-real', 'pi/claude-haiku-4-5'])
+    expect(connection.defaultModel).toBe('pi/not-real')
   })
 
-  it('falls back to provider defaults when userDefined3Tier becomes empty after filtering', () => {
+  it('preserves all-unknown userDefined3Tier models without falling back to defaults', () => {
     const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
 
     writeRootConfig(configPath, workspaceRoot, [
@@ -216,10 +218,10 @@ describe('startup migration (integration)', () => {
     expect(connection).toBeDefined()
     expect(connection.modelSelectionMode).toBe('userDefined3Tier')
     const modelIds = getModelIds(connection)
-    expect(modelIds.length).toBeGreaterThan(1)
-    expect(modelIds).toContain('pi/claude-opus-4-6')
-    expect(modelIds).not.toContain('pi/not-real-1')
-    expect(connection.defaultModel).toBe(modelIds[0])
+    // Even if none of the user's models are in the SDK, they must be preserved.
+    // Users may add models that are available at the provider but not yet in the bundled SDK.
+    expect(modelIds).toEqual(['pi/not-real-1', 'pi/not-real-2'])
+    expect(connection.defaultModel).toBe('pi/not-real-1')
   })
 
   it('normalizes legacy unprefixed userDefined3Tier model IDs instead of resetting', () => {

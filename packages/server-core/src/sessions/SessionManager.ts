@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
+import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, getCallLlmModel, getCallLlmThinkingLevel, getCallLlmConnection, resolveMidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -1418,6 +1418,9 @@ export class SessionManager implements ISessionManager {
             }
           }
         },
+        onEvent: (event, _input) => {
+          sessionRuntimeHooks.onAutomationEvent?.(event as string, undefined)
+        },
         onError: (event, error) => {
           sessionLog.error(`Automation failed for ${event}:`, error.message)
         },
@@ -1427,10 +1430,9 @@ export class SessionManager implements ISessionManager {
       // Bridge automation events to sound notifications via runtime hooks
       if (sessionRuntimeHooks.onAutomationEvent) {
         automationSystem.eventBus.onAny((event, payload) => {
-          sessionRuntimeHooks.onAutomationEvent!(event, payload.sessionId)
+          sessionRuntimeHooks.onAutomationEvent(event, payload.sessionId)
         })
       }
-
       sessionLog.info(`Initialized AutomationSystem for workspace ${workspaceId}`)
     }
   }
@@ -2966,6 +2968,18 @@ export class SessionManager implements ISessionManager {
 
       // Per-session env overrides
       const miniModel = connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined
+
+      // Resolve Secondary Model (call_llm) overrides: workspace config → app-level → unset
+      const callLlmConnectionSlug = workspaceConfig?.defaults?.callLlmConnection
+        ?? getCallLlmConnection()
+        ?? undefined
+      const callLlmModelOverride = workspaceConfig?.defaults?.callLlmModel
+        ?? getCallLlmModel()
+        ?? undefined
+      const callLlmThinkingLevel = workspaceConfig?.defaults?.callLlmThinkingLevel
+        ?? getCallLlmThinkingLevel()
+        ?? undefined
+
       const envOverrides: Record<string, string> = {
         CRAFT_WORKSPACE_PATH: managed.workspace.rootPath,
         // Pass mini model to SDK subprocess so built-in tools like WebFetch
@@ -3100,6 +3114,9 @@ export class SessionManager implements ISessionManager {
         coreConfig: {
         workspace: managed.workspace,
         miniModel,
+        callLlmConnectionSlug,
+        callLlmModelOverride,
+        callLlmThinkingLevel,
         thinkingLevel: managed.thinkingLevel,
         session: sessionConfig,
         onSdkSessionIdUpdate,
@@ -3807,6 +3824,14 @@ export class SessionManager implements ISessionManager {
         },
         setSessionStatusFn: async (sessionId: string | undefined, status: string) => {
           await this.setSessionStatus(sessionId ?? managed.id, status as SessionStatus)
+        },
+        archiveSessionFn: async (sessionId: string | undefined, archive: boolean) => {
+          const targetId = sessionId ?? managed.id
+          if (archive) {
+            await this.archiveSession(targetId)
+          } else {
+            await this.unarchiveSession(targetId)
+          }
         },
         getSessionInfoFn: (sessionId?: string) => {
           const targetId = sessionId ?? managed.id
@@ -5945,7 +5970,7 @@ export class SessionManager implements ISessionManager {
     this.setProcessing(managed, false)
     managed.stopRequested = false  // Reset for next turn
 
-    // Notify sound system of completion reason (interrupted already handled by Stop event)
+    // Notify sound system of completion reason (interrupted already handled by abort/Stop event)
     if (reason !== 'interrupted') {
       sessionRuntimeHooks.onSessionCompleted?.(reason, managed.id)
     }
