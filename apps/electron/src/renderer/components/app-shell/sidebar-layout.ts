@@ -30,13 +30,13 @@ export function resolveSidebarLayout({
     }
   }
 
-  const embedsAllSessionsList =
+  const hidesSessionsNavigator =
     isSessionsNavigation(navState) &&
     navState.filter.kind === 'allSessions'
 
   return {
     sidebarWidth: isSidebarVisible ? sidebarWidth : 0,
-    navigatorWidth: embedsAllSessionsList ? 0 : sidebarWidth,
+    navigatorWidth: hidesSessionsNavigator ? 0 : sidebarWidth,
     showSidebarResizeHandle: true,
   }
 }

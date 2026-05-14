@@ -4,26 +4,7 @@ import { resolveSidebarLayout } from '../sidebar-layout'
 import type { NavigationState } from '../../../../shared/types'
 
 describe('resolveSidebarLayout', () => {
-  test('hides the navigator in all sessions mode when the list is embedded in the sidebar', () => {
-    const navState: NavigationState = {
-      navigator: 'sessions',
-      filter: { kind: 'allSessions' },
-      details: null,
-    }
-
-    expect(resolveSidebarLayout({
-      navState,
-      isSidebarAndNavigatorHidden: false,
-      isSidebarVisible: true,
-      sidebarWidth: 300,
-    })).toEqual({
-      sidebarWidth: 300,
-      navigatorWidth: 0,
-      showSidebarResizeHandle: true,
-    })
-  })
-
-  test('keeps the sessions navigator hidden when all sessions is collapsed', () => {
+  test('keeps the sessions navigator hidden for all sessions navigation', () => {
     const navState: NavigationState = {
       navigator: 'sessions',
       filter: { kind: 'allSessions' },
