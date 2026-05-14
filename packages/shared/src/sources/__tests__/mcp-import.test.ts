@@ -29,6 +29,7 @@ describe('parseMcpJsonImportCandidates', () => {
           args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
         },
       },
+      enableInWorkspace: true,
       errors: [],
     });
   });
@@ -61,6 +62,7 @@ describe('parseMcpJsonImportCandidates', () => {
             args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
           },
         },
+        enableInWorkspace: true,
         errors: [],
       },
       {
@@ -75,6 +77,7 @@ describe('parseMcpJsonImportCandidates', () => {
             url: 'https://mcp.linear.app/mcp',
           },
         },
+        enableInWorkspace: true,
         errors: [],
       },
     ]);
@@ -1105,6 +1108,68 @@ describe('createMcpSourceFromManualInput', () => {
       });
       expect(readFileSync(join(workspaceRootPath, 'sources', 'bearer-remote', 'config.json'), 'utf-8')).not.toContain('bearer-token-123');
       expect(readFileSync(join(workspaceRootPath, 'sources', 'api-key-remote', 'config.json'), 'utf-8')).not.toContain('api-key-123');
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('enableInWorkspace', () => {
+  test('sets enableInWorkspace: true by default on parsed JSON candidates', () => {
+    const result = parseMcpJsonImportCandidates(JSON.stringify({
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+    }));
+
+    expect(result.candidates[0]?.enableInWorkspace).toBe(true);
+  });
+
+  test('enableInWorkspace is metadata not consumed by creation functions', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      const created = await createMcpSourceFromManualInput(workspaceRootPath, {
+        name: 'Metadata Test',
+        provider: 'metadata-test',
+        enableInWorkspace: false,
+        mcp: {
+          transport: 'http',
+          url: 'https://example.com/mcp',
+          authType: 'none',
+        },
+      }, {
+        credentialManager: { save: async () => {} },
+        connectionTester: async () => ({ success: true }),
+      });
+
+      expect(created.slug).toBe('metadata-test');
+      expect(created.enabled).toBe(true);
+      // enableInWorkspace does not affect the stored config
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('JSON import candidates can set enableInWorkspace: false for opt-out', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          optedOut: { url: 'https://opted-out.example.com/mcp' },
+          enabledByDefault: { url: 'https://enabled.example.com/mcp' },
+        },
+      }));
+
+      // Default is true
+      expect(parsed.candidates.every((c) => c.enableInWorkspace === true)).toBe(true);
+
+      // Opt out specific candidates
+      const candidates = parsed.candidates.map((c) =>
+        c.key === 'optedOut' ? { ...c, enableInWorkspace: false } : c
+      );
+
+      const enabled = candidates.filter((c) => c.enableInWorkspace !== false);
+      expect(enabled).toHaveLength(1);
+      expect(enabled[0]?.key).toBe('enabledByDefault');
     } finally {
       rmSync(workspaceRootPath, { recursive: true, force: true });
     }
