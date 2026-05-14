@@ -705,7 +705,7 @@ async function createMcpSourceFromCandidate(
   }
   saveSourceConfig(workspaceRootPath, config);
   saveSourceGuide(workspaceRootPath, slug, guide);
-  await testCreatedMcpSource(workspaceRootPath, slug, guide, credentialValue, options.connectionTester, options.confirmedStdioCommands, options.skipLocalMcpEnabledCheck);
+  await testCreatedMcpSource(workspaceRootPath, slug, guide, credentialValue, options);
   return config;
 }
 
@@ -714,19 +714,16 @@ async function testCreatedMcpSource(
   sourceSlug: string,
   guide: SourceGuide,
   credentialValue: string | null,
-  connectionTester: McpPostCreateConnectionTester | undefined,
-  confirmedStdioCommands?: Record<string, true>,
-  skipLocalMcpEnabledCheck?: boolean,
+  options: McpSourceCreationOptions,
 ): Promise<void> {
+  const { connectionTester, confirmedStdioCommands, skipLocalMcpEnabledCheck } = options;
   if (!connectionTester) return;
 
   const config = loadSourceConfig(workspaceRootPath, sourceSlug);
   if (!config) return;
 
-  // Gate: stdio sources require first-run confirmation before spawning.
   const isStdio = config.type === 'mcp' && config.mcp?.transport === 'stdio';
   if (isStdio) {
-    // Gate: check if local MCP servers are enabled globally.
     if (!skipLocalMcpEnabledCheck && !isLocalMcpEnabled(workspaceRootPath)) {
       config.connectionStatus = 'local_disabled';
       config.lastTestedAt = Date.now();
@@ -734,11 +731,9 @@ async function testCreatedMcpSource(
       return;
     }
 
-    // Gate: check first-run confirmation for this command.
     if (config.mcp?.command && confirmedStdioCommands !== undefined) {
       const fingerprint = stdioCommandFingerprint(config.mcp.command, config.mcp.args);
       if (!confirmedStdioCommands[fingerprint]) {
-        // Not confirmed — skip test so the command is never spawned.
         return;
       }
     }
