@@ -63,7 +63,6 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     return created
   })
 
-  // Parse pasted MCP JSON and mark duplicate candidates for preview.
   server.handle(RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT, async (_ctx, workspaceId: string, json: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
@@ -75,7 +74,6 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     }
   })
 
-  // Create selected MCP import candidates through the normalized creation path.
   server.handle(RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES, async (_ctx, workspaceId: string, candidates: import('@craft-agent/shared/sources').McpImportCandidate[]) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
