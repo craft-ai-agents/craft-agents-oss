@@ -39,7 +39,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
     const { createMcpSourceFromManualInput, createSource, defaultMcpPostCreateConnectionTester } = await import('@craft-agent/shared/sources')
-    const enableInWorkspace = (config as Record<string, unknown>).enableInWorkspace ?? true
+    const enableInWorkspace = config.enableInWorkspace ?? true
     if ((config.type ?? 'mcp') === 'mcp' && config.mcp) {
       const created = await createMcpSourceFromManualInput(workspace.rootPath, {
         name: config.name || 'New Source',
@@ -89,17 +89,11 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       connectionTester: defaultMcpPostCreateConnectionTester,
     })
     // Add successfully created sources with enableInWorkspace to workspace defaults
-    const enabledSlugs = result.results
-      .filter((r) => r.success && !('skipped' in r))
-      .map((r) => r as { key: string; success: true; sourceSlug: string })
-      .filter((r) => {
-        const candidate = candidates.find((c) => c.key === r.key)
-        return candidate?.enableInWorkspace ?? true
-      })
-      .map((r) => r.sourceSlug)
-    if (enabledSlugs.length > 0) {
-      for (const slug of enabledSlugs) {
-        addSlugToWorkspaceDefaults(workspace.rootPath, slug)
+    for (const r of result.results) {
+      if (!r.success || 'skipped' in r) continue
+      const candidate = candidates.find((c) => c.key === r.key)
+      if (candidate?.enableInWorkspace ?? true) {
+        addSlugToWorkspaceDefaults(workspace.rootPath, r.sourceSlug)
       }
     }
     pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
