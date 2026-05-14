@@ -487,12 +487,13 @@ describe('createMcpSourcesFromCandidates', () => {
       expect(result.results).toEqual([
         { key: 'linear', success: true, sourceSlug: 'linear' },
       ]);
-      expect(loadSourceConfig(workspaceRootPath, 'linear')).toMatchObject({
+      const config = loadSourceConfig(workspaceRootPath, 'linear');
+      expect(config).toMatchObject({
         connectionStatus: 'connected',
         isAuthenticated: true,
       });
-      expect(loadSourceConfig(workspaceRootPath, 'linear')?.connectionError).toBeUndefined();
-      expect(loadSourceConfig(workspaceRootPath, 'linear')?.lastTestedAt).toBeGreaterThan(0);
+      expect(config?.connectionError).toBeUndefined();
+      expect(config?.lastTestedAt).toBeGreaterThan(0);
     } finally {
       rmSync(workspaceRootPath, { recursive: true, force: true });
     }
@@ -524,7 +525,8 @@ describe('createMcpSourcesFromCandidates', () => {
       expect(result.results).toEqual([
         { key: 'secured', success: true, sourceSlug: 'secured' },
       ]);
-      expect(loadSourceConfig(workspaceRootPath, 'secured')).toMatchObject({
+      const config = loadSourceConfig(workspaceRootPath, 'secured');
+      expect(config).toMatchObject({
         connectionStatus: 'needs_auth',
         connectionError: 'Authentication failed. Re-authenticate this MCP source.',
         isAuthenticated: false,
@@ -556,7 +558,8 @@ describe('createMcpSourcesFromCandidates', () => {
       expect(result.results).toEqual([
         { key: 'offline', success: true, sourceSlug: 'offline' },
       ]);
-      expect(loadSourceConfig(workspaceRootPath, 'offline')).toMatchObject({
+      const config = loadSourceConfig(workspaceRootPath, 'offline');
+      expect(config).toMatchObject({
         connectionStatus: 'failed',
         connectionError: 'MCP server endpoint not found. Check the URL and try again.',
         isAuthenticated: false,
@@ -732,7 +735,8 @@ describe('createMcpSourceFromManualInput', () => {
 
       expect(created.slug).toBe('manual-remote');
       expect(testedSlugs).toEqual(['manual-remote']);
-      expect(loadSourceConfig(workspaceRootPath, 'manual-remote')?.connectionStatus).toBe('connected');
+      const config = loadSourceConfig(workspaceRootPath, 'manual-remote');
+      expect(config?.connectionStatus).toBe('connected');
     } finally {
       rmSync(workspaceRootPath, { recursive: true, force: true });
     }
