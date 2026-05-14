@@ -66,9 +66,9 @@ describe('Level 1 frame surfaces', () => {
     expect(classes).not.toContain('bg-background/70')
   })
 
-  test('renders embedded All Sessions with auto height so the wrapper owns overflow', () => {
+  test('renders the embedded All Sessions list with auto height so the wrapper owns overflow', () => {
     expect(appShellSource).toMatch(
-      /const allSessionsList = renderSessionList\(\s*'all-sessions-sidebar',[\s\S]*?\s*'auto',\s*\)/,
+      /<SessionList[\s\S]*key=\{key\}[\s\S]*heightBehavior=\{heightBehavior\}[\s\S]*const allSessionsList = renderSessionList\(\s*'all-sessions-sidebar',[\s\S]*'auto',\s*\)/,
     )
   })
 })
