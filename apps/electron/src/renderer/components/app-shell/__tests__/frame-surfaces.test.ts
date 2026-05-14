@@ -42,6 +42,14 @@ describe('Level 1 frame surfaces', () => {
     expectClassNameToInclude(appShellSource, /data-focus-zone="sidebar"[\s\S]*?<div className="([^"]+)"/, 'bg-foreground-5')
     expectClassNameToInclude(topBarSource, /return \(\s+<div\s+className="([^"]+)"/, 'bg-foreground-5')
   })
+
+  test('reserves sidebar scroll gutter before All Sessions expansion overflows', () => {
+    expectClassNameToInclude(
+      appShellSource,
+      /Primary Nav: All Sessions[\s\S]*?<div className="([^"]+)"/,
+      '[scrollbar-gutter:stable]',
+    )
+  })
 })
 
 describe('Level 2 panel surfaces', () => {

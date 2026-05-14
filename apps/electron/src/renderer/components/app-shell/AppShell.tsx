@@ -1779,7 +1779,7 @@ function AppShellContent({
                 </div>
                 {/* Primary Nav: All Sessions, Archived, Labels | Sources, Skills | Settings */}
                 {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
-                <div className="flex-1 overflow-y-auto min-h-0 mask-fade-bottom pb-4">
+                <div className="flex-1 overflow-y-auto min-h-0 [scrollbar-gutter:stable] mask-fade-bottom pb-4">
                 <LeftSidebar
                   isCollapsed={false}
                   getItemProps={getSidebarItemProps}
