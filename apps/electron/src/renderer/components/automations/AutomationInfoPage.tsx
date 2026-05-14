@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { PauseCircle, AlertCircle, Hash } from 'lucide-react'
+import { PauseCircle } from 'lucide-react'
 import {
   Info_Page,
   Info_Section,
@@ -57,25 +57,6 @@ export function AutomationInfoPage({
   const { t } = useTranslation()
   const workspace = useActiveWorkspace()
   const nextRuns = automation.cron ? computeNextRuns(automation.cron) : []
-
-  // Lightweight per-mount fetch — mirrors the pattern used in MessagingSettingsPage.
-  // Only fired when the matcher actually declares a topic to avoid unnecessary IPC.
-  const [hasSupergroup, setHasSupergroup] = React.useState<boolean | null>(null)
-  React.useEffect(() => {
-    if (!automation.telegramTopic) {
-      setHasSupergroup(null)
-      return
-    }
-    let cancelled = false
-    void window.electronAPI.getMessagingSupergroup().then((sg) => {
-      if (!cancelled) setHasSupergroup(Boolean(sg?.chatId))
-    }).catch(() => {
-      if (!cancelled) setHasSupergroup(false)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [automation.telegramTopic])
 
   const editActions = workspace?.rootPath ? (
     <EditPopover
@@ -224,21 +205,6 @@ export function AutomationInfoPage({
                   {automation.labels.map((l) => (
                     <Info_Badge key={l} color="muted">{l}</Info_Badge>
                   ))}
-                </div>
-              </Info_Table.Row>
-            )}
-            {automation.telegramTopic && (
-              <Info_Table.Row label={t('automations.labelTelegramTopic')}>
-                <div className="flex flex-col gap-1">
-                  <div className="inline-flex items-center gap-1.5 text-foreground">
-                    <Hash className="size-3.5 text-foreground/50" />
-                    <span className="font-mono text-xs">{automation.telegramTopic}</span>
-                  </div>
-                  <span className="text-xs text-foreground/50">
-                    {hasSupergroup === false
-                      ? t('automations.telegramTopicHintNoSupergroup')
-                      : t('automations.telegramTopicHintBound')}
-                  </span>
                 </div>
               </Info_Table.Row>
             )}

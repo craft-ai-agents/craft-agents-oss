@@ -95,7 +95,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { PanelHeader } from "./PanelHeader"
 import { FabNewChat } from "./FabNewChat"
 import { SendToWorkspaceDialog } from "./SendToWorkspaceDialog"
-import { MessagingDialogHost } from "@/components/messaging/MessagingDialogHost"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import {
@@ -2362,10 +2361,6 @@ function AppShellContent({
         activeWorkspaceId={activeWorkspaceId}
         onTransferComplete={handleTransferComplete}
       />
-
-      {/* Messaging dialogs (pairing-code + WA connect) — driven by messagingDialogAtom.
-          Mounted here so they survive context-menu / dropdown close. */}
-      <MessagingDialogHost />
 
     </AppShellProvider>
   )

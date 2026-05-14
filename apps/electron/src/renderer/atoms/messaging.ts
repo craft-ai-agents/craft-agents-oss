@@ -49,27 +49,3 @@ export const setMessagingBindingsAtom = atom(
     set(messagingBindingsAtom, bindings.filter((binding) => binding.enabled))
   },
 )
-
-/**
- * Global messaging dialog state.
- *
- * Hoisted out of SessionMenu so dialogs survive context-menu / dropdown close.
- * Rendered by <MessagingDialogHost /> mounted at AppShell level.
- */
-export type MessagingDialogState =
-  | { kind: 'closed' }
-  | {
-      kind: 'pairing'
-      platform: 'telegram' | 'whatsapp' | 'lark'
-      sessionId: string
-      code: string | null
-      expiresAt: number | null
-      botUsername?: string
-      error?: string
-    }
-  | {
-      kind: 'wa_connect'
-      continueToPairingSessionId?: string
-    }
-
-export const messagingDialogAtom = atom<MessagingDialogState>({ kind: 'closed' })
