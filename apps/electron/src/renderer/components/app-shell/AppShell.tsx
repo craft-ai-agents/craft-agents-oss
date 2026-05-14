@@ -1793,7 +1793,7 @@ function AppShellContent({
                       isExpanded: isAllSessionsExpanded,
                       onToggle: () => toggleExpanded(ALL_SESSIONS_NAV_ITEM_ID),
                       expandedContent: (
-                        <div className="mt-1 h-[min(560px,calc(100vh-150px))] min-h-[260px] overflow-hidden rounded-[6px] bg-background/70">
+                        <div className="mt-1 h-[min(560px,calc(100vh-150px))] min-h-[260px] overflow-hidden">
                           {allSessionsList}
                         </div>
                       ),

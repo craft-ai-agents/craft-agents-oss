@@ -50,6 +50,17 @@ describe('Level 1 frame surfaces', () => {
       '[scrollbar-gutter:stable]',
     )
   })
+
+  test('keeps the embedded All Sessions list flush with the sidebar surface', () => {
+    const match = appShellSource.match(/expandedContent:\s*\(\s*<div className="([^"]+)"/)
+    const classes = match?.[1].split(/\s+/) ?? []
+
+    expect(classes).toContain('overflow-hidden')
+    expect(classes).toContain('h-[min(560px,calc(100vh-150px))]')
+    expect(classes).toContain('min-h-[260px]')
+    expect(classes).not.toContain('rounded-[6px]')
+    expect(classes).not.toContain('bg-background/70')
+  })
 })
 
 describe('Level 2 panel surfaces', () => {
