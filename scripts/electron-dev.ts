@@ -239,6 +239,19 @@ async function killProcessIds(pids: number[], label: string): Promise<void> {
 
 async function cleanupExistingElectronDevInstances(): Promise<void> {
   if (process.platform === "win32") {
+    // On Windows, taskkill all electron.exe processes so the single-instance
+    // lock from a stale dev session doesn't cause the new window to silently exit.
+    try {
+      const kill = spawn({
+        cmd: ["taskkill", "/F", "/IM", "electron.exe"],
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      await kill.exited;
+      console.log("🔪 Killed stale electron.exe process(es)");
+    } catch {
+      // No electron.exe running — ignore.
+    }
     return;
   }
 
