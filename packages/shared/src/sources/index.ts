@@ -80,14 +80,18 @@ export type {
 // MCP JSON import parsing
 export {
   createMcpSourcesFromCandidates,
+  detectDuplicateMcpImportCandidates,
   parseMcpJsonImportCandidates,
 } from './mcp-import.ts';
 export type {
+  McpImportCandidateAction,
   McpImportCandidate,
   McpImportBatchCreateResult,
   McpImportCreateOptions,
   McpImportCreateResult,
   McpImportCredentialManager,
+  McpImportDuplicateMatch,
+  McpImportDuplicateReason,
   McpImportFieldError,
   McpImportParseResult,
   McpImportParseOptions,

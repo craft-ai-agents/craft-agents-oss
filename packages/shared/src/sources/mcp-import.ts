@@ -1,7 +1,14 @@
 import { randomUUID } from 'crypto';
 import { basename } from 'path';
 import type { StoredCredential } from '../credentials/types.ts';
-import { generateSourceSlug, getSourcePath, saveSourceConfig, saveSourceGuide } from './storage.ts';
+import {
+  deleteSource,
+  generateSourceSlug,
+  getSourcePath,
+  loadWorkspaceSources,
+  saveSourceConfig,
+  saveSourceGuide,
+} from './storage.ts';
 import { getSourceCredentialManager } from './credential-manager.ts';
 import type { CreateSourceInput, FolderSourceConfig, LoadedSource, McpSourceConfig, McpTransport, SourceGuide } from './types.ts';
 
@@ -39,6 +46,25 @@ export interface McpImportSecret {
   handling: McpImportSecretHandling;
 }
 
+/** Reason an import candidate may duplicate an existing workspace source. */
+export type McpImportDuplicateReason = 'name' | 'slug' | 'url' | 'command-args';
+
+/** Existing source matched by a normalized MCP import candidate. */
+export interface McpImportDuplicateMatch {
+  /** Existing source slug that can be replaced. */
+  sourceSlug: string;
+  /** Existing source display name for preview. */
+  sourceName: string;
+  /** Duplicate semantics that matched this source. */
+  reasons: McpImportDuplicateReason[];
+}
+
+/** Import action selected for a candidate. */
+export type McpImportCandidateAction =
+  | { type: 'create' }
+  | { type: 'replace'; sourceSlug: string }
+  | { type: 'skip' };
+
 /**
  * Options that affect MCP import candidate parsing.
  */
@@ -59,6 +85,12 @@ export interface McpImportCandidate {
   description?: string;
   /** Classified secret-like env/header values, including originals for persistence. */
   secrets?: McpImportSecret[];
+  /** Existing workspace source this candidate may duplicate. */
+  duplicate?: McpImportDuplicateMatch;
+  /** Available creation actions for preview UI. */
+  availableActions?: McpImportCandidateAction[];
+  /** Selected creation action. Defaults to create when absent. */
+  action?: McpImportCandidateAction;
   /** Candidate-specific validation errors. */
   errors: McpImportFieldError[];
 }
@@ -78,6 +110,7 @@ export interface McpImportCreateOptions {
 /** Per-candidate result from MCP import source creation. */
 export type McpImportCreateResult =
   | { key: string; success: true; sourceSlug: string }
+  | { key: string; success: true; skipped: true }
   | { key: string; success: false; errors: McpImportFieldError[] };
 
 /** Batch creation result that preserves one result per input candidate. */
@@ -133,6 +166,37 @@ export function parseMcpJsonImportCandidates(json: string, options: McpImportPar
 }
 
 /**
+ * Mark normalized MCP import candidates that may duplicate existing workspace sources.
+ */
+export function detectDuplicateMcpImportCandidates(
+  workspaceRootPath: string,
+  candidates: McpImportCandidate[],
+): McpImportCandidate[] {
+  const existingSources = loadWorkspaceSources(workspaceRootPath);
+  return candidates.map((candidate) => {
+    const duplicate = findDuplicateMcpSource(candidate, existingSources);
+    if (!duplicate) {
+      return {
+        ...candidate,
+        availableActions: [{ type: 'create' }, { type: 'skip' }],
+        action: candidate.action ?? { type: 'create' },
+      };
+    }
+
+    return {
+      ...candidate,
+      duplicate,
+      availableActions: [
+        { type: 'create' },
+        { type: 'replace', sourceSlug: duplicate.sourceSlug },
+        { type: 'skip' },
+      ],
+      action: candidate.action ?? { type: 'replace', sourceSlug: duplicate.sourceSlug },
+    };
+  });
+}
+
+/**
  * Create workspace MCP sources from normalized import candidates.
  *
  * Each candidate is handled independently so batch imports can partially
@@ -148,13 +212,19 @@ export async function createMcpSourcesFromCandidates(
   const results: McpImportCreateResult[] = [];
 
   for (const candidate of candidates) {
+    if (candidate.action?.type === 'skip') {
+      results.push({ key: candidate.key, success: true, skipped: true });
+      continue;
+    }
+
     if (candidate.errors.length > 0) {
       results.push({ key: candidate.key, success: false, errors: candidate.errors });
       continue;
     }
 
     try {
-      const created = await createMcpSourceFromCandidate(workspaceRootPath, candidate, credentialManager);
+      const replacementSlug = candidate.action?.type === 'replace' ? candidate.action.sourceSlug : undefined;
+      const created = await createMcpSourceFromCandidate(workspaceRootPath, candidate, credentialManager, replacementSlug);
       results.push({ key: candidate.key, success: true, sourceSlug: created.slug });
     } catch (error) {
       results.push({
@@ -173,6 +243,54 @@ function getServerEntries(parsed: Record<string, unknown>): Record<string, unkno
     return parsed.mcpServers as Record<string, unknown>;
   }
   return { 'imported-mcp-server': parsed };
+}
+
+function findDuplicateMcpSource(
+  candidate: McpImportCandidate,
+  existingSources: LoadedSource[],
+): McpImportDuplicateMatch | undefined {
+  for (const source of existingSources) {
+    const reasons = getDuplicateReasons(candidate, source);
+    if (reasons.length > 0) {
+      return {
+        sourceSlug: source.config.slug,
+        sourceName: source.config.name,
+        reasons,
+      };
+    }
+  }
+  return undefined;
+}
+
+function getDuplicateReasons(candidate: McpImportCandidate, source: LoadedSource): McpImportDuplicateReason[] {
+  const reasons: McpImportDuplicateReason[] = [];
+  if (normalizeComparable(candidate.input.name) === normalizeComparable(source.config.name)) {
+    reasons.push('name');
+  }
+  if (sourceSlugFromName(candidate.input.name) === source.config.slug) {
+    reasons.push('slug');
+  }
+  if (source.config.type === 'mcp' && isUrlEndpointMatch(candidate.input.mcp, source.config.mcp)) {
+    reasons.push('url');
+  }
+  if (source.config.type === 'mcp' && isCommandArgsMatch(candidate.input.mcp, source.config.mcp)) {
+    reasons.push('command-args');
+  }
+  return reasons;
+}
+
+function isUrlEndpointMatch(candidateMcp: McpSourceConfig | undefined, sourceMcp: McpSourceConfig | undefined): boolean {
+  const candidateUrl = normalizeEndpointUrl(candidateMcp?.url);
+  const sourceUrl = normalizeEndpointUrl(sourceMcp?.url);
+  return candidateUrl !== undefined && candidateUrl === sourceUrl;
+}
+
+function isCommandArgsMatch(candidateMcp: McpSourceConfig | undefined, sourceMcp: McpSourceConfig | undefined): boolean {
+  if (!candidateMcp?.command || !sourceMcp?.command) return false;
+  return (
+    candidateMcp.command === sourceMcp.command &&
+    JSON.stringify(candidateMcp.args ?? []) === JSON.stringify(sourceMcp.args ?? [])
+  );
 }
 
 function buildCandidate(key: string, server: unknown, options: McpImportParseOptions): McpImportCandidate {
@@ -256,8 +374,9 @@ async function createMcpSourceFromCandidate(
   workspaceRootPath: string,
   candidate: McpImportCandidate,
   credentialManager: McpImportCredentialManager,
+  replacementSlug?: string,
 ): Promise<FolderSourceConfig> {
-  const slug = generateSourceSlug(workspaceRootPath, candidate.input.name);
+  const slug = replacementSlug ?? generateSourceSlug(workspaceRootPath, candidate.input.name);
   const now = Date.now();
   const config: FolderSourceConfig = {
     id: `${slug}_${randomUUID().slice(0, 8)}`,
@@ -283,6 +402,9 @@ async function createMcpSourceFromCandidate(
     await credentialManager.save(source, { value: credentialValue });
   }
 
+  if (replacementSlug) {
+    deleteSource(workspaceRootPath, replacementSlug);
+  }
   saveSourceConfig(workspaceRootPath, config);
   saveSourceGuide(workspaceRootPath, slug, guide);
   return config;
@@ -466,6 +588,32 @@ function titleizeKey(key: string): string {
     .filter(Boolean)
     .map(capitalizeKeyPart)
     .join(' ');
+}
+
+function sourceSlugFromName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .substring(0, 50);
+  return slug || 'source';
+}
+
+function normalizeComparable(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function normalizeEndpointUrl(url: string | undefined): string | undefined {
+  if (!url?.trim()) return undefined;
+  try {
+    const parsed = new URL(url.trim());
+    parsed.hash = '';
+    const normalized = parsed.toString();
+    return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
+  } catch {
+    const trimmed = url.trim();
+    return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+  }
 }
 
 function capitalizeKeyPart(part: string): string {
