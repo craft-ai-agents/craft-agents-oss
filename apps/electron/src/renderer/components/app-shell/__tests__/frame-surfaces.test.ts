@@ -52,7 +52,9 @@ describe('Level 1 frame surfaces', () => {
   })
 
   test('keeps the embedded All Sessions list flush with the sidebar surface', () => {
-    const match = appShellSource.match(/expandedContent:\s*\(\s*<div className="([^"]+)"/)
+    const match = appShellSource.match(
+      /createAllSessionsSidebarItem\(\{[\s\S]*?expandedContent:\s*\(\s*<div className="([^"]+)"/,
+    )
     const classes = match?.[1].split(/\s+/) ?? []
 
     expect(classes).toContain('overflow-hidden')
