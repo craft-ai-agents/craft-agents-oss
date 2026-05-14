@@ -20,11 +20,18 @@ The effective root directory shown in the Workspace File Browser. Resolved from 
 
 When defined, passed as the `rootPath` argument to `workspace.GET_FILES` and `workspace.WATCH_FILES`, replacing `workspace.rootPath` as both the security boundary for `dirPath` resolution and the filesystem watch target. The "View" button in the section header opens the CWD Root in the system file manager.
 
-### Sidebar Drill-Down Mode
-The state in which the left sidebar expands to session list width (~300 px) and renders the **Session List** inline (with a Back button at the top), replacing the icon strip. Active when `NavigationState.navigator === 'sessions'`. The navigator slot is hidden (width 0) and the **Right Sidebar** is only rendered in this mode. Pressing Back collapses the sidebar back to the icon strip.
+### All Sessions Nav Item
+The `nav:allSessions` sidebar item is a chevron-toggle expandable row. When expanded, the full **Session List** (with search header, date-grouped rows, hover menus, and multi-select) embeds inline below the row — no separate drill-down panel, no Back button. Expanded by default on first launch; state is persisted per workspace.
 
-### Icon Strip Mode
-The collapsed state of the left sidebar (~40 px) showing only navigation icons for Sources, Skills, Automations, and Settings. Active when the sidebar is NOT in Sidebar Drill-Down Mode. The navigator slot opens to the right when a secondary navigation item is selected.
+The embedded list is visually flush with the sidebar — no distinct container background or rounded border. A height cap bounds it so a large session list cannot push other nav items off screen.
+
+### Sidebar Width
+The left sidebar is permanently at **session-list width** (~300 px). There is no narrow icon-strip mode — nav items always show icons and labels. The navigator slot (Sources, Skills, Automations, Settings) opens additively to the right of the sidebar when a secondary nav item is selected.
+
+### Archived View
+The dedicated view for archived sessions, accessed via the top-level **Archived** sidebar item. Renders an **Archived Sessions Panel** in the navigator slot alongside the **Main Content Panel**.
+
+Clicking a session in the panel navigates the main content panel to that session while keeping `navigator === 'archived'`. The session is shown in **read-only mode** — the chat input is hidden. The **Right Sidebar** and **Editor Panel** are never shown in the Archived View. The session-already-open-in-another-panel guard is bypassed; clicking always navigates in the current panel to preserve the archived layout.
 
 ### Skill Import Modal
 A tabbed dialog opened by the `+` button in the Skills panel header (replacing the previous direct `EditPopover` call). Provides four tabs for adding workspace-tier skills without an AI conversation: **Remote** (git-aware URL/shorthand resolver), **Upload** (local zip file), **Create** (manual form), and **AI Assist** (existing EditPopover path). All paths write to `{workspace}/skills/{slug}/` (workspace tier only).
@@ -177,6 +184,21 @@ Avoid: Skills Submenu, nesting 市场 under 技能.
 ### Editor Panel
 A resizable panel (`EditorDetailPanel`) that renders to the right of the active content panel(s), showing file contents, git diffs, and git-commit details in a tabbed interface. Tabs are opened automatically when session files change during processing.
 
-Visibility rule: only rendered in **Sidebar Drill-Down Mode** (same gate as the Right Sidebar). Within that mode, it shows when `isEditorPanelOpen && hasOpenTabs`. Opening a new tab auto-forces `isEditorPanelOpen = true` (overrides a manual collapse). Open state is persisted per workspace via the `editorPanelVisible` storage key.
+Visibility rule: only rendered when a **session is active** (same gate as the Right Sidebar). Within that context, it shows when `isEditorPanelOpen && hasOpenTabs`. Opening a new tab auto-forces `isEditorPanelOpen = true` (overrides a manual collapse). Open state is persisted per workspace via the `editorPanelVisible` storage key.
 
 Toggle: a `SquareCode` icon button in the TopBar, positioned to the left of the Right Sidebar toggle, conditionally shown under the same `isRightSidebarContextuallyAvailable` gate.
+
+### Messaging Gateway
+The `@craft-agent/messaging-gateway` package: the `PlatformAdapter` interface, router, renderer, and binding store. Routes inbound messages from an external messaging channel to the correct session, and renders agent output back. The three built-in adapters (Telegram, WhatsApp, Lark) have been removed; the gateway infrastructure is preserved for a future custom channel.
+
+Avoid: messaging stack, messaging backend.
+
+### Platform Adapter
+A concrete plug-in that implements `PlatformAdapter` for a specific messaging service or protocol. Wires the service's inbound/outbound protocol to the Messaging Gateway's routing layer. `PlatformType` is a plain `string` owned by each adapter — the gateway is agnostic to which platform it is.
+
+Avoid: messaging provider, messaging integration.
+
+### Channel Binding
+A persisted mapping between an external messaging channel (`platform` + `channelId`) and a session. Multiple bindings can exist per workspace. Controls how agent output is rendered back to the channel (`responseMode`) and who is allowed to send messages to the bound session.
+
+Avoid: session binding, channel link.
