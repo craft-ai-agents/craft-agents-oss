@@ -17,7 +17,7 @@
 import http from 'node:http';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
-import { mkdirSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { mkdirSync, readdirSync, statSync, existsSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 // Pi SDK
@@ -586,6 +586,36 @@ async function ensureSession(): Promise<AgentSession> {
     const agentDir = initConfig.agentDir || join(initConfig.sessionPath, '.pi-agent');
     mkdirSync(agentDir, { recursive: true });
     sessionOptions.agentDir = agentDir;
+
+    // Write models.json with per-model compat overrides.
+    // Z.ai GLM-5.x with tool_stream=true sends tool call arguments in
+    // separate chunks from id/name metadata. The Pi SDK's OpenAI parser
+    // uses a single-block accumulator that can't merge interleaved
+    // multi-tool streams, producing duplicate toolCall blocks (one with
+    // id+name but empty args, one with args but empty id+name). Disabling
+    // tool_stream makes Z.ai buffer arguments into complete JSON per tool
+    // call, avoiding the split. See plans/zai-glm51-tool-call-fix.md.
+    const modelsJsonPath = join(agentDir, 'models.json');
+    if (!existsSync(modelsJsonPath)) {
+      writeFileSync(modelsJsonPath, JSON.stringify({
+        providers: {
+          zai: {
+            modelOverrides: {
+              'glm-5': { compat: { zaiToolStream: false } },
+              'glm-5-turbo': { compat: { zaiToolStream: false } },
+              'glm-5.1': { compat: { zaiToolStream: false } },
+              'glm-5v-turbo': { compat: { zaiToolStream: false } },
+              'glm-4.7': { compat: { zaiToolStream: false } },
+              'glm-4.7-flash': { compat: { zaiToolStream: false } },
+              'glm-4.7-flashx': { compat: { zaiToolStream: false } },
+              'glm-4.6': { compat: { zaiToolStream: false } },
+              'glm-4.6v': { compat: { zaiToolStream: false } },
+              'glm-4.6v-flash': { compat: { zaiToolStream: false } },
+            },
+          },
+        },
+      }, null, 2));
+    }
 
     // Session resume: use a per-Craft-session directory so the Pi SDK can
     // persist and resume its own session across subprocess restarts.
