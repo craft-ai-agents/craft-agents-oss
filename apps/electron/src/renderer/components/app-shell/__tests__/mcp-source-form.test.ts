@@ -19,7 +19,7 @@ describe('MCP source form flow wiring', () => {
     expect(formSource).toContain('<TabsTrigger value="http">HTTP</TabsTrigger>')
     expect(formSource).toContain('<TabsTrigger value="sse">SSE</TabsTrigger>')
     expect(formSource).toContain('<TabsTrigger value="stdio">Command</TabsTrigger>')
-    expect(formSource).toContain('args: parseListLines(argsText)')
+    expect(formSource).toContain('args: parseListLines(values.argsText)')
     expect(formSource).not.toContain('.split(\' \')')
     expect(formSource).not.toContain('.split(" ")')
     expect(formSource).toContain('authCredential')

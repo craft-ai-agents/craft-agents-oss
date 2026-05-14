@@ -140,6 +140,13 @@ interface McpSourceCreationOptions {
   replacementSlug?: string;
 }
 
+interface ManualCandidateBuildState {
+  errors: McpImportFieldError[];
+  mcp: McpSourceConfig;
+  secrets: McpImportSecret[];
+  credential?: StoredCredential;
+}
+
 /**
  * Result of parsing pasted MCP JSON into import candidates.
  */
@@ -310,67 +317,16 @@ function buildManualCandidate(input: McpManualSourceInput): McpImportCandidate {
   }
 
   const transport = input.mcp.transport ?? 'http';
-  const mcp: McpSourceConfig = { transport };
-  const secrets: McpImportSecret[] = [];
-  let candidateCredential: StoredCredential | undefined;
+  const state: ManualCandidateBuildState = {
+    errors,
+    mcp: { transport },
+    secrets: [],
+  };
 
   if (transport === 'stdio') {
-    if (typeof input.mcp.command === 'string' && input.mcp.command.trim()) {
-      mcp.command = input.mcp.command.trim();
-    } else {
-      errors.push({ field: 'command', message: 'Stdio MCP servers require a command string.' });
-    }
-    if (input.mcp.args !== undefined) {
-      if (isStringArray(input.mcp.args)) {
-        mcp.args = input.mcp.args;
-      } else {
-        errors.push({ field: 'args', message: 'Args must be an array of strings.' });
-      }
-    }
-    if (input.mcp.env !== undefined) {
-      if (isStringRecord(input.mcp.env)) {
-        const classifiedEnv = classifyConfigRecord(provider || 'manual-mcp-source', 'env', input.mcp.env, {});
-        mcp.env = classifiedEnv.preview;
-        secrets.push(...classifiedEnv.secrets);
-      } else {
-        errors.push({ field: 'env', message: 'Env must be an object with string values.' });
-      }
-    }
+    addManualStdioFields(input.mcp, provider, state);
   } else if (transport === 'http' || transport === 'sse') {
-    if (typeof input.mcp.url === 'string' && input.mcp.url.trim()) {
-      mcp.url = input.mcp.url.trim();
-    } else {
-      errors.push({ field: 'url', message: 'HTTP and SSE MCP servers require a URL string.' });
-    }
-    mcp.authType = input.mcp.authType ?? 'none';
-    if (input.mcp.clientId) {
-      mcp.clientId = input.mcp.clientId;
-    }
-    if (input.mcp.headers !== undefined) {
-      if (isStringRecord(input.mcp.headers)) {
-        const classifiedHeaders = classifyConfigRecord(provider || 'manual-mcp-source', 'header', input.mcp.headers, {});
-        mcp.headers = classifiedHeaders.preview;
-        secrets.push(...classifiedHeaders.secrets);
-      } else {
-        errors.push({ field: 'headers', message: 'Headers must be an object with string values.' });
-      }
-    }
-    if (input.mcp.headerNames !== undefined) {
-      if (isStringArray(input.mcp.headerNames)) {
-        mcp.headerNames = input.mcp.headerNames;
-      } else {
-        errors.push({ field: 'headerNames', message: 'Header names must be an array of strings.' });
-      }
-    }
-    const manualAuth = buildManualAuthCredential(input.authCredential, errors);
-    if (manualAuth) {
-      if (manualAuth.headerName) {
-        mcp.headerNames = Array.from(new Set([...(mcp.headerNames ?? []), manualAuth.headerName]));
-      }
-      if (manualAuth.credential) {
-        candidateCredential = manualAuth.credential;
-      }
-    }
+    addManualRemoteFields(input.mcp, input.authCredential, provider, state);
   } else {
     errors.push({ field: 'transport', message: 'Transport must be one of: stdio, sse, http.' });
   }
@@ -382,7 +338,7 @@ function buildManualCandidate(input: McpManualSourceInput): McpImportCandidate {
       provider,
       type: 'mcp',
       enabled: input.enabled ?? true,
-      mcp,
+      mcp: state.mcp,
       ...(input.icon ? { icon: input.icon } : {}),
     },
     errors,
@@ -390,13 +346,87 @@ function buildManualCandidate(input: McpManualSourceInput): McpImportCandidate {
   if (input.description?.trim()) {
     candidate.description = input.description.trim();
   }
-  if (secrets.length > 0) {
-    candidate.secrets = secrets;
+  if (state.secrets.length > 0) {
+    candidate.secrets = state.secrets;
   }
-  if (candidateCredential) {
-    candidate.credential = candidateCredential;
+  if (state.credential) {
+    candidate.credential = state.credential;
   }
   return candidate;
+}
+
+function addManualStdioFields(mcpInput: McpSourceConfig, provider: string, state: ManualCandidateBuildState): void {
+  if (typeof mcpInput.command === 'string' && mcpInput.command.trim()) {
+    state.mcp.command = mcpInput.command.trim();
+  } else {
+    state.errors.push({ field: 'command', message: 'Stdio MCP servers require a command string.' });
+  }
+
+  if (mcpInput.args !== undefined) {
+    if (isStringArray(mcpInput.args)) {
+      state.mcp.args = mcpInput.args;
+    } else {
+      state.errors.push({ field: 'args', message: 'Args must be an array of strings.' });
+    }
+  }
+
+  if (mcpInput.env !== undefined) {
+    if (isStringRecord(mcpInput.env)) {
+      const classifiedEnv = classifyConfigRecord(provider || 'manual-mcp-source', 'env', mcpInput.env, {});
+      state.mcp.env = classifiedEnv.preview;
+      state.secrets.push(...classifiedEnv.secrets);
+    } else {
+      state.errors.push({ field: 'env', message: 'Env must be an object with string values.' });
+    }
+  }
+}
+
+function addManualRemoteFields(
+  mcpInput: McpSourceConfig,
+  authCredential: McpManualAuthCredentialInput | undefined,
+  provider: string,
+  state: ManualCandidateBuildState,
+): void {
+  if (typeof mcpInput.url === 'string' && mcpInput.url.trim()) {
+    state.mcp.url = mcpInput.url.trim();
+  } else {
+    state.errors.push({ field: 'url', message: 'HTTP and SSE MCP servers require a URL string.' });
+  }
+
+  state.mcp.authType = mcpInput.authType ?? 'none';
+  if (mcpInput.clientId) {
+    state.mcp.clientId = mcpInput.clientId;
+  }
+
+  addManualHeaderFields(mcpInput, provider, state);
+
+  const manualAuth = buildManualAuthCredential(authCredential, state.errors);
+  if (manualAuth?.headerName) {
+    state.mcp.headerNames = Array.from(new Set([...(state.mcp.headerNames ?? []), manualAuth.headerName]));
+  }
+  if (manualAuth?.credential) {
+    state.credential = manualAuth.credential;
+  }
+}
+
+function addManualHeaderFields(mcpInput: McpSourceConfig, provider: string, state: ManualCandidateBuildState): void {
+  if (mcpInput.headers !== undefined) {
+    if (isStringRecord(mcpInput.headers)) {
+      const classifiedHeaders = classifyConfigRecord(provider || 'manual-mcp-source', 'header', mcpInput.headers, {});
+      state.mcp.headers = classifiedHeaders.preview;
+      state.secrets.push(...classifiedHeaders.secrets);
+    } else {
+      state.errors.push({ field: 'headers', message: 'Headers must be an object with string values.' });
+    }
+  }
+
+  if (mcpInput.headerNames !== undefined) {
+    if (isStringArray(mcpInput.headerNames)) {
+      state.mcp.headerNames = mcpInput.headerNames;
+    } else {
+      state.errors.push({ field: 'headerNames', message: 'Header names must be an array of strings.' });
+    }
+  }
 }
 
 function findDuplicateMcpSource(
