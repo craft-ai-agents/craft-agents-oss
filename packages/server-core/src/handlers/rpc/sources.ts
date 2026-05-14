@@ -37,7 +37,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
   server.handle(RPC_CHANNELS.sources.CREATE, async (_ctx, workspaceId: string, config: Partial<import('@craft-agent/shared/sources').CreateSourceInput> & Partial<import('@craft-agent/shared/sources').McpManualSourceInput>) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { createMcpSourceFromManualInput, createSource } = await import('@craft-agent/shared/sources')
+    const { createMcpSourceFromManualInput, createSource, defaultMcpPostCreateConnectionTester } = await import('@craft-agent/shared/sources')
     if ((config.type ?? 'mcp') === 'mcp' && config.mcp) {
       const created = await createMcpSourceFromManualInput(workspace.rootPath, {
         name: config.name || 'New Source',
@@ -46,6 +46,8 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
         icon: config.icon,
         mcp: config.mcp,
         authCredential: config.authCredential,
+      }, {
+        connectionTester: defaultMcpPostCreateConnectionTester,
       })
       pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
       return created
@@ -77,8 +79,10 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
   server.handle(RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES, async (_ctx, workspaceId: string, candidates: import('@craft-agent/shared/sources').McpImportCandidate[]) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { createMcpSourcesFromCandidates } = await import('@craft-agent/shared/sources')
-    const result = await createMcpSourcesFromCandidates(workspace.rootPath, candidates)
+    const { createMcpSourcesFromCandidates, defaultMcpPostCreateConnectionTester } = await import('@craft-agent/shared/sources')
+    const result = await createMcpSourcesFromCandidates(workspace.rootPath, candidates, {
+      connectionTester: defaultMcpPostCreateConnectionTester,
+    })
     pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
     return result
   })

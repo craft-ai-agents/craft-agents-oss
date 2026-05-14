@@ -4,13 +4,14 @@ import type { StoredCredential } from '../credentials/types.ts';
 import {
   deleteSource,
   generateSourceSlug,
+  loadSourceConfig,
   getSourcePath,
   loadWorkspaceSources,
   saveSourceConfig,
   saveSourceGuide,
 } from './storage.ts';
 import { getSourceCredentialManager } from './credential-manager.ts';
-import type { CreateSourceInput, FolderSourceConfig, LoadedSource, McpSourceConfig, McpTransport, SourceGuide } from './types.ts';
+import type { CreateSourceInput, FolderSourceConfig, LoadedSource, McpSourceConfig, McpTransport, SourceConnectionStatus, SourceGuide } from './types.ts';
 
 /**
  * Field-level error reported while parsing pasted MCP JSON.
@@ -103,10 +104,70 @@ export interface McpImportCredentialManager {
   save(source: LoadedSource, credential: StoredCredential): Promise<void>;
 }
 
+/** Result from a post-create MCP connection test. */
+export interface McpPostCreateConnectionTestResult {
+  success: boolean;
+  error?: string;
+  errorType?: 'failed' | 'needs-auth' | 'pending' | 'invalid-schema' | 'disabled' | 'unknown';
+}
+
+/** Context passed to post-create MCP connection testers. */
+export interface McpPostCreateConnectionTestContext {
+  source: LoadedSource;
+  credentialValue?: string;
+}
+
+/** Tests a newly-created MCP source and returns a user-facing status result. */
+export type McpPostCreateConnectionTester = (
+  context: McpPostCreateConnectionTestContext
+) => Promise<McpPostCreateConnectionTestResult>;
+
+export const defaultMcpPostCreateConnectionTester: McpPostCreateConnectionTester = async ({ source, credentialValue }) => {
+  if (source.config.type !== 'mcp' || !source.config.mcp) {
+    return { success: false, error: 'Source is not an MCP source.', errorType: 'failed' };
+  }
+
+  const mcp = source.config.mcp;
+  const { validateMcpConnection, validateStdioMcpConnection } = await import('../mcp/validation.ts');
+  if (mcp.transport === 'stdio') {
+    if (!mcp.command) {
+      return { success: false, error: 'Stdio MCP source is missing a command.', errorType: 'failed' };
+    }
+    return validateStdioMcpConnection({
+      command: mcp.command,
+      args: mcp.args,
+      env: mcp.env,
+    });
+  }
+
+  if (!mcp.url) {
+    return { success: false, error: 'MCP source URL is required for HTTP/SSE transport.', errorType: 'failed' };
+  }
+
+  const credentialHeaders = parseCredentialHeaders(credentialValue);
+  const accessToken = credentialValue && !credentialHeaders && (mcp.authType === 'bearer' || mcp.authType === 'oauth')
+    ? credentialValue
+    : undefined;
+  return validateMcpConnection({
+    mcpUrl: mcp.url,
+    mcpTransport: mcp.transport,
+    mcpHeaders: {
+      ...(mcp.headers ?? {}),
+      ...(credentialHeaders ?? {}),
+    },
+    mcpAccessToken: accessToken,
+  });
+};
+
 /** Optional dependencies for creating MCP sources from import candidates. */
 export interface McpImportCreateOptions {
   /** Credential manager override, primarily for tests and alternate storage backends. */
   credentialManager?: McpImportCredentialManager;
+  /**
+   * Optional connection tester run after a source is saved. Failures update
+   * source status but do not turn creation into a failed result.
+   */
+  connectionTester?: McpPostCreateConnectionTester;
 }
 
 /** Manual form input for creating a single MCP source. */
@@ -138,6 +199,7 @@ export interface McpImportBatchCreateResult {
 
 interface McpSourceCreationOptions {
   replacementSlug?: string;
+  connectionTester?: McpPostCreateConnectionTester;
 }
 
 interface ManualCandidateBuildState {
@@ -240,7 +302,10 @@ export async function createMcpSourcesFromCandidates(
 
     try {
       const replacementSlug = candidate.action?.type === 'replace' ? candidate.action.sourceSlug : undefined;
-      const created = await createMcpSourceFromCandidate(workspaceRootPath, candidate, credentialManager, { replacementSlug });
+      const created = await createMcpSourceFromCandidate(workspaceRootPath, candidate, credentialManager, {
+        replacementSlug,
+        connectionTester: options.connectionTester,
+      });
       results.push({ key: candidate.key, success: true, sourceSlug: created.slug });
     } catch (error) {
       results.push({
@@ -595,7 +660,73 @@ async function createMcpSourceFromCandidate(
   }
   saveSourceConfig(workspaceRootPath, config);
   saveSourceGuide(workspaceRootPath, slug, guide);
+  await testCreatedMcpSource(workspaceRootPath, slug, guide, credentialValue, options.connectionTester);
   return config;
+}
+
+async function testCreatedMcpSource(
+  workspaceRootPath: string,
+  sourceSlug: string,
+  guide: SourceGuide,
+  credentialValue: string | null,
+  connectionTester: McpPostCreateConnectionTester | undefined,
+): Promise<void> {
+  if (!connectionTester) return;
+
+  const config = loadSourceConfig(workspaceRootPath, sourceSlug);
+  if (!config) return;
+
+  const source = buildLoadedSource(workspaceRootPath, config, guide);
+  const startedAt = Date.now();
+  try {
+    const result = await connectionTester({
+      source,
+      ...(credentialValue ? { credentialValue } : {}),
+    });
+    persistConnectionTestResult(workspaceRootPath, sourceSlug, result, startedAt);
+  } catch (error) {
+    persistConnectionTestResult(workspaceRootPath, sourceSlug, {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+      errorType: 'failed',
+    }, startedAt);
+  }
+}
+
+function persistConnectionTestResult(
+  workspaceRootPath: string,
+  sourceSlug: string,
+  result: McpPostCreateConnectionTestResult,
+  testedAt: number,
+): void {
+  const config = loadSourceConfig(workspaceRootPath, sourceSlug);
+  if (!config) return;
+
+  config.lastTestedAt = testedAt;
+  if (result.success) {
+    config.isAuthenticated = true;
+    config.connectionStatus = 'connected';
+    config.connectionError = undefined;
+  } else {
+    config.isAuthenticated = false;
+    config.connectionStatus = getFailedConnectionStatus(result.errorType);
+    config.connectionError = result.error || 'Connection test failed';
+  }
+  saveSourceConfig(workspaceRootPath, config);
+}
+
+function getFailedConnectionStatus(errorType: McpPostCreateConnectionTestResult['errorType']): SourceConnectionStatus {
+  return errorType === 'needs-auth' ? 'needs_auth' : 'failed';
+}
+
+function parseCredentialHeaders(credentialValue: string | null | undefined): Record<string, string> | undefined {
+  if (!credentialValue) return undefined;
+  try {
+    const parsed = JSON.parse(credentialValue);
+    return isStringRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function buildCreationMcpConfig(candidate: McpImportCandidate): McpSourceConfig {

@@ -469,6 +469,103 @@ describe('createMcpSourcesFromCandidates', () => {
     }
   });
 
+  test('marks a created MCP source connected after a successful post-create connection test', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          linear: {
+            url: 'https://mcp.linear.app/mcp',
+          },
+        },
+      }));
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, parsed.candidates, {
+        connectionTester: async () => ({ success: true }),
+      });
+
+      expect(result.results).toEqual([
+        { key: 'linear', success: true, sourceSlug: 'linear' },
+      ]);
+      expect(loadSourceConfig(workspaceRootPath, 'linear')).toMatchObject({
+        connectionStatus: 'connected',
+        isAuthenticated: true,
+      });
+      expect(loadSourceConfig(workspaceRootPath, 'linear')?.connectionError).toBeUndefined();
+      expect(loadSourceConfig(workspaceRootPath, 'linear')?.lastTestedAt).toBeGreaterThan(0);
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('marks a created MCP source needs_auth after an auth post-create connection failure', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          secured: {
+            url: 'https://secure.example.com/mcp',
+            headers: { Authorization: 'Bearer stale-token' },
+          },
+        },
+      }));
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, parsed.candidates, {
+        credentialManager: {
+          save: async () => {},
+        },
+        connectionTester: async () => ({
+          success: false,
+          errorType: 'needs-auth',
+          error: 'Authentication failed. Re-authenticate this MCP source.',
+        }),
+      });
+
+      expect(result.results).toEqual([
+        { key: 'secured', success: true, sourceSlug: 'secured' },
+      ]);
+      expect(loadSourceConfig(workspaceRootPath, 'secured')).toMatchObject({
+        connectionStatus: 'needs_auth',
+        connectionError: 'Authentication failed. Re-authenticate this MCP source.',
+        isAuthenticated: false,
+      });
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('marks a created MCP source failed after an ordinary post-create connection failure without rolling back creation', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          offline: {
+            url: 'https://offline.example.com/mcp',
+          },
+        },
+      }));
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, parsed.candidates, {
+        connectionTester: async () => ({
+          success: false,
+          errorType: 'failed',
+          error: 'MCP server endpoint not found. Check the URL and try again.',
+        }),
+      });
+
+      expect(result.results).toEqual([
+        { key: 'offline', success: true, sourceSlug: 'offline' },
+      ]);
+      expect(loadSourceConfig(workspaceRootPath, 'offline')).toMatchObject({
+        connectionStatus: 'failed',
+        connectionError: 'MCP server endpoint not found. Check the URL and try again.',
+        isAuthenticated: false,
+      });
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
   test('blocks creating a source when credential persistence fails', async () => {
     const workspaceRootPath = makeTempWorkspace();
     try {
@@ -614,6 +711,33 @@ describe('createMcpSourcesFromCandidates', () => {
 });
 
 describe('createMcpSourceFromManualInput', () => {
+  test('tests a form-created MCP source after creation', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    const testedSlugs: string[] = [];
+    try {
+      const created = await createMcpSourceFromManualInput(workspaceRootPath, {
+        name: 'Manual Remote',
+        provider: 'manual-remote',
+        mcp: {
+          transport: 'http',
+          url: 'https://manual.example.com/mcp',
+          authType: 'none',
+        },
+      }, {
+        connectionTester: async ({ source }) => {
+          testedSlugs.push(source.config.slug);
+          return { success: true };
+        },
+      });
+
+      expect(created.slug).toBe('manual-remote');
+      expect(testedSlugs).toEqual(['manual-remote']);
+      expect(loadSourceConfig(workspaceRootPath, 'manual-remote')?.connectionStatus).toBe('connected');
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
   test('creates a command MCP source without shell-splitting argument values', async () => {
     const workspaceRootPath = makeTempWorkspace();
     try {
