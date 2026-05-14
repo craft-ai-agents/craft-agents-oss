@@ -49,7 +49,6 @@ function makeRegistry() {
     credentialManager: stubCredentialManager(),
     getMessagingDir: (workspaceId: string) =>
       join(dir, 'workspaces', workspaceId, 'messaging'),
-    whatsapp: { workerEntry: '/dev/null' },
   })
   return { registry, workspaceId: 'ws-test' }
 }

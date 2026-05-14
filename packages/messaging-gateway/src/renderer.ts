@@ -651,7 +651,7 @@ Approve in the desktop app to continue.`,
     text: string,
   ): Promise<SentMessage | undefined> {
     const maxLen = adapter.capabilities.maxMessageLength
-        if (text.length <= maxLen) {
+    if (text.length <= maxLen) {
       return adapter.sendText(binding.channelId, text)
     }
 

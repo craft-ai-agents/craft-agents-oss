@@ -500,10 +500,11 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         addedAt: Date.now(),
       },
     ]
+    const currentMode = this.getPlatformAccessMode(workspaceId, platform)
     this.patchPlatformPolicy(workspaceId, platform, {
       enabled: true,
       owners: nextOwners,
-      accessMode: this.getPlatformAccessMode(workspaceId, platform) === 'open' ? 'owner-only' : this.getPlatformAccessMode(workspaceId, platform),
+      accessMode: currentMode === 'open' ? 'owner-only' : currentMode,
     })
     state.gateway.getPendingStore().dismiss(platform, userId)
     this.emitBindingChanged(workspaceId)
