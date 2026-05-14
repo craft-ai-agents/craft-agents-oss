@@ -27,6 +27,7 @@ import type {
   McpImportBatchCreateResult,
   McpImportCandidate,
   McpImportCandidateAction,
+  McpImportCreateResult,
   McpImportFieldError,
   McpImportSecretHandling,
   McpManualAuthCredentialInput,
@@ -72,6 +73,7 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    if (mode === 'json') return
     if (!canSubmit || isSubmitting) return
 
     setIsSubmitting(true)
@@ -84,7 +86,7 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
         type: 'mcp',
         enabled,
         icon: icon.trim() || undefined,
-        mcp: buildMcpPayload(mode as Exclude<McpFormMode, 'json'>, {
+        mcp: buildMcpPayload(mode, {
           url,
           authType,
           headersText,
@@ -506,15 +508,21 @@ function ImportResults({ result }: { result: McpImportBatchCreateResult }) {
       <div className="mb-2 font-medium">Import results</div>
       <ul className="space-y-1">
         {result.results.map((item) => (
-          <li key={item.key}>
-            {item.success
-              ? `${item.key}: ${'skipped' in item ? 'skipped' : `created ${item.sourceSlug}`}`
-              : `${item.key}: ${item.errors.map((error) => error.message).join(', ')}`}
-          </li>
+          <li key={item.key}>{formatImportResult(item)}</li>
         ))}
       </ul>
     </div>
   )
+}
+
+function formatImportResult(item: McpImportCreateResult): string {
+  if (!item.success) {
+    return `${item.key}: ${item.errors.map((error) => error.message).join(', ')}`
+  }
+  if ('skipped' in item) {
+    return `${item.key}: skipped`
+  }
+  return `${item.key}: created ${item.sourceSlug}`
 }
 
 function actionValue(action: McpImportCandidateAction | undefined): string {
