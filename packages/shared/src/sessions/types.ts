@@ -53,6 +53,9 @@ export const SESSION_PERSISTENT_FIELDS = [
   'transferredSessionSummaryApplied',
   // Automation origin
   'triggeredBy',
+  // Sandboxing (Claude SDK only as of this writing)
+  'sandboxed',
+  'sandboxFailHard',
 ] as const;
 
 export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
@@ -197,6 +200,21 @@ export interface SessionConfig {
   transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
+  /**
+   * Run this session under the agent SDK's native OS-level sandbox
+   * (Seatbelt on macOS, bubblewrap on Linux/WSL2). When enabled, agent
+   * tool execution is restricted to the configured filesystem and network
+   * allow-lists. Currently honored only by the Claude SDK backend; the Pi
+   * backend ignores this field.
+   */
+  sandboxed?: boolean;
+  /**
+   * When sandboxed is true, fail loudly if the sandbox runtime cannot start
+   * (missing dependencies, unsupported platform). Defaults to true. Set to
+   * false for graceful degradation: the session runs unsandboxed with a
+   * warning instead of erroring out.
+   */
+  sandboxFailHard?: boolean;
 }
 
 /**
@@ -288,6 +306,10 @@ export interface SessionHeader {
   transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
+  /** Whether this session runs under the SDK's OS-level sandbox. */
+  sandboxed?: boolean;
+  /** Whether sandbox failures should hard-error vs. degrade gracefully. */
+  sandboxFailHard?: boolean;
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;

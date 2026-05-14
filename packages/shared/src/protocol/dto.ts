@@ -74,6 +74,10 @@ export interface Session {
   model?: string
   llmConnection?: string
   thinkingLevel?: ThinkingLevel
+  /** Whether this session runs under the Claude SDK's OS-level sandbox (Claude only). */
+  sandboxed?: boolean
+  /** Whether sandbox unavailability should hard-error vs. degrade gracefully. */
+  sandboxFailHard?: boolean
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   lastFinalMessageId?: string
   isAsyncOperationOngoing?: boolean
@@ -128,6 +132,10 @@ export interface CreateSessionOptions {
   labels?: string[]
   isFlagged?: boolean
   enabledSourceSlugs?: string[]
+  /** Run the session under the SDK's OS-level sandbox (Claude only currently). */
+  sandboxed?: boolean
+  /** When sandboxed is true, fail loudly if the sandbox runtime cannot start (default true). */
+  sandboxFailHard?: boolean
   /**
    * Message ID to branch from. This is a hard context cutoff:
    * the new session must not include model context from later parent messages.
@@ -231,6 +239,7 @@ export type SessionCommand =
   | { type: 'markUnread' }
   | { type: 'setActiveViewing'; workspaceId: string }
   | { type: 'setPermissionMode'; mode: PermissionMode }
+  | { type: 'setSandboxed'; sandboxed: boolean }
   | { type: 'setThinkingLevel'; level: ThinkingLevel }
   | { type: 'updateWorkingDirectory'; dir: string }
   | { type: 'setSources'; sourceSlugs: string[] }
@@ -508,6 +517,8 @@ export interface WorkspaceSettings {
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
   enabledSourceSlugs?: string[]
+  /** Default sandbox flag for new sessions (Claude-only). */
+  sandboxed?: boolean
 }
 
 // ---------------------------------------------------------------------------

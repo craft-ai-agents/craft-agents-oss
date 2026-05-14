@@ -1,5 +1,17 @@
 import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
+import {
+  buildClaudeSandboxOptions,
+  getSandboxWriteRoots,
+  getSandboxAllowedHosts,
+  isPathInsideAllowedRoots,
+  isHostAllowed,
+  extractSandboxGatedFilePath,
+  extractSandboxGatedUrl,
+  isSandboxNetworkGatedTool,
+  safeExtractHost,
+  SANDBOX_GATED_TOOLS,
+} from './sandbox-config.ts';
 // Local type for SDK user message content blocks (text, image, document)
 // Replaces import from @anthropic-ai/sdk/resources — keeps SDK as agent-only dependency
 type ContentBlockParam =
@@ -957,6 +969,44 @@ export class ClaudeAgent extends BaseAgent {
       // field) so the catch handler reads the value passed to *this*
       // chatImpl invocation, not state left over from an earlier call.
       const resolvedCwd = this.resolveSpawnCwd({ isRetry: _isRetry, sessionId });
+      // Alias: the sandbox helpers expect `sdkCwd`; same value, different name
+      // to keep the surrounding sandbox-related code self-documenting.
+      const resolvedSdkCwd = resolvedCwd;
+
+      // Collect filesystem paths and hostnames from active sources for the
+      // sandbox config. Re-evaluated per turn so source toggles take effect on
+      // the next message. Three buckets, by source type:
+      //   - `local`  → absolute path joins the write allow-list
+      //   - `api`    → host from baseUrl joins the network allow-list
+      //   - `mcp`    → host from url joins the network allow-list (HTTP only;
+      //               stdio MCP servers run as subprocesses and inherit the
+      //               filesystem sandbox without a hostname)
+      const activeLocalSourcePaths: string[] = [];
+      const activeSourceHosts: string[] = [];
+      for (const s of this.sourceManager.getAllSources()) {
+        if (!this.sourceManager.isSourceActive(s.config.slug)) continue;
+        if (s.config.type === 'local') {
+          const p = s.config.local?.path;
+          if (typeof p === 'string' && p.length > 0) activeLocalSourcePaths.push(p);
+        } else if (s.config.type === 'api') {
+          const url = s.config.api?.baseUrl;
+          const host = url ? safeExtractHost(url) : null;
+          if (host) activeSourceHosts.push(host);
+        } else if (s.config.type === 'mcp') {
+          // stdio transport has no URL; only HTTP/SSE contributes a host
+          const url = s.config.mcp?.url;
+          const host = url ? safeExtractHost(url) : null;
+          if (host) activeSourceHosts.push(host);
+        }
+      }
+
+      const sandboxOptions = buildClaudeSandboxOptions({
+        session: this.config.session,
+        workspaceRootPath: this.workspaceRootPath,
+        sdkCwd: resolvedSdkCwd,
+        localSourcePaths: activeLocalSourcePaths,
+        allowedHosts: activeSourceHosts,
+      });
 
       const options: Options = {
         ...getDefaultOptions(this.config.envOverrides),
@@ -987,15 +1037,28 @@ export class ClaudeAgent extends BaseAgent {
               type: 'preset' as const,
               preset: 'claude_code' as const,
               // Working directory included for monorepo context file discovery
-              append: getSystemPrompt(
-                this.pinnedPreferencesPrompt ?? undefined,
-                this.config.debugMode,
-                this.workspaceRootPath,
-                this.config.session?.workingDirectory,
-                undefined, // preset
-                undefined, // backendName
-                this.pinnedIncludeCoAuthoredBy ?? undefined
-              ),
+              append: (() => {
+                const base = getSystemPrompt(
+                  this.pinnedPreferencesPrompt ?? undefined,
+                  this.config.debugMode,
+                  this.workspaceRootPath,
+                  this.config.session?.workingDirectory,
+                  undefined, // preset
+                  undefined, // backendName
+                  this.pinnedIncludeCoAuthoredBy ?? undefined
+                );
+                // When sandboxed, tell the agent the rules of the road so it
+                // doesn't waste tokens probing for restrictions or assume it
+                // can escape via dangerouslyDisableSandbox (which we disable).
+                if (!this.config.session?.sandboxed) return base;
+                return `${base}
+
+This session is using Claude's sandboxing:
+- Writes are limited to the working folder, session storage, the workspace \`data/\` dir, and any active local sources.
+- Network access (for Bash, WebFetch, and browser_tool) is limited to api.anthropic.com plus the hosts of active API and MCP-HTTP sources.
+- If the user asks to "allow a URL" or "let the agent reach a domain", treat that as a request to add an API source whose \`baseUrl\` is that URL — the host portion populates the sandbox network allow-list. If real API access isn't needed, use \`authType: 'none'\` and skip the credential dance.
+- The \`dangerouslyDisableSandbox\` tool parameter is disabled here; do not attempt to use it.`;
+              })(),
             },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
         // This ensures SDK can always find session transcripts regardless of workingDirectory changes.
@@ -1004,6 +1067,9 @@ export class ClaudeAgent extends BaseAgent {
         // session file (stored under ~/.claude/projects/{cwd-hash}/). Without this, cross-CWD
         // branches (e.g., worktree ↔ main repo) fail with "No conversation found".
         cwd: resolvedCwd,
+        // Optional OS-level sandbox (Seatbelt / bubblewrap). Only set when the
+        // session opted in; otherwise we let the SDK use its unsandboxed default.
+        ...(sandboxOptions ? { sandbox: sandboxOptions } : {}),
         includePartialMessages: true,
         // Tools configuration:
         // - Mini agents: minimal set for quick config edits (reduces token count ~70%)
@@ -1094,6 +1160,63 @@ export class ClaudeAgent extends BaseAgent {
               this.onDebug?.(`PreToolUse hook: ${input.tool_name} (sessionId=${sessionId}, permissionMode=${permissionMode})`);
 
               const toolInput = input.tool_input as Record<string, unknown>;
+
+              // Sandbox guard for built-in file tools.
+              // The OS-level sandbox (sandbox.filesystem.allowWrite) only
+              // applies to Bash and its subprocesses — the SDK's Write / Edit
+              // / MultiEdit / NotebookEdit tools bypass it by design and would
+              // otherwise let an agent under sandbox edit anywhere on disk.
+              // We use the same write-root list the OS sandbox sees so the
+              // two enforcement layers stay aligned.
+              if (
+                this.config.session?.sandboxed
+                && SANDBOX_GATED_TOOLS.has(input.tool_name)
+              ) {
+                const filePath = extractSandboxGatedFilePath(input.tool_name, toolInput);
+                if (filePath) {
+                  const allowedRoots = getSandboxWriteRoots({
+                    session: this.config.session,
+                    workspaceRootPath: this.workspaceRootPath,
+                    sdkCwd: resolvedSdkCwd,
+                    localSourcePaths: activeLocalSourcePaths,
+                  });
+                  if (!isPathInsideAllowedRoots(filePath, allowedRoots, resolvedSdkCwd)) {
+                    return blockWithReason(
+                      `Sandbox: writes to "${filePath}" are blocked. ` +
+                      `Allowed write roots: ${allowedRoots.join(', ')}.`
+                    );
+                  }
+                }
+              }
+
+              // Sandbox guard for built-in network tools (WebFetch, browser_tool).
+              // These bypass `sandbox.network.allowedDomains` (which only covers
+              // Bash + subprocesses) by design — we gate them here against the
+              // same host list the OS sandbox sees, so a sandboxed agent can't
+              // exfiltrate via a WebFetch or in-app browser navigation to a
+              // host that isn't a configured source.
+              if (
+                this.config.session?.sandboxed
+                && isSandboxNetworkGatedTool(input.tool_name)
+              ) {
+                const url = extractSandboxGatedUrl(input.tool_name, toolInput);
+                if (url) {
+                  const host = safeExtractHost(url);
+                  const allowedHosts = getSandboxAllowedHosts({
+                    session: this.config.session,
+                    workspaceRootPath: this.workspaceRootPath,
+                    sdkCwd: resolvedSdkCwd,
+                    allowedHosts: activeSourceHosts,
+                  });
+                  if (!isHostAllowed(host, allowedHosts)) {
+                    return blockWithReason(
+                      `Sandbox: network access to "${host ?? url}" is blocked. ` +
+                      `Allowed hosts: ${allowedHosts.join(', ')}. ` +
+                      `To allow this host, add an API or MCP source for it to the workspace.`
+                    );
+                  }
+                }
+              }
 
               // Run centralized PreToolUse checks
               const checkResult = runPreToolUseChecks({

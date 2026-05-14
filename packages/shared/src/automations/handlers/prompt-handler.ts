@@ -53,20 +53,35 @@ export class PromptHandler implements AutomationHandler {
     if (matchers.length === 0) return;
 
     // Group prompt actions by matcher for per-matcher history
+    type MatcherPromptEntry = {
+      prompt: PromptAction;
+      labels?: string[];
+      permissionMode?: PermissionMode;
+      workingDirectory?: string;
+      sandboxed?: boolean;
+      sandboxFailHard?: boolean;
+    };
     const matcherPrompts: Array<{
       matcherId: string | undefined;
       automationName: string;
       telegramTopic: string | undefined;
-      prompts: Array<{ prompt: PromptAction; labels?: string[]; permissionMode?: PermissionMode }>;
+      prompts: MatcherPromptEntry[];
     }> = [];
 
     for (const matcher of matchers) {
       if (!matcherMatches(matcher, event, payload as unknown as Record<string, unknown>)) continue;
 
-      const prompts: Array<{ prompt: PromptAction; labels?: string[]; permissionMode?: PermissionMode }> = [];
+      const prompts: MatcherPromptEntry[] = [];
       for (const action of matcher.actions) {
         if (action.type === 'prompt') {
-          prompts.push({ prompt: action, labels: matcher.labels, permissionMode: matcher.permissionMode });
+          prompts.push({
+            prompt: action,
+            labels: matcher.labels,
+            permissionMode: matcher.permissionMode,
+            workingDirectory: matcher.workingDirectory,
+            sandboxed: matcher.sandboxed,
+            sandboxFailHard: matcher.sandboxFailHard,
+          });
         }
       }
       if (prompts.length > 0) {
@@ -97,7 +112,7 @@ export class PromptHandler implements AutomationHandler {
       const expandedTopic = telegramTopic ? expandEnvVars(telegramTopic, env).trim() : undefined;
       const finalTopic = expandedTopic && expandedTopic.length > 0 ? expandedTopic : undefined;
 
-      for (const { prompt, labels, permissionMode } of prompts) {
+      for (const { prompt, labels, permissionMode, workingDirectory, sandboxed, sandboxFailHard } of prompts) {
         // Expand environment variables in the prompt
         const expandedPrompt = expandEnvVars(prompt.prompt, env);
 
@@ -107,6 +122,12 @@ export class PromptHandler implements AutomationHandler {
         // Expand labels
         const expandedLabels = labels?.map(label => expandEnvVars(label, env));
 
+        // Working directory accepts env-var expansion so users can route by
+        // event payload (e.g. workingDirectory: "$WORKSPACE_ROOT/$REPO").
+        const expandedWorkingDirectory = workingDirectory
+          ? expandEnvVars(workingDirectory, env).trim() || undefined
+          : undefined;
+
         pendingPrompts.push({
           sessionId: this.options.sessionId,
           matcherId,
@@ -115,6 +136,9 @@ export class PromptHandler implements AutomationHandler {
           mentions: references.mentions,
           labels: expandedLabels,
           permissionMode,
+          workingDirectory: expandedWorkingDirectory,
+          sandboxed,
+          sandboxFailHard,
           llmConnection: prompt.llmConnection,
           model: prompt.model,
           thinkingLevel: prompt.thinkingLevel,

@@ -161,6 +161,24 @@ export interface AutomationMatcher {
   timezone?: string;
   /** Permission mode for sessions created by prompt actions. */
   permissionMode?: PermissionMode;
+  /**
+   * Working directory for sessions created by prompt actions. Becomes the
+   * spawned session's `workingDirectory`. When unset, the spawned session
+   * has no working directory and the agent operates from internal session
+   * storage (which sandbox enforcement also constrains).
+   */
+  workingDirectory?: string;
+  /**
+   * Run sessions created by this automation under the agent SDK's OS-level
+   * sandbox. Strongly recommended for unattended automations. Currently
+   * honored only by the Claude SDK backend.
+   */
+  sandboxed?: boolean;
+  /**
+   * When sandboxed is true, fail loudly if the sandbox runtime cannot start.
+   * Defaults to true. Set to false for graceful degradation.
+   */
+  sandboxFailHard?: boolean;
   /** Labels to apply to sessions created by prompt actions */
   labels?: string[];
   /** Whether this automation matcher is enabled. Defaults to true. Set to false to disable without removing. */
@@ -250,6 +268,12 @@ export interface PendingPrompt {
   labels?: string[];
   /** Permission mode for the created session (from matcher config) */
   permissionMode?: PermissionMode;
+  /** Working directory for the created session (from matcher config) */
+  workingDirectory?: string;
+  /** Whether the created session should run under the SDK's OS-level sandbox (Claude only) */
+  sandboxed?: boolean;
+  /** When sandboxed, whether sandbox unavailability should hard-error (default true) */
+  sandboxFailHard?: boolean;
   /** LLM connection slug for the created session (falls back to default if not found) */
   llmConnection?: string;
   /** Model ID for the created session (falls back to provider default if invalid) */

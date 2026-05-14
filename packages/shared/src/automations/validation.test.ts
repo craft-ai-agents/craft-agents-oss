@@ -320,7 +320,7 @@ describe('validation', () => {
       expect(result.errors.some(e => e.message.includes('Invalid timezone'))).toBe(true);
     });
 
-    it('should warn about allow-all permission mode', () => {
+    it('should warn strongly about allow-all without sandbox', () => {
       const json = JSON.stringify({
         automations: {
           LabelAdd: [{
@@ -331,7 +331,30 @@ describe('validation', () => {
       });
       const result = validateAutomationsContent(json);
       expect(result.valid).toBe(true); // Warning, not error
-      expect(result.warnings.some(w => w.message.includes('allow-all'))).toBe(true);
+      const allowAllWarning = result.warnings.find(w => w.message.includes('allow-all'));
+      expect(allowAllWarning).toBeDefined();
+      expect(allowAllWarning?.message).toContain('no sandbox');
+      expect(allowAllWarning?.suggestion).toContain('"sandboxed": true');
+    });
+
+    it('should warn more mildly about allow-all when sandboxed', () => {
+      const json = JSON.stringify({
+        automations: {
+          LabelAdd: [{
+            permissionMode: 'allow-all',
+            sandboxed: true,
+            actions: [{ type: 'prompt', prompt: 'echo confined' }],
+          }],
+        },
+      });
+      const result = validateAutomationsContent(json);
+      expect(result.valid).toBe(true);
+      const allowAllWarning = result.warnings.find(w => w.message.includes('allow-all'));
+      expect(allowAllWarning).toBeDefined();
+      expect(allowAllWarning?.message).toContain('OS-confined');
+      // No "switch to safe/ask" suggestion when sandboxed — sandboxed allow-all
+      // is a sensible automation pattern.
+      expect(allowAllWarning?.suggestion).toBeUndefined();
     });
 
     it('should warn about empty automations config', () => {

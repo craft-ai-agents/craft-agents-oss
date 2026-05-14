@@ -233,6 +233,8 @@ export interface ElectronAPI {
 
   // Server info (REMOTE_ELIGIBLE — returns data from whichever server owns the workspace)
   getServerHomeDir(): Promise<string>
+  /** Probes whether the Claude SDK's OS-level sandbox can run on this machine. */
+  getSandboxCapability(): Promise<import('@craft-agent/shared/agent').SandboxCapability>
 
   // Server mode configuration
   getServerConfig(): Promise<import('@craft-agent/shared/config/server-config').ServerConfig>

@@ -147,6 +147,7 @@ export const CHANNEL_MAP = {
 
   // Server info (REMOTE_ELIGIBLE)
   getServerHomeDir: invoke(RPC_CHANNELS.server.HOME_DIR),
+  getSandboxCapability: invoke(RPC_CHANNELS.server.GET_SANDBOX_CAPABILITY),
 
   // Server mode configuration
   getServerConfig: invoke(RPC_CHANNELS.settings.GET_SERVER_CONFIG),

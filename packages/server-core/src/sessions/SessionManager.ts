@@ -763,6 +763,10 @@ interface ManagedSession {
   // SDK cwd for session storage - set once at creation, never changes.
   // Ensures SDK can find session transcripts regardless of workingDirectory changes.
   sdkCwd?: string
+  // Whether this session runs under the SDK's OS-level sandbox (Claude only).
+  sandboxed?: boolean
+  // Whether sandbox failures should hard-error vs degrade gracefully (default true).
+  sandboxFailHard?: boolean
   // Shared viewer URL (if shared via viewer)
   sharedUrl?: string
   // Shared session ID in viewer (for revoke)
@@ -1386,6 +1390,9 @@ export class SessionManager implements ISessionManager {
                 thinkingLevel: pending.thinkingLevel,
                 automationName: pending.automationName,
                 telegramTopic: pending.telegramTopic,
+                workingDirectory: pending.workingDirectory,
+                sandboxed: pending.sandboxed,
+                sandboxFailHard: pending.sandboxFailHard,
               })
             )
           )
@@ -2505,6 +2512,12 @@ export class SessionManager implements ISessionManager {
       })
     }
 
+    // Resolve sandboxed default the same way permissionMode is resolved:
+    //   caller override → workspace default → undefined (off).
+    // Existing sessions are intentionally NOT retroactively flipped when the
+    // workspace default changes — defaults only apply at creation time.
+    const effectiveSandboxed = options?.sandboxed ?? wsConfig?.defaults?.sandboxed
+
     // Use storage layer to create and persist the session
     const storedSession = await createStoredSession(workspaceRootPath, {
       name: options?.name,
@@ -2514,6 +2527,8 @@ export class SessionManager implements ISessionManager {
       sessionStatus: options?.sessionStatus,
       labels: options?.labels,
       isFlagged: options?.isFlagged,
+      sandboxed: effectiveSandboxed,
+      sandboxFailHard: options?.sandboxFailHard,
     })
 
     // Branch: copy messages from source session up to and including the branch point
@@ -2981,6 +2996,8 @@ export class SessionManager implements ISessionManager {
         llmConnection: managed.llmConnection,
         permissionMode: managed.permissionMode,
         previousPermissionMode: managed.previousPermissionMode,
+        sandboxed: managed.sandboxed,
+        sandboxFailHard: managed.sandboxFailHard,
       }
 
       const onSdkSessionIdUpdate = (sdkSessionId: string) => {
@@ -6380,6 +6397,21 @@ export class SessionManager implements ISessionManager {
    * Set the thinking level for a session. See {@link ThinkingLevel} for valid values.
    * This is sticky and persisted across messages.
    */
+  /**
+   * Set the per-session sandbox flag. Honored only by the Claude SDK backend;
+   * the Pi backend ignores it. The agent reads this fresh from session config
+   * on every chat turn, so no live agent notification is required — the
+   * change applies starting with the next user message.
+   */
+  setSessionSandboxed(sessionId: string, sandboxed: boolean): void {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.sandboxed = sandboxed
+      sessionLog.info(`Session ${sessionId}: sandboxed set to ${sandboxed}`)
+      this.persistSession(managed)
+    }
+  }
+
   setSessionThinkingLevel(sessionId: string, level: ThinkingLevel): void {
     const managed = this.sessions.get(sessionId)
     if (managed) {
@@ -7176,6 +7208,9 @@ export class SessionManager implements ISessionManager {
       thinkingLevel,
       automationName,
       telegramTopic,
+      workingDirectory,
+      sandboxed,
+      sandboxFailHard,
     } = input
 
     // Warn if llmConnection was specified but doesn't resolve
@@ -7207,6 +7242,9 @@ export class SessionManager implements ISessionManager {
       llmConnection,
       model,
       thinkingLevel,
+      workingDirectory,
+      sandboxed,
+      sandboxFailHard,
     })
 
     // Populate triggeredBy metadata so title generation is explicitly skipped

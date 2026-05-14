@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
+import { ShieldAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CHAT_LAYOUT } from '@/config/layout'
 import { flattenLabels, type LabelConfig } from '@craft-agent/shared/labels'
@@ -14,6 +16,17 @@ interface ChatInputZoneProps {
   showOptionBadges?: boolean
   permissionMode?: PermissionMode
   onPermissionModeChange?: (mode: PermissionMode) => void
+  /** See ActiveOptionBadgesProps.sandboxed */
+  sandboxed?: boolean
+  /** See ActiveOptionBadgesProps.onSandboxedChange */
+  onSandboxedChange?: (sandboxed: boolean) => void
+  /** See ActiveOptionBadgesProps.sandboxToggleSupported — pass true only for Claude-backed sessions. */
+  sandboxToggleSupported?: boolean
+  /**
+   * Session's working directory — used to render the no-working-folder
+   * notice when sandbox is on. Empty string or undefined both mean "unset".
+   */
+  workingDirectory?: string
   tasks?: BackgroundTask[]
   sessionId: string
   sessionFolderPath?: string
@@ -34,6 +47,10 @@ export function ChatInputZone({
   showOptionBadges,
   permissionMode = 'ask',
   onPermissionModeChange,
+  sandboxed = false,
+  onSandboxedChange,
+  sandboxToggleSupported = false,
+  workingDirectory,
   tasks = [],
   sessionId,
   sessionFolderPath,
@@ -48,9 +65,16 @@ export function ChatInputZone({
   className,
   inputProps,
 }: ChatInputZoneProps) {
+  const { t } = useTranslation()
   const [autoOpenLabelId, setAutoOpenLabelId] = React.useState<string | null>(null)
   const shouldShowOptionBadges = showOptionBadges ?? !compactMode
   const inputResetKey = `${sessionId}::${inputProps.structuredInput?.type ?? 'freeform'}`
+
+  // Sandbox is on but no working folder is set: writes are confined to
+  // internal session storage. Surface this so the user understands why
+  // legitimate edits to project files would fail.
+  const showSandboxNoCwdNotice =
+    sandboxToggleSupported && sandboxed && (!workingDirectory || workingDirectory.trim() === '')
 
   const handleClearDraft = React.useCallback(() => {
     inputProps.onInputChange?.('')
@@ -76,10 +100,19 @@ export function ChatInputZone({
       compactMode ? 'px-2 pb-3' : 'px-3 @xs/panel:px-4 pb-4',
       className,
     )}>
+      {showSandboxNoCwdNotice && (
+        <div className="flex items-start gap-2 mb-2 px-1 text-xs text-foreground/60">
+          <ShieldAlert className="h-3.5 w-3.5 mt-0.5 shrink-0 text-warning" />
+          <span>{t('sandbox.noWorkingFolderNotice')}</span>
+        </div>
+      )}
       {shouldShowOptionBadges && (
         <ActiveOptionBadges
           permissionMode={permissionMode}
           onPermissionModeChange={onPermissionModeChange}
+          sandboxed={sandboxed}
+          onSandboxedChange={onSandboxedChange}
+          sandboxToggleSupported={sandboxToggleSupported}
           tasks={tasks}
           sessionId={sessionId}
           sessionFolderPath={sessionFolderPath}

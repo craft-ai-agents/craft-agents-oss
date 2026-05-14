@@ -26,6 +26,12 @@ export interface ConfigDefaults {
     thinkingLevel: ThinkingLevel;
     permissionMode: PermissionMode;
     cyclablePermissionModes: PermissionMode[];
+    /**
+     * Default sandbox flag for new sessions. When true, new Claude-backed
+     * sessions are created with `sandboxed: true`. Existing sessions are
+     * NOT retroactively flipped — this only affects creation.
+     */
+    sandboxed?: boolean;
     localMcpServers: {
       enabled: boolean;
     };

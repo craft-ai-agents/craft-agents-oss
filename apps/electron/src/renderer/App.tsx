@@ -54,6 +54,7 @@ import {
 } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
+import { sandboxCapabilityAtom } from '@/atoms/sandbox-capability'
 import { extractBadges } from '@/lib/mentions'
 import { getDefaultStore } from 'jotai'
 import {
@@ -231,6 +232,16 @@ export default function App() {
       initRendererPerf(isDebug)
     })
   }, [])
+
+  // Probe sandbox capability once at startup. The result feeds the per-session
+  // toggle: hide/grey it on platforms where the SDK can't start a sandbox so
+  // users don't get a confusing runtime failure. Cheap (cached server-side).
+  const setSandboxCapability = useSetAtom(sandboxCapabilityAtom)
+  useEffect(() => {
+    window.electronAPI.getSandboxCapability()
+      .then((cap) => setSandboxCapability(cap))
+      .catch(() => setSandboxCapability({ available: false, reason: 'platform-unsupported', platform: 'unknown' as NodeJS.Platform }))
+  }, [setSandboxCapability])
 
   // App state: loading -> check auth -> onboarding or ready
   const [appState, setAppState] = useState<AppState>('loading')
@@ -425,12 +436,14 @@ export default function App() {
         ...current,
         permissionMode: session.permissionMode ?? defaultSessionOptions.permissionMode,
         thinkingLevel: session.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
+        sandboxed: session.sandboxed ?? defaultSessionOptions.sandboxed,
       }
 
       const hasNonDefaultMode = merged.permissionMode !== defaultSessionOptions.permissionMode
       const hasNonDefaultThinking = merged.thinkingLevel !== DEFAULT_THINKING_LEVEL
+      const hasNonDefaultSandboxed = merged.sandboxed !== defaultSessionOptions.sandboxed
 
-      if (!hasNonDefaultMode && !hasNonDefaultThinking && merged.permissionModeVersion == null) {
+      if (!hasNonDefaultMode && !hasNonDefaultThinking && !hasNonDefaultSandboxed && merged.permissionModeVersion == null) {
         next.delete(session.id)
       } else {
         next.set(session.id, merged)
@@ -477,10 +490,16 @@ export default function App() {
       for (const s of loadedSessions) {
         const hasNonDefaultMode = s.permissionMode && s.permissionMode !== 'ask'
         const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== DEFAULT_THINKING_LEVEL
-        if (hasNonDefaultMode || hasNonDefaultThinking) {
+        // Sandboxed must round-trip through this map at startup too; without
+        // it, a session whose only non-default field is `sandboxed` would
+        // silently render the toggle as "off" on relaunch even though the
+        // JSONL header still has sandboxed: true.
+        const hasSandboxed = s.sandboxed === true
+        if (hasNonDefaultMode || hasNonDefaultThinking || hasSandboxed) {
           optionsMap.set(s.id, {
             permissionMode: s.permissionMode ?? 'ask',
             thinkingLevel: s.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
+            sandboxed: s.sandboxed ?? false,
           })
         }
       }
@@ -1390,6 +1409,10 @@ export default function App() {
     if (updates.thinkingLevel !== undefined) {
       // Sync thinking level change with backend (session-level, persisted)
       window.electronAPI.sessionCommand(sessionId, { type: 'setThinkingLevel', level: updates.thinkingLevel })
+    }
+    if (updates.sandboxed !== undefined) {
+      // Sync sandbox flag with backend (session-level, persisted)
+      window.electronAPI.sessionCommand(sessionId, { type: 'setSandboxed', sandboxed: updates.sandboxed })
     }
   }, [sessionOptions])
 

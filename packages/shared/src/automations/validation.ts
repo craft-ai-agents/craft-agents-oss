@@ -61,15 +61,27 @@ function runMatcherSemanticValidations(
     for (let i = 0; i < matchers.length; i++) {
       const matcher = matchers[i];
       if (!matcher) continue;
-      // Warn about allow-all permission mode
+      // Warn about allow-all permission mode. The dangerous combination is
+      // "allow-all" + unsandboxed (no human approval and no OS-enforced
+      // barrier). "allow-all" + sandboxed is a sensible automation pattern:
+      // execute autonomously, but the SDK sandbox confines damage.
       if (matcher.permissionMode === 'allow-all') {
-        warnings.push({
-          file,
-          path: `automations.${event}[${i}].permissionMode`,
-          message: 'permissionMode "allow-all" bypasses all security checks — use with caution',
-          severity: 'warning',
-          suggestion: 'Consider using "safe" or "ask" permission mode instead',
-        });
+        if (matcher.sandboxed) {
+          warnings.push({
+            file,
+            path: `automations.${event}[${i}].permissionMode`,
+            message: 'permissionMode "allow-all" runs without prompts. Sandboxed: damage is OS-confined.',
+            severity: 'warning',
+          });
+        } else {
+          warnings.push({
+            file,
+            path: `automations.${event}[${i}].permissionMode`,
+            message: 'permissionMode "allow-all" bypasses all security checks AND there is no sandbox — automation can take any action on your machine',
+            severity: 'warning',
+            suggestion: 'Add "sandboxed": true to confine actions to the working directory, or switch to "ask" / "safe" permission mode',
+          });
+        }
       }
 
       if (matcher.matcher) {

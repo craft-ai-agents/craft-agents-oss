@@ -16,6 +16,7 @@ export const RPC_CHANNELS = {
     SHUTTING_DOWN: 'server:shuttingDown',
     STATUS_CHANGED: 'server:statusChanged',
     HOME_DIR: 'server:homeDir',
+    GET_SANDBOX_CAPABILITY: 'server:getSandboxCapability',
   },
   sessions: {
     GET: 'sessions:get',

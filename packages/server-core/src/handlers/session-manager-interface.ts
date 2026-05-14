@@ -67,6 +67,7 @@ export interface ISessionManager {
   // ---------------------------------------------------------------------------
 
   setSessionPermissionMode(sessionId: string, mode: PermissionMode): void
+  setSessionSandboxed(sessionId: string, sandboxed: boolean): void
   setSessionThinkingLevel(sessionId: string, level: ThinkingLevel): void
   updateWorkingDirectory(sessionId: string, path: string): void
   setSessionSources(sessionId: string, sourceSlugs: string[]): Promise<void>
@@ -261,6 +262,12 @@ export interface ExecutePromptAutomationInput {
   /** Override the workspace default thinking level for the spawned session. */
   thinkingLevel?: ThinkingLevel
   automationName?: string
+  /** Working directory for the spawned session (post env-var expansion). */
+  workingDirectory?: string
+  /** Run the spawned session under the SDK's OS-level sandbox (Claude only). */
+  sandboxed?: boolean
+  /** When sandboxed, whether sandbox unavailability should hard-error. */
+  sandboxFailHard?: boolean
   /**
    * Optional Telegram forum-topic name. When set and the workspace has a
    * paired supergroup, the new session is bound to a topic of this name
