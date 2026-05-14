@@ -106,14 +106,19 @@ export interface McpImportCredentialManager {
 
 /** Result from a post-create MCP connection test. */
 export interface McpPostCreateConnectionTestResult {
+  /** Whether the source connected and returned tools successfully. */
   success: boolean;
+  /** User-facing failure message when success is false. */
   error?: string;
+  /** Failure classification used to choose the persisted connection status. */
   errorType?: 'failed' | 'needs-auth' | 'pending' | 'invalid-schema' | 'disabled' | 'unknown';
 }
 
 /** Context passed to post-create MCP connection testers. */
 export interface McpPostCreateConnectionTestContext {
+  /** Newly-created source to test. */
   source: LoadedSource;
+  /** Credential-store value saved for the source, when available. */
   credentialValue?: string;
 }
 
@@ -122,6 +127,10 @@ export type McpPostCreateConnectionTester = (
   context: McpPostCreateConnectionTestContext
 ) => Promise<McpPostCreateConnectionTestResult>;
 
+/**
+ * Tests a newly-created MCP source using the same validators as explicit
+ * connection checks.
+ */
 export const defaultMcpPostCreateConnectionTester: McpPostCreateConnectionTester = async ({ source, credentialValue }) => {
   if (source.config.type !== 'mcp' || !source.config.mcp) {
     return { success: false, error: 'Source is not an MCP source.', errorType: 'failed' };
@@ -145,9 +154,11 @@ export const defaultMcpPostCreateConnectionTester: McpPostCreateConnectionTester
   }
 
   const credentialHeaders = parseCredentialHeaders(credentialValue);
-  const accessToken = credentialValue && !credentialHeaders && (mcp.authType === 'bearer' || mcp.authType === 'oauth')
-    ? credentialValue
-    : undefined;
+  let accessToken: string | undefined;
+  if (!credentialHeaders && (mcp.authType === 'bearer' || mcp.authType === 'oauth')) {
+    accessToken = credentialValue;
+  }
+
   return validateMcpConnection({
     mcpUrl: mcp.url,
     mcpTransport: mcp.transport,
