@@ -57,7 +57,7 @@ import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSourc
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
-import { panelStackAtom, panelCountAtom, focusedPanelIdAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom, parseSessionIdFromRoute } from "@/atoms/panel-stack"
+import { panelStackAtom, panelCountAtom, focusedPanelIdAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom } from "@/atoms/panel-stack"
 import { openFileTabAtom, hasOpenTabsAtom } from "@/atoms/editor-tabs"
 import { type SessionStatus, statusConfigsToSessionStatuses } from "@/config/session-status-config"
 import { useStatuses } from "@/hooks/useStatuses"
@@ -126,6 +126,7 @@ import {
   loadEditorPanelOpenPreference,
   persistEditorPanelOpenPreference,
 } from "./editor-panel-state"
+import { resolveSessionPanelNavigation } from "./session-panel-routing"
 import { createAllSessionsSidebarItem } from "./all-sessions-sidebar-item"
 import { createArchivedSidebarItem, ARCHIVED_NAV_ID } from "./archived-sidebar-item"
 import {
@@ -350,22 +351,30 @@ function AppShellContent({
   )
 
   // Navigate the focused panel to a session.
-  // If the session is already open in another panel, focus that panel instead.
+  // If the session is already open in another panel, focus that panel unless
+  // the current navigator needs a route-specific session view.
   const setFocusedPanel = useSetAtom(focusedPanelIdAtom)
   const openFileTab = useSetAtom(openFileTabAtom)
   const navigateToSessionInPanel = useCallback((sessionId: string) => {
-    // Check if the session is already open in any panel — focus it instead of navigating
-    const stack = store.get(panelStackAtom)
-    for (const entry of stack) {
-      if (parseSessionIdFromRoute(entry.route) === sessionId) {
-        setFocusedPanel(entry.id)
-        return
-      }
+    const result = resolveSessionPanelNavigation({
+      navState,
+      panelStack: store.get(panelStackAtom),
+      sessionId,
+    })
+
+    if (result.type === 'focus') {
+      setFocusedPanel(result.panelId)
+      return
+    }
+
+    if (result.route) {
+      navigate(result.route)
+      return
     }
 
     // Not open in any panel — navigate() updates the focused panel
     navigateToSession(sessionId)
-  }, [store, setFocusedPanel, navigateToSession])
+  }, [navState, store, setFocusedPanel, navigateToSession])
 
   const sessionsContext = React.useMemo(() => {
     if (isSessionsNavigation(navState)) {

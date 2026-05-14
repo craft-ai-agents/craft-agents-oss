@@ -32,6 +32,7 @@ import {
   isLocalSkillsNavigation,
   isSkillMarketplaceNavigation,
   isAutomationsNavigation,
+  isArchivedNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
@@ -361,6 +362,25 @@ export function MainContentPanel({
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">{t("automations.noAutomationsConfigured")}</p>
+        </div>
+      </Panel>
+    )
+  }
+
+  // Archived navigator - show archived chat content without switching to sessions navigation.
+  if (isArchivedNavigation(navState)) {
+    if (navState.details) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ChatPage sessionId={navState.details.sessionId} />
+        </Panel>
+      )
+    }
+
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          <p className="text-sm">{t("session.noSessionSelected")}</p>
         </div>
       </Panel>
     )
