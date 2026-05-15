@@ -200,10 +200,14 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
         }
 
         log.info(`Fetching MCP tools from ${source.config.mcp.url}`)
+        const headers: Record<string, string> = {
+          ...(source.config.mcp.headers || {}),
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        }
         client = new CraftMcpClient({
           transport: 'http',
           url: source.config.mcp.url,
-          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+          headers: Object.keys(headers).length > 0 ? headers : undefined,
         })
       }
 
