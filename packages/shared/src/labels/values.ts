@@ -96,6 +96,25 @@ export function extractLabelId(entry: string): string {
 }
 
 /**
+ * Toggle a label in a session-labels list. Returns a new array.
+ *
+ * - If any entry has this base ID (boolean or valued), all matching
+ *   entries are removed (so toggling "priority" removes "priority::3").
+ * - Otherwise the labelId is appended as a boolean entry.
+ *
+ * Designed for use with optimistic UI state in menu components — feeding
+ * the previous result back in compounds correctly under rapid toggles
+ * without losing earlier updates to a stale snapshot.
+ */
+export function toggleLabelInList(labels: string[], labelId: string): string[] {
+  const isApplied = labels.some(entry => extractLabelId(entry) === labelId);
+  if (isApplied) {
+    return labels.filter(entry => extractLabelId(entry) !== labelId);
+  }
+  return [...labels, labelId];
+}
+
+/**
  * Check whether `rawValue` is well-formed for the declared `valueType`.
  *
  * - `string` — always valid

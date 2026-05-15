@@ -32,6 +32,19 @@ import type { ModelProvider } from '../../config/models.ts';
 // Import LLM connection types for auth
 import type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.ts';
 export type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.ts';
+
+export interface BackendRuntimeUpdate {
+  model: string;
+  providerType?: LlmProviderType;
+  authType?: LlmAuthType;
+  runtime?: {
+    baseUrl?: string;
+    piAuthProvider?: string;
+    customEndpoint?: { api: string; supportsImages?: boolean };
+    customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
+    [key: string]: unknown;
+  };
+}
 import type { AutomationSystem } from '../../automations/index.ts';
 
 /**
@@ -210,6 +223,20 @@ export interface CoreBackendConfig {
 
   /** Callback when SDK session ID is cleared (e.g., after failed resume) */
   onSdkSessionIdCleared?: () => void;
+
+  /**
+   * Called when the agent decides the persisted branch-fork metadata
+   * (branchFromSdkSessionId / branchFromSdkCwd / branchFromSdkTurnId) is
+   * unrecoverable on this machine — typically because the parent's sdk cwd
+   * doesn't exist locally (cross-machine session import) or the SDK fork
+   * spawn failed before establishing a child session.
+   *
+   * Implementations MUST clear all four fields (including sdkSessionId)
+   * atomically and persist. `onSdkSessionIdCleared` is insufficient because
+   * it only clears sdkSessionId — branch fields would reload from disk
+   * on next launch and re-trigger the failure.
+   */
+  onBranchForkInvalidated?: () => void;
 
   /** Callback to get recent messages for recovery context */
   getRecoveryMessages?: () => RecoveryMessage[];
@@ -427,6 +454,19 @@ export interface AgentBackend {
   /** Set model (should validate against capabilities) */
   setModel(model: string): void;
 
+  /**
+   * Update runtime-affecting provider config without recreating the backend.
+   * Backends return false when the update cannot be applied in-place and the
+   * session manager should fall back to an idle restart.
+   */
+  updateRuntimeConfig?(update: BackendRuntimeUpdate): Promise<boolean>;
+
+  /**
+   * Dispose resources before an idle backend restart. Backends with subprocesses
+   * can wait for child process exit here to avoid transient process leaks.
+   */
+  disposeForRestart?(): Promise<void>;
+
   /** Get current thinking level */
   getThinkingLevel(): ThinkingLevel;
 
@@ -478,6 +518,22 @@ export interface AgentBackend {
    * Get currently active source slugs.
    */
   getActiveSourceSlugs(): string[];
+
+  /**
+   * Get the raw user message for the current turn (cleared between turns).
+   * Used by SessionManager.activateSourceInSessionFn to capture the message
+   * that should be re-sent after a source_test-triggered auto-restart.
+   */
+  getCurrentTurnUserMessage(): string | null;
+
+  /**
+   * Schedule a source-activation auto-restart. Consumed by the backend's
+   * event loop after the next tool_result, which yields `source_activated`
+   * and `forceAbort`s the turn — triggering the renderer's existing
+   * auto_retry effect. Set by SessionManager after a successful mid-turn
+   * activation (source_test auto-enable).
+   */
+  setPendingSourceActivationRestart(pending: { sourceSlug: string; userMessage: string }): void;
 
   /**
    * Get all sources (for context injection).

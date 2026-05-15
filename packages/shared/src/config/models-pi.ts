@@ -129,14 +129,19 @@ export function getAllPiModels(): ModelDefinition[] {
 
 /**
  * Display metadata for Pi SDK providers.
+ *
+ * Keep this keyed by string instead of `KnownProvider` so the UI metadata can
+ * stay ahead of or lag behind the SDK's exact provider union without blocking
+ * typecheck/commits when providers are added or renamed upstream.
  */
-const PI_PROVIDER_DISPLAY: Partial<Record<KnownProvider, { label: string; placeholder: string }>> = {
+const PI_PROVIDER_DISPLAY: Partial<Record<string, { label: string; placeholder: string }>> = {
   'anthropic':              { label: 'Anthropic',          placeholder: 'sk-ant-...' },
   'google':                 { label: 'Google AI Studio',   placeholder: 'AIza...' },
   'openai':                 { label: 'OpenAI',             placeholder: 'sk-...' },
   'openrouter':             { label: 'OpenRouter',         placeholder: 'sk-or-...' },
   'groq':                   { label: 'Groq',               placeholder: 'gsk_...' },
   'mistral':                { label: 'Mistral',            placeholder: 'Paste your key here...' },
+  'deepseek':               { label: 'DeepSeek',           placeholder: 'sk-...' },
   'xai':                    { label: 'xAI (Grok)',         placeholder: 'xai-...' },
   'cerebras':               { label: 'Cerebras',           placeholder: 'csk-...' },
   'amazon-bedrock':         { label: 'Amazon Bedrock',     placeholder: 'AKIA...' },
@@ -155,8 +160,6 @@ const PI_EXCLUDED_PROVIDERS: Set<string> = new Set([
   'github-copilot',
   'openai-codex',
   'google-vertex',
-  'google-gemini-cli',
-  'google-antigravity',
 ]);
 
 /** Info for a Pi provider available in the API key flow. */

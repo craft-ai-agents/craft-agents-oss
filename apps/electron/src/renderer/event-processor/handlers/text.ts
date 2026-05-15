@@ -80,7 +80,7 @@ export function handleTextComplete(
   state: SessionState,
   event: TextCompleteEvent
 ): SessionState {
-  const { session } = state
+  const { session, streaming } = state
 
   // Find message by turnId (try streaming first, then any assistant)
   let msgIndex = findStreamingMessage(session.messages, event.turnId)
@@ -102,11 +102,15 @@ export function handleTextComplete(
     // Update existing message with final content
     // Only update lastMessageAt for final (non-intermediate) messages
     const shouldUpdateTimestamp = !event.isIntermediate
+    const existingMsg = session.messages[msgIndex]
+    // Fallback chain: SDK event text → accumulated streaming content → existing message content.
+    // Guards against SDK quirks or race conditions where event.text arrives empty.
+    const resolvedContent = event.text || streaming?.content || existingMsg?.content || ''
     const updatedSession = updateMessageAt(session, msgIndex, {
       // Replace temporary renderer-generated ID with authoritative main-process ID
       // so branchFromMessageId always resolves against persisted session.jsonl.
       ...(event.messageId ? { id: event.messageId } : {}),
-      content: event.text,  // Complete text from SDK
+      content: resolvedContent,
       isStreaming: false,
       isPending: false,
       isIntermediate: event.isIntermediate,
@@ -125,7 +129,7 @@ export function handleTextComplete(
   const newMessage: Message = {
     id: event.messageId ?? generateMessageId(),
     role: 'assistant',
-    content: event.text,
+    content: event.text || streaming?.content || '',
     timestamp: event.timestamp ?? Date.now(),
     isStreaming: false,
     isPending: false,

@@ -152,6 +152,7 @@ The `source_test` tool:
 2. **Downloads and caches the icon** if a URL was provided
 3. **Tests the connection** to verify the source is reachable
 4. **Reports missing fields** (icon, tagline) that should be added
+5. **Auto-enables the source** (default): on a clean run it flips `enabled: true` in config if needed and activates the source in the current session so its tools become available without a restart. Pass `autoEnable: false` to keep pure validation behavior.
 
 After validation passes, trigger the appropriate auth flow:
 - OAuth sources: `source_oauth_trigger({ sourceSlug: "{slug}" })`

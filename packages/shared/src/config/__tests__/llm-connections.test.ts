@@ -73,6 +73,13 @@ describe('getDefaultModelForConnection', () => {
     expect(modelIds).toContain(defaultModel)
   })
 
+  it('Pi deepseek default is in its own model list', () => {
+    const defaultModel = getDefaultModelForConnection('pi', 'deepseek')
+    const models = getDefaultModelsForConnection('pi', 'deepseek')
+    const modelIds = models.map(m => typeof m === 'string' ? m : m.id)
+    expect(modelIds).toContain(defaultModel)
+  })
+
   it('returns empty string for pi_compat (dynamic provider)', () => {
     const defaultModel = getDefaultModelForConnection('pi_compat')
     expect(defaultModel).toBe('')

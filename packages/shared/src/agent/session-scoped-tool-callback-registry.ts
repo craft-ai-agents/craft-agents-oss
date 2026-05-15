@@ -65,8 +65,18 @@ export interface SessionScopedToolCallbacks {
   resolveStatusFn?: (status: string) => import('@craft-agent/session-tools-core').ResolvedStatusResult;
   /** Send a message to another session (inter-session messaging). */
   sendAgentMessageFn?: (sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>) => Promise<void>;
+  /**
+   * Activate a source in the running session (source_test auto-enable flow).
+   * Wired by SessionManager to the per-session onSourceActivationRequest callback
+   * plus a backend-aware readiness signal (Pi vs Claude).
+   */
+  activateSourceInSessionFn?: (sourceSlug: string) => Promise<{
+    ok: boolean;
+    reason?: string;
+    availability?: 'immediate' | 'next-turn';
+  }>;
   /** Get messaging bindings for a session. */
-  getMessagingBindingsFn?: (sessionId: string) => Array<{ platform: string; channelId: string; channelName?: string; enabled: boolean }>;
+  getMessagingBindingsFn?: (sessionId: string) => Array<{ platform: string; channelId: string; threadId?: number; channelName?: string; enabled: boolean }>;
   /** Unbind messaging channels from a session. Returns count of removed bindings. */
   unbindMessagingChannelFn?: (sessionId: string, platform?: string) => number;
 }

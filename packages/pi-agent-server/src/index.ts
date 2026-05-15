@@ -26,20 +26,22 @@ import {
   SessionManager as PiSessionManager,
   AuthStorage as PiAuthStorage,
   ModelRegistry as PiModelRegistry,
-  codingTools,
+  createReadToolDefinition,
+  createBashToolDefinition,
+  createEditToolDefinition,
+  createWriteToolDefinition,
+  createGrepToolDefinition,
+  createFindToolDefinition,
+  createLsToolDefinition,
 } from '@mariozechner/pi-coding-agent';
 import type {
   AgentSession,
   AgentSessionEvent,
   AgentToolResult,
+  AuthCredential,
   CreateAgentSessionOptions,
   ToolDefinition,
 } from '@mariozechner/pi-coding-agent';
-
-// Pi Agent Core types
-import type {
-  AgentTool,
-} from '@mariozechner/pi-agent-core';
 
 // Pi AI types
 import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
@@ -47,7 +49,7 @@ import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
 // Pre-register the Bedrock provider module so the Pi SDK doesn't attempt a
 // dynamic import of "./amazon-bedrock.js" — which fails in the bundled output
 // because bun collapses everything into a single file.
-// With the current Pi SDK (0.66.1 here), pi-ai is deduped (single hoisted
+// With the current Pi SDK (0.70.0 here), pi-ai is deduped (single hoisted
 // copy), so one registration covers both pi-ai and pi-agent-core module scopes.
 import { setBedrockProviderModule } from '@mariozechner/pi-ai';
 import { bedrockProviderModule } from '@mariozechner/pi-ai/bedrock-provider';
@@ -55,10 +57,17 @@ setBedrockProviderModule(bedrockProviderModule);
 
 // Model resolution (extracted for testability + custom-endpoint precedence)
 import { resolvePiModel, isDeniedMiniModelId, isModelNotFoundError } from './model-resolution.ts';
-import { buildCustomEndpointModelDef, type CustomEndpointModelOverrides } from './custom-endpoint-models.ts';
+import { pickProviderAppropriateMiniModel } from './pick-mini-model.ts';
+import {
+  buildCustomEndpointModelDef,
+  normalizeCustomEndpointModelEntry,
+  stripPiPrefix,
+  type CustomEndpointModelEntry,
+  type CustomEndpointModelOverrides,
+} from './custom-endpoint-models.ts';
 
 // Direct source imports from shared (bundled by bun build)
-import { handleLargeResponse, estimateTokens, TOKEN_LIMIT } from '../../shared/src/utils/large-response.ts';
+import { handleLargeResponse, estimateTokens, tokenLimitFor } from '../../shared/src/utils/large-response.ts';
 import { getSessionPlansPath, getSessionPath } from '../../shared/src/sessions/storage.ts';
 import { buildCallLlmRequest, withTimeout, LLM_QUERY_TIMEOUT_MS } from '../../shared/src/agent/llm-tool.ts';
 import type { LLMQueryRequest, LLMQueryResult } from '../../shared/src/agent/llm-tool.ts';
@@ -67,6 +76,8 @@ import { getDefaultSummarizationModel } from '../../shared/src/config/models.ts'
 import { createWebFetchTool } from './tools/web-fetch.ts';
 import { resolveSearchProvider } from './tools/search/resolve-provider.ts';
 import { createSearchTool } from './tools/search/create-search-tool.ts';
+import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
+import { applySystemPromptOverride } from './system-prompt-override.ts';
 
 // ============================================================
 // Types — JSONL Protocol
@@ -107,6 +118,17 @@ interface InitMessage {
   piAuth?: { provider: string; credential: PiCredential };
 }
 
+interface RuntimeConfigUpdateMessage {
+  type: 'update_runtime_config';
+  id: string;
+  model: string;
+  providerType?: string;
+  authType?: string;
+  baseUrl?: string;
+  customEndpoint?: { api: CustomEndpointApi; supportsImages?: boolean };
+  customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
+}
+
 /** Messages from main process (stdin) */
 type InboundMessage =
   | InitMessage
@@ -116,11 +138,13 @@ type InboundMessage =
   | { type: 'pre_tool_use_response'; requestId: string; action: 'allow' | 'block' | 'modify'; input?: Record<string, unknown>; reason?: string }
   | { type: 'abort' }
   | { type: 'mini_completion'; id: string; prompt: string }
+  | { type: 'llm_query'; id: string; request: LLMQueryRequest }
   | { type: 'ensure_session_ready'; id: string }
   | { type: 'set_model'; model: string }
   | { type: 'set_thinking_level'; level: string }
   | { type: 'compact'; id: string; customInstructions?: string }
   | { type: 'set_auto_compaction'; id: string; enabled: boolean }
+  | RuntimeConfigUpdateMessage
   | { type: 'steer'; message: string }
   | { type: 'token_update'; piAuth: { provider: string; credential: PiCredential } }
   | { type: 'shutdown' };
@@ -158,6 +182,17 @@ interface OutboundPreToolUseReq {
 interface OutboundToolExecReq { type: 'tool_execute_request'; requestId: string; toolName: string; args: Record<string, unknown> }
 interface OutboundSessionToolCompleted { type: 'session_tool_completed'; toolName: string; args: Record<string, unknown>; isError: boolean }
 interface OutboundMiniResult { type: 'mini_completion_result'; id: string; text: string | null }
+interface OutboundLlmQueryResult {
+  type: 'llm_query_result';
+  id: string;
+  result: LLMQueryResult | null;
+  errorMessage?: string;
+  /**
+   * When set, signals the main process that a generic `error` with the same code
+   * was also emitted on the error channel (for centralized auth-refresh detection).
+   */
+  errorCode?: string;
+}
 interface OutboundEnsureSessionReadyResult { type: 'ensure_session_ready_result'; id: string; sessionId: string | null }
 interface OutboundCompactResult {
   type: 'compact_result';
@@ -173,6 +208,13 @@ interface OutboundSetAutoCompactionResult {
   enabled: boolean;
   errorMessage?: string;
 }
+interface OutboundRuntimeConfigUpdateResult {
+  type: 'update_runtime_config_result';
+  id: string;
+  success: boolean;
+  updated: boolean;
+  errorMessage?: string;
+}
 interface OutboundSessionIdUpdate { type: 'session_id_update'; sessionId: string }
 interface OutboundError { type: 'error'; message: string; code?: string }
 
@@ -183,9 +225,11 @@ type OutboundMessage =
   | OutboundToolExecReq
   | OutboundSessionToolCompleted
   | OutboundMiniResult
+  | OutboundLlmQueryResult
   | OutboundEnsureSessionReadyResult
   | OutboundCompactResult
   | OutboundSetAutoCompactionResult
+  | OutboundRuntimeConfigUpdateResult
   | OutboundSessionIdUpdate
   | OutboundError;
 
@@ -350,11 +394,6 @@ function setInterceptorApiHints(model: { api?: string; provider?: string; baseUr
   );
 }
 
-/** Strip bare model IDs (remove pi/ prefix if present) */
-function stripPiPrefix(id: string): string {
-  return id.startsWith('pi/') ? id.slice(3) : id;
-}
-
 /**
  * Resolve the API key for custom endpoint auth.
  * Returns empty string for local endpoints (Ollama etc.) that don't need auth.
@@ -390,10 +429,6 @@ function isLocalhostUrl(url: string): boolean {
 /** Model IDs currently registered under the custom-endpoint provider */
 let customEndpointModelIds: Set<string> = new Set();
 
-interface CustomModelEntry extends CustomEndpointModelOverrides {
-  id: string;
-}
-
 /**
  * Register (or re-register) the custom-endpoint provider with the given models.
  * Note: registerProvider replaces the entire provider, so we maintain a Set of all
@@ -405,7 +440,7 @@ function registerCustomEndpointModels(
   registry: PiModelRegistry,
   api: CustomEndpointApi,
   baseUrl: string,
-  models: CustomModelEntry[],
+  models: CustomEndpointModelEntry[],
 ): void {
   for (const m of models) {
     customEndpointModelIds.add(m.id);
@@ -448,7 +483,11 @@ function createAuthenticatedRegistry(): {
   const authStorage = moduleAuthStorage;
   if (initConfig?.piAuth) {
     const { provider, credential } = initConfig.piAuth;
-    authStorage.set(provider, credential);
+    // Pi SDK 0.70.0's AuthCredential union (ApiKeyCredential | OAuthCredential) doesn't
+    // include 'iam' as a first-class member, but the auth storage accepts it at runtime
+    // — the Bedrock provider module reads AWS env directly; this `set` keeps Pi SDK's
+    // internal provider-tracking consistent regardless of credential shape.
+    authStorage.set(provider, credential as unknown as AuthCredential);
     debugLog(`Injected ${credential.type} credential for provider: ${provider}`);
   } else if (initConfig?.apiKey) {
     authStorage.set('anthropic', { type: 'api_key', key: initConfig.apiKey });
@@ -463,12 +502,10 @@ function createAuthenticatedRegistry(): {
   const hasCustomEndpoint = !!initConfig?.baseUrl?.trim();
   if (hasCustomEndpoint && initConfig?.customEndpoint) {
     const { api } = initConfig.customEndpoint;
-    const modelEntries: CustomModelEntry[] = (initConfig.customModels?.length
+    const modelEntries: CustomEndpointModelEntry[] = (initConfig.customModels?.length
       ? initConfig.customModels
       : [initConfig.model || 'default']
-    ).map(m => typeof m === 'string'
-      ? { id: stripPiPrefix(m) }
-      : { id: stripPiPrefix(m.id), contextWindow: m.contextWindow });
+    ).map(normalizeCustomEndpointModelEntry);
     customEndpointModelIds = new Set();  // Reset on fresh registry creation
     registerCustomEndpointModels(modelRegistry, api, initConfig.baseUrl!.trim(), modelEntries);
   } else if (hasCustomEndpoint && !initConfig?.customEndpoint) {
@@ -510,17 +547,37 @@ async function ensureSession(): Promise<AgentSession> {
     initConfig ? getSessionPath(initConfig.workspaceRootPath, initConfig.sessionId) : null
   );
   const webTools = [searchTool, webFetchTool];
-  const wrappedCodingTools = wrapToolsWithHooks([...codingTools, ...webTools]);
+
+  // Pi SDK 0.70.0 registration contract:
+  //   - `customTools` accepts ToolDefinition[] — our hook-wrapped objects go here
+  //   - `tools` is a string[] name allowlist — MUST include every tool we want active,
+  //     otherwise Pi SDK defaults to the built-in [read, bash, edit, write] set and
+  //     silently filters out everything else. Custom tool names with matching built-in
+  //     names override the SDK's raw implementation inside _refreshToolRegistry, so
+  //     our hooked versions take effect (permissions + large-response summarization).
+  //   - Do NOT pass tool *objects* to `tools` — `allowedToolNames = new Set(options.tools)`
+  //     then `.has(name)` returns false for every string lookup → zero tools active.
+  const builtinDefs = [
+    createReadToolDefinition(cwd),
+    createBashToolDefinition(cwd),
+    createEditToolDefinition(cwd),
+    createWriteToolDefinition(cwd),
+    createGrepToolDefinition(cwd),
+    createFindToolDefinition(cwd),
+    createLsToolDefinition(cwd),
+  ];
   const proxyTools = buildProxyTools();
-  const allTools = [...wrappedCodingTools, ...proxyTools];
-  debugLog(`Session tools: ${wrappedCodingTools.length} coding + ${proxyTools.length} proxy = ${allTools.length} total`);
+  const wrappedAll = wrapToolsWithHooks([...builtinDefs, ...webTools, ...proxyTools]);
+  const toolAllowlist = wrappedAll.map(t => t.name);
+  debugLog(`Session tools: ${builtinDefs.length} builtin + ${webTools.length} web + ${proxyTools.length} proxy = ${wrappedAll.length} total`);
 
   // Build session options
   const sessionOptions: CreateAgentSessionOptions = {
     cwd,
     authStorage,
     modelRegistry,
-    tools: allTools,
+    customTools: wrappedAll,
+    tools: toolAllowlist,
   };
 
   // Extension isolation: set agentDir to a temp directory under session path
@@ -604,35 +661,12 @@ async function ensureSession(): Promise<AgentSession> {
     sessionOptions.thinkingLevel = piThinkingLevel;
   }
 
-  // Create the session
+  // Create the session — tools flow through customTools + allowlist (see comment above).
   const { session } = await createAgentSession(sessionOptions);
   piSession = session;
 
-  // Pi SDK's createAgentSession ignores custom AgentTool objects passed via
-  // `tools` — it only accepts its own internal Tool type and creates instances
-  // internally. Inject our wrapped tools (with permission hooks) and proxy
-  // tools via _baseToolsOverride, then rebuild the runtime so the session
-  // actually uses them.
-  const sessionInternal = piSession as any;
-  if (typeof sessionInternal._buildRuntime !== 'function') {
-    throw new Error(
-      'Pi SDK internal API changed: _buildRuntime not found. ' +
-      'Update ensureSession() for the new SDK version.',
-    );
-  }
-
-  const baseToolsOverride: Record<string, AgentTool<any>> = {};
-  for (const tool of allTools) {
-    baseToolsOverride[tool.name] = tool;
-  }
-  sessionInternal._baseToolsOverride = baseToolsOverride;
-  sessionInternal._buildRuntime({
-    activeToolNames: Object.keys(baseToolsOverride),
-    includeAllExtensionTools: true,
-  });
-
   toolsChanged = false;
-  debugLog(`Created Pi session: ${session.sessionId} (${Object.keys(baseToolsOverride).length} tools)`);
+  debugLog(`Created Pi session: ${session.sessionId} (${wrappedAll.length} tools)`);
 
   // Notify main process of session ID
   send({ type: 'session_id_update', sessionId: session.sessionId });
@@ -681,7 +715,7 @@ async function requestPreToolUseApproval(
   return response.action === 'modify' && response.input ? response.input : input;
 }
 
-function wrapToolsWithHooks(tools: AgentTool<any>[]): AgentTool<any>[] {
+function wrapToolsWithHooks(tools: ToolDefinition<any, any>[]): ToolDefinition<any, any>[] {
   return tools.map(tool => wrapSingleTool(tool));
 }
 
@@ -692,15 +726,17 @@ function makeErrorResult(message: string): AgentToolResult<any> {
   };
 }
 
-function wrapSingleTool(tool: AgentTool<any>): AgentTool<any> {
+function wrapSingleTool(tool: ToolDefinition<any, any>): ToolDefinition<any, any> {
   const originalExecute = tool.execute;
+  const parameters = allowCraftMetadataProperties(tool.parameters);
 
-  const wrappedExecute = async (
-    toolCallId: string,
-    params: any,
-    signal?: AbortSignal,
-    onUpdate?: (partialResult: AgentToolResult<any>) => void,
-  ): Promise<AgentToolResult<any>> => {
+  const wrappedExecute: ToolDefinition<any, any>['execute'] = async (
+    toolCallId,
+    params,
+    signal,
+    onUpdate,
+    ctx,
+  ) => {
     const sdkToolName = PI_TOOL_NAME_MAP[tool.name] || tool.name;
     let inputObj: Record<string, unknown> = { ...(params as Record<string, unknown>) };
 
@@ -716,8 +752,13 @@ function wrapSingleTool(tool: AgentTool<any>): AgentTool<any> {
     // Send to main process for permission checking + transforms
     inputObj = await requestPreToolUseApproval(sdkToolName, inputObj, toolCallId);
 
+    // Metadata is for Craft UI only. Keep a final defensive strip here so the
+    // upstream Pi tool implementation always receives clean executable args,
+    // even if a future pre-tool-use path returns `allow` without modification.
+    inputObj = stripCraftMetadata(inputObj);
+
     // Execute original tool with (potentially modified) input
-    const result = await originalExecute(toolCallId, inputObj, signal, onUpdate);
+    const result = await originalExecute(toolCallId, inputObj, signal, onUpdate, ctx);
 
     // --- Post-execute: large response summarization ---
 
@@ -726,7 +767,11 @@ function wrapSingleTool(tool: AgentTool<any>): AgentTool<any> {
       .map(c => c.text)
       .join('');
 
-    if (estimateTokens(resultText) > TOKEN_LIMIT && initConfig) {
+    // Source the active model's contextWindow each call so the threshold
+    // tracks set_model mid-session, not the model that was active at session
+    // creation. Falls back to the fixed default when the model isn't set yet.
+    const modelContextWindow = piSession?.agent.state.model?.contextWindow;
+    if (estimateTokens(resultText) > tokenLimitFor(modelContextWindow) && initConfig) {
       try {
         const sessionPath = getSessionPath(
           initConfig.workspaceRootPath,
@@ -743,6 +788,7 @@ function wrapSingleTool(tool: AgentTool<any>): AgentTool<any> {
             userRequest: currentUserMessage,
           },
           summarize: runMiniCompletion,
+          contextWindow: modelContextWindow,
         });
 
         if (largeResult) {
@@ -763,6 +809,7 @@ function wrapSingleTool(tool: AgentTool<any>): AgentTool<any> {
 
   return {
     ...tool,
+    parameters,
     execute: wrappedExecute,
   };
 }
@@ -771,10 +818,10 @@ function wrapSingleTool(tool: AgentTool<any>): AgentTool<any> {
 // Proxy Tools (tools executed in main process)
 // ============================================================
 
-function buildProxyTools(): AgentTool<any>[] {
+function buildProxyTools(): ToolDefinition<any, any>[] {
   debugLog(`Building proxy tools from ${proxyToolDefs.length} definitions: ${proxyToolDefs.map(t => t.name).join(', ')}`);
 
-  return proxyToolDefs.map(def => ({
+  return proxyToolDefs.map<ToolDefinition<any, any>>(def => ({
     name: def.name,
     label: def.name
       .replace(/^mcp__.*?__/, '')
@@ -864,7 +911,13 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
     const resolvedProvider = (resolved as any)?.provider;
     const isCompatible = resolvedProvider === authProvider || resolvedProvider === 'custom-endpoint';
     if (!resolved || !isCompatible || isDeniedMiniModelId(model, piAuthProvider)) {
-      const fallback = getDefaultSummarizationModel();
+      // Anthropic: keep Haiku (the cheap/fast mini). For every other provider
+      // Haiku is unresolvable, so walk PI_PREFERRED_DEFAULTS for a model that
+      // actually works under the user's auth.
+      const providerDefault = authProvider === 'anthropic'
+        ? undefined
+        : pickProviderAppropriateMiniModel(authProvider, modelRegistry, shouldPreferCustomEndpoint());
+      const fallback = providerDefault ?? getDefaultSummarizationModel();
       debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider} (resolved: ${resolvedProvider}), falling back to ${fallback}`);
       model = fallback;
     }
@@ -873,6 +926,17 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
   const runQueryWithModel = async (modelId: string): Promise<string> => {
     debugLog(`[queryLlm] Using model: ${modelId}`);
 
+    // Resolve model — fail fast if unresolvable so we don't let the Pi SDK
+    // fall back to its own internal default (which may require a provider
+    // the user hasn't authenticated with, surfacing as a misleading
+    // "No API key found for <provider>" error).
+    const piModel = resolvePiModel(modelRegistry, modelId, initConfig!.piAuth?.provider, shouldPreferCustomEndpoint());
+    if (!piModel) {
+      throw new Error(
+        `Could not resolve mini model "${modelId}" for provider "${initConfig!.piAuth?.provider ?? '(unknown)'}"`,
+      );
+    }
+
     // Create minimal ephemeral session
     const ephemeralOptions: CreateAgentSessionOptions = {
       cwd: resolvedCwd(),
@@ -880,39 +944,26 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
       modelRegistry,
       tools: [],
       sessionManager: PiSessionManager.inMemory(),
+      model: piModel,
     };
-
-    // Resolve model
-    let piModel: ReturnType<typeof resolvePiModel>;
-    try {
-      piModel = resolvePiModel(modelRegistry, modelId, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
-      if (piModel) {
-        ephemeralOptions.model = piModel;
-      }
-    } catch {
-      debugLog(`[queryLlm] Could not resolve model: ${modelId}`);
-    }
 
     const { session: ephemeralSession } = await createAgentSession(ephemeralOptions);
 
     // Pi SDK ignores options.model for ephemeral sessions (same issue as options.tools).
     // Explicitly set the model after creation to ensure the mini model is used.
-    if (piModel) {
-      try {
-        await ephemeralSession.setModel(piModel);
-      } catch {
-        debugLog(`[queryLlm] Failed to set model on ephemeral session, proceeding with default`);
-      }
+    try {
+      await ephemeralSession.setModel(piModel);
+    } catch {
+      debugLog(`[queryLlm] Failed to set model on ephemeral session, proceeding with default`);
     }
 
     debugLog(`[queryLlm] Created ephemeral session: ${ephemeralSession.sessionId}`);
 
-    // Set system prompt
-    if (request.systemPrompt) {
-      ephemeralSession.agent.state.systemPrompt = request.systemPrompt;
-    } else {
-      ephemeralSession.agent.state.systemPrompt = 'Reply with ONLY the requested text. No explanation.';
-    }
+    // Force the system prompt — see system-prompt-override.ts for why direct
+    // assignment to `state.systemPrompt` doesn't survive `session.prompt()`.
+    const promptForSession =
+      request.systemPrompt ?? 'Reply with ONLY the requested text. No explanation.';
+    applySystemPromptOverride(ephemeralSession, promptForSession);
 
     // Collect response text and errors from events
     let result = '';
@@ -975,7 +1026,8 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
   };
 
   const fallbackCandidates = [
-    'pi/gpt-5.1-codex-mini',
+    // Removed 'pi/gpt-5.1-codex-mini' (#596) — stale on several OpenAI catalogs.
+    // The connection-configured miniModel is still tried via `initConfig.miniModel`.
     'pi/gpt-5-mini',
     initConfig.miniModel,
     getDefaultSummarizationModel(),
@@ -1000,11 +1052,11 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
       const retryModel = fallbackCandidates.find(candidate => {
         if (triedModels.has(candidate)) return false;
         try {
-          const resolved = resolvePiModel(modelRegistry, candidate, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
+          const resolved = resolvePiModel(modelRegistry, candidate, initConfig!.piAuth?.provider, shouldPreferCustomEndpoint());
           if (!resolved) return false;
-          if (initConfig.piAuth) {
+          if (initConfig!.piAuth) {
             const rp = (resolved as any).provider;
-            if (rp !== initConfig.piAuth.provider && rp !== 'custom-endpoint') {
+            if (rp !== initConfig!.piAuth.provider && rp !== 'custom-endpoint') {
               return false;
             }
           }
@@ -1076,10 +1128,13 @@ function handleSessionEvent(event: AgentSessionEvent): void {
     if (msg?.role === 'assistant' && piSession) {
       const sdkTurnAnchor = piSession.sessionManager.getLeafId();
       if (sdkTurnAnchor) {
+        // Enrichment: main process reads `sdkTurnAnchor` off the forwarded event to
+        // set branch cutoff points. The SDK's event shape doesn't declare this field,
+        // so the cast is intentional.
         forwardedEvent = {
           ...(event as Record<string, unknown>),
           sdkTurnAnchor,
-        } as OutboundAgentEvent;
+        } as unknown as OutboundAgentEvent;
       }
 
       // Speculative prefetch: if the assistant message contains 2+ prefetchable tool calls,
@@ -1183,29 +1238,21 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
   });
 }
 
-function isContextOverflowErrorMessage(message: string): boolean {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes('context_length_exceeded') ||
-    normalized.includes('exceeds the context window') ||
-    normalized.includes('context window') && normalized.includes('exceed') ||
-    normalized.includes('too many tokens') ||
-    normalized.includes('token limit exceeded')
-  );
-}
-
 /**
- * Wait for any in-flight compaction to finish before sending a prompt.
- * Prevents a race in the Pi SDK where concurrent _runAutoCompaction calls
- * crash on a shared AbortController (see craft-agents-oss#464).
+ * Wait for any in-flight compaction to finish before sending a prompt or
+ * starting another compaction. Prevents a race in the Pi SDK where concurrent
+ * _runAutoCompaction calls crash on a shared AbortController
+ * (see craft-agents-oss#464). Default timeout matches the RPC compact timeout
+ * in PiAgent.requestCompact (300 s), since GPT compactions can legitimately
+ * take 60–120 s.
  */
-async function waitForCompaction(session: { isCompacting: boolean }, timeoutMs = 60_000): Promise<void> {
+async function waitForCompaction(session: { isCompacting: boolean }, timeoutMs = 300_000): Promise<void> {
   if (!session.isCompacting) return;
   debugLog('Waiting for in-flight compaction to finish before prompt...');
   const start = Date.now();
   while (session.isCompacting) {
     if (Date.now() - start > timeoutMs) {
-      debugLog('Compaction wait timed out after 60s, proceeding anyway');
+      debugLog(`Compaction wait timed out after ${Math.floor(timeoutMs / 1000)}s, proceeding anyway`);
       break;
     }
     await new Promise(resolve => setTimeout(resolve, 200));
@@ -1234,9 +1281,11 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
 
     const session = await ensureSession();
 
-    // Set system prompt
+    // Force the Craft-built system prompt onto the Pi session. Direct assignment
+    // to `state.systemPrompt` is wiped on every `session.prompt()` call by the Pi
+    // SDK (see system-prompt-override.ts).
     if (msg.systemPrompt) {
-      session.agent.state.systemPrompt = msg.systemPrompt;
+      applySystemPromptOverride(session, msg.systemPrompt);
     }
 
     // Wire up event handler
@@ -1257,37 +1306,19 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
 
-    // Fallback hardening: if the provider surfaced a context-overflow error,
-    // force a manual compact and retry this prompt once.
-    if (isContextOverflowErrorMessage(errorMsg)) {
-      debugLog(`Prompt overflow detected, attempting compact+retry: ${errorMsg}`);
-      try {
-        const session = await ensureSession();
-        await session.compact();
-        await waitForCompaction(session);
-        await session.prompt(msg.message, {
-          images: msg.images && msg.images.length > 0 ? msg.images : undefined,
-          streamingBehavior: 'followUp',
-        });
-        debugLog('Compact+retry succeeded after overflow');
-        return;
-      } catch (retryError) {
-        const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
-        debugLog(`Compact+retry failed: ${retryMsg}`);
-        send({
-          type: 'error',
-          message: `Prompt overflow recovery failed: ${retryMsg}`,
-          code: 'prompt_overflow_recovery_failed',
-        });
-        send({ type: 'event', event: { type: 'agent_end' } });
-        return;
-      }
-    }
+    // No wrapper-side overflow recovery here. The Pi SDK's _checkCompaction
+    // already runs `_runAutoCompaction("overflow", true)` on overflow and
+    // calls agent.continue() to retry once. Running our own session.compact()
+    // in parallel raced against the SDK and is the documented cause of the
+    // AbortController crash in `_runAutoCompaction` (see
+    // plans/fix-pi-gpt-compaction.md). PiEventAdapter holds the Craft event
+    // queue open across the SDK's recovery flow so the recovered turn
+    // reaches the UI.
 
     debugLog(`Prompt failed: ${errorMsg}`);
     send({ type: 'error', message: errorMsg, code: 'prompt_error' });
     // Send synthetic agent_end so the main process event queue unblocks
-    send({ type: 'event', event: { type: 'agent_end' } });
+    send({ type: 'event', event: { type: 'agent_end', messages: [] } });
   }
 }
 
@@ -1361,6 +1392,25 @@ async function handleMiniCompletion(msg: Extract<InboundMessage, { type: 'mini_c
   }
 }
 
+// INVARIANT: the full LLMQueryRequest shape must pass through this RPC unchanged.
+// Adding a field to LLMQueryRequest? Nothing to do here — we pass `msg.request`
+// to queryLlm() verbatim. But verify queryLlm() actually honors the new field;
+// request-propagation + request-honoring are independent (see #596).
+async function handleLlmQuery(msg: Extract<InboundMessage, { type: 'llm_query' }>): Promise<void> {
+  try {
+    const result = await queryLlm(msg.request);
+    send({ type: 'llm_query_result', id: msg.id, result });
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    debugLog(`[handleLlmQuery] Error: ${errorMsg}`);
+    // Dual-emit: the generic `error` channel drives main-process OAuth
+    // auth-refresh detection (centralized in PiAgent), while the targeted
+    // `llm_query_result` rejects the pending promise for this specific call.
+    send({ type: 'error', message: errorMsg, code: 'llm_query_error' });
+    send({ type: 'llm_query_result', id: msg.id, result: null, errorMessage: errorMsg, errorCode: 'llm_query_error' });
+  }
+}
+
 async function handleEnsureSessionReady(msg: Extract<InboundMessage, { type: 'ensure_session_ready' }>): Promise<void> {
   const session = await ensureSession();
   send({
@@ -1373,6 +1423,13 @@ async function handleEnsureSessionReady(msg: Extract<InboundMessage, { type: 'en
 async function handleCompact(msg: Extract<InboundMessage, { type: 'compact' }>): Promise<void> {
   try {
     const session = await ensureSession();
+    // Serialize manual /compact behind any in-flight auto-compaction. Public
+    // session.compact() calls agent.abort() and uses its own controller; if
+    // it runs while _runAutoCompaction is suspended, agent state churns and
+    // the SDK's race surface widens. Wait for the auto-compaction to drain
+    // before starting a manual one. waitForCompaction has its own timeout
+    // fallback so we don't deadlock on a stuck subprocess.
+    await waitForCompaction(session);
     const result = await session.compact(msg.customInstructions);
     send({
       type: 'compact_result',
@@ -1419,6 +1476,61 @@ async function handleSetAutoCompaction(msg: Extract<InboundMessage, { type: 'set
   }
 }
 
+async function handleUpdateRuntimeConfig(msg: RuntimeConfigUpdateMessage): Promise<void> {
+  try {
+    if (!initConfig) {
+      throw new Error('Runtime config update received before init');
+    }
+
+    initConfig = {
+      ...initConfig,
+      model: msg.model,
+      providerType: msg.providerType ?? initConfig.providerType,
+      authType: msg.authType ?? initConfig.authType,
+      baseUrl: msg.baseUrl,
+      customEndpoint: msg.customEndpoint,
+      customModels: msg.customModels,
+    };
+
+    if (piModelRegistry && initConfig.baseUrl?.trim() && initConfig.customEndpoint) {
+      const modelEntries: CustomEndpointModelEntry[] = (initConfig.customModels?.length
+        ? initConfig.customModels
+        : [initConfig.model || 'default']
+      ).map(normalizeCustomEndpointModelEntry);
+
+      customEndpointModelIds = new Set();
+      customModelOverrides.clear();
+      registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl.trim(), modelEntries);
+    }
+
+    if (piSession && piModelRegistry) {
+      let piModel = resolvePiModel(piModelRegistry, msg.model, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
+      if (!piModel && initConfig.baseUrl?.trim() && initConfig.customEndpoint) {
+        const bareId = stripPiPrefix(msg.model);
+        registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl.trim(), [{ id: bareId }]);
+        piModel = piModelRegistry.find('custom-endpoint', bareId) ?? undefined;
+        debugLog(`[runtime_config] Dynamically registered custom endpoint model: ${bareId}`);
+      }
+
+      if (!piModel) {
+        throw new Error(`Could not resolve model after runtime update: ${msg.model}`);
+      }
+
+      await piSession.setModel(piModel);
+      setInterceptorApiHints(piModel as { api?: string; provider?: string; baseUrl?: string });
+      debugLog(`[runtime_config] Updated runtime config and active model: ${piModel.provider}/${piModel.id}`);
+    } else {
+      debugLog('[runtime_config] Stored update; no active session/model registry yet');
+    }
+
+    send({ type: 'update_runtime_config_result', id: msg.id, success: true, updated: true });
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    debugLog(`[runtime_config] Failed: ${errorMsg}`);
+    send({ type: 'update_runtime_config_result', id: msg.id, success: false, updated: false, errorMessage: errorMsg });
+  }
+}
+
 async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }>): Promise<void> {
   debugLog(`[set_model] Received: ${msg.model}`);
   if (!piSession || !piModelRegistry) {
@@ -1432,7 +1544,7 @@ async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }
   // (registerProvider replaces, so we track all IDs and re-register the full set).
   if (!piModel && initConfig?.baseUrl?.trim() && initConfig?.customEndpoint) {
     const bareId = stripPiPrefix(msg.model);
-    registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl!.trim(), [bareId]);
+    registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl!.trim(), [{ id: bareId }]);
     piModel = piModelRegistry.find('custom-endpoint', bareId) ?? undefined;
     debugLog(`[set_model] Dynamically registered custom endpoint model: ${bareId}`);
   }
@@ -1541,6 +1653,10 @@ async function processMessage(msg: InboundMessage): Promise<void> {
       await handleMiniCompletion(msg);
       break;
 
+    case 'llm_query':
+      await handleLlmQuery(msg);
+      break;
+
     case 'ensure_session_ready':
       await handleEnsureSessionReady(msg);
       break;
@@ -1561,6 +1677,10 @@ async function processMessage(msg: InboundMessage): Promise<void> {
       await handleSetAutoCompaction(msg);
       break;
 
+    case 'update_runtime_config':
+      await handleUpdateRuntimeConfig(msg);
+      break;
+
     case 'steer':
       if (piSession) {
         debugLog(`Steering with: "${msg.message.slice(0, 100)}"`);
@@ -1573,7 +1693,8 @@ async function processMessage(msg: InboundMessage): Promise<void> {
     case 'token_update':
       if (moduleAuthStorage) {
         const { provider, credential } = msg.piAuth;
-        moduleAuthStorage.set(provider, credential);
+        // See ambient comment at the initial `authStorage.set` call — same shape reason.
+        moduleAuthStorage.set(provider, credential as unknown as AuthCredential);
         if (initConfig) {
           initConfig.piAuth = msg.piAuth;
         }

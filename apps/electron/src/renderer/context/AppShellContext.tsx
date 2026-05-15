@@ -49,6 +49,10 @@ export interface AppShellContextType {
   pendingCredentials: Map<string, CredentialRequest[]>
   /** Get draft input text for a session - reads from ref without triggering re-renders */
   getDraft: (sessionId: string) => string
+  /** Get persisted attachment refs (path + name) for a session's draft - no file IO */
+  getDraftAttachmentRefs: (sessionId: string) => import('@craft-agent/shared/config').DraftAttachmentRef[]
+  /** Hydrate persisted attachment refs into full FileAttachment objects (async, reads files) */
+  hydrateDraftAttachments: (sessionId: string) => Promise<FileAttachment[]>
   /** All enabled sources for this workspace - provided by AppShell component */
   enabledSources?: LoadedSource[]
   /** All skills for this workspace - provided by AppShell component (for @mentions) */
@@ -118,6 +122,9 @@ export interface AppShellContextType {
 
   // Input draft callback
   onInputChange: (sessionId: string, value: string) => void
+
+  // Attachment draft callback — persists attachment refs per session
+  onAttachmentsChange: (sessionId: string, attachments: FileAttachment[]) => void
 
   // Source selection callback (per-session) - provided by AppShell component
   onSessionSourcesChange?: (sessionId: string, sourceSlugs: string[]) => void

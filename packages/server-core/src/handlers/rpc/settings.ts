@@ -199,14 +199,14 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   // Session Drafts (persisted input text)
   // ============================================================
 
-  // Get draft text for a session
+  // Get draft for a session (text + attachment refs)
   server.handle(RPC_CHANNELS.drafts.GET, async (_ctx, sessionId: string) => {
     return getSessionDraft(sessionId)
   })
 
-  // Set draft text for a session (pass empty string to clear)
-  server.handle(RPC_CHANNELS.drafts.SET, async (_ctx, sessionId: string, text: string) => {
-    setSessionDraft(sessionId, text)
+  // Set draft for a session (empty drafts are cleared)
+  server.handle(RPC_CHANNELS.drafts.SET, async (_ctx, sessionId: string, draft: import('@craft-agent/shared/config').SessionDraft) => {
+    setSessionDraft(sessionId, draft)
   })
 
   // Delete draft for a session

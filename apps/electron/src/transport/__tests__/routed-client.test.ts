@@ -36,6 +36,13 @@ function stubClient(overrides?: Partial<WsRpcClient>): WsRpcClient {
       return () => {}
     }),
     reconnectNow: mock(() => {}),
+    emitReconnected: mock((isStale: boolean) => {
+      const set = listeners.get('__transport:reconnected')
+      if (!set) return
+      for (const cb of set) {
+        try { cb(isStale) } catch { /* listener errors must not break transport */ }
+      }
+    }),
     // expose internals for assertions
     _listeners: listeners,
     _capabilities: capabilities,

@@ -88,4 +88,37 @@ describe('PairingCodeManager', () => {
     expect(mgr.consume('ws1', 'telegram', a.code)).toBeNull()
     expect(mgr.consume('ws2', 'telegram', b.code)?.sessionId).toBe('sB')
   })
+
+  it('session-kind codes carry the kind discriminator', () => {
+    const mgr = new PairingCodeManager()
+    const { code } = mgr.generate('ws1', 'sess', 'telegram')
+    const entry = mgr.consume('ws1', 'telegram', code)
+    expect(entry?.kind).toBe('session')
+    expect(entry?.sessionId).toBe('sess')
+  })
+
+  it('generateForSupergroup issues a workspace-supergroup-kind code without sessionId', () => {
+    const mgr = new PairingCodeManager()
+    const { code } = mgr.generateForSupergroup('ws1', 'telegram')
+    const entry = mgr.consume('ws1', 'telegram', code)
+    expect(entry?.kind).toBe('workspace-supergroup')
+    expect(entry?.sessionId).toBeUndefined()
+    expect(entry?.workspaceId).toBe('ws1')
+  })
+
+  it('keeps session and supergroup namespaces collision-resistant within one workspace', () => {
+    // Both kinds share the per-platform key, so the collision-retry logic
+    // already keeps codes unique. This test asserts that consuming one
+    // doesn't leak the other's kind.
+    const mgr = new PairingCodeManager()
+    const sCode = mgr.generate('ws1', 'sess', 'telegram').code
+    const gCode = mgr.generateForSupergroup('ws1', 'telegram').code
+    expect(sCode).not.toBe(gCode)
+
+    const a = mgr.consume('ws1', 'telegram', sCode)
+    expect(a?.kind).toBe('session')
+
+    const b = mgr.consume('ws1', 'telegram', gCode)
+    expect(b?.kind).toBe('workspace-supergroup')
+  })
 })

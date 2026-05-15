@@ -24,6 +24,7 @@ import {
   TooltipProvider,
   extractOverlayData,
   detectLanguage,
+  openExternalUrl,
   type PlatformActions,
   type ActivityItem,
   type OverlayData,
@@ -180,7 +181,11 @@ export function App() {
   // Platform actions for the viewer (limited functionality)
   const platformActions: PlatformActions = {
     onOpenUrl: (url) => {
-      window.open(url, '_blank', 'noopener,noreferrer')
+      const result = openExternalUrl(url)
+      if (!result.opened) {
+        const detail = result.reason === 'dangerous' ? result.detail : result.reason
+        console.warn('[viewer:onOpenUrl] blocked URL:', detail, url)
+      }
     },
     onCopyToClipboard: async (text) => {
       await navigator.clipboard.writeText(text)

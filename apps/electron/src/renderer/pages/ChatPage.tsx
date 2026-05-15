@@ -12,6 +12,7 @@ import { AlertCircle, Globe, Copy, RefreshCw, Link2Off, Info } from 'lucide-reac
 import { ChatDisplay, type ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { SessionMenu } from '@/components/app-shell/SessionMenu'
+import { CompactSessionMenu } from '@/components/app-shell/CompactSessionMenu'
 import { SessionInfoPopover } from '@/components/app-shell/SessionInfoPopover'
 import { RenameDialog } from '@/components/ui/rename-dialog'
 import { toast } from 'sonner'
@@ -21,7 +22,9 @@ import { StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSe
 import { useAppShellContext, usePendingPermission, usePendingCredential, useSessionOptionsFor, useSession as useSessionData } from '@/context/AppShellContext'
 import { rendererPerf } from '@/lib/perf'
 import { routes } from '@/lib/navigate'
-import { ensureSessionMessagesLoadedAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
+import { coerceInputText } from '@/lib/input-text'
+import { deriveSessionMessagesLoadState, formatSessionLoadFailure } from '@/lib/session-load'
+import { ensureSessionMessagesLoadedAtom, forceSessionMessagesReloadAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
 import { getSessionTitle } from '@/utils/session'
 // Model resolution: connection.defaultModel (no hardcoded defaults)
 import { resolveEffectiveConnectionSlug, isSessionConnectionUnavailable } from '@config/llm-connections'
@@ -51,7 +54,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     onMarkSessionUnread,
     onSetActiveViewingSession,
     getDraft,
+    hydrateDraftAttachments,
     onInputChange,
+    onAttachmentsChange,
     enabledSources,
     skills,
     labels,
@@ -96,9 +101,78 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
   // Fallback: ensure messages are loaded when session is viewed
   const ensureMessagesLoaded = useSetAtom(ensureSessionMessagesLoadedAtom)
+  const forceMessagesReload = useSetAtom(forceSessionMessagesReloadAtom)
+  const [messagesLoadError, setMessagesLoadError] = React.useState<string | null>(null)
+  const [messagesRetrying, setMessagesRetrying] = React.useState(false)
+  const autoForcedReloadSessionRef = React.useRef<string | null>(null)
+  const shouldForceInitialMessagesReload = React.useMemo(() => {
+    const expectedMessageCount = session?.messageCount ?? sessionMeta?.messageCount ?? 0
+    return messagesLoaded
+      && !!session
+      && (session.messages?.length ?? 0) === 0
+      && (expectedMessageCount > 0 || !!session.lastFinalMessageId || !!sessionMeta?.lastFinalMessageId)
+  }, [messagesLoaded, session, sessionMeta])
+
   React.useEffect(() => {
-    ensureMessagesLoaded(sessionId)
-  }, [sessionId, ensureMessagesLoaded])
+    let cancelled = false
+    setMessagesLoadError(null)
+    setMessagesRetrying(false)
+
+    if (shouldForceInitialMessagesReload && autoForcedReloadSessionRef.current === sessionId) {
+      setMessagesLoadError('Session messages are not available')
+      return () => {
+        cancelled = true
+      }
+    }
+
+    const useForceReload = shouldForceInitialMessagesReload
+    if (useForceReload) {
+      autoForcedReloadSessionRef.current = sessionId
+    }
+
+    const loadPromise = useForceReload
+      ? forceMessagesReload(sessionId)
+      : ensureMessagesLoaded(sessionId)
+
+    loadPromise
+      .then((loadedSession) => {
+        if (!cancelled && !loadedSession) {
+          setMessagesLoadError('Session messages are not available')
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setMessagesLoadError(formatSessionLoadFailure(error))
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId, ensureMessagesLoaded, forceMessagesReload, shouldForceInitialMessagesReload])
+
+  const handleRetryMessagesLoad = React.useCallback(async () => {
+    setMessagesLoadError(null)
+    setMessagesRetrying(true)
+
+    try {
+      const loadedSession = await forceMessagesReload(sessionId)
+      if (!loadedSession) {
+        setMessagesLoadError('Session messages are not available')
+      }
+    } catch (error) {
+      setMessagesLoadError(formatSessionLoadFailure(error))
+    } finally {
+      setMessagesRetrying(false)
+    }
+  }, [forceMessagesReload, sessionId])
+
+  const messageLoadState = React.useMemo(() => deriveSessionMessagesLoadState({
+    session,
+    sessionMeta,
+    messagesLoaded,
+    loadError: messagesLoadError,
+  }), [session, sessionMeta, messagesLoaded, messagesLoadError])
 
   // Perf: Mark when session data is available
   const sessionLoadedMarkedRef = React.useRef<string | null>(null)
@@ -134,13 +208,13 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const pendingCredential = usePendingCredential(sessionId)
 
   // Track draft value for this session
-  const [inputValue, setInputValue] = React.useState(() => getDraft(sessionId))
+  const [inputValue, setInputValue] = React.useState(() => coerceInputText(getDraft(sessionId)))
   const inputValueRef = React.useRef(inputValue)
   inputValueRef.current = inputValue
 
   // Re-sync from parent when session changes
   React.useEffect(() => {
-    setInputValue(getDraft(sessionId))
+    setInputValue(coerceInputText(getDraft(sessionId)))
   }, [getDraft, sessionId])
 
   // Sync when draft is set externally (e.g., from notifications or shortcuts)
@@ -152,7 +226,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     let attempts = 0
     const maxAttempts = 10
     const interval = setInterval(() => {
-      const currentDraft = getDraft(sessionId)
+      const currentDraft = coerceInputText(getDraft(sessionId))
       if (currentDraft !== inputValueRef.current && currentDraft !== '') {
         setInputValue(currentDraft)
         clearInterval(interval)
@@ -169,10 +243,11 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   // Listen for restore-input events (queued messages restored to input on abort)
   React.useEffect(() => {
     const handler = (e: Event) => {
-      const { sessionId: targetId, text } = (e as CustomEvent).detail
+      const { sessionId: targetId, text } = (e as CustomEvent).detail ?? {}
       if (targetId === sessionId) {
-        setInputValue(text)
-        inputValueRef.current = text
+        const nextText = coerceInputText(text)
+        setInputValue(nextText)
+        inputValueRef.current = nextText
       }
     }
     window.addEventListener('craft:restore-input', handler)
@@ -180,10 +255,30 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   }, [sessionId])
 
   const handleInputChange = React.useCallback((value: string) => {
-    setInputValue(value)
-    inputValueRef.current = value
-    onInputChange(sessionId, value)
+    const nextText = coerceInputText(value)
+    setInputValue(nextText)
+    inputValueRef.current = nextText
+    onInputChange(sessionId, nextText)
   }, [sessionId, onInputChange])
+
+  // Attachments draft state — hydrated async from persisted refs on session switch.
+  // `[]` is the safe default while hydration is in flight; FreeFormInput seeds its
+  // local state from this prop and swaps in the restored list when ready.
+  const [attachmentsValue, setAttachmentsValue] = React.useState<import('../../shared/types').FileAttachment[]>([])
+
+  React.useEffect(() => {
+    let cancelled = false
+    setAttachmentsValue([])
+    hydrateDraftAttachments(sessionId).then((atts) => {
+      if (!cancelled) setAttachmentsValue(atts)
+    })
+    return () => { cancelled = true }
+  }, [sessionId, hydrateDraftAttachments])
+
+  const handleAttachmentsChange = React.useCallback((attachments: import('../../shared/types').FileAttachment[]) => {
+    setAttachmentsValue(attachments)
+    onAttachmentsChange(sessionId, attachments)
+  }, [sessionId, onAttachmentsChange])
 
   // Session model change handler - persists per-session model and connection
   const handleModelChange = React.useCallback((model: string, connection?: string) => {
@@ -292,11 +387,11 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   // Perf: Mark when data is ready
   const dataReadyMarkedRef = React.useRef<string | null>(null)
   React.useLayoutEffect(() => {
-    if (messagesLoaded && session && dataReadyMarkedRef.current !== sessionId) {
+    if (messageLoadState.messagesReady && session && dataReadyMarkedRef.current !== sessionId) {
       dataReadyMarkedRef.current = sessionId
       rendererPerf.markSessionSwitch(sessionId, 'data.ready')
     }
-  }, [sessionId, messagesLoaded, session])
+  }, [sessionId, messageLoadState.messagesReady, session])
 
   // Perf: Mark render complete after paint
   React.useEffect(() => {
@@ -507,8 +602,11 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
   const headerActions = isCompactMode ? compactInfoButton : shareButton
 
-  // Build title menu content for chat sessions using shared SessionMenu
-  const titleMenu = React.useMemo(() => sessionMeta ? (
+  // Build title menu content for chat sessions using shared SessionMenu.
+  // Desktop uses Radix DropdownMenu via PanelHeader; compact mode uses a
+  // vaul Drawer (CompactSessionMenu) so submenus aren't clipped by the
+  // panel container query on narrow viewports.
+  const titleMenu = React.useMemo(() => (sessionMeta && !isCompactMode) ? (
     <SessionMenu
       item={sessionMeta}
       sessionStatuses={sessionStatuses ?? []}
@@ -526,6 +624,44 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     />
   ) : null, [
     sessionMeta,
+    isCompactMode,
+    sessionStatuses,
+    labels,
+    handleLabelsChange,
+    handleRename,
+    handleFlag,
+    handleUnflag,
+    handleArchive,
+    handleUnarchive,
+    handleMarkUnread,
+    handleSessionStatusChange,
+    handleOpenInNewWindow,
+    handleDelete,
+  ])
+
+  const compactTitleMenu = React.useMemo(() => (sessionMeta && isCompactMode) ? (
+    <CompactSessionMenu
+      title={displayTitle}
+      isRegeneratingTitle={isAsyncOperationOngoing}
+      item={sessionMeta}
+      sessionStatuses={sessionStatuses ?? []}
+      labels={labels ?? []}
+      onLabelsChange={handleLabelsChange}
+      onRename={handleRename}
+      onFlag={handleFlag}
+      onUnflag={handleUnflag}
+      onArchive={handleArchive}
+      onUnarchive={handleUnarchive}
+      onMarkUnread={handleMarkUnread}
+      onSessionStatusChange={handleSessionStatusChange}
+      onOpenInNewWindow={handleOpenInNewWindow}
+      onDelete={handleDelete}
+    />
+  ) : null, [
+    sessionMeta,
+    isCompactMode,
+    displayTitle,
+    isAsyncOperationOngoing,
     sessionStatuses,
     labels,
     handleLabelsChange,
@@ -561,7 +697,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       return (
         <>
           <div className="h-full flex flex-col">
-            <PanelHeader  title={displayTitle} titleMenu={titleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+            <PanelHeader  title={displayTitle} titleMenu={titleMenu} compactTitleMenu={compactTitleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
             <div className="flex-1 flex flex-col min-h-0">
               <ChatDisplay
                 ref={chatDisplayRef}
@@ -583,6 +719,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 enabledModes={enabledModes}
                 inputValue={inputValue}
                 onInputChange={handleInputChange}
+                attachmentsValue={attachmentsValue}
+                onAttachmentsChange={handleAttachmentsChange}
                 sources={enabledSources}
                 skills={skills}
                 sessionStatuses={sessionStatuses}
@@ -591,7 +729,10 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 onSourcesChange={(slugs) => onSessionSourcesChange?.(sessionId, slugs)}
                 workingDirectory={sessionMeta.workingDirectory}
                 onWorkingDirectoryChange={handleWorkingDirectoryChange}
-                messagesLoading={true}
+                messagesLoading={messageLoadState.messagesLoading || (messagesRetrying && !messageLoadState.messagesReady)}
+                messagesLoadError={messageLoadState.error}
+                messagesRetrying={messagesRetrying}
+                onRetryMessagesLoad={handleRetryMessagesLoad}
                 searchQuery={sessionListSearchQuery}
                 isSearchModeActive={isSearchModeActive}
                 onMatchInfoChange={onChatMatchInfoChange}
@@ -628,7 +769,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   return (
     <>
       <div className="h-full flex flex-col">
-        <PanelHeader  title={displayTitle} titleMenu={titleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+        <PanelHeader  title={displayTitle} titleMenu={titleMenu} compactTitleMenu={compactTitleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
         <div className="flex-1 flex flex-col min-h-0">
           <ChatDisplay
             ref={chatDisplayRef}
@@ -654,6 +795,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             enabledModes={enabledModes}
             inputValue={inputValue}
             onInputChange={handleInputChange}
+            attachmentsValue={attachmentsValue}
+            onAttachmentsChange={handleAttachmentsChange}
             sources={enabledSources}
             skills={skills}
             labels={labels}
@@ -665,7 +808,10 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             workingDirectory={workingDirectory}
             onWorkingDirectoryChange={handleWorkingDirectoryChange}
             sessionFolderPath={session?.sessionFolderPath}
-            messagesLoading={!messagesLoaded}
+            messagesLoading={messageLoadState.messagesLoading || (messagesRetrying && !messageLoadState.messagesReady)}
+            messagesLoadError={messageLoadState.error}
+            messagesRetrying={messagesRetrying}
+            onRetryMessagesLoad={handleRetryMessagesLoad}
             searchQuery={sessionListSearchQuery}
             isSearchModeActive={isSearchModeActive}
             onMatchInfoChange={onChatMatchInfoChange}

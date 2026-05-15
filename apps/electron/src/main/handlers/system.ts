@@ -4,6 +4,7 @@ import { homedir } from 'os'
 import { execSync } from 'child_process'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
+import { isSafeExternalUrl } from '@craft-agent/shared/utils/url-safety'
 import { isUsableGitBashPath, validateGitBashPath } from '@craft-agent/server-core/services'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import type { RpcServer } from '@craft-agent/server-core/transport'
@@ -218,8 +219,8 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
         return
       }
 
-      if (!['http:', 'https:', 'mailto:', 'craftdocs:'].includes(parsed.protocol)) {
-        throw new Error('Only http, https, mailto, craftdocs URLs are allowed')
+      if (!isSafeExternalUrl(url)) {
+        throw new Error(`Refused to open URL with blocked scheme: ${parsed.protocol}`)
       }
 
       const result = await requestClientOpenExternal(server, ctx.clientId, url)

@@ -18,6 +18,7 @@ function createMockWebContents() {
   return {
     userAgent: 'Mock Chrome Electron/99.0.0',
     session: {},
+    isDestroyed: mock(() => false),
     on: (event: string, cb: Function) => {
       if (!listeners[event]) listeners[event] = []
       listeners[event].push(cb)
@@ -135,6 +136,9 @@ function createMockWindow(opts?: { width?: number; height?: number; minWidth?: n
 }
 
 mock.module('electron', () => ({
+  app: {
+    getPath: mock((name: string) => name === 'downloads' ? '/tmp/mock-downloads' : `/tmp/mock-${name}`),
+  },
   BrowserWindow: class MockBrowserWindow {
     webContents: any
     constructor(opts?: any) {

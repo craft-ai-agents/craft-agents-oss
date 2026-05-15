@@ -50,6 +50,7 @@ const providerDisplayNames: Record<string, string> = {
   openai: 'OpenAI',
   openai_compat: 'OpenAI',
   copilot: 'GitHub Copilot',
+  deepseek: 'DeepSeek',
   kimi: 'Kimi',
   minimax: 'Minimax',
   ollama: 'Ollama',
@@ -69,6 +70,7 @@ export function getProviderDisplayName(providerType: string, baseUrl?: string | 
     if (url.includes('kimi.com')) return 'Kimi'
     if (url.includes('minimax.io') || url.includes('minimaxi.com')) return 'Minimax'
     if (url.includes('v0.dev') || url.includes('vercel')) return 'Vercel'
+    if (url.includes('manifest.build')) return 'Manifest'
   }
   return providerDisplayNames[providerType] || providerType
 }
@@ -141,6 +143,7 @@ const PI_AUTH_PROVIDER_DOMAINS: Record<string, string> = {
   groq: 'groq.com',
   xai: 'x.ai',
   cerebras: 'cerebras.ai',
+  deepseek: 'deepseek.com',
   zai: 'z.ai',
 }
 
@@ -164,6 +167,10 @@ export function getProviderIcon(
     const detectedProvider = detectProviderFromUrl(baseUrl)
     if (detectedProvider) {
       return providerIcons[detectedProvider]
+    }
+    // Manifest has no bundled SVG — fall back to Google Favicon V2 (same trick used for groq/xai elsewhere).
+    if (baseUrl.toLowerCase().includes('manifest.build')) {
+      return 'https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=128&url=https://app.manifest.build'
     }
   }
 

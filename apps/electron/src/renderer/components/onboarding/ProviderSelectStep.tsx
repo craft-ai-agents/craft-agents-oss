@@ -88,13 +88,14 @@ export function ProviderSelectStep({ onSelect, onSkip }: ProviderSelectStepProps
       title={t("onboarding.providerSelect.title")}
       description={t("onboarding.providerSelect.description")}
     >
-      <div className="space-y-3">
+      <div className="space-y-2 sm:space-y-3">
         {PROVIDER_OPTIONS.map((option) => (
           <button
             key={option.id}
             onClick={() => onSelect(option.id)}
             className={cn(
-              "flex w-full items-start gap-4 rounded-xl bg-foreground-2 p-4 text-left transition-all",
+              "flex w-full items-center gap-3 rounded-xl bg-foreground-2 p-3 text-left transition-all",
+              "sm:items-start sm:gap-4 sm:p-4",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               "hover:bg-foreground/[0.02] shadow-minimal",
             )}
@@ -107,7 +108,7 @@ export function ProviderSelectStep({ onSelect, onSkip }: ProviderSelectStepProps
             {/* Content */}
             <div className="flex-1 min-w-0">
               <span className="font-medium text-sm">{option.name}</span>
-              <p className="mt-0 text-xs text-muted-foreground">
+              <p className="mt-0 hidden sm:block text-xs text-muted-foreground">
                 {option.description}
               </p>
             </div>

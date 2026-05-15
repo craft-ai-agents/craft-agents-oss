@@ -20,6 +20,26 @@ interface ClientSessionWatchState {
 // Per-client session file watcher state (supports concurrent windows/clients safely)
 const clientSessionWatches = new Map<string, ClientSessionWatchState>()
 
+const SESSION_GET_LOG_ID_LIMIT = 25
+
+function summarizeIds(ids: Iterable<string>, limit = SESSION_GET_LOG_ID_LIMIT) {
+  const all = Array.from(ids)
+  return {
+    count: all.length,
+    ids: all.slice(0, limit),
+    truncated: all.length > limit,
+  }
+}
+
+function sessionWorkspaceDistribution(sessions: Array<{ workspaceId?: string }>): Record<string, number> {
+  const distribution: Record<string, number> = {}
+  for (const session of sessions) {
+    const key = session.workspaceId || '(missing)'
+    distribution[key] = (distribution[key] ?? 0) + 1
+  }
+  return distribution
+}
+
 /**
  * Clean up session file watcher for a client.
  * Called from main process disconnect hooks to prevent watcher leaks.
@@ -122,9 +142,23 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
       log.error('GET_SESSIONS continuing after initialization failure:', error)
     }
     const end = perf.start('rpc.getSessions')
-    const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
+    const windowWorkspaceId = ctx.webContentsId != null
+      ? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId)
+      : undefined
+    const workspaceId = ctx.workspaceId ?? windowWorkspaceId
     const sessions = sessionManager.getSessions(workspaceId ?? undefined)
     end()
+
+    log.info('[sessions:get] result', {
+      ctxWorkspaceId: ctx.workspaceId,
+      webContentsId: ctx.webContentsId,
+      windowWorkspaceId,
+      resolvedWorkspaceId: workspaceId,
+      returnedCount: sessions.length,
+      returnedWorkspaceIds: sessionWorkspaceDistribution(sessions),
+      returnedIds: summarizeIds(sessions.map(s => s.id)),
+    })
+
     return sessions
   })
 
@@ -163,31 +197,63 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     return sessionManager.deleteSession(sessionId)
   })
 
-  // Send a message to a session (with optional file attachments)
-  // Note: We intentionally don't await here - the response is streamed via events.
-  // The IPC handler returns immediately, and results come through SESSION_EVENT channel.
+  // Send a message to a session (with optional file attachments).
+  //
+  // Behavior:
+  //   - Awaits until the user message is persisted to disk, then returns
+  //     `{ accepted: true, messageId }`. This guarantees the message survives
+  //     a mid-stream crash (#616).
+  //   - The actual model-streaming work continues in the background; results
+  //     flow back via SESSION_EVENT as before.
+  //   - Pre-persist errors (session not found, etc.) reject the RPC so the
+  //     caller can show a synchronous error.
+  //   - Post-persist errors (model API failures, etc.) are routed via the
+  //     event stream as today.
   // attachments: FileAttachment[] for Claude (has content), storedAttachments: StoredAttachment[] for persistence (has thumbnailBase64)
   server.handle(RPC_CHANNELS.sessions.SEND_MESSAGE, async (ctx, sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachment[], options?: SendMessageOptions) => {
     // Capture the caller's clientId for error routing
     const callerClientId = ctx.clientId
 
-    // Start processing in background, errors are sent via event stream
-    sessionManager.sendMessage(sessionId, message, attachments, storedAttachments, options).catch(err => {
-      log.error('Error in sendMessage:', err)
-      // Send error to the calling client
-      pushTyped(server, RPC_CHANNELS.sessions.EVENT, { to: 'client', clientId: callerClientId }, {
-        type: 'error',
-        sessionId,
-        error: err instanceof Error ? err.message : 'Unknown error'
-      } as SessionEvent)
-      // Also send complete event to clear processing state
-      pushTyped(server, RPC_CHANNELS.sessions.EVENT, { to: 'client', clientId: callerClientId }, {
-        type: 'complete',
-        sessionId
-      } as SessionEvent)
+    return await new Promise<{ accepted: true; messageId: string }>((resolve, reject) => {
+      let acked = false
+      const onAck = (messageId: string) => {
+        if (!acked) {
+          acked = true
+          resolve({ accepted: true, messageId })
+        }
+      }
+
+      sessionManager
+        .sendMessage(sessionId, message, attachments, storedAttachments, options, undefined, undefined, onAck)
+        .then(() => {
+          // sendMessage finished without firing onAck — should not happen in
+          // practice (every code path that creates a user message acks).
+          // Treat as a defensive failure rather than silently dropping.
+          if (!acked) {
+            acked = true
+            reject(new Error('sendMessage completed without persisting a user message'))
+          }
+        })
+        .catch(err => {
+          log.error('Error in sendMessage:', err)
+          if (!acked) {
+            // Pre-persist error — surface synchronously to the caller.
+            acked = true
+            reject(err)
+            return
+          }
+          // Post-persist error — route via the event stream as today.
+          pushTyped(server, RPC_CHANNELS.sessions.EVENT, { to: 'client', clientId: callerClientId }, {
+            type: 'error',
+            sessionId,
+            error: err instanceof Error ? err.message : 'Unknown error'
+          } as SessionEvent)
+          pushTyped(server, RPC_CHANNELS.sessions.EVENT, { to: 'client', clientId: callerClientId }, {
+            type: 'complete',
+            sessionId
+          } as SessionEvent)
+        })
     })
-    // Return immediately - streaming results come via SESSION_EVENT
-    return { started: true }
   })
 
   // Cancel processing

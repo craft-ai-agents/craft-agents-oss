@@ -1,5 +1,6 @@
 import { Type } from '@sinclair/typebox';
-import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
+import type { AgentToolResult } from '@mariozechner/pi-agent-core';
+import type { ToolDefinition } from '@mariozechner/pi-coding-agent';
 import TurndownService from 'turndown';
 import { parse as parseHtml } from 'node-html-parser';
 import { join } from 'node:path';
@@ -150,7 +151,7 @@ async function readResponseText(response: Response, maxSize: number): Promise<st
 // Helpers
 // ============================================================
 
-function result(text: string, isError = false): AgentToolResult<typeof schema> {
+function result(text: string, isError = false): AgentToolResult<{ isError?: boolean }> {
   return {
     content: [{ type: 'text', text }],
     details: isError ? { isError: true } : {},
@@ -226,7 +227,7 @@ async function handlePdf(
   buffer: Buffer,
   url: string,
   saveBinary: (buffer: Buffer, url: string, ext: string) => Promise<string>,
-): Promise<AgentToolResult<typeof schema>> {
+): Promise<AgentToolResult<{ isError?: boolean }>> {
   let savedPath: string;
   try {
     savedPath = await saveBinary(buffer, url, '.pdf');
@@ -255,7 +256,7 @@ async function handleImage(
   url: string,
   contentType: string,
   saveBinary: (buffer: Buffer, url: string, ext: string) => Promise<string>,
-): Promise<AgentToolResult<typeof schema>> {
+): Promise<AgentToolResult<{ isError?: boolean }>> {
   const ext = MIME_TO_EXT[contentType] || '.bin';
   const savedPath = await saveBinary(buffer, url, ext);
   const sizeKb = Math.round(buffer.length / 1024);
@@ -270,7 +271,7 @@ function handleHtml(
   html: string,
   url: string,
   prompt: string | undefined,
-): AgentToolResult<typeof schema> {
+): AgentToolResult<{ isError?: boolean }> {
   const root = parseHtml(html);
   // Strip noise elements from the DOM before selecting mainContent.
   root
@@ -294,7 +295,7 @@ function handleHtml(
 function handleJson(
   raw: string,
   url: string,
-): AgentToolResult<typeof schema> {
+): AgentToolResult<{ isError?: boolean }> {
   let formatted: string;
   try {
     formatted = JSON.stringify(JSON.parse(raw), null, 2);
@@ -307,7 +308,7 @@ function handleJson(
 function handleText(
   raw: string,
   url: string,
-): AgentToolResult<typeof schema> {
+): AgentToolResult<{ isError?: boolean }> {
   return result(`Content from ${url}:\n\n${truncate(raw)}`);
 }
 
@@ -317,7 +318,7 @@ function handleText(
 
 export function createWebFetchTool(
   getSessionPath: () => string | null,
-): AgentTool<typeof schema> {
+): ToolDefinition<typeof schema> {
   async function saveBinary(buffer: Buffer, url: string, ext: string): Promise<string> {
     const sessionPath = getSessionPath();
     if (!sessionPath) throw new Error('No active session — cannot save file to disk');

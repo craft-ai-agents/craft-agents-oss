@@ -401,8 +401,8 @@ export class WsRpcServer implements RpcServer {
           return
         }
 
-        const clientMajor = parseInt(envelope.protocolVersion.split('.')[0], 10)
-        const serverMajor = parseInt(PROTOCOL_VERSION.split('.')[0], 10)
+        const clientMajor = parseInt(envelope.protocolVersion.split('.')[0] ?? '0', 10)
+        const serverMajor = parseInt(PROTOCOL_VERSION.split('.')[0] ?? '0', 10)
         if (clientMajor !== serverMajor) {
           this.sendError(ws, envelope.id, 'PROTOCOL_VERSION_UNSUPPORTED',
             `Server protocol ${PROTOCOL_VERSION}, client ${envelope.protocolVersion}`)
@@ -599,7 +599,7 @@ export class WsRpcServer implements RpcServer {
           // Evict acknowledged events
           const buf = client.eventBuffer
           let removeCount = 0
-          while (removeCount < buf.length && buf[removeCount].seq <= ackSeq) {
+          while (removeCount < buf.length && buf[removeCount]!.seq <= ackSeq) {
             removeCount++
           }
           if (removeCount > 0) {
@@ -763,7 +763,7 @@ export class WsRpcServer implements RpcServer {
 
     // Evict by TTL
     while (removeCount < buf.length &&
-           now - buf[removeCount].timestamp > EVENT_BUFFER_TTL_MS) {
+           now - buf[removeCount]!.timestamp > EVENT_BUFFER_TTL_MS) {
       removeCount++
     }
 

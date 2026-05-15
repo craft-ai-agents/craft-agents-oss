@@ -12,6 +12,7 @@
 
 import { computeNextRuns } from './utils'
 import type { PermissionMode } from '../../../shared/types'
+import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { DEFAULT_WEBHOOK_METHOD } from './constants'
 
 // ============================================================================
@@ -59,6 +60,12 @@ export const AGENT_EVENTS: AgentEvent[] = [
 export interface PromptAction {
   type: 'prompt'
   prompt: string
+  /** LLM connection slug override for the spawned session */
+  llmConnection?: string
+  /** Model ID override for the spawned session */
+  model?: string
+  /** Thinking level override for the spawned session */
+  thinkingLevel?: ThinkingLevel
 }
 
 export interface WebhookAction {
@@ -216,6 +223,12 @@ export interface AutomationListItem {
   conditions?: AutomationConditionUI[]
   /** The actions this automation performs */
   actions: AutomationAction[]
+  /**
+   * Optional Telegram forum-topic name. When set, sessions spawned by this
+   * matcher are bound to a topic of this name in the workspace's paired
+   * supergroup (created on first use).
+   */
+  telegramTopic?: string
   /** Timestamp of last execution (ms since epoch) */
   lastExecutedAt?: number
 }
@@ -359,7 +372,7 @@ interface AutomationsConfigFile {
 }
 
 type RawAction =
-  | { type: 'prompt'; prompt: string }
+  | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
   | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string>; bodyFormat?: 'json' | 'form' | 'raw'; body?: unknown; captureResponse?: boolean; auth?: WebhookAction['auth'] }
 
 interface AutomationsConfigMatcher {
@@ -447,6 +460,10 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
         .filter((a): a is AutomationAction => a.type === 'prompt' || a.type === 'webhook')
       if (actions.length === 0) continue
 
+      const rawTopic = (matcher as { telegramTopic?: unknown }).telegramTopic
+      const telegramTopic =
+        typeof rawTopic === 'string' && rawTopic.trim().length > 0 ? rawTopic.trim() : undefined
+
       items.push({
         id: matcher.id ?? `${eventName}-${index}`,
         event,
@@ -461,6 +478,7 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
         labels: matcher.labels,
         conditions: matcher.conditions,
         actions,
+        telegramTopic,
       })
       index++
     }

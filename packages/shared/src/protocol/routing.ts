@@ -40,6 +40,11 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
 
   // file — native file dialog
   RPC_CHANNELS.file.OPEN_DIALOG,
+  // file — draft hydration for user-attached paths. Paths in drafts.json were captured
+  // via webUtils.getPathForFile in the renderer, so they point at the user's local machine
+  // — even when the workspace itself lives on a remote server. Routing this REMOTE_ELIGIBLE
+  // would send the local path to a remote filesystem that can't resolve it.
+  RPC_CHANNELS.file.READ_USER_ATTACHMENT,
 
   // dialog — native folder dialog
   RPC_CHANNELS.dialog.OPEN_FOLDER,
@@ -412,19 +417,34 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.messaging.WA_DISCONNECT,
   RPC_CHANNELS.messaging.BINDING_CHANGED,
   RPC_CHANNELS.messaging.PLATFORM_STATUS,
+  RPC_CHANNELS.messaging.PENDING_CHANGED,
   RPC_CHANNELS.messaging.GET_CONFIG,
   RPC_CHANNELS.messaging.UPDATE_CONFIG,
   RPC_CHANNELS.messaging.TEST_TELEGRAM,
   RPC_CHANNELS.messaging.SAVE_TELEGRAM,
+  RPC_CHANNELS.messaging.TEST_LARK,
+  RPC_CHANNELS.messaging.SAVE_LARK,
   RPC_CHANNELS.messaging.DISCONNECT,
   RPC_CHANNELS.messaging.FORGET,
   RPC_CHANNELS.messaging.GET_BINDINGS,
   RPC_CHANNELS.messaging.GENERATE_CODE,
+  RPC_CHANNELS.messaging.GENERATE_SUPERGROUP_CODE,
+  RPC_CHANNELS.messaging.GET_SUPERGROUP,
+  RPC_CHANNELS.messaging.UNBIND_SUPERGROUP,
   RPC_CHANNELS.messaging.UNBIND,
   RPC_CHANNELS.messaging.UNBIND_BINDING,
   RPC_CHANNELS.messaging.WA_START_CONNECT,
   RPC_CHANNELS.messaging.WA_SUBMIT_PHONE,
   RPC_CHANNELS.messaging.WA_UI_EVENT,
+  // messaging access control — UI ↔ Server, per-platform owners + per-binding allow-list
+  RPC_CHANNELS.messaging.GET_PLATFORM_OWNERS,
+  RPC_CHANNELS.messaging.SET_PLATFORM_OWNERS,
+  RPC_CHANNELS.messaging.GET_PLATFORM_ACCESS_MODE,
+  RPC_CHANNELS.messaging.SET_PLATFORM_ACCESS_MODE,
+  RPC_CHANNELS.messaging.GET_PENDING_SENDERS,
+  RPC_CHANNELS.messaging.DISMISS_PENDING_SENDER,
+  RPC_CHANNELS.messaging.ALLOW_PENDING_SENDER,
+  RPC_CHANNELS.messaging.SET_BINDING_ACCESS,
 ])
 
 // ---------------------------------------------------------------------------

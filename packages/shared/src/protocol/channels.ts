@@ -84,6 +84,7 @@ export const RPC_CHANNELS = {
     READ_BINARY: 'file:readBinary',
     OPEN_DIALOG: 'file:openDialog',
     READ_ATTACHMENT: 'file:readAttachment',
+    READ_USER_ATTACHMENT: 'file:readUserAttachment',
     STORE_ATTACHMENT: 'file:storeAttachment',
     GENERATE_THUMBNAIL: 'file:generateThumbnail',
   },
@@ -388,22 +389,39 @@ export const RPC_CHANNELS = {
     // Gateway → UI clients (broadcast)
     BINDING_CHANGED: 'messaging:bindingChanged',
     PLATFORM_STATUS: 'messaging:platformStatus',
+    /** Broadcast when the workspace's pending-senders list mutates. */
+    PENDING_CHANGED: 'messaging:pendingChanged',
     // UI ↔ Server (config/binding CRUD)
     GET_CONFIG: 'messaging:getConfig',
     UPDATE_CONFIG: 'messaging:updateConfig',
     TEST_TELEGRAM: 'messaging:testTelegram',
     SAVE_TELEGRAM: 'messaging:saveTelegram',
+    TEST_LARK: 'messaging:testLark',
+    SAVE_LARK: 'messaging:saveLark',
     DISCONNECT: 'messaging:disconnect',
     FORGET: 'messaging:forget',
     GET_BINDINGS: 'messaging:getBindings',
     GENERATE_CODE: 'messaging:generateCode',
     UNBIND: 'messaging:unbind',
     UNBIND_BINDING: 'messaging:unbindBinding',
+    /** Workspace-supergroup pairing (Telegram forum support). UI ↔ Server. */
+    GENERATE_SUPERGROUP_CODE: 'messaging:generateSupergroupCode',
+    GET_SUPERGROUP: 'messaging:getSupergroup',
+    UNBIND_SUPERGROUP: 'messaging:unbindSupergroup',
     // UI ↔ Server — WhatsApp pairing/connection flow (Baileys subprocess adapter)
     WA_START_CONNECT: 'messaging:wa:startConnect',
     WA_SUBMIT_PHONE: 'messaging:wa:submitPhone',
     /** Broadcast to UI clients: QR string, pairing code, status, unavailable, error. */
     WA_UI_EVENT: 'messaging:wa:uiEvent',
+    // UI ↔ Server — Access control (per-platform owners + per-binding allow-list)
+    GET_PLATFORM_OWNERS: 'messaging:access:getOwners',
+    SET_PLATFORM_OWNERS: 'messaging:access:setOwners',
+    GET_PLATFORM_ACCESS_MODE: 'messaging:access:getMode',
+    SET_PLATFORM_ACCESS_MODE: 'messaging:access:setMode',
+    GET_PENDING_SENDERS: 'messaging:access:getPending',
+    DISMISS_PENDING_SENDER: 'messaging:access:dismissPending',
+    ALLOW_PENDING_SENDER: 'messaging:access:allowPending',
+    SET_BINDING_ACCESS: 'messaging:access:setBindingAccess',
   },
 } as const
 

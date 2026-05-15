@@ -69,6 +69,39 @@ describe('AutomationSystem', () => {
       await system.dispose();
     });
 
+    it('should preserve thinkingLevel on prompt actions through load', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          LabelAdd: [
+            {
+              matcher: 'review',
+              actions: [{
+                type: 'prompt',
+                prompt: 'Audit changes',
+                llmConnection: 'anthropic',
+                model: 'claude-opus-4-7',
+                thinkingLevel: 'high',
+              }],
+            },
+          ],
+        },
+      }));
+
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      const config = system.getConfig();
+      const action = config?.automations.LabelAdd?.[0]?.actions[0];
+      expect(action).toMatchObject({
+        type: 'prompt',
+        thinkingLevel: 'high',
+      });
+
+      await system.dispose();
+    });
+
     it('should reject semantically invalid conditions at load time', async () => {
       writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
         automations: {

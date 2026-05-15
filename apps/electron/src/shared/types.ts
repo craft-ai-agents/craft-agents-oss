@@ -308,8 +308,13 @@ export interface ElectronAPI {
   readFilePreviewDataUrl(path: string, maxSize?: number): Promise<string>
   openFileDialog(): Promise<string[]>
   readFileAttachment(path: string): Promise<FileAttachment | null>
+  /** Re-read a user-attached file by absolute path (bypasses workspace-dir validation).
+   *  Used only by draft hydration for paths the user explicitly picked via OS dialog / drag. */
+  readUserAttachment(path: string): Promise<FileAttachment | null>
   storeAttachment(sessionId: string, attachment: FileAttachment): Promise<import('../../../../packages/core/src/types/index.ts').StoredAttachment>
   generateThumbnail(base64: string, mimeType: string): Promise<string | null>
+  /** Returns the absolute filesystem path for a File (only works for file-picker / OS-drag Files). */
+  getFilePath(file: File): string | null
 
   // Filesystem search (for @ mention file selection)
   searchFiles(basePath: string, query: string): Promise<FileSearchResult[]>
@@ -429,11 +434,11 @@ export interface ElectronAPI {
   readPreferences(): Promise<{ content: string; exists: boolean; path: string }>
   writePreferences(content: string): Promise<{ success: boolean; error?: string }>
 
-  // Session Drafts (persisted input text)
-  getDraft(sessionId: string): Promise<string | null>
-  setDraft(sessionId: string, text: string): Promise<void>
+  // Session Drafts (persisted composer state — text + attachment refs)
+  getDraft(sessionId: string): Promise<import('@craft-agent/shared/config').SessionDraft | null>
+  setDraft(sessionId: string, draft: import('@craft-agent/shared/config').SessionDraft): Promise<void>
   deleteDraft(sessionId: string): Promise<void>
-  getAllDrafts(): Promise<Record<string, string>>
+  getAllDrafts(): Promise<Record<string, import('@craft-agent/shared/config').SessionDraft>>
 
   // Session Info Panel
   getSessionFiles(sessionId: string): Promise<SessionFile[]>
@@ -650,16 +655,24 @@ export interface ElectronAPI {
   // Messaging gateway — workspaceId is taken from the client handshake (ctx.workspaceId)
   getMessagingConfig(): Promise<{
     enabled: boolean
-    platforms: Record<string, { enabled: boolean } | undefined>
+    platforms: Record<string, { enabled: boolean; accessMode?: MessagingPlatformAccessMode; owners?: MessagingPlatformOwnerInfo[] } | undefined>
     runtime: Record<string, MessagingPlatformRuntimeInfo | undefined>
   } | null>
   updateMessagingConfig(config: Record<string, unknown>): Promise<void>
   testTelegramToken(token: string): Promise<{ success: boolean; botName?: string; botUsername?: string; error?: string }>
   saveTelegramToken(token: string): Promise<void>
+  testLarkCredentials(creds: { appId: string; appSecret: string; domain: 'lark' | 'feishu' }): Promise<{ success: boolean; botName?: string; error?: string }>
+  saveLarkCredentials(creds: { appId: string; appSecret: string; domain: 'lark' | 'feishu' }): Promise<void>
   disconnectMessagingPlatform(platform: string): Promise<void>
   forgetMessagingPlatform(platform: string): Promise<void>
-  getMessagingBindings(): Promise<Array<{ id: string; workspaceId: string; sessionId: string; platform: string; channelId: string; channelName?: string; enabled: boolean; createdAt: number }>>
+  getMessagingBindings(): Promise<Array<{ id: string; workspaceId: string; sessionId: string; platform: string; channelId: string; threadId?: number; channelName?: string; enabled: boolean; createdAt: number; accessMode?: MessagingBindingAccessMode; allowedSenderIds?: string[] }>>
   generateMessagingPairingCode(sessionId: string, platform: string): Promise<{ code: string; expiresAt: number; botUsername?: string }>
+  /** Telegram supergroup pairing — returns a code typed in the supergroup to capture its chatId. */
+  generateMessagingSupergroupCode(platform: string): Promise<{ code: string; expiresAt: number; botUsername?: string }>
+  /** Read the workspace's currently paired Telegram supergroup, if any. */
+  getMessagingSupergroup(): Promise<{ chatId: string; title: string; capturedAt: number } | null>
+  /** Forget the paired Telegram supergroup (existing topic bindings stay on disk but stop matching). */
+  unbindMessagingSupergroup(): Promise<{ success: boolean }>
   unbindMessagingSession(sessionId: string, platform?: string): Promise<void>
   unbindMessagingBinding(bindingId: string): Promise<{ success: boolean }>
   onMessagingBindingChanged(callback: (workspaceId: string) => void): () => void
@@ -668,6 +681,20 @@ export interface ElectronAPI {
   startWhatsAppConnect(): Promise<{ success: boolean }>
   submitWhatsAppPhone(phoneNumber: string): Promise<{ success: boolean }>
   onWhatsAppEvent(callback: (payload: { workspaceId: string; event: WhatsAppUiEvent }) => void): () => void
+  // Messaging access control (Phase 3)
+  getMessagingPlatformOwners(platform: string): Promise<MessagingPlatformOwnerInfo[]>
+  setMessagingPlatformOwners(platform: string, owners: MessagingPlatformOwnerInfo[]): Promise<MessagingPlatformOwnerInfo[]>
+  getMessagingPlatformAccessMode(platform: string): Promise<MessagingPlatformAccessMode>
+  setMessagingPlatformAccessMode(platform: string, mode: MessagingPlatformAccessMode): Promise<{ success: boolean }>
+  getMessagingPendingSenders(platform?: string): Promise<MessagingPendingSenderInfo[]>
+  dismissMessagingPendingSender(platform: string, userId: string, opts?: { reason?: MessagingPendingRejectReason; bindingId?: string }): Promise<{ success: boolean }>
+  allowMessagingPendingSender(
+    platform: string,
+    userId: string,
+    entryKey?: { reason?: MessagingPendingRejectReason; bindingId?: string },
+  ): Promise<{ owners: MessagingPlatformOwnerInfo[]; bindingId?: string }>
+  setMessagingBindingAccess(bindingId: string, access: { mode: MessagingBindingAccessMode; allowedSenderIds?: string[] }): Promise<{ success: boolean }>
+  onMessagingPendingChanged(callback: (workspaceId: string) => void): () => void
 }
 
 export interface MessagingPlatformRuntimeInfo {
@@ -678,6 +705,38 @@ export interface MessagingPlatformRuntimeInfo {
   identity?: string
   lastError?: string
   updatedAt: number
+}
+
+/**
+ * Workspace-level access policy for a messaging platform.
+ * Mirrors the canonical type in `@craft-agent/messaging-gateway`.
+ */
+export type MessagingPlatformAccessMode = 'open' | 'owner-only'
+
+/** Per-binding access policy. */
+export type MessagingBindingAccessMode = 'inherit' | 'allow-list' | 'open'
+
+export interface MessagingPlatformOwnerInfo {
+  userId: string
+  displayName?: string
+  username?: string
+  addedAt: number
+}
+
+export type MessagingPendingRejectReason = 'not-owner' | 'not-on-binding-allowlist'
+
+export interface MessagingPendingSenderInfo {
+  platform: string
+  userId: string
+  displayName?: string
+  username?: string
+  lastAttemptAt: number
+  attemptCount: number
+  reason?: MessagingPendingRejectReason
+  bindingId?: string
+  sessionId?: string
+  channelId?: string
+  threadId?: number
 }
 
 /** Event payloads broadcast from the WhatsApp subprocess to the UI. */
@@ -756,10 +815,14 @@ export interface SourcesNavigationState {
 
 /**
  * Settings navigation state
+ *
+ * `subpage: null` means the bare `settings` route — navigator-only view in compact
+ * mode. On desktop, the content panel falls back to the App page so it isn't empty.
+ * Sources/Skills/Automations use `details: null` for the same purpose.
  */
 export interface SettingsNavigationState {
   navigator: 'settings'
-  subpage: SettingsSubpage
+  subpage: SettingsSubpage | null
   rightSidebar?: RightSidebarPanel
 }
 
@@ -838,6 +901,7 @@ export const getNavigationStateKey = (state: NavigationState): string => {
     return 'automations'
   }
   if (state.navigator === 'settings') {
+    if (state.subpage === null) return 'settings'
     return `settings:${state.subpage}`
   }
   // Chats
@@ -885,7 +949,7 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   }
 
   // Handle settings
-  if (key === 'settings') return { navigator: 'settings', subpage: 'app' }
+  if (key === 'settings') return { navigator: 'settings', subpage: null }
   if (key.startsWith('settings:')) {
     const subpage = key.slice(9)
     if (isValidSettingsSubpage(subpage)) {

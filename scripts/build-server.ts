@@ -395,10 +395,20 @@ function copyProductionDeps(config: ServerBuildConfig): void {
   // -------------------------------------------------------------------------
   // 2. Platform-specific native binaries (optionalDependencies, not in dep trees)
   // -------------------------------------------------------------------------
+  // NOTE on `@anthropic-ai/claude-agent-sdk-<platform>-<arch>`: since SDK
+  // 0.2.113 the SDK ships only sdk.mjs in the main package; the native
+  // `claude` binary lives in this per-platform optional dep. The server runs
+  // on its host platform/arch so we ship only the matching one.
+  const sdkPlatformPkg = platform === 'win32'
+    ? `@anthropic-ai/claude-agent-sdk-win32-${arch}`
+    : `@anthropic-ai/claude-agent-sdk-${platform}-${arch}`;
+
   const PLATFORM_DEPS = [
     `@img/sharp-${platform === 'darwin' ? 'darwin' : 'linux'}-${arch}`,
     `@img/sharp-libvips-${platform === 'darwin' ? 'darwin' : 'linux'}-${arch}`,
     '@img/colour',
+    sdkPlatformPkg,
+    '@vscode/ripgrep',
   ];
 
   for (const dep of PLATFORM_DEPS) {
@@ -418,36 +428,6 @@ function copyProductionDeps(config: ServerBuildConfig): void {
   }
 
   console.log(`  Total: ${copied.size} packages copied to node_modules`);
-
-  // Filter ripgrep to target platform only
-  filterRipgrep(config);
-}
-
-function filterRipgrep(config: ServerBuildConfig): void {
-  const { outputDir, platform, arch } = config;
-  const ripgrepDir = join(outputDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep');
-
-  if (!existsSync(ripgrepDir)) {
-    console.warn('  Warning: ripgrep vendor directory not found in SDK');
-    return;
-  }
-
-  const keepPlatform = `${arch}-${platform}`;
-  let removedSize = 0;
-
-  for (const entry of readdirSync(ripgrepDir)) {
-    const fullPath = join(ripgrepDir, entry);
-    const stat = lstatSync(fullPath);
-    if (stat.isDirectory() && entry !== keepPlatform) {
-      const dirSize = getDirSize(fullPath);
-      removedSize += dirSize;
-      rmSync(fullPath, { recursive: true, force: true });
-    }
-  }
-
-  if (removedSize > 0) {
-    console.log(`  Filtered ripgrep: removed ${(removedSize / 1024 / 1024).toFixed(1)} MB (kept ${keepPlatform})`);
-  }
 }
 
 function getDirSize(dir: string): number {

@@ -5,6 +5,7 @@
  */
 
 import type { PermissionMode } from '../agent/mode-types.ts';
+import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 
 // ============================================================================
 // Event Types
@@ -61,6 +62,11 @@ export interface PromptAction {
   llmConnection?: string;
   /** Model ID for the created session (falls back to provider default if invalid) */
   model?: string;
+  /**
+   * Thinking level for the created session.
+   * When omitted, falls back to the workspace default (then DEFAULT_THINKING_LEVEL).
+   */
+  thinkingLevel?: ThinkingLevel;
 }
 
 /** HTTP method for webhook actions */
@@ -161,6 +167,18 @@ export interface AutomationMatcher {
   enabled?: boolean;
   /** Optional conditions that must all pass (AND) after matcher matches, before actions fire */
   conditions?: AutomationCondition[];
+  /**
+   * Optional Telegram forum-topic name. When set, sessions spawned by this
+   * matcher are bound to a forum topic of this name in the workspace's paired
+   * supergroup. The topic is created on first use and reused thereafter.
+   * Multiple matchers using the same value share one topic.
+   *
+   * Silently ignored when:
+   *   - No supergroup is paired in Settings → Messaging → Telegram
+   *   - The Telegram bot is not connected
+   *   - The bot lacks "Manage Topics" permission in the supergroup
+   */
+  telegramTopic?: string;
   actions: AutomationAction[];
 }
 
@@ -236,6 +254,10 @@ export interface PendingPrompt {
   llmConnection?: string;
   /** Model ID for the created session (falls back to provider default if invalid) */
   model?: string;
+  /** Thinking level for the created session (falls back to workspace default when omitted) */
+  thinkingLevel?: ThinkingLevel;
+  /** Forum-topic name to bind the new session to (Telegram supergroup, when paired). */
+  telegramTopic?: string;
 }
 
 export interface AutomationResult {

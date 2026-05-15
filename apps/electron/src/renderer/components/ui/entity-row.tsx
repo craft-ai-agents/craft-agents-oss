@@ -162,6 +162,7 @@ export function EntityRow({
                 </span>
                 {menuContent && !hideMoreButton && (
                   <div
+                    data-touch-reveal="true"
                     className={cn(
                       "absolute inset-0 flex items-center justify-end overflow-visible",
                       menuOpen || contextMenuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
@@ -251,6 +252,7 @@ export function EntityRow({
       {/* More menu button — visible on hover or when menu is open (skipped when titleTrailing handles it inline) */}
       {menuContent && !hideMoreButton && !titleTrailing && (
         <div
+          data-touch-reveal="true"
           className={cn(
             "absolute right-2 top-2 transition-opacity z-10",
             menuOpen || contextMenuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"

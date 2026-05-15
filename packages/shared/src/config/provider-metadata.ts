@@ -60,6 +60,10 @@ const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
     name: 'Mistral',
     dashboardUrl: 'https://console.mistral.ai',
   },
+  deepseek: {
+    name: 'DeepSeek',
+    dashboardUrl: 'https://platform.deepseek.com',
+  },
   xai: {
     name: 'xAI',
     dashboardUrl: 'https://console.x.ai',
