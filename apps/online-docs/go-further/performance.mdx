@@ -1,0 +1,183 @@
+---
+title: "Performance and Token Optimization"
+description: "Use RTK to reduce token usage from verbose development commands"
+---
+
+Craft Agents can route Bash tool output through [RTK](https://github.com/rtk-ai/rtk), a local CLI that compresses common development-command output before it is sent back to the model.
+
+This is useful when a session runs commands that produce lots of repetitive text: diffs, directory listings, search results, test logs, package-manager output, and build output. RTK does not make commands run faster; it reduces how many output tokens the model has to read and pay attention to.
+
+<Tip>
+Craft Agents checks and permission-prompts the **original command**. RTK only changes the output path used for the model context.
+</Tip>
+
+## Why enable RTK?
+
+Verbose tool output is one of the easiest ways to burn context. For example:
+
+```bash
+git diff
+rg "TODO|FIXME" .
+bun test
+npm install
+ls -R
+```
+
+Without RTK, the full raw output is appended to the conversation. With RTK enabled, Craft Agents invokes the local `rtk` binary to rewrite eligible Bash commands so their output is compacted before it reaches the model.
+
+Typical benefits:
+
+- **Lower token usage** for common development commands
+- **More usable context** left for code and reasoning
+- **Less noise** from repetitive logs, huge diffs, and long file listings
+- **Visibility in Settings** through RTK's saved-token / efficiency stats
+
+RTK is most useful for coding and repository-maintenance sessions. It helps less for commands that already print short, targeted output.
+
+## Requirements
+
+- RTK installed locally as `rtk` on your system PATH
+- RTK version `0.23.0` or newer
+- Craft Agents v0.9.4 or newer
+
+Craft Agents does **not** bundle RTK. It detects the `rtk` executable on PATH and invokes it locally with telemetry disabled for Craft Agents' rewrite and stats calls.
+
+<Note>
+You do not need to run `rtk init` for Craft Agents. `rtk init` installs hooks for other tools; Craft Agents calls `rtk rewrite` directly when the Performance toggle is enabled.
+</Note>
+
+## Enable RTK in Craft Agents
+
+1. Install RTK for your operating system.
+2. Open **Settings → AI → Performance** and click **Re-check**. If you edited PATH environment variables, restart Craft Agents first so the desktop process sees the new PATH.
+3. Enable **Token Optimization**.
+4. Run a command-heavy session.
+5. Return to **Settings → AI → Performance** to view saved-token stats once RTK has processed commands.
+
+If Craft Agents still shows **Get RTK**, the `rtk` binary is either missing, below the required version, or not visible on the PATH used by the desktop app.
+
+## Install RTK
+
+<Tabs>
+  <Tab title="macOS">
+    Homebrew is the simplest option:
+
+    ```bash
+    brew install rtk-ai/tap/rtk
+    ```
+
+    Or use RTK's install script:
+
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh
+    ```
+
+    Verify:
+
+    ```bash
+    which rtk
+    rtk --version
+    rtk gain
+    ```
+  </Tab>
+
+  <Tab title="Linux">
+    Homebrew on Linux:
+
+    ```bash
+    brew install rtk-ai/tap/rtk
+    ```
+
+    Or use RTK's install script:
+
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh
+    ```
+
+    If you prefer Cargo:
+
+    ```bash
+    cargo install --git https://github.com/rtk-ai/rtk rtk
+    ```
+
+    Verify:
+
+    ```bash
+    which rtk
+    rtk --version
+    rtk gain
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    Download the Windows zip from the [RTK releases page](https://github.com/rtk-ai/rtk/releases), extract `rtk.exe`, and copy it to a directory on the **Windows** PATH.
+
+    The no-admin, no-environment-edit option is:
+
+    ```powershell
+    Copy-Item "C:\Users\<you>\bin\rtk.exe" "$env:LOCALAPPDATA\Microsoft\WindowsApps\rtk.exe" -Force
+    ```
+
+    Verify from a new PowerShell window:
+
+    ```powershell
+    Get-Command rtk
+    rtk --version
+    rtk gain
+    ```
+
+    If you prefer a dedicated user bin folder, add it to your Windows user PATH once:
+
+    ```powershell
+    [Environment]::SetEnvironmentVariable(
+      "Path",
+      [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\Users\<you>\bin",
+      "User"
+    )
+    ```
+
+    Then reopen PowerShell and verify again. If Craft Agents was already running when you edited PATH, restart Craft Agents before clicking **Re-check**.
+
+    <Warning>
+    Git Bash/MSYS PATH and Windows/PowerShell PATH are not the same thing. `rtk` may work in Git Bash from `C:\Users\<you>\bin` while Craft Agents or PowerShell still cannot find it. Put `rtk.exe` somewhere on the Windows PATH, such as `%LOCALAPPDATA%\Microsoft\WindowsApps`, or add your bin folder to the Windows user PATH.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Windows PowerShell notes
+
+If you are verifying from Windows PowerShell 5.1:
+
+- Use `Get-Command rtk` or `where.exe rtk`; `which` is not a PowerShell command.
+- Use `;` between commands instead of Bash-style `&&`.
+
+Example:
+
+```powershell
+Get-Command rtk; rtk --version; rtk gain
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Craft Agents still says RTK is not installed">
+    Click **Re-check** in **Settings → AI → Performance**. If it still fails, verify `rtk` from the same operating-system shell Craft Agents can see:
+
+    - macOS/Linux: `which rtk && rtk --version`
+    - Windows: `Get-Command rtk; rtk --version`
+
+    On Windows, make sure the folder is on the Windows PATH, not only on Git Bash/MSYS PATH.
+  </Accordion>
+
+  <Accordion title="rtk --version works, but Craft Agents does not enable it">
+    Check the version. Craft Agents requires RTK `0.23.0` or newer because it depends on `rtk rewrite`.
+  </Accordion>
+
+  <Accordion title="rtk gain fails or looks wrong">
+    Make sure you installed Rust Token Killer (`rtk-ai/rtk`), not the unrelated Rust Type Kit package with the same binary name. The correct RTK supports `rtk gain`.
+  </Accordion>
+
+  <Accordion title="Do I need to initialize every project?">
+    No. Craft Agents does not require `rtk init`; it uses the installed `rtk` binary directly. You only need `rtk init` if you also want RTK hooks for another tool that uses RTK that way.
+  </Accordion>
+</AccordionGroup>

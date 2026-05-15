@@ -113,6 +113,7 @@
           {
             "group": "Go Further",
             "pages": [
+              "go-further/performance",
               "go-further/rich-output",
               "go-further/document-tools",
               "go-further/sharing",
