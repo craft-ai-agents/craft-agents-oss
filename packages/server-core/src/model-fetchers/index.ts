@@ -164,6 +164,11 @@ class ModelRefreshService {
       const fetcher = this.fetchers[providerType]
       if (!fetcher) continue
 
+      // SDK self-auth: credentials live in the agent subprocess's env, not in
+      // the server. Auto-refresh has no key to call /v1/models with and would
+      // emit hourly WARNs. Manual refreshNow() still attempts.
+      if (conn.authType === 'environment') continue
+
       // Immediate non-blocking fetch
       this.refreshConnection(conn.slug).catch(err => {
         handlerLog.warn(`Initial model refresh failed for ${conn.slug}: ${err instanceof Error ? err.message : err}`)
@@ -203,6 +208,8 @@ class ModelRefreshService {
     // Ensure periodic timer is running
     const connection = getLlmConnection(slug)
     if (!connection || isCompatProvider(connection.providerType)) return
+    // SDK self-auth: see startAll() comment — skip timer install.
+    if (connection.authType === 'environment') return
 
     const providerType = connection.providerType as FetchableProvider
     const fetcher = this.fetchers[providerType]
