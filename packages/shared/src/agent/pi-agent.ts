@@ -33,6 +33,7 @@ import type { ThinkingLevel } from './thinking-levels.ts';
 
 // Import models from centralized registry
 import { getModelById } from '../config/models.ts';
+import { getAllPiModels } from '../config/models-pi.ts';
 
 // BaseAgent provides common functionality
 import { BaseAgent } from './base-agent.ts';
@@ -281,14 +282,23 @@ export class PiAgent extends BaseAgent {
   constructor(config: BackendConfig) {
     const resolvedModel = config.model || '';
     const modelDef = getModelById(resolvedModel);
-    super(config, resolvedModel, modelDef?.contextWindow);
+    // Fall back to Pi SDK model catalog for non-Claude models (DeepSeek, Gemini, etc.)
+    // that are not in the static MODEL_REGISTRY.
+    const contextWindow = modelDef?.contextWindow
+      ?? (() => {
+        try {
+          const bareId = resolvedModel.startsWith('pi/') ? resolvedModel.slice(3) : resolvedModel;
+          return getAllPiModels().find(m => m.id === `pi/${bareId}` || m.id === bareId)?.contextWindow;
+        } catch { return undefined; }
+      })();
+    super(config, resolvedModel, contextWindow);
 
     this._supportsBranching = true;
 
     this.piSessionId = config.session?.sdkSessionId || null;
     this.adapter = new PiEventAdapter();
-    if (modelDef?.contextWindow) {
-      this.adapter.setContextWindow(modelDef.contextWindow);
+    if (contextWindow) {
+      this.adapter.setContextWindow(contextWindow);
     }
     if (config.miniModel) {
       this.adapter.setMiniModel(config.miniModel);
