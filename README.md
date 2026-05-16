@@ -4,8 +4,34 @@
 
 # Craft Agents
 
+[![GitHub stars](https://img.shields.io/github/stars/lukilabs/craft-agents-oss)](https://github.com/lukilabs/craft-agents-oss/stargazers)
+[![GitHub release](https://img.shields.io/github/v/release/lukilabs/craft-agents-oss)](https://github.com/lukilabs/craft-agents-oss/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
+
+A desktop-native agent environment for working with Claude, Gemini, and other LLMs — featuring multi-session inbox, MCP/API integrations, skills, automations, and a beautiful UI.
+
+## Table of Contents
+
+- [How it Works (Video)](#how-it-works-video)
+- [Why Craft Agents was built](#why-craft-agents-was-built)
+- [Things that are hard to believe "just work"](#things-that-are-hard-to-believe-just-work)
+- [Installation](#installation)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Desktop App Features](#desktop-app-features)
+- [Remote Server (Headless)](#remote-server-headless)
+- [CLI Client](#cli-client)
+- [Architecture](#architecture)
+- [Development](#development)
+- [Supported LLM Providers](#supported-llm-providers)
+- [Configuration](#configuration)
+- [Advanced Features](#advanced-features)
+- [Tech Stack](#tech-stack)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
+- [Contributing](#contributing)
+- [Security](#security)
 
 ## How it Works (Video)
 To understand what Craft Agents does and how it works watch this video.
