@@ -2,7 +2,7 @@
  * Tests for extractWorkspaceSlug utility and qualifySkillName
  *
  * extractWorkspaceSlug (packages/shared/src/utils/workspace.ts) is used in
- * ClaudeAgent, CodexAgent, and renderer components to derive the workspace
+ * ClaudeAgent, PiAgent, and renderer components to derive the workspace
  * slug from rootPath for skill qualification.
  *
  * This file tests:

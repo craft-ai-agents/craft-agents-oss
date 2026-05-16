@@ -1,6 +1,6 @@
 {
   "name": "craft-agent",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "license": "Apache-2.0",
   "description": "Claude Code-like agent for Craft documents",
   "type": "module",
@@ -141,8 +141,8 @@
     "@dnd-kit/dom": "^0.4.0-beta-20260227032529",
     "@dnd-kit/helpers": "^0.4.0-beta-20260227032529",
     "@github/copilot-sdk": "^0.1.23",
-    "@mariozechner/pi-ai": "0.72.1",
-    "@mariozechner/pi-coding-agent": "0.72.1",
+    "@mariozechner/pi-ai": "0.73.1",
+    "@mariozechner/pi-coding-agent": "0.73.1",
     "@modelcontextprotocol/sdk": "^1.24.3",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-collapsible": "^1.1.12",

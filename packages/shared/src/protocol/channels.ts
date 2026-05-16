@@ -322,6 +322,12 @@ export const RPC_CHANNELS = {
     GET_ENABLE_1M_CONTEXT: 'caching:getEnable1MContext',
     SET_ENABLE_1M_CONTEXT: 'caching:setEnable1MContext',
   },
+  rtk: {
+    GET_ENABLED: 'rtk:getEnabled',
+    SET_ENABLED: 'rtk:setEnabled',
+    GET_STATUS: 'rtk:getStatus',
+    GET_GAIN: 'rtk:getGain',
+  },
   badge: {
     REFRESH: 'badge:refresh',
     SET_ICON: 'badge:setIcon',

@@ -2,8 +2,8 @@
  * Base Event Adapter
  *
  * Abstract base class for provider-specific event adapters. Provides shared
- * state management (Maps, lifecycle) that was previously duplicated across
- * CodexEventAdapter and CopilotEventAdapter.
+ * state management (Maps, lifecycle) used by ClaudeEventAdapter and
+ * PiEventAdapter.
  *
  * Subclasses implement provider-specific event dispatch (adapt*() methods)
  * while inheriting:
@@ -17,7 +17,7 @@
 import type { AgentEvent } from '@craft-agent/core/types';
 import { parseReadCommand, type ReadCommandInfo } from './read-patterns.ts';
 import { createLogger } from '../../utils/debug.ts';
-/** MCP server name used by the pool server (previously in codex/config-generator) */
+/** MCP server name used by the pool server */
 const POOL_SERVER_MCP_NAME = 'sources';
 
 export { type ReadCommandInfo } from './read-patterns.ts';
@@ -32,7 +32,7 @@ export abstract class BaseEventAdapter {
   /** Session directory for toolMetadataStore lookups (concurrent-session safe) */
   protected sessionDir: string | undefined;
 
-  // Shared state maps — identical in Codex and Copilot adapters
+  // Shared state maps used by subclass event adapters
   protected commandOutput: Map<string, string> = new Map();
   protected readCommands: Map<string, ReadCommandInfo> = new Map();
   protected blockReasons: Map<string, string> = new Map();

@@ -32,7 +32,7 @@ export interface SkillMenuProps {
   skillName: string
   /** Callbacks */
   onOpenInNewWindow: () => void
-  onShowInFinder: () => void
+  onShowInFinder: () => void | Promise<void>
   onDelete?: () => void
   canShowInFinder?: boolean
   canDelete?: boolean
