@@ -102,6 +102,7 @@ async function main(): Promise<void> {
       "--external:link-preview-js",
       "--external:qrcode-terminal",
       "--external:jimp",
+      "--external:music-metadata",
     ],
     cwd: ROOT_DIR,
     stdout: "inherit",
