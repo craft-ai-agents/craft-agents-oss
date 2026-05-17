@@ -1,0 +1,32 @@
+{
+  "allowedMcpPatterns": [
+    {
+      "pattern": "get",
+      "comment": "Read Meta Ads account, campaign, ad set, ad, catalog, and diagnostic details"
+    },
+    {
+      "pattern": "list",
+      "comment": "List Meta Ads entities available to the connected Business account"
+    },
+    {
+      "pattern": "search",
+      "comment": "Search Meta Ads entities and available resources"
+    },
+    {
+      "pattern": "report",
+      "comment": "Pull reporting data without changing campaigns"
+    },
+    {
+      "pattern": "insight",
+      "comment": "Read campaign performance insights"
+    },
+    {
+      "pattern": "diagnos",
+      "comment": "Run signal, pixel, catalog, or delivery diagnostics"
+    },
+    {
+      "pattern": "preview",
+      "comment": "Preview planned campaign or creative changes before mutation"
+    }
+  ]
+}

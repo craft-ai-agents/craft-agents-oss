@@ -1,0 +1,19 @@
+{
+  "id": "meta-ads_20260512",
+  "name": "Meta Ads",
+  "slug": "meta-ads",
+  "enabled": true,
+  "provider": "meta",
+  "type": "mcp",
+  "icon": "📣",
+  "tagline": "Manage and inspect Meta Ads accounts through Meta's official Ads MCP beta",
+  "mcp": {
+    "transport": "http",
+    "url": "https://mcp.facebook.com/ads",
+    "authType": "oauth"
+  },
+  "connectionStatus": "needs_auth",
+  "isAuthenticated": false,
+  "createdAt": 1778544000000,
+  "updatedAt": 1778544000000
+}
