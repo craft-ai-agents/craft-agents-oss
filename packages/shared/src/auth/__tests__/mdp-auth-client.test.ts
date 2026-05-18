@@ -1,11 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
 import {
   MdpAuthClient,
   MdpAuthHttpError,
   type SsoSession,
 } from '../mdp-auth-client.ts';
 
-const originalFetch = globalThis.fetch;
+const fixedNow = () => 1_700_000_000_000;
 
 function serverSession(overrides: Record<string, unknown> = {}) {
   return {
@@ -22,24 +22,18 @@ function serverSession(overrides: Record<string, unknown> = {}) {
 }
 
 describe('MdpAuthClient', () => {
-  beforeEach(() => {
-    Date.now = mock(() => 1_700_000_000_000) as unknown as typeof Date.now;
-  });
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-    mock.restore();
-  });
-
   it('login posts the SSO code and converts expiresIn to expiresAt', async () => {
     const fetchMock = mock(() =>
       Promise.resolve(
         new Response(JSON.stringify(serverSession()), { status: 200 }),
       )
     );
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    const client = new MdpAuthClient({ baseUrl: 'https://mdp.example.test' });
+    const client = new MdpAuthClient({
+      baseUrl: 'https://mdp.example.test',
+      fetchFn: fetchMock as unknown as typeof fetch,
+      now: fixedNow,
+    });
     const session = await client.login('sso-code');
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -72,9 +66,11 @@ describe('MdpAuthClient', () => {
         ),
       )
     );
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    const client = new MdpAuthClient({ baseUrl: 'https://mdp.example.test/' });
+    const client = new MdpAuthClient({
+      baseUrl: 'https://mdp.example.test/',
+      fetchFn: fetchMock as unknown as typeof fetch,
+      now: fixedNow,
+    });
     const session = await client.refresh('old-session-token');
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -90,11 +86,15 @@ describe('MdpAuthClient', () => {
   });
 
   it('throws a typed error on non-2xx responses', async () => {
-    globalThis.fetch = mock(() =>
+    const fetchMock = mock(() =>
       Promise.resolve(new Response('bad code', { status: 401, statusText: 'Unauthorized' }))
-    ) as unknown as typeof fetch;
+    );
 
-    const client = new MdpAuthClient({ baseUrl: 'https://mdp.example.test' });
+    const client = new MdpAuthClient({
+      baseUrl: 'https://mdp.example.test',
+      fetchFn: fetchMock as unknown as typeof fetch,
+      now: fixedNow,
+    });
     const error = await client.login('bad-code').catch((err) => err);
 
     expect(error).toBeInstanceOf(MdpAuthHttpError);

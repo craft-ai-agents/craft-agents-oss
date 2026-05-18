@@ -49,6 +49,8 @@ export interface MdpAuthClientOptions {
   baseUrl?: string;
   /** Fetch implementation for HTTP requests. */
   fetchFn?: typeof fetch;
+  /** Current time provider, injectable for deterministic tests. */
+  now?: () => number;
 }
 
 const SSO_LOGIN_ENDPOINT = '/api/mdp/auth/sso-login';
@@ -58,10 +60,12 @@ const REFRESH_TOKEN_ENDPOINT = '/api/mdp/auth/refresh-token';
 export class MdpAuthClient {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
+  private readonly now: () => number;
 
   constructor(options: MdpAuthClientOptions = {}) {
     this.baseUrl = stripTrailingSlash(options.baseUrl ?? process.env.MDP_API_URL ?? '');
     this.fetchFn = options.fetchFn ?? globalThis.fetch;
+    this.now = options.now ?? Date.now;
   }
 
   /** Exchange an SSO authorization code for an MDP SSO session. */
@@ -90,11 +94,11 @@ export class MdpAuthClient {
       );
     }
 
-    return parseSsoSession(await response.json());
+    return parseSsoSession(await response.json(), this.now);
   }
 }
 
-function parseSsoSession(raw: unknown): SsoSession {
+function parseSsoSession(raw: unknown, now: () => number): SsoSession {
   if (!isRawSsoSession(raw)) {
     throw new Error('Invalid MDP SSO session response');
   }
@@ -103,7 +107,7 @@ function parseSsoSession(raw: unknown): SsoSession {
     token: raw.token,
     accessToken: raw.accessToken,
     idToken: raw.idToken,
-    expiresAt: Date.now() + raw.expiresIn * 1000,
+    expiresAt: now() + raw.expiresIn * 1000,
     employeeId: raw.employeeId,
     ystId: raw.ystId,
     department: raw.department,

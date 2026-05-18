@@ -202,3 +202,33 @@ Avoid: messaging provider, messaging integration.
 A persisted mapping between an external messaging channel (`platform` + `channelId`) and a session. Multiple bindings can exist per workspace. Controls how agent output is rendered back to the channel (`responseMode`) and who is allowed to send messages to the bound session.
 
 Avoid: session binding, channel link.
+
+### SSO Session
+An enterprise identity session established via the OIDC login flow. Checked on every app launch before any other screen. Required to use the app; independent of Claude credential setup (which follows after). Persisted across launches until the session token is cleared (logout) or the refresh mechanism fails.
+
+Avoid: SSO token, login session.
+
+### Session Token (`token`)
+The long-lived credential returned by `/api/mdp/auth/sso-login` and `/api/mdp/auth/refresh-token`. Sent as the `Authorization` header on all MDP API calls. Stored encrypted in the credential manager. The presence of this token determines whether the user has an SSO Session.
+
+Avoid: access token (that's a separate field), auth token.
+
+### Identity Token (`idToken`)
+A short-lived token returned alongside the Session Token. Expires per `expiresIn` (seconds). When expired, the app silently calls `/api/mdp/auth/refresh-token` using the Session Token to obtain a new Identity Token. If refresh fails, the app shows the Login Page.
+
+Avoid: JWT, id token.
+
+### SSO Login Flow
+The browser-based OIDC authorization code flow used to establish an SSO Session:
+1. App opens `MDP_AUTH_URL` in the system browser with `client_id`, `redirect_uri=mdp://sso-callback`, `response_type=code`.
+2. OIDC provider redirects to `mdp://sso-callback?code=...`, which the OS routes back to the app.
+3. App exchanges the `code` via POST to `MDP_API_URL/api/mdp/auth/sso-login`.
+4. Response fields: `token`, `employeeId`, `ystId`, `department`, `userName`, `expiresIn`, `accessToken`, `idToken`.
+
+### Login Page
+The screen shown when no valid SSO Session exists. Displayed as a new `sso-login` app state, inserted before `onboarding` in the state machine (`loading → sso-login → onboarding → workspace-picker → ready`). Contains a single "Login" button that starts the SSO Login Flow.
+
+### MDP Deep Link Protocol
+The custom URL scheme `mdp://` registered by the Electron app for OS-level deep linking. Replaces the former `craftagents://` scheme entirely. Used for all deep links including the SSO callback (`mdp://sso-callback`), session navigation, and actions.
+
+Avoid: craftagents protocol, custom protocol.
