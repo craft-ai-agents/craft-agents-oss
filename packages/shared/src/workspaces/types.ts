@@ -27,6 +27,18 @@ export interface LocalMcpConfig {
   enabled: boolean;
 }
 
+export interface TeamPublicKnowledgeDocumentConfig {
+  id: string;
+  title: string;
+  url: string;
+  priority: number;
+}
+
+export interface TeamPublicKnowledgeConfig {
+  enabled: boolean;
+  documents: TeamPublicKnowledgeDocumentConfig[];
+}
+
 /**
  * Workspace configuration (stored in config.json)
  */
@@ -56,6 +68,12 @@ export interface WorkspaceConfig {
    * Resolution order: ENV (CRAFT_LOCAL_MCP_ENABLED) > workspace config > default (true)
    */
   localMcpServers?: LocalMcpConfig;
+
+  /**
+   * Workspace-scoped, manually maintained team knowledge documents.
+   * This only covers public team knowledge Markdown, not project/resource lookup.
+   */
+  teamPublicKnowledge?: TeamPublicKnowledgeConfig;
 
   createdAt: number;
   updatedAt: number;

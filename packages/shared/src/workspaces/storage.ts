@@ -131,6 +131,15 @@ export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
       config.defaults.thinkingLevel = normalizeThinkingLevel(config.defaults.thinkingLevel);
     }
 
+    if (config.teamPublicKnowledge) {
+      config.teamPublicKnowledge = {
+        enabled: config.teamPublicKnowledge.enabled === true,
+        documents: Array.isArray(config.teamPublicKnowledge.documents)
+          ? [...config.teamPublicKnowledge.documents].sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id))
+          : [],
+      };
+    }
+
     return config;
   } catch {
     return null;
