@@ -10,6 +10,7 @@ import type { McpImportCandidate } from '@craft-agent/shared/sources'
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.GET,
   RPC_CHANNELS.sources.CREATE,
+  RPC_CHANNELS.sources.UPDATE,
   RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT,
   RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES,
   RPC_CHANNELS.sources.DELETE,
@@ -75,6 +76,39 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     })
     pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
     return created
+  })
+
+  // Update an existing source with full overwrite semantics
+  server.handle(RPC_CHANNELS.sources.UPDATE, async (_ctx, workspaceId: string, sourceSlug: string, config: Partial<import('@craft-agent/shared/sources/types').FolderSourceConfig> & { authCredential?: string }) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { loadSourceConfig, saveSourceConfig, loadWorkspaceSources, loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+
+    const existing = loadSourceConfig(workspace.rootPath, sourceSlug)
+    if (!existing) throw new Error(`Source not found: ${sourceSlug}`)
+
+    // Build updated config preserving identity fields, overwriting editable fields
+    const updated: import('@craft-agent/shared/sources/types').FolderSourceConfig = {
+      ...existing,
+      ...config,
+      slug: existing.slug,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      updatedAt: Date.now(),
+    }
+
+    // Save auth credential if provided
+    if (config.authCredential) {
+      const source = loadSource(workspace.rootPath, sourceSlug)
+      if (source) {
+        const credManager = getSourceCredentialManager()
+        await credManager.save(source, { value: config.authCredential })
+      }
+    }
+
+    saveSourceConfig(workspace.rootPath, updated)
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
+    return updated
   })
 
   server.handle(RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT, async (_ctx, workspaceId: string, json: string) => {

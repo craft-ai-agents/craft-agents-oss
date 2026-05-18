@@ -344,6 +344,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // sources — source config per-workspace
   RPC_CHANNELS.sources.GET,
   RPC_CHANNELS.sources.CREATE,
+  RPC_CHANNELS.sources.UPDATE,
   RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT,
   RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES,
   RPC_CHANNELS.sources.DELETE,

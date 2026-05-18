@@ -278,6 +278,7 @@ const EXPECTED_CHANNELS: string[] = [
   'sources:parseMcpJsonImport',
   'sources:saveCredentials',
   'sources:startOAuth',
+  'sources:update',
   'statuses:changed',
   'statuses:list',
   'statuses:reorder',

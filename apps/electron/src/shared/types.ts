@@ -460,6 +460,7 @@ export interface ElectronAPI {
   // Sources
   getSources(workspaceId: string): Promise<LoadedSource[]>
   createSource(workspaceId: string, config: Partial<FolderSourceConfig> & Partial<import('@craft-agent/shared/sources').McpManualSourceInput>): Promise<FolderSourceConfig>
+  updateSource(workspaceId: string, sourceSlug: string, config: Partial<FolderSourceConfig> & { authCredential?: string }): Promise<FolderSourceConfig>
   parseMcpJsonImport(workspaceId: string, json: string): Promise<McpImportParseResult>
   importMcpJsonCandidates(workspaceId: string, candidates: McpImportCandidate[]): Promise<McpImportBatchCreateResult>
   deleteSource(workspaceId: string, sourceSlug: string): Promise<void>
