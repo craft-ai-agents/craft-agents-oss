@@ -1,10 +1,19 @@
 import type { SsoSession } from './mdp-auth-client.ts';
 
-export interface PublicSsoSessionState {
-  authenticated: boolean;
+/** Public renderer-safe view of an authenticated SSO session. */
+export interface AuthenticatedSsoSessionState {
+  authenticated: true;
   userName?: string;
   department?: string;
 }
+
+/** Public renderer-safe view used when no valid SSO session exists. */
+export interface UnauthenticatedSsoSessionState {
+  authenticated: false;
+}
+
+/** SSO session state returned to the renderer. Raw tokens are never exposed. */
+export type PublicSsoSessionState = AuthenticatedSsoSessionState | UnauthenticatedSsoSessionState;
 
 interface SsoSessionCredentialStore {
   load(): Promise<SsoSession | null>;
@@ -17,11 +26,15 @@ interface SsoSessionAuthClient {
 }
 
 export interface SsoSessionStateOptions {
+  /** Store used to load, save, and clear persisted SSO sessions. */
   credentialStore: SsoSessionCredentialStore;
+  /** Auth client used for silent token refresh when the identity token has expired. */
   authClient: SsoSessionAuthClient;
+  /** Current time provider, injectable for deterministic tests. */
   now?: () => number;
 }
 
+/** Resolve the current public SSO state, silently refreshing expired sessions when possible. */
 export async function getSsoSessionState(options: SsoSessionStateOptions): Promise<PublicSsoSessionState> {
   const session = await options.credentialStore.load();
   if (!session) {
@@ -35,6 +48,7 @@ export async function getSsoSessionState(options: SsoSessionStateOptions): Promi
   return refreshStoredSsoSession(options);
 }
 
+/** Force a refresh of the stored SSO session and return the resulting public state. */
 export async function refreshStoredSsoSession(options: SsoSessionStateOptions): Promise<PublicSsoSessionState> {
   const session = await options.credentialStore.load();
   if (!session) {
@@ -51,7 +65,7 @@ export async function refreshStoredSsoSession(options: SsoSessionStateOptions): 
   }
 }
 
-function authenticated(session: SsoSession): PublicSsoSessionState {
+function authenticated(session: SsoSession): AuthenticatedSsoSessionState {
   return {
     authenticated: true,
     userName: session.userName,
@@ -59,6 +73,6 @@ function authenticated(session: SsoSession): PublicSsoSessionState {
   };
 }
 
-function unauthenticated(): PublicSsoSessionState {
+function unauthenticated(): UnauthenticatedSsoSessionState {
   return { authenticated: false };
 }

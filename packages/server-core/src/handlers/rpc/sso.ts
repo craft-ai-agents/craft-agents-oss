@@ -12,6 +12,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sso.REFRESH,
 ] as const
 
+/** Register local-only SSO startup session and refresh handlers. */
 export function registerSsoHandlers(server: RpcServer): void {
   server.handle(RPC_CHANNELS.sso.GET_SESSION, async () => {
     return getSsoSessionState(createSsoSessionDeps())
