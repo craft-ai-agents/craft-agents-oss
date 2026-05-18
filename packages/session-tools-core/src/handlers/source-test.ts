@@ -627,12 +627,21 @@ async function testApiConnectionBasic(
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     const configuredMethod = source.api?.testEndpoint?.method;
+    const body = source.api?.testEndpoint?.body;
+    const headers: Record<string, string> = { ...(source.api?.testEndpoint?.headers ?? {}) };
+    const buildRequestInit = (method: string): RequestInit => {
+      const init: RequestInit = { method, headers, signal: controller.signal };
+      if (body !== undefined && method !== 'GET') {
+        init.body = typeof body === 'string' ? body : JSON.stringify(body);
+        const hasContentType = Object.keys(headers).some((key) => key.toLowerCase() === 'content-type');
+        if (!hasContentType) headers['Content-Type'] = 'application/json';
+      }
+      return init;
+    };
+
     let response: Response | null;
     if (configuredMethod) {
-      response = await fetch(testUrl, {
-        method: configuredMethod,
-        signal: controller.signal,
-      }).catch(() => null);
+      response = await fetch(testUrl, buildRequestInit(configuredMethod)).catch(() => null);
     } else {
       response = await fetch(testUrl, {
         method: 'HEAD',
@@ -640,10 +649,7 @@ async function testApiConnectionBasic(
       }).catch(() => null);
 
       if (response && response.status === 405) {
-        response = await fetch(testUrl, {
-          method: 'GET',
-          signal: controller.signal,
-        }).catch(() => null);
+        response = await fetch(testUrl, buildRequestInit('GET')).catch(() => null);
       }
     }
 

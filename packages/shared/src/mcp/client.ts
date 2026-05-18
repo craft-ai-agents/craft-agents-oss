@@ -5,6 +5,7 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
@@ -13,7 +14,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
  * HTTP transport config for remote MCP servers
  */
 export interface HttpMcpClientConfig {
-  transport: 'http';
+  transport: 'http' | 'sse';
   url: string;
   headers?: Record<string, string>;
 }
@@ -96,15 +97,33 @@ export class CraftMcpClient {
         env: { ...processEnv, ...config.env },
       });
     } else {
-      // HTTP transport for remote MCP servers
-      this.transport = new StreamableHTTPClientTransport(
-        new URL(config.url),
-        {
-          requestInit: {
-            headers: config.headers,
-          },
-        }
-      );
+      const url = new URL(config.url);
+      if (config.transport === 'sse') {
+        this.transport = new SSEClientTransport(url, {
+          requestInit: { headers: config.headers },
+          eventSourceInit: config.headers
+            ? {
+                fetch: (input, init) => {
+                  const headers = new Headers(init?.headers);
+                  for (const [key, value] of Object.entries(config.headers ?? {})) {
+                    headers.set(key, value);
+                  }
+                  return fetch(input, { ...init, headers });
+                },
+              }
+            : undefined,
+        });
+      } else {
+        // HTTP transport for remote MCP servers
+        this.transport = new StreamableHTTPClientTransport(
+          url,
+          {
+            requestInit: {
+              headers: config.headers,
+            },
+          }
+        );
+      }
     }
   }
 

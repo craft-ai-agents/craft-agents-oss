@@ -377,12 +377,17 @@ describe('source_test API connection branches', () => {
     expect(persisted.connectionStatus).toBe('disconnected');
   });
 
-  it('basic probe honors configured testEndpoint.method', async () => {
+  it('basic probe honors configured testEndpoint method, body, and headers', async () => {
     writeApiSource(tempDir, 'post-only-api', {
       api: {
         baseUrl: 'https://api.example.test',
         authType: 'none',
-        testEndpoint: { method: 'POST', path: '/v1/things' },
+        testEndpoint: {
+          method: 'POST',
+          path: '/v1/things',
+          body: { ping: true },
+          headers: { 'X-Test-Probe': 'yes' },
+        },
       },
     } as Partial<SourceConfig>);
 
@@ -395,6 +400,9 @@ describe('source_test API connection branches', () => {
 
     expect(stub.calls.length).toBe(1);
     expect(stub.calls[0]?.init?.method).toBe('POST');
+    expect(stub.calls[0]?.init?.body).toBe(JSON.stringify({ ping: true }));
+    expect((stub.calls[0]?.init?.headers as Record<string, string>)?.['X-Test-Probe']).toBe('yes');
+    expect((stub.calls[0]?.init?.headers as Record<string, string>)?.['Content-Type']).toBe('application/json');
     expect(stub.calls[0]?.url).toBe('https://api.example.test/v1/things');
   });
 });

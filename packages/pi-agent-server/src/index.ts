@@ -61,7 +61,7 @@ import { pickProviderAppropriateMiniModel } from './pick-mini-model.ts';
 import { buildCustomEndpointModelDef, type CustomEndpointModelOverrides } from './custom-endpoint-models.ts';
 
 // Direct source imports from shared (bundled by bun build)
-import { handleLargeResponse, estimateTokens, tokenLimitFor } from '../../shared/src/utils/large-response.ts';
+import { handleLargeResponse, estimateTokensDensityAware, tokenLimitFor } from '../../shared/src/utils/large-response.ts';
 import { getSessionPlansPath, getSessionPath } from '../../shared/src/sessions/storage.ts';
 import { buildCallLlmRequest, withTimeout, LLM_QUERY_TIMEOUT_MS } from '../../shared/src/agent/llm-tool.ts';
 import type { LLMQueryRequest, LLMQueryResult } from '../../shared/src/agent/llm-tool.ts';
@@ -753,7 +753,7 @@ function wrapSingleTool(tool: ToolDefinition<any, any>): ToolDefinition<any, any
       .join('');
 
     const modelContextWindow = piSession?.agent.state.model?.contextWindow;
-    if (estimateTokens(resultText) > tokenLimitFor(modelContextWindow) && initConfig) {
+    if (estimateTokensDensityAware(resultText) > tokenLimitFor(modelContextWindow) && initConfig) {
       try {
         const sessionPath = getSessionPath(
           initConfig.workspaceRootPath,
