@@ -65,7 +65,8 @@
     "./protocol": "./src/protocol/index.ts",
     "./i18n": "./src/i18n/index.ts",
     "./resources": "./src/resources/index.ts",
-    "./team-public-knowledge": "./src/team-public-knowledge/index.ts"
+    "./team-public-knowledge": "./src/team-public-knowledge/index.ts",
+    "./markdown-entry-parser": "./src/markdown-entry-parser/index.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
