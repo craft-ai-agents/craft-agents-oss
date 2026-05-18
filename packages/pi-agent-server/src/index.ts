@@ -71,6 +71,7 @@ import { createWebFetchTool } from './tools/web-fetch.ts';
 import { resolveSearchProvider } from './tools/search/resolve-provider.ts';
 import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
+import { applySystemPromptOverride } from './system-prompt-override.ts';
 
 // ============================================================
 // Types — JSONL Protocol
@@ -940,9 +941,9 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
 
     // Set system prompt
     if (request.systemPrompt) {
-      ephemeralSession.agent.state.systemPrompt = request.systemPrompt;
+      applySystemPromptOverride(ephemeralSession, request.systemPrompt);
     } else {
-      ephemeralSession.agent.state.systemPrompt = 'Reply with ONLY the requested text. No explanation.';
+      applySystemPromptOverride(ephemeralSession, 'Reply with ONLY the requested text. No explanation.');
     }
 
     // Collect response text and errors from events
@@ -1273,7 +1274,7 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
 
     // Set system prompt
     if (msg.systemPrompt) {
-      session.agent.state.systemPrompt = msg.systemPrompt;
+      applySystemPromptOverride(session, msg.systemPrompt);
     }
 
     // Wire up event handler
