@@ -237,12 +237,12 @@ export const piDriver: ProviderDriver = {
     customEndpoint: context.connection?.customEndpoint,
     customModels: context.connection?.models?.map(m => {
       if (typeof m === 'string') return m;
-      const supportsImages = 'supportsImages' in m && m.supportsImages === true
-      if (m.contextWindow || supportsImages) {
+      const hasSupportsImages = 'supportsImages' in m && typeof m.supportsImages === 'boolean'
+      if (m.contextWindow || hasSupportsImages) {
         return {
           id: m.id,
           ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
-          ...(supportsImages ? { supportsImages: true } : {}),
+          ...(hasSupportsImages ? { supportsImages: m.supportsImages } : {}),
         }
       }
       return m.id;
