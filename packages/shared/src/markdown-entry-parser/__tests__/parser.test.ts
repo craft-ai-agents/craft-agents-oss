@@ -252,24 +252,8 @@ describe('markdown entry parser', () => {
       const md = '# Team Wiki\n\n## Concepts\n\n<!-- concept title:Reactive System -->\nA system that reacts to events.\n\n## Slang\n\n| Slang | Meaning |\n|-------|--------|\n| WIP | Work In Progress |\n| ETA | Estimated Time of Arrival |\n\n## Rules\n\n<!-- rule id:no-direct-db -->\nNever access the database directly from controllers.\n\nAlways use the repository pattern.\n\n<!-- rule id:log-all-errors -->\nLog all errors with stack traces.';
       const entries = parseMarkdownEntries(md);
 
-      // Concepts section: 1 marked entry
-      // Slang section: 2 table row entries
-      // Rules section: 2 marked entries (no-direct-db, log-all-errors) + 1 paragraph "Always use the repository pattern."
-      // Actually wait - "Always use the repository pattern." comes after the first rule but before the second rule.
-      // It's not preceded by a marker, so it should be its own concept entry?
-
-      // Let me trace through the logic:
-      // Section "Team Wiki > Rules" has content:
-      //   <!-- rule id:no-direct-db -->
-      //   Never access the database directly from controllers.
-      //   Always use the repository pattern.
-      //   <!-- rule id:log-all-errors -->
-      //   Log all errors with stack traces.
-      //
-      // First marker rule-1: content starts after marker, goes until next marker:
-      //   "Never access the database directly from controllers.\nAlways use the repository pattern."
-      // Second marker rule-2: content after it:
-      //   "Log all errors with stack traces."
+      // Concepts: 1 marked entry; Slang: 2 table row entries; Rules: 2 marked entries
+      // Content between markers belongs to the preceding marker
 
       expect(entries).toHaveLength(5);
 
