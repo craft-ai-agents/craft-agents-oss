@@ -36,7 +36,7 @@ import type {
   McpManualSourceInput,
 } from '@craft-agent/shared/sources'
 
-type McpFormMode = 'http' | 'sse' | 'stdio' | 'json'
+type McpFormMode = 'streamable_http' | 'stdio' | 'json'
 type McpFormAuthType = 'none' | 'oauth' | 'bearer' | 'api-key'
 
 interface McpSourceFormDialogProps {
@@ -47,7 +47,7 @@ interface McpSourceFormDialogProps {
 export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialogProps) {
   const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
-  const [mode, setMode] = React.useState<McpFormMode>('http')
+  const [mode, setMode] = React.useState<McpFormMode>('streamable_http')
   const [name, setName] = React.useState('')
   const [provider, setProvider] = React.useState('')
   const [icon, setIcon] = React.useState('')
@@ -71,7 +71,7 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
-  const isRemote = mode === 'http' || mode === 'sse'
+  const isRemote = mode === 'streamable_http'
   const canSubmit = mode !== 'json' && Boolean(name.trim() && provider.trim() && (isRemote ? url.trim() : command.trim()))
   const selectedImportCandidates = candidates.filter((candidate) => selectedCandidateKeys.has(candidate.key) && candidate.errors.length === 0)
 
@@ -111,7 +111,7 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
   }
 
   const resetForm = () => {
-    setMode('http')
+    setMode('streamable_http')
     setName('')
     setProvider('')
     setIcon('')
@@ -198,43 +198,40 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
           </DialogHeader>
 
           <Tabs value={mode} onValueChange={(value) => setMode(value as McpFormMode)}>
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="http">HTTP</TabsTrigger>
-              <TabsTrigger value="sse">SSE</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="streamable_http">Streamable HTTP</TabsTrigger>
               <TabsTrigger value="stdio">Command</TabsTrigger>
               <TabsTrigger value="json">JSON</TabsTrigger>
             </TabsList>
 
-            {(['http', 'sse'] as const).map((remoteMode) => (
-              <TabsContent key={remoteMode} value={remoteMode} className="space-y-4">
-                <ManualDetails
-                  name={name}
-                  setName={setName}
-                  provider={provider}
-                  setProvider={setProvider}
-                  icon={icon}
-                  setIcon={setIcon}
-                  enabled={enabled}
-                  setEnabled={setEnabled}
-                  enableInWorkspace={enableInWorkspace}
-                  setEnableInWorkspace={setEnableInWorkspace}
-                />
-                <RemoteFields
-                  url={url}
-                  setUrl={setUrl}
-                  authType={authType}
-                  setAuthType={setAuthType}
-                  bearerToken={bearerToken}
-                  setBearerToken={setBearerToken}
-                  apiKeyHeader={apiKeyHeader}
-                  setApiKeyHeader={setApiKeyHeader}
-                  apiKeyValue={apiKeyValue}
-                  setApiKeyValue={setApiKeyValue}
-                  headersText={headersText}
-                  setHeadersText={setHeadersText}
-                />
-              </TabsContent>
-            ))}
+            <TabsContent value="streamable_http" className="space-y-4">
+              <ManualDetails
+                name={name}
+                setName={setName}
+                provider={provider}
+                setProvider={setProvider}
+                icon={icon}
+                setIcon={setIcon}
+                enabled={enabled}
+                setEnabled={setEnabled}
+                enableInWorkspace={enableInWorkspace}
+                setEnableInWorkspace={setEnableInWorkspace}
+              />
+              <RemoteFields
+                url={url}
+                setUrl={setUrl}
+                authType={authType}
+                setAuthType={setAuthType}
+                bearerToken={bearerToken}
+                setBearerToken={setBearerToken}
+                apiKeyHeader={apiKeyHeader}
+                setApiKeyHeader={setApiKeyHeader}
+                apiKeyValue={apiKeyValue}
+                setApiKeyValue={setApiKeyValue}
+                headersText={headersText}
+                setHeadersText={setHeadersText}
+              />
+            </TabsContent>
 
             <TabsContent value="stdio" className="space-y-4">
               <ManualDetails
@@ -395,7 +392,7 @@ function McpJsonCandidatePreview(props: {
         </Field>
         <Field label="Transport">
           <Select
-            value={mcp.transport ?? 'http'}
+            value={mcp.transport ?? 'streamable_http'}
             onValueChange={(value) => props.onChange((current) => ({
               ...current,
               input: {
@@ -406,8 +403,7 @@ function McpJsonCandidatePreview(props: {
           >
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="http">HTTP</SelectItem>
-              <SelectItem value="sse">SSE</SelectItem>
+              <SelectItem value="streamable_http">Streamable HTTP</SelectItem>
               <SelectItem value="stdio">Command</SelectItem>
             </SelectContent>
           </Select>
@@ -631,12 +627,12 @@ function validateImportCandidate(candidate: McpImportCandidate): McpImportFieldE
     if (!mcp.command?.trim()) {
       errors.push({ field: 'command', message: 'Stdio MCP servers require a command string.' })
     }
-  } else if (mcp.transport === 'http' || mcp.transport === 'sse' || !mcp.transport) {
+  } else if (mcp.transport === 'streamable_http' || !mcp.transport) {
     if (!mcp.url?.trim()) {
-      errors.push({ field: 'url', message: 'HTTP and SSE MCP servers require a URL string.' })
+      errors.push({ field: 'url', message: 'Streamable HTTP MCP servers require a URL string.' })
     }
   } else {
-    errors.push({ field: 'transport', message: 'Transport must be one of: stdio, sse, http.' })
+    errors.push({ field: 'transport', message: 'Transport must be one of: stdio, streamable_http.' })
   }
   return errors
 }

@@ -16,8 +16,7 @@ describe('MCP source form flow wiring', () => {
   test('form submits transport-specific MCP payloads without shell-splitting args', () => {
     const formSource = readFileSync(join(import.meta.dir, '../McpSourceFormDialog.tsx'), 'utf-8')
 
-    expect(formSource).toContain('<TabsTrigger value="http">HTTP</TabsTrigger>')
-    expect(formSource).toContain('<TabsTrigger value="sse">SSE</TabsTrigger>')
+    expect(formSource).toContain('<TabsTrigger value="streamable_http">Streamable HTTP</TabsTrigger>')
     expect(formSource).toContain('<TabsTrigger value="stdio">Command</TabsTrigger>')
     expect(formSource).toContain('args: parseListLines(values.argsText)')
     expect(formSource).not.toContain('.split(\' \')')
