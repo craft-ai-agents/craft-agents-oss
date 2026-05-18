@@ -8,6 +8,7 @@ import {
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 
+/** RPC channels handled by the local SSO login/session module. */
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sso.GET_SESSION,
   RPC_CHANNELS.sso.REFRESH,
@@ -42,11 +43,15 @@ function createSsoSessionDeps() {
   }
 }
 
+/** Dependencies used to exchange and persist an SSO callback code. */
 export interface SsoCallbackDeps {
+  /** Auth client used to exchange the authorization code for an SSO session. */
   authClient: Pick<MdpAuthClient, 'login'>
+  /** Credential store used to persist the exchanged SSO session. */
   credentialStore: Pick<SsoCredentialStore, 'save'>
 }
 
+/** Build the OIDC authorization URL used to start system-browser SSO login. */
 export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): string {
   const authUrl = env.MDP_AUTH_URL
   const clientId = env.MDP_CLIENT_ID
@@ -66,6 +71,7 @@ export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): string {
   return url.toString()
 }
 
+/** Exchange an SSO authorization code and persist the resulting session. */
 export async function handleSsoCallback(
   payload: { code?: string },
   deps: SsoCallbackDeps = createSsoSessionDeps(),

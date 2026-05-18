@@ -63,6 +63,7 @@ export interface DeepLinkResult {
   windowId?: number
 }
 
+/** Exchanges an SSO authorization code and returns the renderer-safe login result. */
 export type SsoCallbackHandler = (code: string) => Promise<{ success: boolean; error?: string }>
 
 /**
