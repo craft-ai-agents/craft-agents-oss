@@ -7,7 +7,7 @@ import {
   type SsoSession,
   type SsoSessionStateOptions,
 } from '@craft-agent/shared/auth'
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { DEFAULT_SSO_CALLBACK_URL, RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
@@ -129,7 +129,7 @@ export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): string {
 
   const url = new URL(authUrl)
   url.searchParams.set('client_id', clientId)
-  url.searchParams.set('redirect_uri', 'mdp://sso-callback')
+  url.searchParams.set('redirect_uri', DEFAULT_SSO_CALLBACK_URL)
   url.searchParams.set('response_type', 'code')
   return url.toString()
 }

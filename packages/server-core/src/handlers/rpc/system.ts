@@ -2,7 +2,7 @@ import { resolve } from 'path'
 import { join } from 'path'
 import { homedir } from 'os'
 import { execSync } from 'child_process'
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { getConfiguredDeepLinkProtocol, RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId, getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
 import { isSafeExternalUrl } from '@craft-agent/shared/utils/url-safety'
 import { isUsableGitBashPath, validateGitBashPath } from '@craft-agent/server-core/services'
@@ -67,14 +67,8 @@ function collectDeepLinkParams(parsed: URL, pathId?: string): Record<string, str
   return Object.keys(params).length > 0 ? params : undefined
 }
 
-const DEFAULT_DEEPLINK_SCHEME = 'mdp'
-
-function getDeepLinkProtocol(): string {
-  return `${process.env.CRAFT_DEEPLINK_SCHEME || DEFAULT_DEEPLINK_SCHEME}:`
-}
-
 function parseInternalDeepLink(parsed: URL): ParsedInternalDeepLink | null {
-  if (parsed.protocol !== getDeepLinkProtocol()) return null
+  if (parsed.protocol !== getConfiguredDeepLinkProtocol()) return null
 
   const host = parsed.hostname
   const pathParts = parsed.pathname.split('/').filter(Boolean)
@@ -289,7 +283,7 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
     try {
       const parsed = new URL(url)
 
-      if (parsed.protocol === getDeepLinkProtocol()) {
+      if (parsed.protocol === getConfiguredDeepLinkProtocol()) {
         const deepLink = parseInternalDeepLink(parsed)
 
         if (deepLink?.handledNoop) {
