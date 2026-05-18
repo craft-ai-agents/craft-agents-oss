@@ -106,7 +106,7 @@ export class SourceServerBuilder {
 
     // Handle Streamable HTTP transport (remote servers)
     if (!mcp.url) {
-      debug(`[SourceServerBuilder] HTTP/SSE source ${source.config.slug} missing URL`);
+      debug(`[SourceServerBuilder] Streamable HTTP source ${source.config.slug} missing URL`);
       return null;
     }
 

@@ -153,7 +153,7 @@ export const defaultMcpPostCreateConnectionTester: McpPostCreateConnectionTester
   }
 
   if (!mcp.url) {
-    return { success: false, error: 'MCP source URL is required for HTTP/SSE transport.', errorType: 'failed' };
+    return { success: false, error: 'MCP source URL is required for Streamable HTTP transport.', errorType: 'failed' };
   }
 
   const credentialHeaders = parseCredentialHeaders(credentialValue);
@@ -425,7 +425,9 @@ function buildManualCandidate(input: McpManualSourceInput): McpImportCandidate {
 
   // Normalize legacy transport values (http/sse → streamable_http) for backward compatibility
   const rawTransport: string | undefined = input.mcp.transport;
-  const transport: McpTransport = ((rawTransport === 'http' || rawTransport === 'sse') ? 'streamable_http' : (rawTransport ?? 'streamable_http')) as McpTransport;
+  const transport: McpTransport = rawTransport === 'http' || rawTransport === 'sse' || rawTransport === undefined
+    ? 'streamable_http'
+    : (rawTransport as McpTransport);
   const state: ManualCandidateBuildState = {
     errors,
     mcp: { transport },
@@ -500,7 +502,7 @@ function addManualRemoteFields(
   if (typeof mcpInput.url === 'string' && mcpInput.url.trim()) {
     state.mcp.url = mcpInput.url.trim();
   } else {
-    state.errors.push({ field: 'url', message: 'HTTP and SSE MCP servers require a URL string.' });
+    state.errors.push({ field: 'url', message: 'Streamable HTTP MCP servers require a URL string.' });
   }
 
   state.mcp.authType = mcpInput.authType ?? 'none';
