@@ -1,17 +1,8 @@
-/**
- * get_team_public_knowledge_entry Handler
- *
- * Returns one bounded Markdown entry/chunk by its metadata id,
- * with truncated status and related entry ids where available.
- */
-
 import { join } from 'node:path';
 import { parseMarkdownEntries, type MarkdownEntry } from '../../../shared/src/markdown-entry-parser/index.ts';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse } from '../response.ts';
-
-// ── Types ───────────────────────────────────────────────────────
 
 interface TeamPublicKnowledgeCacheEntry {
   id: string;
@@ -38,8 +29,6 @@ export interface GetTeamPublicKnowledgeEntryArgs {
   id: string;
 }
 
-// ── Cache loading ───────────────────────────────────────────────
-
 function loadCache(workspacePath: string, fs: SessionToolContext['fs']): TeamPublicKnowledgeCache | null {
   const cachePath = join(workspacePath, 'team-public-knowledge', 'cache.json');
   if (!fs.exists(cachePath)) return null;
@@ -49,8 +38,6 @@ function loadCache(workspacePath: string, fs: SessionToolContext['fs']): TeamPub
     return null;
   }
 }
-
-// ── Entry lookup ────────────────────────────────────────────────
 
 function parseAllEntries(cache: TeamPublicKnowledgeCache): MarkdownEntry[] {
   const allEntries: MarkdownEntry[] = [];
@@ -112,37 +99,30 @@ function findRelatedIds(entries: MarkdownEntry[], entry: MarkdownEntry, maxRelat
   return Array.from(related);
 }
 
-// ── Handler ─────────────────────────────────────────────────────
-
 export async function handleGetTeamPublicKnowledgeEntry(
   ctx: SessionToolContext,
   args: GetTeamPublicKnowledgeEntryArgs,
 ): Promise<ToolResult> {
   const { id } = args;
 
-  // Load cache
   const cache = loadCache(ctx.workspacePath, ctx.fs);
   if (!cache || Object.keys(cache.entries).length === 0) {
     return successResponse(JSON.stringify({ found: false }, null, 2));
   }
 
-  // Parse all entries
   const allEntries = parseAllEntries(cache);
 
-  // Find by id
   const entry = findEntryById(allEntries, id);
   if (!entry) {
     return successResponse(JSON.stringify({ found: false }, null, 2));
   }
 
-  // Truncate content if too long
   let content = entry.content;
   const truncated = content.length > MAX_CONTENT_LENGTH;
   if (truncated) {
     content = content.slice(0, MAX_CONTENT_LENGTH) + '\n... [truncated]';
   }
 
-  // Find related entries
   const relatedIds = findRelatedIds(allEntries, entry);
 
   const result = {

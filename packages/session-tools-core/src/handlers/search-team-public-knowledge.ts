@@ -1,17 +1,8 @@
-/**
- * search_team_public_knowledge Handler
- *
- * Searches team public knowledge entries with optional kind, tag, scope,
- * limit, and cursor-based pagination.
- */
-
 import { join } from 'node:path';
 import { parseMarkdownEntries, type MarkdownEntry } from '../../../shared/src/markdown-entry-parser/index.ts';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
-
-// ── Types ───────────────────────────────────────────────────────
 
 interface TeamPublicKnowledgeCacheEntry {
   id: string;
@@ -42,8 +33,6 @@ interface SearchResultItem {
   headingPath: string[];
   sourceDocId?: string;
   source: string;
-  /** @deprecated Use source */
-  sourceTitle?: string;
   tags?: string[];
   scope?: string;
   defaults?: Record<string, string>;
@@ -69,8 +58,6 @@ export interface SearchTeamPublicKnowledgeArgs {
   cursor?: string;
 }
 
-// ── Cache loading ───────────────────────────────────────────────
-
 function loadCache(workspacePath: string, fs: SessionToolContext['fs']): TeamPublicKnowledgeCache | null {
   const cachePath = join(workspacePath, 'team-public-knowledge', 'cache.json');
   if (!fs.exists(cachePath)) return null;
@@ -80,8 +67,6 @@ function loadCache(workspacePath: string, fs: SessionToolContext['fs']): TeamPub
     return null;
   }
 }
-
-// ── Scoring ─────────────────────────────────────────────────────
 
 function scoreEntry(entry: MarkdownEntry, query: string): { confidence: number; relevance: string; matchReason: string } {
   const q = query.toLowerCase();
@@ -136,8 +121,6 @@ function matchesScope(entry: MarkdownEntry, scope?: string): boolean {
   return entry.metadata.scope?.toLowerCase() === scope.toLowerCase();
 }
 
-// ── Pagination ──────────────────────────────────────────────────
-
 function encodeCursor(index: number): string {
   return Buffer.from(String(index)).toString('base64');
 }
@@ -151,29 +134,24 @@ function decodeCursor(cursor?: string): number {
   }
 }
 
-// ── Handler ─────────────────────────────────────────────────────
-
 export async function handleSearchTeamPublicKnowledge(
   ctx: SessionToolContext,
   args: SearchTeamPublicKnowledgeArgs,
 ): Promise<ToolResult> {
   const { query, kind, tag, scope, limit = 20, cursor } = args;
 
-  // Require non-empty query
   if (!query || query.trim().length === 0) {
     return errorResponse('search_team_public_knowledge requires a non-empty query parameter.');
   }
 
   const trimmedQuery = query.trim();
 
-  // Load cache
   const cache = loadCache(ctx.workspacePath, ctx.fs);
   if (!cache || Object.keys(cache.entries).length === 0) {
     const result: SearchResult = { results: [], total: 0 };
     return successResponse(JSON.stringify(result, null, 2));
   }
 
-  // Parse all entries
   const allEntries: MarkdownEntry[] = [];
   const staleDocIds = new Set<string>();
   for (const entry of Object.values(cache.entries)) {
@@ -187,7 +165,6 @@ export async function handleSearchTeamPublicKnowledge(
     if (entry.stale) staleDocIds.add(entry.id);
   }
 
-  // Score and filter entries
   const scored = allEntries
     .map(e => {
       const scoring = scoreEntry(e, trimmedQuery);
@@ -198,11 +175,9 @@ export async function handleSearchTeamPublicKnowledge(
 
   const total = scored.length;
 
-  // Apply pagination
   const offset = decodeCursor(cursor);
   const pageItems = scored.slice(offset, offset + limit);
 
-  // Build response items
   const results: SearchResultItem[] = pageItems.map(s => ({
     id: s.entry.metadata.id ?? s.entry.sourceDocId ?? '',
     kind: s.entry.kind,
@@ -213,7 +188,6 @@ export async function handleSearchTeamPublicKnowledge(
     headingPath: s.entry.headingPath,
     sourceDocId: s.entry.sourceDocId,
     source: s.entry.sourceTitle ?? '',
-    sourceTitle: s.entry.sourceTitle ?? '',
     tags: s.entry.metadata.tags,
     scope: s.entry.metadata.scope,
     defaults: s.entry.metadata.defaults,

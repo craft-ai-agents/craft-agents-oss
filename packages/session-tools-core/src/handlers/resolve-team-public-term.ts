@@ -1,17 +1,8 @@
-/**
- * resolve_team_public_term Handler
- *
- * Resolves a term against team public knowledge entries.
- * Returns found, not_found, ambiguous, or conflict status with metadata.
- */
-
 import { join } from 'node:path';
 import { parseMarkdownEntries, type MarkdownEntry } from '../../../shared/src/markdown-entry-parser/index.ts';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse } from '../response.ts';
-
-// ── Types ───────────────────────────────────────────────────────
 
 interface TeamPublicKnowledgeCacheEntry {
   id: string;
@@ -66,8 +57,6 @@ export interface ResolveTeamPublicTermArgs {
   term: string;
 }
 
-// ── Cache loading ───────────────────────────────────────────────
-
 function loadCache(workspacePath: string, fs: SessionToolContext['fs']): TeamPublicKnowledgeCache | null {
   const cachePath = join(workspacePath, 'team-public-knowledge', 'cache.json');
   if (!fs.exists(cachePath)) return null;
@@ -77,8 +66,6 @@ function loadCache(workspacePath: string, fs: SessionToolContext['fs']): TeamPub
     return null;
   }
 }
-
-// ── Entry parsing ──────────────────────────────────────────────
 
 function parseAllEntries(cache: TeamPublicKnowledgeCache): MarkdownEntry[] {
   const allEntries: MarkdownEntry[] = [];
@@ -94,9 +81,6 @@ function parseAllEntries(cache: TeamPublicKnowledgeCache): MarkdownEntry[] {
   return allEntries;
 }
 
-// ── Matching logic ─────────────────────────────────────────────
-
-/** Compute similarity between query and target (basic substring-based). */
 function similarity(query: string, target: string | undefined): number {
   if (!target) return 0;
   const q = query.toLowerCase();
@@ -104,7 +88,6 @@ function similarity(query: string, target: string | undefined): number {
   if (t === q) return 1;
   if (t.includes(q)) return 0.8;
   if (q.includes(t)) return 0.6;
-  // Token overlap
   const qTokens = q.split(/[\s_-]+/).filter(Boolean);
   const tTokens = t.split(/[\s_-]+/).filter(Boolean);
   if (qTokens.length > 0 && tTokens.length > 0) {
@@ -116,12 +99,6 @@ function similarity(query: string, target: string | undefined): number {
 
 function findExactTermMatches(entries: MarkdownEntry[], term: string): MarkdownEntry[] {
   return entries.filter(e => e.term !== undefined && e.term.toLowerCase() === term.toLowerCase());
-}
-
-function findContentMatches(entries: MarkdownEntry[], term: string): MarkdownEntry[] {
-  return entries.filter(
-    e => e.term !== undefined && (e.term.toLowerCase().includes(term.toLowerCase()) || term.toLowerCase().includes(e.term.toLowerCase()))
-  );
 }
 
 function buildSuggestions(entries: MarkdownEntry[], term: string): Array<{ term: string; kind: string; sourceTitle: string; confidence: number }> {
@@ -170,29 +147,23 @@ function findConflicts(cache: TeamPublicKnowledgeCache): Array<{ id: string; tit
     }));
 }
 
-// ── Handler ─────────────────────────────────────────────────────
-
 export async function handleResolveTeamPublicTerm(
   ctx: SessionToolContext,
   args: ResolveTeamPublicTermArgs,
 ): Promise<ToolResult> {
   const { term } = args;
 
-  // Load cache
   const cache = loadCache(ctx.workspacePath, ctx.fs);
   if (!cache || Object.keys(cache.entries).length === 0) {
     const result: ResolveResult = { status: 'not_found' };
     return successResponse(JSON.stringify(result, null, 2));
   }
 
-  // Check for stale entries (conflicts)
   const conflicts = findConflicts(cache);
   const hasConflicts = conflicts.length > 0;
 
-  // Parse all entries
   const allEntries = parseAllEntries(cache);
 
-  // Find exact term matches
   const exactMatches = findExactTermMatches(allEntries, term);
 
   // If conflicts exist and the matched term comes from a stale doc, return conflict
@@ -240,7 +211,6 @@ export async function handleResolveTeamPublicTerm(
     return successResponse(JSON.stringify(result, null, 2));
   }
 
-  // No exact match — return not_found with suggestions
   const suggestions = buildSuggestions(allEntries, term);
 
   // If there are stale entries and they're the only ones with anything related
