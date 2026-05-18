@@ -122,19 +122,10 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
     setBearerToken('')
     setApiKeyValue('')
 
-    // Serialize structured fields to text
-    setHeadersText(
-      mcp.headers
-        ? Object.entries(mcp.headers).map(([k, v]) => `${k}=${v}`).join('\n')
-        : '',
-    )
+    setHeadersText(objectToLines(mcp.headers))
     setCommand(mcp.command ?? '')
     setArgsText(mcp.args ? mcp.args.join('\n') : '')
-    setEnvText(
-      mcp.env
-        ? Object.entries(mcp.env).map(([k, v]) => `${k}=${v}`).join('\n')
-        : '',
-    )
+    setEnvText(objectToLines(mcp.env))
 
     // Reset JSON import state
     setJsonText('')
@@ -742,6 +733,16 @@ function validateImportCandidate(candidate: McpImportCandidate): McpImportFieldE
   return errors
 }
 
+function ConfiguredBadge() {
+  const { t } = useTranslation()
+  return (
+    <span className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-success/10 text-success">
+      <CheckCircle2 className="h-3 w-3" />
+      {t('mcpForm.configured')}
+    </span>
+  )
+}
+
 function RemoteFields(props: {
   url: string
   setUrl: (value: string) => void
@@ -781,10 +782,7 @@ function RemoteFields(props: {
           <Label className="text-xs text-muted-foreground">
             Bearer Token
             {props.isEditMode && props.isAuthenticated && !props.bearerToken && (
-              <span className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-success/10 text-success">
-                <CheckCircle2 className="h-3 w-3" />
-                {t('mcpForm.configured')}
-              </span>
+              <ConfiguredBadge />
             )}
           </Label>
           <Input type="password" value={props.bearerToken} onChange={(event) => props.setBearerToken(event.target.value)} />
@@ -799,10 +797,7 @@ function RemoteFields(props: {
             <Label className="text-xs text-muted-foreground">
               Header Value
               {props.isEditMode && props.isAuthenticated && !props.apiKeyValue && (
-                <span className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-success/10 text-success">
-                  <CheckCircle2 className="h-3 w-3" />
-                  {t('mcpForm.configured')}
-                </span>
+                <ConfiguredBadge />
               )}
             </Label>
             <Input type="password" value={props.apiKeyValue} onChange={(event) => props.setApiKeyValue(event.target.value)} />
@@ -828,6 +823,10 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function parseListLines(value: string): string[] | undefined {
   const items = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
   return items.length > 0 ? items : undefined
+}
+
+function objectToLines(obj: Record<string, string> | undefined): string {
+  return obj ? Object.entries(obj).map(([k, v]) => `${k}=${v}`).join('\n') : ''
 }
 
 function parseKeyValueLines(value: string): Record<string, string> | undefined {
