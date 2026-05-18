@@ -37,7 +37,7 @@
 import type { BrowserWindow } from 'electron'
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
-import { RPC_CHANNELS } from '../shared/types'
+import { RPC_CHANNELS, SSO_CALLBACK_HOST } from '../shared/types'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import { getDeepLinkProtocol } from './deep-link-scheme'
 
@@ -67,6 +67,8 @@ export interface DeepLinkResult {
 
 /** Exchanges an SSO authorization code and returns the renderer-safe login result. */
 export type SsoCallbackHandler = (code: string, state?: string) => Promise<{ success: boolean; error?: string }>
+
+type SsoLoginResult = Awaited<ReturnType<SsoCallbackHandler>>
 
 /** Optional collaborators used while routing a parsed deep link. */
 export interface HandleDeepLinkOptions {
@@ -133,7 +135,7 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
       return null
     }
 
-    if (host === 'sso-callback') {
+    if (host === SSO_CALLBACK_HOST) {
       const code = parsed.searchParams.get('code')
       if (!code) return null
       return {
@@ -258,6 +260,39 @@ function buildDeepLinkWithoutWindowParam(url: string): string {
   return parsed.toString()
 }
 
+function resolvePushClientId(
+  webContentsId: number,
+  resolveClientId?: (webContentsId: number) => string | undefined,
+  preferredClientId?: string,
+): string | undefined {
+  const resolvedClientId = resolveClientId?.(webContentsId)
+
+  // Prefer the resolved target window client. Only use preferredClientId as
+  // fallback when no resolver was provided (legacy call sites).
+  return resolvedClientId ?? (!resolveClientId ? preferredClientId : undefined)
+}
+
+function pushSsoLoginResult(
+  sink: EventSink | undefined,
+  windowManager: WindowManager,
+  window: BrowserWindow | null,
+  result: SsoLoginResult,
+  resolveClientId?: (webContentsId: number) => string | undefined,
+  preferredClientId?: string,
+): void {
+  if (!window || !sink) return
+
+  const webContentsId = window.webContents.id
+  const wsId = windowManager.getWorkspaceForWindow(webContentsId)
+  const clientId = resolvePushClientId(webContentsId, resolveClientId, preferredClientId)
+
+  if (clientId) {
+    sink(RPC_CHANNELS.sso.LOGIN_RESULT, { to: 'client', clientId }, result)
+  } else if (wsId) {
+    sink(RPC_CHANNELS.sso.LOGIN_RESULT, { to: 'workspace', workspaceId: wsId }, result)
+  }
+}
+
 /**
  * Handle a deep link by navigating to the target
  */
@@ -286,18 +321,7 @@ export async function handleDeepLink(
 
     const window = windowManager.getFocusedWindow() ?? windowManager.getLastActiveWindow()
     const result = await handleSsoCallback(target.ssoCallbackCode, target.ssoCallbackState)
-
-    if (window && sink) {
-      const wsId = windowManager.getWorkspaceForWindow(window.webContents.id)
-      const resolvedClientId = resolveClientId?.(window.webContents.id)
-      const clientId = resolvedClientId ?? (!resolveClientId ? preferredClientId : undefined)
-
-      if (clientId) {
-        sink(RPC_CHANNELS.sso.LOGIN_RESULT, { to: 'client', clientId }, result)
-      } else if (wsId) {
-        sink(RPC_CHANNELS.sso.LOGIN_RESULT, { to: 'workspace', workspaceId: wsId }, result)
-      }
-    }
+    pushSsoLoginResult(sink, windowManager, window, result, resolveClientId, preferredClientId)
 
     return { success: result.success, error: result.error, windowId: window?.webContents.id }
   }
@@ -375,12 +399,9 @@ export async function handleDeepLink(
       action: target.action,
       actionParams: target.actionParams,
     }
-    const wsId = target.workspaceId ?? windowManager.getWorkspaceForWindow(window.webContents.id)
-    const resolvedClientId = resolveClientId?.(window.webContents.id)
-
-    // Prefer the resolved target window client. Only use preferredClientId as
-    // fallback when no resolver was provided (legacy call sites).
-    const clientId = resolvedClientId ?? (!resolveClientId ? preferredClientId : undefined)
+    const webContentsId = window.webContents.id
+    const wsId = target.workspaceId ?? windowManager.getWorkspaceForWindow(webContentsId)
+    const clientId = resolvePushClientId(webContentsId, resolveClientId, preferredClientId)
 
     if (sink && clientId) {
       sink(RPC_CHANNELS.deeplink.NAVIGATE, { to: 'client', clientId }, navigation)
