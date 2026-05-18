@@ -190,7 +190,8 @@ export class SourceManager {
     // Active sources line - include warning for sources with failed builds
     if (activeSlugs.length > 0) {
       const activeWithStatus = activeSlugs.map((slug) => {
-        const hasWorkingTools = this.activeSlugs.has(slug);
+        const source = this.allSources.find((s) => s.config.slug === slug);
+        const hasWorkingTools = this.activeSlugs.has(slug) || source?.config.type === 'local';
         return hasWorkingTools ? slug : `${slug} (no tools)`;
       });
       parts.push(`Active: ${activeWithStatus.join(', ')}`);
@@ -230,6 +231,11 @@ export class SourceManager {
       for (const s of unseenSources) {
         const tagline = s.config.tagline || s.config.provider;
         parts.push(`- ${s.config.slug}: ${tagline}`);
+        if (s.config.type === 'local' && s.config.local?.path) {
+          const format = s.config.local.format ? ` (${s.config.local.format})` : '';
+          parts.push(`  Local path${format}: ${s.config.local.path}`);
+          parts.push('  Use the Bash tool for documented local CLI commands; this source does not spawn MCP/API tools.');
+        }
         // Add guide path for sources that have guides (excluding internal sources)
         if (s.guide?.raw && !GUIDE_EXEMPT_SLUGS.has(s.config.slug)) {
           parts.push(`  Guide: ${join(s.folderPath, 'guide.md')}`);

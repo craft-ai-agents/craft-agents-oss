@@ -1,0 +1,52 @@
+{
+  "allowedBashPatterns": [
+    {
+      "pattern": "^3d\\s+help$",
+      "comment": "Show 3DCellForge CLI help"
+    },
+    {
+      "pattern": "^3d\\s+health\\s+--json$",
+      "comment": "Check 3DCellForge backend health"
+    },
+    {
+      "pattern": "^3d\\s+test$",
+      "comment": "Run the 3DCellForge test suite"
+    },
+    {
+      "pattern": "^3d\\s+build$",
+      "comment": "Build 3DCellForge"
+    },
+    {
+      "pattern": "^3d\\s+api$",
+      "comment": "Start the local 3DCellForge backend when the user asks to use the tool"
+    },
+    {
+      "pattern": "^3d\\s+dev$",
+      "comment": "Start the local 3DCellForge frontend when the user asks to see the UI"
+    },
+    {
+      "pattern": "^3d\\s+status\\s+--task\\s+[^\\s]+\\s+--provider\\s+(rodin|tripo|fal|hunyuan)\\s+--json$",
+      "comment": "Read provider task status without starting new generation"
+    },
+    {
+      "pattern": "^node\\s+\"/Users/michaelb\\.williams/Creative Gen/3DCellForge/bin/3d\\.mjs\"\\s+help$",
+      "comment": "Fallback direct CLI help command"
+    },
+    {
+      "pattern": "^node\\s+\"/Users/michaelb\\.williams/Creative Gen/3DCellForge/bin/3d\\.mjs\"\\s+health\\s+--json$",
+      "comment": "Fallback direct CLI health command"
+    }
+  ],
+  "blockedCommandHints": [
+    {
+      "command": "3d",
+      "whenNotMatching": "^(3d\\s+(help|health\\s+--json|test|build|api|dev)|3d\\s+status\\s+--task\\s+[^\\s]+\\s+--provider\\s+(rodin|tripo|fal|hunyuan)\\s+--json)$",
+      "reason": "3DCellForge generation and import commands may spend provider quota or mutate local project state.",
+      "context": "Use allowed health/status/test/build commands freely. Ask for confirmation before generate/import or other provider actions.",
+      "tryInstead": [
+        "Run `3d health --json` first",
+        "Ask the user to approve the exact `3d generate` or `3d import` command"
+      ]
+    }
+  ]
+}

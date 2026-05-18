@@ -213,6 +213,24 @@ describe('SourceManager', () => {
 
       expect(formatted).toContain('github (no tools)');
     });
+
+    it('should treat local sources as Bash-operated instead of failed tool builds', () => {
+      sourceManager.setAllSources([
+        createMockSource('3d-cell-forge', {
+          type: 'local',
+          local: { path: '/Users/example/3DCellForge', format: 'cli-tool' },
+          tagline: 'Local CLI-driven creative generation tool',
+        }),
+      ]);
+      sourceManager.updateActiveState([], [], ['3d-cell-forge']);
+
+      const formatted = sourceManager.formatSourceState();
+
+      expect(formatted).toContain('Active: 3d-cell-forge');
+      expect(formatted).not.toContain('3d-cell-forge (no tools)');
+      expect(formatted).toContain('Local path (cli-tool): /Users/example/3DCellForge');
+      expect(formatted).toContain('Use the Bash tool for documented local CLI commands');
+    });
   });
 
   describe('Authentication Utilities', () => {

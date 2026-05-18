@@ -55,6 +55,7 @@
     { "id": "curl", "displayName": "curl", "icon": "curl.svg", "commands": ["curl"] },
     { "id": "openssh", "displayName": "OpenSSH", "icon": "openssh.png", "commands": ["ssh", "scp"] },
     { "id": "xcode", "displayName": "Xcode", "icon": "xcode.png", "commands": ["xcodebuild", "xcrun"] },
-    { "id": "cocoapods", "displayName": "CocoaPods", "icon": "cocoapods.png", "commands": ["pod"] }
+    { "id": "cocoapods", "displayName": "CocoaPods", "icon": "cocoapods.png", "commands": ["pod"] },
+    { "id": "3d-cell-forge", "displayName": "3DCellForge", "icon": "vite.svg", "commands": ["3d"] }
   ]
 }

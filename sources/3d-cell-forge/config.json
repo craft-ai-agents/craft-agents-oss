@@ -1,0 +1,17 @@
+{
+  "id": "3d-cell-forge_20260518",
+  "name": "3DCellForge",
+  "slug": "3d-cell-forge",
+  "enabled": true,
+  "provider": "3d-cell-forge",
+  "type": "local",
+  "icon": "🧊",
+  "tagline": "Local Bash-operated CLI tool for image-to-3D generation workflows",
+  "local": {
+    "path": "/Users/michaelb.williams/Creative Gen/3DCellForge",
+    "format": "cli-tool"
+  },
+  "connectionStatus": "untested",
+  "createdAt": 1779051600000,
+  "updatedAt": 1779051600000
+}
