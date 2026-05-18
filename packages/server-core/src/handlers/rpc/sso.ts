@@ -3,6 +3,7 @@ import {
   refreshStoredSsoSession,
   getSsoSessionState,
   SsoCredentialStore,
+  type PublicSsoSessionState,
   type SsoSession,
   type SsoSessionStateOptions,
 } from '@craft-agent/shared/auth'
@@ -77,17 +78,26 @@ export async function handleSsoStartupSession({
   isPackaged,
   env = process.env,
   ...sessionStateOptions
-}: SsoStartupSessionDeps) {
-  if (!isPackaged && env.CRAFT_DISABLE_SSO === '1') {
-    await sessionStateOptions.credentialStore.save(DEV_SSO_BYPASS_SESSION)
+}: SsoStartupSessionDeps): Promise<PublicSsoSessionState> {
+  if (isDevSsoBypassEnabled(isPackaged, env)) {
+    const session = createDevSsoBypassSession()
+    await sessionStateOptions.credentialStore.save(session)
     return {
-      authenticated: true as const,
-      userName: DEV_SSO_BYPASS_SESSION.userName,
-      department: DEV_SSO_BYPASS_SESSION.department,
+      authenticated: true,
+      userName: session.userName,
+      department: session.department,
     }
   }
 
   return getSsoSessionState(sessionStateOptions)
+}
+
+function isDevSsoBypassEnabled(isPackaged: boolean, env: NodeJS.ProcessEnv): boolean {
+  return !isPackaged && env.CRAFT_DISABLE_SSO === '1'
+}
+
+function createDevSsoBypassSession(): SsoSession {
+  return { ...DEV_SSO_BYPASS_SESSION }
 }
 
 /** Dependencies used to exchange and persist an SSO callback code. */
