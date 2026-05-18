@@ -129,6 +129,14 @@ export interface McpValidationConfig {
   model?: string;
 }
 
+type HttpMcpTransport = Extract<McpTransport, 'http' | 'sse'>;
+
+export function resolveMcpValidationTransport(
+  config: Pick<McpValidationConfig, 'mcpTransport'>
+): HttpMcpTransport {
+  return config.mcpTransport === 'sse' ? 'sse' : 'http';
+}
+
 /**
  * Map a low-level connection error to a user-actionable result.
  */
@@ -161,7 +169,7 @@ export async function validateMcpConnection(
   };
 
   const mcpClient = new CraftMcpClient({
-    transport: 'http',
+    transport: resolveMcpValidationTransport(config),
     url: mcpUrl,
     headers: Object.keys(headers).length > 0 ? headers : undefined,
   });

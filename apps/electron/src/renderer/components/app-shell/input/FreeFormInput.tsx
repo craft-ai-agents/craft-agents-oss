@@ -107,6 +107,13 @@ function stripPiPrefixForDisplay(value: string): string {
   return value.startsWith('pi/') ? value.slice(3) : value
 }
 
+function getConfiguredModelLabel(model: string | (Pick<ModelDefinition, 'id'> & Partial<Pick<ModelDefinition, 'name' | 'shortName'>>), compact = false): string {
+  if (typeof model === 'string') {
+    return stripPiPrefixForDisplay(compact ? getModelShortName(model) : model)
+  }
+  return model.name ?? model.shortName ?? stripPiPrefixForDisplay(model.id)
+}
+
 const EMPTY_LLM_CONNECTIONS: LlmConnectionWithStatus[] = []
 
 function formatFollowUpChipText(text: string, fallback: string, maxLength = 50): string {
@@ -376,7 +383,7 @@ export function FreeFormInput({
       // Fallback: use helper function to format unknown model IDs nicely
       return stripPiPrefixForDisplay(getModelDisplayName(modelToDisplay))
     }
-    return typeof model === 'string' ? stripPiPrefixForDisplay(model) : model.name
+    return getConfiguredModelLabel(model)
   }, [availableModels, currentModel, connectionDefaultModel])
 
   // Group connections by provider type for hierarchical dropdown
@@ -2096,7 +2103,7 @@ export function FreeFormInput({
                               {/* Show models for this connection - use provider-specific models as fallback */}
                               {(conn.models || ANTHROPIC_MODELS).map((model) => {
                                 const modelId = typeof model === 'string' ? model : model.id
-                                const modelName = typeof model === 'string' ? stripPiPrefixForDisplay(getModelShortName(model)) : model.name
+                                const modelName = getConfiguredModelLabel(model, true)
                                 const isSelectedModel = isCurrentConnection && currentModel === modelId
                                 return (
                                   <StyledDropdownMenuItem
@@ -2143,7 +2150,7 @@ export function FreeFormInput({
                   {/* Model options based on effective connection's provider type */}
                   {availableModels.map((model) => {
                     const modelId = typeof model === 'string' ? model : model.id
-                    const modelName = typeof model === 'string' ? stripPiPrefixForDisplay(getModelShortName(model)) : model.name
+                    const modelName = getConfiguredModelLabel(model, true)
                     const isSelected = currentModel === modelId
                     const descriptionKey = typeof model !== 'string' && 'descriptionKey' in model ? (model.descriptionKey as string) : undefined
                     const description = descriptionKey ? t(descriptionKey) : (typeof model !== 'string' && 'description' in model ? (model.description as string) : '')

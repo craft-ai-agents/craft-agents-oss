@@ -540,4 +540,29 @@ describe('source_test HTTP MCP probe credential forwarding', () => {
     expect(calls[0]?.headers).toEqual({ 'X-Api-Key': 'k1' });
     expect(calls[0]?.accessToken).toBeUndefined();
   });
+
+  it('auth-required MCP probe does not auto-enable the source', async () => {
+    writeHttpMcpSource(tempDir, 'oauth-needs-auth', { enabled: false, isAuthenticated: false });
+
+    let activated = false;
+    const result = await handleSourceTest(createCtx(tempDir, {
+      validateMcpConnection: async () => ({ success: false, needsAuth: true }),
+      activateSourceInSession: async () => {
+        activated = true;
+        return { ok: true };
+      },
+    }), { sourceSlug: 'oauth-needs-auth' });
+    const text = result.content[0]?.text ?? '';
+
+    expect(result.isError).toBeFalsy();
+    expect(text).toContain('MCP server requires authentication');
+    expect(text).toContain('Skipping activation because connection test did not succeed');
+    expect(activated).toBe(false);
+
+    const persisted = JSON.parse(
+      readFileSync(join(tempDir, 'sources', 'oauth-needs-auth', 'config.json'), 'utf-8')
+    ) as SourceConfig;
+    expect(persisted.enabled).toBe(false);
+    expect(persisted.connectionStatus).toBe('disconnected');
+  });
 });

@@ -815,7 +815,6 @@ async function testMcpConnection(
           if (source.mcp.authType === 'oauth') {
             lines.push('  Use source_oauth_trigger to authenticate');
           }
-          success = true; // Server is reachable, just needs auth
         } else {
           hasError = true;
           error = result.error || 'MCP connection failed';
