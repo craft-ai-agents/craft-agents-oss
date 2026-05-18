@@ -25,7 +25,6 @@ describe('user profile dynamic context', () => {
       profile: profile(),
       fetchedAt: NOW,
       stale: false,
-      now: NOW,
     })
 
     expect(formatted).toContain('<user_profile')

@@ -11,11 +11,13 @@ export interface UserProfile {
   ownedTopics?: string[]
 }
 
+/** Cached profile data and the time it was last refreshed successfully. */
 export interface UserProfileCacheEntry {
   profile: UserProfile
   fetchedAt: number
 }
 
+/** Redacted persisted reference to profile context sent with a message. */
 export interface DynamicContextRef {
   type: 'user_profile'
   status: 'fresh' | 'stale'
@@ -23,16 +25,19 @@ export interface DynamicContextRef {
   summary: string
 }
 
+/** Expanded transient context plus the redacted reference safe for persistence. */
 export interface LoadedUserProfileContext {
   dynamicContext: string
   ref: DynamicContextRef
   stale: boolean
 }
 
+/** Boundary for loading the current authenticated user's profile. */
 export interface UserProfileProvider {
   fetchUserProfile(): Promise<UserProfile | null>
 }
 
+/** Dependencies and runtime options for loading dynamic user profile context. */
 export interface UserProfileContextManagerOptions {
   provider?: UserProfileProvider
   cachePath?: string
@@ -76,17 +81,18 @@ function escapeContextValue(value: string): string {
   return value.replace(/[<>&]/g, ch => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[ch]!))
 }
 
+/** Builds the redacted human-readable profile summary stored with messages. */
 export function summarizeUserProfileRef(profile: UserProfile, stale: boolean): string {
   const parts = [profile.name, profile.group, profile.department].filter(Boolean)
   const summary = parts.length > 0 ? parts.join(', ') : 'User profile'
   return stale ? `${summary}; stale profile cache` : summary
 }
 
+/** Formats the compact profile block injected into transient model input. */
 export function formatUserProfileDynamicContext(input: {
   profile: UserProfile
   fetchedAt: number
   stale: boolean
-  now?: number
 }): string {
   const profile = sanitizeProfile(input.profile)
   const lines: string[] = [
@@ -117,6 +123,7 @@ export function formatUserProfileDynamicContext(input: {
   return lines.join('\n')
 }
 
+/** Loads user profile data from the configured profile JSON source. */
 export class FileUserProfileProvider implements UserProfileProvider {
   constructor(private readonly profilePath = process.env.CRAFT_USER_PROFILE_PATH ?? join(CONFIG_DIR, 'user-profile.json')) {}
 
@@ -134,6 +141,7 @@ export class FileUserProfileProvider implements UserProfileProvider {
   }
 }
 
+/** Loads fresh or stale cached user profile context for message sends. */
 export class UserProfileContextManager {
   private readonly provider: UserProfileProvider
   private readonly cachePath: string
@@ -180,7 +188,6 @@ export class UserProfileContextManager {
         profile,
         fetchedAt: entry.fetchedAt,
         stale,
-        now: this.now(),
       }),
       ref: {
         type: 'user_profile',
