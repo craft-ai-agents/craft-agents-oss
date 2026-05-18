@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { buildSsoLoginUrl, handleSsoCallback } from './sso'
+import { buildSsoLoginUrl, handleSsoCallback, handleSsoLogout } from './sso'
 import type { SsoSession } from '@craft-agent/shared/auth'
 
 const session: SsoSession = {
@@ -71,5 +71,20 @@ describe('SSO RPC handlers', () => {
     )
 
     expect(result).toEqual({ success: false, error: 'invalid_grant' })
+  })
+
+  it('clears the persisted SSO session on logout', async () => {
+    let clearCalls = 0
+
+    const result = await handleSsoLogout({
+      credentialStore: {
+        clear: async () => {
+          clearCalls += 1
+        },
+      },
+    })
+
+    expect(result).toEqual({ success: true })
+    expect(clearCalls).toBe(1)
   })
 })

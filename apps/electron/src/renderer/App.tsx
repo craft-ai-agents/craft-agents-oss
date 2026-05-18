@@ -1688,6 +1688,34 @@ export default function App() {
     setShowResetDialog(true)
   }, [])
 
+  const clearRendererSsoSessionState = useCallback(() => {
+    initializeSessions([])
+    setWorkspaces([])
+    setWindowWorkspaceId(null)
+    setSetupNeeds(null)
+    setLlmConnections([])
+    setDefaultLlmConnectionSlug(undefined)
+    setWorkspaceDefaultLlmConnection(undefined)
+    setSession({ selected: null })
+    setPendingPermissions(new Map())
+    setPendingCredentials(new Map())
+    setSessionOptions(new Map())
+    setSessionLoadError(null)
+    setSsoLoginResult(null)
+    sessionDraftsRef.current.clear()
+    clearStreamingState()
+    store.set(sourcesAtom, [])
+    store.set(skillsAtom, [])
+    store.set(sessionMetaMapAtom, new Map())
+    store.set(sessionIdsAtom, [])
+  }, [clearStreamingState, initializeSessions, setSession, store])
+
+  const handleSsoLogout = useCallback(async () => {
+    await window.electronAPI.logoutSso()
+    clearRendererSsoSessionState()
+    setAppState('sso-login')
+  }, [clearRendererSsoSessionState])
+
   // Execute reset after user confirms in dialog
   const executeReset = useCallback(async () => {
     try {
@@ -1829,6 +1857,7 @@ export default function App() {
     onOpenKeyboardShortcuts: handleOpenKeyboardShortcuts,
     onOpenStoredUserPreferences: handleOpenStoredUserPreferences,
     onReset: handleReset,
+    onSsoLogout: handleSsoLogout,
     // Session options
     onSessionOptionsChange: handleSessionOptionsChange,
     onInputChange: handleInputChange,
@@ -1871,6 +1900,7 @@ export default function App() {
     handleOpenKeyboardShortcuts,
     handleOpenStoredUserPreferences,
     handleReset,
+    handleSsoLogout,
     handleSessionOptionsChange,
     handleInputChange,
     handleAttachmentsChange,

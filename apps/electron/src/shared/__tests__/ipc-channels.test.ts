@@ -279,6 +279,7 @@ const EXPECTED_CHANNELS: string[] = [
   'sso:getSession',
   'sso:handleCallback',
   'sso:loginResult',
+  'sso:logout',
   'sso:refresh',
   'sso:startLogin',
   'statuses:changed',

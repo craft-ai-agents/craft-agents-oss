@@ -405,6 +405,7 @@ export interface ElectronAPI {
   startSsoLogin(): Promise<string>
   handleSsoCallback(payload: { code: string }): Promise<{ success: boolean; error?: string }>
   onSsoLoginResult(callback: (result: { success: boolean; error?: string }) => void): () => void
+  logoutSso(): Promise<{ success: true }>
 
   // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
   startChatGptOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>

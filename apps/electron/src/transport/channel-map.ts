@@ -138,6 +138,7 @@ export const CHANNEL_MAP = {
   startSsoLogin: invoke(RPC_CHANNELS.sso.START_LOGIN),
   handleSsoCallback: invoke(RPC_CHANNELS.sso.HANDLE_CALLBACK),
   onSsoLoginResult: listener(RPC_CHANNELS.sso.LOGIN_RESULT),
+  logoutSso: invoke(RPC_CHANNELS.sso.LOGOUT),
 
   // ChatGPT OAuth
   startChatGptOAuth: invoke(RPC_CHANNELS.chatgpt.START_OAUTH),

@@ -14,6 +14,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sso.REFRESH,
   RPC_CHANNELS.sso.START_LOGIN,
   RPC_CHANNELS.sso.HANDLE_CALLBACK,
+  RPC_CHANNELS.sso.LOGOUT,
 ] as const
 
 /** Register local-only SSO startup session and refresh handlers. */
@@ -34,6 +35,10 @@ export function registerSsoHandlers(server: RpcServer): void {
   server.handle(RPC_CHANNELS.sso.HANDLE_CALLBACK, async (_ctx, payload: { code?: string }) => {
     return handleSsoCallback(payload, createSsoSessionDeps())
   })
+
+  server.handle(RPC_CHANNELS.sso.LOGOUT, async () => {
+    return handleSsoLogout(createSsoSessionDeps())
+  })
 }
 
 function createSsoSessionDeps() {
@@ -49,6 +54,12 @@ export interface SsoCallbackDeps {
   authClient: Pick<MdpAuthClient, 'login'>
   /** Credential store used to persist the exchanged SSO session. */
   credentialStore: Pick<SsoCredentialStore, 'save'>
+}
+
+/** Dependencies used to clear a persisted SSO session. */
+export interface SsoLogoutDeps {
+  /** Credential store used to clear encrypted tokens and plain identity config. */
+  credentialStore: Pick<SsoCredentialStore, 'clear'>
 }
 
 /** Build the OIDC authorization URL used to start system-browser SSO login. */
@@ -88,4 +99,12 @@ export async function handleSsoCallback(
     const message = error instanceof Error ? error.message : 'SSO login failed'
     return { success: false, error: message }
   }
+}
+
+/** Clear all persisted SSO session state. */
+export async function handleSsoLogout(
+  deps: SsoLogoutDeps = createSsoSessionDeps(),
+): Promise<{ success: true }> {
+  await deps.credentialStore.clear()
+  return { success: true }
 }
