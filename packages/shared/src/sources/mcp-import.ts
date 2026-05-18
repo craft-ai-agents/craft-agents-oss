@@ -423,7 +423,9 @@ function buildManualCandidate(input: McpManualSourceInput): McpImportCandidate {
     errors.push({ field: 'provider', message: 'MCP source provider is required.' });
   }
 
-  const transport = input.mcp.transport ?? 'http';
+  // Normalize legacy transport values (http/sse → streamable_http) for backward compatibility
+  const rawTransport: string | undefined = input.mcp.transport;
+  const transport: McpTransport = ((rawTransport === 'http' || rawTransport === 'sse') ? 'streamable_http' : (rawTransport ?? 'streamable_http')) as McpTransport;
   const state: ManualCandidateBuildState = {
     errors,
     mcp: { transport },
@@ -432,10 +434,10 @@ function buildManualCandidate(input: McpManualSourceInput): McpImportCandidate {
 
   if (transport === 'stdio') {
     addManualStdioFields(input.mcp, provider, state);
-  } else if (transport === 'http' || transport === 'sse') {
+  } else if (transport === 'streamable_http') {
     addManualRemoteFields(input.mcp, input.authCredential, provider, state);
   } else {
-    errors.push({ field: 'transport', message: 'Transport must be one of: stdio, sse, http.' });
+    errors.push({ field: 'transport', message: 'Transport must be one of: streamable_http, stdio.' });
   }
 
   const candidate: McpImportCandidate = {
@@ -629,7 +631,7 @@ function buildCandidate(key: string, server: unknown, options: McpImportParseOpt
     if (typeof serverObject.url === 'string' && serverObject.url.trim()) {
       mcp.url = serverObject.url;
     } else {
-      errors.push({ field: 'url', message: 'HTTP and SSE MCP servers require a URL string.' });
+      errors.push({ field: 'url', message: 'Streamable HTTP MCP servers require a URL string.' });
     }
     if (serverObject.headers !== undefined) {
       if (isStringRecord(serverObject.headers)) {
@@ -954,17 +956,20 @@ function classifyConfigRecord(
 
 function inferTransport(server: Record<string, unknown>, errors: McpImportFieldError[]): McpTransport {
   const explicitTransport = server.transport ?? server.type;
-  if (explicitTransport === 'stdio' || explicitTransport === 'sse' || explicitTransport === 'http') {
-    return explicitTransport;
+  if (explicitTransport === 'stdio') {
+    return 'stdio';
+  }
+  if (explicitTransport === 'streamable_http' || explicitTransport === 'http' || explicitTransport === 'sse') {
+    return 'streamable_http';
   }
   if (explicitTransport !== undefined) {
     const field = server.transport !== undefined ? 'transport' : 'type';
-    errors.push({ field, message: 'Transport must be one of: stdio, sse, http.' });
+    errors.push({ field, message: 'Transport must be one of: streamable_http, stdio.' });
   }
   if (server.command) {
     return 'stdio';
   }
-  return 'http';
+  return 'streamable_http';
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

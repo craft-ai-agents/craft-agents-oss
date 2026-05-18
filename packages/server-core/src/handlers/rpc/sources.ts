@@ -256,7 +256,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
         })
       } else {
         if (!source.config.mcp.url) {
-          return { success: false, error: 'MCP source URL is required for HTTP/SSE transport' }
+          return { success: false, error: 'MCP source URL is required for Streamable HTTP transport' }
         }
 
         let accessToken: string | undefined
@@ -271,7 +271,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
 
         log.info(`Fetching MCP tools from ${source.config.mcp.url}`)
         client = new CraftMcpClient({
-          transport: 'http',
+          transport: 'streamable_http',
           url: source.config.mcp.url,
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
         })

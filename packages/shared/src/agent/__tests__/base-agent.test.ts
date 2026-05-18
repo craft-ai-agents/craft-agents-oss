@@ -112,7 +112,7 @@ describe('BaseAgent', () => {
 
     it('should track source servers', async () => {
       await agent.setSourceServers(
-        { 'source-1': { type: 'http', url: 'http://test' } },
+        { 'source-1': { type: 'streamable_http', url: 'http://test' } },
         { 'source-2': {} },
         ['source-1', 'source-2']
       );
@@ -123,7 +123,7 @@ describe('BaseAgent', () => {
 
     it('should check if source is active', async () => {
       await agent.setSourceServers(
-        { 'active-source': { type: 'http', url: 'http://test' } },
+        { 'active-source': { type: 'streamable_http', url: 'http://test' } },
         {},
         ['active-source']
       );

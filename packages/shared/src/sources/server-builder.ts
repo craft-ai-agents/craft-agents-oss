@@ -30,10 +30,10 @@ export const SERVER_BUILD_ERRORS = {
 
 /**
  * MCP server configuration compatible with Claude Agent SDK
- * Supports HTTP/SSE (remote) and stdio (local subprocess) transports.
+ * Supports Streamable HTTP (remote) and stdio (local subprocess) transports.
  */
 export type McpServerConfig =
-  | { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }
+  | { type: 'streamable_http'; url: string; headers?: Record<string, string> }
   | { type: 'stdio'; command: string; args?: string[]; env?: Record<string, string> };
 
 /**
@@ -104,7 +104,7 @@ export class SourceServerBuilder {
       };
     }
 
-    // Handle HTTP/SSE transport (remote servers)
+    // Handle Streamable HTTP transport (remote servers)
     if (!mcp.url) {
       debug(`[SourceServerBuilder] HTTP/SSE source ${source.config.slug} missing URL`);
       return null;
@@ -113,7 +113,7 @@ export class SourceServerBuilder {
     const url = normalizeMcpUrl(mcp.url);
 
     const config: McpServerConfig = {
-      type: mcp.transport === 'sse' ? 'sse' : 'http',
+      type: 'streamable_http',
       url,
     };
 
@@ -309,7 +309,7 @@ export class SourceServerBuilder {
             debug(`[SourceServerBuilder] Built MCP server for ${source.config.slug}`);
             mcpServers[source.config.slug] = config;
           } else if (source.config.mcp?.transport !== 'stdio' && source.config.mcp?.authType !== 'none') {
-            // Only report auth error for HTTP/SSE sources that need auth
+            // Only report auth error for Streamable HTTP sources that need auth
             // Stdio sources don't need auth
             debug(`[SourceServerBuilder] MCP server ${source.config.slug} needs auth`);
             errors.push({

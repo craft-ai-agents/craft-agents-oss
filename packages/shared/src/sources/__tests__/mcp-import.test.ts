@@ -73,7 +73,7 @@ describe('parseMcpJsonImportCandidates', () => {
           type: 'mcp',
           enabled: true,
           mcp: {
-            transport: 'http',
+            transport: 'streamable_http',
             url: 'https://mcp.linear.app/mcp',
           },
         },
@@ -94,8 +94,8 @@ describe('parseMcpJsonImportCandidates', () => {
 
     expect(result.candidates.map((candidate) => candidate.input.mcp)).toEqual([
       { transport: 'stdio', command: 'bun', args: ['server.ts'] },
-      { transport: 'sse', url: 'https://example.com/sse' },
-      { transport: 'http', url: 'https://example.com/mcp' },
+      { transport: 'streamable_http', url: 'https://example.com/sse' },
+      { transport: 'streamable_http', url: 'https://example.com/mcp' },
     ]);
     expect(result.candidates.every((candidate) => candidate.errors.length === 0)).toBe(true);
   });
@@ -144,13 +144,13 @@ describe('parseMcpJsonImportCandidates', () => {
       },
       {
         key: 'missingUrl',
-        mcp: { transport: 'sse' },
-        errors: [{ field: 'url', message: 'HTTP and SSE MCP servers require a URL string.' }],
+        mcp: { transport: 'streamable_http' },
+        errors: [{ field: 'url', message: 'Streamable HTTP MCP servers require a URL string.' }],
       },
       {
         key: 'badTransport',
-        mcp: { transport: 'http', url: 'https://example.com/mcp' },
-        errors: [{ field: 'transport', message: 'Transport must be one of: stdio, sse, http.' }],
+        mcp: { transport: 'streamable_http', url: 'https://example.com/mcp' },
+        errors: [{ field: 'transport', message: 'Transport must be one of: streamable_http, stdio.' }],
       },
       {
         key: 'badArgs',
@@ -159,7 +159,7 @@ describe('parseMcpJsonImportCandidates', () => {
       },
       {
         key: 'badHeaders',
-        mcp: { transport: 'http', url: 'https://example.com/mcp' },
+        mcp: { transport: 'streamable_http', url: 'https://example.com/mcp' },
         errors: [{ field: 'headers', message: 'Headers must be an object with string values.' }],
       },
     ]);
@@ -226,7 +226,7 @@ describe('parseMcpJsonImportCandidates', () => {
       {
         key: 'remote',
         mcp: {
-          transport: 'http',
+          transport: 'streamable_http',
           url: 'https://example.com/mcp',
           headers: {
             Authorization: '••••••••',
@@ -380,7 +380,7 @@ describe('detectDuplicateMcpImportCandidates', () => {
       writeExistingMcpSource(workspaceRootPath, {
         name: 'Linear',
         slug: 'linear',
-        mcp: { transport: 'http', authType: 'none', url: 'https://mcp.linear.app/mcp' },
+        mcp: { transport: 'streamable_http', authType: 'none', url: 'https://mcp.linear.app/mcp' },
       });
 
       const parsed = parseMcpJsonImportCandidates(JSON.stringify({
@@ -413,7 +413,7 @@ describe('detectDuplicateMcpImportCandidates', () => {
       writeExistingMcpSource(workspaceRootPath, {
         name: 'Existing Linear',
         slug: 'existing-linear',
-        mcp: { transport: 'sse', authType: 'none', url: 'https://mcp.linear.app/sse' },
+        mcp: { transport: 'streamable_http', authType: 'none', url: 'https://mcp.linear.app/sse' },
       });
 
       const parsed = parseMcpJsonImportCandidates(JSON.stringify({
@@ -471,7 +471,7 @@ describe('detectDuplicateMcpImportCandidates', () => {
       writeExistingMcpSource(workspaceRootPath, {
         name: 'Linear',
         slug: 'linear',
-        mcp: { transport: 'http', authType: 'none', url: 'https://mcp.linear.app/mcp' },
+        mcp: { transport: 'streamable_http', authType: 'none', url: 'https://mcp.linear.app/mcp' },
       });
 
       const parsed = parseMcpJsonImportCandidates(JSON.stringify({
@@ -531,7 +531,7 @@ describe('createMcpSourcesFromCandidates', () => {
       expect(config?.type).toBe('mcp');
       expect(config?.tagline).toBe('Issue tracking for product work.');
       expect(config?.mcp).toEqual({
-        transport: 'http',
+        transport: 'streamable_http',
         authType: 'none',
         url: 'https://mcp.linear.app/mcp',
         headers: { 'X-Trace-ID': 'trace-123' },
@@ -755,7 +755,7 @@ describe('createMcpSourcesFromCandidates', () => {
       writeExistingMcpSource(workspaceRootPath, {
         name: 'Linear',
         slug: 'linear',
-        mcp: { transport: 'http', authType: 'none', url: 'https://old.example.com/mcp' },
+        mcp: { transport: 'streamable_http', authType: 'none', url: 'https://old.example.com/mcp' },
       });
 
       const parsed = parseMcpJsonImportCandidates(JSON.stringify({
@@ -780,7 +780,7 @@ describe('createMcpSourcesFromCandidates', () => {
         { key: 'skipped', success: true, skipped: true },
       ]);
       expect(loadSourceConfig(workspaceRootPath, 'linear')?.mcp).toEqual({
-        transport: 'http',
+        transport: 'streamable_http',
         authType: 'none',
         url: 'https://new.example.com/mcp',
       });
@@ -983,7 +983,7 @@ describe('createMcpSourceFromManualInput', () => {
         name: 'Manual Remote',
         provider: 'manual-remote',
         mcp: {
-          transport: 'http',
+          transport: 'streamable_http',
           url: 'https://manual.example.com/mcp',
           authType: 'none',
         },
@@ -1051,7 +1051,7 @@ describe('createMcpSourceFromManualInput', () => {
         name: 'Bearer Remote',
         provider: 'bearer-remote',
         mcp: {
-          transport: 'http',
+          transport: 'streamable_http',
           url: 'https://example.com/mcp',
           authType: 'bearer',
         },
@@ -1071,7 +1071,7 @@ describe('createMcpSourceFromManualInput', () => {
         name: 'API Key Remote',
         provider: 'api-key-remote',
         mcp: {
-          transport: 'sse',
+          transport: 'streamable_http',
           url: 'https://example.com/sse',
           authType: 'none',
         },
@@ -1096,12 +1096,12 @@ describe('createMcpSourceFromManualInput', () => {
         { slug: 'api-key-remote', value: JSON.stringify({ 'X-API-Key': 'api-key-123' }) },
       ]);
       expect(bearer.mcp).toEqual({
-        transport: 'http',
+        transport: 'streamable_http',
         authType: 'bearer',
         url: 'https://example.com/mcp',
       });
       expect(apiKey.mcp).toEqual({
-        transport: 'sse',
+        transport: 'streamable_http',
         authType: 'none',
         url: 'https://example.com/sse',
         headerNames: ['X-API-Key'],
@@ -1132,7 +1132,7 @@ describe('enableInWorkspace', () => {
         provider: 'metadata-test',
         enableInWorkspace: false,
         mcp: {
-          transport: 'http',
+          transport: 'streamable_http',
           url: 'https://example.com/mcp',
           authType: 'none',
         },

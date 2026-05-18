@@ -1,6 +1,6 @@
 /**
  * MCP client using official @modelcontextprotocol/sdk
- * Supports both HTTP and stdio transports for remote and local MCP servers
+ * Supports both Streamable HTTP and stdio transports for remote and local MCP servers
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -10,10 +10,10 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 /**
- * HTTP transport config for remote MCP servers
+ * Streamable HTTP transport config for remote MCP servers
  */
 export interface HttpMcpClientConfig {
-  transport: 'http';
+  transport: 'streamable_http';
   url: string;
   headers?: Record<string, string>;
 }
