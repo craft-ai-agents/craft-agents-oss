@@ -127,6 +127,7 @@ import type { PulseAction } from '@craft-agent/shared/pulses'
 import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
 import { CONCIERGE_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
+import { filterAttachmentsForModelInput } from './runtime-config'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
@@ -6477,7 +6478,21 @@ user a clickable link to where the thing now lives.`
       }
 
       sendSpan.mark('chat.starting')
-      const chatIterator = agent.chat(effectiveMessage, attachments)
+      const messageBackendContext = resolveBackendContext({
+        sessionConnectionSlug: managed.llmConnection,
+        workspaceDefaultConnectionSlug: loadWorkspaceConfig(workspaceRootPath)?.defaults?.defaultLlmConnection,
+        managedModel: managed.model,
+      })
+      const attachmentFilter = filterAttachmentsForModelInput(
+        attachments,
+        messageBackendContext.connection,
+        messageBackendContext.resolvedModel,
+      )
+      if (attachmentFilter.omittedImages.length > 0) {
+        sessionLog.warn(`Omitting ${attachmentFilter.omittedImages.length} image attachment(s) for text-only model ${messageBackendContext.resolvedModel} on connection ${managed.llmConnection ?? 'unknown'}`)
+      }
+
+      const chatIterator = agent.chat(effectiveMessage, attachmentFilter.attachments)
       sessionLog.info('Got chat iterator, starting iteration...')
 
       for await (const event of chatIterator) {

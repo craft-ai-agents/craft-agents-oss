@@ -394,6 +394,28 @@ export function isCompatProvider(providerType: LlmProviderType): boolean {
 }
 
 /**
+ * Resolve whether a given model on a connection accepts image input.
+ *
+ * For custom-endpoint connections, per-model supportsImages overrides the
+ * connection-level default. For non-compat providers, return true because the
+ * provider/runtime owns capability enforcement.
+ */
+export function modelSupportsImages(
+  connection: Pick<LlmConnection, 'providerType' | 'models' | 'customEndpoint'>,
+  modelId: string,
+): boolean {
+  if (!isCompatProvider(connection.providerType)) return true;
+
+  const entry = connection.models?.find(m =>
+    (typeof m === 'string' ? m : m.id) === modelId,
+  );
+  if (entry && typeof entry !== 'string' && typeof entry.supportsImages === 'boolean') {
+    return entry.supportsImages;
+  }
+  return connection.customEndpoint?.supportsImages ?? false;
+}
+
+/**
  * Check if a provider type uses the Anthropic Claude Agent SDK.
  * Only direct Anthropic API connections use the Claude SDK.
  * @param providerType - Provider type to check
