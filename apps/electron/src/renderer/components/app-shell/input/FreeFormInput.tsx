@@ -73,6 +73,7 @@ import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceSelectorPopover } from '@/components/ui/SourceSelectorPopover'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
+import { derivePickerMode } from './picker-mode'
 import type { FileAttachment, LoadedSource, LoadedSkill, LlmConnectionWithStatus } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelNameKey } from '@craft-agent/shared/agent/thinking-levels'
@@ -332,6 +333,13 @@ export function FreeFormInput({
     if (conn.models && conn.models.length > 1) return null
     return conn.defaultModel ?? null
   }, [currentConnection, workspaceDefaultConnection, llmConnections])
+
+  const pickerMode = derivePickerMode({
+    connectionUnavailable,
+    connectionDefaultModel,
+    isEmptySession,
+    connectionCount: llmConnections.length,
+  })
 
   // Compute available models from the effective connection.
   // All connections have models populated by backfillAllConnectionModels().
@@ -2021,7 +2029,7 @@ export function FreeFormInput({
                       <>
                         {effectiveConnectionDetails && llmConnections.length > 1 && storage.get(storage.KEYS.showConnectionIcons, true) && <ConnectionIcon connection={effectiveConnectionDetails} size={14} showTooltip />}
                         {currentModelDisplayName}
-                        {!connectionDefaultModel && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
+                        {pickerMode !== 'locked-single' && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
                       </>
                     )}
                   </button>
@@ -2033,7 +2041,7 @@ export function FreeFormInput({
             </Tooltip>
             <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[260px]">
               {/* Connection unavailable message */}
-              {connectionUnavailable ? (
+              {pickerMode === 'unavailable' ? (
                 <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
                   <AlertCircle className="h-8 w-8 text-destructive mb-2" />
                   <div className="font-medium text-sm mb-1">{t('chat.connectionUnavailable')}</div>
@@ -2041,7 +2049,7 @@ export function FreeFormInput({
                     {t('chat.connectionUnavailableDescription')}
                   </div>
                 </div>
-              ) : connectionDefaultModel ? (
+              ) : pickerMode === 'locked-single' && connectionDefaultModel ? (
                 <StyledDropdownMenuItem
                   disabled
                   className="flex items-center justify-between px-2 py-2 rounded-lg"
@@ -2052,7 +2060,7 @@ export function FreeFormInput({
                   </div>
                   <Check className="h-3 w-3 text-foreground shrink-0 ml-3" />
                 </StyledDropdownMenuItem>
-              ) : isEmptySession && llmConnections.length > 1 ? (
+              ) : pickerMode === 'switcher' ? (
                 /* Hierarchical view: Provider → Connection → Models (for new sessions with multiple connections) */
                 connectionsByProvider.map(([providerName, connections], index) => (
                   <React.Fragment key={providerName}>
