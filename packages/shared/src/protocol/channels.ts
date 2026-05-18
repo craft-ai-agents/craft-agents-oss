@@ -393,6 +393,12 @@ export const RPC_CHANNELS = {
     REPLAY: 'automations:replay',
     CHANGED: 'automations:changed',
   },
+  teamKnowledge: {
+    GET_CONFIG: 'teamKnowledge:getConfig',
+    UPDATE_CONFIG: 'teamKnowledge:updateConfig',
+    REFRESH: 'teamKnowledge:refresh',
+    CHANGED: 'teamKnowledge:changed',
+  },
   resources: {
     EXPORT: 'resources:export',
     IMPORT: 'resources:import',

@@ -82,6 +82,7 @@ mock.module('@craft-agent/shared/config', () => ({
   migrateOrphanedDefaultConnections: async () => {},
   MODEL_REGISTRY: [],
   // Targeted stubs: prevent SyntaxError in tests that import these from the barrel
+  CONFIG_DIR: '/tmp/craft-agent-config',
   DEFAULT_MODEL: 'claude-sonnet-4-20250514',
   DEFAULT_THEME: { mode: 'system' },
   getDefaultModelsForConnection: () => ({ default: 'claude-sonnet-4-20250514', mini: 'claude-haiku-4-5-20251001' }),

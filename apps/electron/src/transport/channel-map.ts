@@ -255,6 +255,12 @@ export const CHANNEL_MAP = {
   reorderStatuses: invoke(RPC_CHANNELS.statuses.REORDER),
   onStatusesChanged: listener(RPC_CHANNELS.statuses.CHANGED),
 
+  // Team Knowledge
+  getTeamKnowledgeConfig: invoke(RPC_CHANNELS.teamKnowledge.GET_CONFIG),
+  updateTeamKnowledgeConfig: invoke(RPC_CHANNELS.teamKnowledge.UPDATE_CONFIG),
+  refreshTeamKnowledge: invoke(RPC_CHANNELS.teamKnowledge.REFRESH),
+  onTeamKnowledgeChanged: listener(RPC_CHANNELS.teamKnowledge.CHANGED),
+
   // Labels
   listLabels: invoke(RPC_CHANNELS.labels.LIST),
   createLabel: invoke(RPC_CHANNELS.labels.CREATE),

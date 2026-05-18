@@ -11,6 +11,7 @@ import { registerOAuthHandlers } from './oauth'
 import { registerResourcesHandlers } from './resources'
 import { registerOnboardingHandlers } from './onboarding'
 import { registerSessionsHandlers } from './sessions'
+import { registerTeamKnowledgeHandlers } from './teamKnowledge'
 export { registerSessionsHandlers, cleanupSessionFileWatchForClient } from './sessions'
 export { cleanupWorkspaceFileWatchForClient } from './workspace-files'
 import { registerServerHandlers } from './server'
@@ -47,6 +48,7 @@ export function registerCoreRpcHandlers(
   registerSkillsHandlers(server, deps)
   registerSourcesHandlers(server, deps)
   registerStatusesHandlers(server, deps)
+  registerTeamKnowledgeHandlers(server, deps)
   registerSystemCoreHandlers(server, deps)
   registerTransferHandlers(server)
   registerWorkspaceCoreHandlers(server, deps)

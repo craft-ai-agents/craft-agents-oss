@@ -430,6 +430,12 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.resources.EXPORT,
   RPC_CHANNELS.resources.IMPORT,
 
+  // teamKnowledge — workspace-scoped team knowledge cache
+  RPC_CHANNELS.teamKnowledge.GET_CONFIG,
+  RPC_CHANNELS.teamKnowledge.UPDATE_CONFIG,
+  RPC_CHANNELS.teamKnowledge.REFRESH,
+  RPC_CHANNELS.teamKnowledge.CHANGED,
+
   // messaging — gateway channels run on workspace server
   RPC_CHANNELS.messaging.WA_REGISTER,
   RPC_CHANNELS.messaging.WA_INCOMING,
