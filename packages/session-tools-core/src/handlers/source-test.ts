@@ -127,7 +127,9 @@ export async function handleSourceTest(
   } else if (connectionResult.success) {
     connectionStatus = 'connected';
   } else {
+    // Soft failure: the endpoint was reachable but not healthy enough to activate.
     connectionStatus = 'disconnected';
+    hasWarnings = true;
   }
 
   // 7. Auth status
@@ -139,7 +141,7 @@ export async function handleSourceTest(
   // 8. Auto-enable + metadata update
   // Defaults to true; pass autoEnable: false to keep pure validation behavior.
   const autoEnable = args.autoEnable !== false;
-  const shouldAutoEnable = autoEnable && !hasErrors;
+  const shouldAutoEnable = autoEnable && !hasErrors && connectionStatus === 'connected';
   const willFlipEnabled = shouldAutoEnable && source.enabled === false;
 
   if (ctx.saveSourceConfig) {
@@ -186,6 +188,8 @@ export async function handleSourceTest(
       // Only nag about restart if we actually flipped the flag.
       lines.push('ℹ Config updated. Restart session to load tools (mid-session activation not available in this backend).');
     }
+  } else if (autoEnable && !hasErrors && connectionStatus !== 'connected') {
+    lines.push(`ℹ Skipping activation because connection test did not succeed (status: ${connectionStatus}). Re-run source_test once the endpoint is reachable.`);
   }
 
   // Summary
@@ -557,11 +561,23 @@ async function testApiConnectionWithAuth(
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     const method = source.api!.testEndpoint?.method || 'GET';
-    const response = await fetch(urlWithAuth, {
-      method,
-      headers,
-      signal: controller.signal,
-    });
+    const body = source.api!.testEndpoint?.body;
+    const extraHeaders = source.api!.testEndpoint?.headers;
+
+    if (extraHeaders) {
+      for (const [key, value] of Object.entries(extraHeaders)) {
+        if (!(key in headers)) headers[key] = value;
+      }
+    }
+
+    const init: RequestInit = { method, headers, signal: controller.signal };
+    if (body !== undefined && method !== 'GET') {
+      init.body = typeof body === 'string' ? body : JSON.stringify(body);
+      const hasContentType = Object.keys(headers).some((key) => key.toLowerCase() === 'content-type');
+      if (!hasContentType) headers['Content-Type'] = 'application/json';
+    }
+
+    const response = await fetch(urlWithAuth, init);
 
     clearTimeout(timeoutId);
 
@@ -610,18 +626,25 @@ async function testApiConnectionBasic(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    // Try HEAD first
-    let response = await fetch(testUrl, {
-      method: 'HEAD',
-      signal: controller.signal,
-    }).catch(() => null);
-
-    // If HEAD returns 405, try GET
-    if (response && response.status === 405) {
+    const configuredMethod = source.api?.testEndpoint?.method;
+    let response: Response | null;
+    if (configuredMethod) {
       response = await fetch(testUrl, {
-        method: 'GET',
+        method: configuredMethod,
         signal: controller.signal,
       }).catch(() => null);
+    } else {
+      response = await fetch(testUrl, {
+        method: 'HEAD',
+        signal: controller.signal,
+      }).catch(() => null);
+
+      if (response && response.status === 405) {
+        response = await fetch(testUrl, {
+          method: 'GET',
+          signal: controller.signal,
+        }).catch(() => null);
+      }
     }
 
     clearTimeout(timeoutId);
@@ -732,9 +755,10 @@ async function testMcpConnection(
     if (ctx.validateMcpConnection) {
       lines.push(`ℹ Testing MCP server: ${source.mcp.url}`);
       try {
-        // Merge static headers with credential-store headers (if headerNames configured)
+        // Merge static headers with credential-store headers or access token.
         let headers = source.mcp.headers ? { ...source.mcp.headers } : undefined;
-        if (source.mcp.headerNames?.length && ctx.credentialManager) {
+        let accessToken: string | undefined;
+        if (ctx.credentialManager) {
           const workspaceId = basename(ctx.workspacePath) || '';
           const loadedSource = {
             config: source,
@@ -742,14 +766,26 @@ async function testMcpConnection(
             workspaceRootPath: ctx.workspacePath,
             workspaceId,
           };
-          try {
-            const rawCred = await ctx.credentialManager.getToken(loadedSource);
-            if (rawCred) {
-              const parsed = JSON.parse(rawCred) as Record<string, string>;
-              headers = { ...headers, ...parsed };
+
+          if (source.mcp.headerNames?.length) {
+            try {
+              const rawCred = await ctx.credentialManager.getToken(loadedSource);
+              if (rawCred) {
+                const parsed = JSON.parse(rawCred) as Record<string, string>;
+                headers = { ...headers, ...parsed };
+              }
+            } catch {
+              // Not JSON or no credential — continue without credential headers.
             }
-          } catch {
-            // Not JSON or no credential — continue without credential headers
+          } else if (source.mcp.authType === 'oauth' || source.mcp.authType === 'bearer') {
+            try {
+              accessToken =
+                (await ctx.credentialManager.getToken(loadedSource)) ??
+                (await ctx.credentialManager.refresh(loadedSource)) ??
+                undefined;
+            } catch {
+              // Token resolution failed — the probe will surface auth failure.
+            }
           }
         }
         const result = await ctx.validateMcpConnection({
@@ -757,6 +793,7 @@ async function testMcpConnection(
           transport: source.mcp.transport,
           authType: source.mcp.authType,
           headers,
+          accessToken,
         });
         if (result.success) {
           success = true;

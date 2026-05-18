@@ -22,6 +22,8 @@ type ActivateResult = Awaited<
 interface CtxOverrides {
   activateSourceInSession?: (slug: string) => Promise<ActivateResult>;
   validateStdioMcpConnection?: SessionToolContext['validateStdioMcpConnection'];
+  validateMcpConnection?: SessionToolContext['validateMcpConnection'];
+  credentialManager?: SessionToolContext['credentialManager'];
 }
 
 function createCtx(workspacePath: string, overrides: CtxOverrides = {}): SessionToolContext {
@@ -64,6 +66,8 @@ function createCtx(workspacePath: string, overrides: CtxOverrides = {}): Session
     },
     // Stub the MCP validator so connection tests don't hit the network.
     validateStdioMcpConnection: overrides.validateStdioMcpConnection,
+    validateMcpConnection: overrides.validateMcpConnection,
+    credentialManager: overrides.credentialManager,
     activateSourceInSession: overrides.activateSourceInSession,
   } as unknown as SessionToolContext;
   // Expose saved for assertions (test-only — not on real ctx).
@@ -274,5 +278,258 @@ describe('source_test auto-enable', () => {
     expect(text).toContain('turn will auto-restart');
     expect(text).not.toContain('tools available now');
     expect(text).not.toContain('available on your next message');
+  });
+});
+
+interface FetchCall {
+  url: string;
+  init?: RequestInit;
+}
+
+function installFetchStub(
+  responder: (call: FetchCall) => Response | Promise<Response>
+): { calls: FetchCall[]; restore: () => void } {
+  const calls: FetchCall[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : String(input);
+    const call: FetchCall = { url, init };
+    calls.push(call);
+    return responder(call);
+  }) as typeof fetch;
+  return {
+    calls,
+    restore: () => {
+      globalThis.fetch = original;
+    },
+  };
+}
+
+function writeApiSource(
+  workspacePath: string,
+  slug: string,
+  overrides: Partial<SourceConfig> = {}
+): void {
+  const sourcePath = join(workspacePath, 'sources', slug);
+  mkdirSync(sourcePath, { recursive: true });
+  const config: SourceConfig = {
+    id: slug,
+    slug,
+    name: slug,
+    enabled: false,
+    provider: 'test',
+    type: 'api',
+    tagline: 'A test API source',
+    icon: '🧪',
+    api: {
+      baseUrl: 'https://api.example.test',
+      authType: 'none',
+    },
+    ...overrides,
+  } as SourceConfig;
+  writeFileSync(join(sourcePath, 'config.json'), JSON.stringify(config, null, 2));
+  writeFileSync(
+    join(sourcePath, 'guide.md'),
+    '# Guide\n\nThis is a longer guide with more than fifty words so the validator does not warn about the guide being too short for the readability criteria the tool enforces when evaluating source completeness for this test suite which is only here to exercise connection behavior.'
+  );
+}
+
+describe('source_test API connection branches', () => {
+  let tempDir: string;
+  let restoreFetch: () => void = () => {};
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'source-test-api-conn-'));
+  });
+
+  afterEach(() => {
+    restoreFetch();
+    restoreFetch = () => {};
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('500 stays disabled and skips activation', async () => {
+    writeApiSource(tempDir, 'flaky-api');
+    ({ restore: restoreFetch } = installFetchStub(() => new Response(null, { status: 500 })));
+
+    let activated = false;
+    const result = await handleSourceTest(createCtx(tempDir, {
+      activateSourceInSession: async () => {
+        activated = true;
+        return { ok: true };
+      },
+    }), { sourceSlug: 'flaky-api' });
+
+    const text = result.content[0]?.text ?? '';
+    expect(text).toContain('Validation passed with warnings');
+    expect(text).toContain('Skipping activation');
+    expect(activated).toBe(false);
+
+    const persisted = JSON.parse(
+      readFileSync(join(tempDir, 'sources', 'flaky-api', 'config.json'), 'utf-8')
+    ) as SourceConfig;
+    expect(persisted.enabled).toBe(false);
+    expect(persisted.connectionStatus).toBe('disconnected');
+  });
+
+  it('basic probe honors configured testEndpoint.method', async () => {
+    writeApiSource(tempDir, 'post-only-api', {
+      api: {
+        baseUrl: 'https://api.example.test',
+        authType: 'none',
+        testEndpoint: { method: 'POST', path: '/v1/things' },
+      },
+    } as Partial<SourceConfig>);
+
+    const stub = installFetchStub(() => new Response(null, { status: 200 }));
+    restoreFetch = stub.restore;
+
+    await handleSourceTest(createCtx(tempDir, {
+      activateSourceInSession: async () => ({ ok: true }),
+    }), { sourceSlug: 'post-only-api' });
+
+    expect(stub.calls.length).toBe(1);
+    expect(stub.calls[0]?.init?.method).toBe('POST');
+    expect(stub.calls[0]?.url).toBe('https://api.example.test/v1/things');
+  });
+});
+
+function writeHttpMcpSource(
+  workspacePath: string,
+  slug: string,
+  overrides: Partial<SourceConfig> = {}
+): void {
+  const sourcePath = join(workspacePath, 'sources', slug);
+  mkdirSync(sourcePath, { recursive: true });
+  const config: SourceConfig = {
+    id: slug,
+    slug,
+    name: slug,
+    enabled: true,
+    provider: 'test',
+    type: 'mcp',
+    tagline: 'A test HTTP MCP source',
+    icon: '🧪',
+    mcp: {
+      transport: 'http',
+      url: 'https://mcp.example.test',
+      authType: 'oauth',
+    },
+    ...overrides,
+  } as SourceConfig;
+  writeFileSync(join(sourcePath, 'config.json'), JSON.stringify(config, null, 2));
+  writeFileSync(
+    join(sourcePath, 'guide.md'),
+    '# Guide\n\nThis is a longer guide with more than fifty words so the validator does not warn about the guide being too short for the readability criteria the tool enforces when evaluating source completeness for this test suite which is only here to exercise probe credential behavior.'
+  );
+}
+
+interface CredManagerStub {
+  manager: NonNullable<SessionToolContext['credentialManager']>;
+  getTokenCalls: number;
+  refreshCalls: number;
+}
+
+function makeCredentialManager({
+  cachedToken,
+  refreshedToken,
+}: {
+  cachedToken?: string | null;
+  refreshedToken?: string | null;
+}): CredManagerStub {
+  const stub: CredManagerStub = {
+    manager: {
+      hasValidCredentials: async () => Boolean(cachedToken),
+      getToken: async () => {
+        stub.getTokenCalls += 1;
+        return cachedToken ?? null;
+      },
+      refresh: async () => {
+        stub.refreshCalls += 1;
+        return refreshedToken ?? null;
+      },
+    },
+    getTokenCalls: 0,
+    refreshCalls: 0,
+  };
+  return stub;
+}
+
+describe('source_test HTTP MCP probe credential forwarding', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'source-test-mcp-cred-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('OAuth MCP forwards cached accessToken without refresh', async () => {
+    writeHttpMcpSource(tempDir, 'oauth-cached');
+    const cred = makeCredentialManager({ cachedToken: 'cached-tok' });
+    const calls: Array<Parameters<NonNullable<SessionToolContext['validateMcpConnection']>>[0]> = [];
+
+    await handleSourceTest(createCtx(tempDir, {
+      credentialManager: cred.manager,
+      validateMcpConnection: async (config) => {
+        calls.push(config);
+        return { success: true, toolCount: 2 };
+      },
+    }), { sourceSlug: 'oauth-cached', autoEnable: false });
+
+    expect(calls.length).toBe(1);
+    expect(calls[0]?.accessToken).toBe('cached-tok');
+    expect(cred.getTokenCalls).toBe(1);
+    expect(cred.refreshCalls).toBe(0);
+  });
+
+  it('OAuth MCP falls back to refresh on token miss', async () => {
+    writeHttpMcpSource(tempDir, 'oauth-refresh');
+    const cred = makeCredentialManager({ cachedToken: null, refreshedToken: 'fresh-tok' });
+    const calls: Array<Parameters<NonNullable<SessionToolContext['validateMcpConnection']>>[0]> = [];
+
+    await handleSourceTest(createCtx(tempDir, {
+      credentialManager: cred.manager,
+      validateMcpConnection: async (config) => {
+        calls.push(config);
+        return { success: true };
+      },
+    }), { sourceSlug: 'oauth-refresh', autoEnable: false });
+
+    expect(calls.length).toBe(1);
+    expect(calls[0]?.accessToken).toBe('fresh-tok');
+    expect(cred.getTokenCalls).toBe(1);
+    expect(cred.refreshCalls).toBe(1);
+  });
+
+  it('headerNames flow still merges credential headers', async () => {
+    writeHttpMcpSource(tempDir, 'header-style', {
+      mcp: {
+        transport: 'http',
+        url: 'https://mcp.example.test',
+        headerNames: ['X-Api-Key'],
+      },
+    } as Partial<SourceConfig>);
+    const cred = makeCredentialManager({ cachedToken: JSON.stringify({ 'X-Api-Key': 'k1' }) });
+    const calls: Array<Parameters<NonNullable<SessionToolContext['validateMcpConnection']>>[0]> = [];
+
+    await handleSourceTest(createCtx(tempDir, {
+      credentialManager: cred.manager,
+      validateMcpConnection: async (config) => {
+        calls.push(config);
+        return { success: true };
+      },
+    }), { sourceSlug: 'header-style', autoEnable: false });
+
+    expect(calls.length).toBe(1);
+    expect(calls[0]?.headers).toEqual({ 'X-Api-Key': 'k1' });
+    expect(calls[0]?.accessToken).toBeUndefined();
   });
 });
