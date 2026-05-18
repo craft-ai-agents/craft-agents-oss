@@ -119,7 +119,7 @@ export interface SsoLogoutDeps {
 }
 
 /** Build the OIDC authorization URL used to start system-browser SSO login. */
-export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): { authUrl: string; nonce: string } {
+export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): { authUrl: string; nonce: string | null } {
   const authUrl = env.MDP_AUTH_URL
   const clientId = env.MDP_CLIENT_ID
 
@@ -136,12 +136,17 @@ export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): { authUr
     throw new Error('MDP_RELAY_URL is required to start SSO login')
   }
 
-  const nonce = randomBytes(16).toString('hex')
   const url = new URL(authUrl)
   url.searchParams.set('client_id', clientId)
   url.searchParams.set('redirect_uri', relayUrl)
   url.searchParams.set('response_type', 'code')
-  url.searchParams.set('state', encodeOAuthRelayState(DEFAULT_SSO_CALLBACK_URL, nonce))
+
+  let nonce: string | null = null
+  if (env.MDP_ENABLE_SSO_STATE_CHECK === '1') {
+    nonce = randomBytes(16).toString('hex')
+    url.searchParams.set('state', encodeOAuthRelayState(DEFAULT_SSO_CALLBACK_URL, nonce))
+  }
+
   return { authUrl: url.toString(), nonce }
 }
 
@@ -156,16 +161,18 @@ export function startSsoLogin(env: NodeJS.ProcessEnv = process.env): string {
 export async function handleSsoCallback(
   payload: { code?: string; state?: string },
   deps: SsoCallbackDeps = createSsoSessionDeps(),
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<{ success: boolean; error?: string }> {
   const expectedNonce = pendingSsoNonce
   pendingSsoNonce = null
 
-  if (!expectedNonce) {
-    return { success: false }
-  }
-
-  if (payload.state !== expectedNonce) {
-    return { success: false, error: 'Invalid SSO state' }
+  if (env.MDP_ENABLE_SSO_STATE_CHECK === '1') {
+    if (!expectedNonce) {
+      return { success: false }
+    }
+    if (payload.state !== expectedNonce) {
+      return { success: false, error: 'Invalid SSO state' }
+    }
   }
 
   if (!payload.code) {

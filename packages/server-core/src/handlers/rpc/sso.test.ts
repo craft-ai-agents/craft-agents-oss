@@ -23,16 +23,19 @@ const ssoEnv = {
   MDP_RELAY_URL: RELAY_URL,
 } as NodeJS.ProcessEnv
 
+const strictEnv = { ...ssoEnv, MDP_ENABLE_SSO_STATE_CHECK: '1' } as NodeJS.ProcessEnv
+
 function nonceFromAuthUrl(authUrl: string): string {
   return decodeOAuthRelayState(new URL(authUrl).searchParams.get('state') ?? '').innerState
 }
 
 describe('SSO RPC handlers', () => {
-  it('builds the OIDC authorization URL from environment configuration', () => {
+  it('builds the OIDC authorization URL with a nonce state when MDP_ENABLE_SSO_STATE_CHECK is set', () => {
     const { authUrl, nonce } = buildSsoLoginUrl({
       MDP_AUTH_URL: 'https://auth.example.test/oauth/authorize?prompt=login',
       MDP_CLIENT_ID: 'desktop-client',
       MDP_RELAY_URL: RELAY_URL,
+      MDP_ENABLE_SSO_STATE_CHECK: '1',
     } as NodeJS.ProcessEnv)
     const url = new URL(authUrl)
     const state = url.searchParams.get('state')
@@ -46,8 +49,20 @@ describe('SSO RPC handlers', () => {
     expect(state).toStartWith('ca1.')
     expect(decodeOAuthRelayState(state ?? '')).toEqual({
       returnTo: 'mdp://sso-callback',
-      innerState: nonce,
+      innerState: nonce!,
     })
+  })
+
+  it('builds the OIDC authorization URL without a state param when MDP_ENABLE_SSO_STATE_CHECK is not set', () => {
+    const { authUrl, nonce } = buildSsoLoginUrl({
+      MDP_AUTH_URL: 'https://auth.example.test/oauth/authorize',
+      MDP_CLIENT_ID: 'desktop-client',
+      MDP_RELAY_URL: RELAY_URL,
+    } as NodeJS.ProcessEnv)
+    const url = new URL(authUrl)
+
+    expect(url.searchParams.get('state')).toBeNull()
+    expect(nonce).toBeNull()
   })
 
   it('requires the auth URL to build an SSO login URL', () => {
@@ -74,6 +89,7 @@ describe('SSO RPC handlers', () => {
       MDP_AUTH_URL: process.env.MDP_AUTH_URL,
       MDP_CLIENT_ID: process.env.MDP_CLIENT_ID,
       MDP_RELAY_URL: process.env.MDP_RELAY_URL,
+      MDP_ENABLE_SSO_STATE_CHECK: process.env.MDP_ENABLE_SSO_STATE_CHECK,
     }
     const handlers = new Map<string, (ctx: unknown, ...args: unknown[]) => unknown>()
     const server = {
@@ -88,6 +104,7 @@ describe('SSO RPC handlers', () => {
       process.env.MDP_AUTH_URL = 'https://auth.example.test/oauth/authorize'
       process.env.MDP_CLIENT_ID = 'desktop-client'
       process.env.MDP_RELAY_URL = RELAY_URL
+      process.env.MDP_ENABLE_SSO_STATE_CHECK = '1'
       registerSsoHandlers(server as never, { platform: { isPackaged: false } } as never)
 
       const authUrl = await handlers.get(RPC_CHANNELS.sso.START_LOGIN)?.({
@@ -105,6 +122,8 @@ describe('SSO RPC handlers', () => {
       else process.env.MDP_CLIENT_ID = previous.MDP_CLIENT_ID
       if (previous.MDP_RELAY_URL === undefined) delete process.env.MDP_RELAY_URL
       else process.env.MDP_RELAY_URL = previous.MDP_RELAY_URL
+      if (previous.MDP_ENABLE_SSO_STATE_CHECK === undefined) delete process.env.MDP_ENABLE_SSO_STATE_CHECK
+      else process.env.MDP_ENABLE_SSO_STATE_CHECK = previous.MDP_ENABLE_SSO_STATE_CHECK
       await handleSsoCallback(
         { code: 'clear-pending-nonce', state: 'clear-pending-nonce' },
         {
@@ -122,7 +141,7 @@ describe('SSO RPC handlers', () => {
   it('exchanges an SSO callback code and persists the session', async () => {
     const calls: string[] = []
     let savedSession: unknown = null
-    const nonce = nonceFromAuthUrl(startSsoLogin(ssoEnv))
+    const nonce = nonceFromAuthUrl(startSsoLogin(strictEnv))
 
     const result = await handleSsoCallback(
       { code: 'abc123', state: nonce },
@@ -146,8 +165,8 @@ describe('SSO RPC handlers', () => {
     expect(savedSession).toEqual(session)
   })
 
-  it('rejects an SSO callback with the wrong nonce without touching the auth client', async () => {
-    startSsoLogin(ssoEnv)
+  it('rejects an SSO callback with the wrong nonce when the state check flag is enabled', async () => {
+    startSsoLogin(strictEnv)
     let loginCalls = 0
 
     const result = await handleSsoCallback(
@@ -165,14 +184,37 @@ describe('SSO RPC handlers', () => {
           },
         },
       },
+      strictEnv,
     )
 
     expect(result).toEqual({ success: false, error: 'Invalid SSO state' })
     expect(loginCalls).toBe(0)
   })
 
+  it('allows an SSO callback with the wrong state when the state check flag is disabled', async () => {
+    startSsoLogin(ssoEnv)
+    let loginCalls = 0
+
+    const result = await handleSsoCallback(
+      { code: 'abc123', state: 'wrong-nonce' },
+      {
+        authClient: {
+          login: async () => {
+            loginCalls += 1
+            return session
+          },
+        },
+        credentialStore: { save: async () => {} },
+      },
+      ssoEnv,
+    )
+
+    expect(result).toEqual({ success: true })
+    expect(loginCalls).toBe(1)
+  })
+
   it('rejects a replayed SSO callback because the nonce is cleared after first use', async () => {
-    const nonce = nonceFromAuthUrl(startSsoLogin(ssoEnv))
+    const nonce = nonceFromAuthUrl(startSsoLogin(strictEnv))
     const calls: string[] = []
     const deps = {
       authClient: {
@@ -186,8 +228,8 @@ describe('SSO RPC handlers', () => {
       },
     }
 
-    expect(await handleSsoCallback({ code: 'abc123', state: nonce }, deps)).toEqual({ success: true })
-    expect(await handleSsoCallback({ code: 'abc123', state: nonce }, deps)).toEqual({ success: false })
+    expect(await handleSsoCallback({ code: 'abc123', state: nonce }, deps, strictEnv)).toEqual({ success: true })
+    expect(await handleSsoCallback({ code: 'abc123', state: nonce }, deps, strictEnv)).toEqual({ success: false })
     expect(calls).toEqual(['abc123'])
   })
 
@@ -207,6 +249,7 @@ describe('SSO RPC handlers', () => {
           save: async () => {},
         },
       },
+      strictEnv,
     )
 
     expect(result).toEqual({ success: false })
@@ -214,7 +257,7 @@ describe('SSO RPC handlers', () => {
   })
 
   it('clears the pending SSO nonce after a failed validation', async () => {
-    const nonce = nonceFromAuthUrl(startSsoLogin(ssoEnv))
+    const nonce = nonceFromAuthUrl(startSsoLogin(strictEnv))
     let loginCalls = 0
     const deps = {
       authClient: {
@@ -228,16 +271,16 @@ describe('SSO RPC handlers', () => {
       },
     }
 
-    expect(await handleSsoCallback({ code: 'abc123', state: 'wrong-nonce' }, deps)).toEqual({
+    expect(await handleSsoCallback({ code: 'abc123', state: 'wrong-nonce' }, deps, strictEnv)).toEqual({
       success: false,
       error: 'Invalid SSO state',
     })
-    expect(await handleSsoCallback({ code: 'abc123', state: nonce }, deps)).toEqual({ success: false })
+    expect(await handleSsoCallback({ code: 'abc123', state: nonce }, deps, strictEnv)).toEqual({ success: false })
     expect(loginCalls).toBe(0)
   })
 
   it('returns a failed result when the code exchange fails', async () => {
-    const nonce = nonceFromAuthUrl(startSsoLogin(ssoEnv))
+    const nonce = nonceFromAuthUrl(startSsoLogin(strictEnv))
 
     const result = await handleSsoCallback(
       { code: 'abc123', state: nonce },
@@ -253,14 +296,15 @@ describe('SSO RPC handlers', () => {
           },
         },
       },
+      strictEnv,
     )
 
     expect(result).toEqual({ success: false, error: 'invalid_grant' })
   })
 
   it('keeps only the latest pending SSO nonce', async () => {
-    const firstNonce = nonceFromAuthUrl(startSsoLogin(ssoEnv))
-    const secondNonce = nonceFromAuthUrl(startSsoLogin(ssoEnv))
+    const firstNonce = nonceFromAuthUrl(startSsoLogin(strictEnv))
+    const secondNonce = nonceFromAuthUrl(startSsoLogin(strictEnv))
     let loginCalls = 0
 
     const firstResult = await handleSsoCallback(
@@ -276,6 +320,7 @@ describe('SSO RPC handlers', () => {
           save: async () => {},
         },
       },
+      strictEnv,
     )
 
     expect(firstResult).toEqual({ success: false, error: 'Invalid SSO state' })
