@@ -299,6 +299,14 @@ if (!gotTheLock) {
     // Someone tried to run a second instance, we should focus our window.
     // On Windows/Linux, the deeplink is in commandLine
     const url = commandLine.find(arg => arg.startsWith(`${DEEPLINK_SCHEME}://`))
+    if (windowManager) {
+      const windows = windowManager.getAllWindows()
+      if (windows.length > 0) {
+        const win = windows[0].window
+        if (win.isMinimized()) win.restore()
+        win.focus()
+      }
+    }
     if (url && windowManager) {
       mainLog.info('Received deeplink from second instance:', url)
       handleDeepLink(url, windowManager, {
@@ -308,14 +316,6 @@ if (!gotTheLock) {
       }).catch(err => {
         mainLog.error('Failed to handle deep link:', err)
       })
-    } else if (windowManager) {
-      // No deep link - just focus the first window
-      const windows = windowManager.getAllWindows()
-      if (windows.length > 0) {
-        const win = windows[0].window
-        if (win.isMinimized()) win.restore()
-        win.focus()
-      }
     }
   })
 }
