@@ -6,11 +6,17 @@ import {
 } from '../config/storage.ts';
 import type { SsoSession } from './mdp-auth-client.ts';
 
+/** Non-sensitive SSO session fields stored in the plain app config. */
 export interface SsoSessionIdentity {
+  /** Employee identifier from the MDP identity response. */
   employeeId: string;
+  /** YST identifier from the MDP identity response. */
   ystId: string;
+  /** Employee department from the MDP identity response. */
   department: string;
+  /** Display name from the MDP identity response. */
   userName: string;
+  /** Absolute expiration timestamp in milliseconds. */
   expiresAt: number;
 }
 
@@ -20,14 +26,20 @@ interface SsoCredentialStoreCredentialManager {
   delete(id: CredentialId): Promise<boolean>;
 }
 
+/** Dependencies for persisting MDP SSO credentials and identity config. */
 export interface SsoCredentialStoreOptions {
+  /** Credential manager used for encrypted token storage. */
   credentialManager?: SsoCredentialStoreCredentialManager;
+  /** Loads the app config that stores non-sensitive SSO identity fields. */
   loadConfig?: () => StoredConfig | null;
+  /** Persists the app config after SSO identity changes. */
   saveConfig?: (config: StoredConfig) => void;
 }
 
+/** Global credential identifier for encrypted MDP SSO tokens. */
 export const SSO_CREDENTIAL_ID: CredentialId = { type: 'mdp_sso' };
 
+/** Persists complete MDP SSO sessions across encrypted credentials and plain config. */
 export class SsoCredentialStore {
   private readonly credentialManager: SsoCredentialStoreCredentialManager;
   private readonly loadConfig: () => StoredConfig | null;
@@ -39,25 +51,17 @@ export class SsoCredentialStore {
     this.saveConfig = options.saveConfig ?? saveConfig;
   }
 
+  /** Save tokens to encrypted credentials and identity fields to app config. */
   async save(session: SsoSession): Promise<void> {
     const config = this.requireConfig();
 
-    await this.credentialManager.set(SSO_CREDENTIAL_ID, {
-      value: session.token,
-      accessToken: session.accessToken,
-      idToken: session.idToken,
-    });
+    await this.credentialManager.set(SSO_CREDENTIAL_ID, toStoredCredential(session));
 
-    config.ssoSessionIdentity = {
-      employeeId: session.employeeId,
-      ystId: session.ystId,
-      department: session.department,
-      userName: session.userName,
-      expiresAt: session.expiresAt,
-    };
+    config.ssoSessionIdentity = toSsoSessionIdentity(session);
     this.saveConfig(config);
   }
 
+  /** Load a complete SSO session, or null when either store is incomplete. */
   async load(): Promise<SsoSession | null> {
     const credential = await this.credentialManager.get(SSO_CREDENTIAL_ID);
     const identity = this.loadConfig()?.ssoSessionIdentity;
@@ -78,6 +82,7 @@ export class SsoCredentialStore {
     };
   }
 
+  /** Remove encrypted SSO tokens and plain identity fields. */
   async clear(): Promise<void> {
     await this.credentialManager.delete(SSO_CREDENTIAL_ID);
 
@@ -95,6 +100,24 @@ export class SsoCredentialStore {
     }
     return config;
   }
+}
+
+function toStoredCredential(session: SsoSession): StoredCredential {
+  return {
+    value: session.token,
+    accessToken: session.accessToken,
+    idToken: session.idToken,
+  };
+}
+
+function toSsoSessionIdentity(session: SsoSession): SsoSessionIdentity {
+  return {
+    employeeId: session.employeeId,
+    ystId: session.ystId,
+    department: session.department,
+    userName: session.userName,
+    expiresAt: session.expiresAt,
+  };
 }
 
 function isCompleteSsoCredential(value: StoredCredential | null): value is StoredCredential & {

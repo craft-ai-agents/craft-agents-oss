@@ -1,11 +1,20 @@
+/** Parsed SSO session returned by the MDP auth endpoints. */
 export interface SsoSession {
+  /** Long-lived session token used as the MDP API bearer token. */
   token: string;
+  /** OAuth access token returned by MDP and stored for future use. */
   accessToken: string;
+  /** Short-lived identity token returned by MDP. */
   idToken: string;
+  /** Absolute expiration timestamp in milliseconds. */
   expiresAt: number;
+  /** Employee identifier from the MDP identity response. */
   employeeId: string;
+  /** YST identifier from the MDP identity response. */
   ystId: string;
+  /** Employee department from the MDP identity response. */
   department: string;
+  /** Display name from the MDP identity response. */
   userName: string;
 }
 
@@ -20,6 +29,7 @@ interface RawSsoSession {
   userName: string;
 }
 
+/** Error thrown when an MDP auth endpoint returns a non-2xx response. */
 export class MdpAuthHttpError extends Error {
   readonly name = 'MdpAuthHttpError';
 
@@ -33,14 +43,18 @@ export class MdpAuthHttpError extends Error {
   }
 }
 
+/** Dependencies and endpoint configuration for the MDP auth client. */
 export interface MdpAuthClientOptions {
+  /** Base MDP API URL. Defaults to MDP_API_URL. */
   baseUrl?: string;
+  /** Fetch implementation for HTTP requests. */
   fetchFn?: typeof fetch;
 }
 
 const SSO_LOGIN_ENDPOINT = '/api/mdp/auth/sso-login';
 const REFRESH_TOKEN_ENDPOINT = '/api/mdp/auth/refresh-token';
 
+/** Client for the MDP SSO login and refresh-token endpoints. */
 export class MdpAuthClient {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
@@ -50,10 +64,12 @@ export class MdpAuthClient {
     this.fetchFn = options.fetchFn ?? globalThis.fetch;
   }
 
+  /** Exchange an SSO authorization code for an MDP SSO session. */
   login(code: string): Promise<SsoSession> {
     return this.post(SSO_LOGIN_ENDPOINT, { code });
   }
 
+  /** Refresh an existing MDP SSO session token. */
   refresh(token: string): Promise<SsoSession> {
     return this.post(REFRESH_TOKEN_ENDPOINT, { token });
   }
