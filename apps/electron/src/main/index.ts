@@ -1,9 +1,8 @@
-// Load user's shell environment first (before other imports that may use env)
-// This ensures tools like Homebrew, nvm, etc. are available to the agent
-import { loadShellEnv } from './shell-env'
-loadShellEnv()
-
+// Load .env and shell environment before anything else reads process.env
+import { loadDotEnv, loadShellEnv } from './shell-env'
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
+loadDotEnv(app.getAppPath())
+loadShellEnv()
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
