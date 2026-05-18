@@ -7,7 +7,6 @@ import {
   type SsoSession,
   type SsoSessionStateOptions,
   encodeOAuthRelayState,
-  OAUTH_RELAY_CALLBACK_URL,
 } from '@craft-agent/shared/auth'
 import { DEFAULT_SSO_CALLBACK_URL, RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
@@ -132,10 +131,15 @@ export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): { authUr
     throw new Error('MDP_CLIENT_ID is required to start SSO login')
   }
 
+  const relayUrl = env.MDP_RELAY_URL
+  if (!relayUrl) {
+    throw new Error('MDP_RELAY_URL is required to start SSO login')
+  }
+
   const nonce = randomBytes(16).toString('hex')
   const url = new URL(authUrl)
   url.searchParams.set('client_id', clientId)
-  url.searchParams.set('redirect_uri', OAUTH_RELAY_CALLBACK_URL)
+  url.searchParams.set('redirect_uri', relayUrl)
   url.searchParams.set('response_type', 'code')
   url.searchParams.set('state', encodeOAuthRelayState(DEFAULT_SSO_CALLBACK_URL, nonce))
   return { authUrl: url.toString(), nonce }
