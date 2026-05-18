@@ -219,11 +219,15 @@ A short-lived token returned alongside the Session Token. Expires per `expiresIn
 Avoid: JWT, id token.
 
 ### SSO Login Flow
-The browser-based OIDC authorization code flow used to establish an SSO Session:
-1. App opens `MDP_AUTH_URL` in the system browser with `client_id`, `redirect_uri=https://agents.craft.do/auth/callback`, `response_type=code`, and a relay-wrapped `state` nonce.
-2. OIDC provider redirects to `https://agents.craft.do/auth/callback`, and the relay forwards to `mdp://sso-callback?code=...&state=...`, which the OS routes back to the app.
-3. App exchanges the `code` via POST to `MDP_API_URL/api/mdp/auth/sso-login`.
-4. Response fields: `token`, `employeeId`, `ystId`, `department`, `userName`, `expiresIn`, `accessToken`, `idToken`.
+The browser-based OIDC authorization code flow used to establish an SSO Session. The OIDC provider only accepts `http/https` redirect URIs, so the app routes through the shared OAuth relay instead of using the `mdp://` scheme directly as `redirect_uri`.
+
+1. App generates a random CSRF nonce and stores it in memory.
+2. App opens `MDP_AUTH_URL` in the system browser with `client_id`, `redirect_uri=MDP_RELAY_URL`, `state=<relay-envelope encoding returnTo=mdp://sso-callback and the nonce>`, `response_type=code`. `MDP_RELAY_URL` points to the deployment's own self-hosted relay instance.
+3. OIDC provider redirects to `{MDP_RELAY_URL}?code=...&state=...`.
+4. Relay decodes the state envelope and redirects to `mdp://sso-callback?code=...&state=<nonce>`.
+5. OS routes `mdp://sso-callback` back to the Electron app.
+6. Electron deep link handler validates the `state` nonce against the stored value, then exchanges the `code` via POST to `MDP_API_URL/api/mdp/auth/sso-login`.
+7. Response fields: `token`, `employeeId`, `ystId`, `department`, `userName`, `expiresIn`, `accessToken`, `idToken`.
 
 ### Login Page
 The screen shown when no valid SSO Session exists. Displayed as a new `sso-login` app state, inserted before `onboarding` in the state machine (`loading → sso-login → onboarding → workspace-picker → ready`). Contains a single "Login" button that starts the SSO Login Flow.

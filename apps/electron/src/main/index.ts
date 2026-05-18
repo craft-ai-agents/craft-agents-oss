@@ -67,7 +67,7 @@ setupI18n()
 const machineId = createHash('sha256').update(hostname() + homedir()).digest('hex').slice(0, 16)
 Sentry.setUser({ id: machineId })
 
-import { join, delimiter } from 'path'
+import { join, delimiter, resolve } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { handleSsoCallback } from '@craft-agent/server-core/handlers/rpc/sso'
@@ -219,7 +219,7 @@ app.setName(process.env.CRAFT_APP_NAME || 'MDP')
 if (process.defaultApp) {
   // Development mode: need to pass the app path
   if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient(DEEPLINK_SCHEME, process.execPath, [process.argv[1]])
+    app.setAsDefaultProtocolClient(DEEPLINK_SCHEME, process.execPath, [resolve(process.argv[1])])
   }
 } else {
   // Production mode
