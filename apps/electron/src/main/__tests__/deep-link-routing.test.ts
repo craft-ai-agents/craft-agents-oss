@@ -62,9 +62,11 @@ describe('handleDeepLink routing', () => {
     await handleDeepLink(
       'mdp://workspace/ws-target/allSessions',
       windowManager,
-      sink,
-      (wcId) => wcId === 22 ? 'client-target' : undefined,
-      'client-caller',
+      {
+        sink,
+        resolveClientId: (wcId) => wcId === 22 ? 'client-target' : undefined,
+        preferredClientId: 'client-caller',
+      },
     )
 
     expect(sent.length).toBe(1)
@@ -90,9 +92,10 @@ describe('handleDeepLink routing', () => {
     await handleDeepLink(
       'mdp://workspace/ws-target/allSessions',
       windowManager,
-      sink,
-      undefined,
-      'client-caller',
+      {
+        sink,
+        preferredClientId: 'client-caller',
+      },
     )
 
     expect(sent.length).toBe(1)
@@ -117,9 +120,11 @@ describe('handleDeepLink routing', () => {
     await handleDeepLink(
       'mdp://workspace/ws-target/allSessions',
       windowManager,
-      sink,
-      () => undefined,
-      'client-caller',
+      {
+        sink,
+        resolveClientId: () => undefined,
+        preferredClientId: 'client-caller',
+      },
     )
 
     expect(sent.length).toBe(1)
@@ -144,12 +149,13 @@ describe('handleDeepLink routing', () => {
     const result = await handleDeepLink(
       'mdp://sso-callback?code=abc123',
       windowManager,
-      sink,
-      (wcId) => wcId === 55 ? 'client-target' : undefined,
-      undefined,
-      async (code) => {
-        codes.push(code)
-        return { success: true }
+      {
+        sink,
+        resolveClientId: (wcId) => wcId === 55 ? 'client-target' : undefined,
+        handleSsoCallback: async (code) => {
+          codes.push(code)
+          return { success: true }
+        },
       },
     )
 

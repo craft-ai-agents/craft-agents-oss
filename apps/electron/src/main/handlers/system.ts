@@ -16,7 +16,7 @@ import {
   requestClientOpenFileDialog,
 } from '@craft-agent/server-core/transport'
 import { getDeepLinkProtocol } from '../deep-link-scheme'
-import { handleSsoCallback } from '../../../../../packages/server-core/src/handlers/rpc/sso'
+import { handleSsoCallback } from '@craft-agent/server-core/handlers/rpc/sso'
 
 export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.theme.GET_SYSTEM_PREFERENCE,
@@ -216,7 +216,12 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
         deps.platform.logger.info('[OPEN_URL] Handling as deep link')
         const { handleDeepLink } = await import('../deep-link')
         const resolver = (wcId: number) => windowManager.getClientIdForWindow(wcId)
-        const result = await handleDeepLink(url, windowManager, server.push.bind(server), resolver, ctx.clientId, (code) => handleSsoCallback({ code }))
+        const result = await handleDeepLink(url, windowManager, {
+          sink: server.push.bind(server),
+          resolveClientId: resolver,
+          preferredClientId: ctx.clientId,
+          handleSsoCallback: (code) => handleSsoCallback({ code }),
+        })
         deps.platform.logger.info('[OPEN_URL] Deep link result:', result)
         return
       }

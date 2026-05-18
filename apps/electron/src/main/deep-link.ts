@@ -66,6 +66,18 @@ export interface DeepLinkResult {
 /** Exchanges an SSO authorization code and returns the renderer-safe login result. */
 export type SsoCallbackHandler = (code: string) => Promise<{ success: boolean; error?: string }>
 
+/** Optional collaborators used while routing a parsed deep link. */
+export interface HandleDeepLinkOptions {
+  /** Event sink used to push navigation or SSO callback results to renderers. */
+  sink?: EventSink
+  /** Resolves the renderer client ID for a window webContents ID. */
+  resolveClientId?: (webContentsId: number) => string | undefined
+  /** Client ID to prefer when no resolver is available. */
+  preferredClientId?: string
+  /** Main-process handler used to exchange SSO callback authorization codes. */
+  handleSsoCallback?: SsoCallbackHandler
+}
+
 /**
  * Navigation payload sent to renderer via IPC
  */
@@ -247,11 +259,9 @@ function buildDeepLinkWithoutWindowParam(url: string): string {
 export async function handleDeepLink(
   url: string,
   windowManager: WindowManager,
-  sink?: EventSink,
-  resolveClientId?: (webContentsId: number) => string | undefined,
-  preferredClientId?: string,
-  handleSsoCallback?: SsoCallbackHandler,
+  options: HandleDeepLinkOptions = {},
 ): Promise<DeepLinkResult> {
+  const { sink, resolveClientId, preferredClientId, handleSsoCallback } = options
   const target = parseDeepLink(url)
 
   if (!target) {
