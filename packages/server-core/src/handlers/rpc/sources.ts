@@ -82,7 +82,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
   server.handle(RPC_CHANNELS.sources.UPDATE, async (_ctx, workspaceId: string, sourceSlug: string, config: Partial<import('@craft-agent/shared/sources/types').FolderSourceConfig> & { authCredential?: string }) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { loadSourceConfig, saveSourceConfig, loadWorkspaceSources, loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const { loadSourceConfig, saveSourceConfig, loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
 
     const existing = loadSourceConfig(workspace.rootPath, sourceSlug)
     if (!existing) throw new Error(`Source not found: ${sourceSlug}`)
