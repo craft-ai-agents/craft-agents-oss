@@ -202,14 +202,14 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
     deps.platform.logger.info('[renderer]', ...args)
   })
 
-  // Shell operations - open URL in external browser (or handle craftagents:// internally)
+  // Shell operations - open URL in external browser (or handle mdp:// internally)
   server.handle(RPC_CHANNELS.shell.OPEN_URL, async (ctx, url: string) => {
     deps.platform.logger.info('[OPEN_URL] Received request:', url)
     try {
       const parsed = new URL(url)
 
-      // Handle craftagents:// URLs internally via deep link handler (GUI only)
-      if (parsed.protocol === 'craftagents:') {
+      // Handle mdp:// URLs internally via deep link handler (GUI only)
+      if (parsed.protocol === 'mdp:') {
         if (!windowManager) return
         deps.platform.logger.info('[OPEN_URL] Handling as deep link')
         const { handleDeepLink } = await import('../deep-link')

@@ -182,9 +182,9 @@ registerPiModelResolver((piAuthProvider) =>
   piAuthProvider ? getPiModelsForAuthProvider(piAuthProvider) : getAllPiModels()
 )
 
-// Custom URL scheme for deeplinks (e.g., craftagents://auth-complete)
-// Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (craftagents1, craftagents2, etc.)
-const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'
+// Custom URL scheme for deeplinks (e.g., mdp://auth-complete)
+// Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (mdp1, mdp2, etc.)
+const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'mdp'
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
@@ -207,7 +207,7 @@ let pendingDeepLink: string | null = null
 // Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "MDP [1]")
 app.setName(process.env.CRAFT_APP_NAME || 'MDP')
 
-// Register as default protocol client for craftagents:// URLs
+// Register as default protocol client for mdp:// URLs
 // This must be done before app.whenReady() on some platforms
 if (process.defaultApp) {
   // Development mode: need to pass the app path

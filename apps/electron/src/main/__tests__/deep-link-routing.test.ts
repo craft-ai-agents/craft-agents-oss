@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { handleDeepLink } from '../deep-link'
+import { handleDeepLink, parseDeepLink } from '../deep-link'
 import { RPC_CHANNELS } from '../../shared/types'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import type { WindowManager } from '../window-manager'
@@ -20,6 +20,11 @@ function createMockWindow(webContentsId: number) {
 }
 
 describe('handleDeepLink routing', () => {
+  it('rejects non-mdp protocols', () => {
+    const legacyScheme = ['craft', 'agents'].join('')
+    expect(parseDeepLink(`${legacyScheme}://workspace/ws-target/allSessions`)).toBeNull()
+  })
+
   it('prefers resolved target client over preferred caller client', async () => {
     const targetWindow = createMockWindow(22)
 
@@ -36,7 +41,7 @@ describe('handleDeepLink routing', () => {
     }
 
     await handleDeepLink(
-      'craftagents://workspace/ws-target/allSessions',
+      'mdp://workspace/ws-target/allSessions',
       windowManager,
       sink,
       (wcId) => wcId === 22 ? 'client-target' : undefined,
@@ -64,7 +69,7 @@ describe('handleDeepLink routing', () => {
     }
 
     await handleDeepLink(
-      'craftagents://workspace/ws-target/allSessions',
+      'mdp://workspace/ws-target/allSessions',
       windowManager,
       sink,
       undefined,
@@ -91,7 +96,7 @@ describe('handleDeepLink routing', () => {
     }
 
     await handleDeepLink(
-      'craftagents://workspace/ws-target/allSessions',
+      'mdp://workspace/ws-target/allSessions',
       windowManager,
       sink,
       () => undefined,
