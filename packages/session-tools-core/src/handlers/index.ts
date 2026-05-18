@@ -72,3 +72,11 @@ export { handleGetSessionInfo } from './get-session-info.ts';
 export type { GetSessionInfoArgs } from './get-session-info.ts';
 export { handleListSessions } from './list-sessions.ts';
 export type { ListSessionsArgs } from './list-sessions.ts';
+
+// Team Public Knowledge
+export { handleResolveTeamPublicTerm } from './resolve-team-public-term.ts';
+export type { ResolveTeamPublicTermArgs } from './resolve-team-public-term.ts';
+export { handleSearchTeamPublicKnowledge } from './search-team-public-knowledge.ts';
+export type { SearchTeamPublicKnowledgeArgs } from './search-team-public-knowledge.ts';
+export { handleGetTeamPublicKnowledgeEntry } from './get-team-public-knowledge-entry.ts';
+export type { GetTeamPublicKnowledgeEntryArgs } from './get-team-public-knowledge-entry.ts';

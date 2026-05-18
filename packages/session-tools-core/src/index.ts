@@ -165,6 +165,10 @@ export {
   handleRenderTemplate,
   // Send Developer Feedback
   handleSendDeveloperFeedback,
+  // Team Public Knowledge
+  handleResolveTeamPublicTerm,
+  handleSearchTeamPublicKnowledge,
+  handleGetTeamPublicKnowledgeEntry,
 } from './handlers/index.ts';
 
 export type {
@@ -183,6 +187,10 @@ export type {
   ScriptSandboxArgs,
   RenderTemplateArgs,
   SendDeveloperFeedbackArgs,
+  // Team Public Knowledge
+  ResolveTeamPublicTermArgs,
+  SearchTeamPublicKnowledgeArgs,
+  GetTeamPublicKnowledgeEntryArgs,
 } from './handlers/index.ts';
 
 // Tool definitions — single source of truth
@@ -204,6 +212,10 @@ export {
   BrowserToolSchema,
   // Developer feedback schema
   SendDeveloperFeedbackSchema,
+  // Team public knowledge schemas
+  ResolveTeamPublicTermSchema,
+  SearchTeamPublicKnowledgeSchema,
+  GetTeamPublicKnowledgeEntrySchema,
   // Descriptions
   TOOL_DESCRIPTIONS,
   // Registry
