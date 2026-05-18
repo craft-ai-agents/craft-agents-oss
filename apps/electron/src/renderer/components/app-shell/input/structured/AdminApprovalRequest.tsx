@@ -52,7 +52,7 @@ export function AdminApprovalRequest({
           : 'border border-info/30 rounded-[8px] shadow-middle'
       )}
     >
-      <div className="p-4 space-y-3 flex-1 min-h-0 flex flex-col">
+      <div className="p-4 space-y-3 flex-1 min-h-0 flex flex-col overflow-y-auto">
         <div className="space-y-2 pb-1">
           <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
             <ShieldAlert className="h-3.5 w-3.5 text-info" />
@@ -77,7 +77,7 @@ export function AdminApprovalRequest({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 px-3 py-2 border-t border-border/50">
+      <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 border-t border-border/50">
         <Button
           size="sm"
           variant="default"
@@ -98,7 +98,7 @@ export function AdminApprovalRequest({
           Cancel
         </Button>
 
-        <div className="flex-1" />
+        <div className="min-w-0 flex-1" />
 
         <div className="flex items-center gap-2">
           <Switch

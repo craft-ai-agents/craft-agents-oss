@@ -119,7 +119,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
         className="flex flex-col flex-1 min-h-0"
       >
         {/* Content */}
-        <div className="p-4 space-y-4 flex-1 min-h-0 flex flex-col">
+        <div className="p-4 space-y-4 flex-1 min-h-0 flex flex-col overflow-y-auto">
           {/* Header */}
           <div className="flex items-start gap-3">
             <div className="shrink-0 mt-0.5">
@@ -278,7 +278,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2 px-3 py-2 border-t border-border/50">
+        <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 border-t border-border/50">
           <Button
             type="submit"
             size="sm"
@@ -300,9 +300,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
             Cancel
           </Button>
 
-          <div className="flex-1" />
-
-          <span className="text-[10px] text-muted-foreground">
+          <span className="min-w-0 flex-1 basis-full text-[10px] text-muted-foreground sm:basis-auto sm:text-right">
             Credentials are encrypted at rest
           </span>
         </div>
