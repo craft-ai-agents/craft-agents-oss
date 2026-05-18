@@ -176,6 +176,9 @@ export const RPC_CHANNELS = {
   sso: {
     GET_SESSION: 'sso:getSession',
     REFRESH: 'sso:refresh',
+    START_LOGIN: 'sso:startLogin',
+    HANDLE_CALLBACK: 'sso:handleCallback',
+    LOGIN_RESULT: 'sso:loginResult',
   },
   llmConnections: {
     LIST: 'LLM_Connection:list',

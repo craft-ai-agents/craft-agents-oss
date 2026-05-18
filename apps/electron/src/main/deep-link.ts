@@ -42,6 +42,8 @@ import type { EventSink } from '@craft-agent/server-core/transport'
 import { getDeepLinkProtocol } from './deep-link-scheme'
 
 export interface DeepLinkTarget {
+  /** SSO authorization-code callback, handled in main instead of renderer navigation */
+  ssoCallbackCode?: string
   /** Workspace ID - undefined means use active window */
   workspaceId?: string
   /** Compound route format (e.g., 'allSessions/session/abc123', 'settings/shortcuts') */
@@ -60,6 +62,8 @@ export interface DeepLinkResult {
   error?: string
   windowId?: number
 }
+
+export type SsoCallbackHandler = (code: string) => Promise<{ success: boolean; error?: string }>
 
 /**
  * Navigation payload sent to renderer via IPC
@@ -112,6 +116,12 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
     // mdp://auth-callback?... (OAuth callbacks - return null to let existing handler process)
     if (host === 'auth-callback') {
       return null
+    }
+
+    if (host === 'sso-callback') {
+      const code = parsed.searchParams.get('code')
+      if (!code) return null
+      return { ssoCallbackCode: code }
     }
 
     // Compound route prefixes
@@ -239,6 +249,7 @@ export async function handleDeepLink(
   sink?: EventSink,
   resolveClientId?: (webContentsId: number) => string | undefined,
   preferredClientId?: string,
+  handleSsoCallback?: SsoCallbackHandler,
 ): Promise<DeepLinkResult> {
   const target = parseDeepLink(url)
 
@@ -251,6 +262,29 @@ export async function handleDeepLink(
   }
 
   mainLog.info('[DeepLink] Handling:', target)
+
+  if (target.ssoCallbackCode) {
+    if (!handleSsoCallback) {
+      return { success: false, error: 'SSO callback handler unavailable' }
+    }
+
+    const window = windowManager.getFocusedWindow() ?? windowManager.getLastActiveWindow()
+    const result = await handleSsoCallback(target.ssoCallbackCode)
+
+    if (window && sink) {
+      const wsId = windowManager.getWorkspaceForWindow(window.webContents.id)
+      const resolvedClientId = resolveClientId?.(window.webContents.id)
+      const clientId = resolvedClientId ?? (!resolveClientId ? preferredClientId : undefined)
+
+      if (clientId) {
+        sink(RPC_CHANNELS.sso.LOGIN_RESULT, { to: 'client', clientId }, result)
+      } else if (wsId) {
+        sink(RPC_CHANNELS.sso.LOGIN_RESULT, { to: 'workspace', workspaceId: wsId }, result)
+      }
+    }
+
+    return { success: result.success, error: result.error, windowId: window?.webContents.id }
+  }
 
   // If windowMode is set, create a new window instead of navigating in existing
   if (target.windowMode) {

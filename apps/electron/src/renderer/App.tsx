@@ -12,7 +12,7 @@ import { useEventProcessor } from './event-processor'
 import type { AgentEvent, Effect } from './event-processor'
 import { AppShell } from '@/components/app-shell/AppShell'
 import type { AppShellContextType } from '@/context/AppShellContext'
-import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
+import { OnboardingWizard, ReauthScreen, SsoLoginPage } from '@/components/onboarding'
 import { WorkspacePicker } from '@/components/workspace'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
@@ -235,6 +235,7 @@ export default function App() {
   // App state: loading -> check auth -> onboarding or ready
   const [appState, setAppState] = useState<AppState>('loading')
   const [setupNeeds, setSetupNeeds] = useState<SetupNeeds | null>(null)
+  const [ssoLoginResult, setSsoLoginResult] = useState<{ success: boolean; error?: string } | null>(null)
 
   // Per-session Jotai atom setters for isolated updates
   // NOTE: No sessionsAtom - we don't store a Session[] array anywhere to prevent memory leaks
@@ -687,6 +688,12 @@ export default function App() {
     }
 
     initialize()
+  }, [])
+
+  useEffect(() => {
+    return window.electronAPI.onSsoLoginResult((result) => {
+      setSsoLoginResult(result)
+    })
   }, [])
 
   // Session selection state
@@ -1923,32 +1930,17 @@ export default function App() {
     )
   }
 
-  // SSO login state. The dedicated login page lands in the next slice; keep
-  // the existing setup UI as a fallback only after the SSO gate has completed.
   if (appState === 'sso-login') {
     return (
       <DismissibleLayerProvider>
         <ModalProvider>
           <WindowCloseHandler />
-          <OnboardingWizard
-            state={onboarding.state}
-            onContinue={onboarding.handleContinue}
-            onBack={onboarding.handleBack}
-            onSelectProvider={onboarding.handleSelectProvider}
-            onSkipSetup={onboarding.handleSkipSetup}
-            onSelectApiSetupMethod={onboarding.handleSelectApiSetupMethod}
-            onSubmitCredential={onboarding.handleSubmitCredential}
-            onSubmitLocalModel={onboarding.handleSubmitLocalModel}
-            onStartOAuth={onboarding.handleStartOAuth}
-            onFinish={onboarding.handleFinish}
-            isWaitingForCode={onboarding.isWaitingForCode}
-            onSubmitAuthCode={onboarding.handleSubmitAuthCode}
-            onCancelOAuth={onboarding.handleCancelOAuth}
-            copilotDeviceCode={onboarding.copilotDeviceCode}
-            onBrowseGitBash={onboarding.handleBrowseGitBash}
-            onUseGitBashPath={onboarding.handleUseGitBashPath}
-            onRecheckGitBash={onboarding.handleRecheckGitBash}
-            onClearError={onboarding.handleClearError}
+          <SsoLoginPage
+            result={ssoLoginResult}
+            onSuccess={() => {
+              setSsoLoginResult(null)
+              setAppState('onboarding')
+            }}
           />
         </ModalProvider>
       </DismissibleLayerProvider>
