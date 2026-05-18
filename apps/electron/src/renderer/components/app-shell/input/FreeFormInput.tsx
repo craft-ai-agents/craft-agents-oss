@@ -57,8 +57,16 @@ import { coerceInputText } from '@/lib/input-text'
 import { isMac, PATH_SEP, getPathBasename } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
+import { ImageSupportWarningBanner } from './ImageSupportWarningBanner'
 import { ANTHROPIC_MODELS, getModelShortName, getModelDisplayName, getModelContextWindow, type ModelDefinition } from '@config/models'
-import { resolveEffectiveConnectionSlug, isCompatProvider, isLocalConnection } from '@config/llm-connections'
+import {
+  resolveEffectiveConnectionSlug,
+  isCompatProvider,
+  isLocalConnection,
+  modelSupportsImages,
+  setModelSupportsImages,
+  type LlmConnection,
+} from '@config/llm-connections'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
@@ -402,6 +410,28 @@ export function FreeFormInput({
     if (!effectiveConnection) return null
     return llmConnections.find(c => c.slug === effectiveConnection) ?? null
   }, [llmConnections, effectiveConnection])
+
+  const handleEnableModelImages = React.useCallback(async () => {
+    if (!effectiveConnectionDetails || !window.electronAPI) return
+    const {
+      isAuthenticated: _isAuthenticated,
+      authError: _authError,
+      isDefault: _isDefault,
+      ...bareConnection
+    } = effectiveConnectionDetails
+    const updated = setModelSupportsImages(bareConnection as LlmConnection, currentModel, true)
+    const result = await window.electronAPI.saveLlmConnection(updated)
+    if (!result.success) {
+      toast.error(t('chat.modelPicker.toggleVisionFailed', {
+        defaultValue: 'Failed to update image support',
+      }))
+      return
+    }
+    await appShellCtx?.refreshLlmConnections?.()
+    toast.success(t('chat.modelPicker.visionEnabled', {
+      defaultValue: 'Image support enabled',
+    }))
+  }, [appShellCtx, currentModel, effectiveConnectionDetails, t])
 
 
   // Access sessionStatuses and onSessionStatusChange from context for the # menu state picker
@@ -1516,6 +1546,12 @@ export function FreeFormInput({
   }, [followUpLayoutKey])
 
   const hasContent = input.trim() || attachments.length > 0 || followUpItems.length > 0
+  const hasStagedImages = attachments.some(a => a.type === 'image' || a.mimeType?.startsWith('image/'))
+  const showVisionWarning =
+    hasStagedImages
+    && !!effectiveConnectionDetails
+    && isCompatProvider(effectiveConnectionDetails.providerType)
+    && !modelSupportsImages(effectiveConnectionDetails, currentModel)
 
   return (
     <form onSubmit={handleSubmit}>
@@ -1593,6 +1629,13 @@ export function FreeFormInput({
             } : undefined}
             side="top"
             align="start"
+          />
+        )}
+
+        {showVisionWarning && (
+          <ImageSupportWarningBanner
+            modelName={currentModelDisplayName}
+            onEnable={handleEnableModelImages}
           />
         )}
 

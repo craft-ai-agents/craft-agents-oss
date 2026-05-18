@@ -10,6 +10,9 @@ import {
   fromBedrockNativeId,
   normalizeBedrockModelId,
   deriveBedrockRegionPrefix,
+  modelSupportsImages,
+  setModelSupportsImages,
+  type LlmConnection,
 } from '../llm-connections'
 import { ANTHROPIC_MODELS, getModelDisplayName, getModelContextWindow, getModelShortName, isClaudeModel } from '../models'
 
@@ -125,6 +128,43 @@ describe('isPiProvider', () => {
 
   it('returns false for anthropic', () => {
     expect(isPiProvider('anthropic')).toBe(false)
+  })
+})
+
+describe('custom endpoint image support', () => {
+  const connection: LlmConnection = {
+    slug: 'local',
+    name: 'Local',
+    providerType: 'pi_compat',
+    authType: 'api_key_with_endpoint',
+    baseUrl: 'http://localhost:11434',
+    defaultModel: 'llava',
+    models: ['llava', {
+      id: 'text-only',
+      name: 'text-only',
+      shortName: 'text-only',
+      description: '',
+      provider: 'pi',
+      contextWindow: 128_000,
+      supportsImages: false,
+    }],
+    customEndpoint: { api: 'openai-completions', supportsImages: false },
+    createdAt: 1,
+  }
+
+  it('promotes string model entries when enabling image support', () => {
+    const updated = setModelSupportsImages(connection, 'llava', true)
+    expect(modelSupportsImages(updated, 'llava')).toBe(true)
+    expect(updated.models?.[0]).toMatchObject({
+      id: 'llava',
+      name: 'llava',
+      shortName: 'llava',
+      supportsImages: true,
+    })
+  })
+
+  it('preserves explicit per-model false overrides', () => {
+    expect(modelSupportsImages(connection, 'text-only')).toBe(false)
   })
 })
 

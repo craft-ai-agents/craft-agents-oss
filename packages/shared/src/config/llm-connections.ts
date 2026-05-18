@@ -394,6 +394,31 @@ export function isCompatProvider(providerType: LlmProviderType): boolean {
 }
 
 /**
+ * Return a new LlmConnection with the given model's image-support override set.
+ * Pure helper: storage is handled by the caller via saveLlmConnection.
+ */
+export function setModelSupportsImages(
+  connection: LlmConnection,
+  modelId: string,
+  enabled: boolean,
+): LlmConnection {
+  if (!connection.models) return connection;
+  const idOf = (m: ModelDefinition | string) => (typeof m === 'string' ? m : m.id);
+  const idx = connection.models.findIndex(m => idOf(m) === modelId);
+  if (idx === -1) return connection;
+
+  const entry = connection.models[idx]!;
+  const nextEntry =
+    typeof entry === 'string'
+      ? { id: entry, name: entry, shortName: entry, supportsImages: enabled }
+      : { ...entry, supportsImages: enabled };
+
+  const nextModels = connection.models.slice();
+  nextModels[idx] = nextEntry as ModelDefinition;
+  return { ...connection, models: nextModels };
+}
+
+/**
  * Resolve whether a given model on a connection accepts image input.
  *
  * For custom-endpoint connections, per-model supportsImages overrides the
