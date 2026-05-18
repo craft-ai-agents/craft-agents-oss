@@ -6,9 +6,11 @@ import {
   type PublicSsoSessionState,
   type SsoSession,
   type SsoSessionStateOptions,
+  encodeOAuthRelayState,
 } from '@craft-agent/shared/auth'
 import { DEFAULT_SSO_CALLBACK_URL, RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
+import { randomBytes } from 'node:crypto'
 import type { HandlerDeps } from '../handler-deps'
 
 /** RPC channels handled by the local SSO login/session module. */
@@ -19,6 +21,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sso.HANDLE_CALLBACK,
   RPC_CHANNELS.sso.LOGOUT,
 ] as const
+
+let pendingSsoNonce: string | null = null
 
 /** Register local-only SSO startup session and refresh handlers. */
 export function registerSsoHandlers(server: RpcServer, deps: Pick<HandlerDeps, 'platform'>): void {
@@ -35,10 +39,10 @@ export function registerSsoHandlers(server: RpcServer, deps: Pick<HandlerDeps, '
   })
 
   server.handle(RPC_CHANNELS.sso.START_LOGIN, async () => {
-    return buildSsoLoginUrl()
+    return startSsoLogin()
   })
 
-  server.handle(RPC_CHANNELS.sso.HANDLE_CALLBACK, async (_ctx, payload: { code?: string }) => {
+  server.handle(RPC_CHANNELS.sso.HANDLE_CALLBACK, async (_ctx, payload: { code?: string; state?: string }) => {
     return handleSsoCallback(payload, createSsoSessionDeps())
   })
 
@@ -115,9 +119,10 @@ export interface SsoLogoutDeps {
 }
 
 /** Build the OIDC authorization URL used to start system-browser SSO login. */
-export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): string {
+export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): { authUrl: string; nonce: string } {
   const authUrl = env.MDP_AUTH_URL
   const clientId = env.MDP_CLIENT_ID
+  const relayUrl = env.MDP_RELAY_URL
 
   if (!authUrl) {
     throw new Error('MDP_AUTH_URL is required to start SSO login')
@@ -127,18 +132,38 @@ export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): string {
     throw new Error('MDP_CLIENT_ID is required to start SSO login')
   }
 
+  if (!relayUrl) {
+    throw new Error('MDP_RELAY_URL is required to start SSO login')
+  }
+
+  const nonce = randomBytes(16).toString('hex')
   const url = new URL(authUrl)
   url.searchParams.set('client_id', clientId)
-  url.searchParams.set('redirect_uri', DEFAULT_SSO_CALLBACK_URL)
+  url.searchParams.set('redirect_uri', relayUrl)
   url.searchParams.set('response_type', 'code')
-  return url.toString()
+  url.searchParams.set('state', encodeOAuthRelayState(DEFAULT_SSO_CALLBACK_URL, nonce))
+  return { authUrl: url.toString(), nonce }
+}
+
+/** Start an SSO login and remember the one pending callback nonce. */
+export function startSsoLogin(env: NodeJS.ProcessEnv = process.env): string {
+  const { authUrl, nonce } = buildSsoLoginUrl(env)
+  pendingSsoNonce = nonce
+  return authUrl
 }
 
 /** Exchange an SSO authorization code and persist the resulting session. */
 export async function handleSsoCallback(
-  payload: { code?: string },
+  payload: { code?: string; state?: string },
   deps: SsoCallbackDeps = createSsoSessionDeps(),
 ): Promise<{ success: boolean; error?: string }> {
+  const expectedNonce = pendingSsoNonce
+  pendingSsoNonce = null
+
+  if (!expectedNonce || payload.state !== expectedNonce) {
+    return { success: false, error: 'Invalid SSO state' }
+  }
+
   if (!payload.code) {
     return { success: false, error: 'Missing SSO authorization code' }
   }

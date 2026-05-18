@@ -44,6 +44,8 @@ import { getDeepLinkProtocol } from './deep-link-scheme'
 export interface DeepLinkTarget {
   /** SSO authorization-code callback, handled in main instead of renderer navigation */
   ssoCallbackCode?: string
+  /** SSO callback nonce returned by the OAuth relay. */
+  ssoCallbackState?: string
   /** Workspace ID - undefined means use active window */
   workspaceId?: string
   /** Compound route format (e.g., 'allSessions/session/abc123', 'settings/shortcuts') */
@@ -64,7 +66,7 @@ export interface DeepLinkResult {
 }
 
 /** Exchanges an SSO authorization code and returns the renderer-safe login result. */
-export type SsoCallbackHandler = (code: string) => Promise<{ success: boolean; error?: string }>
+export type SsoCallbackHandler = (code: string, state?: string) => Promise<{ success: boolean; error?: string }>
 
 /** Optional collaborators used while routing a parsed deep link. */
 export interface HandleDeepLinkOptions {
@@ -134,7 +136,10 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
     if (host === 'sso-callback') {
       const code = parsed.searchParams.get('code')
       if (!code) return null
-      return { ssoCallbackCode: code }
+      return {
+        ssoCallbackCode: code,
+        ssoCallbackState: parsed.searchParams.get('state') ?? undefined,
+      }
     }
 
     // Compound route prefixes
@@ -280,7 +285,7 @@ export async function handleDeepLink(
     }
 
     const window = windowManager.getFocusedWindow() ?? windowManager.getLastActiveWindow()
-    const result = await handleSsoCallback(target.ssoCallbackCode)
+    const result = await handleSsoCallback(target.ssoCallbackCode, target.ssoCallbackState)
 
     if (window && sink) {
       const wsId = windowManager.getWorkspaceForWindow(window.webContents.id)

@@ -195,7 +195,10 @@ let oauthFlowStore: OAuthFlowStore | null = null
 let moduleSink: EventSink | null = null
 let moduleClientResolver: ((webContentsId: number) => string | undefined) | null = null
 
-const handleDeepLinkSsoCallback = (code: string) => handleSsoCallback({ code })
+const handleDeepLinkSsoCallback = (code: string, state?: string) => {
+  const payload = { code, state }
+  return handleSsoCallback(payload)
+}
 
 // Messaging gateway: the bootstrap handle is created once sessionManager is
 // available (inside createHandlerDeps) and populated with the WS publisher
