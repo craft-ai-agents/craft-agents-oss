@@ -95,11 +95,18 @@ import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
 import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
+import { UserProfileContextManager, type UserProfileProvider, type LoadedUserProfileContext } from './user-profile-context'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
 import { resizeImageForAPI, resizeIconBuffer } from '@craft-agent/server-core/services'
 export { sanitizeForTitle }
+
+export interface SessionManagerOptions {
+  userProfileProvider?: UserProfileProvider
+  userProfileContextEnabled?: boolean
+  userProfileCachePath?: string
+}
 
 // Module-level platform ref — set once during init via setSessionPlatform()
 let _platform: PlatformServices | null = null
@@ -140,6 +147,10 @@ const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
 }
 
 let sessionRuntimeHooks: SessionRuntimeHooks = defaultSessionRuntimeHooks
+
+function appendDynamicUserProfileContext(message: string, context: LoadedUserProfileContext): string {
+  return `${message}\n\n<dynamic_user_context>\n${context.dynamicContext}\n</dynamic_user_context>`
+}
 
 export function setSessionRuntimeHooks(hooks: Partial<SessionRuntimeHooks>): void {
   sessionRuntimeHooks = {
@@ -1034,6 +1045,15 @@ export class SessionManager implements ISessionManager {
   private agentRefreshLocks: Map<string, Promise<void>> = new Map()
   /** Monotonic clock to ensure strictly increasing message timestamps */
   private lastTimestamp = 0
+  private readonly userProfileContextManager: UserProfileContextManager
+
+  constructor(options: SessionManagerOptions = {}) {
+    this.userProfileContextManager = new UserProfileContextManager({
+      provider: options.userProfileProvider,
+      enabled: options.userProfileContextEnabled,
+      cachePath: options.userProfileCachePath,
+    })
+  }
 
   /**
    * Optional binder installed by the messaging-gateway bootstrap. When set,
@@ -5160,6 +5180,8 @@ export class SessionManager implements ISessionManager {
     // Ensure messages are loaded before we try to add new ones
     await this.ensureMessagesLoaded(managed)
 
+    const userProfileContext = await this.userProfileContextManager.load()
+
     // If currently processing, behavior depends on the connection's
     // `midStreamBehavior` (resolved via {@link resolveMidStreamBehavior},
     // defaults to provider-appropriate value):
@@ -5201,6 +5223,7 @@ export class SessionManager implements ISessionManager {
         timestamp: this.monotonic(),
         attachments: storedAttachments,
         badges: options?.badges,
+        dynamicContextRef: userProfileContext?.ref,
       }
       managed.messages.push(userMessage)
 
@@ -5250,6 +5273,7 @@ export class SessionManager implements ISessionManager {
         timestamp: this.monotonic(),
         attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
         badges: options?.badges,  // Include content badges (sources, skills with embedded icons)
+        dynamicContextRef: userProfileContext?.ref,
       }
       managed.messages.push(userMessage)
 
@@ -5505,6 +5529,9 @@ export class SessionManager implements ISessionManager {
       if (managed.wasInterrupted) {
         effectiveMessage = `${message}\n\n<system-reminder>The previous assistant response was interrupted by the user and may be incomplete. Do not repeat or continue the interrupted response unless asked. Focus on the new message above.</system-reminder>`
         managed.wasInterrupted = false
+      }
+      if (userProfileContext) {
+        effectiveMessage = appendDynamicUserProfileContext(effectiveMessage, userProfileContext)
       }
 
       const messageBackendContext = resolveBackendContext({
