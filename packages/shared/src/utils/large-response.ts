@@ -24,14 +24,20 @@ import {
 // Constants (re-exported from summarize.ts for convenience)
 // ============================================================
 
-/** Token limit for summarization trigger (roughly ~60KB of text) */
-export const TOKEN_LIMIT = 15000;
+/**
+ * Default per-result summarization threshold. Prefer tokenLimitFor() at call
+ * sites that know the active model context window.
+ */
+export const TOKEN_LIMIT = 12000;
 
 /** Max tokens to send for summarization (~400KB). Beyond this, save to file + preview only. */
 export const MAX_SUMMARIZATION_INPUT = 100000;
 
 /** Canonical subfolder under session dir for full tool results */
 export const LONG_RESPONSES_DIR = 'long_responses';
+
+const TOKEN_LIMIT_FLOOR = 2_000;
+const PER_RESULT_CONTEXT_FRACTION = 0.10;
 
 // ============================================================
 // Token Estimation
@@ -42,6 +48,43 @@ export const LONG_RESPONSES_DIR = 'long_responses';
  */
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
+}
+
+const DENSITY_AWARE_MIN_LENGTH = 20_000;
+const BASE64_RUN_MIN = 60;
+const BASE64_DENSITY_THRESHOLD = 0.70;
+const BASE64_CHARS_PER_TOKEN = 1.5;
+
+/**
+ * Estimate tokens while correcting for base64-heavy text, where the normal
+ * 4-chars/token heuristic undercounts badly.
+ */
+export function estimateTokensDensityAware(text: string): number {
+  if (text.length < DENSITY_AWARE_MIN_LENGTH) return estimateTokens(text);
+
+  const runRegex = new RegExp(`[A-Za-z0-9+/=]{${BASE64_RUN_MIN},}`, 'g');
+  let denseChars = 0;
+  for (const match of text.matchAll(runRegex)) {
+    denseChars += match[0].length;
+  }
+
+  if (denseChars / text.length >= BASE64_DENSITY_THRESHOLD) {
+    return Math.ceil(text.length / BASE64_CHARS_PER_TOKEN);
+  }
+
+  return estimateTokens(text);
+}
+
+/**
+ * Per-result threshold scaled to the active model window. Falls back to the
+ * fixed default when the call site cannot provide model context.
+ */
+export function tokenLimitFor(contextWindow: number | undefined): number {
+  if (!contextWindow || contextWindow <= 0) return TOKEN_LIMIT;
+  return Math.max(
+    TOKEN_LIMIT_FLOOR,
+    Math.min(TOKEN_LIMIT, Math.floor(contextWindow * PER_RESULT_CONTEXT_FRACTION)),
+  );
 }
 
 // ============================================================
@@ -420,6 +463,8 @@ export interface HandleLargeResponseOptions {
   context: SummarizationContext;
   /** Optional summarize callback — typically agent.runMiniCompletion.bind(agent) */
   summarize?: (prompt: string) => Promise<string | null>;
+  /** Active model context window, if known. */
+  contextWindow?: number;
 }
 
 export interface HandleLargeResponseResult {
@@ -453,6 +498,7 @@ export async function guardLargeResult(
     input?: Record<string, unknown>;
     intent?: string;
     summarize?: (prompt: string) => Promise<string | null>;
+    contextWindow?: number;
   }
 ): Promise<string | null> {
   // 1. Binary detection — check before any text processing
@@ -496,12 +542,13 @@ export async function guardLargeResult(
   }
 
   // 3. Existing size check + summarize flow
-  if (estimateTokens(text) <= TOKEN_LIMIT) return null;
+  if (estimateTokensDensityAware(text) <= tokenLimitFor(opts.contextWindow)) return null;
   const result = await handleLargeResponse({
     text,
     sessionPath: opts.sessionPath,
     context: { toolName: opts.toolName, input: opts.input, intent: opts.intent },
     summarize: opts.summarize,
+    contextWindow: opts.contextWindow,
   });
   return result?.message ?? null;
 }
@@ -518,10 +565,10 @@ export async function guardLargeResult(
 export async function handleLargeResponse(
   opts: HandleLargeResponseOptions
 ): Promise<HandleLargeResponseResult | null> {
-  const { text, sessionPath, context, summarize } = opts;
-  const estimatedTokens = estimateTokens(text);
+  const { text, sessionPath, context, summarize, contextWindow } = opts;
+  const estimatedTokens = estimateTokensDensityAware(text);
 
-  if (estimatedTokens <= TOKEN_LIMIT) {
+  if (estimatedTokens <= tokenLimitFor(contextWindow)) {
     return null; // Not large enough — caller should return as-is
   }
 

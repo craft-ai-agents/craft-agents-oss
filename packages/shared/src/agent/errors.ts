@@ -10,6 +10,7 @@ import { getProviderMetadata } from '../config/provider-metadata.ts';
 export type ErrorCode =
   | 'invalid_api_key'
   | 'invalid_credentials'    // Generic credential issue (from diagnostics)
+  | 'response_too_large'
   | 'expired_oauth_token'
   | 'token_expired'          // Workspace token expired (from diagnostics)
   | 'rate_limited'
@@ -90,6 +91,12 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     actions: [
       { key: 's', label: 'Update credentials', command: '/settings', action: 'settings' },
     ],
+    canRetry: false,
+  },
+  response_too_large: {
+    title: 'Response Too Large',
+    message: 'The tool response was too large to display inline. The full output has been saved to disk.',
+    actions: [],
     canRetry: false,
   },
   expired_oauth_token: {

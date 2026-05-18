@@ -76,7 +76,7 @@ describe('mapClaudeSdkAssistantError', () => {
       expect(error.actions?.some(a => a.action === 'settings')).toBe(true);
     });
 
-    it('matches on context_window hint even without context-1m phrase', () => {
+    it('maps general context overflow separately from 1M tier errors', () => {
       const error = mapClaudeSdkAssistantError('invalid_request', {
         ...baseContext,
         actualError: {
@@ -85,10 +85,12 @@ describe('mapClaudeSdkAssistantError', () => {
         },
       });
 
-      expect(error.title).toBe('1M Context Not Available');
+      expect(error.title).toBe('Context Window Exceeded');
+      expect(error.canRetry).toBe(false);
+      expect(error.actions?.some(a => a.command === '/compact')).toBe(true);
     });
 
-    it('matches on tier hint', () => {
+    it('does not treat bare tier hint as 1M context', () => {
       const error = mapClaudeSdkAssistantError('invalid_request', {
         ...baseContext,
         capturedApiError: {
@@ -99,7 +101,7 @@ describe('mapClaudeSdkAssistantError', () => {
         },
       });
 
-      expect(error.title).toBe('1M Context Not Available');
+      expect(error.title).toBe('Invalid Request');
     });
 
     it('falls back to generic invalid_request when no 1M hints present', () => {
@@ -122,6 +124,8 @@ describe('mapClaudeSdkAssistantError', () => {
       const error = mapClaudeSdkAssistantError('invalid_request', baseContext);
 
       expect(error.title).toBe('Invalid Request');
+      expect(error.details?.some(d => d.includes('/compact'))).toBe(true);
+      expect(error.details?.some(d => d.toLowerCase().includes('attachments'))).toBe(false);
     });
   });
 });

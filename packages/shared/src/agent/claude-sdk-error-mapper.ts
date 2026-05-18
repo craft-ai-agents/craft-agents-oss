@@ -14,6 +14,7 @@ export interface ClaudeSdkErrorContext {
   capturedApiError: LastApiError | null;
   providerType?: string;
   piAuthProvider?: string;
+  userTurnHadAttachments?: boolean;
 }
 
 type FailureKind = 'provider' | 'network' | 'unknown';
@@ -41,16 +42,39 @@ const NETWORK_HINTS = [
   'connection refused',
 ] as const;
 
-// Signals that an invalid_request error is caused by the 1M context beta
-// (the user's API tier doesn't support it, or the request exceeded even 1M).
-// Anthropic's error strings evolve — match on multiple hints.
 const ONE_M_CONTEXT_HINTS = [
   'context-1m',
   'context_1m',
+] as const;
+
+const ONE_M_TIER_PHRASES = [
   'context window',
   'context_window',
-  'tier',
+  'context',
+  '1m',
+  'extended',
+  '200k',
+  '1000k',
+] as const;
+
+const CONTEXT_OVERFLOW_HINTS = [
+  'context window',
+  'context_window',
   'exceeds the context',
+  'prompt is too long',
+  'prompt exceeds',
+  'too many tokens',
+  'maximum context',
+  'context length',
+  'input is too long',
+] as const;
+
+const ATTACHMENT_REJECTION_HINTS = [
+  'image',
+  'attachment',
+  'media',
+  'unsupported format',
+  'could not process',
 ] as const;
 
 function isOneMContextError(context: ClaudeSdkErrorContext): boolean {
@@ -58,7 +82,24 @@ function isOneMContextError(context: ClaudeSdkErrorContext): boolean {
     normalize(context.capturedApiError?.message),
     normalize(context.actualError?.message),
   ].join(' ');
-  return includesAny(haystack, ONE_M_CONTEXT_HINTS);
+  if (includesAny(haystack, ONE_M_CONTEXT_HINTS)) return true;
+  return haystack.includes('tier') && includesAny(haystack, ONE_M_TIER_PHRASES);
+}
+
+function isContextOverflowError(context: ClaudeSdkErrorContext): boolean {
+  const haystack = [
+    normalize(context.capturedApiError?.message),
+    normalize(context.actualError?.message),
+  ].join(' ');
+  return includesAny(haystack, CONTEXT_OVERFLOW_HINTS);
+}
+
+function isAttachmentRejection(context: ClaudeSdkErrorContext): boolean {
+  const haystack = [
+    normalize(context.capturedApiError?.message),
+    normalize(context.actualError?.message),
+  ].join(' ');
+  return includesAny(haystack, ATTACHMENT_REJECTION_HINTS);
 }
 
 function normalize(value?: string | null): string {
@@ -224,7 +265,7 @@ export function mapClaudeSdkAssistantError(
         providerInfo,
       };
 
-    case 'invalid_request':
+    case 'invalid_request': {
       if (isOneMContextError(context)) {
         return {
           code: 'invalid_request',
@@ -237,27 +278,57 @@ export function mapClaudeSdkAssistantError(
           ],
           actions: [
             { key: 's', label: 'Settings', action: 'settings' },
-            { key: 'r', label: 'Retry', action: 'retry' },
+            { key: 'c', label: 'Compact', command: '/compact' },
           ],
-          canRetry: true,
-          retryDelayMs: 1000,
+          canRetry: false,
           providerInfo,
         };
       }
+
+      if (isContextOverflowError(context)) {
+        return {
+          code: 'invalid_request',
+          title: 'Context Window Exceeded',
+          message: 'The conversation has grown larger than the model can handle.',
+          details: [
+            ...apiDetails,
+            'Run /compact to summarize history and free up context',
+            'Or start a new conversation to keep going',
+          ],
+          actions: [
+            { key: 'c', label: 'Compact', command: '/compact' },
+          ],
+          canRetry: false,
+          providerInfo,
+        };
+      }
+
+      const showAttachmentHints =
+        context.userTurnHadAttachments === true || isAttachmentRejection(context);
+      const fallbackHints = showAttachmentHints
+        ? [
+            'Try removing any attachments and resending',
+            'Check if images are in a supported format (PNG, JPEG, GIF, WebP)',
+          ]
+        : [
+            'If this keeps repeating, the conversation may have grown too large — try /compact or start a new session',
+          ];
+
+      if (apiDetails.length === 0) {
+        fallbackHints.push("No detailed error info available — check the app's main process log for the raw response");
+      }
+
       return {
         code: 'invalid_request',
         title: 'Invalid Request',
         message: 'The API rejected this request.',
-        details: [
-          ...apiDetails,
-          'Try removing any attachments and resending',
-          'Check if images are in a supported format (PNG, JPEG, GIF, WebP)',
-        ],
+        details: [...apiDetails, ...fallbackHints],
         actions: retryAction,
         canRetry: true,
         retryDelayMs: 1000,
         providerInfo,
       };
+    }
 
     case 'server_error':
       return failureKind === 'network' ? networkError : providerError;
