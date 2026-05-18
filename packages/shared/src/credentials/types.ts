@@ -27,6 +27,7 @@ export type CredentialType =
   | 'llm_service_account' // GCP service account JSON
   // Workspace credentials
   | 'workspace_oauth'    // Workspace MCP OAuth token
+  | 'mdp_sso'            // MDP SSO session tokens
   // Source credentials (stored at ~/.craft-agent/workspaces/{ws}/sources/{slug}/)
   | 'source_oauth'       // OAuth tokens for MCP/API sources
   | 'source_bearer'      // Bearer tokens
@@ -44,6 +45,7 @@ const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'llm_iam',
   'llm_service_account',
   'workspace_oauth',
+  'mdp_sso',
   'source_oauth',
   'source_bearer',
   'source_apikey',
@@ -104,6 +106,8 @@ export interface StoredCredential {
    * The `value` field stores access_token, this field stores id_token.
    */
   idToken?: string;
+  /** OAuth access token when the primary credential value stores another token. */
+  accessToken?: string;
 
   // --- AWS IAM credentials (for llm_iam type) ---
 
