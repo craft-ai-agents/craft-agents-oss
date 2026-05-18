@@ -4,9 +4,11 @@ import {
   getSsoSessionState,
   SsoCredentialStore,
   type SsoSession,
+  type SsoSessionStateOptions,
 } from '@craft-agent/shared/auth'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
+import type { HandlerDeps } from '../handler-deps'
 
 /** RPC channels handled by the local SSO login/session module. */
 export const HANDLED_CHANNELS = [
@@ -18,9 +20,12 @@ export const HANDLED_CHANNELS = [
 ] as const
 
 /** Register local-only SSO startup session and refresh handlers. */
-export function registerSsoHandlers(server: RpcServer): void {
+export function registerSsoHandlers(server: RpcServer, deps: Pick<HandlerDeps, 'platform'>): void {
   server.handle(RPC_CHANNELS.sso.GET_SESSION, async () => {
-    return getSsoSessionState(createSsoSessionDeps())
+    return handleSsoStartupSession({
+      ...createSsoSessionDeps(),
+      isPackaged: deps.platform.isPackaged,
+    })
   })
 
   server.handle(RPC_CHANNELS.sso.REFRESH, async () => {
@@ -46,6 +51,43 @@ function createSsoSessionDeps() {
     credentialStore: new SsoCredentialStore(),
     authClient: new MdpAuthClient(),
   }
+}
+
+/** Dependencies used to resolve the startup SSO session state. */
+export interface SsoStartupSessionDeps extends SsoSessionStateOptions {
+  /** True when running from a packaged production binary. */
+  isPackaged: boolean
+  /** Environment source used to read development flags. */
+  env?: NodeJS.ProcessEnv
+}
+
+const DEV_SSO_BYPASS_SESSION: SsoSession = {
+  token: 'dev-sso-bypass-session-token',
+  accessToken: 'dev-sso-bypass-access-token',
+  idToken: 'dev-sso-bypass-id-token',
+  expiresAt: Date.UTC(2100, 0, 1),
+  employeeId: 'DEV-EMPLOYEE',
+  ystId: 'DEV-YST',
+  department: 'Development',
+  userName: 'Development User',
+}
+
+/** Resolve startup SSO state, optionally injecting a development-only mock session. */
+export async function handleSsoStartupSession({
+  isPackaged,
+  env = process.env,
+  ...sessionStateOptions
+}: SsoStartupSessionDeps) {
+  if (!isPackaged && env.CRAFT_DISABLE_SSO === '1') {
+    await sessionStateOptions.credentialStore.save(DEV_SSO_BYPASS_SESSION)
+    return {
+      authenticated: true as const,
+      userName: DEV_SSO_BYPASS_SESSION.userName,
+      department: DEV_SSO_BYPASS_SESSION.department,
+    }
+  }
+
+  return getSsoSessionState(sessionStateOptions)
 }
 
 /** Dependencies used to exchange and persist an SSO callback code. */

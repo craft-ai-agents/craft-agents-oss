@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { buildSsoLoginUrl, handleSsoCallback, handleSsoLogout } from './sso'
+import { buildSsoLoginUrl, handleSsoCallback, handleSsoLogout, handleSsoStartupSession } from './sso'
 import type { SsoSession } from '@craft-agent/shared/auth'
 
 const session: SsoSession = {
@@ -86,5 +86,81 @@ describe('SSO RPC handlers', () => {
 
     expect(result).toEqual({ success: true })
     expect(clearCalls).toBe(1)
+  })
+
+  it('injects a mock SSO session when the dev bypass flag is enabled in an unpackaged build', async () => {
+    let loadCalls = 0
+    let refreshCalls = 0
+    const savedSessions: SsoSession[] = []
+
+    const result = await handleSsoStartupSession({
+      isPackaged: false,
+      env: { CRAFT_DISABLE_SSO: '1' } as NodeJS.ProcessEnv,
+      credentialStore: {
+        load: async () => {
+          loadCalls += 1
+          return null
+        },
+        save: async (value) => {
+          savedSessions.push(value)
+        },
+        clear: async () => {},
+      },
+      authClient: {
+        refresh: async () => {
+          refreshCalls += 1
+          return session
+        },
+      },
+    })
+
+    expect(result).toEqual({
+      authenticated: true,
+      userName: 'Development User',
+      department: 'Development',
+    })
+    expect(loadCalls).toBe(0)
+    expect(refreshCalls).toBe(0)
+    expect(savedSessions).toHaveLength(1)
+    const mockSession = savedSessions[0]
+    expect(mockSession).toMatchObject({
+      token: 'dev-sso-bypass-session-token',
+      accessToken: 'dev-sso-bypass-access-token',
+      idToken: 'dev-sso-bypass-id-token',
+      employeeId: 'DEV-EMPLOYEE',
+      ystId: 'DEV-YST',
+      department: 'Development',
+      userName: 'Development User',
+    })
+    expect(mockSession.expiresAt).toBeGreaterThan(Date.UTC(2099, 0, 1))
+  })
+
+  it('ignores the dev bypass flag in packaged builds and runs the normal session check', async () => {
+    let saved = false
+
+    const result = await handleSsoStartupSession({
+      isPackaged: true,
+      env: { CRAFT_DISABLE_SSO: '1' } as NodeJS.ProcessEnv,
+      credentialStore: {
+        load: async () => session,
+        save: async () => {
+          saved = true
+        },
+        clear: async () => {},
+      },
+      authClient: {
+        refresh: async () => {
+          throw new Error('refresh should not be called')
+        },
+      },
+      now: () => 1,
+    })
+
+    expect(result).toEqual({
+      authenticated: true,
+      userName: 'Ada Lovelace',
+      department: 'Engineering',
+    })
+    expect(saved).toBe(false)
   })
 })

@@ -47,7 +47,7 @@ export function registerCoreRpcHandlers(
   registerSettingsHandlers(server, deps)
   registerSkillsHandlers(server, deps)
   registerSourcesHandlers(server, deps)
-  registerSsoHandlers(server)
+  registerSsoHandlers(server, deps)
   registerStatusesHandlers(server, deps)
   registerSystemCoreHandlers(server, deps)
   registerTransferHandlers(server)
