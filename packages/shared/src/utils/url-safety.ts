@@ -21,7 +21,7 @@ const DANGEROUS_SCHEMES: ReadonlySet<string> = new Set([
   'file:',
 ])
 
-const INTERNAL_DEEPLINK_SCHEME = 'craftagents:'
+const INTERNAL_DEEPLINK_SCHEME = 'mdp:'
 
 export function classifyExternalUrl(rawUrl: string): UrlClassification {
   if (typeof rawUrl !== 'string' || rawUrl.trim() === '') {

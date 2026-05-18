@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it } from 'bun:test'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { CLIENT_OPEN_EXTERNAL } from '@craft-agent/server-core/transport'
 import type { RpcServer, HandlerFn, RequestContext } from '@craft-agent/server-core/transport'
@@ -62,10 +62,20 @@ function createTestHarness(overrides?: { workspaceId?: string | null }) {
 }
 
 describe('registerSystemCoreHandlers OPEN_URL', () => {
-  it('routes craftagents action links internally via deeplink:navigate', async () => {
+  const originalDeepLinkScheme = process.env.CRAFT_DEEPLINK_SCHEME
+
+  afterEach(() => {
+    if (originalDeepLinkScheme === undefined) {
+      delete process.env.CRAFT_DEEPLINK_SCHEME
+    } else {
+      process.env.CRAFT_DEEPLINK_SCHEME = originalDeepLinkScheme
+    }
+  })
+
+  it('routes mdp action links internally via deeplink:navigate', async () => {
     const { openUrl, ctx, invokeClientCalls, pushCalls } = createTestHarness()
 
-    await openUrl(ctx, 'craftagents://action/new-session?input=sg&send=true')
+    await openUrl(ctx, 'mdp://action/new-session?input=sg&send=true')
 
     expect(invokeClientCalls).toHaveLength(0)
     expect(pushCalls).toHaveLength(1)
@@ -76,10 +86,25 @@ describe('registerSystemCoreHandlers OPEN_URL', () => {
     })
   })
 
+  it('respects CRAFT_DEEPLINK_SCHEME for dev multi-instance deep links', async () => {
+    process.env.CRAFT_DEEPLINK_SCHEME = 'mdp2'
+    const { openUrl, ctx, invokeClientCalls, pushCalls } = createTestHarness()
+
+    await openUrl(ctx, 'mdp2://action/new-session?input=sg')
+
+    expect(invokeClientCalls).toHaveLength(0)
+    expect(pushCalls).toHaveLength(1)
+    expect(pushCalls[0]).toMatchObject({
+      channel: RPC_CHANNELS.deeplink.NAVIGATE,
+      target: { to: 'client', clientId: 'client-1' },
+      args: [{ action: 'new-session', actionParams: { input: 'sg' } }],
+    })
+  })
+
   it('routes workspace deep links to workspace target when URL workspace differs', async () => {
     const { openUrl, ctx, invokeClientCalls, pushCalls } = createTestHarness({ workspaceId: 'ws-1' })
 
-    await openUrl(ctx, 'craftagents://workspace/ws-2/action/new-session?input=hello')
+    await openUrl(ctx, 'mdp://workspace/ws-2/action/new-session?input=hello')
 
     expect(invokeClientCalls).toHaveLength(0)
     expect(pushCalls).toHaveLength(1)
@@ -90,17 +115,17 @@ describe('registerSystemCoreHandlers OPEN_URL', () => {
     })
   })
 
-  it('falls back to client openExternal for craftagents window-mode links', async () => {
+  it('falls back to client openExternal for mdp window-mode links', async () => {
     const { openUrl, ctx, invokeClientCalls, pushCalls } = createTestHarness()
 
-    await openUrl(ctx, 'craftagents://action/new-session?window=focused')
+    await openUrl(ctx, 'mdp://action/new-session?window=focused')
 
     expect(pushCalls).toHaveLength(0)
     expect(invokeClientCalls).toHaveLength(1)
     expect(invokeClientCalls[0]).toEqual({
       clientId: 'client-1',
       channel: CLIENT_OPEN_EXTERNAL,
-      args: ['craftagents://action/new-session?window=focused'],
+      args: ['mdp://action/new-session?window=focused'],
     })
   })
 
