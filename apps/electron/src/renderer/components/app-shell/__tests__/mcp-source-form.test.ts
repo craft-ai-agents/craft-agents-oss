@@ -35,7 +35,7 @@ describe('MCP source form flow wiring', () => {
     expect(formSource).toContain('fieldErrors')
     expect(formSource).toContain('Replace existing source')
     expect(formSource).toContain('Secret handling')
-    expect(formSource).toContain('Import selected')
+    expect(formSource).toContain('mcpForm.importSelected')
     expect(apiTypesSource).toContain('parseMcpJsonImport(workspaceId: string, json: string)')
     expect(apiTypesSource).toContain('importMcpJsonCandidates(workspaceId: string')
   })

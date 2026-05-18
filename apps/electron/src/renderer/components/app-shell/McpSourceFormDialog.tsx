@@ -243,6 +243,8 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
                 setIcon={setIcon}
                 enabled={enabled}
                 setEnabled={setEnabled}
+                enableInWorkspace={enableInWorkspace}
+                setEnableInWorkspace={setEnableInWorkspace}
               />
               <Field label={t('mcpForm.command')}>
                 <Input value={command} onChange={(event) => setCommand(event.target.value)} placeholder={t('mcpForm.commandPlaceholder')} />
