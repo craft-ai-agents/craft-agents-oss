@@ -22,7 +22,7 @@ function serverSession(overrides: Record<string, unknown> = {}) {
 }
 
 describe('MdpAuthClient', () => {
-  it('login posts the SSO code and converts expiresIn to expiresAt', async () => {
+  it('login posts the SSO code with a loginId and converts expiresIn to expiresAt', async () => {
     const fetchMock = mock(() =>
       Promise.resolve(
         new Response(JSON.stringify(serverSession()), { status: 200 }),
@@ -33,6 +33,7 @@ describe('MdpAuthClient', () => {
       baseUrl: 'https://mdp.example.test',
       fetchFn: fetchMock as unknown as typeof fetch,
       now: fixedNow,
+      generateLoginId: () => 'fixed-login-id',
     });
     const session = await client.login('sso-code');
 
@@ -41,7 +42,7 @@ describe('MdpAuthClient', () => {
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ code: 'sso-code' }),
+        body: JSON.stringify({ code: 'sso-code', loginId: 'fixed-login-id' }),
       },
     );
     expect(session).toEqual<SsoSession>({
@@ -55,6 +56,29 @@ describe('MdpAuthClient', () => {
       userName: 'Ada Lovelace',
     });
     expect('expiresIn' in session).toBe(false);
+  });
+
+  it('generates a unique UUID loginId for each login call', async () => {
+    const bodies: string[] = [];
+    const fetchMock = mock((_url: string, init: RequestInit) => {
+      bodies.push(init.body as string);
+      return Promise.resolve(new Response(JSON.stringify(serverSession()), { status: 200 }));
+    });
+    const client = new MdpAuthClient({
+      baseUrl: 'https://mdp.example.test',
+      fetchFn: fetchMock as unknown as typeof fetch,
+      now: fixedNow,
+    });
+
+    await client.login('code-1');
+    await client.login('code-2');
+
+    const id1 = (JSON.parse(bodies[0]!) as { loginId: string }).loginId;
+    const id2 = (JSON.parse(bodies[1]!) as { loginId: string }).loginId;
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    expect(id1).toMatch(uuidPattern);
+    expect(id2).toMatch(uuidPattern);
+    expect(id1).not.toBe(id2);
   });
 
   it('refresh posts the session token and returns a parsed SSO session', async () => {

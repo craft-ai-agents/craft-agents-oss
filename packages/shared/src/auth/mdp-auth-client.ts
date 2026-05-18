@@ -51,7 +51,11 @@ export interface MdpAuthClientOptions {
   fetchFn?: typeof fetch;
   /** Current time provider, injectable for deterministic tests. */
   now?: () => number;
+  /** Login ID generator, injectable for deterministic tests. Defaults to randomUUID. */
+  generateLoginId?: () => string;
 }
+
+import { randomUUID } from 'node:crypto';
 
 const SSO_LOGIN_ENDPOINT = '/api/mdp/auth/sso-login';
 const REFRESH_TOKEN_ENDPOINT = '/api/mdp/auth/refresh-token';
@@ -61,16 +65,18 @@ export class MdpAuthClient {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
   private readonly now: () => number;
+  private readonly generateLoginId: () => string;
 
   constructor(options: MdpAuthClientOptions = {}) {
     this.baseUrl = stripTrailingSlash(options.baseUrl ?? process.env.MDP_API_URL ?? '');
     this.fetchFn = options.fetchFn ?? globalThis.fetch;
     this.now = options.now ?? Date.now;
+    this.generateLoginId = options.generateLoginId ?? randomUUID;
   }
 
   /** Exchange an SSO authorization code for an MDP SSO session. */
   login(code: string): Promise<SsoSession> {
-    return this.post(SSO_LOGIN_ENDPOINT, { code });
+    return this.post(SSO_LOGIN_ENDPOINT, { code, loginId: this.generateLoginId() });
   }
 
   /** Refresh an existing MDP SSO session token. */
