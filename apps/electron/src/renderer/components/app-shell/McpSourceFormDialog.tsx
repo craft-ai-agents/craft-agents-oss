@@ -1,6 +1,8 @@
 import * as React from 'react'
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Loader2 } from 'lucide-react'
+import i18n from 'i18next'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -43,6 +45,7 @@ interface McpSourceFormDialogProps {
 }
 
 export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialogProps) {
+  const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
   const [mode, setMode] = React.useState<McpFormMode>('http')
   const [name, setName] = React.useState('')
@@ -190,8 +193,8 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
       <DialogContent className="sm:max-w-4xl">
         <form onSubmit={handleSubmit} className="space-y-5">
           <DialogHeader>
-            <DialogTitle>Add MCP Server</DialogTitle>
-            <DialogDescription>Create a remote or command-based MCP source.</DialogDescription>
+            <DialogTitle>{t('mcpForm.title')}</DialogTitle>
+            <DialogDescription>{t('mcpForm.description')}</DialogDescription>
           </DialogHeader>
 
           <Tabs value={mode} onValueChange={(value) => setMode(value as McpFormMode)}>
@@ -244,36 +247,36 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
                 enabled={enabled}
                 setEnabled={setEnabled}
               />
-              <Field label="Command">
-                <Input value={command} onChange={(event) => setCommand(event.target.value)} placeholder="npx" />
+              <Field label={t('mcpForm.command')}>
+                <Input value={command} onChange={(event) => setCommand(event.target.value)} placeholder={t('mcpForm.commandPlaceholder')} />
               </Field>
-              <Field label="Args">
-                <Textarea value={argsText} onChange={(event) => setArgsText(event.target.value)} rows={4} placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path with spaces" />
+              <Field label={t('mcpForm.args')}>
+                <Textarea value={argsText} onChange={(event) => setArgsText(event.target.value)} rows={4} placeholder={t('mcpForm.argsPlaceholder')} />
               </Field>
-              <Field label="Env">
-                <Textarea value={envText} onChange={(event) => setEnvText(event.target.value)} rows={4} placeholder="API_TOKEN=..." />
+              <Field label={t('mcpForm.env')}>
+                <Textarea value={envText} onChange={(event) => setEnvText(event.target.value)} rows={4} placeholder={t('mcpForm.envPlaceholder')} />
               </Field>
             </TabsContent>
 
             <TabsContent value="json" className="space-y-4">
-              <Field label="MCP JSON">
+              <Field label={t('mcpForm.jsonLabel')}>
                 <Textarea
                   value={jsonText}
                   onChange={(event) => setJsonText(event.target.value)}
                   rows={8}
-                  placeholder={'{\n  "mcpServers": {\n    "linear": { "url": "https://mcp.linear.app/mcp" }\n  }\n}'}
+                  placeholder={t('mcpForm.jsonPlaceholder')}
                 />
               </Field>
               <div className="flex items-center gap-2">
                 <Button type="button" onClick={handleParseJson} disabled={!jsonText.trim() || isParsingJson}>
                   {isParsingJson && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Parse JSON
+                  {t('mcpForm.parseJson')}
                 </Button>
                 <Button type="button" variant="secondary" onClick={handleImportJson} disabled={selectedImportCandidates.length === 0 || isSubmitting}>
                   {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Import selected
+                  {t('mcpForm.importSelected')}
                 </Button>
-                <span className="text-xs text-muted-foreground">{selectedImportCandidates.length} selected</span>
+                <span className="text-xs text-muted-foreground">{t('mcpForm.selectedCount', { count: selectedImportCandidates.length })}</span>
               </div>
               {jsonErrors.length > 0 && (
                 <FieldErrors fieldErrors={jsonErrors} />
@@ -300,11 +303,11 @@ export function McpSourceFormDialog({ workspaceId, trigger }: McpSourceFormDialo
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>{t('common.cancel')}</Button>
             {mode !== 'json' && (
               <Button type="submit" disabled={!canSubmit || isSubmitting}>
                 {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                Create
+                {t('common.create')}
               </Button>
             )}
           </DialogFooter>
@@ -326,25 +329,26 @@ function ManualDetails(props: {
   enableInWorkspace: boolean
   setEnableInWorkspace: (value: boolean) => void
 }) {
+  const { t } = useTranslation()
   return (
     <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]">
-        <Field label="Name">
+        <Field label={t('common.name')}>
           <Input value={props.name} onChange={(event) => props.setName(event.target.value)} placeholder="Linear" required />
         </Field>
-        <Field label="Provider">
+        <Field label={t('mcpForm.provider')}>
           <Input value={props.provider} onChange={(event) => props.setProvider(event.target.value)} placeholder="linear" required />
         </Field>
-        <Field label="Icon">
+        <Field label={t('mcpForm.icon')}>
           <Input className="w-20" value={props.icon} onChange={(event) => props.setIcon(event.target.value)} placeholder="icon" />
         </Field>
       </div>
       <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm">
-        <span>Enabled</span>
+        <span>{t('mcpForm.enabled')}</span>
         <Switch checked={props.enabled} onCheckedChange={props.setEnabled} />
       </label>
       <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm">
-        <span>Enable in workspace</span>
+        <span>{t('mcpForm.enableInWorkspace')}</span>
         <Switch checked={props.enableInWorkspace} onCheckedChange={props.setEnableInWorkspace} />
       </label>
     </>
