@@ -144,23 +144,23 @@ describe('handleDeepLink routing', () => {
     const sink: EventSink = (channel, target, ...args) => {
       sent.push({ channel, target, args })
     }
-    const codes: string[] = []
+    const callbacks: Array<{ code: string; state?: string }> = []
 
     const result = await handleDeepLink(
-      'mdp://sso-callback?code=abc123',
+      'mdp://sso-callback?code=abc123&state=nonce123',
       windowManager,
       {
         sink,
         resolveClientId: (wcId) => wcId === 55 ? 'client-target' : undefined,
-        handleSsoCallback: async (code) => {
-          codes.push(code)
+        handleSsoCallback: async (code, state) => {
+          callbacks.push({ code, state })
           return { success: true }
         },
       },
     )
 
     expect(result.success).toBe(true)
-    expect(codes).toEqual(['abc123'])
+    expect(callbacks).toEqual([{ code: 'abc123', state: 'nonce123' }])
     expect(sent).toEqual([
       {
         channel: RPC_CHANNELS.sso.LOGIN_RESULT,

@@ -220,7 +220,10 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
           sink: server.push.bind(server),
           resolveClientId: resolver,
           preferredClientId: ctx.clientId,
-          handleSsoCallback: (code) => handleSsoCallback({ code }),
+          handleSsoCallback: (code, state) => {
+            const payload = { code, state }
+            return handleSsoCallback(payload)
+          },
         })
         deps.platform.logger.info('[OPEN_URL] Deep link result:', result)
         return

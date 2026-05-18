@@ -403,7 +403,7 @@ export interface ElectronAPI {
   getSsoSession(): Promise<PublicSsoSessionState>
   refreshSsoSession(): Promise<{ success: boolean }>
   startSsoLogin(): Promise<string>
-  handleSsoCallback(payload: { code: string }): Promise<{ success: boolean; error?: string }>
+  handleSsoCallback(payload: { code: string; state?: string }): Promise<{ success: boolean; error?: string }>
   onSsoLoginResult(callback: (result: { success: boolean; error?: string }) => void): () => void
   logoutSso(): Promise<{ success: true }>
 
