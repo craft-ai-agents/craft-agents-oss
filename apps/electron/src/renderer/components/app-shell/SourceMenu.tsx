@@ -21,6 +21,7 @@ import {
   FolderOpen,
   AppWindow,
   Send,
+  Pencil,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getFileManagerName } from '@/lib/platform'
@@ -33,6 +34,8 @@ export interface SourceMenuProps {
   /** Callbacks */
   onOpenInNewWindow: () => void
   onShowInFinder: () => void
+  /** Edit source config (omit to hide the option) */
+  onEdit?: () => void
   onDelete: () => void
   /** Send to another workspace (omit to hide the option) */
   onSendToWorkspace?: () => void
@@ -47,6 +50,7 @@ export function SourceMenu({
   sourceName,
   onOpenInNewWindow,
   onShowInFinder,
+  onEdit,
   onDelete,
   onSendToWorkspace,
 }: SourceMenuProps) {
@@ -74,6 +78,14 @@ export function SourceMenu({
         <MenuItem onClick={onSendToWorkspace}>
           <Send className="h-3.5 w-3.5" />
           <span className="flex-1">{t("sessionMenu.sendToWorkspace")}</span>
+        </MenuItem>
+      )}
+
+      {/* Edit */}
+      {onEdit && (
+        <MenuItem onClick={onEdit}>
+          <Pencil className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("common.edit")}</span>
         </MenuItem>
       )}
 
