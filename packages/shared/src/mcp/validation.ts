@@ -227,6 +227,80 @@ export interface StdioValidationConfig {
 }
 
 /**
+ * Connect-phase watchdog with two cooperating timers:
+ *
+ *  - **Idle timer** — fires after `idleMs` of *silence* on stderr. Reset every
+ *    time `kick()` is called (typically from the stderr data handler). Catches
+ *    "spawn loop has gone quiet, server is hung."
+ *  - **Ceiling timer** — fires unconditionally after `ceilingMs` of wall-clock
+ *    since creation. Hard cap so a server that floods stderr but never
+ *    completes `initialize` can't hold the connect phase alive forever.
+ *
+ * `outcome()` returns which one fired (or null if connect resolved first).
+ */
+interface ConnectWatchdog {
+  promise: Promise<never>;
+  kick: () => void;
+  stop: () => void;
+  outcome: () => 'idle' | 'ceiling' | null;
+}
+
+function createConnectWatchdog(
+  idleMs: number,
+  ceilingMs: number,
+): ConnectWatchdog {
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let ceilingTimer: ReturnType<typeof setTimeout> | null = null;
+  let outcome: 'idle' | 'ceiling' | null = null;
+  let stopped = false;
+  let rejectFn: ((err: Error) => void) | null = null;
+
+  const promise = new Promise<never>((_, reject) => {
+    rejectFn = reject;
+  });
+  // Swallow unhandled rejection if the race winner is `client.connect()`.
+  promise.catch(() => {});
+
+  const fire = (kind: 'idle' | 'ceiling') => {
+    if (outcome || stopped) return;
+    outcome = kind;
+    if (idleTimer) clearTimeout(idleTimer);
+    if (ceilingTimer) clearTimeout(ceilingTimer);
+    idleTimer = null;
+    ceilingTimer = null;
+    rejectFn?.(
+      new Error(
+        kind === 'idle'
+          ? `Timeout: MCP initialize did not complete within ${idleMs}ms of stderr silence`
+          : `Timeout: MCP initialize did not complete within the ${ceilingMs}ms ceiling`,
+      ),
+    );
+  };
+
+  const arm = () => {
+    if (outcome || stopped) return;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => fire('idle'), idleMs);
+  };
+
+  ceilingTimer = setTimeout(() => fire('ceiling'), ceilingMs);
+  arm();
+
+  return {
+    promise,
+    kick: arm,
+    stop: () => {
+      stopped = true;
+      if (idleTimer) clearTimeout(idleTimer);
+      if (ceilingTimer) clearTimeout(ceilingTimer);
+      idleTimer = null;
+      ceilingTimer = null;
+    },
+    outcome: () => outcome,
+  };
+}
+
+/**
  * Validates a stdio MCP connection by spawning the process and listing tools.
  *
  * Unlike HTTP validation, this actually spawns the MCP server process,
@@ -242,11 +316,17 @@ export async function validateStdioMcpConnection(
 ): Promise<McpValidationResult> {
   const { command, args = [], env = {}, timeout = 30000 } = config;
 
-  // Split the budget: most "MCP doesn't work" failures fail to even complete
-  // the `initialize` handshake — so failing fast on connect with a specific
-  // diagnostic beats burning the whole 30s on a generic timeout.
-  const connectTimeout = Math.min(8000, Math.max(1000, Math.floor(timeout / 2)));
-  const listToolsTimeout = Math.max(1000, timeout - connectTimeout);
+  // Two-watchdog connect phase. Most "MCP doesn't work" failures never
+  // complete the `initialize` handshake, so we want fast diagnostics — but
+  // legitimate cold-cache installs (`uv tool run`, `npx`, `pipx`) can take
+  // 20+ seconds while emitting reassuring stderr noise. The idle timer
+  // resets on every stderr event so cold installs aren't penalized; the
+  // ceiling caps the worst-case to prevent a noisy-but-broken server from
+  // holding the validation alive forever.
+  const connectIdleMs = Math.min(8000, Math.max(1000, Math.floor(timeout / 2)));
+  const listToolsFloor = 2000;
+  const connectCeilingMs = Math.max(connectIdleMs, timeout - listToolsFloor);
+  let listToolsTimeoutResolved = listToolsFloor;
 
   debug(`[stdio-validation] Spawning: ${command} ${args.join(' ')}`);
 
@@ -314,13 +394,18 @@ export async function validateStdioMcpConnection(
       stderr: 'pipe',
     });
 
+    const watchdog = createConnectWatchdog(connectIdleMs, connectCeilingMs);
+
     // The SDK exposes a PassThrough _before_ `start()` is called, so this
-    // listener catches early startup output too.
+    // listener catches early startup output too. Every stderr event resets
+    // the idle watchdog — keeps cold-cache installs (`uv`/`uvx`/`npx`) from
+    // timing out while they emit reassuring progress noise.
     transport.stderr?.on('data', (data: Buffer | string) => {
       stderrOutput += typeof data === 'string' ? data : data.toString();
       if (stderrOutput.length > 10000) {
         stderrOutput = stderrOutput.slice(-10000);
       }
+      watchdog.kick();
     });
 
     client = new Client(
@@ -329,12 +414,19 @@ export async function validateStdioMcpConnection(
     );
 
     phase = 'connect';
-    await withTimeout(client.connect(transport), connectTimeout, 'MCP initialize');
+    const connectStart = Date.now();
+    try {
+      await Promise.race([client.connect(transport), watchdog.promise]);
+    } finally {
+      watchdog.stop();
+    }
+    const elapsedConnect = Date.now() - connectStart;
+    listToolsTimeoutResolved = Math.max(listToolsFloor, timeout - elapsedConnect);
 
     phase = 'list-tools';
     const toolsResult = await withTimeout(
       client.listTools(),
-      listToolsTimeout,
+      listToolsTimeoutResolved,
       'tools/list',
     );
     const tools = toolsResult.tools || [];
@@ -404,13 +496,30 @@ export async function validateStdioMcpConnection(
     } else if (error.message.includes('Timeout')) {
       // Phase split: connect timeouts are diagnostic, list-tools timeouts are not.
       if (phase === 'connect') {
-        errorMessage = stderrSnippet
-          ? `MCP initialize not acknowledged within ${connectTimeout}ms. ${framingHint}\nstderr (tail):\n${stderrSnippet}`
-          : `MCP initialize not acknowledged within ${connectTimeout}ms and the server produced no stderr output. ${framingHint}`;
+        // Connect-phase timeouts come from the two-watchdog setup:
+        //   - "stderr silence"  → server went quiet without completing init
+        //                         (likely wrong framing / hung handshake)
+        //   - "ceiling"         → server kept emitting stderr the whole time
+        //                         but never completed init (stuck in a setup
+        //                         loop, wrong entrypoint, etc.)
+        if (error.message.includes('stderr silence')) {
+          errorMessage = stderrSnippet
+            ? `MCP initialize not acknowledged within ${connectIdleMs}ms of stderr silence. ${framingHint}\nstderr (tail):\n${stderrSnippet}`
+            : `MCP initialize not acknowledged within ${connectIdleMs}ms of stderr silence and the server produced no stderr output. ${framingHint}`;
+        } else if (error.message.includes('ceiling')) {
+          errorMessage = stderrSnippet
+            ? `MCP server kept emitting startup output for ${connectCeilingMs}ms but never completed the \`initialize\` handshake. Check that the command actually launches an MCP server (not just a package installer or build step).\nstderr (tail):\n${stderrSnippet}`
+            : `MCP server hit the ${connectCeilingMs}ms connect ceiling without completing the \`initialize\` handshake. Check that the command actually launches an MCP server (not just a package installer or build step).`;
+        } else {
+          // Defensive fallback if some other Timeout-message shape sneaks in.
+          errorMessage = stderrSnippet
+            ? `MCP initialize did not complete within ${connectCeilingMs}ms.\nstderr (tail):\n${stderrSnippet}`
+            : `MCP initialize did not complete within ${connectCeilingMs}ms.`;
+        }
       } else if (phase === 'list-tools') {
         errorMessage = stderrSnippet
-          ? `tools/list did not respond within ${listToolsTimeout}ms.\nstderr (tail):\n${stderrSnippet}`
-          : `tools/list did not respond within ${listToolsTimeout}ms.`;
+          ? `tools/list did not respond within ${listToolsTimeoutResolved}ms.\nstderr (tail):\n${stderrSnippet}`
+          : `tools/list did not respond within ${listToolsTimeoutResolved}ms.`;
       } else {
         errorMessage = stderrSnippet
           ? `Server did not respond within ${timeout}ms.\nstderr (tail):\n${stderrSnippet}`
