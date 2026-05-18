@@ -8,6 +8,9 @@ import type { TeamPublicKnowledgeDocumentConfig } from '../workspaces/types.ts';
 export const TEAM_PUBLIC_KNOWLEDGE_REFRESH_INTERVAL_MS = 30 * 60 * 1_000;
 export const TEAM_PUBLIC_KNOWLEDGE_STALE_TTL_MS = 24 * 60 * 60 * 1_000;
 
+/**
+ * Cached Markdown content and refresh metadata for a configured team knowledge document.
+ */
 export interface TeamPublicKnowledgeCacheEntry extends TeamPublicKnowledgeDocumentConfig {
   content: string;
   contentHash: string;
@@ -19,6 +22,9 @@ export interface TeamPublicKnowledgeCacheEntry extends TeamPublicKnowledgeDocume
   lastError?: string;
 }
 
+/**
+ * Debug/UI summary for the most recent team public knowledge refresh.
+ */
 export interface TeamPublicKnowledgeRefreshSummary {
   added: number;
   updated: number;
@@ -28,11 +34,17 @@ export interface TeamPublicKnowledgeRefreshSummary {
   refreshedAt: number;
 }
 
+/**
+ * Workspace-local cache persisted under team-public-knowledge/cache.json.
+ */
 export interface TeamPublicKnowledgeCache {
   entries: Record<string, TeamPublicKnowledgeCacheEntry>;
   lastSummary?: TeamPublicKnowledgeRefreshSummary;
 }
 
+/**
+ * Fresh public knowledge document content returned for trigger or prefetch use.
+ */
 export interface TeamPublicKnowledgeResult {
   id: string;
   title: string;
@@ -44,19 +56,31 @@ export interface TeamPublicKnowledgeResult {
   fetchedAt: number;
 }
 
+/**
+ * Fetches Markdown content for a configured team public knowledge document.
+ */
 export type TeamPublicKnowledgeFetcher = (document: TeamPublicKnowledgeDocumentConfig) => Promise<string>;
 
+/**
+ * Runtime dependencies and clock overrides for a refresh operation.
+ */
 export interface RefreshTeamPublicKnowledgeOptions {
   now?: number;
   fetchMarkdown?: TeamPublicKnowledgeFetcher;
 }
 
+/**
+ * Clock override for reads that filter stale cache entries.
+ */
 export interface TeamPublicKnowledgeReadOptions {
   now?: number;
 }
 
 const EMPTY_CACHE: TeamPublicKnowledgeCache = { entries: {} };
 
+/**
+ * Refreshes configured team public knowledge documents and persists the workspace cache.
+ */
 export async function refreshTeamPublicKnowledge(
   workspaceRoot: string,
   options: RefreshTeamPublicKnowledgeOptions = {},
@@ -64,14 +88,7 @@ export async function refreshTeamPublicKnowledge(
   const now = options.now ?? Date.now();
   const config = loadWorkspaceConfig(workspaceRoot);
   const cache = loadTeamPublicKnowledgeCache(workspaceRoot);
-  const summary: TeamPublicKnowledgeRefreshSummary = {
-    added: 0,
-    updated: 0,
-    removed: 0,
-    stale: 0,
-    conflicts: 0,
-    refreshedAt: now,
-  };
+  const summary = createRefreshSummary(now);
 
   const knowledgeConfig = config?.teamPublicKnowledge;
   if (!knowledgeConfig?.enabled) {
@@ -94,11 +111,7 @@ export async function refreshTeamPublicKnowledge(
     try {
       const content = await fetchMarkdown(document);
       const contentHash = sha256(content);
-      const version = previous
-        ? previous.contentHash === contentHash
-          ? previous.version
-          : previous.version + 1
-        : 1;
+      const version = getNextVersion(previous, contentHash);
 
       if (!previous) {
         summary.added += 1;
@@ -135,6 +148,9 @@ export async function refreshTeamPublicKnowledge(
   return summary;
 }
 
+/**
+ * Returns fresh, non-stale team public knowledge entries for trigger evaluation.
+ */
 export function getTeamPublicKnowledgeTriggerResults(
   workspaceRoot: string,
   options: TeamPublicKnowledgeReadOptions = {},
@@ -142,6 +158,9 @@ export function getTeamPublicKnowledgeTriggerResults(
   return getFreshTeamPublicKnowledgeResults(workspaceRoot, options);
 }
 
+/**
+ * Returns fresh, non-stale team public knowledge entries for prefetch context.
+ */
 export function getTeamPublicKnowledgePrefetchResults(
   workspaceRoot: string,
   options: TeamPublicKnowledgeReadOptions = {},
@@ -149,6 +168,9 @@ export function getTeamPublicKnowledgePrefetchResults(
   return getFreshTeamPublicKnowledgeResults(workspaceRoot, options);
 }
 
+/**
+ * Loads the workspace-local team public knowledge cache, returning an empty cache on absence or corruption.
+ */
 export function loadTeamPublicKnowledgeCache(workspaceRoot: string): TeamPublicKnowledgeCache {
   const path = getTeamPublicKnowledgeCachePath(workspaceRoot);
   if (!existsSync(path)) return { ...EMPTY_CACHE };
@@ -163,10 +185,16 @@ export function loadTeamPublicKnowledgeCache(workspaceRoot: string): TeamPublicK
   }
 }
 
+/**
+ * Returns the most recent refresh summary stored in the workspace cache.
+ */
 export function getTeamPublicKnowledgeRefreshSummary(workspaceRoot: string): TeamPublicKnowledgeRefreshSummary | null {
   return loadTeamPublicKnowledgeCache(workspaceRoot).lastSummary ?? null;
 }
 
+/**
+ * Returns the path to the workspace-local team public knowledge cache file.
+ */
 export function getTeamPublicKnowledgeCachePath(workspaceRoot: string): string {
   return join(workspaceRoot, 'team-public-knowledge', 'cache.json');
 }
@@ -199,6 +227,23 @@ function saveTeamPublicKnowledgeCache(workspaceRoot: string, cache: TeamPublicKn
   atomicWriteFileSync(getTeamPublicKnowledgeCachePath(workspaceRoot), JSON.stringify(cache, null, 2));
 }
 
+function createRefreshSummary(now: number): TeamPublicKnowledgeRefreshSummary {
+  return {
+    added: 0,
+    updated: 0,
+    removed: 0,
+    stale: 0,
+    conflicts: 0,
+    refreshedAt: now,
+  };
+}
+
+function getNextVersion(previous: TeamPublicKnowledgeCacheEntry | undefined, contentHash: string): number {
+  if (!previous) return 1;
+  if (previous.contentHash === contentHash) return previous.version;
+  return previous.version + 1;
+}
+
 function dedupeDocuments(
   documents: TeamPublicKnowledgeDocumentConfig[],
   summary: TeamPublicKnowledgeRefreshSummary,
@@ -228,6 +273,9 @@ function sha256(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex');
 }
 
+/**
+ * Periodically refreshes the team public knowledge cache for a single workspace.
+ */
 export class TeamPublicKnowledgeRefreshLoop {
   private timer: ReturnType<typeof setInterval> | null = null;
 

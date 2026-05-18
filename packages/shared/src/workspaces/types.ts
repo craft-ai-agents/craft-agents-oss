@@ -27,6 +27,9 @@ export interface LocalMcpConfig {
   enabled: boolean;
 }
 
+/**
+ * A manually maintained public Markdown document that can be cached for team knowledge.
+ */
 export interface TeamPublicKnowledgeDocumentConfig {
   id: string;
   title: string;
@@ -34,6 +37,9 @@ export interface TeamPublicKnowledgeDocumentConfig {
   priority: number;
 }
 
+/**
+ * Workspace configuration for team public knowledge refresh and lookup.
+ */
 export interface TeamPublicKnowledgeConfig {
   enabled: boolean;
   documents: TeamPublicKnowledgeDocumentConfig[];
