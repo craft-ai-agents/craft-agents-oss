@@ -228,6 +228,11 @@ The browser-based OIDC authorization code flow used to establish an SSO Session:
 ### Login Page
 The screen shown when no valid SSO Session exists. Displayed as a new `sso-login` app state, inserted before `onboarding` in the state machine (`loading → sso-login → onboarding → workspace-picker → ready`). Contains a single "Login" button that starts the SSO Login Flow.
 
+### SSO Bypass Mode
+A development-only mode activated by setting `CRAFT_DISABLE_SSO=1` when running an unpackaged (non-production) build. When active, the app skips the SSO Login Flow entirely and injects a mock SSO Session with placeholder identity values, then proceeds through the normal state machine (`onboarding → workspace-picker → ready`). The flag is silently ignored in packaged production builds (`app.isPackaged === true`).
+
+Avoid: SSO skip, auth bypass, dev mode login.
+
 ### MDP Deep Link Protocol
 The custom URL scheme `mdp://` registered by the Electron app for OS-level deep linking. Replaces the former `craftagents://` scheme entirely. Used for all deep links including the SSO callback (`mdp://sso-callback`), session navigation, and actions.
 
