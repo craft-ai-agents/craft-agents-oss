@@ -1,7 +1,7 @@
 /**
  * BaseAgent Abstract Class
  *
- * Shared base class for all AI agent backends (ClaudeAgent, CodexAgent, etc.).
+ * Shared base class for all AI agent backends (ClaudeAgent, PiAgent).
  * Extracts common functionality including:
  * - Model/thinking configuration
  * - Permission mode management (via PermissionManager)
@@ -402,9 +402,8 @@ export abstract class BaseAgent implements AgentBackend {
    * has its own process memory, so when it calls getSessionScopedToolCallbacks(),
    * the callback registry is empty — it was populated in THIS process, not the subprocess.
    *
-   * Instead, each backend (CodexAgent, CopilotAgent) detects session MCP tool
-   * completions from its own event stream (different formats per SDK) and calls
-   * THIS shared method to fire the appropriate callback.
+   * Instead, PiAgent detects session MCP tool completions from its own event
+   * stream and calls THIS shared method to fire the appropriate callback.
    *
    * ClaudeAgent doesn't need this — its session-scoped tools run in-process
    * via Claude Agent SDK, so the callback registry works directly.
@@ -702,7 +701,7 @@ export abstract class BaseAgent implements AgentBackend {
    * Get mini agent configuration for provider-specific application.
    * Returns centralized config that each backend interprets appropriately:
    * - ClaudeAgent: Uses tools array, mcpServers filter, maxThinkingTokens: 0
-   * - CodexAgent: Uses baseInstructions, codex-mini model, effort: 'low'
+   * - PiAgent: Applies tool filter + minimizeThinking via runtime config
    */
   getMiniAgentConfig(): MiniAgentConfig {
     const enabled = this.isMiniAgent();
@@ -1117,8 +1116,7 @@ ${formattedMessages}
    *
    * Each backend implements this using its own SDK/session mechanism:
    * - ClaudeAgent: SDK query() with OAuth
-   * - CodexAgent: Ephemeral thread on app-server
-   * - CopilotAgent: Ephemeral CopilotSession
+   * - PiAgent: One-shot completion via Pi SDK in the subprocess
    *
    * @param request - The query request (prompt, model, systemPrompt, etc.)
    * @returns The model's response text and optional token usage

@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/shared",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "license": "Apache-2.0",
   "description": "Shared business logic for MDP - agent, auth, config, credentials, MCP integration",
   "type": "module",
@@ -79,9 +79,9 @@
     "i18next": "^26.0.3",
     "incr-regex-package": "^1.0.4",
     "shell-quote": "^1.8.3",
-    "@mariozechner/pi-agent-core": "0.72.1",
-    "@mariozechner/pi-ai": "0.72.1",
-    "@mariozechner/pi-coding-agent": "0.72.1"
+    "@mariozechner/pi-agent-core": "0.73.1",
+    "@mariozechner/pi-ai": "0.73.1",
+    "@mariozechner/pi-coding-agent": "0.73.1"
   },
   "peerDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.2.123",

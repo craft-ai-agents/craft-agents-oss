@@ -122,9 +122,9 @@ export function detectProvider(authType: string): AgentProvider {
  *   model: 'claude-sonnet-4-6',
  * });
  *
- * // Create Codex backend (uses app-server mode)
- * const codexBackend = createBackend({
- *   provider: 'openai',
+ * // Create Pi backend (routes OpenAI / Copilot / Bedrock / etc. via Pi SDK)
+ * const piBackend = createBackend({
+ *   provider: 'pi',
  *   workspace: myWorkspace,
  * });
  * ```
@@ -190,7 +190,7 @@ export function createBackendFromResolvedContext(args: {
 
 /**
  * Initialize backend host runtime wiring once at app startup.
- * Keeps runtime/bootstrap details (Codex vendor root, Claude SDK executable/interceptor)
+ * Keeps runtime/bootstrap details (Claude SDK executable, Pi interceptor bundle)
  * behind backend internals.
  */
 export function initializeBackendHostRuntime(args: {
@@ -243,7 +243,7 @@ export function isProviderAvailable(provider: AgentProvider): boolean {
  *
  * AgentProvider determines which backend class to instantiate:
  * - 'anthropic' → ClaudeAgent
- * - 'openai' → CodexAgent
+ * - 'pi' → PiAgent
  *
  * @param providerType - The full provider type from LLM connection
  * @returns The agent provider for SDK selection

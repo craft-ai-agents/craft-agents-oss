@@ -314,6 +314,34 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   })
 
   // ============================================================
+  // RTK Token-Optimization Settings
+  // ============================================================
+
+  // Get rtk Bash-output compression setting
+  server.handle(RPC_CHANNELS.rtk.GET_ENABLED, async () => {
+    const { getRtkEnabled } = await import('@craft-agent/shared/config/storage')
+    return getRtkEnabled()
+  })
+
+  // Set rtk Bash-output compression setting
+  server.handle(RPC_CHANNELS.rtk.SET_ENABLED, async (_ctx, enabled: boolean) => {
+    const { setRtkEnabled } = await import('@craft-agent/shared/config/storage')
+    setRtkEnabled(enabled)
+  })
+
+  // Detect rtk installation (used by Settings UI to swap install prompt ↔ toggle)
+  server.handle(RPC_CHANNELS.rtk.GET_STATUS, async (_ctx, opts?: { forceRecheck?: boolean }) => {
+    const { getRtkStatus } = await import('@craft-agent/shared/agent')
+    return getRtkStatus(opts)
+  })
+
+  // Token-savings summary from `rtk gain --format json` (efficiency meter)
+  server.handle(RPC_CHANNELS.rtk.GET_GAIN, async () => {
+    const { getRtkGain } = await import('@craft-agent/shared/agent')
+    return getRtkGain()
+  })
+
+  // ============================================================
   // Tools Settings
   // ============================================================
 

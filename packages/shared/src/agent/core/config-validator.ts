@@ -2,7 +2,7 @@
  * ConfigValidator - Pre-Write Configuration Validation
  *
  * Provides validation utilities for configuration files before writing.
- * Both ClaudeAgent and CodexAgent can use this to validate Write/Edit tool
+ * Both ClaudeAgent and PiAgent can use this to validate Write/Edit tool
  * inputs before they modify config files.
  *
  * Key responsibilities:

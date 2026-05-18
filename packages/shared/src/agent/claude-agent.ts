@@ -67,6 +67,9 @@ import {
   type PreToolUseCheckResult,
   BUILT_IN_TOOLS,
 } from './core/pre-tool-use.ts';
+import { getRtkPath } from './core/rtk-detector.ts';
+import { getRtkEnabled } from '../config/storage.ts';
+import type { RtkContext } from './core/rtk-rewrite.ts';
 import { type ThinkingLevel, THINKING_TO_EFFORT, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
 import { generateConversationSummary } from './conversation-summary.ts';
 import type { LoadedSource } from '../sources/types.ts';
@@ -1095,6 +1098,13 @@ export class ClaudeAgent extends BaseAgent {
 
               const toolInput = input.tool_input as Record<string, unknown>;
 
+              // Build RTK context fresh per call so toggling the preference
+              // takes effect without restart. `getRtkPath()` is cached per
+              // process; only the storage read happens each time.
+              const rtkContext: RtkContext | undefined = getRtkEnabled()
+                ? { enabled: true, path: getRtkPath(), exclude: [] }
+                : undefined;
+
               // Run centralized PreToolUse checks
               const checkResult = runPreToolUseChecks({
                 toolName: input.tool_name,
@@ -1111,6 +1121,7 @@ export class ClaudeAgent extends BaseAgent {
                 hasSourceActivation: !!this.onSourceActivationRequest,
                 permissionManager: this.permissionManager,
                 prerequisiteManager: this.prerequisiteManager,
+                rtkContext,
                 onDebug: (msg) => this.onDebug?.(msg),
               });
 
@@ -2511,7 +2522,7 @@ This is a branched conversation. All prior messages in this conversation are par
 
   /**
    * Check if running in mini agent mode.
-   * Uses centralized detection for consistency with CodexAgent.
+   * Uses the centralized `systemPromptPreset` flag from BaseAgent.
    */
   isMiniAgent(): boolean {
     return this.config.systemPromptPreset === 'mini';

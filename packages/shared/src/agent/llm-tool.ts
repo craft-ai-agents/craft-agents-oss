@@ -173,7 +173,7 @@ export interface BuildCallLlmOptions {
  * Validates input, processes attachments, resolves schema, and builds an LLMQueryRequest
  * ready to be passed to the backend's queryLlm().
  *
- * Used by CodexAgent and CopilotAgent to avoid duplicating the same ~80 lines of logic.
+ * Used by PiAgent's call_llm intercept path.
  */
 export async function buildCallLlmRequest(
   input: Record<string, unknown>,

@@ -5,7 +5,7 @@
  * Extracted from ClaudeAgent.convertSDKMessage() for testability and
  * consistency with the Codex/Copilot adapter pattern.
  *
- * Key differences from Codex/Copilot adapters:
+ * Key Claude-specific behavior:
  * - Uses extractToolStarts/extractToolResults from tool-matching.ts (stateless, ID-based)
  * - Handles stream_event for real-time text deltas and tool start detection
  * - Manages pendingText for deferred text_complete (waits for stop_reason from message_delta)
