@@ -173,6 +173,10 @@ export const RPC_CHANNELS = {
     CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
     DEFER_SETUP: 'onboarding:deferSetup',
   },
+  sso: {
+    GET_SESSION: 'sso:getSession',
+    REFRESH: 'sso:refresh',
+  },
   llmConnections: {
     LIST: 'LLM_Connection:list',
     LIST_WITH_STATUS: 'LLM_Connection:listWithStatus',

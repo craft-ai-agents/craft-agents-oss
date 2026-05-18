@@ -132,6 +132,10 @@ export const CHANNEL_MAP = {
   clearClaudeOAuthState: invoke(RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE),
   deferSetup: invoke(RPC_CHANNELS.onboarding.DEFER_SETUP),
 
+  // SSO startup session
+  getSsoSession: invoke(RPC_CHANNELS.sso.GET_SESSION),
+  refreshSsoSession: invoke(RPC_CHANNELS.sso.REFRESH),
+
   // ChatGPT OAuth
   startChatGptOAuth: invoke(RPC_CHANNELS.chatgpt.START_OAUTH),
   cancelChatGptOAuth: invoke(RPC_CHANNELS.chatgpt.CANCEL_OAUTH),

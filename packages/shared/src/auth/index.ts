@@ -16,4 +16,5 @@ export * from './oauth.ts';
 export * from './oauth-relay.ts';
 export * from './pkce.ts';
 export * from './sso-credential-store.ts';
+export * from './sso-session-state.ts';
 export * from './state.ts';
