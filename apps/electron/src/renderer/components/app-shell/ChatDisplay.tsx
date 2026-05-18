@@ -1608,6 +1608,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             onOpenFile={onOpenFile}
                             onOpenUrl={onOpenUrl}
                             sessionId={session?.id}
+                            sessionFolderPath={sessionFolderPath}
                             compactMode={compactMode}
                           />
                         </div>
@@ -1631,6 +1632,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             onOpenFile={onOpenFile}
                             onOpenUrl={onOpenUrl}
                             sessionId={session?.id}
+                            sessionFolderPath={sessionFolderPath}
                             onRetry={turn.message.role === 'error' ? () => {
                               const msgs = session?.messages
                               if (!msgs) return
@@ -1966,6 +1968,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           theme={isDark ? 'dark' : 'light'}
           onOpenUrl={onOpenUrl}
           onOpenFile={onOpenFile}
+          sessionFolderPath={sessionFolderPath}
         />
       )}
 
@@ -2013,6 +2016,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             content={activityOutputOverlayData.content}
             onOpenUrl={onOpenUrl}
             onOpenFile={onOpenFile}
+            sessionFolderPath={sessionFolderPath}
             filePath={activityOutputOverlayData.filePath}
             typeBadge={{
               icon: Info,
@@ -2028,6 +2032,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             content={activityOutputOverlayData.content}
             onOpenUrl={onOpenUrl}
             onOpenFile={onOpenFile}
+            sessionFolderPath={sessionFolderPath}
             typeBadge={{
               icon: Info,
               label: overlayState.activity.displayName || overlayState.activity.toolName || 'Activity',
@@ -2082,6 +2087,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             content={overlayState.content}
             onOpenUrl={onOpenUrl}
             onOpenFile={onOpenFile}
+            sessionFolderPath={sessionFolderPath}
           />
         )
       )}
@@ -2105,6 +2111,8 @@ interface MessageBubbleProps {
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
   sessionId?: string
+  /** Absolute path to the current session folder for resolving preview src values like data/... or plans/... */
+  sessionFolderPath?: string
   /**
    * Markdown render mode for assistant messages
    * @default 'minimal'
@@ -2201,6 +2209,7 @@ function MessageBubble({
   onOpenFile,
   onOpenUrl,
   sessionId,
+  sessionFolderPath,
   renderMode = 'minimal',
   onPopOut,
   compactMode,
@@ -2248,6 +2257,7 @@ function MessageBubble({
               mode={renderMode}
               onUrlClick={onOpenUrl}
               onFileClick={onOpenFile}
+              sessionFolderPath={sessionFolderPath}
             />
           ) : (
             <CollapsibleMarkdownProvider>
@@ -2258,6 +2268,7 @@ function MessageBubble({
                 id={message.id}
                 className="text-sm"
                 collapsible
+                sessionFolderPath={sessionFolderPath}
               >
                 {message.content}
               </Markdown>
@@ -2356,6 +2367,7 @@ const MemoizedMessageBubble = React.memo(MessageBubble, (prev, next) => {
     prev.message.content === next.message.content &&
     prev.message.role === next.message.role &&
     prev.sessionId === next.sessionId &&
+    prev.sessionFolderPath === next.sessionFolderPath &&
     prev.compactMode === next.compactMode
   )
 })

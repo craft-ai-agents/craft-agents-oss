@@ -48,6 +48,8 @@ export interface AnnotatableMarkdownDocumentProps {
   content: string
   messageId: string
   sessionId?: string
+  /** Absolute path to the current session folder for resolving preview src values like data/... or plans/... */
+  sessionFolderPath?: string
   annotations?: AnnotationV1[]
   onAddAnnotation?: (messageId: string, annotation: AnnotationV1) => void
   onRemoveAnnotation?: (messageId: string, annotationId: string) => void
@@ -64,6 +66,7 @@ export function AnnotatableMarkdownDocument({
   content,
   messageId,
   sessionId,
+  sessionFolderPath,
   annotations,
   onAddAnnotation,
   onRemoveAnnotation,
@@ -623,7 +626,13 @@ export function AnnotatableMarkdownDocument({
         onMouseDown={handleSelectionPointerDown}
         onMouseUp={handleTextSelection}
       >
-        <Markdown mode="minimal" onUrlClick={onOpenUrl} onFileClick={onOpenFile} hideFirstMermaidExpand={false}>
+        <Markdown
+          mode="minimal"
+          onUrlClick={onOpenUrl}
+          onFileClick={onOpenFile}
+          hideFirstMermaidExpand={false}
+          sessionFolderPath={sessionFolderPath}
+        >
           {content}
         </Markdown>
 
