@@ -220,8 +220,8 @@ Avoid: JWT, id token.
 
 ### SSO Login Flow
 The browser-based OIDC authorization code flow used to establish an SSO Session:
-1. App opens `MDP_AUTH_URL` in the system browser with `client_id`, `redirect_uri=MDP_RELAY_URL`, `response_type=code`, and a relay-wrapped `state` nonce.
-2. OIDC provider redirects to `MDP_RELAY_URL`, and the relay forwards to `mdp://sso-callback?code=...&state=...`, which the OS routes back to the app.
+1. App opens `MDP_AUTH_URL` in the system browser with `client_id`, `redirect_uri=https://agents.craft.do/auth/callback`, `response_type=code`, and a relay-wrapped `state` nonce.
+2. OIDC provider redirects to `https://agents.craft.do/auth/callback`, and the relay forwards to `mdp://sso-callback?code=...&state=...`, which the OS routes back to the app.
 3. App exchanges the `code` via POST to `MDP_API_URL/api/mdp/auth/sso-login`.
 4. Response fields: `token`, `employeeId`, `ystId`, `department`, `userName`, `expiresIn`, `accessToken`, `idToken`.
 
