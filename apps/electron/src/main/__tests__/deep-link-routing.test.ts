@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it } from 'bun:test'
 import { handleDeepLink, parseDeepLink } from '../deep-link'
 import { RPC_CHANNELS } from '../../shared/types'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import type { WindowManager } from '../window-manager'
+
+const originalDeepLinkScheme = process.env.CRAFT_DEEPLINK_SCHEME
 
 function createMockWindow(webContentsId: number) {
   return {
@@ -20,9 +22,26 @@ function createMockWindow(webContentsId: number) {
 }
 
 describe('handleDeepLink routing', () => {
+  afterEach(() => {
+    if (originalDeepLinkScheme === undefined) {
+      delete process.env.CRAFT_DEEPLINK_SCHEME
+    } else {
+      process.env.CRAFT_DEEPLINK_SCHEME = originalDeepLinkScheme
+    }
+  })
+
   it('rejects non-mdp protocols', () => {
     const legacyScheme = ['craft', 'agents'].join('')
     expect(parseDeepLink(`${legacyScheme}://workspace/ws-target/allSessions`)).toBeNull()
+  })
+
+  it('accepts the configured development protocol override', () => {
+    process.env.CRAFT_DEEPLINK_SCHEME = 'mdp2'
+    expect(parseDeepLink('mdp2://workspace/ws-target/allSessions')).toMatchObject({
+      workspaceId: 'ws-target',
+      view: 'allSessions',
+    })
+    expect(parseDeepLink('mdp://workspace/ws-target/allSessions')).toBeNull()
   })
 
   it('prefers resolved target client over preferred caller client', async () => {

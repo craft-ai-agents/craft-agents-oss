@@ -39,6 +39,7 @@ import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
 import { RPC_CHANNELS } from '../shared/types'
 import type { EventSink } from '@craft-agent/server-core/transport'
+import { getDeepLinkProtocol } from './deep-link-scheme'
 
 export interface DeepLinkTarget {
   /** Workspace ID - undefined means use active window */
@@ -96,7 +97,7 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
   try {
     const parsed = new URL(url)
 
-    if (parsed.protocol !== 'mdp:') {
+    if (parsed.protocol !== getDeepLinkProtocol()) {
       return null
     }
 

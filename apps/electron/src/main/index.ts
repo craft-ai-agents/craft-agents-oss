@@ -94,6 +94,7 @@ import { setBundledAssetsRoot } from '@craft-agent/shared/utils'
 import { initializeBackendHostRuntime } from '@craft-agent/shared/agent/backend'
 import { setPowerShellValidatorRoot } from '@craft-agent/shared/agent'
 import { handleDeepLink } from './deep-link'
+import { getDeepLinkScheme } from './deep-link-scheme'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
@@ -184,7 +185,7 @@ registerPiModelResolver((piAuthProvider) =>
 
 // Custom URL scheme for deeplinks (e.g., mdp://auth-complete)
 // Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (mdp1, mdp2, etc.)
-const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'mdp'
+const DEEPLINK_SCHEME = getDeepLinkScheme()
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null

@@ -15,6 +15,7 @@ import {
   requestClientShowInFolder,
   requestClientOpenFileDialog,
 } from '@craft-agent/server-core/transport'
+import { getDeepLinkProtocol } from '../deep-link-scheme'
 
 export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.theme.GET_SYSTEM_PREFERENCE,
@@ -209,7 +210,7 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
       const parsed = new URL(url)
 
       // Handle mdp:// URLs internally via deep link handler (GUI only)
-      if (parsed.protocol === 'mdp:') {
+      if (parsed.protocol === getDeepLinkProtocol()) {
         if (!windowManager) return
         deps.platform.logger.info('[OPEN_URL] Handling as deep link')
         const { handleDeepLink } = await import('../deep-link')

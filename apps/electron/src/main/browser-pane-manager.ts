@@ -21,6 +21,7 @@ import {
 import { DEFAULT_THEME, loadAppTheme } from '@craft-agent/shared/config'
 import { getBrowserLiveFxCornerRadii } from '../shared/browser-live-fx'
 import type { IBrowserPaneManager } from '@craft-agent/server-core/handlers'
+import { getDeepLinkPrefix } from './deep-link-scheme'
 
 export type { BrowserInstanceInfo }
 
@@ -43,7 +44,6 @@ const THEME_COLOR_NULL_SENTINEL = '__NULL__'
 const THEME_OBSERVER_MIN_INTERVAL_MS = 120
 const EARLY_THEME_EXTRACTION_DELAY_MS = 100
 const BROWSER_EMPTY_STATE_PAGE = 'browser-empty-state.html'
-const CRAFT_DEEPLINK_SCHEME_PREFIX = `${process.env.CRAFT_DEEPLINK_SCHEME || 'mdp'}://`
 
 const THEME_COLOR_EXTRACTOR_FN = String.raw`
 () => {
@@ -640,7 +640,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       normalizedPath = `workspace/${encodeURIComponent(workspaceId)}/${normalizedPath}`
     }
 
-    return `${CRAFT_DEEPLINK_SCHEME_PREFIX}${normalizedPath}${routeQuery ? `?${routeQuery}` : ''}`
+    return `${getDeepLinkPrefix()}${normalizedPath}${routeQuery ? `?${routeQuery}` : ''}`
   }
 
   private async triggerEmptyStateRouteLaunch(
@@ -2086,7 +2086,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   private async handleDeepLinkUrl(url: string): Promise<void> {
-    if (!url.startsWith(CRAFT_DEEPLINK_SCHEME_PREFIX)) return
+    if (!url.startsWith(getDeepLinkPrefix())) return
 
     try {
       if (!this.windowManager) {
@@ -3054,7 +3054,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     })
 
     pageWc.on('will-navigate', (event, url) => {
-      if (url.startsWith(CRAFT_DEEPLINK_SCHEME_PREFIX)) {
+      if (url.startsWith(getDeepLinkPrefix())) {
         event.preventDefault()
         void this.handleDeepLinkUrl(url)
       }
@@ -3076,7 +3076,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
         `[browser-pane] window-open requested id=${instance.id} url=${details.url} disposition=${details.disposition ?? 'unknown'} frameName=${details.frameName || 'none'}`,
       )
 
-      if (details.url.startsWith(CRAFT_DEEPLINK_SCHEME_PREFIX)) {
+      if (details.url.startsWith(getDeepLinkPrefix())) {
         void this.handleDeepLinkUrl(details.url)
         return { action: 'deny' }
       }
