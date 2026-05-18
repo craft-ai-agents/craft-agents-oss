@@ -28,4 +28,14 @@ describe('generateSsoRelayCallbackPage', () => {
     expect(html).not.toContain('Open MDP');
     expect(html).toContain('@media (prefers-color-scheme: dark)');
   });
+
+  it('does not allow deep link values to break out of the inline script', () => {
+    const deepLinkUrl = 'mdp://sso-callback?code=abc&state=</script><script>alert(1)</script>';
+
+    const html = generateSsoRelayCallbackPage(deepLinkUrl);
+
+    expect(html).toContain('window.location.href = "mdp://sso-callback?code=abc&state=\\u003C/script>');
+    expect(html).not.toContain(deepLinkUrl);
+    expect(html).toContain('href="mdp://sso-callback?code=abc&amp;state=&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;"');
+  });
 });

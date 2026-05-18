@@ -17,6 +17,13 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+function serializeScriptString(value: string): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003C')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
 /**
  * Generate a minimal, clean callback page matching the app's design system.
  * Logo at top, status message in a card below.
@@ -204,7 +211,7 @@ export function generateSsoRelayCallbackPage(deepLinkUrl: string, errorDetail?: 
   const autoRedirectScript = isSuccess
     ? `
     setTimeout(() => {
-      window.location.href = ${JSON.stringify(deepLinkUrl)};
+      window.location.href = ${serializeScriptString(deepLinkUrl)};
     }, 300);`
     : '';
 
