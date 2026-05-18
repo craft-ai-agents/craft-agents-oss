@@ -1364,6 +1364,9 @@ function AppShellContent({
     }
   }, [])
 
+  // Sources state
+  const [editingSource, setEditingSource] = React.useState<LoadedSource | null>(null)
+
   // Delete Source - simplified since agents system is removed
   const handleDeleteSource = useCallback(async (sourceSlug: string) => {
     if (!activeWorkspace) return
@@ -1375,6 +1378,11 @@ function AppShellContent({
       toast.error(t('toast.failedToDeleteSource'))
     }
   }, [activeWorkspace])
+
+  // Edit Source - opens the edit dialog with the selected source pre-filled
+  const handleEditSource = useCallback((source: LoadedSource) => {
+    setEditingSource(source)
+  }, [])
 
   // Delete Skill
   const handleDeleteSkill = useCallback(async (skillSlug: string) => {
@@ -2072,10 +2080,19 @@ function AppShellContent({
                 sourceFilter={sourceFilter}
                 workspaceRootPath={activeWorkspace?.rootPath}
                 onDeleteSource={handleDeleteSource}
+                onEditSource={handleEditSource}
                 onSourceClick={handleSourceSelect}
                 selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
                 localMcpEnabled={localMcpEnabled}
               />
+              {/* Edit Source dialog */}
+              {editingSource && activeWorkspace && (
+                <McpSourceFormDialog
+                  workspaceId={activeWorkspace.id}
+                  editSource={editingSource}
+                  onEditComplete={() => setEditingSource(null)}
+                />
+              )}
             )}
             {isLocalSkillsNav && activeWorkspaceId && (
               /* Skills List */

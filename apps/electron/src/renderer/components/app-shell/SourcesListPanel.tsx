@@ -39,6 +39,7 @@ export interface SourcesListPanelProps {
   sourceFilter?: SourceFilter | null
   workspaceRootPath?: string
   onDeleteSource: (sourceSlug: string) => void
+  onEditSource: (source: LoadedSource) => void
   onSourceClick: (source: LoadedSource) => void
   selectedSourceSlug?: string | null
   localMcpEnabled?: boolean
@@ -50,6 +51,7 @@ export function SourcesListPanel({
   sourceFilter,
   workspaceRootPath,
   onDeleteSource,
+  onEditSource,
   onSourceClick,
   selectedSourceSlug,
   localMcpEnabled = true,
@@ -148,6 +150,7 @@ export function SourcesListPanel({
               sourceName={source.config.name}
               onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://sources/source/${source.config.slug}?window=focused`)}
               onShowInFinder={() => window.electronAPI.showInFolder(source.folderPath)}
+              onEdit={() => onEditSource(source)}
               onDelete={() => onDeleteSource(source.config.slug)}
               onSendToWorkspace={hasOtherWorkspaces ? () => {
                 setSendResourceSlug(source.config.slug)
