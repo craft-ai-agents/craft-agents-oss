@@ -39,13 +39,13 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
     const { createMcpSourceFromManualInput, createSource, defaultMcpPostCreateConnectionTester, stdioCommandFingerprint } = await import('@craft-agent/shared/sources')
-    const enableInWorkspace = (config as Record<string, unknown>).enableInWorkspace ?? true
+    const enableInWorkspace = config.enableInWorkspace ?? true
     if ((config.type ?? 'mcp') === 'mcp' && config.mcp) {
       // Auto-confirm stdio commands — user confirmed by submitting the form.
-      let confirmedStdioCommands: Record<string, true> | undefined
+      let confirmedStdioCommands: Record<string, true> | undefined;
       if (config.mcp.transport === 'stdio' && config.mcp.command) {
-        const fingerprint = stdioCommandFingerprint(config.mcp.command, config.mcp.args)
-        confirmedStdioCommands = { [fingerprint]: true }
+        const fingerprint = stdioCommandFingerprint(config.mcp.command, config.mcp.args);
+        confirmedStdioCommands = { [fingerprint]: true };
       }
       const created = await createMcpSourceFromManualInput(workspace.rootPath, {
         name: config.name || 'New Source',
@@ -93,11 +93,11 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
     const { createMcpSourcesFromCandidates, defaultMcpPostCreateConnectionTester, stdioCommandFingerprint } = await import('@craft-agent/shared/sources')
     // Auto-confirm stdio commands — user confirmed by selecting and importing in the preview.
-    const confirmedStdioCommands: Record<string, true> = {}
+    const confirmedStdioCommands: Record<string, true> = {};
     for (const candidate of candidates) {
       if (candidate.input.mcp?.transport === 'stdio' && candidate.input.mcp.command) {
-        const fingerprint = stdioCommandFingerprint(candidate.input.mcp.command, candidate.input.mcp.args)
-        confirmedStdioCommands[fingerprint] = true
+        const fingerprint = stdioCommandFingerprint(candidate.input.mcp.command, candidate.input.mcp.args);
+        confirmedStdioCommands[fingerprint] = true;
       }
     }
     const result = await createMcpSourcesFromCandidates(workspace.rootPath, candidates, {
