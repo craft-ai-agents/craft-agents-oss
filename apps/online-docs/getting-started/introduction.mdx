@@ -1,6 +1,6 @@
 ---
 title: "Introduction"
-description: "Claude's coding capabilities, extended for your entire digital workflow"
+description: "AI Agent's coding and computer use capabilities, extended for your entire digital workflow"
 ---
 
 Craft Agents brings Claude's coding capabilities to your entire digital workflow. It massively improves both coding and non-coding workflows via enhanced UI, review, and auto execution. Built on the same foundation as Claude Code (the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk)), it extends the model's reasoning power to work across all your tools: GitHub, Linear, Slack, Craft documents, local files, and any API you can connect.
@@ -16,14 +16,12 @@ The inbox works like a combination of email and task manager. Each conversation 
 **Sources** give the agent access to your tools—MCP servers, REST APIs, or local files:
 
 | Source Type | Examples | What You Can Do |
-|-------------|----------|-----------------|
+| --- | --- | --- |
 | MCP servers | GitHub, Linear, Craft | Full integration with issue tracking, docs, repos |
 | REST APIs | Any service with an API | Query and mutate data from internal tools |
 | Local files | Obsidian vaults, code repos | Work with files on your machine |
 
 A single conversation might pull issues from Linear, reference code from GitHub, check Slack threads, and summarize everything in a Craft document.
-
-
 
 ### Multitask naturally
 
@@ -46,44 +44,44 @@ Run a [remote server](/server/headless) and access your workspaces from any mach
 Themes, skills, statuses, permissions—everything is a config file the agent can edit. Modify behavior through conversation, not complex settings UIs.
 
 | What | How It Works | Customization Level |
-|------|--------------|---------------------|
-| **[Skills](/skills/overview)** | YAML frontmatter + markdown | Reusable instructions invoked with `@mention` |
-| **[Themes](/go-further/themes)** | 6-color semantic system | App or workspace, with dark mode and scenic backgrounds |
-| **[Statuses](/statuses/overview)** | Config for workflow states | Custom labels, colors, icons, inbox/archive categories |
-| **[Permissions](/core-concepts/permissions)** | Layered rules | App → workspace → source cascade |
+| --- | --- | --- |
+| [**Skills**](/skills/overview) | YAML frontmatter \+ markdown | Reusable instructions invoked with `@mention` |
+| [**Themes**](/go-further/themes) | 6-color semantic system | App or workspace, with dark mode and scenic backgrounds |
+| [**Statuses**](/statuses/overview) | Config for workflow states | Custom labels, colors, icons, inbox/archive categories |
+| [**Permissions**](/core-concepts/permissions) | Layered rules | App → workspace → source cascade |
 
 ## Craft Agents vs Claude Code
 
 Craft Agents and Claude Code share the same foundation—the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk)—but serve different purposes:
 
 | Aspect | Claude Code | Craft Agents |
-|--------|-------------|--------------|
+| --- | --- | --- |
 | **Interface** | Terminal CLI | Easy to use desktop app |
-| **Data sources** | MCP servers | MCP + REST APIs + local files |
+| **Data sources** | MCP servers | MCP \+ REST APIs \+ local files |
 | **Session org** | Continue with `-c` flag | Inbox with custom workflow statuses |
 | **Config scope** | Per-project `.claude/` | Multi-workspace with full isolation |
 | **Permissions** | Fixed mode behaviors | [Customizable rules](/core-concepts/permissions) per workspace/source |
-| **Remote access** | SSH + terminal | [Remote server](/server/headless) with desktop, browser, and CLI clients |
+| **Remote access** | SSH \+ terminal | [Remote server](/server/headless) with desktop, browser, and CLI clients |
 
 **What's the same:** Claude model, core tools (Read, Write, Edit, Bash, Glob, Grep), MCP support, skills format, and thinking level control (Off / Low / Medium / High / Max).
 
 ## Key Concepts
 
-**[Sources](/sources/overview)** connect Craft Agents to external data—GitHub repos, Linear projects, Craft spaces, or your local filesystem. Each source gives the agent new capabilities.
+[**Sources**](/sources/overview) connect Craft Agents to external data—GitHub repos, Linear projects, Craft spaces, or your local filesystem. Each source gives the agent new capabilities.
 
-**[Workspaces](/go-further/workspaces)** are isolated environments with their own sources, skills, and sessions. Use different workspaces for different projects or contexts.
+[**Workspaces**](/go-further/workspaces) are isolated environments with their own sources, skills, and sessions. Use different workspaces for different projects or contexts.
 
-**[Permission modes](/core-concepts/permissions)** control what the agent can do. Cycle through them with **SHIFT+TAB**:
+[**Permission modes**](/core-concepts/permissions) control what the agent can do. Cycle through them with **SHIFT\+TAB**:
 
 | Mode | Behavior |
-|------|----------|
+| --- | --- |
 | **Explore** | Read-only. Research and analyze without risk. |
 | **Ask to Edit** | Prompts before changes. Review each action. |
 | **Execute** | Full autonomy. The agent works uninterrupted. |
 
-**[Sessions](/core-concepts/conversations)** are persistent conversations organized like an inbox. Start multiple tasks, switch between them, and pick up where you left off.
+[**Sessions**](/core-concepts/conversations) are persistent conversations organized like an inbox. Start multiple tasks, switch between them, and pick up where you left off.
 
-**[Skills](/skills/overview)** are custom instructions that define specialized agent behaviors—like a code review workflow or a content generation template. Same format as Claude Code skills.
+[**Skills**](/skills/overview) are custom instructions that define specialized agent behaviors—like a code review workflow or a content generation template. Same format as Claude Code skills.
 
 ## Open Source
 
@@ -92,18 +90,11 @@ Craft Agents is open source under Apache 2.0. The codebase lives at [github.com/
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card
-    title="Install Craft Agents"
-    icon="download"
-    href="/getting-started/installation"
-  >
+  <Card title="Install Craft Agents" icon="download" href="/getting-started/installation">
     Desktop app for macOS, Windows, and Linux.
   </Card>
-  <Card
-    title="Add Sources"
-    icon="plug"
-    href="/sources/overview"
-  >
+
+  <Card title="Add Sources" icon="plug" href="/sources/overview">
     Connect GitHub, Linear, APIs, and local files.
   </Card>
 </CardGroup>
