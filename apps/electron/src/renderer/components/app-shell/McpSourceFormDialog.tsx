@@ -731,7 +731,7 @@ function validateImportCandidate(candidate: McpImportCandidate): McpImportFieldE
   return errors
 }
 
-function ConfiguredBadge() {
+function CredentialConfiguredBadge() {
   const { t } = useTranslation()
   return (
     <span className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-success/10 text-success">
@@ -754,7 +754,7 @@ function RemoteFields(props: {
   setApiKeyValue: (value: string) => void
   headersText: string
   setHeadersText: (value: string) => void
-  /** When true, sensitive fields show a "Configured" badge instead of pre-filled values */
+  /** When true, sensitive fields show a credential configured badge instead of pre-filled values */
   isEditMode?: boolean
   isAuthenticated?: boolean
 }) {
@@ -780,7 +780,7 @@ function RemoteFields(props: {
           <Label className="text-xs text-muted-foreground">
             Bearer Token
             {props.isEditMode && props.isAuthenticated && !props.bearerToken && (
-              <ConfiguredBadge />
+              <CredentialConfiguredBadge />
             )}
           </Label>
           <Input type="password" value={props.bearerToken} onChange={(event) => props.setBearerToken(event.target.value)} />
@@ -795,7 +795,7 @@ function RemoteFields(props: {
             <Label className="text-xs text-muted-foreground">
               Header Value
               {props.isEditMode && props.isAuthenticated && !props.apiKeyValue && (
-                <ConfiguredBadge />
+                <CredentialConfiguredBadge />
               )}
             </Label>
             <Input type="password" value={props.apiKeyValue} onChange={(event) => props.setApiKeyValue(event.target.value)} />

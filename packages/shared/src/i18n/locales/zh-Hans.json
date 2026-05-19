@@ -482,7 +482,6 @@
   "mcpForm.blocked": "已阻止",
   "mcpForm.command": "命令",
   "mcpForm.commandPlaceholder": "npx",
-  "mcpForm.configured": "已配置",
   "mcpForm.createNewSource": "创建新数据源",
   "mcpForm.credentialConfigured": "凭据已配置",
   "mcpForm.credentialStore": "凭据存储",

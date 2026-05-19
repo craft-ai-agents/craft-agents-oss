@@ -482,7 +482,6 @@
   "mcpForm.blocked": "Blocked",
   "mcpForm.command": "Command",
   "mcpForm.commandPlaceholder": "npx",
-  "mcpForm.configured": "Configured",
   "mcpForm.createNewSource": "Create new source",
   "mcpForm.credentialConfigured": "Credential configured",
   "mcpForm.credentialStore": "Credential store",
