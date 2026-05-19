@@ -475,6 +475,20 @@ function AppShellContent({
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
 
+  // Admin permission check
+  const [isAdmin, setIsAdmin] = React.useState(false)
+  React.useEffect(() => {
+    const permissionApiBase: string = import.meta.env.VITE_PERMISSION_API_URL ?? ''
+    window.electronAPI.getSsoSession().then((session) => {
+      if (!session.authenticated) return
+      const employeeId = session.employeeId
+      fetch(`${permissionApiBase}/api/mdp/permission/checkAdmin?employeeId=${encodeURIComponent(employeeId)}`)
+        .then((res) => res.json())
+        .then((json: { body: boolean }) => { if (json.body) setIsAdmin(true) })
+        .catch(() => {})
+    }).catch(() => {})
+  }, [])
+
   // Enabled permission modes for Shift+Tab cycling (min 2 modes)
   const [enabledModes, setEnabledModes] = React.useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
 
@@ -1956,14 +1970,14 @@ function AppShellContent({
                     },
                     // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },
-                    // --- Admin ---
-                    {
+                    // --- Admin (only visible to admins) ---
+                    ...(isAdmin ? [{
                       id: "nav:admin",
                       title: "后台管理",
                       icon: ShieldCheck,
                       variant: isAdminNavigation(navState) ? "default" : "ghost",
                       onClick: () => handleAdminClick(),
-                    },
+                    }] : []),
                     // --- Settings ---
                     {
                       id: "nav:settings",
