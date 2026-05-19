@@ -36,8 +36,10 @@ import { resolveRequestContext } from './interceptor-request-utils.ts';
 // Type alias for fetch's HeadersInit
 type HeadersInitType = Headers | Record<string, string> | string[][];
 
+/** JSONL signal value emitted when the SSO-backed Pi endpoint returns HTTP 501. */
 export const SSO_TOKEN_EXPIRED_SIGNAL = 'SSO_TOKEN_EXPIRED';
 
+/** Runtime SSO settings injected into Pi subprocesses by the main process. */
 export interface SsoInterceptorConfig {
   token: string;
   baseUrl: string;
@@ -108,6 +110,7 @@ if (PROXY_URL) {
 // SSO TOKEN INJECTION (Pi subprocess only; enabled by spawn env vars)
 // ============================================================================
 
+/** Resolve the SSO interceptor settings from subprocess environment values. */
 export function resolveSsoInterceptorConfig(env: NodeJS.ProcessEnv = process.env): SsoInterceptorConfig | null {
   const token = env.CRAFT_LLM_SSO_TOKEN;
   const baseUrl = env.CRAFT_LLM_SSO_BASE_URL?.trim();
@@ -115,6 +118,7 @@ export function resolveSsoInterceptorConfig(env: NodeJS.ProcessEnv = process.env
   return { token, baseUrl };
 }
 
+/** Return true when the request URL is covered by the configured SSO base URL. */
 export function isSsoBaseUrlRequest(url: string, config: SsoInterceptorConfig | null = resolveSsoInterceptorConfig()): boolean {
   return Boolean(config && url.startsWith(config.baseUrl));
 }
@@ -128,19 +132,21 @@ function collectRequestHeaders(input: string | URL | Request, init?: RequestInit
   return headers;
 }
 
+/** Apply the raw SSO token as the Authorization header for configured SSO requests. */
 export function applySsoTokenInjection(
   input: string | URL | Request,
   init: RequestInit | undefined,
   url: string,
   config: SsoInterceptorConfig | null = resolveSsoInterceptorConfig(),
 ): RequestInit | undefined {
-  if (!isSsoBaseUrlRequest(url, config)) return init;
+  if (!config || !isSsoBaseUrlRequest(url, config)) return init;
   const headers = collectRequestHeaders(input, init);
-  headers.set('Authorization', config!.token);
+  headers.set('Authorization', config.token);
   debugLog(`[sso] Injected Authorization header for ${url}`);
   return { ...init, headers };
 }
 
+/** Return true when a response should trigger the SSO token-expired signal. */
 export function shouldEmitSsoTokenExpired(
   url: string,
   status: number,
@@ -149,12 +155,14 @@ export function shouldEmitSsoTokenExpired(
   return status === 501 && isSsoBaseUrlRequest(url, config);
 }
 
+/** Emit the JSONL signal consumed by the Pi subprocess client. */
 export function emitSsoTokenExpiredSignal(
   write: (line: string) => void = (line) => process.stdout.write(line),
 ): void {
   write(JSON.stringify({ type: 'sso_token_expired', signal: SSO_TOKEN_EXPIRED_SIGNAL }) + '\n');
 }
 
+/** Emit an SSO token-expired signal when a configured SSO request receives HTTP 501. */
 export function handleSsoTokenExpiredResponse(
   response: Response,
   url: string,
