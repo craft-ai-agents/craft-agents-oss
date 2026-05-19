@@ -33,6 +33,7 @@ import type { ThinkingLevel } from './thinking-levels.ts';
 
 // Import models from centralized registry
 import { getModelById } from '../config/models.ts';
+import { ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR } from '../config/llm-connections.ts';
 
 // BaseAgent provides common functionality
 import { BaseAgent } from './base-agent.ts';
@@ -682,8 +683,8 @@ export class PiAgent extends BaseAgent {
       CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
     };
 
-    if (!this.config.envOverrides?.CRAFT_LLM_SSO_TOKEN) delete env.CRAFT_LLM_SSO_TOKEN;
-    if (!this.config.envOverrides?.CRAFT_LLM_SSO_BASE_URL) delete env.CRAFT_LLM_SSO_BASE_URL;
+    if (!this.config.envOverrides?.[ENV_CONNECTION_SSO_TOKEN_ENV_VAR]) delete env[ENV_CONNECTION_SSO_TOKEN_ENV_VAR];
+    if (!this.config.envOverrides?.[ENV_CONNECTION_SSO_BASE_URL_ENV_VAR]) delete env[ENV_CONNECTION_SSO_BASE_URL_ENV_VAR];
 
     return env;
   }

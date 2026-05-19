@@ -3,6 +3,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from "fs";
 import { debug } from "../utils/debug";
+import { ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR } from "../config/llm-connections.ts";
 import { getProxyEnvVars } from "../config/proxy-env.ts";
 
 declare const CRAFT_AGENT_CLI_VERSION: string | undefined;
@@ -200,8 +201,8 @@ export function buildClaudeSubprocessEnv(
     delete env.AWS_BEARER_TOKEN_BEDROCK;
     delete env.ANTHROPIC_BEDROCK_BASE_URL;
 
-    if (!envOverrides?.CRAFT_LLM_SSO_TOKEN) delete env.CRAFT_LLM_SSO_TOKEN;
-    if (!envOverrides?.CRAFT_LLM_SSO_BASE_URL) delete env.CRAFT_LLM_SSO_BASE_URL;
+    if (!envOverrides?.[ENV_CONNECTION_SSO_TOKEN_ENV_VAR]) delete env[ENV_CONNECTION_SSO_TOKEN_ENV_VAR];
+    if (!envOverrides?.[ENV_CONNECTION_SSO_BASE_URL_ENV_VAR]) delete env[ENV_CONNECTION_SSO_BASE_URL_ENV_VAR];
 
     return env;
 }

@@ -31,6 +31,7 @@ import {
   intentSchema,
 } from './interceptor-common.ts';
 import { FEATURE_FLAGS } from './feature-flags.ts';
+import { ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR } from './config/llm-connections.ts';
 import { resolveRequestContext } from './interceptor-request-utils.ts';
 
 // Type alias for fetch's HeadersInit
@@ -112,8 +113,8 @@ if (PROXY_URL) {
 
 /** Resolve the SSO interceptor settings from subprocess environment values. */
 export function resolveSsoInterceptorConfig(env: NodeJS.ProcessEnv = process.env): SsoInterceptorConfig | null {
-  const token = env.CRAFT_LLM_SSO_TOKEN;
-  const baseUrl = env.CRAFT_LLM_SSO_BASE_URL?.trim();
+  const token = env[ENV_CONNECTION_SSO_TOKEN_ENV_VAR];
+  const baseUrl = env[ENV_CONNECTION_SSO_BASE_URL_ENV_VAR]?.trim();
   if (!token || !baseUrl) return null;
   return { token, baseUrl };
 }

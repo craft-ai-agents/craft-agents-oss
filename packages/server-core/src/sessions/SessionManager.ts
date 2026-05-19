@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { ENV_CONNECTION_SLUG, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
+import { ENV_CONNECTION_SLUG, ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -131,8 +131,8 @@ export async function buildSsoSubprocessEnvOverrides(
     const session = await (options.loadSsoSession ?? (() => new SsoCredentialStore().load()))()
     if (!session?.token) return {}
     return {
-      CRAFT_LLM_SSO_TOKEN: session.token,
-      CRAFT_LLM_SSO_BASE_URL: baseUrl,
+      [ENV_CONNECTION_SSO_TOKEN_ENV_VAR]: session.token,
+      [ENV_CONNECTION_SSO_BASE_URL_ENV_VAR]: baseUrl,
     }
   } catch (error) {
     sessionLog.warn('Failed to load SSO session for subprocess env injection:', error)

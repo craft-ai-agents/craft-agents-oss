@@ -229,6 +229,12 @@ export interface EnvConnectionEnv {
 /** Reserved slug used by the protected Environment connection. */
 export const ENV_CONNECTION_SLUG = 'env-provider';
 
+/** Env var name used to pass the SSO session token to subprocesses. */
+export const ENV_CONNECTION_SSO_TOKEN_ENV_VAR = 'CRAFT_LLM_SSO_TOKEN';
+
+/** Env var name used to pass the SSO-backed LLM base URL to subprocesses. */
+export const ENV_CONNECTION_SSO_BASE_URL_ENV_VAR = 'CRAFT_LLM_SSO_BASE_URL';
+
 // ============================================================
 // Helpers
 // ============================================================
