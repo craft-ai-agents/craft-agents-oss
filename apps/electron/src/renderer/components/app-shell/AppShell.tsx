@@ -2074,25 +2074,27 @@ function AppShellContent({
               />
             )}
             {isSourcesNavigation(navState) && (
-              /* Sources List - filtered by type if sourceFilter is active */
-              <SourcesListPanel
-                sources={sources}
-                sourceFilter={sourceFilter}
-                workspaceRootPath={activeWorkspace?.rootPath}
-                onDeleteSource={handleDeleteSource}
-                onEditSource={handleEditSource}
-                onSourceClick={handleSourceSelect}
-                selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
-                localMcpEnabled={localMcpEnabled}
-              />
-              {/* Edit Source dialog */}
-              {editingSource && activeWorkspace && (
-                <McpSourceFormDialog
-                  workspaceId={activeWorkspace.id}
-                  editSource={editingSource}
-                  onEditComplete={() => setEditingSource(null)}
+              <>
+                {/* Sources List - filtered by type if sourceFilter is active */}
+                <SourcesListPanel
+                  sources={sources}
+                  sourceFilter={sourceFilter}
+                  workspaceRootPath={activeWorkspace?.rootPath}
+                  onDeleteSource={handleDeleteSource}
+                  onEditSource={handleEditSource}
+                  onSourceClick={handleSourceSelect}
+                  selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
+                  localMcpEnabled={localMcpEnabled}
                 />
-              )}
+                {/* Edit Source dialog */}
+                {editingSource && activeWorkspace && (
+                  <McpSourceFormDialog
+                    workspaceId={activeWorkspace.id}
+                    editSource={editingSource}
+                    onEditComplete={() => setEditingSource(null)}
+                  />
+                )}
+              </>
             )}
             {isLocalSkillsNav && activeWorkspaceId && (
               /* Skills List */

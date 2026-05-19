@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
-  SelectContent,
+  SelectContent as BaseSelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -35,10 +35,12 @@ import type {
   McpManualAuthCredentialInput,
   McpManualSourceInput,
 } from '@craft-agent/shared/sources'
-import type { LoadedSource } from '../../../../shared/types'
+import type { LoadedSource } from '../../../shared/types'
 
 type McpFormMode = 'streamable_http' | 'stdio' | 'json'
 type McpFormAuthType = 'none' | 'oauth' | 'bearer' | 'api-key'
+
+const McpSelectPortalContext = React.createContext<HTMLElement | null>(null)
 
 interface McpSourceFormDialogProps {
   workspaceId: string
@@ -76,6 +78,7 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
   const [isParsingJson, setIsParsingJson] = React.useState(false)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [selectPortalContainer, setSelectPortalContainer] = React.useState<HTMLElement | null>(null)
 
   const isRemote = mode === 'streamable_http'
   const canSubmit = mode !== 'json' && Boolean(name.trim() && provider.trim() && (isRemote ? url.trim() : command.trim()))
@@ -147,6 +150,7 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
       const authCredential = buildAuthCredential(authType, bearerToken, apiKeyHeader, apiKeyValue)
 
       if (isEditMode && editSource) {
+        const authCredentialValue = serializeAuthCredentialForUpdate(authCredential)
         await window.electronAPI.updateSource(workspaceId, editSource.config.slug, {
           name: name.trim(),
           provider: provider.trim(),
@@ -160,8 +164,9 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
             command,
             argsText,
             envText,
+            apiKeyHeader,
           }),
-          ...(authCredential ? { authCredential } : {}),
+          ...(authCredentialValue ? { authCredential: authCredentialValue } : {}),
         })
         resetForm()
         onEditComplete?.()
@@ -182,6 +187,7 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
           command,
           argsText,
           envText,
+          apiKeyHeader,
         }),
         authCredential,
       })
@@ -275,137 +281,145 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {!isEditMode && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="sm:max-w-4xl">
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <DialogHeader>
-            <DialogTitle>{isEditMode ? t('mcpForm.editTitle') : t('mcpForm.title')}</DialogTitle>
-            <DialogDescription>{t('mcpForm.description')}</DialogDescription>
-          </DialogHeader>
+        <div ref={setSelectPortalContainer} />
+        <McpSelectPortalContext.Provider value={selectPortalContainer}>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <DialogHeader>
+              <DialogTitle>{isEditMode ? t('mcpForm.editTitle') : t('mcpForm.title')}</DialogTitle>
+              <DialogDescription>{t('mcpForm.description')}</DialogDescription>
+            </DialogHeader>
 
-          <Tabs value={mode} onValueChange={isEditMode ? undefined : (value) => setMode(value as McpFormMode)}>
-            <TabsList className="grid w-full grid-cols-3" title={isEditMode ? t('mcpForm.transportLocked') : undefined}>
-              <TabsTrigger value="streamable_http" disabled={isEditMode && mode !== 'streamable_http'}>
-                Streamable HTTP
-              </TabsTrigger>
-              <TabsTrigger value="stdio" disabled={isEditMode && mode !== 'stdio'}>
-                Command
-              </TabsTrigger>
-              <TabsTrigger value="json" disabled={isEditMode}>JSON</TabsTrigger>
-            </TabsList>
+            <Tabs value={mode} onValueChange={isEditMode ? undefined : (value) => setMode(value as McpFormMode)}>
+              <TabsList className="grid w-full grid-cols-3" title={isEditMode ? t('mcpForm.transportLocked') : undefined}>
+                <TabsTrigger value="streamable_http" disabled={isEditMode && mode !== 'streamable_http'}>
+                  Streamable HTTP
+                </TabsTrigger>
+                <TabsTrigger value="stdio" disabled={isEditMode && mode !== 'stdio'}>
+                  Command
+                </TabsTrigger>
+                <TabsTrigger value="json" disabled={isEditMode}>JSON</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="streamable_http" className="space-y-4">
-              <ManualDetails
-                name={name}
-                setName={setName}
-                provider={provider}
-                setProvider={setProvider}
-                icon={icon}
-                setIcon={setIcon}
-                enabled={enabled}
-                setEnabled={setEnabled}
-                enableInWorkspace={enableInWorkspace}
-                setEnableInWorkspace={setEnableInWorkspace}
-              />
-              <RemoteFields
-                url={url}
-                setUrl={setUrl}
-                authType={authType}
-                setAuthType={setAuthType}
-                bearerToken={bearerToken}
-                setBearerToken={setBearerToken}
-                apiKeyHeader={apiKeyHeader}
-                setApiKeyHeader={setApiKeyHeader}
-                apiKeyValue={apiKeyValue}
-                setApiKeyValue={setApiKeyValue}
-                headersText={headersText}
-                setHeadersText={setHeadersText}
-                isEditMode={isEditMode}
-                isAuthenticated={editSource?.config.isAuthenticated}
-              />
-            </TabsContent>
-
-            <TabsContent value="stdio" className="space-y-4">
-              <ManualDetails
-                name={name}
-                setName={setName}
-                provider={provider}
-                setProvider={setProvider}
-                icon={icon}
-                setIcon={setIcon}
-                enabled={enabled}
-                setEnabled={setEnabled}
-                enableInWorkspace={enableInWorkspace}
-                setEnableInWorkspace={setEnableInWorkspace}
-              />
-              <Field label={t('mcpForm.command')}>
-                <Input value={command} onChange={(event) => setCommand(event.target.value)} placeholder={t('mcpForm.commandPlaceholder')} />
-              </Field>
-              <Field label={t('mcpForm.args')}>
-                <Textarea value={argsText} onChange={(event) => setArgsText(event.target.value)} rows={4} placeholder={t('mcpForm.argsPlaceholder')} />
-              </Field>
-              <Field label={t('mcpForm.env')}>
-                <Textarea value={envText} onChange={(event) => setEnvText(event.target.value)} rows={4} placeholder={t('mcpForm.envPlaceholder')} />
-              </Field>
-            </TabsContent>
-
-            {!isEditMode && (
-            <TabsContent value="json" className="space-y-4">
-              <Field label={t('mcpForm.jsonLabel')}>
-                <Textarea
-                  value={jsonText}
-                  onChange={(event) => setJsonText(event.target.value)}
-                  rows={8}
-                  placeholder={t('mcpForm.jsonPlaceholder')}
+              <TabsContent value="streamable_http" className="space-y-4">
+                <ManualDetails
+                  name={name}
+                  setName={setName}
+                  provider={provider}
+                  setProvider={setProvider}
+                  icon={icon}
+                  setIcon={setIcon}
+                  enabled={enabled}
+                  setEnabled={setEnabled}
+                  enableInWorkspace={enableInWorkspace}
+                  setEnableInWorkspace={setEnableInWorkspace}
                 />
-              </Field>
-              <div className="flex items-center gap-2">
-                <Button type="button" onClick={handleParseJson} disabled={!jsonText.trim() || isParsingJson}>
-                  {isParsingJson && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {t('mcpForm.parseJson')}
-                </Button>
-                <Button type="button" variant="secondary" onClick={handleImportJson} disabled={selectedImportCandidates.length === 0 || isSubmitting}>
-                  {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {t('mcpForm.importSelected')}
-                </Button>
-                <span className="text-xs text-muted-foreground">{t('mcpForm.selectedCount', { count: selectedImportCandidates.length })}</span>
-              </div>
-              {jsonErrors.length > 0 && (
-                <FieldErrors fieldErrors={jsonErrors} />
-              )}
-              {candidates.length > 0 && (
-                <div className="space-y-3">
-                  {candidates.map((candidate) => (
-                    <McpJsonCandidatePreview
-                      key={candidate.key}
-                      candidate={candidate}
-                      selected={selectedCandidateKeys.has(candidate.key)}
-                      onSelectedChange={(selected) => toggleCandidate(candidate.key, selected)}
-                      onChange={(update) => updateCandidate(candidate.key, update)}
-                    />
-                  ))}
+                <RemoteFields
+                  url={url}
+                  setUrl={setUrl}
+                  authType={authType}
+                  setAuthType={setAuthType}
+                  bearerToken={bearerToken}
+                  setBearerToken={setBearerToken}
+                  apiKeyHeader={apiKeyHeader}
+                  setApiKeyHeader={setApiKeyHeader}
+                  apiKeyValue={apiKeyValue}
+                  setApiKeyValue={setApiKeyValue}
+                  headersText={headersText}
+                  setHeadersText={setHeadersText}
+                  isEditMode={isEditMode}
+                  isAuthenticated={editSource?.config.isAuthenticated}
+                />
+              </TabsContent>
+
+              <TabsContent value="stdio" className="space-y-4">
+                <ManualDetails
+                  name={name}
+                  setName={setName}
+                  provider={provider}
+                  setProvider={setProvider}
+                  icon={icon}
+                  setIcon={setIcon}
+                  enabled={enabled}
+                  setEnabled={setEnabled}
+                  enableInWorkspace={enableInWorkspace}
+                  setEnableInWorkspace={setEnableInWorkspace}
+                />
+                <Field label={t('mcpForm.command')}>
+                  <Input value={command} onChange={(event) => setCommand(event.target.value)} placeholder={t('mcpForm.commandPlaceholder')} />
+                </Field>
+                <Field label={t('mcpForm.args')}>
+                  <Textarea value={argsText} onChange={(event) => setArgsText(event.target.value)} rows={4} placeholder={t('mcpForm.argsPlaceholder')} />
+                </Field>
+                <Field label={t('mcpForm.env')}>
+                  <Textarea value={envText} onChange={(event) => setEnvText(event.target.value)} rows={4} placeholder={t('mcpForm.envPlaceholder')} />
+                </Field>
+              </TabsContent>
+
+              {!isEditMode && (
+              <TabsContent value="json" className="space-y-4">
+                <Field label={t('mcpForm.jsonLabel')}>
+                  <Textarea
+                    value={jsonText}
+                    onChange={(event) => setJsonText(event.target.value)}
+                    rows={8}
+                    placeholder={t('mcpForm.jsonPlaceholder')}
+                  />
+                </Field>
+                <div className="flex items-center gap-2">
+                  <Button type="button" onClick={handleParseJson} disabled={!jsonText.trim() || isParsingJson}>
+                    {isParsingJson && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {t('mcpForm.parseJson')}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={handleImportJson} disabled={selectedImportCandidates.length === 0 || isSubmitting}>
+                    {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {t('mcpForm.importSelected')}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">{t('mcpForm.selectedCount', { count: selectedImportCandidates.length })}</span>
                 </div>
+                {jsonErrors.length > 0 && (
+                  <FieldErrors fieldErrors={jsonErrors} />
+                )}
+                {candidates.length > 0 && (
+                  <div className="space-y-3">
+                    {candidates.map((candidate) => (
+                      <McpJsonCandidatePreview
+                        key={candidate.key}
+                        candidate={candidate}
+                        selected={selectedCandidateKeys.has(candidate.key)}
+                        onSelectedChange={(selected) => toggleCandidate(candidate.key, selected)}
+                        onChange={(update) => updateCandidate(candidate.key, update)}
+                      />
+                    ))}
+                  </div>
+                )}
+                {importResult && (
+                  <ImportResults result={importResult} />
+                )}
+              </TabsContent>
               )}
-              {importResult && (
-                <ImportResults result={importResult} />
+            </Tabs>
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>{t('common.cancel')}</Button>
+              {mode !== 'json' && (
+                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+                  {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isEditMode ? t('common.save') : t('common.create')}
+                </Button>
               )}
-            </TabsContent>
-            )}
-          </Tabs>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>{t('common.cancel')}</Button>
-            {mode !== 'json' && (
-              <Button type="submit" disabled={!canSubmit || isSubmitting}>
-                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                {isEditMode ? t('common.save') : t('common.create')}
-              </Button>
-            )}
-          </DialogFooter>
-        </form>
+            </DialogFooter>
+          </form>
+        </McpSelectPortalContext.Provider>
       </DialogContent>
     </Dialog>
   )
+}
+
+function McpSelectContent(props: React.ComponentProps<typeof BaseSelectContent>) {
+  const container = React.useContext(McpSelectPortalContext)
+  return <BaseSelectContent container={container} {...props} />
 }
 
 function ManualDetails(props: {
@@ -496,10 +510,10 @@ function McpJsonCandidatePreview(props: {
             }))}
           >
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <McpSelectContent>
               <SelectItem value="streamable_http">Streamable HTTP</SelectItem>
               <SelectItem value="stdio">Command</SelectItem>
-            </SelectContent>
+            </McpSelectContent>
           </Select>
         </Field>
         {isRemote ? (
@@ -568,10 +582,10 @@ function McpJsonCandidatePreview(props: {
                 onValueChange={(value) => props.onChange((current) => updateSecretHandling(current, secret.id, value as McpImportSecretHandling))}
               >
                 <SelectTrigger className="h-7 w-44"><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <McpSelectContent>
                   <SelectItem value="credential-store">Credential store</SelectItem>
                   <SelectItem value="config">Keep in config</SelectItem>
-                </SelectContent>
+                </McpSelectContent>
               </Select>
             </div>
           ))}
@@ -589,13 +603,13 @@ function McpJsonCandidatePreview(props: {
             }))}
           >
             <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <McpSelectContent>
               {(candidate.availableActions ?? []).map((action) => (
                 <SelectItem key={actionValue(action)} value={actionValue(action)}>
                   {actionLabel(action)}
                 </SelectItem>
               ))}
-            </SelectContent>
+            </McpSelectContent>
           </Select>
         </div>
       )}
@@ -767,12 +781,12 @@ function RemoteFields(props: {
       <Field label="Auth Type">
         <Select value={props.authType} onValueChange={(value) => props.setAuthType(value as McpFormAuthType)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
+          <McpSelectContent>
             <SelectItem value="none">None</SelectItem>
             <SelectItem value="oauth">OAuth</SelectItem>
             <SelectItem value="bearer">Bearer</SelectItem>
             <SelectItem value="api-key">API Key Header</SelectItem>
-          </SelectContent>
+          </McpSelectContent>
         </Select>
       </Field>
       {props.authType === 'bearer' && (
@@ -847,6 +861,7 @@ function buildMcpPayload(
     command: string
     argsText: string
     envText: string
+    apiKeyHeader: string
   },
 ): McpManualSourceInput['mcp'] {
   if (mode === 'stdio') {
@@ -862,6 +877,7 @@ function buildMcpPayload(
     transport: mode,
     url: values.url.trim(),
     authType: values.authType === 'oauth' || values.authType === 'bearer' ? values.authType : 'none',
+    headerNames: values.authType === 'api-key' && values.apiKeyHeader.trim() ? [values.apiKeyHeader.trim()] : undefined,
     headers: parseKeyValueLines(values.headersText),
   }
 }
@@ -879,4 +895,12 @@ function buildAuthCredential(
     return { kind: 'api-key', headerName: apiKeyHeader.trim(), value: apiKeyValue.trim() }
   }
   return undefined
+}
+
+function serializeAuthCredentialForUpdate(authCredential: McpManualAuthCredentialInput | undefined): string | undefined {
+  if (!authCredential) return undefined
+  if (authCredential.kind === 'api-key') {
+    return JSON.stringify({ [authCredential.headerName]: authCredential.value })
+  }
+  return authCredential.value
 }

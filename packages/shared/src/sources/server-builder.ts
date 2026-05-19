@@ -134,10 +134,12 @@ export class SourceServerBuilder {
     }
 
     // 3. Auth token (highest priority — OAuth/bearer overrides everything)
+    // Credential-store imports can already provide Authorization as a header bundle.
+    // In that case token may be the raw JSON credential value, so do not re-wrap it.
     if (mcp.authType !== 'none') {
-      if (token) {
+      if (token && !mergedHeaders.Authorization && !looksLikeCredentialHeaderBundle(token)) {
         mergedHeaders = { ...mergedHeaders, Authorization: `Bearer ${token}` };
-      } else if (source.config.isAuthenticated) {
+      } else if (source.config.isAuthenticated && !mergedHeaders.Authorization) {
         // Source claims to be authenticated but token is missing - needs re-auth
         debug(`[SourceServerBuilder] Source ${source.config.slug} needs re-authentication`);
         return null;
@@ -342,6 +344,21 @@ export class SourceServerBuilder {
  */
 export function normalizeMcpUrl(url: string): string {
   return url.replace(/\/+$/, '');
+}
+
+function looksLikeCredentialHeaderBundle(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{')) return false;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      Object.values(parsed).every((item) => typeof item === 'string')
+    );
+  } catch {
+    return false;
+  }
 }
 
 // Singleton instance

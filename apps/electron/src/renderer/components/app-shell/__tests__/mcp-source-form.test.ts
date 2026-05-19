@@ -82,5 +82,24 @@ describe('MCP source form flow wiring', () => {
     expect(formSource).toContain('setCommand(mcp.command ?? \'\')')
     expect(formSource).toContain('setArgsText(mcp.args ? mcp.args.join(\'\\n\') : \'\')')
     expect(formSource).toContain('setEnvText(objectToLines(mcp.env))')
+    expect(formSource).toContain('serializeAuthCredentialForUpdate(authCredential)')
+  })
+
+  test('MCP dialog select menus render inside the dialog portal so options remain clickable', () => {
+    const formSource = readFileSync(join(import.meta.dir, '../McpSourceFormDialog.tsx'), 'utf-8')
+
+    expect(formSource).toContain('SelectContent as BaseSelectContent')
+    expect(formSource).toContain('setSelectPortalContainer')
+    expect(formSource).toContain('<McpSelectPortalContext.Provider value={selectPortalContainer}>')
+    expect(formSource).toContain('<BaseSelectContent container={container} {...props} />')
+    expect(formSource).not.toContain('<SelectContent>')
+  })
+
+  test('API key auth type persists header metadata when saving MCP edits', () => {
+    const formSource = readFileSync(join(import.meta.dir, '../McpSourceFormDialog.tsx'), 'utf-8')
+
+    expect(formSource).toContain('apiKeyHeader,')
+    expect(formSource).toContain("headerNames: values.authType === 'api-key' && values.apiKeyHeader.trim() ? [values.apiKeyHeader.trim()] : undefined")
+    expect(formSource).toContain("return JSON.stringify({ [authCredential.headerName]: authCredential.value })")
   })
 })
