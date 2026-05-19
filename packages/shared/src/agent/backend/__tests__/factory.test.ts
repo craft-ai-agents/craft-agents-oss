@@ -326,7 +326,7 @@ describe('phase4 backend abstraction APIs', () => {
     expect(result.error).toBe('Connection not found');
   });
 
-  it('resolves the environment connection to the Pi backend when LLM_BASE_URL is set', () => {
+  it('resolves and preserves the environment connection for Pi backend sessions', () => {
     const originalBaseUrl = process.env.LLM_BASE_URL;
     const originalModel = process.env.LLM_MODEL;
     const originalName = process.env.LLM_CONNECTION_NAME;
@@ -339,12 +339,29 @@ describe('phase4 backend abstraction APIs', () => {
       const connection = resolveSessionConnection(ENV_CONNECTION_SLUG);
       expect(connection?.slug).toBe(ENV_CONNECTION_SLUG);
       expect(connection?.providerType).toBe('pi_compat');
+      expect(connection?.authType).toBe('none');
 
       const context = resolveBackendContext({
         sessionConnectionSlug: ENV_CONNECTION_SLUG,
       });
       expect(context.provider).toBe('pi');
       expect(context.connection?.slug).toBe(ENV_CONNECTION_SLUG);
+      expect(context.connection?.providerType).toBe('pi_compat');
+      expect(context.connection?.authType).toBe('none');
+
+      const managed: { llmConnection: string | undefined; connectionLocked: boolean } = {
+        llmConnection: ENV_CONNECTION_SLUG,
+        connectionLocked: true,
+      };
+
+      const restoredConnection = resolveSessionConnection(managed.llmConnection, undefined);
+      if (managed.llmConnection && !restoredConnection) {
+        managed.llmConnection = undefined;
+        managed.connectionLocked = false;
+      }
+
+      expect(managed.llmConnection).toBe(ENV_CONNECTION_SLUG);
+      expect(managed.connectionLocked).toBe(true);
     } finally {
       if (originalBaseUrl === undefined) delete process.env.LLM_BASE_URL;
       else process.env.LLM_BASE_URL = originalBaseUrl;
