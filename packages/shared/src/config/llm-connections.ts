@@ -212,8 +212,14 @@ export interface LlmConnectionWithStatus extends LlmConnection {
   isDefault?: boolean;
 }
 
+/**
+ * Environment variables used to synthesize the reserved Environment connection.
+ */
 export interface EnvConnectionEnv {
+  /** Custom LLM endpoint URL. When absent, no Environment connection is created. */
   LLM_BASE_URL?: string;
+
+  /** Optional model ID used as both the available and default model. */
   LLM_MODEL?: string;
 }
 
@@ -230,7 +236,7 @@ export interface EnvConnectionEnv {
  */
 export function synthesizeEnvConnection(
   env: EnvConnectionEnv,
-  ssoToken?: unknown,
+  ssoToken: unknown,
 ): LlmConnection | null {
   void ssoToken;
 
@@ -248,7 +254,7 @@ export function synthesizeEnvConnection(
     customEndpoint: { api: 'openai-completions' },
     baseUrl,
     models: model ? [model] : [],
-    defaultModel: model || undefined,
+    defaultModel: model ? model : undefined,
     createdAt: 0,
   };
 }
