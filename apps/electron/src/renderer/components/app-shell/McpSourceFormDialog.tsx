@@ -34,6 +34,7 @@ import type {
   McpImportSecretHandling,
   McpManualAuthCredentialInput,
   McpManualSourceInput,
+  McpSourceConfig,
 } from '@craft-agent/shared/sources'
 import type { LoadedSource } from '../../../shared/types'
 
@@ -41,6 +42,7 @@ type McpFormMode = 'streamable_http' | 'stdio' | 'json'
 type McpFormAuthType = 'none' | 'oauth' | 'bearer' | 'api-key'
 
 const McpSelectPortalContext = React.createContext<HTMLElement | null>(null)
+const MASKED_CREDENTIAL_PLACEHOLDER = '········'
 
 interface McpSourceFormDialogProps {
   workspaceId: string
@@ -110,15 +112,10 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
     setUrl(mcp.url ?? '')
 
     // Determine auth type from existing config
-    if (mcp.authType === 'bearer') {
-      setAuthType('bearer')
-    } else if (mcp.authType === 'oauth') {
-      setAuthType('oauth')
-    } else if (mcp.headerNames && mcp.headerNames.length > 0) {
-      setAuthType('api-key')
+    const formAuthType = getFormAuthTypeFromMcp(mcp)
+    if (formAuthType) setAuthType(formAuthType)
+    if (mcp.headerNames && mcp.headerNames.length > 0) {
       setApiKeyHeader(mcp.headerNames[0])
-    } else {
-      setAuthType('none')
     }
 
     // Sensitive fields: NOT pre-filled
@@ -249,6 +246,12 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
     setError(null)
     try {
       const result = await window.electronAPI.importMcpJsonCandidates(workspaceId, selectedImportCandidates)
+      const allSelectedImported = result.results.length > 0 && result.results.every((item) => item.success)
+      if (allSelectedImported) {
+        resetForm()
+        setLocalOpen(false)
+        return
+      }
       setImportResult(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -290,14 +293,17 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
             </DialogHeader>
 
             <Tabs value={mode} onValueChange={isEditMode ? undefined : (value) => setMode(value as McpFormMode)}>
-              <TabsList className="grid w-full grid-cols-3" title={isEditMode ? t('mcpForm.transportLocked') : undefined}>
+              <TabsList
+                className={isEditMode ? 'grid w-full grid-cols-2' : 'grid w-full grid-cols-3'}
+                title={isEditMode ? t('mcpForm.transportLocked') : undefined}
+              >
                 <TabsTrigger value="streamable_http" disabled={isEditMode && mode !== 'streamable_http'}>
                   Streamable HTTP
                 </TabsTrigger>
                 <TabsTrigger value="stdio" disabled={isEditMode && mode !== 'stdio'}>
                   Command
                 </TabsTrigger>
-                <TabsTrigger value="json" disabled={isEditMode}>JSON</TabsTrigger>
+                {!isEditMode && <TabsTrigger value="json">JSON</TabsTrigger>}
               </TabsList>
 
               <TabsContent value="streamable_http" className="space-y-4">
@@ -327,7 +333,8 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
                   headersText={headersText}
                   setHeadersText={setHeadersText}
                   isEditMode={isEditMode}
-                  isAuthenticated={editSource?.config.isAuthenticated}
+                  configuredAuthType={getFormAuthTypeFromMcp(editSource?.config.mcp)}
+                  hasConfiguredCredential={editSource?.config.isAuthenticated}
                 />
               </TabsContent>
 
@@ -517,15 +524,33 @@ function McpJsonCandidatePreview(props: {
           </Select>
         </Field>
         {isRemote ? (
-          <Field label="URL">
-            <Input
-              value={mcp.url ?? ''}
-              onChange={(event) => props.onChange((current) => ({
-                ...current,
-                input: { ...current.input, mcp: { ...current.input.mcp, url: event.target.value } },
-              }))}
-            />
-          </Field>
+          <>
+            <Field label="URL">
+              <Input
+                value={mcp.url ?? ''}
+                onChange={(event) => props.onChange((current) => ({
+                  ...current,
+                  input: { ...current.input, mcp: { ...current.input.mcp, url: event.target.value } },
+                }))}
+              />
+            </Field>
+            <Field label="Auth Type">
+              <Select
+                value={mcp.authType ?? 'none'}
+                onValueChange={(value) => props.onChange((current) => ({
+                  ...current,
+                  input: { ...current.input, mcp: { ...current.input.mcp, authType: value as McpSourceConfig['authType'] } },
+                }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <McpSelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="oauth">OAuth</SelectItem>
+                  <SelectItem value="bearer">Bearer</SelectItem>
+                </McpSelectContent>
+              </Select>
+            </Field>
+          </>
         ) : (
           <>
             <Field label="Command">
@@ -745,6 +770,14 @@ function validateImportCandidate(candidate: McpImportCandidate): McpImportFieldE
   return errors
 }
 
+function getFormAuthTypeFromMcp(mcp: McpSourceConfig | undefined): McpFormAuthType | undefined {
+  if (!mcp) return undefined
+  if (mcp.authType === 'bearer') return 'bearer'
+  if (mcp.authType === 'oauth') return 'oauth'
+  if (mcp.headerNames && mcp.headerNames.length > 0) return 'api-key'
+  return 'none'
+}
+
 function CredentialConfiguredBadge() {
   const { t } = useTranslation()
   return (
@@ -768,11 +801,15 @@ function RemoteFields(props: {
   setApiKeyValue: (value: string) => void
   headersText: string
   setHeadersText: (value: string) => void
-  /** When true, sensitive fields show a credential configured badge instead of pre-filled values */
   isEditMode?: boolean
-  isAuthenticated?: boolean
+  /** Auth type configured on the existing source */
+  configuredAuthType?: McpFormAuthType
+  /** Whether a credential is stored for the existing source */
+  hasConfiguredCredential?: boolean
 }) {
   const { t } = useTranslation()
+  const showBearerBadge = props.isEditMode && props.hasConfiguredCredential && props.configuredAuthType === 'bearer' && !props.bearerToken
+  const showApiKeyBadge = props.isEditMode && props.hasConfiguredCredential && props.configuredAuthType === 'api-key' && !props.apiKeyValue
   return (
     <>
       <Field label="URL">
@@ -793,11 +830,14 @@ function RemoteFields(props: {
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">
             Bearer Token
-            {props.isEditMode && props.isAuthenticated && !props.bearerToken && (
-              <CredentialConfiguredBadge />
-            )}
+            {showBearerBadge && <CredentialConfiguredBadge />}
           </Label>
-          <Input type="password" value={props.bearerToken} onChange={(event) => props.setBearerToken(event.target.value)} />
+          <Input
+            type="password"
+            value={props.bearerToken}
+            onChange={(event) => props.setBearerToken(event.target.value)}
+            placeholder={showBearerBadge ? MASKED_CREDENTIAL_PLACEHOLDER : undefined}
+          />
         </div>
       )}
       {props.authType === 'api-key' && (
@@ -808,11 +848,14 @@ function RemoteFields(props: {
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">
               Header Value
-              {props.isEditMode && props.isAuthenticated && !props.apiKeyValue && (
-                <CredentialConfiguredBadge />
-              )}
+              {showApiKeyBadge && <CredentialConfiguredBadge />}
             </Label>
-            <Input type="password" value={props.apiKeyValue} onChange={(event) => props.setApiKeyValue(event.target.value)} />
+            <Input
+              type="password"
+              value={props.apiKeyValue}
+              onChange={(event) => props.setApiKeyValue(event.target.value)}
+              placeholder={showApiKeyBadge ? MASKED_CREDENTIAL_PLACEHOLDER : undefined}
+            />
           </div>
         </div>
       )}
