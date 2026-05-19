@@ -1,36 +1,26 @@
 import * as React from 'react'
-import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
-import { AlertTriangle, CheckCircle2, Download, FileArchive, Flag, Globe2, PencilLine, Search, ShieldAlert, Store, UserCog } from 'lucide-react'
-import { strToU8, zipSync } from 'fflate'
-import { resolveMarketplaceServiceConfig } from '@craft-agent/shared/skills/marketplace-config'
-import { deriveSkillSlug } from '@craft-agent/shared/skills/slug'
+import { Check, ChevronDown, ExternalLink, FilePlus2, Folder, FolderUp, Loader2, MessageCircle, Minus, MoreHorizontal, Plus, Search, Store, Upload, UserCog, Zap } from 'lucide-react'
+import { Markdown, Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Switch } from '@/components/ui/switch'
+import { useAppShellContext } from '@/context/AppShellContext'
+import { strToU8, unzipSync, zipSync } from 'fflate'
 import type {
-  DiscoveredSkill,
-  MarketplaceDirectSkillPublishInput,
-  MarketplacePublishDirectResult,
-  MarketplaceInstallConflictResolution,
   MarketplaceInstallIntent,
   MarketplaceInstallResult,
   MarketplaceOriginMetadata,
   MarketplaceSkillInstallInput,
   MarketplaceSkillUpdateInput,
+  MarketplaceDirectSkillPublishInput,
+  MarketplacePublishDirectResult,
 } from '@craft-agent/shared/skills'
-import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { SkillPicker } from './SkillPicker'
-import { getRemoteResolvePhase } from './remote-skill-import-state'
+import { cn } from '@/lib/utils'
+import { navigate, routes } from '@/lib/navigate'
 
-/** Install/update state shown for a Marketplace Skill in the catalog and detail views. */
+// ============================================================================
+// Types
+// ============================================================================
+
 export type MarketplaceInstallState =
   | 'install'
   | 'installed'
@@ -39,21 +29,16 @@ export type MarketplaceInstallState =
   | 'unavailable'
   | 'safety-blocked'
 
-/** Product-owned category vocabulary for Marketplace browsing filters. */
 export const PRODUCT_MARKETPLACE_CATEGORIES = ['Documentation', 'Product', 'Quality', 'Security'] as const
-
-/** Direct Marketplace publish paths supported by the publish-only dialog. */
 export const MARKETPLACE_DIRECT_PUBLISH_TABS = ['create', 'remote', 'upload'] as const
 
-type DirectPublishTab = typeof MARKETPLACE_DIRECT_PUBLISH_TABS[number]
-
-/** Summary data shown on Marketplace listing cards. */
 export interface MarketplaceSkillListing {
   id: string
   slug: string
   ownerId: string
   basedOn?: MarketplaceOriginMetadata['basedOn']
   icon: string
+  iconBg?: string
   name: string
   description: string
   owner: string
@@ -64,14 +49,12 @@ export interface MarketplaceSkillListing {
   installState: MarketplaceInstallState
 }
 
-/** Published version metadata shown in Marketplace Skill detail. */
 export interface MarketplaceSkillVersion {
   version: string
   publishedAt: string
   releaseNotes: string
 }
 
-/** Full read-only Marketplace Skill detail payload. */
 export interface MarketplaceSkillDetail extends MarketplaceSkillListing {
   skillMarkdown: string
   requiredSources: string[]
@@ -84,14 +67,11 @@ export interface MarketplaceSkillDetail extends MarketplaceSkillListing {
   }
 }
 
-/** Catalog filters supported by the Marketplace browsing surface. */
 export interface MarketplaceCatalogFilters {
   search?: string
   category?: string
-  tag?: string
 }
 
-/** Minimal Marketplace API boundary used by the read-only browsing slice. */
 export interface MarketplaceApi {
   listSkills: () => Promise<MarketplaceSkillListing[]>
   getSkillDetail: (slug: string) => Promise<MarketplaceSkillDetail>
@@ -103,19 +83,16 @@ export interface MarketplaceApi {
   recordUpdateComplete: (intentId: string) => Promise<void>
 }
 
-/** Service boundary used to publish a Local Skill into Marketplace. */
 export interface MarketplacePublishApi {
   publishSkill: (input: { userId: string; skillSlug: string }) => Promise<MarketplacePublishResult>
 }
 
-/** UI-safe result returned after attempting a Marketplace publish handoff. */
 export type MarketplacePublishResult =
   | { status: 'published'; marketplaceSlug: string }
   | { status: 'slug-conflict'; marketplaceSlug: string; message: string }
   | { status: 'auth-required'; message: string }
   | { status: 'error'; message: string }
 
-/** User-authenticated report payload sent to the Marketplace service for abuse review. */
 export interface MarketplaceSkillReportInput {
   userId: string
   marketplaceId: string
@@ -123,58 +100,36 @@ export interface MarketplaceSkillReportInput {
   context: string
 }
 
-/** Owner-authenticated unpublish payload sent to remove a Marketplace Skill from discovery. */
 export interface MarketplaceOwnerUnpublishInput {
   userId: string
   marketplaceId: string
   marketplaceSlug: string
 }
 
-/** UI-safe result returned after attempting a Marketplace Skill report. */
 export type MarketplaceReportResult =
   | { status: 'submitted'; reportId: string }
   | { status: 'validation-error'; message: string }
   | { status: 'auth-required'; message: string }
   | { status: 'error'; message: string }
 
-/** UI-safe result returned after an owner unpublishes a Marketplace Skill. */
 export type MarketplaceOwnerUnpublishResult =
   | { status: 'unpublished'; marketplaceSlug: string; message: string }
   | { status: 'auth-required'; message: string }
   | { status: 'forbidden'; message: string }
   | { status: 'error'; message: string }
 
-/** Electron bridge used to install Marketplace Skills into Local Skills. */
 export interface MarketplaceInstallElectronApi {
   installMarketplaceSkill(workspaceId: string, input: MarketplaceSkillInstallInput): Promise<MarketplaceInstallResult>
 }
 
-/** Electron bridge used to apply Marketplace updates to Local Skills. */
 export interface MarketplaceUpdateElectronApi {
   updateMarketplaceSkill(workspaceId: string, input: MarketplaceSkillUpdateInput): Promise<MarketplaceInstallResult>
 }
 
-/** Electron bridge used to publish Marketplace Skills without installing them locally. */
 export interface MarketplaceDirectPublishElectronApi {
   publishDirectMarketplaceSkill(workspaceId: string, input: MarketplaceDirectSkillPublishInput): Promise<MarketplacePublishDirectResult>
 }
 
-/** Result of loading and filtering the Marketplace catalog. */
-export type MarketplaceCatalogState =
-  | {
-      status: 'ready'
-      listings: MarketplaceSkillListing[]
-      availableCategories: string[]
-      availableTags: string[]
-    }
-  | { status: 'error'; message: string }
-
-/** Result of loading a Marketplace Skill detail page. */
-export type MarketplaceDetailState =
-  | { status: 'ready'; detail: MarketplaceSkillDetail }
-  | { status: 'error'; message: string }
-
-/** Static API configuration used for the mocked Marketplace boundary. */
 export interface StaticMarketplaceApiOptions {
   listings?: MarketplaceSkillListing[]
   details?: Record<string, MarketplaceSkillDetail>
@@ -182,1113 +137,2072 @@ export interface StaticMarketplaceApiOptions {
   detailError?: string
 }
 
-const DEFAULT_MARKETPLACE_LISTINGS: MarketplaceSkillListing[] = [
+// ============================================================================
+// Mock Data
+// ============================================================================
+
+const MOCK_SKILLS: MarketplaceSkillListing[] = [
   {
-    id: 'mkt_skill_test_writer',
-    slug: 'test-writer',
-    ownerId: 'owner_craft_labs',
-    icon: 'TW',
-    name: 'Test Writer',
-    description: 'Creates focused regression tests for bug fixes and feature slices.',
-    owner: 'Craft Labs',
-    category: 'Quality',
-    tags: ['ci', 'testing', 'automation'],
-    latestVersion: '1.4.2',
-    installCount: 1284,
+    id: 'mkt_docker',
+    slug: 'docker',
+    ownerId: 'owner_mdp',
+    icon: 'D',
+    iconBg: 'bg-blue-500',
+    name: 'Docker',
+    description: '管理容器的构建、运行与生命周期，管理容器的构建、运行与生命周期管理容器的构建、运行与生命周期',
+    owner: 'MDP Labs',
+    category: 'DevOps',
+    tags: ['container', 'devops'],
+    latestVersion: '1.2.0',
+    installCount: 3812,
     installState: 'install',
   },
   {
-    id: 'mkt_skill_api-docs',
-    slug: 'api-docs',
-    ownerId: 'owner_docs_guild',
-    icon: 'AD',
-    name: 'API Docs Companion',
-    description: 'Keeps endpoint references and examples aligned with source changes.',
-    owner: 'Docs Guild',
-    category: 'Documentation',
-    tags: ['api', 'docs'],
-    latestVersion: '2.1.0',
-    installCount: 847,
+    id: 'mkt_kubernetes',
+    slug: 'kubernetes',
+    ownerId: 'owner_mdp',
+    icon: 'K8s',
+    iconBg: 'bg-indigo-500',
+    name: 'Kubernetes',
+    description: '自动化部署、扩缩容与集群管理',
+    owner: 'MDP Labs',
+    category: 'DevOps',
+    tags: ['k8s', 'devops', 'cloud'],
+    latestVersion: '2.0.1',
+    installCount: 2940,
     installState: 'installed',
   },
   {
-    id: 'mkt_skill_release-notes',
-    slug: 'release-notes',
-    ownerId: 'owner_1',
-    icon: 'RN',
-    name: 'Release Notes',
-    description: 'Turns merged changes into concise release notes for product teams.',
-    owner: 'Launch Team',
-    category: 'Product',
-    tags: ['release', 'writing'],
-    latestVersion: '1.8.0',
-    installCount: 2319,
-    installState: 'update-available',
+    id: 'mkt_github_actions',
+    slug: 'github-actions',
+    ownerId: 'owner_mdp',
+    icon: 'GA',
+    iconBg: 'bg-gray-700',
+    name: 'GitHub Actions',
+    description: '构建和管理 CI/CD 工作流',
+    owner: 'MDP Labs',
+    category: 'DevOps',
+    tags: ['ci', 'cd', 'github'],
+    latestVersion: '1.5.3',
+    installCount: 5120,
+    installState: 'install',
   },
   {
-    id: 'mkt_skill_security-review',
-    slug: 'security-review',
-    ownerId: 'owner_secure_build',
-    icon: 'SR',
-    name: 'Security Review',
-    description: 'Checks code and configuration changes for common security risks.',
-    owner: 'Secure Build',
-    category: 'Security',
-    tags: ['audit', 'security'],
-    latestVersion: '3.0.1',
-    installCount: 642,
-    installState: 'safety-blocked',
+    id: 'mkt_terraform',
+    slug: 'terraform',
+    ownerId: 'owner_mdp',
+    icon: 'TF',
+    iconBg: 'bg-purple-600',
+    name: 'Terraform',
+    description: '基础设施即代码，管理云资源',
+    owner: 'MDP Labs',
+    category: 'DevOps',
+    tags: ['iac', 'cloud', 'devops'],
+    latestVersion: '1.0.0',
+    installCount: 1876,
+    installState: 'install',
+  },
+  {
+    id: 'mkt_prometheus',
+    slug: 'prometheus',
+    ownerId: 'owner_mdp',
+    icon: 'PM',
+    iconBg: 'bg-orange-500',
+    name: 'Prometheus',
+    description: '监控指标采集与告警规则管理',
+    owner: 'MDP Labs',
+    category: 'DevOps',
+    tags: ['monitoring', 'metrics'],
+    latestVersion: '1.1.2',
+    installCount: 1340,
+    installState: 'install',
+  },
+  {
+    id: 'mkt_jenkins',
+    slug: 'jenkins',
+    ownerId: 'owner_mdp',
+    icon: 'JK',
+    iconBg: 'bg-red-500',
+    name: 'Jenkins',
+    description: '配置并触发 Jenkins 构建流水线',
+    owner: 'MDP Labs',
+    category: 'DevOps',
+    tags: ['ci', 'build'],
+    latestVersion: '1.0.4',
+    installCount: 987,
+    installState: 'installed',
+  },
+  {
+    id: 'mkt_doc_gen',
+    slug: 'doc-generator',
+    ownerId: 'owner_community',
+    icon: 'DG',
+    iconBg: 'bg-emerald-500',
+    name: '文档生成器',
+    description: '根据代码自动生成技术文档',
+    owner: '社区',
+    category: '公共',
+    tags: ['docs', 'automation'],
+    latestVersion: '1.3.0',
+    installCount: 2210,
+    installState: 'install',
+  },
+  {
+    id: 'mkt_code_review',
+    slug: 'code-review',
+    ownerId: 'owner_community',
+    icon: 'CR',
+    iconBg: 'bg-cyan-500',
+    name: '代码审查',
+    description: '智能分析代码质量与安全问题',
+    owner: '社区',
+    category: '公共',
+    tags: ['review', 'quality'],
+    latestVersion: '2.1.0',
+    installCount: 3450,
+    installState: 'install',
+  },
+  {
+    id: 'mkt_calendar',
+    slug: 'calendar-assistant',
+    ownerId: 'owner_community',
+    icon: 'CA',
+    iconBg: 'bg-green-500',
+    name: '日历助手',
+    description: '管理日程、会议与提醒事项',
+    owner: '社区',
+    category: '公共',
+    tags: ['calendar', 'productivity'],
+    latestVersion: '1.0.2',
+    installCount: 1560,
+    installState: 'installed',
+  },
+  {
+    id: 'mkt_weekly_report',
+    slug: 'weekly-report',
+    ownerId: 'owner_community',
+    icon: 'WR',
+    iconBg: 'bg-violet-500',
+    name: '周报助手',
+    description: '自动整理工作内容，生成周报草稿',
+    owner: '社区',
+    category: '公共',
+    tags: ['report', 'productivity'],
+    latestVersion: '1.1.0',
+    installCount: 4230,
+    installState: 'install',
   },
 ]
 
-const DEFAULT_MARKETPLACE_DETAILS: Record<string, MarketplaceSkillDetail> = {
-  'test-writer': {
-    ...DEFAULT_MARKETPLACE_LISTINGS[0],
-    skillMarkdown: [
-      '---',
-      'name: Test Writer',
-      'description: Creates focused regression tests for bug fixes and feature slices.',
-      '---',
-      '',
-      '# Test Writer',
-      '',
-      'Use this skill to add behavior-first regression tests before changing implementation code.',
-    ].join('\n'),
-    requiredSources: ['GitHub repository', 'Local workspace files'],
-    versions: [
-      { version: '1.4.2', publishedAt: '2026-05-01', releaseNotes: 'Adds CI-focused assertion guidance.' },
-      { version: '1.3.0', publishedAt: '2026-04-12', releaseNotes: 'Improves integration test examples.' },
-      { version: '1.0.0', publishedAt: '2026-03-18', releaseNotes: 'Initial public release.' },
-    ],
-    metadata: {
-      marketplaceId: 'mkt_skill_test_writer',
-      marketplaceSlug: 'test-writer',
-      publishedAt: '2026-03-18',
-      updatedAt: '2026-05-01',
+import type { LoadedSkill } from '../../../shared/types'
+
+const MOCK_LOCAL_SKILLS: LoadedSkill[] = [
+  // 市场安装的技能（有 marketplaceOrigin）
+  {
+    slug: 'docker',
+    metadata: { name: 'Docker', description: '管理容器的构建、运行与生命周期' },
+    content: '',
+    path: '/workspace/.agents/docker',
+    source: 'workspace',
+    marketplaceOrigin: {
+      marketplaceId: 'mkt_docker',
+      marketplaceSlug: 'docker',
+      ownerId: 'owner_devops',
+      ownerDisplayName: 'DevOps Team',
+      installedVersion: '1.2.0',
+      installedAt: '2024-01-10T08:00:00Z',
+      lastCheckedAt: '2024-01-10T08:00:00Z',
+      modified: false,
+      sourceBundleHash: 'abc123',
+      safetyStatus: 'ok',
     },
   },
-  'api-docs': {
-    ...DEFAULT_MARKETPLACE_LISTINGS[1],
-    skillMarkdown: [
-      '---',
-      'name: API Docs Companion',
-      'description: Keeps endpoint references and examples aligned with source changes.',
-      '---',
-      '',
-      '# API Docs Companion',
-      '',
-      'Review changed handlers, schemas, and public examples before updating documentation.',
-    ].join('\n'),
-    requiredSources: ['API source files', 'Documentation directory'],
-    versions: [
-      { version: '2.1.0', publishedAt: '2026-04-28', releaseNotes: 'Adds schema drift checks.' },
-      { version: '2.0.0', publishedAt: '2026-04-03', releaseNotes: 'Refreshes endpoint grouping.' },
-    ],
-    metadata: {
-      marketplaceId: 'mkt_skill_api-docs',
-      marketplaceSlug: 'api-docs',
-      publishedAt: '2026-04-03',
-      updatedAt: '2026-04-28',
+  {
+    slug: 'kubernetes',
+    metadata: { name: 'Kubernetes', description: '自动化部署、扩缩容与集群管理' },
+    content: '',
+    path: '/workspace/.agents/kubernetes',
+    source: 'workspace',
+    marketplaceOrigin: {
+      marketplaceId: 'mkt_kubernetes',
+      marketplaceSlug: 'kubernetes',
+      ownerId: 'owner_devops',
+      ownerDisplayName: 'DevOps Team',
+      installedVersion: '2.0.1',
+      installedAt: '2024-01-12T09:00:00Z',
+      lastCheckedAt: '2024-01-12T09:00:00Z',
+      modified: false,
+      sourceBundleHash: 'def456',
+      safetyStatus: 'ok',
     },
   },
-  'release-notes': {
-    ...DEFAULT_MARKETPLACE_LISTINGS[2],
-    skillMarkdown: [
-      '---',
-      'name: Release Notes',
-      'description: Turns merged changes into concise release notes for product teams.',
-      '---',
-      '',
-      '# Release Notes',
-      '',
-      'Summarize completed work by user-visible outcome and include migration notes when needed.',
-    ].join('\n'),
-    requiredSources: ['Git history', 'Issue tracker'],
-    versions: [
-      { version: '1.8.0', publishedAt: '2026-05-03', releaseNotes: 'Adds owner-facing changelog sections.' },
-      { version: '1.7.1', publishedAt: '2026-04-20', releaseNotes: 'Fixes duplicate bullet grouping.' },
-    ],
-    metadata: {
-      marketplaceId: 'mkt_skill_release-notes',
-      marketplaceSlug: 'release-notes',
-      publishedAt: '2026-02-22',
-      updatedAt: '2026-05-03',
+  {
+    slug: 'github-actions',
+    metadata: { name: 'GitHub Actions', description: '构建和管理 CI/CD 工作流' },
+    content: '',
+    path: '/workspace/.agents/github-actions',
+    source: 'workspace',
+    marketplaceOrigin: {
+      marketplaceId: 'mkt_github_actions',
+      marketplaceSlug: 'github-actions',
+      ownerId: 'owner_devops',
+      ownerDisplayName: 'DevOps Team',
+      installedVersion: '1.5.0',
+      installedAt: '2024-01-15T10:00:00Z',
+      lastCheckedAt: '2024-01-15T10:00:00Z',
+      modified: false,
+      sourceBundleHash: 'ghi789',
+      safetyStatus: 'ok',
     },
   },
-  'security-review': {
-    ...DEFAULT_MARKETPLACE_LISTINGS[3],
-    skillMarkdown: [
-      '---',
-      'name: Security Review',
-      'description: Checks code and configuration changes for common security risks.',
-      '---',
-      '',
-      '# Security Review',
-      '',
-      'Inspect changed authentication, credential, network, and filesystem paths before release.',
-    ].join('\n'),
-    requiredSources: ['Changed code', 'Security policy docs'],
-    versions: [
-      { version: '3.0.1', publishedAt: '2026-04-30', releaseNotes: 'Safety blocked pending marketplace review.' },
-      { version: '3.0.0', publishedAt: '2026-04-21', releaseNotes: 'Adds credential exposure checks.' },
-    ],
-    metadata: {
-      marketplaceId: 'mkt_skill_security-review',
-      marketplaceSlug: 'security-review',
-      publishedAt: '2026-01-15',
-      updatedAt: '2026-04-30',
-    },
+  // 本地上传的技能（无 marketplaceOrigin）
+  {
+    slug: 'code-review',
+    metadata: { name: '代码审查', description: '智能分析代码质量与安全问题', author: '张三' },
+    content: '',
+    path: '/workspace/.agents/code-review',
+    source: 'workspace',
   },
+  {
+    slug: 'weekly-report',
+    metadata: { name: '周报助手', description: '自动整理工作内容，生成周报草稿', author: '李四' },
+    content: '',
+    path: '/workspace/.agents/weekly-report',
+    source: 'workspace',
+  },
+  {
+    slug: 'doc-generator',
+    metadata: { name: '文档生成器', description: '根据代码自动生成技术文档', author: '王五' },
+    content: '',
+    path: '/workspace/.agents/doc-generator',
+    source: 'workspace',
+  },
+]
+
+const HERO_SLIDES = [
+  { icon: 'D', color: 'bg-blue-500', name: 'Docker', prompt: '帮我分析容器内存占用并优化配置' },
+  { icon: 'K8s', color: 'bg-indigo-500', name: 'Kubernetes', prompt: '检查集群状态并扩容 production 命名空间' },
+  { icon: 'GA', color: 'bg-gray-700', name: 'GitHub Actions', prompt: '为我的项目生成一个完整的 CI/CD 流水线' },
+  { icon: 'WR', color: 'bg-violet-500', name: '周报助手', prompt: '整理本周提交记录并生成工作周报' },
+]
+
+// ============================================================================
+// createStaticMarketplaceApi
+// ============================================================================
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', bytes)
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
 }
 
-/** Creates the mocked Marketplace API used until the service-backed API exists. */
+function toBase64(bytes: Uint8Array): string {
+  let s = ''
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i])
+  return btoa(s)
+}
+
 export function createStaticMarketplaceApi(options?: StaticMarketplaceApiOptions): MarketplaceApi {
-  const listings = options?.listings ?? DEFAULT_MARKETPLACE_LISTINGS
-  const details = options?.details ?? DEFAULT_MARKETPLACE_DETAILS
-  const unpublishedSlugs = new Set<string>()
+  const listings = options?.listings ?? MOCK_SKILLS
+  const unpublished = new Set<string>()
 
   return {
     async listSkills() {
       if (options?.listError) throw new Error(options.listError)
-      return listings.filter((listing) => !unpublishedSlugs.has(listing.slug))
+      return listings.filter((l) => !unpublished.has(l.slug))
     },
     async getSkillDetail(slug) {
       if (options?.detailError) throw new Error(options.detailError)
-      const detail = details[slug]
-      if (!detail) throw new Error('Marketplace Skill not found.')
-      return detail
+      const l = listings.find((x) => x.slug === slug)
+      if (!l) throw new Error('Skill not found.')
+      return {
+        ...l,
+        skillMarkdown: `# ${l.name}\n\n${l.description}`,
+        requiredSources: [],
+        versions: [{ version: l.latestVersion, publishedAt: new Date().toISOString(), releaseNotes: '' }],
+        metadata: {
+          marketplaceId: l.id,
+          marketplaceSlug: l.slug,
+          publishedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      }
     },
     async reportSkill(input) {
       return { status: 'submitted', reportId: `report_${input.marketplaceId}` }
     },
     async unpublishSkill(input) {
-      unpublishedSlugs.add(input.marketplaceSlug)
-      return {
-        status: 'unpublished',
-        marketplaceSlug: input.marketplaceSlug,
-        message: 'Removed from Marketplace discovery. Published versions are preserved.',
-      }
+      unpublished.add(input.marketplaceSlug)
+      return { status: 'unpublished', marketplaceSlug: input.marketplaceSlug, message: '已从市场下架。' }
     },
     async createInstallIntent(detail) {
       const bytes = zipSync({ 'SKILL.md': strToU8(detail.skillMarkdown) })
-      return {
-        intentId: `intent_${detail.id}`,
-        downloadUrl: `data:application/zip;base64,${toBase64(bytes)}`,
-        expectedSha256: await sha256Hex(bytes),
-      }
+      return { intentId: `intent_${detail.id}`, downloadUrl: `data:application/zip;base64,${toBase64(bytes)}`, expectedSha256: await sha256Hex(bytes) }
     },
-    async recordInstallComplete() {
-      // Static Marketplace API records no hosted metrics.
-    },
+    async recordInstallComplete() {},
     async createUpdateIntent(detail) {
       const bytes = zipSync({ 'SKILL.md': strToU8(detail.skillMarkdown) })
-      return {
-        intentId: `update_intent_${detail.id}`,
-        downloadUrl: `data:application/zip;base64,${toBase64(bytes)}`,
-        expectedSha256: await sha256Hex(bytes),
-      }
+      return { intentId: `update_intent_${detail.id}`, downloadUrl: `data:application/zip;base64,${toBase64(bytes)}`, expectedSha256: await sha256Hex(bytes) }
     },
-    async recordUpdateComplete() {
-      // Static Marketplace API records no hosted metrics.
-    },
-  }
-}
-
-/** Applies Marketplace search, category, and tag filters to listing summaries. */
-export function filterMarketplaceListings(
-  listings: MarketplaceSkillListing[],
-  filters: MarketplaceCatalogFilters,
-): MarketplaceSkillListing[] {
-  const search = filters.search?.trim().toLowerCase() ?? ''
-  const category = filters.category?.trim()
-  const tag = filters.tag?.trim().toLowerCase()
-
-  return listings.filter((listing) => {
-    const matchesSearch = !search
-      || listing.name.toLowerCase().includes(search)
-      || listing.description.toLowerCase().includes(search)
-      || listing.owner.toLowerCase().includes(search)
-      || listing.tags.some((candidate) => candidate.toLowerCase().includes(search))
-    const matchesCategory = !category || listing.category === category
-    const matchesTag = !tag || listing.tags.some((candidate) => candidate.toLowerCase() === tag)
-
-    return matchesSearch && matchesCategory && matchesTag
-  })
-}
-
-/** Loads Marketplace listings and returns a UI-safe catalog state. */
-export async function loadMarketplaceCatalog(
-  api: MarketplaceApi,
-  filters: MarketplaceCatalogFilters,
-): Promise<MarketplaceCatalogState> {
-  try {
-    const listings = await api.listSkills()
-    return {
-      status: 'ready',
-      listings: filterMarketplaceListings(listings, filters),
-      availableCategories: [...PRODUCT_MARKETPLACE_CATEGORIES],
-      availableTags: uniqueSorted(listings.flatMap((listing) => listing.tags)),
-    }
-  } catch (error) {
-    return {
-      status: 'error',
-      message: error instanceof Error ? error.message : 'The Marketplace is unavailable.',
-    }
-  }
-}
-
-/** Loads one Marketplace Skill detail and returns a UI-safe detail state. */
-export async function loadMarketplaceDetail(
-  api: MarketplaceApi,
-  slug: string,
-): Promise<MarketplaceDetailState> {
-  try {
-    return { status: 'ready', detail: await api.getSkillDetail(slug) }
-  } catch (error) {
-    return {
-      status: 'error',
-      message: error instanceof Error ? error.message : 'The Marketplace detail is unavailable.',
-    }
-  }
-}
-
-export async function installMarketplaceSkillFromDetail({
-  workspaceId,
-  userId,
-  detail,
-  api,
-  electronAPI,
-  conflictResolution,
-}: {
-  workspaceId: string
-  userId: string | null
-  detail: MarketplaceSkillDetail
-  api: MarketplaceApi
-  electronAPI: MarketplaceInstallElectronApi
-  conflictResolution?: MarketplaceInstallConflictResolution
-}): Promise<MarketplaceInstallResult | { status: 'auth-required'; message: string } | { status: 'error'; message: string }> {
-  if (!userId) {
-    return { status: 'auth-required', message: 'Sign in is required to install Marketplace Skills.' }
-  }
-
-  try {
-    const intent = await api.createInstallIntent(detail, userId)
-    const result = await electronAPI.installMarketplaceSkill(workspaceId, {
-      userId,
-      conflictResolution,
-      intent,
-      skill: {
-        marketplaceId: detail.metadata.marketplaceId,
-        marketplaceSlug: detail.metadata.marketplaceSlug,
-        skillSlug: detail.slug,
-        ownerId: detail.ownerId,
-        ownerDisplayName: detail.owner,
-        version: detail.latestVersion,
-        basedOn: detail.basedOn,
-      },
-    })
-    if (result.status !== 'installed') return result
-
-    try {
-      await api.recordInstallComplete(intent.intentId)
-      return result
-    } catch (error) {
-      return {
-        status: 'install-complete-failed',
-        slug: detail.slug,
-        message: error instanceof Error ? error.message : 'Marketplace install completion failed.',
-      }
-    }
-  } catch (error) {
-    return {
-      status: 'error',
-      message: error instanceof Error ? error.message : 'Marketplace install failed.',
-    }
-  }
-}
-
-/** Requests an update intent, applies the local update, and reports hosted completion. */
-export async function updateMarketplaceSkillFromDetail({
-  workspaceId,
-  userId,
-  detail,
-  api,
-  electronAPI,
-}: {
-  workspaceId: string
-  userId: string | null
-  detail: MarketplaceSkillDetail
-  api: MarketplaceApi
-  electronAPI: MarketplaceUpdateElectronApi
-}): Promise<MarketplaceInstallResult | { status: 'auth-required'; message: string } | { status: 'error'; message: string }> {
-  if (!userId) {
-    return { status: 'auth-required', message: 'Sign in is required to update Marketplace Skills.' }
-  }
-
-  try {
-    const intent = await api.createUpdateIntent(detail, userId)
-    const result = await electronAPI.updateMarketplaceSkill(workspaceId, {
-      userId,
-      slug: detail.slug,
-      targetVersion: detail.latestVersion,
-      intent,
-    })
-    if (result.status !== 'installed') return result
-
-    try {
-      await api.recordUpdateComplete(intent.intentId)
-      return result
-    } catch (error) {
-      return {
-        status: 'install-complete-failed',
-        slug: detail.slug,
-        message: error instanceof Error ? error.message : 'Marketplace update completion failed.',
-      }
-    }
-  } catch (error) {
-    return {
-      status: 'error',
-      message: error instanceof Error ? error.message : 'Marketplace update failed.',
-    }
-  }
-}
-
-/** Starts the Marketplace publish handoff only when an authenticated user is available. */
-export async function publishMarketplaceSkill({
-  userId,
-  skillSlug,
-  api,
-}: {
-  userId: string | null
-  skillSlug: string
-  api: MarketplacePublishApi
-}): Promise<MarketplacePublishResult> {
-  if (!userId) {
-    return { status: 'auth-required', message: 'Sign in is required to publish Marketplace Skills.' }
-  }
-
-  try {
-    return await api.publishSkill({ userId, skillSlug })
-  } catch (error) {
-    return {
-      status: 'error',
-      message: error instanceof Error ? error.message : 'Marketplace publish failed.',
-    }
-  }
-}
-
-/** Submits a user report for one published Marketplace Skill after auth and context validation. */
-export async function reportMarketplaceSkillFromDetail({
-  userId,
-  detail,
-  context,
-  api,
-}: {
-  userId: string | null
-  detail: MarketplaceSkillDetail
-  context: string
-  api: MarketplaceApi
-}): Promise<MarketplaceReportResult> {
-  if (!userId) {
-    return { status: 'auth-required', message: 'Sign in is required to report Marketplace Skills.' }
-  }
-
-  const trimmedContext = context.trim()
-  if (!trimmedContext) {
-    return { status: 'validation-error', message: 'Add report details before submitting.' }
-  }
-
-  try {
-    return await api.reportSkill({
-      userId,
-      marketplaceId: detail.metadata.marketplaceId,
-      marketplaceSlug: detail.metadata.marketplaceSlug,
-      context: trimmedContext,
-    })
-  } catch (error) {
-    return {
-      status: 'error',
-      message: error instanceof Error ? error.message : 'Marketplace report failed.',
-    }
-  }
-}
-
-/** Unpublishes a Marketplace Skill from discovery through the owner-only service action. */
-export async function unpublishOwnerMarketplaceSkillFromDetail({
-  userId,
-  detail,
-  api,
-}: {
-  userId: string | null
-  detail: MarketplaceSkillDetail
-  api: MarketplaceApi
-}): Promise<MarketplaceOwnerUnpublishResult> {
-  if (!userId) {
-    return { status: 'auth-required', message: 'Sign in is required to manage Marketplace Skills.' }
-  }
-  if (userId !== detail.ownerId) {
-    return { status: 'forbidden', message: 'Only the Marketplace Skill owner can unpublish this Skill.' }
-  }
-
-  try {
-    return await api.unpublishSkill({
-      userId,
-      marketplaceId: detail.metadata.marketplaceId,
-      marketplaceSlug: detail.metadata.marketplaceSlug,
-    })
-  } catch (error) {
-    return {
-      status: 'error',
-      message: error instanceof Error ? error.message : 'Marketplace unpublish failed.',
-    }
-  }
-}
-
-/** Publishes a new immutable owner version from the currently published Marketplace detail. */
-export async function publishOwnerMarketplaceVersionFromDetail({
-  workspaceId,
-  userId,
-  detail,
-  version,
-  releaseNotes,
-  electronAPI,
-}: {
-  workspaceId: string
-  userId: string | null
-  detail: MarketplaceSkillDetail
-  version: string
-  releaseNotes?: string
-  electronAPI: MarketplaceDirectPublishElectronApi
-}): Promise<DirectPublishState> {
-  if (!userId) {
-    return { status: 'auth-required', message: 'Sign in is required to publish Marketplace Skills.' }
-  }
-  if (userId !== detail.ownerId) {
-    return { status: 'error', message: 'Only the Marketplace Skill owner can publish a new version.' }
-  }
-
-  const parsed = parsePublishedSkillMarkdown(detail.skillMarkdown, detail)
-  return publishDirectMarketplaceSkill({
-    workspaceId,
-    userId,
-    skill: {
-      slug: detail.slug,
-      metadata: parsed.metadata,
-      content: parsed.content,
-      sourcePath: 'marketplace-owner-detail',
-    },
-    marketplaceSlug: detail.metadata.marketplaceSlug,
-    version,
-    category: detail.category,
-    tags: detail.tags,
-    releaseNotes,
-    electronAPI,
-  })
-}
-
-/** Publishes a Skill directly from Marketplace without creating or updating a Local Skill. */
-export async function publishDirectMarketplaceSkill({
-  workspaceId,
-  userId,
-  skill,
-  marketplaceSlug,
-  version,
-  category,
-  tags,
-  releaseNotes,
-  electronAPI,
-}: {
-  workspaceId: string
-  userId: string | null
-  skill: DiscoveredSkill
-  marketplaceSlug: string
-  version: string
-  category: string
-  tags?: string[]
-  releaseNotes?: string
-  electronAPI: MarketplaceDirectPublishElectronApi
-}): Promise<DirectPublishState> {
-  if (!userId) {
-    return { status: 'auth-required', message: 'Sign in is required to publish Marketplace Skills.' }
-  }
-  if (!workspaceId) {
-    return { status: 'error', message: 'Open a workspace before publishing Marketplace Skills.' }
-  }
-
-  const errors = validateDirectPublishFields({ skill, marketplaceSlug, version, category, tags, releaseNotes })
-  if (errors.length > 0) {
-    return { status: 'validation-error', message: errors.join(' ') }
-  }
-
-  try {
-    return await electronAPI.publishDirectMarketplaceSkill(workspaceId, {
-      userId,
-      skill: {
-        slug: skill.slug,
-        metadata: skill.metadata,
-        content: skill.content,
-      },
-      marketplaceSlug: marketplaceSlug.trim(),
-      version: version.trim(),
-      category,
-      tags: cleanTags(tags),
-      releaseNotes: releaseNotes?.trim() || undefined,
-    })
-  } catch (error) {
-    return {
-      status: 'error',
-      message: error instanceof Error ? error.message : 'Marketplace publish failed.',
-    }
+    async recordUpdateComplete() {},
   }
 }
 
 const defaultMarketplaceApi = createStaticMarketplaceApi()
-const defaultMarketplaceServiceConfig = resolveMarketplaceServiceConfig()
 
-type MarketplaceDetailInstallState =
-  | { status: 'idle' }
-  | { status: 'installing' }
-  | { status: 'installed'; message: string }
-  | { status: 'conflict'; message: string }
-  | { status: 'skipped'; message: string }
-  | { status: 'error'; message: string }
+// ============================================================================
+// Categories
+// ============================================================================
 
-type MarketplaceDetailReportState =
-  | { status: 'idle' }
-  | { status: 'submitting' }
-  | MarketplaceReportResult
+const CATEGORIES = ['全部', 'DevOps', '公共'] as const
+type Category = typeof CATEGORIES[number]
 
-type MarketplaceDetailOwnerState =
-  | { status: 'idle' }
-  | { status: 'publishing' }
-  | { status: 'unpublishing' }
-  | DirectPublishState
-  | MarketplaceOwnerUnpublishResult
+// ============================================================================
+// Sub-components
+// ============================================================================
 
-type DirectPublishState =
-  | { status: 'idle' }
-  | { status: 'publishing' }
-  | MarketplacePublishDirectResult
-  | { status: 'auth-required'; message: string }
-  | { status: 'validation-error'; message: string }
-  | { status: 'error'; message: string }
-
-type DirectPublishPathPhase =
-  | { kind: 'idle' }
-  | { kind: 'loading' }
-  | { kind: 'error'; message: string }
-  | { kind: 'picker'; skills: DiscoveredSkill[] }
-
-function uniqueSorted(values: string[]): string[] {
-  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b))
-}
-
-function validateDirectPublishFields(input: {
-  skill: DiscoveredSkill | null
-  marketplaceSlug: string
-  version: string
-  category: string
-  tags?: string[]
-  releaseNotes?: string
-}): string[] {
-  const errors: string[] = []
-  if (!input.skill) errors.push('Choose or create a Skill before publishing.')
-  if (input.skill && !input.skill.metadata.name.trim()) errors.push('Skill name is required.')
-  if (input.skill && !input.skill.metadata.description.trim()) errors.push('Skill description is required.')
-  if (input.skill && !input.skill.content.trim()) errors.push('Skill instructions are required.')
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.marketplaceSlug.trim())) {
-    errors.push('Marketplace slug must use lowercase letters, numbers, and single hyphens.')
-  }
-  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(input.version.trim())) {
-    errors.push('Version must be a valid SemVer version.')
-  }
-  if (!PRODUCT_MARKETPLACE_CATEGORIES.includes(input.category as typeof PRODUCT_MARKETPLACE_CATEGORIES[number])) {
-    errors.push(`Category must be one of ${PRODUCT_MARKETPLACE_CATEGORIES.join(', ')}.`)
-  }
-  if (input.tags?.some((tag) => tag.trim() && !/^[a-z0-9][a-z0-9-]{0,39}$/.test(tag.trim()))) {
-    errors.push('Tags must use lowercase letters, numbers, and hyphens.')
-  }
-  if (input.releaseNotes && input.releaseNotes.length > 5000) {
-    errors.push('Release notes must be 5000 characters or fewer.')
-  }
-  return errors
-}
-
-function cleanTags(tags: string[] | undefined): string[] | undefined {
-  const cleaned = tags?.map((tag) => tag.trim()).filter(Boolean)
-  return cleaned && cleaned.length > 0 ? cleaned : undefined
-}
-
-function parsePublishedSkillMarkdown(
-  skillMarkdown: string,
-  detail: Pick<MarketplaceSkillDetail, 'name' | 'description'>,
-): { metadata: { name: string; description: string }; content: string } {
-  const frontmatterMatch = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/m.exec(skillMarkdown.trim())
-  if (!frontmatterMatch) {
-    return {
-      metadata: { name: detail.name, description: detail.description },
-      content: skillMarkdown.trim(),
-    }
-  }
-
-  const metadata: { name: string; description: string } = {
-    name: detail.name,
-    description: detail.description,
-  }
-  for (const line of frontmatterMatch[1].split('\n')) {
-    const [key, ...valueParts] = line.split(':')
-    const value = valueParts.join(':').trim()
-    if (key.trim() === 'name' && value) metadata.name = value
-    if (key.trim() === 'description' && value) metadata.description = value
-  }
-
-  return {
-    metadata,
-    content: frontmatterMatch[2].trim(),
-  }
-}
-
-function formatInstallCount(count: number): string {
-  return new Intl.NumberFormat(undefined, { notation: count >= 10000 ? 'compact' : 'standard' }).format(count)
-}
-
-function installStateLabelKey(state: MarketplaceInstallState): string {
-  switch (state) {
-    case 'installed': return 'skillMarketplace.stateInstalled'
-    case 'update-available': return 'skillMarketplace.stateUpdateAvailable'
-    case 'modified-locally': return 'skillMarketplace.stateModifiedLocally'
-    case 'unavailable': return 'skillMarketplace.stateOwnerUnpublished'
-    case 'safety-blocked': return 'skillMarketplace.stateSafetyBlocked'
-    case 'install': return 'skillMarketplace.stateInstall'
-  }
-}
-
-function installStateClassName(state: MarketplaceInstallState): string {
-  switch (state) {
-    case 'installed':
-      return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-    case 'update-available':
-      return 'border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300'
-    case 'modified-locally':
-      return 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-    case 'unavailable':
-    case 'safety-blocked':
-      return 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300'
-    case 'install':
-      return 'border-border bg-background text-muted-foreground'
-  }
-}
-
-function disabledActionLabelKey(state: MarketplaceInstallState): string {
-  switch (state) {
-    case 'installed': return 'skillMarketplace.stateInstalled'
-    case 'update-available':
-    case 'modified-locally': return 'skillMarketplace.actionUpdate'
-    case 'unavailable': return 'skillMarketplace.stateOwnerUnpublished'
-    case 'safety-blocked': return 'skillMarketplace.stateSafetyBlocked'
-    case 'install': return 'skillMarketplace.stateInstall'
-  }
-}
-
-function marketplaceInstallStateFromResult(
-  result: MarketplaceInstallResult | { status: 'auth-required'; message: string } | { status: 'error'; message: string },
-  t: TFunction,
-): MarketplaceDetailInstallState {
-  switch (result.status) {
-    case 'installed':
-      return { status: 'installed', message: t('skillMarketplace.installedMessage') }
-    case 'conflict':
-      return { status: 'conflict', message: t('skillMarketplace.conflictMessage') }
-    case 'skipped':
-      return { status: 'skipped', message: t('skillMarketplace.skippedMessage') }
-    case 'install-complete-failed':
-    case 'auth-required':
-    case 'error':
-      return { status: 'error', message: result.message }
-  }
-}
-
-function getMarketplaceInstallActionLabelKey(
-  detail: MarketplaceSkillDetail,
-  installState: MarketplaceDetailInstallState,
-  canInstall: boolean,
-  currentUserId?: string | null,
-): string {
-  if (installState.status === 'installing') return 'skillMarketplace.actionInstalling'
-  if (isOwnerLinked(detail, currentUserId) && detail.installState === 'modified-locally') return 'skillMarketplace.actionPublishOrDiscard'
-  if (!canInstall) {
-    if (isMarketplaceUpdateAction(detail.installState)) return 'skillMarketplace.actionSignInToUpdate'
-    return 'skillMarketplace.actionSignInToInstall'
-  }
-  if (isOwnerLinked(detail, currentUserId) && detail.installState === 'update-available') return 'skillMarketplace.actionSyncLatest'
-  return disabledActionLabelKey(detail.installState)
-}
-
-function isMarketplaceUpdateAction(state: MarketplaceInstallState): boolean {
-  return state === 'update-available' || state === 'modified-locally'
-}
-
-function isOwnerLinked(detail: MarketplaceSkillDetail, currentUserId?: string | null): boolean {
-  return Boolean(currentUserId && currentUserId === detail.ownerId)
-}
-
-function marketplaceInstallAlertClassName(status: Exclude<MarketplaceDetailInstallState['status'], 'idle' | 'installing'>): string {
-  switch (status) {
-    case 'installed':
-      return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-    case 'conflict':
-      return 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
-    case 'skipped':
-    case 'error':
-      return 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300'
-  }
-}
-
-function marketplaceReportAlertClassName(status: Exclude<MarketplaceDetailReportState['status'], 'idle' | 'submitting'>): string {
-  switch (status) {
-    case 'submitted':
-      return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-    case 'validation-error':
-    case 'auth-required':
-      return 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
-    case 'error':
-      return 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300'
-  }
-}
-
-function marketplaceOwnerActionAlertClassName(status: MarketplaceDetailOwnerState['status']): string {
-  switch (status) {
-    case 'published':
-    case 'unpublished':
-      return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-    case 'slug-conflict':
-    case 'auth-required':
-    case 'validation-error':
-    case 'forbidden':
-    case 'error':
-    case 'idle':
-    case 'publishing':
-    case 'unpublishing':
-      return 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
-  }
-}
-
-function marketplaceReportMessage(
-  state: Exclude<MarketplaceDetailReportState, { status: 'idle' } | { status: 'submitting' }>,
-  t: TFunction,
-): string {
-  if (state.status === 'submitted') return t('skillMarketplace.reportSubmitted')
-  return state.message
-}
-
-function directPublishMessage(state: DirectPublishState, t: TFunction): string | null {
-  switch (state.status) {
-    case 'published':
-      return t('skillMarketplace.publishedToMarketplaceSlug', { slug: state.marketplaceSlug })
-    case 'slug-conflict':
-    case 'auth-required':
-    case 'validation-error':
-    case 'error':
-      return state.message
-    case 'idle':
-    case 'publishing':
-      return null
-  }
-}
-
-function ownerActionMessage(state: MarketplaceDetailOwnerState, t: TFunction): string | null {
-  switch (state.status) {
-    case 'published':
-      return t('skillMarketplace.ownerActionPublished', { version: state.version })
-    case 'unpublished':
-      return state.message
-    case 'slug-conflict':
-    case 'auth-required':
-    case 'validation-error':
-    case 'forbidden':
-    case 'error':
-      return state.message
-    case 'idle':
-    case 'publishing':
-    case 'unpublishing':
-      return null
-  }
-}
-
-function marketplaceOriginStatusBadgeKeys(status: MarketplaceOriginMetadata['safetyStatus']): string[] {
-  switch (status) {
-    case 'unavailable':
-      return ['skillMarketplace.originStatusOwnerUnpublished']
-    case 'safety-blocked':
-      return ['skillMarketplace.originStatusAdminUnpublished', 'skillMarketplace.originStatusSafetyBlocked']
-    case 'ok':
-      return []
-  }
-}
-
-function marketplaceOriginStatusBadgeClassName(status: MarketplaceOriginMetadata['safetyStatus']): string {
-  switch (status) {
-    case 'unavailable':
-      return 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
-    case 'safety-blocked':
-      return 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300'
-    case 'ok':
-      return ''
-  }
-}
-
-/** Read-only Marketplace browsing page with catalog filters and detail inspection. */
-export function SkillMarketplacePage({
-  api = defaultMarketplaceApi,
-  workspaceId = '',
-  currentUserId = null,
-  serviceEnvironmentLabel = defaultMarketplaceServiceConfig.label,
-}: {
-  api?: MarketplaceApi
-  workspaceId?: string
-  currentUserId?: string | null
-  serviceEnvironmentLabel?: string
-}) {
-  const [search, setSearch] = React.useState('')
-  const [category, setCategory] = React.useState('')
-  const [tag, setTag] = React.useState('')
-  const [catalogState, setCatalogState] = React.useState<MarketplaceCatalogState | { status: 'loading' }>({ status: 'loading' })
-  const [selectedSlug, setSelectedSlug] = React.useState<string | null>(null)
-  const [detailState, setDetailState] = React.useState<MarketplaceDetailState | { status: 'idle' | 'loading' }>({ status: 'idle' })
-  const [installStateBySlug, setInstallStateBySlug] = React.useState<Record<string, MarketplaceDetailInstallState>>({})
-  const [reportStateBySlug, setReportStateBySlug] = React.useState<Record<string, MarketplaceDetailReportState>>({})
-  const [ownerStateBySlug, setOwnerStateBySlug] = React.useState<Record<string, MarketplaceDetailOwnerState>>({})
-  const [publishDialogOpen, setPublishDialogOpen] = React.useState(false)
-  const { t } = useTranslation()
-
-  const refreshCatalog = React.useCallback(() => {
-    setCatalogState({ status: 'loading' })
-    void loadMarketplaceCatalog(api, { search, category, tag }).then(setCatalogState)
-  }, [api, category, search, tag])
-
-  const refreshDetail = React.useCallback((slug: string) => {
-    setDetailState({ status: 'loading' })
-    void loadMarketplaceDetail(api, slug).then(setDetailState)
-  }, [api])
+function HeroBanner() {
+  const [idx, setIdx] = React.useState(0)
 
   React.useEffect(() => {
-    refreshCatalog()
-  }, [refreshCatalog])
+    const t = setInterval(() => setIdx((i) => (i + 1) % HERO_SLIDES.length), 3500)
+    return () => clearInterval(t)
+  }, [])
 
-  React.useEffect(() => {
-    if (!selectedSlug) {
-      setDetailState({ status: 'idle' })
-      return
-    }
-    refreshDetail(selectedSlug)
-  }, [refreshDetail, selectedSlug])
-
-  const installDetail = React.useCallback(async (detail: MarketplaceSkillDetail, conflictResolution?: MarketplaceInstallConflictResolution) => {
-    if (!workspaceId) {
-      setInstallStateBySlug((previous) => ({
-        ...previous,
-        [detail.slug]: { status: 'error', message: 'Open a workspace before installing or updating Marketplace Skills.' },
-      }))
-      return
-    }
-
-    setInstallStateBySlug((previous) => ({ ...previous, [detail.slug]: { status: 'installing' } }))
-    const result = isMarketplaceUpdateAction(detail.installState)
-      ? await updateMarketplaceSkillFromDetail({
-        workspaceId,
-        userId: currentUserId,
-        detail,
-        api,
-        electronAPI: window.electronAPI,
-      })
-      : await installMarketplaceSkillFromDetail({
-        workspaceId,
-        userId: currentUserId,
-        detail,
-        api,
-        electronAPI: window.electronAPI,
-        conflictResolution,
-      })
-
-    setInstallStateBySlug((previous) => ({ ...previous, [detail.slug]: marketplaceInstallStateFromResult(result, t) }))
-  }, [api, currentUserId, t, workspaceId])
-
-  const reportDetail = React.useCallback(async (detail: MarketplaceSkillDetail, context: string) => {
-    setReportStateBySlug((previous) => ({ ...previous, [detail.slug]: { status: 'submitting' } }))
-    const result = await reportMarketplaceSkillFromDetail({
-      userId: currentUserId,
-      detail,
-      context,
-      api,
-    })
-    setReportStateBySlug((previous) => ({ ...previous, [detail.slug]: result }))
-  }, [api, currentUserId])
-
-  const publishOwnerVersion = React.useCallback(async (detail: MarketplaceSkillDetail) => {
-    const version = window.prompt('New Marketplace version', detail.latestVersion)?.trim()
-    if (!version) return
-    const releaseNotes = window.prompt('Release notes', '')?.trim()
-    setOwnerStateBySlug((previous) => ({ ...previous, [detail.slug]: { status: 'publishing' } }))
-    const result = await publishOwnerMarketplaceVersionFromDetail({
-      workspaceId,
-      userId: currentUserId,
-      detail,
-      version,
-      releaseNotes,
-      electronAPI: window.electronAPI,
-    })
-    setOwnerStateBySlug((previous) => ({ ...previous, [detail.slug]: result }))
-    if (result.status === 'published') {
-      refreshCatalog()
-      refreshDetail(result.marketplaceSlug)
-    }
-  }, [currentUserId, refreshCatalog, refreshDetail, workspaceId])
-
-  const unpublishOwnerSkill = React.useCallback(async (detail: MarketplaceSkillDetail) => {
-    setOwnerStateBySlug((previous) => ({ ...previous, [detail.slug]: { status: 'unpublishing' } }))
-    const result = await unpublishOwnerMarketplaceSkillFromDetail({
-      userId: currentUserId,
-      detail,
-      api,
-    })
-    setOwnerStateBySlug((previous) => ({ ...previous, [detail.slug]: result }))
-    if (result.status === 'unpublished') refreshCatalog()
-  }, [api, currentUserId, refreshCatalog])
-
-  const finishDirectPublish = React.useCallback((marketplaceSlug: string) => {
-    setPublishDialogOpen(false)
-    setSelectedSlug(marketplaceSlug)
-    refreshCatalog()
-    refreshDetail(marketplaceSlug)
-  }, [refreshCatalog, refreshDetail])
+  const slide = HERO_SLIDES[idx]
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <div className="border-b border-border px-5 py-4">
-        <SkillMarketplacePageHeader
-          currentUserId={currentUserId}
-          serviceEnvironmentLabel={serviceEnvironmentLabel}
-          onPublishClick={() => setPublishDialogOpen(true)}
-        />
+    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-100 via-purple-50 to-indigo-100 dark:from-violet-950/40 dark:via-purple-900/30 dark:to-indigo-900/30">
+      <div className="pointer-events-none absolute -left-16 -top-16 h-64 w-64 rounded-full bg-purple-300/30 blur-3xl dark:bg-purple-500/20" />
+      <div className="pointer-events-none absolute -bottom-16 -right-16 h-64 w-64 rounded-full bg-indigo-300/30 blur-3xl dark:bg-indigo-500/20" />
+
+      <div className="relative flex flex-col items-center px-8 py-10">
+        <div className="mb-6 flex w-full max-w-lg items-center gap-3 rounded-xl bg-white/80 px-5 py-3 shadow-sm backdrop-blur-sm dark:bg-black/30">
+          <div className={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white', slide.color)}>
+            {slide.icon}
+          </div>
+          <span className="truncate min-w-0 text-[13px] font-medium text-foreground">
+            <span className="mr-1.5 font-semibold text-violet-600 dark:text-violet-400">{slide.name}</span>
+            {`${slide.prompt.slice(0, 30)}${slide.prompt.length > 30 ? '...' : ''}`}
+          </span>
+        </div>
+
+        {/* 在对话中试用 — 暂时隐藏 */}
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(300px,420px)_minmax(0,1fr)]">
-        <section className="flex min-h-0 flex-col border-r border-border">
-          <div className="space-y-3 border-b border-border p-4">
-            <label className="relative block">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={t('common.search')}
-                className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-2 text-sm outline-none focus:border-foreground/30"
-              />
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <select
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                className="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-foreground/30"
-              >
-                <option value="">{t('skillMarketplace.allCategories')}</option>
-                {catalogState.status === 'ready' && catalogState.availableCategories.map((candidate) => (
-                  <option key={candidate} value={candidate}>{candidate}</option>
-                ))}
-              </select>
-              <select
-                value={tag}
-                onChange={(event) => setTag(event.target.value)}
-                className="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-foreground/30"
-              >
-                <option value="">{t('skillMarketplace.allTags')}</option>
-                {catalogState.status === 'ready' && catalogState.availableTags.map((candidate) => (
-                  <option key={candidate} value={candidate}>{candidate}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            {catalogState.status === 'loading' && (
-              <p className="p-3 text-sm text-muted-foreground">{t('skillMarketplace.loading')}</p>
+      <div className="absolute right-4 top-1/2 flex -translate-y-1/2 flex-col gap-1.5">
+        {HERO_SLIDES.map((_, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => setIdx(i)}
+            className={cn(
+              'h-1.5 rounded-full transition-all',
+              i === idx ? 'w-3 bg-amber-500' : 'w-1.5 bg-foreground/20 hover:bg-foreground/40',
             )}
-            {catalogState.status === 'error' && (
-              <MarketplaceError message={catalogState.message} onRetry={refreshCatalog} />
-            )}
-            {catalogState.status === 'ready' && catalogState.listings.length === 0 && (
-              <MarketplaceEmptyState
-                canPublish={Boolean(currentUserId)}
-                onPublishClick={() => setPublishDialogOpen(true)}
-              />
-            )}
-            {catalogState.status === 'ready' && catalogState.listings.map((listing) => (
-              <MarketplaceListingCard
-                key={listing.id}
-                listing={listing}
-                selected={listing.slug === selectedSlug}
-                onSelect={() => setSelectedSlug(listing.slug)}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="min-h-0 overflow-y-auto">
-          {detailState.status === 'idle' && (
-            <div className="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
-              <div className="max-w-sm">
-                <Store className="mx-auto h-5 w-5" />
-                <p className="mt-2 text-sm font-medium text-foreground">{t('skillMarketplace.selectSkill')}</p>
-                <p className="mt-1 text-xs">{t('skillMarketplace.selectSkillDesc')}</p>
-                <button
-                  type="button"
-                  disabled={!currentUserId}
-                  onClick={() => setPublishDialogOpen(true)}
-                  className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
-                >
-                  <UserCog className="h-3.5 w-3.5" />
-                  {currentUserId ? t('skillMarketplace.publishButton') : t('skillMarketplace.signInToPublish')}
-                </button>
-              </div>
-            </div>
-          )}
-          {detailState.status === 'loading' && (
-            <p className="p-5 text-sm text-muted-foreground">{t('skillMarketplace.loadingDetail')}</p>
-          )}
-          {detailState.status === 'error' && (
-            <div className="p-5">
-              <MarketplaceError message={detailState.message} onRetry={() => selectedSlug && refreshDetail(selectedSlug)} />
-            </div>
-          )}
-          {detailState.status === 'ready' && (
-            <MarketplaceDetail
-              detail={detailState.detail}
-              installState={installStateBySlug[detailState.detail.slug] ?? { status: 'idle' }}
-              onInstall={(conflictResolution) => installDetail(detailState.detail, conflictResolution)}
-              reportState={reportStateBySlug[detailState.detail.slug] ?? { status: 'idle' }}
-              onReport={(context) => reportDetail(detailState.detail, context)}
-              ownerState={ownerStateBySlug[detailState.detail.slug] ?? { status: 'idle' }}
-              onOwnerPublishVersion={() => publishOwnerVersion(detailState.detail)}
-              onOwnerUnpublish={() => unpublishOwnerSkill(detailState.detail)}
-              canInstall={Boolean(currentUserId)}
-              canReport={Boolean(currentUserId)}
-              currentUserId={currentUserId}
-            />
-          )}
-        </section>
+          />
+        ))}
       </div>
-
-      <MarketplacePublishSkillDialog
-        open={publishDialogOpen}
-        onOpenChange={setPublishDialogOpen}
-        workspaceId={workspaceId}
-        currentUserId={currentUserId}
-        onPublished={finishDirectPublish}
-      />
     </div>
   )
 }
 
-/** Header for Marketplace browsing, publish auth state, and selected service environment. */
+function SkillIcon({ icon, iconBg }: { icon: string; iconBg?: string }) {
+  return (
+    <div
+      className={cn(
+        'flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white',
+        iconBg ?? 'bg-foreground',
+      )}
+    >
+      {icon}
+    </div>
+  )
+}
+
+function SkillRow({
+  skill,
+  onInstall,
+  onClick,
+}: {
+  skill: MarketplaceSkillListing
+  onInstall: (s: MarketplaceSkillListing) => void
+  onClick: (s: MarketplaceSkillListing) => void
+}) {
+  const installed = skill.installState === 'installed'
+
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(skill)}
+      className="group flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-foreground/[0.04]"
+    >
+      <SkillIcon icon={skill.icon} iconBg={skill.iconBg} />
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-semibold text-foreground">{skill.name}</p>
+        {skill.description.length > 20 ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p className="truncate text-[12px] text-muted-foreground cursor-default">
+                {skill.description.slice(0, 20)}...
+              </p>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[240px] text-xs">
+              {skill.description}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <p className="truncate text-[12px] text-muted-foreground">{skill.description}</p>
+        )}
+        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground/70">
+          <span>{skill.owner}</span>
+          <span>·</span>
+          <span>{skill.installCount.toLocaleString()} 次安装</span>
+        </div>
+      </div>
+
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={(e) => { e.stopPropagation(); if (!installed) onInstall(skill) }}
+        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !installed) { e.stopPropagation(); onInstall(skill) } }}
+        className={cn(
+          'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border transition-colors',
+          installed
+            ? 'cursor-default border-foreground/15 text-foreground/40'
+            : 'cursor-pointer border-foreground/20 text-foreground/50 hover:border-foreground/50 hover:text-foreground',
+        )}
+      >
+        {installed ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+      </div>
+    </button>
+  )
+}
+
+function SkillGrid({
+  skills,
+  onInstall,
+  onClick,
+}: {
+  skills: MarketplaceSkillListing[]
+  onInstall: (s: MarketplaceSkillListing) => void
+  onClick: (s: MarketplaceSkillListing) => void
+}) {
+  if (skills.length === 0) {
+    return <p className="py-12 text-center text-sm text-muted-foreground">暂无匹配的技能</p>
+  }
+
+  const left = skills.filter((_, i) => i % 2 === 0)
+  const right = skills.filter((_, i) => i % 2 === 1)
+
+  return (
+    <div className="grid grid-cols-2 gap-x-6">
+      <div className="divide-y divide-border/50">
+        {left.map((s) => <SkillRow key={s.id} skill={s} onInstall={onInstall} onClick={onClick} />)}
+      </div>
+      <div className="divide-y divide-border/50">
+        {right.map((s) => <SkillRow key={s.id} skill={s} onInstall={onInstall} onClick={onClick} />)}
+      </div>
+    </div>
+  )
+}
+
+function SkillDetailDialog({
+  skill,
+  onClose,
+  onInstall,
+  onUninstall,
+}: {
+  skill: MarketplaceSkillListing | null
+  onClose: () => void
+  onInstall: (s: MarketplaceSkillListing) => void
+  onUninstall: (s: MarketplaceSkillListing) => void
+}) {
+  if (!skill) return null
+
+  const installed = skill.installState === 'installed'
+
+  const mockMarkdown = `## 概述
+
+${skill.description}
+
+本技能深度集成到 MDP 工作流中，让你通过自然语言即可完成原本需要多步命令行操作的任务，大幅降低操作门槛，提升团队协作效率。
+
+---
+
+## 核心功能
+
+### 1. 自动化任务执行
+
+支持通过对话触发以下操作：
+
+- **构建与部署**：一键触发构建流水线，实时查看日志输出
+- **环境管理**：创建、删除、切换运行环境，支持多环境配置
+- **资源监控**：实时获取 CPU、内存、磁盘等资源使用情况
+- **日志分析**：自动聚合日志并提取关键错误信息
+
+### 2. 智能问题诊断
+
+当任务失败时，技能会自动：
+
+1. 解析错误堆栈，定位根本原因
+2. 结合上下文给出修复建议
+3. 提供参考文档链接
+
+### 3. 配置文件管理
+
+\`\`\`yaml
+# 示例配置文件 .mdp/${skill.slug}.yml
+version: "1.0"
+settings:
+  timeout: 300
+  retry: 3
+  notify: true
+environments:
+  - name: production
+    region: cn-hangzhou
+  - name: staging
+    region: cn-beijing
+\`\`\`
+
+---
+
+## 快速开始
+
+### 前置条件
+
+在使用本技能前，请确保已满足以下条件：
+
+| 依赖项 | 最低版本 | 说明 |
+|--------|---------|------|
+| Node.js | 18.0+ | 运行时环境 |
+| ${skill.slug} CLI | 2.0+ | 命令行工具 |
+| API Token | — | 在账户设置中生成 |
+
+### 安装步骤
+
+\`\`\`bash
+# 第一步：安装 CLI 工具
+npm install -g @mdp/${skill.slug}-cli
+
+# 第二步：登录认证
+${skill.slug} auth login
+
+# 第三步：初始化项目
+${skill.slug} init --workspace my-project
+
+# 验证安装
+${skill.slug} --version
+\`\`\`
+
+### 在 MDP 中激活
+
+安装本技能后，在对话框中直接输入指令即可：
+
+> 「帮我检查一下 production 环境的运行状态」
+
+> 「最近 1 小时有没有报错日志？」
+
+> 「把 staging 的配置同步到 production」
+
+---
+
+## 高级用法
+
+### 批量操作
+
+\`\`\`bash
+# 批量重启服务
+${skill.slug} restart --env production --service all
+
+# 批量导出配置
+${skill.slug} config export --format json --output ./backup/
+\`\`\`
+
+### Webhook 集成
+
+你可以配置 Webhook，在特定事件发生时自动通知 MDP：
+
+\`\`\`json
+{
+  "url": "https://your-mdp-instance/webhook/${skill.slug}",
+  "events": ["deploy.success", "deploy.failed", "alert.triggered"],
+  "secret": "your-webhook-secret"
+}
+\`\`\`
+
+### 自定义规则
+
+在 \`SKILL.md\` 中可以覆盖默认行为：
+
+\`\`\`markdown
+## Custom Rules
+
+- 所有部署操作前必须先运行测试套件
+- production 环境的变更需要二次确认
+- 错误日志超过 100 条时自动告警
+\`\`\`
+
+---
+
+## 常见问题
+
+**Q：认证 Token 过期后会怎样？**
+
+技能会自动检测 Token 状态，过期时提示重新登录，不会中断当前对话上下文。
+
+**Q：是否支持私有化部署？**
+
+支持。在配置文件中将 \`endpoint\` 指向你的私有服务地址即可。
+
+**Q：操作日志保存多久？**
+
+默认保留 30 天，可在设置中调整为 7 / 30 / 90 / 180 天。
+
+---
+
+## 更新日志
+
+### v${skill.latestVersion}（当前版本）
+- 新增批量操作支持
+- 优化错误信息展示，更易于定位问题
+- 修复在弱网络环境下偶发的超时问题
+
+### v1.0.0
+- 初始版本发布
+- 支持基础的部署与监控功能`
+
+  const publishedAt = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="flex max-h-[85vh] w-full max-w-[660px] sm:max-w-[660px] flex-col gap-0 overflow-hidden p-0">
+
+        {/* 图标 + 标题行 */}
+        <div className="flex items-start justify-between px-7 pt-7 pb-1">
+          <div className="flex items-center gap-4">
+            <div className={cn('flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white', skill.iconBg ?? 'bg-foreground')}>
+              {skill.icon}
+            </div>
+            <div>
+              <div className="flex items-baseline gap-2">
+                <h2 className="text-[18px] font-bold text-foreground">{skill.name}</h2>
+                <span className="text-[13px] font-normal text-muted-foreground">Skill</span>
+              </div>
+              <p className="mt-0.5 text-[13px] text-muted-foreground">{skill.description}</p>
+            </div>
+          </div>
+          <div className="ml-4 flex flex-shrink-0 items-center gap-2 pt-1">
+            <button
+              type="button"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* 作者 + 发布时间 + 安装数 */}
+        <div className="flex items-center gap-2 px-7 pb-4 pt-2 text-[12px] text-muted-foreground/55">
+          <span>作者：{skill.owner}</span>
+          <span>·</span>
+          <span>发布于 {publishedAt}</span>
+          <span>·</span>
+          <span>{skill.installCount.toLocaleString()} 次安装</span>
+        </div>
+
+        {/* Markdown 内容区 */}
+        <div className="mx-7 mb-5 min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/20 px-6 py-5 text-[13px] leading-relaxed">
+          <Markdown>{mockMarkdown}</Markdown>
+        </div>
+
+        {/* 底部操作栏 */}
+        <div className="flex items-center justify-between border-t border-border px-7 py-4">
+          <button
+            type="button"
+            onClick={() => onUninstall(skill)}
+            className="rounded-lg bg-rose-100 px-4 py-2 text-[13px] font-medium text-rose-500 transition-colors hover:bg-rose-200 dark:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500/25"
+          >
+            删除
+          </button>
+          <button
+            type="button"
+            onClick={() => onInstall(skill)}
+            disabled={installed}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            安装
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ============================================================================
+// 本地技能专属组件（不复用市场组件）
+// ============================================================================
+
+const LOCAL_ICON_COLORS = [
+  'bg-blue-500', 'bg-indigo-500', 'bg-violet-600', 'bg-purple-600',
+  'bg-emerald-500', 'bg-teal-500', 'bg-cyan-500', 'bg-orange-500',
+  'bg-rose-500', 'bg-gray-600',
+]
+
+function getLocalIconColor(slug: string): string {
+  let hash = 0
+  for (let i = 0; i < slug.length; i++) hash = (hash * 31 + slug.charCodeAt(i)) >>> 0
+  return LOCAL_ICON_COLORS[hash % LOCAL_ICON_COLORS.length]
+}
+
+function LocalSkillIcon({ skill }: { skill: LoadedSkill }) {
+  const name = skill.metadata?.name ?? skill.slug
+  const label = name.slice(0, 2).toUpperCase()
+  const colorClass = getLocalIconColor(skill.slug)
+
+  return (
+    <div className={cn('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white', colorClass)}>
+      {label}
+    </div>
+  )
+}
+
+
+function LocalSkillRow({
+  skill,
+  onUninstall,
+  onClick,
+}: {
+  skill: LoadedSkill
+  onUninstall: (s: LoadedSkill) => void
+  onClick: (s: LoadedSkill) => void
+}) {
+  const name = skill.metadata?.name ?? skill.slug
+  const description = skill.metadata?.description ?? ''
+  const author = skill.marketplaceOrigin?.ownerDisplayName ?? skill.metadata?.author
+
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(skill)}
+      className="group flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-foreground/[0.04]"
+    >
+      <LocalSkillIcon skill={skill} />
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <p className="truncate text-[13px] font-semibold text-foreground">{name}</p>
+          {author && <span className="flex-shrink-0 text-[11px] text-muted-foreground/70">{author}</span>}
+        </div>
+        {description.length > 20 ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p className="truncate text-[12px] text-muted-foreground cursor-default">
+                {description.slice(0, 20)}...
+              </p>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[240px] text-xs">
+              {description}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <p className="truncate text-[12px] text-muted-foreground">{description || '—'}</p>
+        )}
+      </div>
+
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={(e) => { e.stopPropagation(); onUninstall(skill) }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onUninstall(skill) } }}
+        className="flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-full border border-foreground/20 text-foreground/50 opacity-0 transition-all group-hover:opacity-100 hover:border-rose-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-500/10"
+      >
+        <Minus className="h-3.5 w-3.5" />
+      </div>
+    </button>
+  )
+}
+
+function LocalSkillGrid({
+  skills,
+  onUninstall,
+  onClick,
+}: {
+  skills: LoadedSkill[]
+  onUninstall: (s: LoadedSkill) => void
+  onClick: (s: LoadedSkill) => void
+}) {
+  if (skills.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+        <Zap className="h-8 w-8 opacity-30" />
+        <p className="text-sm">暂无匹配的本地技能</p>
+      </div>
+    )
+  }
+
+  const left = skills.filter((_, i) => i % 2 === 0)
+  const right = skills.filter((_, i) => i % 2 === 1)
+
+  return (
+    <div className="grid grid-cols-2 gap-x-6">
+      <div className="divide-y divide-border/50">
+        {left.map((s) => <LocalSkillRow key={s.slug} skill={s} onUninstall={onUninstall} onClick={onClick} />)}
+      </div>
+      <div className="divide-y divide-border/50">
+        {right.map((s) => <LocalSkillRow key={s.slug} skill={s} onUninstall={onUninstall} onClick={onClick} />)}
+      </div>
+    </div>
+  )
+}
+
+function LocalSkillMoreMenu({ slug, workspaceId }: { slug: string; workspaceId: string }) {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-[172px] overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg">
+          <button
+            type="button"
+            onClick={() => { setOpen(false); window.electronAPI.openSkillInEditor(workspaceId, slug) }}
+            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[13px] text-foreground transition-colors hover:bg-foreground/[0.06]"
+          >
+            <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+            在编辑器中打开
+          </button>
+          <button
+            type="button"
+            onClick={() => { setOpen(false); window.electronAPI.openSkillInFinder(workspaceId, slug) }}
+            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[13px] text-foreground transition-colors hover:bg-foreground/[0.06]"
+          >
+            <Folder className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+            在文件夹中显示
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LocalSkillDetailDialog({
+  skill,
+  enabled,
+  workspaceId,
+  onClose,
+  onUninstall,
+  onToggleEnabled,
+  onPublish,
+}: {
+  skill: LoadedSkill | null
+  enabled: boolean
+  workspaceId: string
+  onClose: () => void
+  onUninstall: (s: LoadedSkill) => void
+  onToggleEnabled: (s: LoadedSkill) => void
+  onPublish: (s: LoadedSkill) => void
+}) {
+  if (!skill) return null
+
+  const name = skill.metadata?.name ?? skill.slug
+  const description = skill.metadata?.description ?? ''
+
+  const mockMarkdown = `## 概述
+
+${description || '本地技能，无描述信息。'}
+
+## 使用方式
+
+在对话中直接引用此技能，或将其作为工作区默认技能启用。
+
+## 技能路径
+
+\`\`\`
+${skill.path}
+\`\`\`
+
+## 配置信息
+
+- **标识符**：\`${skill.slug}\`
+${skill.metadata?.globs?.length ? `- **触发规则**：\`${skill.metadata.globs.join(', ')}\`` : ''}
+${skill.metadata?.requiredSources?.length ? `- **依赖来源**：${skill.metadata.requiredSources.join(', ')}` : ''}
+
+## 内容预览
+
+${skill.content || '（内容为空）'}`
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="flex max-h-[85vh] w-full max-w-[660px] sm:max-w-[660px] flex-col gap-0 overflow-hidden p-0">
+
+        {/* 图标 + 标题行 */}
+        <div className="flex items-start justify-between px-7 pt-7 pb-1">
+          <div className="flex items-center gap-4">
+            <LocalSkillIcon skill={skill} />
+            <div>
+              <div className="flex items-baseline gap-2">
+                <h2 className="text-[18px] font-bold text-foreground">{name}</h2>
+                <span className="text-[13px] font-normal text-muted-foreground">本地</span>
+              </div>
+              <p className="mt-0.5 text-[13px] text-muted-foreground">{description || '—'}</p>
+            </div>
+          </div>
+          <div className="ml-4 flex flex-shrink-0 items-center gap-2 pt-1">
+            <Switch checked={enabled} onCheckedChange={() => onToggleEnabled(skill)} />
+            <LocalSkillMoreMenu slug={skill.slug} workspaceId={workspaceId} />
+          </div>
+        </div>
+
+        {/* 路径信息 + 发布到市场 */}
+        <div className="flex items-center justify-between px-7 pb-4 pt-2">
+          <span className="text-[12px] text-muted-foreground/55">路径：{skill.path}</span>
+          {!skill.marketplaceOrigin && (
+            <button
+              type="button"
+              onClick={() => { onClose(); onPublish(skill) }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-foreground/[0.04]"
+            >
+              <Store className="h-3.5 w-3.5" />
+              发布到市场
+            </button>
+          )}
+        </div>
+
+        {/* Markdown 内容区 */}
+        <div className="mx-7 mb-5 min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/20 px-6 py-5 text-[13px] leading-relaxed">
+          <Markdown>{mockMarkdown}</Markdown>
+        </div>
+
+        {/* 底部操作栏 */}
+        <div className="flex items-center justify-between border-t border-border px-7 py-4">
+          <button
+            type="button"
+            onClick={() => { onUninstall(skill); onClose() }}
+            className="rounded-lg bg-rose-100 px-4 py-2 text-[13px] font-medium text-rose-500 transition-colors hover:bg-rose-200 dark:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500/25"
+          >
+            卸载
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onClose()
+              navigate(routes.action.newSession({ input: `@${skill.slug} ` }))
+            }}
+            className="inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-85"
+          >
+            <MessageCircle className="h-3.5 w-3.5" />
+            在对话中试用
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+type PageTab = 'market' | 'local'
+type LocalOriginFilter = '全部' | '市场安装' | '本地上传'
+const LOCAL_ORIGIN_OPTIONS: LocalOriginFilter[] = ['全部', '市场安装', '本地上传']
+
+function LocalOriginDropdown({ value, onChange }: { value: LocalOriginFilter; onChange: (v: LocalOriginFilter) => void }) {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-foreground/[0.04]"
+      >
+        {value}
+        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 min-w-[110px] overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg">
+          {LOCAL_ORIGIN_OPTIONS.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => { onChange(opt); setOpen(false) }}
+              className={cn(
+                'flex w-full items-center gap-2 px-3 py-2 text-[13px] transition-colors hover:bg-foreground/[0.06]',
+                opt === value ? 'font-semibold text-foreground' : 'text-foreground/70',
+              )}
+            >
+              <span className="h-3 w-3 flex-shrink-0">{opt === value ? <Check className="h-3 w-3" /> : null}</span>
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
+// 创建技能弹窗
+// ============================================================================
+
+function CreateSkillDialog({
+  open,
+  workspaceId,
+  onClose,
+  onCreated,
+}: {
+  open: boolean
+  workspaceId: string
+  onClose: () => void
+  onCreated: (skill: LoadedSkill) => void
+}) {
+  const [slug, setSlug] = React.useState('')
+  const [displayName, setDisplayName] = React.useState('')
+  const [description, setDescription] = React.useState('')
+  const [content, setContent] = React.useState('')
+  const [errors, setErrors] = React.useState<Record<string, string>>({})
+  const [saving, setSaving] = React.useState(false)
+
+  const validate = (): Record<string, string> => {
+    const errs: Record<string, string> = {}
+    if (!slug.trim()) {
+      errs.slug = '请输入技能标识符'
+    } else if (!/^[a-z0-9][a-z0-9_-]*$/.test(slug.trim())) {
+      errs.slug = '只允许小写字母、数字、下划线和连字符，且以字母或数字开头'
+    }
+    if (!displayName.trim()) errs.displayName = '请输入展示名称'
+    if (!description.trim()) errs.description = '请输入技能描述'
+    if (!content.trim()) errs.content = '请输入技能内容'
+    return errs
+  }
+
+  const handleSubmit = async () => {
+    const errs = validate()
+    if (Object.keys(errs).length > 0) { setErrors(errs); return }
+
+    const trimmedSlug = slug.trim()
+    const metadata = { name: displayName.trim(), description: description.trim() }
+    const body = content.trim()
+
+    setSaving(true)
+    try {
+      const result = await window.electronAPI.createSkill(workspaceId, trimmedSlug, metadata, body)
+      if ('conflict' in result && result.conflict) {
+        setErrors({ slug: '此标识符已存在，请更换一个' })
+        setSaving(false)
+        return
+      }
+    } catch (err) {
+      setErrors({ slug: '创建失败：' + String(err) })
+      setSaving(false)
+      return
+    }
+    setSaving(false)
+
+    const newSkill: LoadedSkill = {
+      slug: trimmedSlug,
+      metadata,
+      content: body,
+      path: `~/.agents/${trimmedSlug}`,
+      source: 'global',
+      // 无 marketplaceOrigin → 归入「本地上传」分类
+    }
+    onCreated(newSkill)
+    handleClose()
+  }
+
+  const handleClose = () => {
+    if (saving) return
+    setSlug(''); setDisplayName(''); setDescription(''); setContent(''); setErrors({})
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose() }}>
+      <DialogContent className="flex max-h-[85vh] w-full max-w-[580px] sm:max-w-[580px] flex-col gap-0 overflow-hidden p-0">
+
+        {/* 标题 */}
+        <div className="flex-shrink-0 border-b border-border px-7 py-5">
+          <h2 className="text-[17px] font-semibold text-foreground">创建技能</h2>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">技能将保存到全局目录 <code className="rounded bg-muted px-1 py-0.5 text-[12px]">~/.agents/</code></p>
+        </div>
+
+        {/* 表单区 */}
+        <div className="flex-1 space-y-4 overflow-y-auto px-7 py-5">
+
+          {/* 标识符 */}
+          <div>
+            <label className="mb-1.5 block text-[13px] font-medium text-foreground">
+              标识符 <span className="text-rose-500">*</span>
+              <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">小写字母、数字、下划线</span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={slug}
+                onChange={(e) => { setSlug(e.target.value.toLowerCase()); setErrors((p) => ({ ...p, slug: '' })) }}
+                placeholder="例如：code_reviewer"
+                maxLength={64}
+                className={cn(
+                  'h-9 w-full rounded-lg border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring',
+                  errors.slug ? 'border-rose-400' : 'border-border',
+                )}
+              />
+            </div>
+            {errors.slug && <p className="mt-1 text-[12px] text-rose-500">{errors.slug}</p>}
+          </div>
+
+          {/* 展示名称 */}
+          <div>
+            <label className="mb-1.5 block text-[13px] font-medium text-foreground">
+              展示名称 <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => { setDisplayName(e.target.value); setErrors((p) => ({ ...p, displayName: '' })) }}
+              placeholder="例如：代码审查"
+              maxLength={64}
+              className={cn(
+                'h-9 w-full rounded-lg border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring',
+                errors.displayName ? 'border-rose-400' : 'border-border',
+              )}
+            />
+            {errors.displayName && <p className="mt-1 text-[12px] text-rose-500">{errors.displayName}</p>}
+          </div>
+
+          {/* 描述 */}
+          <div>
+            <label className="mb-1.5 block text-[13px] font-medium text-foreground">
+              描述 <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => { setDescription(e.target.value); setErrors((p) => ({ ...p, description: '' })) }}
+              placeholder="简要说明此技能的用途"
+              maxLength={200}
+              className={cn(
+                'h-9 w-full rounded-lg border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring',
+                errors.description ? 'border-rose-400' : 'border-border',
+              )}
+            />
+            {errors.description && <p className="mt-1 text-[12px] text-rose-500">{errors.description}</p>}
+          </div>
+
+          {/* 技能内容 */}
+          <div>
+            <label className="mb-1.5 block text-[13px] font-medium text-foreground">
+              技能内容 <span className="text-rose-500">*</span>
+              <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">描述此技能的行为规则和指令</span>
+            </label>
+            <div className="relative">
+              <textarea
+                value={content}
+                onChange={(e) => { setContent(e.target.value); setErrors((p) => ({ ...p, content: '' })) }}
+                placeholder={`例如：\n\n## 规则\n\n- 审查代码时优先关注安全问题\n- 每次审查都需要给出改进建议\n- 使用中文回复`}
+                rows={10}
+                className={cn(
+                  'w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono',
+                  errors.content ? 'border-rose-400' : 'border-border',
+                )}
+              />
+            </div>
+            {errors.content && <p className="mt-1 text-[12px] text-rose-500">{errors.content}</p>}
+          </div>
+
+        </div>
+
+        {/* 底部操作 */}
+        <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-border px-7 py-4">
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={saving}
+            className="rounded-lg border border-border px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-foreground/[0.04] disabled:opacity-50"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-85 disabled:opacity-50"
+          >
+            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            创建
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ============================================================================
+// 发布 Skill 弹窗
+// ============================================================================
+
+function buildSkillMd(skill: LoadedSkill): string {
+  const lines = ['---']
+  lines.push(`name: ${skill.metadata?.name ?? skill.slug}`)
+  lines.push(`description: ${skill.metadata?.description ?? ''}`)
+  if (skill.metadata?.author) lines.push(`author: ${skill.metadata.author}`)
+  lines.push('---')
+  if (skill.content) { lines.push(''); lines.push(skill.content) }
+  return lines.join('\n')
+}
+
+function PublishSkillDialog({
+  open,
+  onClose,
+  workspaceId,
+  currentUserId,
+  sourceSkill,
+}: {
+  open: boolean
+  onClose: () => void
+  workspaceId: string
+  currentUserId: string | null
+  sourceSkill?: LoadedSkill
+}) {
+  const [name, setName] = React.useState('')
+  const [chineseName, setChineseName] = React.useState('')
+  const [description, setDescription] = React.useState('')
+  const [tag, setTag] = React.useState<'A' | 'B'>('B')
+  const [tagOpen, setTagOpen] = React.useState(false)
+  const [file, setFile] = React.useState<File | null>(null)
+  const [errors, setErrors] = React.useState<Record<string, string>>({})
+  const [uploading, setUploading] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const tagRef = React.useRef<HTMLDivElement>(null)
+
+  // Pre-fill form when sourceSkill provided (publish from local skill)
+  React.useEffect(() => {
+    if (!open) return
+    if (sourceSkill) {
+      setName(sourceSkill.slug.replace(/-/g, '_'))
+      setChineseName(sourceSkill.metadata?.name ?? '')
+      setDescription(sourceSkill.metadata?.description ?? '')
+    } else {
+      setName(''); setChineseName(''); setDescription('')
+    }
+    setTag('B'); setFile(null); setErrors({})
+  }, [open, sourceSkill])
+
+  const { ssoUser } = useAppShellContext()
+  const displayUser = ssoUser?.userName
+    ? `${ssoUser.userName}（${ssoUser.employeeId ?? currentUserId ?? '—'}）`
+    : (currentUserId ?? '—')
+
+  const TAG_OPTIONS = [
+    { value: 'B' as const, label: 'DevOps（DevOps 相关能力，天眼、乐高等）' },
+    { value: 'A' as const, label: '公共（如 PDF）' },
+  ]
+
+  React.useEffect(() => {
+    if (!tagOpen) return
+    const fn = (e: MouseEvent) => { if (tagRef.current && !tagRef.current.contains(e.target as Node)) setTagOpen(false) }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [tagOpen])
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    if (!f.name.toLowerCase().endsWith('.zip')) {
+      setErrors((prev) => ({ ...prev, file: '只支持上传 .zip 文件' }))
+      return
+    }
+    setFile(f)
+    setErrors((prev) => ({ ...prev, file: '' }))
+  }
+
+  const validate = (): Record<string, string> => {
+    const errs: Record<string, string> = {}
+    if (!name.trim()) {
+      errs.name = '请输入 Skill 名称'
+    } else if (!/^[a-z0-9_]+$/.test(name.trim())) {
+      errs.name = '只允许英文小写字母、数字和下划线'
+    }
+    if (!description.trim()) errs.description = '请输入 Skill 描述'
+    if (!sourceSkill && !file) errs.file = '请选择要上传的 zip 文件'
+    return errs
+  }
+
+  const handleSubmit = async () => {
+    const errs = validate()
+    if (Object.keys(errs).length > 0) { setErrors(errs); return }
+    if (!currentUserId) { setErrors({ submit: '无法获取用户信息，请重新登录' }); return }
+    setUploading(true)
+
+    try {
+      let skillData: { slug: string; metadata: { name?: string; description?: string; author?: string }; content: string }
+
+      if (sourceSkill) {
+        skillData = { slug: sourceSkill.slug, metadata: sourceSkill.metadata, content: sourceSkill.content }
+      } else if (file) {
+        const buffer = await file.arrayBuffer()
+        const unzipped = unzipSync(new Uint8Array(buffer))
+        const skillMdKey = Object.keys(unzipped).find((k) =>
+          k.toLowerCase() === 'skill.md' || k.toLowerCase().match(/^[^/]+\/skill\.md$/)
+        )
+        if (!skillMdKey) {
+          setErrors({ file: 'zip 中未找到 SKILL.md 文件' })
+          setUploading(false)
+          return
+        }
+        const rawContent = new TextDecoder().decode(unzipped[skillMdKey])
+        const fmMatch = rawContent.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
+        const body = fmMatch ? fmMatch[2].trim() : rawContent
+        const yamlStr = fmMatch ? fmMatch[1] : ''
+        const getYamlVal = (key: string) => {
+          const m = yamlStr.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'))
+          return m ? m[1].trim().replace(/^['"]|['"]$/g, '') : undefined
+        }
+        const slug = file.name.replace(/\.zip$/i, '').replace(/[\s]+/g, '-').toLowerCase()
+        skillData = {
+          slug,
+          metadata: { name: getYamlVal('name') ?? slug, description: getYamlVal('description') ?? description },
+          content: body,
+        }
+      } else {
+        setUploading(false)
+        return
+      }
+
+      const marketplaceSlug = name.trim().replace(/_/g, '-')
+      const result = await window.electronAPI.publishDirectMarketplaceSkill(workspaceId, {
+        userId: currentUserId,
+        skill: skillData,
+        marketplaceSlug,
+        version: '1.0.0',
+        category: tag === 'B' ? 'DevOps' : '公共',
+      })
+
+      if (result.status === 'slug-conflict') {
+        setErrors({ name: `市场标识符"${result.marketplaceSlug}"已被占用，请换一个名称` })
+        setUploading(false)
+        return
+      }
+
+      setUploading(false)
+      handleClose()
+    } catch (err) {
+      setErrors({ submit: err instanceof Error ? err.message : '发布失败，请稍后重试' })
+      setUploading(false)
+    }
+  }
+
+  const handleClose = () => {
+    if (uploading) return
+    setName(''); setChineseName(''); setDescription(''); setTag('B')
+    setFile(null); setErrors({}); setTagOpen(false)
+    onClose()
+  }
+
+  // Auto-generate zip info for display when publishing from local skill
+  const autoZipName = sourceSkill ? `${sourceSkill.slug}.zip` : null
+
+  const tagLabel = TAG_OPTIONS.find((o) => o.value === tag)?.label ?? ''
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose() }}>
+      <DialogContent className="flex max-h-[85vh] w-full max-w-[520px] sm:max-w-[520px] flex-col gap-0 overflow-hidden p-0">
+
+        {/* 标题 */}
+        <div className="flex-shrink-0 border-b border-border px-7 py-5">
+          <h2 className="text-[17px] font-semibold text-foreground">上传 Skill 到市场</h2>
+        </div>
+
+        {/* 表单区（可滚动） */}
+        <div className="flex-1 space-y-5 overflow-y-auto px-7 py-5">
+
+          {/* Skill 名称 */}
+          <div>
+            <label className="mb-1.5 block text-[13px] font-medium text-foreground">
+              Skill 名称（英文小写下划线）<span className="ml-0.5 text-rose-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => { setName(e.target.value); setErrors((p) => ({ ...p, name: '' })) }}
+                placeholder="例如：browser_tool"
+                maxLength={36}
+                className={cn(
+                  'h-9 w-full rounded-lg border bg-background px-3 pr-12 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring',
+                  errors.name ? 'border-rose-400' : 'border-border',
+                )}
+              />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground/50">{name.length}/36</span>
+            </div>
+            {errors.name && <p className="mt-1 text-[12px] text-rose-500">{errors.name}</p>}
+          </div>
+
+          {/* Skill 展示名称 */}
+          <div>
+            <label className="mb-1.5 block text-[13px] font-medium text-foreground">Skill 展示名称</label>
+            <div className="relative">
+              <input
+                type="text"
+                value={chineseName}
+                onChange={(e) => setChineseName(e.target.value)}
+                placeholder="例如：浏览器工具"
+                maxLength={36}
+                className="h-9 w-full rounded-lg border border-border bg-background px-3 pr-12 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground/50">{chineseName.length}/36</span>
+            </div>
+          </div>
+
+          {/* Skill 描述 */}
+          <div>
+            <label className="mb-1.5 block text-[13px] font-medium text-foreground">
+              Skill 描述<span className="ml-0.5 text-rose-500">*</span>
+            </label>
+            <div className="relative">
+              <textarea
+                value={description}
+                onChange={(e) => { setDescription(e.target.value); setErrors((p) => ({ ...p, description: '' })) }}
+                placeholder="简要描述 Skill 的功能和使用场景..."
+                maxLength={1000}
+                rows={3}
+                className={cn(
+                  'w-full resize-none rounded-lg border bg-background px-3 pb-6 pt-2.5 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring',
+                  errors.description ? 'border-rose-400' : 'border-border',
+                )}
+              />
+              <span className="pointer-events-none absolute bottom-2 right-3 text-[11px] text-muted-foreground/50">{description.length}/1000</span>
+            </div>
+            {errors.description && <p className="mt-1 text-[12px] text-rose-500">{errors.description}</p>}
+          </div>
+
+          {/* 分类 */}
+          <div>
+            <label className="mb-1.5 block text-[13px] font-medium text-foreground">
+              分类<span className="ml-0.5 text-rose-500">*</span>
+            </label>
+            <div ref={tagRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setTagOpen((v) => !v)}
+                className="inline-flex h-9 w-full items-center justify-between rounded-lg border border-border bg-background px-3 text-[13px] text-foreground transition-colors hover:bg-foreground/[0.04]"
+              >
+                <span className="truncate text-left">{tagLabel}</span>
+                <ChevronDown className="ml-2 h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+              </button>
+              {tagOpen && (
+                <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg">
+                  {TAG_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => { setTag(opt.value); setTagOpen(false) }}
+                      className={cn(
+                        'flex w-full items-center gap-2 px-3 py-2 text-[13px] transition-colors hover:bg-foreground/[0.06]',
+                        opt.value === tag ? 'font-semibold text-foreground' : 'text-foreground/70',
+                      )}
+                    >
+                      <span className="h-3 w-3 flex-shrink-0">{opt.value === tag ? <Check className="h-3 w-3" /> : null}</span>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 上传人信息 */}
+          <div>
+            <label className="mb-1.5 block text-[13px] font-medium text-foreground">上传人信息</label>
+            <p className="text-[13px] text-muted-foreground">
+              {displayUser}
+            </p>
+          </div>
+
+          {/* Skill 文件（zip） */}
+          <div>
+            <label className="mb-1.5 block text-[13px] font-medium text-foreground">
+              Skill 文件（zip）{!sourceSkill && <span className="ml-0.5 text-rose-500">*</span>}
+            </label>
+            {sourceSkill ? (
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
+                <span className="text-[13px] text-foreground">{autoZipName}</span>
+                <span className="text-[12px] text-muted-foreground">（自动从本地技能生成）</span>
+              </div>
+            ) : (
+              <>
+                <input ref={fileInputRef} type="file" accept=".zip" className="hidden" onChange={handleFileChange} />
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex h-8 flex-shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] text-foreground transition-colors hover:bg-foreground/[0.04]"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    选择文件
+                  </button>
+                  {file ? (
+                    <span className="truncate text-[13px] text-foreground">{file.name}（{(file.size / 1024).toFixed(1)} KB）</span>
+                  ) : (
+                    <span className="text-[13px] text-muted-foreground">未选择文件</span>
+                  )}
+                </div>
+                {errors.file && <p className="mt-1.5 text-[12px] text-rose-500">{errors.file}</p>}
+              </>
+            )}
+          </div>
+
+        </div>
+
+        {/* 底部操作 */}
+        <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-border px-7 py-4">
+          {errors.submit && <p className="mr-auto text-[12px] text-rose-500">{errors.submit}</p>}
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={uploading}
+            className="rounded-lg border border-border px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-foreground/[0.04] disabled:opacity-50"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={uploading}
+            className="inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-85 disabled:opacity-50"
+          >
+            {uploading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            上传
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function LocalCreateDropdown({
+  onUpload,
+  onCreateSkill,
+}: {
+  onUpload: () => void
+  onCreateSkill: () => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3.5 py-1.5 text-[13px] font-medium text-foreground shadow-sm transition-colors hover:bg-foreground/[0.04]"
+      >
+        创建
+        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1.5 w-[168px] overflow-hidden rounded-xl border border-border bg-popover py-1.5 shadow-lg">
+          <button
+            type="button"
+            onClick={() => { onUpload(); setOpen(false) }}
+            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[13px] text-foreground transition-colors hover:bg-foreground/[0.06]"
+          >
+            <FolderUp className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+            上传本地技能
+          </button>
+          <button
+            type="button"
+            onClick={() => { onCreateSkill(); setOpen(false) }}
+            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[13px] text-foreground transition-colors hover:bg-foreground/[0.06]"
+          >
+            <FilePlus2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+            创建技能
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CategoryDropdown({ value, onChange }: { value: Category; onChange: (v: Category) => void }) {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-foreground/[0.04]"
+      >
+        {value}
+        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 min-w-[120px] overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => { onChange(cat); setOpen(false) }}
+              className={cn(
+                'flex w-full items-center gap-2 px-3 py-2 text-[13px] transition-colors hover:bg-foreground/[0.06]',
+                cat === value ? 'font-semibold text-foreground' : 'text-foreground/70',
+              )}
+            >
+              <span className="h-3 w-3 flex-shrink-0">{cat === value ? <Check className="h-3 w-3" /> : null}</span>
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
+// Main Page
+// ============================================================================
+
+export function SkillMarketplacePage({
+  workspaceId,
+  currentUserId,
+  api = defaultMarketplaceApi,
+  onSkillClick,
+}: {
+  workspaceId: string
+  currentUserId: string | null
+  api?: MarketplaceApi
+  onSkillClick?: (skill: MarketplaceSkillListing) => void
+}) {
+  const [tab, setTab] = React.useState<PageTab>('market')
+  const [search, setSearch] = React.useState('')
+  const [category, setCategory] = React.useState<Category>('DevOps')
+  const [marketSkills, setMarketSkills] = React.useState<MarketplaceSkillListing[]>([])
+  const [installedIds, setInstalledIds] = React.useState<Set<string>>(new Set())
+  const [selectedSkill, setSelectedSkill] = React.useState<MarketplaceSkillListing | null>(null)
+  const [selectedLocalSkill, setSelectedLocalSkill] = React.useState<LoadedSkill | null>(null)
+  const [localSkillSlugs, setLocalSkillSlugs] = React.useState<Set<string>>(new Set())
+  const [enabledLocalSlugs, setEnabledLocalSlugs] = React.useState<Set<string>>(new Set())
+  const [localOriginFilter, setLocalOriginFilter] = React.useState<LocalOriginFilter>('全部')
+  const [publishOpen, setPublishOpen] = React.useState(false)
+  const [publishSourceSkill, setPublishSourceSkill] = React.useState<LoadedSkill | null>(null)
+  const [createOpen, setCreateOpen] = React.useState(false)
+  const [uploadedSkills, setUploadedSkills] = React.useState<LoadedSkill[]>([])
+  const [uploadError, setUploadError] = React.useState<string | null>(null)
+  const uploadZipInputRef = React.useRef<HTMLInputElement>(null)
+
+  const { skills: ctxSkills = [] } = useAppShellContext()
+  const baseLocalSkills = ctxSkills.length > 0 ? ctxSkills : MOCK_LOCAL_SKILLS
+  const localSkills = React.useMemo(() => [...baseLocalSkills, ...uploadedSkills], [baseLocalSkills, uploadedSkills])
+
+  const handleUploadZip = React.useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setUploadError(null)
+
+
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      setUploadError('只支持 .zip 文件')
+      return
+    }
+
+    try {
+      const buffer = await file.arrayBuffer()
+      const unzipped = unzipSync(new Uint8Array(buffer))
+
+      // 找 SKILL.md（支持顶层或一级子目录）
+      const skillMdKey = Object.keys(unzipped).find((k) =>
+        k.toLowerCase() === 'skill.md' || k.toLowerCase().match(/^[^/]+\/skill\.md$/)
+      )
+      if (!skillMdKey) {
+        setUploadError('zip 中未找到 SKILL.md 文件')
+        return
+      }
+
+      const rawContent = new TextDecoder().decode(unzipped[skillMdKey])
+
+      // 简单解析 YAML frontmatter
+      const fmMatch = rawContent.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
+      const body = fmMatch ? fmMatch[2].trim() : rawContent
+      const yamlStr = fmMatch ? fmMatch[1] : ''
+      const getYamlVal = (key: string) => {
+        const m = yamlStr.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'))
+        return m ? m[1].trim().replace(/^['"]|['"]$/g, '') : undefined
+      }
+
+      const slug = file.name.replace(/\.zip$/i, '').replace(/[\s]+/g, '-').toLowerCase()
+      const name = getYamlVal('name') ?? slug
+      const description = getYamlVal('description') ?? ''
+      const author = getYamlVal('author')
+
+      const parsedMetadata = { name, description, ...(author ? { author } : {}) }
+      const newSkill: LoadedSkill = {
+        slug,
+        metadata: parsedMetadata,
+        content: body,
+        path: `/workspace/.agents/${slug}`,
+        source: 'workspace',
+        // 无 marketplaceOrigin → 自动归入「本地上传」
+      }
+
+      // 写入磁盘（覆盖同名技能）
+      try {
+        await window.electronAPI.forceWriteSkill(workspaceId, slug, parsedMetadata, body)
+      } catch {
+        // 写入失败时仍在 UI 中显示，等待下次自动刷新
+      }
+
+      setUploadedSkills((prev) => {
+        // 如果 slug 已存在则替换
+        const exists = prev.findIndex((s) => s.slug === slug)
+        if (exists >= 0) {
+          const next = [...prev]
+          next[exists] = newSkill
+          return next
+        }
+        return [...prev, newSkill]
+      })
+      setTab('local')
+    } catch {
+      setUploadError('解析 zip 失败，请检查文件格式')
+    }
+  }, [workspaceId])
+
+  React.useEffect(() => {
+    api.listSkills().then(setMarketSkills).catch(console.error)
+  }, [api])
+
+  const filtered = React.useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return marketSkills
+      .filter((s) => {
+        const matchCat = category === '全部' || s.category === category
+        const matchQ = !q || s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.owner.toLowerCase().includes(q)
+        return matchCat && matchQ
+      })
+      .map((s) => ({
+        ...s,
+        installState: (installedIds.has(s.id) ? 'installed' : s.installState) as MarketplaceInstallState,
+      }))
+      .sort((a, b) => b.installCount - a.installCount)
+  }, [marketSkills, category, search, installedIds])
+
+  const filteredLocal = React.useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return localSkills.filter((s) => {
+      const matchOrigin =
+        localOriginFilter === '全部' ||
+        (localOriginFilter === '市场安装' && s.marketplaceOrigin != null) ||
+        (localOriginFilter === '本地上传' && s.marketplaceOrigin == null)
+      const matchQ =
+        !q ||
+        s.slug.toLowerCase().includes(q) ||
+        (s.metadata?.name ?? s.slug).toLowerCase().includes(q) ||
+        (s.metadata?.description ?? '').toLowerCase().includes(q)
+      return matchOrigin && matchQ
+    })
+  }, [localSkills, search, localOriginFilter])
+
+  const handleInstall = React.useCallback((s: MarketplaceSkillListing) => {
+    setInstalledIds((prev) => new Set([...prev, s.id]))
+    setSelectedSkill((prev) => prev?.id === s.id ? { ...prev, installState: 'installed' } : prev)
+  }, [])
+
+  const handleUninstall = React.useCallback((s: MarketplaceSkillListing) => {
+    setInstalledIds((prev) => { const n = new Set(prev); n.delete(s.id); return n })
+    setSelectedSkill((prev) => prev?.id === s.id ? { ...prev, installState: 'install' } : prev)
+  }, [])
+
+  const handleClick = React.useCallback((s: MarketplaceSkillListing) => {
+    setSelectedSkill(s)
+    onSkillClick?.(s)
+  }, [onSkillClick])
+
+  const handleLocalUninstall = React.useCallback((s: LoadedSkill) => {
+    setLocalSkillSlugs((prev) => new Set([...prev, s.slug]))
+  }, [])
+
+  const handleToggleLocalEnabled = React.useCallback((s: LoadedSkill) => {
+    setEnabledLocalSlugs((prev) => {
+      const n = new Set(prev)
+      n.has(s.slug) ? n.delete(s.slug) : n.add(s.slug)
+      return n
+    })
+  }, [])
+
+  const displayedLocalSkills = React.useMemo(
+    () => filteredLocal.filter((s) => !localSkillSlugs.has(s.slug)),
+    [filteredLocal, localSkillSlugs],
+  )
+
+  return (
+    <>
+    <CreateSkillDialog
+      open={createOpen}
+      workspaceId={workspaceId}
+      onClose={() => setCreateOpen(false)}
+      onCreated={(skill) => {
+        setUploadedSkills((prev) => {
+          const exists = prev.findIndex((s) => s.slug === skill.slug)
+          if (exists >= 0) { const next = [...prev]; next[exists] = skill; return next }
+          return [...prev, skill]
+        })
+        setTab('local')
+      }}
+    />
+    <PublishSkillDialog
+      open={publishOpen}
+      onClose={() => { setPublishOpen(false); setPublishSourceSkill(null) }}
+      workspaceId={workspaceId}
+      currentUserId={currentUserId}
+      sourceSkill={publishSourceSkill ?? undefined}
+    />
+    <SkillDetailDialog
+      skill={selectedSkill}
+      onClose={() => setSelectedSkill(null)}
+      onInstall={handleInstall}
+      onUninstall={handleUninstall}
+    />
+    <LocalSkillDetailDialog
+      skill={selectedLocalSkill}
+      enabled={selectedLocalSkill ? enabledLocalSlugs.has(selectedLocalSkill.slug) : false}
+      workspaceId={workspaceId}
+      onClose={() => setSelectedLocalSkill(null)}
+      onUninstall={handleLocalUninstall}
+      onToggleEnabled={handleToggleLocalEnabled}
+      onPublish={(s) => { setSelectedLocalSkill(null); setPublishSourceSkill(s); setPublishOpen(true) }}
+    />
+    <div className="flex h-full flex-col bg-background">
+
+      {/* Tab 切换 — 固定顶部 */}
+      <div className="flex flex-shrink-0 items-center justify-between px-4 pt-3 pb-1">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setTab('market')}
+            className={cn(
+              'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors',
+              tab === 'market'
+                ? 'bg-foreground/[0.08] text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            市场
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('local')}
+            className={cn(
+              'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors',
+              tab === 'local'
+                ? 'bg-foreground/[0.08] text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            本地
+          </button>
+        </div>
+        {tab === 'market' && (
+          <button
+            type="button"
+            onClick={() => { setPublishSourceSkill(null); setPublishOpen(true) }}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3.5 py-1.5 text-[13px] font-medium text-foreground shadow-sm transition-colors hover:bg-foreground/[0.04]"
+          >
+            发布技能
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+        )}
+        {tab === 'local' && (
+          <LocalCreateDropdown
+            onUpload={() => { setUploadError(null); uploadZipInputRef.current?.click() }}
+            onCreateSkill={() => setCreateOpen(true)}
+          />
+        )}
+        <input ref={uploadZipInputRef} type="file" accept=".zip" className="hidden" onChange={handleUploadZip} />
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+      <div className="mx-auto w-full max-w-4xl px-8 pb-12 pt-6">
+
+        {tab === 'local' ? (
+          /* ── 本地技能 Tab ── */
+          <div>
+            {/* 搜索 */}
+            <div className="mb-5 flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="搜索本地技能"
+                  className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              <LocalOriginDropdown value={localOriginFilter} onChange={setLocalOriginFilter} />
+            </div>
+            {uploadError && <p className="mt-2 text-[12px] text-rose-500">{uploadError}</p>}
+
+            {/* 空状态（无技能时） */}
+            {localSkills.length === 0 && !search && (
+              <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                <Zap className="h-8 w-8 opacity-30" />
+                <p className="text-sm">还没有本地技能，前往市场安装吧</p>
+                <button
+                  type="button"
+                  onClick={() => setTab('market')}
+                  className="mt-1 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-85"
+                >
+                  前往市场
+                </button>
+              </div>
+            )}
+
+            {/* 技能列表 */}
+            {(localSkills.length > 0 || search) && (
+              localOriginFilter === '全部' ? (
+                // 全部：本地上传在上，市场安装在下
+                <>
+                  {(['本地上传', '市场安装'] as const).map((section) => {
+                    const sectionSkills = displayedLocalSkills.filter((s) =>
+                      section === '市场安装' ? s.marketplaceOrigin != null : s.marketplaceOrigin == null
+                    )
+                    if (sectionSkills.length === 0) return null
+                    return (
+                      <div key={section} className="mb-8">
+                        <h2 className="mb-3 text-[15px] font-semibold text-foreground">
+                          {section}
+                          <span className="ml-2 text-[13px] font-normal text-muted-foreground">{sectionSkills.length}</span>
+                        </h2>
+                        <LocalSkillGrid
+                          skills={sectionSkills}
+                          onUninstall={handleLocalUninstall}
+                          onClick={setSelectedLocalSkill}
+                        />
+                      </div>
+                    )
+                  })}
+                </>
+              ) : (
+                <>
+                  <h2 className="mb-3 text-[15px] font-semibold text-foreground">
+                    {localOriginFilter}
+                    <span className="ml-2 text-[13px] font-normal text-muted-foreground">{displayedLocalSkills.length}</span>
+                  </h2>
+                  <LocalSkillGrid
+                    skills={displayedLocalSkills}
+                    onUninstall={handleLocalUninstall}
+                    onClick={setSelectedLocalSkill}
+                  />
+                </>
+              )
+            )}
+          </div>
+        ) : (
+          /* ── 市场 Tab ── */
+          <>
+        {/* 标题 */}
+        <h1 className="mb-6 text-center text-[26px] font-semibold tracking-tight text-foreground">
+          让 MDP 按你的方式工作
+        </h1>
+
+        {/* 搜索 + 类别筛选 */}
+        <div className="mb-5 flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="搜索技能"
+              className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+          <CategoryDropdown value={category} onChange={setCategory} />
+        </div>
+
+        {/* Hero */}
+        <div className="mb-8">
+          <HeroBanner />
+        </div>
+
+        {/* 技能列表 */}
+        {category === '全部' ? (
+          <>
+            {(['DevOps', '公共'] as const).map((cat) => {
+              const catSkills = filtered.filter((s) => s.category === cat)
+              if (catSkills.length === 0) return null
+              return (
+                <div key={cat} className="mb-8">
+                  <h2 className="mb-3 text-[15px] font-semibold text-foreground">{cat}</h2>
+                  <SkillGrid skills={catSkills} onInstall={handleInstall} onClick={handleClick} />
+                </div>
+              )
+            })}
+          </>
+        ) : (
+          <div>
+            <h2 className="mb-3 text-[15px] font-semibold text-foreground">{category}</h2>
+            <SkillGrid skills={filtered} onInstall={handleInstall} onClick={handleClick} />
+          </div>
+        )}
+          </>
+        )}
+      </div>
+      </div>
+    </div>
+    </>
+  )
+}
+
+// ============================================================================
+// 兼容性导出（被其他文件依赖）
+// ============================================================================
+
 export function SkillMarketplacePageHeader({
   currentUserId,
   serviceEnvironmentLabel,
@@ -1298,462 +2212,46 @@ export function SkillMarketplacePageHeader({
   serviceEnvironmentLabel: string
   onPublishClick?: () => void
 }) {
-  const { t } = useTranslation()
   const canPublish = Boolean(currentUserId)
-
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-          <span className="inline-flex items-center gap-2">
-            <Store className="h-4 w-4" />
-            <span>{t('skillMarketplace.title')}</span>
-          </span>
-          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-            {serviceEnvironmentLabel}
-          </span>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {t('skillMarketplace.headerDescription')}
-        </p>
+      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+        <Store className="h-4 w-4" />
+        <span>技能市场</span>
+        <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+          {serviceEnvironmentLabel}
+        </span>
       </div>
       <button
         type="button"
         disabled={!canPublish}
         onClick={onPublishClick}
-        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
+        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted disabled:opacity-50"
       >
         <UserCog className="h-3.5 w-3.5" />
-        {canPublish ? t('skillMarketplace.publishButton') : t('skillMarketplace.signInToPublish')}
+        {canPublish ? '发布技能' : '登录后发布'}
       </button>
     </div>
   )
 }
 
-/** Empty Marketplace catalog state with a publish-only entry point. */
-export function MarketplaceEmptyState({
-  canPublish,
-  onPublishClick,
-}: {
-  canPublish: boolean
-  onPublishClick: () => void
-}) {
-  const { t } = useTranslation()
+export function MarketplaceEmptyState({ canPublish, onPublishClick }: { canPublish: boolean; onPublishClick: () => void }) {
   return (
     <div className="p-3 text-sm text-muted-foreground">
-      <p>{t('skillMarketplace.noMatch')}</p>
+      <p>暂无匹配的技能</p>
       <button
         type="button"
         disabled={!canPublish}
         onClick={onPublishClick}
-        className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
+        className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted disabled:opacity-50"
       >
         <UserCog className="h-3.5 w-3.5" />
-        {canPublish ? t('skillMarketplace.publishButton') : t('skillMarketplace.signInToPublish')}
+        {canPublish ? '发布技能' : '登录后发布'}
       </button>
     </div>
   )
 }
 
-/** Publish-only Marketplace dialog for creating, resolving, or uploading Skills without Local Skill installation. */
-export function MarketplacePublishSkillDialog({
-  open,
-  onOpenChange,
-  workspaceId,
-  currentUserId,
-  onPublished,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  workspaceId: string
-  currentUserId: string | null
-  onPublished: (marketplaceSlug: string) => void
-}) {
-  const [activeTab, setActiveTab] = React.useState<DirectPublishTab>('create')
-  const [name, setName] = React.useState('')
-  const [description, setDescription] = React.useState('')
-  const [content, setContent] = React.useState('')
-  const [selectedSkill, setSelectedSkill] = React.useState<DiscoveredSkill | null>(null)
-  const [marketplaceSlug, setMarketplaceSlug] = React.useState('')
-  const [version, setVersion] = React.useState('1.0.0')
-  const [category, setCategory] = React.useState<string>(PRODUCT_MARKETPLACE_CATEGORIES[0])
-  const [tags, setTags] = React.useState('')
-  const [releaseNotes, setReleaseNotes] = React.useState('')
-  const [publishState, setPublishState] = React.useState<DirectPublishState>({ status: 'idle' })
-  const [uploadPhase, setUploadPhase] = React.useState<DirectPublishPathPhase>({ kind: 'idle' })
-  const [remoteInput, setRemoteInput] = React.useState('')
-  const [remotePhase, setRemotePhase] = React.useState<DirectPublishPathPhase>({ kind: 'idle' })
-  const fileInputRef = React.useRef<HTMLInputElement>(null)
-
-  const reset = React.useCallback(() => {
-    setActiveTab('create')
-    setName('')
-    setDescription('')
-    setContent('')
-    setSelectedSkill(null)
-    setMarketplaceSlug('')
-    setVersion('1.0.0')
-    setCategory(PRODUCT_MARKETPLACE_CATEGORIES[0])
-    setTags('')
-    setReleaseNotes('')
-    setPublishState({ status: 'idle' })
-    setUploadPhase({ kind: 'idle' })
-    setRemoteInput('')
-    setRemotePhase({ kind: 'idle' })
-  }, [])
-
-  const closeDialog = React.useCallback(() => {
-    reset()
-    onOpenChange(false)
-  }, [onOpenChange, reset])
-
-  const chooseSkill = React.useCallback((skill: DiscoveredSkill) => {
-    setSelectedSkill(skill)
-    setMarketplaceSlug((current) => current.trim() || skill.slug)
-    setPublishState({ status: 'idle' })
-  }, [])
-
-  const switchPublishTab = React.useCallback((value: string) => {
-    if (!MARKETPLACE_DIRECT_PUBLISH_TABS.includes(value as DirectPublishTab)) return
-    setActiveTab(value as DirectPublishTab)
-    setSelectedSkill(null)
-    setPublishState({ status: 'idle' })
-  }, [])
-
-  const getSkillForPublish = React.useCallback((): DiscoveredSkill | null => {
-    if (activeTab !== 'create') return selectedSkill
-    const slug = deriveSkillSlug(name)
-    return {
-      slug,
-      metadata: {
-        name: name.trim(),
-        description: description.trim(),
-      },
-      content: content.trim(),
-      sourcePath: 'marketplace-create',
-    }
-  }, [activeTab, content, description, name, selectedSkill])
-
-  React.useEffect(() => {
-    if (activeTab !== 'create') return
-    setMarketplaceSlug(deriveSkillSlug(name))
-  }, [activeTab, name])
-
-  const submitPublish = React.useCallback(async () => {
-    const skill = getSkillForPublish()
-    setPublishState({ status: 'publishing' })
-    const result = await publishDirectMarketplaceSkill({
-      workspaceId,
-      userId: currentUserId,
-      skill: skill ?? {
-        slug: '',
-        metadata: { name: '', description: '' },
-        content: '',
-        sourcePath: '',
-      },
-      marketplaceSlug,
-      version,
-      category,
-      tags: tags.split(','),
-      releaseNotes,
-      electronAPI: window.electronAPI,
-    })
-    setPublishState(result)
-    if (result.status === 'published') {
-      onPublished(result.marketplaceSlug)
-      reset()
-    }
-  }, [category, currentUserId, getSkillForPublish, marketplaceSlug, onPublished, releaseNotes, reset, tags, version, workspaceId])
-
-  const processZipFile = React.useCallback(async (file: File) => {
-    const filePath = window.electronAPI.getFilePath?.(file)
-    if (!filePath) {
-      setUploadPhase({ kind: 'error', message: 'Could not determine file path.' })
-      return
-    }
-    setUploadPhase({ kind: 'loading' })
-    try {
-      const skills = await window.electronAPI.extractSkillsFromZip(filePath)
-      if (skills.length === 0) {
-        setUploadPhase({ kind: 'error', message: 'No skills found in this zip.' })
-        return
-      }
-      if (skills.length === 1) {
-        chooseSkill(skills[0])
-        setUploadPhase({ kind: 'idle' })
-        return
-      }
-      setUploadPhase({ kind: 'picker', skills })
-    } catch (error) {
-      setUploadPhase({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
-    }
-  }, [chooseSkill])
-
-  const resolveRemote = React.useCallback(async () => {
-    const input = remoteInput.trim()
-    if (!input) return
-    setRemotePhase({ kind: 'loading' })
-    try {
-      const resolved = await window.electronAPI.resolveRemoteSkills(input)
-      const phase = getRemoteResolvePhase(resolved)
-      if (phase.kind === 'single') {
-        chooseSkill(phase.skill)
-        setRemotePhase({ kind: 'idle' })
-        return
-      }
-      if (phase.kind === 'picker') {
-        setRemotePhase({ kind: 'picker', skills: phase.skills })
-        return
-      }
-      setRemotePhase({ kind: 'error', message: phase.message })
-    } catch (error) {
-      setRemotePhase({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
-    }
-  }, [chooseSkill, remoteInput])
-
-  function handleFileInputChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (file) void processZipFile(file)
-    event.target.value = ''
-  }
-
-  const { t } = useTranslation()
-  const publishDisabled = publishState.status === 'publishing' || !currentUserId
-  const publishMessage = directPublishMessage(publishState, t)
-
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => {
-      if (!isOpen) reset()
-      onOpenChange(isOpen)
-    }}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{t('skillMarketplace.publishDialogTitle')}</DialogTitle>
-          <DialogDescription>
-            {t('skillMarketplace.publishDialogDesc')}
-          </DialogDescription>
-        </DialogHeader>
-
-        <Tabs value={activeTab} onValueChange={switchPublishTab}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="create" className="gap-1.5">
-              <PencilLine className="h-3.5 w-3.5" />
-              {t('skillMarketplace.tabCreate')}
-            </TabsTrigger>
-            <TabsTrigger value="remote" className="gap-1.5">
-              <Globe2 className="h-3.5 w-3.5" />
-              {t('skillMarketplace.tabRemote')}
-            </TabsTrigger>
-            <TabsTrigger value="upload" className="gap-1.5">
-              <FileArchive className="h-3.5 w-3.5" />
-              {t('skillMarketplace.tabUpload')}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="create" className="mt-4 space-y-3">
-            <label className="grid gap-1 text-xs font-medium">
-              {t('common.name')}
-              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('skillMarketplace.placeholderName')} />
-            </label>
-            <label className="grid gap-1 text-xs font-medium">
-              {t('common.description')}
-              <Input value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t('skillMarketplace.placeholderDescription')} />
-            </label>
-            <label className="grid gap-1 text-xs font-medium">
-              {t('skillMarketplace.fieldInstructions')}
-              <textarea
-                value={content}
-                onChange={(event) => setContent(event.target.value)}
-                className="min-h-28 rounded-md border border-border bg-background px-3 py-2 text-sm font-normal outline-none focus:border-foreground/30"
-                placeholder={t('skillMarketplace.placeholderInstructions')}
-              />
-            </label>
-          </TabsContent>
-
-          <TabsContent value="remote" className="mt-4 space-y-3">
-            {remotePhase.kind === 'picker' ? (
-              <SkillPicker
-                skills={remotePhase.skills}
-                onConfirm={(skills) => {
-                  if (skills[0]) chooseSkill(skills[0])
-                  setRemotePhase({ kind: 'idle' })
-                }}
-                onCancel={() => setRemotePhase({ kind: 'idle' })}
-              />
-            ) : (
-              <>
-                <div className="flex gap-2">
-                  <Input
-                    value={remoteInput}
-                    onChange={(event) => setRemoteInput(event.target.value)}
-                    placeholder={t('skillMarketplace.placeholderRemote')}
-                    onKeyDown={(event) => { if (event.key === 'Enter') void resolveRemote() }}
-                  />
-                  <Button type="button" onClick={() => void resolveRemote()} disabled={!remoteInput.trim() || remotePhase.kind === 'loading'}>
-                    {remotePhase.kind === 'loading' ? t('skillMarketplace.resolving') : t('skillMarketplace.resolve')}
-                  </Button>
-                </div>
-                {remotePhase.kind === 'error' && <p className="text-xs text-destructive">{remotePhase.message}</p>}
-              </>
-            )}
-          </TabsContent>
-
-          <TabsContent value="upload" className="mt-4 space-y-3">
-            {uploadPhase.kind === 'picker' ? (
-              <SkillPicker
-                skills={uploadPhase.skills}
-                onConfirm={(skills) => {
-                  if (skills[0]) chooseSkill(skills[0])
-                  setUploadPhase({ kind: 'idle' })
-                }}
-                onCancel={() => setUploadPhase({ kind: 'idle' })}
-              />
-            ) : (
-              <div className="flex min-h-28 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-foreground/15 bg-foreground/[0.02] p-4 text-center">
-                <input ref={fileInputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={handleFileInputChange} />
-                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploadPhase.kind === 'loading'}>
-                  <FileArchive className="h-4 w-4" />
-                  {uploadPhase.kind === 'loading' ? t('skillMarketplace.readingZip') : t('skillMarketplace.chooseZip')}
-                </Button>
-                {uploadPhase.kind === 'error' && <p className="text-xs text-destructive">{uploadPhase.message}</p>}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-
-        {activeTab !== 'create' && selectedSkill && (
-          <div className="rounded-md border border-border bg-muted/20 p-3 text-sm">
-            <span className="font-medium">{selectedSkill.metadata.name}</span>
-            <span className="ml-2 text-muted-foreground">{selectedSkill.slug}</span>
-          </div>
-        )}
-
-        <div className="grid gap-3">
-          <label className="grid gap-1 text-xs font-medium">
-            {t('skillMarketplace.fieldMarketplaceSlug')}
-            <Input value={marketplaceSlug} onChange={(event) => setMarketplaceSlug(event.target.value)} />
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="grid gap-1 text-xs font-medium">
-              {t('skillMarketplace.fieldVersion')}
-              <Input value={version} onChange={(event) => setVersion(event.target.value)} />
-            </label>
-            <label className="grid gap-1 text-xs font-medium">
-              {t('skillMarketplace.fieldCategory')}
-              <select className="h-9 rounded-md border border-border bg-background px-2 text-sm font-normal" value={category} onChange={(event) => setCategory(event.target.value)}>
-                {PRODUCT_MARKETPLACE_CATEGORIES.map((candidate) => (
-                  <option key={candidate} value={candidate}>{candidate}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <label className="grid gap-1 text-xs font-medium">
-            {t('skillMarketplace.fieldTags')}
-            <Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder={t('skillMarketplace.placeholderTags')} />
-          </label>
-          <label className="grid gap-1 text-xs font-medium">
-            {t('skillMarketplace.fieldReleaseNotes')}
-            <textarea
-              value={releaseNotes}
-              onChange={(event) => setReleaseNotes(event.target.value)}
-              className="min-h-16 rounded-md border border-border bg-background px-3 py-2 text-sm font-normal outline-none focus:border-foreground/30"
-            />
-          </label>
-        </div>
-
-        {publishMessage && (
-          <p className={`rounded-md border p-3 text-sm ${
-            publishState.status === 'published'
-              ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-              : 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
-          }`}>
-            {publishMessage}
-          </p>
-        )}
-
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={closeDialog}>{t('common.cancel')}</Button>
-          <Button type="button" onClick={() => void submitPublish()} disabled={publishDisabled}>
-            {publishState.status === 'publishing' ? t('skillMarketplace.publishing') : currentUserId ? t('skillMarketplace.publishButton') : t('skillMarketplace.signInToPublish')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/** Marketplace status block shown on Local Skill detail after publish/link. */
-export function LocalSkillMarketplaceStatus({
-  metadata,
-  publishState = { status: 'idle' },
-}: {
-  metadata?: MarketplaceOriginMetadata | null
-  publishState?: MarketplacePublishResult | { status: 'idle' | 'publishing' }
-}) {
-  const { t } = useTranslation()
-
-  if (publishState.status === 'publishing') {
-    return (
-      <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
-        <span className="font-medium">{t('skillMarketplace.publishingToMarketplace')}</span>
-      </div>
-    )
-  }
-
-  if (publishState.status === 'published') {
-    return (
-      <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-800 dark:text-emerald-200">
-        <span className="font-medium">{t('skillMarketplace.publishedToMarketplace')}</span>
-        <span className="ml-2">/{publishState.marketplaceSlug}</span>
-      </div>
-    )
-  }
-
-  if (publishState.status === 'auth-required' || publishState.status === 'error' || publishState.status === 'slug-conflict') {
-    return (
-      <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
-        {publishState.message}
-      </div>
-    )
-  }
-
-  if (!metadata) {
-    return (
-      <div className="rounded-md border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
-        {t('skillMarketplace.notPublished')}
-      </div>
-    )
-  }
-
-  const statusBadgeClassName = marketplaceOriginStatusBadgeClassName(metadata.safetyStatus)
-  const statusBadgeKeys = marketplaceOriginStatusBadgeKeys(metadata.safetyStatus)
-
-  return (
-    <div className="rounded-md border border-border bg-muted/20 p-3 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium">{t('skillMarketplace.linkedMarketplace')}</span>
-        <span className="text-muted-foreground">/{metadata.marketplaceSlug}</span>
-        <span className="text-muted-foreground">v{metadata.installedVersion}</span>
-        {statusBadgeKeys.map((key) => (
-          <span key={key} className={`rounded-full border px-2 py-0.5 text-xs ${statusBadgeClassName}`}>
-            {t(key)}
-          </span>
-        ))}
-        {metadata.modified && (
-          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-200">
-            {t('skillMarketplace.unpublishedChanges')}
-          </span>
-        )}
-      </div>
-      <div className="mt-2 text-xs text-muted-foreground">
-        {t('skillMarketplace.marketplaceId')} {metadata.marketplaceId}
-        {metadata.safetyStatus !== 'ok' && <span className="ml-2">{t('skillMarketplace.localFilesPreserved')}</span>}
-      </div>
-    </div>
-  )
-}
-
-/** Read-only Marketplace listing card used in catalog results. */
 export function MarketplaceListingCard({
   listing,
   selected,
@@ -1763,358 +2261,105 @@ export function MarketplaceListingCard({
   selected: boolean
   onSelect: () => void
 }) {
-  const { t } = useTranslation()
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`mb-2 flex w-full min-w-0 flex-col gap-2 rounded-lg border p-3 text-left transition-colors ${
-        selected ? 'border-foreground/40 bg-muted/60' : 'border-border hover:bg-muted/40'
-      }`}
-    >
-      <div className="flex min-w-0 items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-foreground text-xs font-semibold text-background">
-          {listing.icon}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{listing.name}</span>
-          <span className="line-clamp-2 text-xs text-muted-foreground">{listing.description}</span>
-        </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-        <span>{listing.owner}</span>
-        <span>v{listing.latestVersion}</span>
-        <span>{t('skillMarketplace.installCount', { count: formatInstallCount(listing.installCount) })}</span>
-      </div>
-      {listing.basedOn && (
-        <div className="text-[11px] text-muted-foreground">
-          Based on /{listing.basedOn.marketplaceSlug} v{listing.basedOn.version}
-        </div>
+      className={cn(
+        'mb-2 flex w-full min-w-0 items-center gap-3 rounded-lg border p-3 text-left transition-colors',
+        selected ? 'border-foreground/40 bg-muted/60' : 'border-border hover:bg-muted/40',
       )}
-      <div className="flex flex-wrap gap-1.5">
-        <Pill>{listing.category}</Pill>
-        {listing.tags.map((tag) => <Pill key={tag}>{tag}</Pill>)}
-        <span className={`rounded-full border px-2 py-0.5 text-[11px] ${installStateClassName(listing.installState)}`}>
-          {t(installStateLabelKey(listing.installState))}
-        </span>
+    >
+      <div className={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white', listing.iconBg ?? 'bg-foreground')}>
+        {listing.icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{listing.name}</p>
+        <p className="truncate text-xs text-muted-foreground">{listing.description}</p>
       </div>
     </button>
   )
 }
 
-/** Read-only Marketplace detail view for published Skill metadata and SKILL.md content. */
-export function MarketplaceDetail({
-  detail,
-  installState = { status: 'idle' },
-  reportState = { status: 'idle' },
-  ownerState = { status: 'idle' },
-  onInstall,
-  onReport,
-  onOwnerPublishVersion,
-  onOwnerUnpublish,
-  canInstall = true,
-  canReport = true,
-  currentUserId = null,
+export function LocalSkillMarketplaceStatus({
+  metadata,
+  publishState = { status: 'idle' },
 }: {
-  detail: MarketplaceSkillDetail
-  installState?: MarketplaceDetailInstallState
-  reportState?: MarketplaceDetailReportState
-  ownerState?: MarketplaceDetailOwnerState
-  onInstall?: (conflictResolution?: MarketplaceInstallConflictResolution) => void
-  onReport?: (context: string) => void
-  onOwnerPublishVersion?: () => void
-  onOwnerUnpublish?: () => void
-  canInstall?: boolean
-  canReport?: boolean
-  currentUserId?: string | null
+  metadata?: MarketplaceOriginMetadata | null
+  publishState?: MarketplacePublishResult | { status: 'idle' | 'publishing' }
 }) {
-  const { t } = useTranslation()
-  const [reportOpen, setReportOpen] = React.useState(false)
-  const [reportContext, setReportContext] = React.useState('')
-  const isBlocked = detail.installState === 'safety-blocked' || detail.installState === 'unavailable'
-  const isInstalling = installState.status === 'installing'
-  const isReportSubmitting = reportState.status === 'submitting'
-  const ownerLinked = isOwnerLinked(detail, currentUserId)
-  const ownerActionBusy = ownerState.status === 'publishing' || ownerState.status === 'unpublishing'
-  const hasUnpublishedChanges = ownerLinked && detail.installState === 'modified-locally'
-  const canRunPrimaryAction = !isInstalling && !hasUnpublishedChanges
-  const actionLabel = t(getMarketplaceInstallActionLabelKey(detail, installState, canInstall, currentUserId))
-  const reportLabel = canReport ? t('skillMarketplace.report') : t('skillMarketplace.signInToReport')
-  const ownerMessage = ownerActionMessage(ownerState, t)
-
+  if (publishState.status === 'publishing') {
+    return <div className="rounded-md border border-border bg-muted/30 p-3 text-sm font-medium">正在发布到技能市场...</div>
+  }
+  if (publishState.status === 'published') {
+    return (
+      <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-800 dark:text-emerald-200">
+        <span className="font-medium">已发布到技能市场</span>
+        <span className="ml-2">/{publishState.marketplaceSlug}</span>
+      </div>
+    )
+  }
+  if (publishState.status === 'auth-required' || publishState.status === 'error' || publishState.status === 'slug-conflict') {
+    return <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">{publishState.message}</div>
+  }
+  if (!metadata) {
+    return <div className="rounded-md border border-border bg-muted/20 p-3 text-sm text-muted-foreground">尚未发布到技能市场</div>
+  }
   return (
-    <div className="space-y-5 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-foreground text-sm font-semibold text-background">
-            {detail.icon}
+    <div className="rounded-md border border-border bg-muted/20 p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">已关联技能市场</span>
+        <span className="text-muted-foreground">/{metadata.marketplaceSlug}</span>
+        <span className="text-muted-foreground">v{metadata.installedVersion}</span>
+        {metadata.modified && (
+          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-200">
+            有未发布的改动
           </span>
-          <div className="min-w-0">
-            <h2 className="truncate text-lg font-semibold">{detail.name}</h2>
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{detail.description}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <Pill>{detail.owner}</Pill>
-              <Pill>{detail.category}</Pill>
-              {detail.tags.map((tag) => <Pill key={tag}>{tag}</Pill>)}
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {isBlocked ? (
-            <DisabledAction icon={<Download className="h-3.5 w-3.5" />} label={t(disabledActionLabelKey(detail.installState))} />
-          ) : (
-            <button
-              type="button"
-              disabled={!canRunPrimaryAction}
-              onClick={() => onInstall?.()}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
-            >
-              <Download className="h-3.5 w-3.5" />
-              {actionLabel}
-            </button>
-          )}
-          <button
-            type="button"
-            disabled={!canReport || isReportSubmitting}
-            onClick={() => setReportOpen((open) => !open)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
-          >
-            <Flag className="h-3.5 w-3.5" />
-            {isReportSubmitting ? t('skillMarketplace.submitting') : reportLabel}
-          </button>
-          {ownerLinked && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted px-3 text-xs font-medium text-muted-foreground">
-                <UserCog className="h-3.5 w-3.5" />
-                {t('skillMarketplace.ownerActions')}
-              </span>
-              <button
-                type="button"
-                disabled={ownerActionBusy}
-                onClick={onOwnerPublishVersion}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
-              >
-                <UserCog className="h-3.5 w-3.5" />
-                {ownerState.status === 'publishing' ? t('skillMarketplace.publishing') : t('skillMarketplace.publishVersion')}
-              </button>
-              <button
-                type="button"
-                disabled={ownerActionBusy}
-                onClick={onOwnerUnpublish}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-500/30 bg-background px-3 text-xs font-medium text-red-700 hover:bg-red-500/10 disabled:bg-muted disabled:text-muted-foreground dark:text-red-300"
-              >
-                <ShieldAlert className="h-3.5 w-3.5" />
-                {ownerState.status === 'unpublishing' ? t('skillMarketplace.unpublishing') : t('skillMarketplace.unpublish')}
-              </button>
-            </div>
-          )}
-        </div>
+        )}
       </div>
-
-      {(reportOpen || reportState.status !== 'idle') && (
-        <div className="rounded-md border border-border bg-muted/20 p-3">
-          <label className="text-xs font-medium" htmlFor={`marketplace-report-${detail.slug}`}>
-            {t('skillMarketplace.reportDetails')}
-          </label>
-          <textarea
-            id={`marketplace-report-${detail.slug}`}
-            value={reportContext}
-            onChange={(event) => setReportContext(event.target.value)}
-            disabled={!canReport || isReportSubmitting}
-            placeholder={t('skillMarketplace.placeholderReportDetails')}
-            className="mt-2 min-h-24 w-full resize-y rounded-md border border-border bg-background p-2 text-sm outline-none focus:border-foreground/30 disabled:bg-muted"
-          />
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">{t('skillMarketplace.reportDisclaimer')}</p>
-            <button
-              type="button"
-              disabled={!canReport || isReportSubmitting}
-              onClick={() => onReport?.(reportContext)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
-            >
-              <Flag className="h-3.5 w-3.5" />
-              {t('skillMarketplace.submitReport')}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {reportState.status !== 'idle' && reportState.status !== 'submitting' && (
-        <div className={`rounded-md border p-3 text-sm ${marketplaceReportAlertClassName(reportState.status)}`}>
-          {marketplaceReportMessage(reportState, t)}
-        </div>
-      )}
-
-      {ownerMessage && (
-        <div className={`rounded-md border p-3 text-sm ${marketplaceOwnerActionAlertClassName(ownerState.status)}`}>
-          {ownerMessage}
-        </div>
-      )}
-
-      {installState.status !== 'idle' && installState.status !== 'installing' && (
-        <div className={`rounded-md border p-3 text-sm ${marketplaceInstallAlertClassName(installState.status)}`}>
-          <div className="flex flex-wrap items-center gap-2">
-            <span>{installState.message}</span>
-            {installState.status === 'conflict' && (
-              <>
-                <button type="button" className="rounded-md border border-current px-2 py-1 text-xs font-medium" onClick={() => onInstall?.('overwrite')}>
-                  {t('skillMarketplace.overwrite')}
-                </button>
-                <button type="button" className="rounded-md border border-current px-2 py-1 text-xs font-medium" onClick={() => onInstall?.('skip')}>
-                  {t('skillMarketplace.skip')}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {isBlocked && (
-        <div className="flex gap-2 rounded-md border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">
-          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          {detail.installState === 'unavailable' ? (
-            <span>{t('skillMarketplace.ownerUnpublishedWarning')}</span>
-          ) : (
-            <span>{t('skillMarketplace.safetyBlockedWarning')}</span>
-          )}
-        </div>
-      )}
-
-      {detail.installState === 'modified-locally' && (
-        <div className="flex gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          {hasUnpublishedChanges ? (
-            <span>{t('skillMarketplace.unpublishedChangesWarning')}</span>
-          ) : (
-            <span>{t('skillMarketplace.willOverwriteLocal')}</span>
-          )}
-        </div>
-      )}
-
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(280px,0.7fr)]">
-        <section>
-          <SectionTitle>{t('skillMarketplace.publishedSkillMd')}</SectionTitle>
-          <pre className="mt-2 max-h-[520px] overflow-auto rounded-md border border-border bg-muted/40 p-4 text-xs leading-relaxed text-foreground">
-            {detail.skillMarkdown}
-          </pre>
-        </section>
-
-        <aside className="space-y-5">
-          <section>
-            <SectionTitle>{t('skillMarketplace.listingMetadata')}</SectionTitle>
-            <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">
-              <dt className="text-muted-foreground">{t('skillMarketplace.marketplaceId')}</dt>
-              <dd className="truncate">{detail.metadata.marketplaceId}</dd>
-              <dt className="text-muted-foreground">{t('skillMarketplace.metadataSlug')}</dt>
-              <dd>{detail.metadata.marketplaceSlug}</dd>
-              <dt className="text-muted-foreground">{t('skillMarketplace.metadataLatestVersion')}</dt>
-              <dd>v{detail.latestVersion}</dd>
-              {detail.basedOn && (
-                <>
-                  <dt className="text-muted-foreground">{t('skillMarketplace.metadataBasedOn')}</dt>
-                  <dd>/{detail.basedOn.marketplaceSlug} v{detail.basedOn.version}</dd>
-                </>
-              )}
-              <dt className="text-muted-foreground">{t('skillMarketplace.metadataInstalls')}</dt>
-              <dd>{formatInstallCount(detail.installCount)}</dd>
-              <dt className="text-muted-foreground">{t('skillMarketplace.metadataState')}</dt>
-              <dd>{t(installStateLabelKey(detail.installState))}</dd>
-            </dl>
-          </section>
-
-          <section>
-            <SectionTitle>{t('skillMarketplace.requiredSources')}</SectionTitle>
-            <ul className="mt-2 space-y-1 text-xs">
-              {detail.requiredSources.map((source) => (
-                <li key={source} className="flex items-center gap-2">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>{source}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section>
-            <SectionTitle>{t('skillMarketplace.versionHistory')}</SectionTitle>
-            <ol className="mt-2 space-y-3">
-              {detail.versions.map((version) => (
-                <li key={version.version} className="rounded-md border border-border p-3">
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="font-medium">v{version.version}</span>
-                    <span className="text-muted-foreground">{version.publishedAt}</span>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">{version.releaseNotes}</p>
-                </li>
-              ))}
-            </ol>
-          </section>
-        </aside>
-      </div>
+      <p className="mt-2 text-xs text-muted-foreground">市场 ID：{metadata.marketplaceId}</p>
     </div>
   )
 }
 
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', toArrayBuffer(bytes))
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+export function filterMarketplaceListings(
+  listings: MarketplaceSkillListing[],
+  filters: MarketplaceCatalogFilters,
+): MarketplaceSkillListing[] {
+  const q = filters.search?.trim().toLowerCase() ?? ''
+  return listings.filter((l) => {
+    const matchQ = !q || l.name.toLowerCase().includes(q) || l.description.toLowerCase().includes(q)
+    const matchCat = !filters.category || l.category === filters.category
+    return matchQ && matchCat
+  })
 }
 
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
-}
-
-function toBase64(bytes: Uint8Array): string {
-  const maybeBuffer = (globalThis as { Buffer?: { from: (bytes: Uint8Array) => { toString: (encoding: string) => string } } }).Buffer
-  if (maybeBuffer) return maybeBuffer.from(bytes).toString('base64')
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
-}
-
-/** Marketplace-scoped outage display with retry behavior. */
-export function MarketplaceError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  const { t } = useTranslation()
+export function MarketplacePublishSkillDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  workspaceId: string
+  currentUserId: string | null
+  onPublished: (slug: string) => void
+}) {
+  if (!open) return null
   return (
-    <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
-      <div className="flex gap-2">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-        <div>
-          <p className="font-medium">{t('skillMarketplace.unavailable')}</p>
-          <p className="mt-1 text-xs">{message}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl">
+        <h2 className="mb-4 text-base font-semibold">发布技能</h2>
+        <p className="text-sm text-muted-foreground">发布功能开发中。</p>
+        <div className="mt-4 flex justify-end">
           <button
             type="button"
-            onClick={onRetry}
-            className="mt-2 rounded-md border border-current px-2 py-1 text-xs font-medium"
+            onClick={() => onOpenChange(false)}
+            className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted"
           >
-            {t('skillMarketplace.retry')}
+            关闭
           </button>
         </div>
       </div>
     </div>
   )
-}
-
-function DisabledAction({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <button
-      type="button"
-      disabled
-      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted px-3 text-xs font-medium text-muted-foreground"
-    >
-      {icon}
-      {label}
-    </button>
-  )
-}
-
-function Pill({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
-      {children}
-    </span>
-  )
-}
-
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-sm font-semibold">{children}</h3>
 }

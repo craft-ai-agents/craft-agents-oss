@@ -144,9 +144,11 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (workspace.remoteServer) throw new Error('Open in editor is not available for remote workspaces')
 
     const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
+    const { GLOBAL_AGENT_SKILLS_DIR } = await import('@craft-agent/shared/skills')
 
-    const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
-    const skillFile = join(skillsDir, skillSlug, 'SKILL.md')
+    const workspaceSkillFile = join(getWorkspaceSkillsPath(workspace.rootPath), skillSlug, 'SKILL.md')
+    const globalSkillFile = join(GLOBAL_AGENT_SKILLS_DIR, skillSlug, 'SKILL.md')
+    const skillFile = existsSync(workspaceSkillFile) ? workspaceSkillFile : globalSkillFile
     await deps.platform.openPath?.(skillFile)
   })
 
@@ -157,9 +159,11 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (workspace.remoteServer) throw new Error('Show in Finder is not available for remote workspaces')
 
     const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
+    const { GLOBAL_AGENT_SKILLS_DIR } = await import('@craft-agent/shared/skills')
 
-    const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
-    const skillDir = join(skillsDir, skillSlug)
+    const workspaceSkillDir = join(getWorkspaceSkillsPath(workspace.rootPath), skillSlug)
+    const globalSkillDir = join(GLOBAL_AGENT_SKILLS_DIR, skillSlug)
+    const skillDir = existsSync(workspaceSkillDir) ? workspaceSkillDir : globalSkillDir
     await deps.platform.showItemInFolder?.(skillDir)
   })
 

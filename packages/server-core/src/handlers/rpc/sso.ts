@@ -90,6 +90,7 @@ export async function handleSsoStartupSession({
       authenticated: true,
       userName: session.userName,
       department: session.department,
+      employeeId: session.employeeId,
     }
   }
 
