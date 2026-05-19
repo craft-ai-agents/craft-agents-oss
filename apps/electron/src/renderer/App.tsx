@@ -236,6 +236,7 @@ export default function App() {
   const [appState, setAppState] = useState<AppState>('loading')
   const [setupNeeds, setSetupNeeds] = useState<SetupNeeds | null>(null)
   const [ssoLoginResult, setSsoLoginResult] = useState<{ success: boolean; error?: string } | null>(null)
+  const [ssoUser, setSsoUser] = useState<{ userName?: string; department?: string; employeeId?: string } | undefined>(undefined)
 
   // Per-session Jotai atom setters for isolated updates
   // NOTE: No sessionsAtom - we don't store a Session[] array anywhere to prevent memory leaks
@@ -661,6 +662,11 @@ export default function App() {
           setAppState('sso-login')
           return
         }
+        setSsoUser({
+          userName: ssoSession.userName,
+          department: ssoSession.department,
+          employeeId: ssoSession.employeeId,
+        })
 
         // Get this window's workspace ID (passed via URL query param from main process)
         const wsId = await window.electronAPI.getWindowWorkspace()
@@ -1858,6 +1864,7 @@ export default function App() {
     onOpenStoredUserPreferences: handleOpenStoredUserPreferences,
     onReset: handleReset,
     onSsoLogout: handleSsoLogout,
+    ssoUser,
     // Session options
     onSessionOptionsChange: handleSessionOptionsChange,
     onInputChange: handleInputChange,
@@ -1901,6 +1908,7 @@ export default function App() {
     handleOpenStoredUserPreferences,
     handleReset,
     handleSsoLogout,
+    ssoUser,
     handleSessionOptionsChange,
     handleInputChange,
     handleAttachmentsChange,

@@ -5,6 +5,7 @@ export interface AuthenticatedSsoSessionState {
   authenticated: true;
   userName?: string;
   department?: string;
+  employeeId?: string;
 }
 
 /** Public renderer-safe view used when no valid SSO session exists. */
@@ -70,6 +71,7 @@ function authenticated(session: SsoSession): AuthenticatedSsoSessionState {
     authenticated: true,
     userName: session.userName,
     department: session.department,
+    employeeId: session.employeeId,
   };
 }
 

@@ -1074,14 +1074,16 @@ ${skill.content || '（内容为空）'}`
         {/* 路径信息 + 发布到市场 */}
         <div className="flex items-center justify-between px-7 pb-4 pt-2">
           <span className="text-[12px] text-muted-foreground/55">路径：{skill.path}</span>
-          <button
-            type="button"
-            onClick={() => { onClose(); onPublish(skill) }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-foreground/[0.04]"
-          >
-            <Store className="h-3.5 w-3.5" />
-            发布到市场
-          </button>
+          {!skill.marketplaceOrigin && (
+            <button
+              type="button"
+              onClick={() => { onClose(); onPublish(skill) }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-foreground/[0.04]"
+            >
+              <Store className="h-3.5 w-3.5" />
+              发布到市场
+            </button>
+          )}
         </div>
 
         {/* Markdown 内容区 */}
@@ -1377,11 +1379,13 @@ function buildSkillMd(skill: LoadedSkill): string {
 function PublishSkillDialog({
   open,
   onClose,
+  workspaceId,
   currentUserId,
   sourceSkill,
 }: {
   open: boolean
   onClose: () => void
+  workspaceId: string
   currentUserId: string | null
   sourceSkill?: LoadedSkill
 }) {
@@ -1409,7 +1413,7 @@ function PublishSkillDialog({
     setTag('B'); setFile(null); setErrors({})
   }, [open, sourceSkill])
 
-  const mockUser = { userName: '当前用户', employeeId: currentUserId ?? 'EMP001' }
+  const displayUserId = currentUserId ?? '—'
 
   const TAG_OPTIONS = [
     { value: 'B' as const, label: 'DevOps（DevOps 相关能力，天眼、乐高等）' },
@@ -1450,18 +1454,65 @@ function PublishSkillDialog({
   const handleSubmit = async () => {
     const errs = validate()
     if (Object.keys(errs).length > 0) { setErrors(errs); return }
+    if (!currentUserId) { setErrors({ submit: '无法获取用户信息，请重新登录' }); return }
     setUploading(true)
 
-    // 准备 zip 字节：来自本地技能时在内存中生成，否则读取用户选择的文件
-    // TODO: 接入真实上传 API，将 zipBytes + name/chineseName/description/tag/uploader 发送到服务端
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const zipBytes = sourceSkill
-      ? zipSync({ 'SKILL.md': strToU8(buildSkillMd(sourceSkill)) })
-      : file ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array()
+    try {
+      let skillData: { slug: string; metadata: { name?: string; description?: string; author?: string }; content: string }
 
-    await new Promise((r) => setTimeout(r, 1000))
-    setUploading(false)
-    handleClose()
+      if (sourceSkill) {
+        skillData = { slug: sourceSkill.slug, metadata: sourceSkill.metadata, content: sourceSkill.content }
+      } else if (file) {
+        const buffer = await file.arrayBuffer()
+        const unzipped = unzipSync(new Uint8Array(buffer))
+        const skillMdKey = Object.keys(unzipped).find((k) =>
+          k.toLowerCase() === 'skill.md' || k.toLowerCase().match(/^[^/]+\/skill\.md$/)
+        )
+        if (!skillMdKey) {
+          setErrors({ file: 'zip 中未找到 SKILL.md 文件' })
+          setUploading(false)
+          return
+        }
+        const rawContent = new TextDecoder().decode(unzipped[skillMdKey])
+        const fmMatch = rawContent.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
+        const body = fmMatch ? fmMatch[2].trim() : rawContent
+        const yamlStr = fmMatch ? fmMatch[1] : ''
+        const getYamlVal = (key: string) => {
+          const m = yamlStr.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'))
+          return m ? m[1].trim().replace(/^['"]|['"]$/g, '') : undefined
+        }
+        const slug = file.name.replace(/\.zip$/i, '').replace(/[\s]+/g, '-').toLowerCase()
+        skillData = {
+          slug,
+          metadata: { name: getYamlVal('name') ?? slug, description: getYamlVal('description') ?? description },
+          content: body,
+        }
+      } else {
+        setUploading(false)
+        return
+      }
+
+      const marketplaceSlug = name.trim().replace(/_/g, '-')
+      const result = await window.electronAPI.publishDirectMarketplaceSkill(workspaceId, {
+        userId: currentUserId,
+        skill: skillData,
+        marketplaceSlug,
+        version: '1.0.0',
+        category: tag === 'B' ? 'DevOps' : '公共',
+      })
+
+      if (result.status === 'slug-conflict') {
+        setErrors({ name: `市场标识符"${result.marketplaceSlug}"已被占用，请换一个名称` })
+        setUploading(false)
+        return
+      }
+
+      setUploading(false)
+      handleClose()
+    } catch (err) {
+      setErrors({ submit: err instanceof Error ? err.message : '发布失败，请稍后重试' })
+      setUploading(false)
+    }
   }
 
   const handleClose = () => {
@@ -1587,7 +1638,7 @@ function PublishSkillDialog({
           <div>
             <label className="mb-1.5 block text-[13px] font-medium text-foreground">上传人信息</label>
             <p className="text-[13px] text-muted-foreground">
-              {mockUser.userName}（{mockUser.employeeId}）
+              {displayUserId}
             </p>
           </div>
 
@@ -1628,6 +1679,7 @@ function PublishSkillDialog({
 
         {/* 底部操作 */}
         <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-border px-7 py-4">
+          {errors.submit && <p className="mr-auto text-[12px] text-rose-500">{errors.submit}</p>}
           <button
             type="button"
             onClick={handleClose}
@@ -1942,6 +1994,7 @@ export function SkillMarketplacePage({
     <PublishSkillDialog
       open={publishOpen}
       onClose={() => { setPublishOpen(false); setPublishSourceSkill(null) }}
+      workspaceId={workspaceId}
       currentUserId={currentUserId}
       sourceSkill={publishSourceSkill ?? undefined}
     />
