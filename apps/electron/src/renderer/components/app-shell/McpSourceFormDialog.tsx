@@ -282,16 +282,14 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
           </DialogHeader>
 
           <Tabs value={mode} onValueChange={isEditMode ? undefined : (value) => setMode(value as McpFormMode)}>
-            <TabsList className={`grid w-full ${isEditMode ? 'grid-cols-2' : 'grid-cols-3'}`}>
+            <TabsList className="grid w-full grid-cols-3" title={isEditMode ? t('mcpForm.transportLocked') : undefined}>
               <TabsTrigger value="streamable_http" disabled={isEditMode && mode !== 'streamable_http'}>
                 Streamable HTTP
               </TabsTrigger>
               <TabsTrigger value="stdio" disabled={isEditMode && mode !== 'stdio'}>
                 Command
               </TabsTrigger>
-              {!isEditMode && (
-                <TabsTrigger value="json">JSON</TabsTrigger>
-              )}
+              <TabsTrigger value="json" disabled={isEditMode}>JSON</TabsTrigger>
             </TabsList>
 
             <TabsContent value="streamable_http" className="space-y-4">
@@ -738,7 +736,7 @@ function ConfiguredBadge() {
   return (
     <span className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-success/10 text-success">
       <CheckCircle2 className="h-3 w-3" />
-      {t('mcpForm.configured')}
+      {t('mcpForm.credentialConfigured')}
     </span>
   )
 }

@@ -18,8 +18,11 @@ describe('MCP source form flow wiring', () => {
 
     expect(formSource).toContain('value="streamable_http"')
     expect(formSource).toContain('value="stdio"')
+    expect(formSource).toContain('value="json"')
     expect(formSource).toContain('Streamable HTTP')
     expect(formSource).toContain('Command')
+    expect(formSource).toContain('JSON')
+    expect(formSource).toContain('className="grid w-full grid-cols-3"')
     expect(formSource).toContain('args: parseListLines(values.argsText)')
     expect(formSource).not.toContain('.split(\' \')')
     expect(formSource).not.toContain('.split(" ")')
@@ -52,7 +55,7 @@ describe('MCP source form flow wiring', () => {
     // SourceMenu: Edit item with pencil icon
     expect(sourceMenuSource).toContain('onEdit?: () => void')
     expect(sourceMenuSource).toContain('Pencil')
-    expect(sourceMenuSource).toContain('common.edit')
+    expect(sourceMenuSource).toContain('sidebarMenu.editSource')
 
     // SourcesListPanel: onEditSource prop wired to SourceMenu.onEdit
     expect(sourcesListPanelSource).toContain('onEditSource: (source: LoadedSource) => void')
@@ -63,12 +66,21 @@ describe('MCP source form flow wiring', () => {
     expect(appShellSource).toContain('handleEditSource')
     expect(appShellSource).toContain('onEditSource={handleEditSource}')
 
-    // McpSourceFormDialog: editSource prop and edit mode UI
+    // McpSourceFormDialog: editSource prop, edit mode UI, and pre-fill
     expect(formSource).toContain('editSource?: LoadedSource')
     expect(formSource).toContain('onEditComplete?: () => void')
     expect(formSource).toContain('mcpForm.editTitle')
+    expect(formSource).toContain('mcpForm.transportLocked')
+    expect(formSource).toContain('mcpForm.credentialConfigured')
     expect(formSource).toContain('updateSource')
     expect(formSource).toContain('common.save')
     expect(formSource).toContain('isEditMode')
+    expect(formSource).toContain('setMode(transport === \'stdio\' ? \'stdio\' : \'streamable_http\')')
+    expect(formSource).toContain('setName(config.name)')
+    expect(formSource).toContain('setProvider(config.provider ?? \'\')')
+    expect(formSource).toContain('setUrl(mcp.url ?? \'\')')
+    expect(formSource).toContain('setCommand(mcp.command ?? \'\')')
+    expect(formSource).toContain('setArgsText(mcp.args ? mcp.args.join(\'\\n\') : \'\')')
+    expect(formSource).toContain('setEnvText(objectToLines(mcp.env))')
   })
 })
