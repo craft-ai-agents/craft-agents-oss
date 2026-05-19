@@ -212,9 +212,52 @@ export interface LlmConnectionWithStatus extends LlmConnection {
   isDefault?: boolean;
 }
 
+/**
+ * Environment variables used to synthesize the reserved Environment connection.
+ */
+export interface EnvConnectionEnv {
+  /** Custom LLM endpoint URL. When absent, no Environment connection is created. */
+  LLM_BASE_URL?: string;
+
+  /** Optional model ID used as both the available and default model. */
+  LLM_MODEL?: string;
+}
+
 // ============================================================
 // Helpers
 // ============================================================
+
+/**
+ * Build the reserved Environment connection from process environment values.
+ *
+ * Pure source of truth for the env-backed connection shape. The SSO token is
+ * accepted for caller parity but is intentionally not used: this connection
+ * never stores or derives credentials.
+ */
+export function synthesizeEnvConnection(
+  env: EnvConnectionEnv,
+  ssoToken: unknown,
+): LlmConnection | null {
+  void ssoToken;
+
+  const baseUrl = env.LLM_BASE_URL;
+  if (baseUrl === undefined) return null;
+
+  const model = env.LLM_MODEL;
+
+  return {
+    slug: 'env-provider',
+    name: 'Environment',
+    providerType: 'pi_compat',
+    authType: 'none',
+    piAuthProvider: 'openai',
+    customEndpoint: { api: 'openai-completions' },
+    baseUrl,
+    models: model ? [model] : [],
+    defaultModel: model ? model : undefined,
+    createdAt: 0,
+  };
+}
 
 /**
  * Returns true when `modelId` must NOT be used as the mini/summarization model
