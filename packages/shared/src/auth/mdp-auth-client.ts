@@ -96,7 +96,7 @@ export class MdpAuthClient {
   private async get(endpoint: string, token: string): Promise<SsoSession> {
     const response = await this.fetchFn(`${this.baseUrl}${endpoint}`, {
       method: 'GET',
-      headers: { authorization: `Bearer ${token}` },
+      headers: { Authorization: token },
     });
     return this.parseResponse(response, endpoint);
   }

@@ -101,7 +101,7 @@ describe('MdpAuthClient', () => {
       'https://mdp.example.test/api/mdp/auth/refresh-token',
       {
         method: 'GET',
-        headers: { authorization: 'Bearer old-session-token' },
+        headers: { Authorization: 'old-session-token' },
       },
     );
     expect(session.token).toBe('new-session-token');
