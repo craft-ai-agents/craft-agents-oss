@@ -148,7 +148,7 @@ export function SourcesListPanel({
             <SourceMenu
               sourceSlug={source.config.slug}
               sourceName={source.config.name}
-              onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://sources/source/${source.config.slug}?window=focused`)}
+              onOpenInNewWindow={() => window.electronAPI.openUrl(`mdp://sources/source/${source.config.slug}?window=focused`)}
               onShowInFinder={() => window.electronAPI.showInFolder(source.folderPath)}
               onEdit={() => onEditSource(source)}
               onDelete={() => onDeleteSource(source.config.slug)}

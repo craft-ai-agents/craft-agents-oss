@@ -21,6 +21,7 @@ export { getHealthCheck } from './server'
 import { registerSettingsHandlers } from './settings'
 import { registerSkillsHandlers } from './skills'
 import { registerSourcesHandlers } from './sources'
+import { registerSsoHandlers } from './sso'
 import { registerStatusesHandlers } from './statuses'
 import { registerSystemCoreHandlers } from './system'
 import { registerTransferHandlers } from './transfer'
@@ -47,6 +48,7 @@ export function registerCoreRpcHandlers(
   registerSettingsHandlers(server, deps)
   registerSkillsHandlers(server, deps)
   registerSourcesHandlers(server, deps)
+  registerSsoHandlers(server, deps)
   registerStatusesHandlers(server, deps)
   registerTeamKnowledgeHandlers(server, deps)
   registerSystemCoreHandlers(server, deps)

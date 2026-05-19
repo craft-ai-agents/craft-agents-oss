@@ -92,7 +92,7 @@ export function SidebarMenu({
   // New Session: only shows "Open in New Window"
   if (type === 'newSession') {
     return (
-      <MenuItem onClick={() => window.electronAPI.openUrl('craftagents://action/new-session?window=focused')}>
+      <MenuItem onClick={() => window.electronAPI.openUrl('mdp://action/new-session?window=focused')}>
         <AppWindow className="h-3.5 w-3.5" />
         <span className="flex-1">{t("sidebarMenu.openInNewWindow")}</span>
       </MenuItem>

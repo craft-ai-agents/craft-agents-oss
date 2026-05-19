@@ -560,14 +560,14 @@ Tool responses exceeding ~60KB are automatically summarized using Claude Haiku w
 
 ### Deep Linking
 
-External apps can navigate using `craftagents://` URLs:
+External apps can navigate using `mdp://` URLs:
 
 ```
-craftagents://allSessions                      # All sessions view
-craftagents://allSessions/session/session123   # Specific session
-craftagents://settings                         # Settings
-craftagents://sources/source/github            # Source info
-craftagents://action/new-chat                  # Create new session
+mdp://allSessions                      # All sessions view
+mdp://allSessions/session/session123   # Specific session
+mdp://settings                         # Settings
+mdp://sources/source/github            # Source info
+mdp://action/new-chat                  # Create new session
 ```
 
 ## Tech Stack

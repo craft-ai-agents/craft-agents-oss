@@ -32,6 +32,8 @@ import {
   SettingsInput,
 } from '@/components/settings'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
+import { useAppShellContext } from '@/context/AppShellContext'
+import { SsoSignOutSection } from './SsoSignOutSection'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -94,6 +96,7 @@ function validateProxyUrl(url: string): string | undefined {
 
 export default function AppSettingsPage() {
   const { t } = useTranslation()
+  const { onSsoLogout } = useAppShellContext()
 
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
@@ -307,6 +310,8 @@ export default function AppSettingsPage() {
                   )}
                 </SettingsCard>
               </SettingsSection>
+
+              <SsoSignOutSection onSignOut={onSsoLogout} />
 
               {/* About */}
               <SettingsSection title={t("settings.about.title")}>
