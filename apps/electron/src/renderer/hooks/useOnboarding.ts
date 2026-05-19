@@ -213,10 +213,8 @@ export function useOnboarding({
     checkGitBash()
   }, [])
 
-  // Save configuration using the new unified LLM connection API
-  // Returns true on success, false on failure (sets errorMessage on failure)
-  // `methodOverride` lets callers pass the method explicitly to avoid stale-closure issues
-  // (e.g. when called after a state update that has not reached this closure yet).
+  // Save configuration using the new unified LLM connection API.
+  // Returns true on success, false on failure (sets errorMessage on failure).
   const handleSaveConfig = useCallback(async (
     credential?: string,
     options?: {
@@ -230,11 +228,8 @@ export function useOnboarding({
       awsRegion?: string
       bedrockAuthMethod?: 'iam_credentials' | 'environment'
     },
-    methodOverride?: ApiSetupMethod,
-    connectionSlugOverride?: string,
-    updateOnly?: boolean,
   ): Promise<boolean> => {
-    const method = methodOverride ?? state.apiSetupMethod
+    const method = state.apiSetupMethod
     if (!method) {
       return false
     }
@@ -254,11 +249,9 @@ export function useOnboarding({
         iamCredentials: options?.iamCredentials,
         awsRegion: options?.awsRegion,
         bedrockAuthMethod: options?.bedrockAuthMethod,
-      }, connectionSlugOverride ?? editingSlug, existingSlugs)
+      }, editingSlug, existingSlugs)
       // Use new unified API
-      const result = await window.electronAPI.setupLlmConnection(
-        updateOnly ? { ...setup, updateOnly: true } : setup
-      )
+      const result = await window.electronAPI.setupLlmConnection(setup)
 
       if (result.success) {
         setState(s => ({ ...s, completionStatus: 'complete' }))
@@ -398,28 +391,16 @@ export function useOnboarding({
         return
       }
 
-      // API key validation differs by endpoint locality:
-      // - Local/loopback custom endpoints may be keyless (e.g. Ollama)
-      // - Non-local endpoints require an API key
+      // Local/loopback custom endpoints may be keyless (e.g. Ollama).
+      // Non-local endpoints require an API key.
       const isLoopbackCustomEndpoint = isLoopbackEndpoint(data.baseUrl)
-      if (isPiApiKeyFlow) {
-        if (!data.apiKey.trim() && !isLoopbackCustomEndpoint) {
-          setState(s => ({
-            ...s,
-            credentialStatus: 'error',
-            errorMessage: 'Please enter a valid API key',
-          }))
-          return
-        }
-      } else {
-        if (!data.apiKey.trim() && !isLoopbackCustomEndpoint) {
-          setState(s => ({
-            ...s,
-            credentialStatus: 'error',
-            errorMessage: 'Please enter a valid API key',
-          }))
-          return
-        }
+      if (!data.apiKey.trim() && !isLoopbackCustomEndpoint) {
+        setState(s => ({
+          ...s,
+          credentialStatus: 'error',
+          errorMessage: 'Please enter a valid API key',
+        }))
+        return
       }
 
       // Validate connection by spawning a lightweight subprocess test.
