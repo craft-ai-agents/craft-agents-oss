@@ -1,6 +1,7 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, synthesizeEnvConnection, type EnvConnectionEnv, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { SsoCredentialStore } from '@craft-agent/shared/auth'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
 import {
   resolveSetupTestConnectionHint,
@@ -30,6 +31,31 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.pi.GET_PROVIDER_BASE_URL,
   RPC_CHANNELS.pi.GET_PROVIDER_MODELS,
 ] as const
+
+export const ENV_CONNECTION_SLUG = 'env-provider'
+
+export function rejectEnvironmentConnectionMutation(): { success: false; error: string } {
+  return {
+    success: false,
+    error: 'The Environment connection is managed by process environment variables and cannot be modified.',
+  }
+}
+
+export function isEnvironmentConnectionSlug(slug: string): boolean {
+  return slug === ENV_CONNECTION_SLUG
+}
+
+export function synthesizeEnvConnectionWithStatus(env: EnvConnectionEnv, ssoToken: string | undefined): LlmConnectionWithStatus | null {
+  const envConnection = ssoToken ? synthesizeEnvConnection(env, ssoToken) : null
+  if (!envConnection) return null
+
+  return {
+    ...envConnection,
+    isAuthenticated: true,
+    isDefault: true,
+    isEnvironmentConnection: true,
+  }
+}
 
 export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerDeps): void {
   const { sessionManager } = deps
@@ -380,7 +406,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     const credentialManager = getCredentialManager()
     const defaultSlug = getDefaultLlmConnection()
 
-    return Promise.all(connections.map(async (conn): Promise<LlmConnectionWithStatus> => {
+    const persistedConnections = await Promise.all(connections.map(async (conn): Promise<LlmConnectionWithStatus> => {
       // Check if credentials exist for this connection
       const hasCredentials = await credentialManager.hasLlmCredentials(conn.slug, conn.authType)
       return {
@@ -389,6 +415,24 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         isDefault: conn.slug === defaultSlug,
       }
     }))
+
+    let ssoToken: string | undefined
+    try {
+      const ssoSession = await new SsoCredentialStore().load()
+      if (ssoSession?.token && ssoSession.expiresAt > Date.now()) {
+        ssoToken = ssoSession.token
+      }
+    } catch (error) {
+      deps.platform.logger?.warn(`Failed to load SSO session for Environment connection: ${error instanceof Error ? error.message : error}`)
+    }
+
+    const envConnection = synthesizeEnvConnectionWithStatus({
+      LLM_BASE_URL: process.env.LLM_BASE_URL,
+      LLM_MODEL: process.env.LLM_MODEL,
+    }, ssoToken)
+    if (!envConnection) return persistedConnections
+
+    return [envConnection, ...persistedConnections]
   })
 
   // Get a specific LLM connection by slug
@@ -412,6 +456,10 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // If connection.slug exists and is found, updates it; otherwise creates new
   server.handle(RPC_CHANNELS.llmConnections.SAVE, async (_ctx, connection: LlmConnection): Promise<{ success: boolean; error?: string }> => {
     try {
+      if (isEnvironmentConnectionSlug(connection.slug)) {
+        return rejectEnvironmentConnectionMutation()
+      }
+
       // Check if this is an update or create
       const existing = getLlmConnection(connection.slug)
       if (existing) {
@@ -456,6 +504,10 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // Delete an LLM connection (at least one connection must remain)
   server.handle(RPC_CHANNELS.llmConnections.DELETE, async (_ctx, slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      if (isEnvironmentConnectionSlug(slug)) {
+        return rejectEnvironmentConnectionMutation()
+      }
+
       const connection = getLlmConnection(slug)
       if (!connection) {
         return { success: false, error: 'Connection not found' }
@@ -510,6 +562,10 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // Set global default LLM connection
   server.handle(RPC_CHANNELS.llmConnections.SET_DEFAULT, async (_ctx, slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      if (isEnvironmentConnectionSlug(slug)) {
+        return rejectEnvironmentConnectionMutation()
+      }
+
       const success = setDefaultLlmConnection(slug)
       if (success) {
         deps.platform.logger?.info(`Global default LLM connection set to: ${slug}`)

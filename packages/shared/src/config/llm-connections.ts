@@ -210,6 +210,9 @@ export interface LlmConnectionWithStatus extends LlmConnection {
 
   /** Whether this is the global default connection */
   isDefault?: boolean;
+
+  /** Whether this is the protected connection synthesized from process env. */
+  isEnvironmentConnection?: boolean;
 }
 
 /**
