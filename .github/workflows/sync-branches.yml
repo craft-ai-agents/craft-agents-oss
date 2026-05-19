@@ -1,0 +1,24 @@
+name: Sync dev and main
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync dev → main
+        if: github.ref == 'refs/heads/dev'
+        run: git push origin dev:main
+
+      - name: Sync main → dev
+        if: github.ref == 'refs/heads/main'
+        run: git push origin main:dev
