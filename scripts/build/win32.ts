@@ -7,7 +7,7 @@
 
 import { execSync } from 'child_process';
 import { existsSync, rmSync, readdirSync, statSync, cpSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import type { BuildConfig } from './common';
 
 
@@ -21,12 +21,13 @@ function sleep(ms: number): Promise<void> {
 /**
  * Run a shell command with proper Windows handling
  */
-function run(command: string, cwd: string): void {
+function run(command: string, cwd: string, env?: Record<string, string>): void {
   console.log(`    > ${command}`);
   execSync(command, {
     cwd,
     stdio: 'inherit',
     shell: true,
+    ...(env && { env: { ...process.env, ...env } }),
   });
 }
 
@@ -184,7 +185,8 @@ export async function buildElectronAppWindows(config: BuildConfig): Promise<void
  * Package the Windows app with electron-builder (with retry logic)
  */
 export async function packageWindows(config: BuildConfig): Promise<string> {
-  const { electronDir } = config;
+  const { rootDir, electronDir } = config;
+  const ebCache = process.env.ELECTRON_BUILDER_CACHE ?? resolve(rootDir, '.cache', 'electron-builder');
 
   console.log('Packaging app with electron-builder...');
 
@@ -206,7 +208,7 @@ export async function packageWindows(config: BuildConfig): Promise<string> {
 
     try {
       // Run electron-builder from electronDir using npx (npx traverses up to find it in root node_modules)
-      run('npx electron-builder --win --x64', electronDir);
+      run('npx electron-builder --win --x64', electronDir, { ELECTRON_BUILDER_CACHE: ebCache });
       console.log(`  electron-builder succeeded on attempt ${attempt} ✓`);
       lastError = null;
       break;
