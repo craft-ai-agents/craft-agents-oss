@@ -157,6 +157,138 @@ Second definition of foo.`,
     expect(parsed.matches.length).toBe(2);
   });
 
+  it('returns conflict for contradictory explicit entries with equal priority and update time', async () => {
+    writeCache(tempDir, {
+      entries: {
+        doc1: {
+          id: 'doc1',
+          title: 'Legacy Glossary',
+          url: 'https://example.com/legacy',
+          priority: 5,
+          content: `# Glossary
+
+<!-- alias term:runtime canonical:node summary:Runtime means Node.js -->
+Use Node.js for runtime references.`,
+          contentHash: 'abc',
+          version: 1,
+          fetchedAt: 1000,
+          updatedAt: 3000,
+          stale: false,
+        },
+        doc2: {
+          id: 'doc2',
+          title: 'New Glossary',
+          url: 'https://example.com/new',
+          priority: 5,
+          content: `# Glossary
+
+<!-- alias term:runtime canonical:bun summary:Runtime means Bun -->
+Use Bun for runtime references.`,
+          contentHash: 'def',
+          version: 1,
+          fetchedAt: 1000,
+          updatedAt: 3000,
+          stale: false,
+        },
+      },
+    });
+
+    const result = await handleResolveTeamPublicTerm(createCtx(tempDir), { term: 'runtime' });
+    const parsed = JSON.parse(result.content[0]?.text ?? '');
+
+    expect(parsed.status).toBe('conflict');
+    expect(parsed.matches.map((m: any) => m.sourceTitle)).toEqual(['Legacy Glossary', 'New Glossary']);
+    expect(parsed.conflicts).toHaveLength(2);
+  });
+
+  it('resolves contradictory explicit entries by priority before update time', async () => {
+    writeCache(tempDir, {
+      entries: {
+        lowerPriority: {
+          id: 'lowerPriority',
+          title: 'Lower Priority Newer',
+          url: 'https://example.com/lower',
+          priority: 50,
+          content: `# Glossary
+
+<!-- alias term:runtime canonical:node -->
+Runtime means Node.js.`,
+          contentHash: 'abc',
+          version: 1,
+          fetchedAt: 1000,
+          updatedAt: 5000,
+          stale: false,
+        },
+        higherPriority: {
+          id: 'higherPriority',
+          title: 'Higher Priority Older',
+          url: 'https://example.com/higher',
+          priority: 10,
+          content: `# Glossary
+
+<!-- alias term:runtime canonical:bun -->
+Runtime means Bun.`,
+          contentHash: 'def',
+          version: 1,
+          fetchedAt: 1000,
+          updatedAt: 3000,
+          stale: false,
+        },
+      },
+    });
+
+    const result = await handleResolveTeamPublicTerm(createCtx(tempDir), { term: 'runtime' });
+    const parsed = JSON.parse(result.content[0]?.text ?? '');
+
+    expect(parsed.status).toBe('found');
+    expect(parsed.match.canonical).toBe('bun');
+    expect(parsed.matches.map((m: any) => m.canonical)).toEqual(['bun', 'node']);
+  });
+
+  it('resolves equal-priority contradictory explicit entries by newer update time', async () => {
+    writeCache(tempDir, {
+      entries: {
+        older: {
+          id: 'older',
+          title: 'Older Glossary',
+          url: 'https://example.com/older',
+          priority: 10,
+          content: `# Glossary
+
+<!-- alias term:runtime canonical:node -->
+Runtime means Node.js.`,
+          contentHash: 'abc',
+          version: 1,
+          fetchedAt: 1000,
+          updatedAt: 3000,
+          stale: false,
+        },
+        newer: {
+          id: 'newer',
+          title: 'Newer Glossary',
+          url: 'https://example.com/newer',
+          priority: 10,
+          content: `# Glossary
+
+<!-- alias term:runtime canonical:bun -->
+Runtime means Bun.`,
+          contentHash: 'def',
+          version: 1,
+          fetchedAt: 1000,
+          updatedAt: 5000,
+          stale: false,
+        },
+      },
+    });
+
+    const result = await handleResolveTeamPublicTerm(createCtx(tempDir), { term: 'runtime' });
+    const parsed = JSON.parse(result.content[0]?.text ?? '');
+
+    expect(parsed.status).toBe('found');
+    expect(parsed.match.canonical).toBe('bun');
+    expect(parsed.matches.map((m: any) => m.canonical)).toEqual(['bun', 'node']);
+  });
+
   it('returns conflict when cache has stale entries', async () => {
     writeCache(tempDir, {
       entries: {

@@ -366,4 +366,77 @@ Some rule from stale document.`,
     expect(parsed.results).toHaveLength(1);
     expect(parsed.results[0]?.stale).toBeTrue();
   });
+
+  it('surfaces expired validUntil entries with stale metadata', async () => {
+    writeCache(tempDir, {
+      entries: {
+        doc1: {
+          id: 'doc1',
+          title: 'Old Rule',
+          url: 'https://example.com/old',
+          priority: 1,
+          content: `# Topics
+
+<!-- rule validUntil:2025-01-01 -->
+Use the old deployment process.`,
+          contentHash: 'abc',
+          version: 1,
+          fetchedAt: Date.now(),
+          updatedAt: Date.now(),
+          stale: false,
+        },
+      },
+    });
+
+    const result = await handleSearchTeamPublicKnowledge(createCtx(tempDir), { query: 'deployment' });
+    const parsed = JSON.parse(result.content[0]?.text ?? '');
+
+    expect(parsed.results).toHaveLength(1);
+    expect(parsed.results[0]?.stale).toBeTrue();
+    expect(parsed.results[0]?.staleReason).toBe('valid_until_expired');
+  });
+
+  it('surfaces conflicting entries with conflict metadata', async () => {
+    writeCache(tempDir, {
+      entries: {
+        doc1: {
+          id: 'doc1',
+          title: 'Doc One',
+          url: 'https://example.com/one',
+          priority: 5,
+          content: `# Glossary
+
+<!-- alias term:runtime canonical:node -->
+Runtime means Node.js.`,
+          contentHash: 'abc',
+          version: 1,
+          fetchedAt: Date.now(),
+          updatedAt: 3000,
+          stale: false,
+        },
+        doc2: {
+          id: 'doc2',
+          title: 'Doc Two',
+          url: 'https://example.com/two',
+          priority: 5,
+          content: `# Glossary
+
+<!-- alias term:runtime canonical:bun -->
+Runtime means Bun.`,
+          contentHash: 'def',
+          version: 1,
+          fetchedAt: Date.now(),
+          updatedAt: 3000,
+          stale: false,
+        },
+      },
+    });
+
+    const result = await handleSearchTeamPublicKnowledge(createCtx(tempDir), { query: 'runtime' });
+    const parsed = JSON.parse(result.content[0]?.text ?? '');
+
+    expect(parsed.results).toHaveLength(2);
+    expect(parsed.results.every((r: any) => r.conflict)).toBeTrue();
+    expect(parsed.results[0]?.conflictReason).toBe('contradictory_explicit_entries');
+  });
 });

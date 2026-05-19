@@ -48,6 +48,7 @@ function writeTeamKnowledgeCache(
     content: string;
     priority: number;
     stale?: boolean;
+    fetchedAt?: number;
     updatedAt?: number;
   }>,
 ): void {
@@ -66,7 +67,7 @@ function writeTeamKnowledgeCache(
       content: entry.content,
       contentHash: 'abc123',
       version: 1,
-      fetchedAt: now,
+      fetchedAt: entry.fetchedAt ?? now,
       updatedAt: entry.updatedAt ?? now - 1000,
       stale: entry.stale ?? false,
     };
@@ -341,6 +342,75 @@ describe('TeamPublicKnowledgeInjector', () => {
       const results = prefetchTeamKnowledge(ws, 'fresh term stale term');
       expect(results.length).toBe(1);
       expect(results[0]!.source).toBe('Fresh Slang');
+    });
+
+    it('excludes entries past validUntil from trigger and prefetch context', () => {
+      const ws = createWorkspace();
+      writeTeamKnowledgeCache(ws, {
+        expired: {
+          title: 'Expired Knowledge',
+          content: '# Expired\n\n<!-- slang term:old deploy validUntil:2025-01-01 summary:Expired deploy guidance -->\nExpired content.\n',
+          priority: 1,
+        },
+        fresh: {
+          title: 'Fresh Knowledge',
+          content: '# Fresh\n\n<!-- slang term:new deploy validUntil:2099-01-01 summary:Fresh deploy guidance -->\nFresh content.\n',
+          priority: 2,
+        },
+      });
+
+      const policy = formatTeamKnowledgePolicy(ws);
+      const results = prefetchTeamKnowledge(ws, 'old deploy new deploy');
+
+      expect(policy).not.toContain('"old deploy"');
+      expect(policy).toContain('"new deploy"');
+      expect(results.map(r => r.source)).toEqual(['Fresh Knowledge']);
+    });
+
+    it('excludes documents past the stale TTL from trigger and prefetch context', () => {
+      const ws = createWorkspace();
+      writeTeamKnowledgeCache(ws, {
+        old: {
+          title: 'Old Knowledge',
+          content: '# Old\n\n<!-- slang term:ancient deploy summary:Outdated deploy guidance -->\nOld content.\n',
+          priority: 1,
+          fetchedAt: 1000,
+          updatedAt: 1000,
+        },
+        fresh: {
+          title: 'Fresh Knowledge',
+          content: '# Fresh\n\n<!-- slang term:current deploy summary:Current deploy guidance -->\nFresh content.\n',
+          priority: 2,
+        },
+      });
+
+      const policy = formatTeamKnowledgePolicy(ws);
+      const results = prefetchTeamKnowledge(ws, 'ancient deploy current deploy');
+
+      expect(policy).not.toContain('"ancient deploy"');
+      expect(policy).toContain('"current deploy"');
+      expect(results.map(r => r.source)).toEqual(['Fresh Knowledge']);
+    });
+
+    it('excludes unresolved conflicts from trigger and prefetch context', () => {
+      const ws = createWorkspace();
+      writeTeamKnowledgeCache(ws, {
+        docA: {
+          title: 'Doc A',
+          content: '# A\n\n<!-- alias term:runtime canonical:node summary:Runtime means Node.js -->\nUse Node.js.\n',
+          priority: 10,
+          updatedAt: 3000,
+        },
+        docB: {
+          title: 'Doc B',
+          content: '# B\n\n<!-- alias term:runtime canonical:bun summary:Runtime means Bun -->\nUse Bun.\n',
+          priority: 10,
+          updatedAt: 3000,
+        },
+      });
+
+      expect(formatTeamKnowledgePolicy(ws)).toBeNull();
+      expect(prefetchTeamKnowledge(ws, 'runtime')).toEqual([]);
     });
   });
 

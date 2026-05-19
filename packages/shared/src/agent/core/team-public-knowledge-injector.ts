@@ -4,6 +4,11 @@ import {
   type TeamPublicKnowledgeCacheEntry,
 } from '../../team-public-knowledge/index.ts';
 import { parseMarkdownEntries, type MarkdownEntry, type MarkdownEntryKind } from '../../markdown-entry-parser/index.ts';
+import {
+  getCacheEntryStaleReason,
+  isEntryFreshForRuntime,
+  resolveTeamKnowledgeMatches,
+} from '../../team-public-knowledge/entry-resolution.ts';
 
 const TRIGGER_KINDS: readonly MarkdownEntryKind[] = ['alias', 'slang', 'concept'];
 const MAX_TRIGGER_TERMS = 5;
@@ -22,6 +27,7 @@ interface TriggerTermEntry {
   term: string;
   kind: MarkdownEntryKind;
   priority: number;
+  updatedAt: number;
 }
 
 /**
@@ -98,17 +104,25 @@ ${entryBlocks.join('\n')}
 
 function parseAllFilteredEntries(entries: TeamPublicKnowledgeCacheEntry[]): MarkdownEntry[] {
   const result: MarkdownEntry[] = [];
+  const staleDocIds = new Set<string>();
+  const ttlExpiredDocIds = new Set<string>();
+
   for (const entry of entries) {
-    if (entry.stale) continue;
+    const staleReason = getCacheEntryStaleReason(entry);
+    if (staleReason === 'document_stale') staleDocIds.add(entry.id);
+    if (staleReason === 'stale_ttl_expired') ttlExpiredDocIds.add(entry.id);
+  }
+
+  for (const entry of entries) {
     const parsed = parseMarkdownEntries(entry.content, {
       sourceDocId: entry.id,
       sourceTitle: entry.title,
       priority: entry.priority,
       updatedAt: entry.updatedAt,
     });
-    result.push(...parsed);
+    result.push(...parsed.filter(parsedEntry => isEntryFreshForRuntime(parsedEntry, staleDocIds, ttlExpiredDocIds)));
   }
-  return result;
+  return filterResolvableRuntimeEntries(result);
 }
 
 function collectTopTriggerTerms(parsed: MarkdownEntry[]): TriggerTermEntry[] {
@@ -118,10 +132,40 @@ function collectTopTriggerTerms(parsed: MarkdownEntry[]): TriggerTermEntry[] {
       term: e.term!,
       kind: e.kind,
       priority: e.priority ?? 100,
+      updatedAt: e.updatedAt ?? 0,
     }))
     .filter((t, index, self) => self.findIndex((s) => s.term === t.term) === index)
-    .sort((a, b) => a.priority - b.priority)
+    .sort((a, b) => a.priority - b.priority || b.updatedAt - a.updatedAt)
     .slice(0, MAX_TRIGGER_TERMS);
+}
+
+function filterResolvableRuntimeEntries(parsed: MarkdownEntry[]): MarkdownEntry[] {
+  const byTerm = new Map<string, MarkdownEntry[]>();
+  const withoutTerm: MarkdownEntry[] = [];
+
+  for (const entry of parsed) {
+    if (!entry.term) {
+      withoutTerm.push(entry);
+      continue;
+    }
+    const key = entry.term.toLowerCase();
+    const existing = byTerm.get(key);
+    if (existing) {
+      existing.push(entry);
+    } else {
+      byTerm.set(key, [entry]);
+    }
+  }
+
+  const resolved: MarkdownEntry[] = [...withoutTerm];
+  for (const entries of byTerm.values()) {
+    const resolution = resolveTeamKnowledgeMatches(entries);
+    if (resolution.status === 'found' && resolution.winner) {
+      resolved.push(resolution.winner);
+    }
+  }
+
+  return resolved;
 }
 
 interface TermIndexEntry {

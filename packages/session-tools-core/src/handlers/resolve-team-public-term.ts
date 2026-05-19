@@ -1,5 +1,12 @@
 import { join } from 'node:path';
 import { parseMarkdownEntries, type MarkdownEntry } from '../../../shared/src/markdown-entry-parser/index.ts';
+import {
+  compareResolutionPrecedence,
+  getCacheEntryStaleReason,
+  getMarkdownEntryStaleReason,
+  resolveTeamKnowledgeMatches,
+  type TeamKnowledgeStaleReason,
+} from '../../../shared/src/team-public-knowledge/entry-resolution.ts';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse } from '../response.ts';
@@ -36,6 +43,11 @@ interface TermMatch {
   sourceTitle?: string;
   tags?: string[];
   scope?: string;
+  priority?: number;
+  updatedAt?: number;
+  explicit: boolean;
+  stale: boolean;
+  staleReason?: TeamKnowledgeStaleReason;
   confidence: number;
   relevance: string;
   matchReason: string;
@@ -46,7 +58,7 @@ interface ResolveResult {
   match?: TermMatch;
   matches?: TermMatch[];
   suggestions?: Array<{ term: string; kind: string; sourceTitle: string; confidence: number }>;
-  conflicts?: Array<{ id: string; title: string; staleAt: number; error: string }>;
+  conflicts?: Array<{ id: string; title?: string; sourceDocId?: string; staleAt?: number; error?: string; reason: string }>;
   source?: string;
   confidence?: number;
   relevance?: string;
@@ -98,7 +110,9 @@ function similarity(query: string, target: string | undefined): number {
 }
 
 function findExactTermMatches(entries: MarkdownEntry[], term: string): MarkdownEntry[] {
-  return entries.filter(e => e.term !== undefined && e.term.toLowerCase() === term.toLowerCase());
+  return entries
+    .filter(e => e.term !== undefined && e.term.toLowerCase() === term.toLowerCase())
+    .sort(compareResolutionPrecedence);
 }
 
 function buildSuggestions(entries: MarkdownEntry[], term: string): Array<{ term: string; kind: string; sourceTitle: string; confidence: number }> {
@@ -116,7 +130,12 @@ function buildSuggestions(entries: MarkdownEntry[], term: string): Array<{ term:
   return scored;
 }
 
-function buildTermMatch(entry: MarkdownEntry): TermMatch {
+function buildTermMatch(
+  entry: MarkdownEntry,
+  staleDocIds: Set<string> = new Set(),
+  ttlExpiredDocIds: Set<string> = new Set(),
+): TermMatch {
+  const staleReason = getMarkdownEntryStaleReason(entry, staleDocIds, ttlExpiredDocIds);
   return {
     id: entry.metadata.id ?? entry.sourceDocId ?? '',
     kind: entry.kind,
@@ -130,20 +149,28 @@ function buildTermMatch(entry: MarkdownEntry): TermMatch {
     sourceTitle: entry.sourceTitle,
     tags: entry.metadata.tags,
     scope: entry.metadata.scope,
+    priority: entry.priority,
+    updatedAt: entry.updatedAt,
+    explicit: entry.explicit,
+    stale: staleReason !== undefined,
+    staleReason,
     confidence: 1,
     relevance: 'high',
     matchReason: entry.term ? 'Term matches entry term field' : 'Content match',
   };
 }
 
-function findConflicts(cache: TeamPublicKnowledgeCache): Array<{ id: string; title: string; staleAt: number; error: string }> {
+function findStaleConflicts(cache: TeamPublicKnowledgeCache): Array<{ id: string; title?: string; sourceDocId?: string; staleAt?: number; error?: string; reason: string }> {
   return Object.values(cache.entries)
-    .filter(e => e.stale)
+    .map(e => ({ entry: e, reason: getCacheEntryStaleReason(e) }))
+    .filter((item): item is { entry: TeamPublicKnowledgeCacheEntry; reason: TeamKnowledgeStaleReason } => item.reason === 'document_stale')
     .map(e => ({
-      id: e.id,
-      title: e.title,
-      staleAt: e.staleAt ?? 0,
-      error: e.lastError ?? 'Unknown',
+      id: e.entry.id,
+      title: e.entry.title,
+      sourceDocId: e.entry.id,
+      staleAt: e.entry.staleAt,
+      error: e.entry.lastError,
+      reason: e.reason,
     }));
 }
 
@@ -159,23 +186,28 @@ export async function handleResolveTeamPublicTerm(
     return successResponse(JSON.stringify(result, null, 2));
   }
 
-  const conflicts = findConflicts(cache);
-  const hasConflicts = conflicts.length > 0;
+  const staleConflicts = findStaleConflicts(cache);
+  const staleDocIds = new Set(
+    Object.values(cache.entries)
+      .filter(e => getCacheEntryStaleReason(e) === 'document_stale')
+      .map(e => e.id),
+  );
+  const ttlExpiredDocIds = new Set<string>();
+  const hasStaleConflicts = staleConflicts.length > 0;
 
   const allEntries = parseAllEntries(cache);
 
   const exactMatches = findExactTermMatches(allEntries, term);
 
-  // If conflicts exist and the matched term comes from a stale doc, return conflict
-  if (hasConflicts && exactMatches.length > 0) {
-    const staleDocIds = new Set(conflicts.map(c => c.id));
-    const fromStale = exactMatches.some(e => e.sourceDocId && staleDocIds.has(e.sourceDocId));
-    if (fromStale) {
+  if (exactMatches.some(e => getMarkdownEntryStaleReason(e, staleDocIds, ttlExpiredDocIds) !== undefined)) {
+    const staleMatches = exactMatches.filter(e => getMarkdownEntryStaleReason(e, staleDocIds, ttlExpiredDocIds) !== undefined);
+    if (staleMatches.length > 0) {
       const result: ResolveResult = {
         status: 'conflict',
-        conflicts,
-        match: buildTermMatch(exactMatches[0]!),
-        source: exactMatches[0]!.sourceTitle,
+        conflicts: staleConflicts,
+        matches: exactMatches.map(e => buildTermMatch(e, staleDocIds, ttlExpiredDocIds)),
+        match: buildTermMatch(staleMatches[0]!, staleDocIds, ttlExpiredDocIds),
+        source: staleMatches[0]!.sourceTitle,
         confidence: 0.5,
         relevance: 'low',
         matchReason: 'Matched entry comes from stale document',
@@ -184,29 +216,44 @@ export async function handleResolveTeamPublicTerm(
     }
   }
 
-  if (exactMatches.length === 1) {
-    const match = buildTermMatch(exactMatches[0]!);
-    const result: ResolveResult = {
-      status: 'found',
-      match,
-      source: match.sourceTitle,
-      confidence: match.confidence,
-      relevance: match.relevance,
-      matchReason: match.matchReason,
-    };
-    if (hasConflicts) {
-      result.conflicts = conflicts;
+  if (exactMatches.length > 0) {
+    const resolution = resolveTeamKnowledgeMatches(exactMatches);
+    if (resolution.status === 'conflict') {
+      const result: ResolveResult = {
+        status: 'conflict',
+        matches: resolution.matches.map(e => buildTermMatch(e, staleDocIds, ttlExpiredDocIds)),
+        conflicts: resolution.matches.map(e => ({
+          id: e.metadata.id ?? e.sourceDocId ?? '',
+          title: e.title,
+          sourceDocId: e.sourceDocId,
+          reason: resolution.conflictReason ?? 'unresolved_conflict',
+        })),
+      };
+      return successResponse(JSON.stringify(result, null, 2));
     }
-    return successResponse(JSON.stringify(result, null, 2));
-  }
 
-  if (exactMatches.length > 1) {
+    if (resolution.status === 'found' && resolution.winner) {
+      const match = buildTermMatch(resolution.winner, staleDocIds, ttlExpiredDocIds);
+      const result: ResolveResult = {
+        status: 'found',
+        match,
+        matches: resolution.matches.map(e => buildTermMatch(e, staleDocIds, ttlExpiredDocIds)),
+        source: match.sourceTitle,
+        confidence: match.confidence,
+        relevance: match.relevance,
+        matchReason: match.matchReason,
+      };
+      if (hasStaleConflicts) {
+        result.conflicts = staleConflicts;
+      }
+      return successResponse(JSON.stringify(result, null, 2));
+    }
     const result: ResolveResult = {
       status: 'ambiguous',
-      matches: exactMatches.map(buildTermMatch),
+      matches: resolution.matches.map(e => buildTermMatch(e, staleDocIds, ttlExpiredDocIds)),
     };
-    if (hasConflicts) {
-      result.conflicts = conflicts;
+    if (hasStaleConflicts) {
+      result.conflicts = staleConflicts;
     }
     return successResponse(JSON.stringify(result, null, 2));
   }
@@ -214,10 +261,10 @@ export async function handleResolveTeamPublicTerm(
   const suggestions = buildSuggestions(allEntries, term);
 
   // If there are stale entries and they're the only ones with anything related
-  if (hasConflicts && suggestions.length === 0) {
+  if (hasStaleConflicts && suggestions.length === 0) {
     const result: ResolveResult = {
       status: 'conflict',
-      conflicts,
+      conflicts: staleConflicts,
     };
     return successResponse(JSON.stringify(result, null, 2));
   }
@@ -226,8 +273,8 @@ export async function handleResolveTeamPublicTerm(
     status: 'not_found',
     suggestions,
   };
-  if (hasConflicts) {
-    result.conflicts = conflicts;
+  if (hasStaleConflicts) {
+    result.conflicts = staleConflicts;
   }
   return successResponse(JSON.stringify(result, null, 2));
 }

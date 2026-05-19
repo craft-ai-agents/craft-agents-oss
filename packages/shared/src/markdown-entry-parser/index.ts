@@ -29,6 +29,7 @@ export interface MarkdownEntryMetadata {
 export interface ExplicitMarker {
   kind: MarkdownEntryKind;
   metadata: MarkdownEntryMetadata;
+  explicit?: boolean;
   title?: string;
   summary?: string;
   term?: string;
@@ -41,6 +42,7 @@ export interface ExplicitMarker {
 export interface MarkdownEntry {
   kind: MarkdownEntryKind;
   metadata: MarkdownEntryMetadata;
+  explicit: boolean;
   title?: string;
   summary?: string;
   term?: string;
@@ -193,7 +195,7 @@ function processMarkedSection(
       .map(l => l.trim());
     const content = contentLines.join('\n').replace(/^\n+|\n+$/g, '');
 
-    entries.push(buildEntry(marker, content, headingPath, options));
+    entries.push(buildEntry({ ...marker, explicit: true }, content, headingPath, options));
   }
 
   return entries;
@@ -349,6 +351,7 @@ function buildEntry(
   const entry: MarkdownEntry = {
     kind: marker.kind,
     metadata: marker.metadata,
+    explicit: marker.explicit === true,
     title: marker.title,
     summary: marker.summary,
     term: marker.term,
