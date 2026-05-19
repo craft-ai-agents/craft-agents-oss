@@ -1,6 +1,7 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, synthesizeEnvConnection, ENV_CONNECTION_SLUG, type EnvConnectionEnv, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { SsoCredentialStore } from '@craft-agent/shared/auth'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
 import {
   resolveSetupTestConnectionHint,
@@ -10,13 +11,10 @@ import {
 import { getModelRefreshService } from '@craft-agent/server-core/model-fetchers'
 import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput, setupTestRequiresApiKey, resolveCustomEndpointSetup } from '@craft-agent/server-core/domain'
 import { getWorkspaceOrThrow, buildBackendHostRuntimeContext } from '@craft-agent/server-core/handlers'
-import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
+import { type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
-import { randomUUID } from 'node:crypto'
-import { CLIENT_OPEN_EXTERNAL } from '@craft-agent/server-core/transport'
 
-// Local OAuth state
-let copilotOAuthAbort: AbortController | null = null
+export { ENV_CONNECTION_SLUG } from '@craft-agent/shared/config'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.LIST,
@@ -29,21 +27,38 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.SET_DEFAULT,
   RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT,
   RPC_CHANNELS.llmConnections.REFRESH_MODELS,
-  RPC_CHANNELS.chatgpt.START_OAUTH,
-  RPC_CHANNELS.chatgpt.COMPLETE_OAUTH,
-  RPC_CHANNELS.chatgpt.CANCEL_OAUTH,
-  RPC_CHANNELS.chatgpt.GET_AUTH_STATUS,
-  RPC_CHANNELS.chatgpt.LOGOUT,
-  RPC_CHANNELS.copilot.START_OAUTH,
-  RPC_CHANNELS.copilot.CANCEL_OAUTH,
-  RPC_CHANNELS.copilot.GET_AUTH_STATUS,
-  RPC_CHANNELS.copilot.LOGOUT,
   RPC_CHANNELS.settings.SETUP_LLM_CONNECTION,
   RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP,
   RPC_CHANNELS.pi.GET_API_KEY_PROVIDERS,
   RPC_CHANNELS.pi.GET_PROVIDER_BASE_URL,
   RPC_CHANNELS.pi.GET_PROVIDER_MODELS,
 ] as const
+
+/** Return the shared error result for attempted Environment connection mutations. */
+export function rejectEnvironmentConnectionMutation(): { success: false; error: string } {
+  return {
+    success: false,
+    error: 'The Environment connection is managed by process environment variables and cannot be modified.',
+  }
+}
+
+/** Return true when a connection slug targets the reserved Environment connection. */
+export function isEnvironmentConnectionSlug(slug: string): boolean {
+  return slug === ENV_CONNECTION_SLUG
+}
+
+/** Build the UI-facing Environment connection when an active SSO token is available. */
+export function synthesizeEnvConnectionWithStatus(env: EnvConnectionEnv, activeSsoToken: string | undefined): LlmConnectionWithStatus | null {
+  const envConnection = activeSsoToken ? synthesizeEnvConnection(env) : null
+  if (!envConnection) return null
+
+  return {
+    ...envConnection,
+    isAuthenticated: true,
+    isDefault: true,
+    isEnvironmentConnection: true,
+  }
+}
 
 export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerDeps): void {
   const { sessionManager } = deps
@@ -394,7 +409,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     const credentialManager = getCredentialManager()
     const defaultSlug = getDefaultLlmConnection()
 
-    return Promise.all(connections.map(async (conn): Promise<LlmConnectionWithStatus> => {
+    const persistedConnections = await Promise.all(connections.map(async (conn): Promise<LlmConnectionWithStatus> => {
       // Check if credentials exist for this connection
       const hasCredentials = await credentialManager.hasLlmCredentials(conn.slug, conn.authType)
       return {
@@ -403,6 +418,24 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         isDefault: conn.slug === defaultSlug,
       }
     }))
+
+    let ssoToken: string | undefined
+    try {
+      const ssoSession = await new SsoCredentialStore().load()
+      if (ssoSession?.token && ssoSession.expiresAt > Date.now()) {
+        ssoToken = ssoSession.token
+      }
+    } catch (error) {
+      deps.platform.logger?.warn(`Failed to load SSO session for Environment connection: ${error instanceof Error ? error.message : error}`)
+    }
+
+    const envConnection = synthesizeEnvConnectionWithStatus({
+      LLM_BASE_URL: process.env.LLM_BASE_URL,
+      LLM_MODEL: process.env.LLM_MODEL,
+    }, ssoToken)
+    if (!envConnection) return persistedConnections
+
+    return [envConnection, ...persistedConnections]
   })
 
   // Get a specific LLM connection by slug
@@ -426,6 +459,10 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // If connection.slug exists and is found, updates it; otherwise creates new
   server.handle(RPC_CHANNELS.llmConnections.SAVE, async (_ctx, connection: LlmConnection): Promise<{ success: boolean; error?: string }> => {
     try {
+      if (isEnvironmentConnectionSlug(connection.slug)) {
+        return rejectEnvironmentConnectionMutation()
+      }
+
       // Check if this is an update or create
       const existing = getLlmConnection(connection.slug)
       if (existing) {
@@ -470,6 +507,10 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // Delete an LLM connection (at least one connection must remain)
   server.handle(RPC_CHANNELS.llmConnections.DELETE, async (_ctx, slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      if (isEnvironmentConnectionSlug(slug)) {
+        return rejectEnvironmentConnectionMutation()
+      }
+
       const connection = getLlmConnection(slug)
       if (!connection) {
         return { success: false, error: 'Connection not found' }
@@ -524,6 +565,10 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // Set global default LLM connection
   server.handle(RPC_CHANNELS.llmConnections.SET_DEFAULT, async (_ctx, slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      if (isEnvironmentConnectionSlug(slug)) {
+        return rejectEnvironmentConnectionMutation()
+      }
+
       const success = setDefaultLlmConnection(slug)
       if (success) {
         deps.platform.logger?.info(`Global default LLM connection set to: ${slug}`)
@@ -590,260 +635,4 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     }
   })
 
-  // ============================================================
-  // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
-  // Server-owned: prepare + exchange happen here, browser + callback on client.
-  // ============================================================
-
-  interface PendingChatGptFlow {
-    flowId: string
-    state: string
-    codeVerifier: string
-    connectionSlug: string
-    ownerClientId: string
-    createdAt: number
-  }
-  const pendingChatGptFlows = new Map<string, PendingChatGptFlow>()
-  const CHATGPT_FLOW_TTL_MS = 5 * 60 * 1000
-
-  function cleanupExpiredChatGptFlows() {
-    const now = Date.now()
-    for (const [state, flow] of pendingChatGptFlows) {
-      if (now - flow.createdAt > CHATGPT_FLOW_TTL_MS) {
-        pendingChatGptFlows.delete(state)
-      }
-    }
-  }
-
-  // chatgpt:startOAuth — prepare PKCE + auth URL, store flow, return to client
-  server.handle(RPC_CHANNELS.chatgpt.START_OAUTH, async (ctx, connectionSlug: string): Promise<{
-    authUrl: string
-    state: string
-    flowId: string
-  }> => {
-    cleanupExpiredChatGptFlows()
-    const { prepareChatGptOAuth } = await import('@craft-agent/shared/auth')
-
-    const prepared = prepareChatGptOAuth()
-    const flowId = randomUUID()
-
-    pendingChatGptFlows.set(prepared.state, {
-      flowId,
-      state: prepared.state,
-      codeVerifier: prepared.codeVerifier,
-      connectionSlug,
-      ownerClientId: ctx.clientId,
-      createdAt: Date.now(),
-    })
-
-    deps.platform.logger?.info(`[ChatGPT OAuth] Flow started for ${connectionSlug} (flow=${flowId})`)
-    return { authUrl: prepared.authUrl, state: prepared.state, flowId }
-  })
-
-  // chatgpt:completeOAuth — exchange code for tokens and store credentials
-  server.handle(RPC_CHANNELS.chatgpt.COMPLETE_OAUTH, async (ctx, args: {
-    flowId: string
-    code: string
-    state: string
-  }): Promise<{ success: boolean; error?: string }> => {
-    const { flowId, code, state } = args
-    const flow = pendingChatGptFlows.get(state)
-
-    if (!flow) throw new Error('Unknown or expired ChatGPT OAuth flow')
-    if (flow.flowId !== flowId) throw new Error('Flow ID mismatch')
-    if (flow.ownerClientId !== ctx.clientId) throw new Error('OAuth flow owned by different client')
-    if (Date.now() - flow.createdAt > CHATGPT_FLOW_TTL_MS) {
-      pendingChatGptFlows.delete(state)
-      throw new Error('ChatGPT OAuth flow expired')
-    }
-
-    try {
-      const { exchangeChatGptTokens } = await import('@craft-agent/shared/auth')
-      const credentialManager = getCredentialManager()
-
-      const tokens = await exchangeChatGptTokens(code, flow.codeVerifier)
-
-      await credentialManager.setLlmOAuth(flow.connectionSlug, {
-        accessToken: tokens.accessToken,
-        idToken: tokens.idToken,
-        refreshToken: tokens.refreshToken,
-        expiresAt: tokens.expiresAt,
-      })
-
-      pendingChatGptFlows.delete(state)
-      deps.platform.logger?.info(`[ChatGPT OAuth] Flow complete for ${flow.connectionSlug}`)
-      return { success: true }
-    } catch (error) {
-      pendingChatGptFlows.delete(state)
-      deps.platform.logger?.error('[ChatGPT OAuth] Token exchange failed:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Token exchange failed',
-      }
-    }
-  })
-
-  // Cancel ongoing ChatGPT OAuth flow
-  server.handle(RPC_CHANNELS.chatgpt.CANCEL_OAUTH, async (ctx, args?: { state?: string }): Promise<{ success: boolean }> => {
-    if (args?.state) {
-      const flow = pendingChatGptFlows.get(args.state)
-      if (flow && flow.ownerClientId === ctx.clientId) {
-        pendingChatGptFlows.delete(args.state)
-        deps.platform.logger?.info(`[ChatGPT OAuth] Flow cancelled for ${flow.connectionSlug}`)
-      }
-    }
-    return { success: true }
-  })
-
-  // Get ChatGPT authentication status
-  server.handle(RPC_CHANNELS.chatgpt.GET_AUTH_STATUS, async (_ctx, connectionSlug: string): Promise<{
-    authenticated: boolean
-    expiresAt?: number
-    hasRefreshToken?: boolean
-  }> => {
-    try {
-      const credentialManager = getCredentialManager()
-      const creds = await credentialManager.getLlmOAuth(connectionSlug)
-
-      if (!creds) {
-        return { authenticated: false }
-      }
-
-      // Check if expired (with 5-minute buffer)
-      const isExpired = creds.expiresAt && Date.now() > creds.expiresAt - 5 * 60 * 1000
-
-      return {
-        authenticated: !isExpired || !!creds.refreshToken, // Can refresh if has refresh token
-        expiresAt: creds.expiresAt,
-        hasRefreshToken: !!creds.refreshToken,
-      }
-    } catch (error) {
-      deps.platform.logger?.error('Failed to get ChatGPT auth status:', error)
-      return { authenticated: false }
-    }
-  })
-
-  // Logout from ChatGPT (clear stored tokens)
-  server.handle(RPC_CHANNELS.chatgpt.LOGOUT, async (_ctx, connectionSlug: string): Promise<{ success: boolean }> => {
-    try {
-      const credentialManager = getCredentialManager()
-      await credentialManager.deleteLlmCredentials(connectionSlug)
-      deps.platform.logger?.info('ChatGPT credentials cleared')
-      return { success: true }
-    } catch (error) {
-      deps.platform.logger?.error('Failed to clear ChatGPT credentials:', error)
-      return { success: false }
-    }
-  })
-
-  // ============================================================
-  // GitHub Copilot OAuth
-  // ============================================================
-
-  // Start GitHub Copilot OAuth flow (device flow via Pi SDK)
-  server.handle(RPC_CHANNELS.copilot.START_OAUTH, async (ctx, connectionSlug: string): Promise<{
-    success: boolean
-    error?: string
-  }> => {
-    try {
-      const { loginGitHubCopilot } = await import('@mariozechner/pi-ai/oauth')
-      const credentialManager = getCredentialManager()
-
-      // Cancel any previous in-flight flow
-      copilotOAuthAbort?.abort()
-      copilotOAuthAbort = new AbortController()
-
-      deps.platform.logger?.info(`Starting GitHub Copilot OAuth device flow for connection: ${connectionSlug}`)
-
-      // Use Pi SDK's login flow — this handles the device code flow AND
-      // the critical Copilot token exchange that determines the correct
-      // API endpoint for the user's subscription tier (individual/business/enterprise).
-      const credentials = await loginGitHubCopilot({
-        onAuth: (url, instructions) => {
-          // Extract user code from instructions (format: "Enter code: XXXX-YYYY")
-          const codeMatch = instructions?.match(/:\s*(\S+)/)
-          const userCode = codeMatch?.[1] ?? ''
-          deps.platform.logger?.info(`[GitHub OAuth] Device code: ${userCode}`)
-          pushTyped(server, RPC_CHANNELS.copilot.DEVICE_CODE, { to: 'client', clientId: ctx.clientId }, {
-            userCode,
-            verificationUri: url,
-          })
-          // Open GitHub device code page on the client's machine
-          server.invokeClient(ctx.clientId, CLIENT_OPEN_EXTERNAL, url).catch(err => {
-            deps.platform.logger?.warn(`Failed to open browser for GitHub OAuth: ${err}`)
-          })
-        },
-        onPrompt: async () => {
-          // Pi SDK asks for GitHub Enterprise domain — return empty for github.com
-          return ''
-        },
-        onProgress: (message) => {
-          deps.platform.logger?.info(`[GitHub OAuth] ${message}`)
-        },
-        signal: copilotOAuthAbort.signal,
-      })
-
-      copilotOAuthAbort = null
-
-      // Store the full OAuth credential:
-      // - accessToken = Copilot API token (contains proxy-ep for correct endpoint)
-      // - refreshToken = GitHub access token (used to refresh the Copilot token)
-      // - expiresAt = Copilot token expiry (short-lived, ~1 hour)
-      await credentialManager.setLlmOAuth(connectionSlug, {
-        accessToken: credentials.access,
-        refreshToken: credentials.refresh,
-        expiresAt: credentials.expires,
-      })
-
-      deps.platform.logger?.info('GitHub Copilot OAuth completed successfully')
-      return { success: true }
-    } catch (error) {
-      copilotOAuthAbort = null
-      deps.platform.logger?.error('GitHub Copilot OAuth failed:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'OAuth authentication failed',
-      }
-    }
-  })
-
-  // Cancel ongoing GitHub OAuth flow
-  server.handle(RPC_CHANNELS.copilot.CANCEL_OAUTH, async (): Promise<{ success: boolean }> => {
-    if (copilotOAuthAbort) {
-      copilotOAuthAbort.abort()
-      copilotOAuthAbort = null
-      deps.platform.logger?.info('GitHub Copilot OAuth cancelled')
-    }
-    return { success: true }
-  })
-
-  // Get GitHub Copilot authentication status
-  server.handle(RPC_CHANNELS.copilot.GET_AUTH_STATUS, async (_ctx, connectionSlug: string): Promise<{
-    authenticated: boolean
-  }> => {
-    try {
-      const credentialManager = getCredentialManager()
-      const creds = await credentialManager.getLlmOAuth(connectionSlug)
-
-      return {
-        authenticated: !!creds?.accessToken,
-      }
-    } catch (error) {
-      deps.platform.logger?.error('Failed to get GitHub auth status:', error)
-      return { authenticated: false }
-    }
-  })
-
-  // Logout from Copilot (clear stored tokens)
-  server.handle(RPC_CHANNELS.copilot.LOGOUT, async (_ctx, connectionSlug: string): Promise<{ success: boolean }> => {
-    try {
-      const credentialManager = getCredentialManager()
-      await credentialManager.deleteLlmCredentials(connectionSlug)
-      deps.platform.logger?.info('Copilot credentials cleared')
-      return { success: true }
-    } catch (error) {
-      deps.platform.logger?.error('Failed to clear Copilot credentials:', error)
-      return { success: false }
-    }
-  })
 }

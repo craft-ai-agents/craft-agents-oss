@@ -203,7 +203,6 @@ import type {
   GitBashStatus,
   GitCommit,
   GitStatusEntry,
-  ClaudeOAuthResult,
   UpdateInfo,
   WorkspaceSettings,
   PermissionModeState,
@@ -393,11 +392,6 @@ export interface ElectronAPI {
   getAuthState(): Promise<AuthState>
   getSetupNeeds(): Promise<SetupNeeds>
   startWorkspaceMcpOAuth(mcpUrl: string): Promise<OAuthResult & { clientId?: string }>
-  // Claude OAuth (two-step flow)
-  startClaudeOAuth(): Promise<{ success: boolean; authUrl?: string; error?: string }>
-  exchangeClaudeCode(code: string, connectionSlug: string): Promise<ClaudeOAuthResult>
-  hasClaudeOAuthState(): Promise<boolean>
-  clearClaudeOAuthState(): Promise<{ success: boolean }>
   /** Defer onboarding setup — user chose "Setup later" */
   deferSetup(): Promise<{ success: boolean }>
   getSsoSession(): Promise<PublicSsoSessionState>
@@ -406,19 +400,6 @@ export interface ElectronAPI {
   handleSsoCallback(payload: { code: string; state?: string }): Promise<{ success: boolean; error?: string }>
   onSsoLoginResult(callback: (result: { success: boolean; error?: string }) => void): () => void
   logoutSso(): Promise<{ success: true }>
-
-  // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
-  startChatGptOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
-  cancelChatGptOAuth(): Promise<{ success: boolean }>
-  getChatGptAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean; expiresAt?: number; hasRefreshToken?: boolean }>
-  chatGptLogout(connectionSlug: string): Promise<{ success: boolean }>
-
-  // GitHub Copilot OAuth
-  startCopilotOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
-  cancelCopilotOAuth(): Promise<{ success: boolean }>
-  getCopilotAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean }>
-  copilotLogout(connectionSlug: string): Promise<{ success: boolean }>
-  onCopilotDeviceCode(callback: (data: { userCode: string; verificationUri: string }) => void): () => void
 
   /** Unified LLM connection setup */
   setupLlmConnection(setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>

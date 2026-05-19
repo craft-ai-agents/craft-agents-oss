@@ -33,6 +33,7 @@ import type { ThinkingLevel } from './thinking-levels.ts';
 
 // Import models from centralized registry
 import { getModelById } from '../config/models.ts';
+import { ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR } from '../config/llm-connections.ts';
 
 // BaseAgent provides common functionality
 import { BaseAgent } from './base-agent.ts';
@@ -411,23 +412,12 @@ export class PiAgent extends BaseAgent {
       this.debug('Custom endpoint mode: no provider credential configured, sending empty API key');
     }
 
-    // Derive AWS env vars from the piAuth credential (single fetch, no race).
-    const awsEnv = this.buildAwsEnv(piAuth, runtime);
+    const subprocessEnv = this.buildSubprocessEnv(piAuth, runtime, sessionDir);
 
-    // Spawn the subprocess
     const child = spawn(nodePath, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        ...getProxyEnvVars(),
-        ...this.config.envOverrides,
-        ...awsEnv,
-        // Pass session dir for cross-process toolMetadataStore
-        ...(sessionDir ? { CRAFT_SESSION_DIR: sessionDir } : {}),
-        // Propagate debug mode
-        CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
-      },
+      env: subprocessEnv,
     });
 
     this.subprocess = child;
@@ -677,6 +667,28 @@ export class PiAgent extends BaseAgent {
     return env;
   }
 
+  private buildSubprocessEnv(
+    piAuth: Awaited<ReturnType<PiAgent['getPiAuth']>>,
+    runtime: { piAuthProvider?: string },
+    sessionDir?: string,
+  ): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...getProxyEnvVars(),
+      ...this.config.envOverrides,
+      ...this.buildAwsEnv(piAuth, runtime),
+      // Pass session dir for cross-process toolMetadataStore
+      ...(sessionDir ? { CRAFT_SESSION_DIR: sessionDir } : {}),
+      // Propagate debug mode
+      CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+    };
+
+    if (!this.config.envOverrides?.[ENV_CONNECTION_SSO_TOKEN_ENV_VAR]) delete env[ENV_CONNECTION_SSO_TOKEN_ENV_VAR];
+    if (!this.config.envOverrides?.[ENV_CONNECTION_SSO_BASE_URL_ENV_VAR]) delete env[ENV_CONNECTION_SSO_BASE_URL_ENV_VAR];
+
+    return env;
+  }
+
   /**
    * Refresh OAuth tokens and push updated credentials to the running subprocess.
    * Handles both Copilot (Pi SDK) and ChatGPT Plus token refresh.
@@ -918,6 +930,12 @@ export class PiAgent extends BaseAgent {
         if (msg.sessionId) {
           this.piSessionId = msg.sessionId as string;
           this.config.onSdkSessionIdUpdate?.(this.piSessionId!);
+        }
+        break;
+
+      case 'sso_token_expired':
+        if (msg.signal === 'SSO_TOKEN_EXPIRED') {
+          this.eventQueue.enqueue({ type: 'error', message: 'SSO_TOKEN_EXPIRED' });
         }
         break;
 

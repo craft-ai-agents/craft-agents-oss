@@ -294,40 +294,6 @@ export function createWebApi(options: WebApiOptions): {
         }
       }
     },
-
-    // Claude OAuth — server returns authUrl, we open it in a new tab.
-    // Same iOS-safe pre-open pattern as `performOAuth` above.
-    startClaudeOAuth: async () => {
-      const popup = window.open('about:blank', '_blank')
-      try {
-        const result = await client.invoke('onboarding:startClaudeOAuth')
-        if (result.success && result.authUrl) {
-          if (popup && !popup.closed) {
-            popup.location.href = result.authUrl
-          } else {
-            window.location.href = result.authUrl
-          }
-        } else if (popup && !popup.closed) {
-          // No auth URL — close the placeholder we opened on the click.
-          popup.close()
-        }
-        return result
-      } catch (err) {
-        if (popup && !popup.closed) popup.close()
-        return {
-          success: false,
-          error: err instanceof Error ? err.message : 'Claude OAuth failed',
-        }
-      }
-    },
-
-    // ChatGPT OAuth — requires localhost callback server, not possible in browser
-    startChatGptOAuth: async () => {
-      return {
-        success: false,
-        error: i18n.t('errors.chatGptOAuthNotAvailable'),
-      }
-    },
   }
 
   const api = { ...baseApi, ...webOverrides, ...oauthOverrides } as ElectronAPI
