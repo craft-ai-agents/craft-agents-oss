@@ -227,22 +227,14 @@ describe('parseMcpJsonImportCandidates', () => {
         key: 'remote',
         mcp: {
           transport: 'streamable_http',
+          authType: 'bearer',
           url: 'https://example.com/mcp',
           headers: {
-            Authorization: '••••••••',
             'X-API-Key': '••••••••',
             'X-Trace-ID': 'trace-123',
           },
         },
         secrets: [
-          {
-            id: 'remote:header:Authorization',
-            location: 'header',
-            name: 'Authorization',
-            value: 'Bearer secret-token',
-            previewValue: '••••••••',
-            handling: 'credential-store',
-          },
           {
             id: 'remote:header:X-API-Key',
             location: 'header',
@@ -273,19 +265,15 @@ describe('parseMcpJsonImportCandidates', () => {
       },
     });
 
+    // Authorization: Bearer xxx is auto-detected as bearer auth — removed from headers preview
     expect(result.candidates[0]?.input.mcp?.headers).toEqual({
-      Authorization: '••••••••',
       'X-API-Key': 'api-key-123',
     });
+    // Authorization secret is replaced by a bearer credential
+    expect(result.candidates[0]?.credential).toEqual({ value: 'secret-token' });
+    expect(result.candidates[0]?.input.mcp?.authType).toBe('bearer');
+    // Only the config-handled X-API-Key secret remains
     expect(result.candidates[0]?.secrets).toEqual([
-      {
-        id: 'remote:header:Authorization',
-        location: 'header',
-        name: 'Authorization',
-        value: 'Bearer secret-token',
-        previewValue: '••••••••',
-        handling: 'credential-store',
-      },
       {
         id: 'remote:header:X-API-Key',
         location: 'header',
@@ -525,17 +513,16 @@ describe('createMcpSourcesFromCandidates', () => {
       ]);
       expect(savedCredentials).toHaveLength(1);
       expect(savedCredentials[0]?.source.config.slug).toBe('linear');
-      expect(savedCredentials[0]?.credential.value).toBe(JSON.stringify({ Authorization: 'Bearer lin_secret' }));
+      expect(savedCredentials[0]?.credential.value).toBe('lin_secret');
 
       const config = loadSourceConfig(workspaceRootPath, 'linear');
       expect(config?.type).toBe('mcp');
       expect(config?.tagline).toBe('Issue tracking for product work.');
       expect(config?.mcp).toEqual({
         transport: 'streamable_http',
-        authType: 'none',
+        authType: 'bearer',
         url: 'https://mcp.linear.app/mcp',
         headers: { 'X-Trace-ID': 'trace-123' },
-        headerNames: ['Authorization'],
       });
 
       const guide = loadSourceGuide(workspaceRootPath, 'linear');

@@ -671,7 +671,56 @@ function buildCandidate(key: string, server: unknown, options: McpImportParseOpt
   if (secrets.length > 0) {
     candidate.secrets = secrets;
   }
+
+  // Auto-detect bearer auth from Authorization header
+  extractBearerAuthFromSecrets(candidate);
+
   return candidate;
+}
+
+/**
+ * Detect Authorization: Bearer xxx pattern in parsed secrets and convert to
+ * proper bearer authType with a credential. Strips the "Bearer " prefix from
+ * the stored token so it can be used directly as a bearer credential.
+ */
+function extractBearerAuthFromSecrets(candidate: McpImportCandidate): void {
+  const secrets = candidate.secrets;
+  if (!secrets || secrets.length === 0) return;
+
+  const authSecretIndex = secrets.findIndex(
+    (s) => s.location === 'header' && s.name.toLowerCase() === 'authorization',
+  );
+  if (authSecretIndex === -1) return;
+
+  const authSecret = secrets[authSecretIndex];
+  const bearerMatch = authSecret.value.match(/^Bearer\s+(.+)$/i);
+  if (!bearerMatch) return;
+
+  const token = bearerMatch[1];
+  if (!token) return;
+
+  // Set authType to bearer and store the raw token as a credential
+  const mcp = candidate.input.mcp;
+  if (mcp) {
+    mcp.authType = 'bearer';
+  }
+  candidate.credential = { value: token };
+
+  // Remove Authorization header from preview (bearer auth handles it)
+  if (mcp?.headers) {
+    for (const key of Object.keys(mcp.headers)) {
+      if (key.toLowerCase() === 'authorization') {
+        delete mcp.headers[key];
+      }
+    }
+    if (Object.keys(mcp.headers).length === 0) {
+      delete mcp.headers;
+    }
+  }
+
+  // Remove the Authorization secret (bearer auth handles it)
+  const remaining = secrets.filter((_, i) => i !== authSecretIndex);
+  candidate.secrets = remaining.length > 0 ? remaining : undefined;
 }
 
 async function createMcpSourceFromCandidate(
