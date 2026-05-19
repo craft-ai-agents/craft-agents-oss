@@ -16,11 +16,11 @@ import { ANTHROPIC_MODELS, getModelDisplayName, getModelContextWindow, getModelS
 
 describe('synthesizeEnvConnection', () => {
   it('returns null when LLM_BASE_URL is absent', () => {
-    expect(synthesizeEnvConnection({}, undefined)).toBeNull()
+    expect(synthesizeEnvConnection({})).toBeNull()
   })
 
   it('returns the Environment connection shape when LLM_BASE_URL is set', () => {
-    expect(synthesizeEnvConnection({ LLM_BASE_URL: 'http://localhost:11434/v1' }, undefined)).toEqual({
+    expect(synthesizeEnvConnection({ LLM_BASE_URL: 'http://localhost:11434/v1' })).toEqual({
       slug: 'env-provider',
       name: 'Environment',
       providerType: 'pi_compat',
@@ -38,7 +38,7 @@ describe('synthesizeEnvConnection', () => {
     const conn = synthesizeEnvConnection({
       LLM_BASE_URL: 'https://llm.example.test/v1',
       LLM_MODEL: 'gpt-oss-120b',
-    }, undefined)
+    })
 
     expect(conn?.models).toEqual(['gpt-oss-120b'])
     expect(conn?.defaultModel).toBe('gpt-oss-120b')
@@ -48,7 +48,7 @@ describe('synthesizeEnvConnection', () => {
     const conn = synthesizeEnvConnection({
       LLM_BASE_URL: 'https://api.anthropic.com/v1/messages',
       LLM_MODEL: 'claude-sonnet-4-6',
-    }, undefined)
+    })
 
     expect(conn?.providerType).toBe('pi_compat')
   })

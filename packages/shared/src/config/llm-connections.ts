@@ -236,16 +236,12 @@ export const ENV_CONNECTION_SLUG = 'env-provider';
 /**
  * Build the reserved Environment connection from process environment values.
  *
- * Pure source of truth for the env-backed connection shape. The SSO token is
- * accepted for caller parity but is intentionally not used: this connection
+ * Pure source of truth for the env-backed connection shape. This connection
  * never stores or derives credentials.
  */
 export function synthesizeEnvConnection(
   env: EnvConnectionEnv,
-  ssoToken: unknown,
 ): LlmConnection | null {
-  void ssoToken;
-
   const baseUrl = env.LLM_BASE_URL;
   if (baseUrl === undefined) return null;
 

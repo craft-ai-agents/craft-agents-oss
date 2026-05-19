@@ -49,7 +49,7 @@ export function isEnvironmentConnectionSlug(slug: string): boolean {
 
 /** Build the UI-facing Environment connection when an active SSO token is available. */
 export function synthesizeEnvConnectionWithStatus(env: EnvConnectionEnv, activeSsoToken: string | undefined): LlmConnectionWithStatus | null {
-  const envConnection = activeSsoToken ? synthesizeEnvConnection(env, activeSsoToken) : null
+  const envConnection = activeSsoToken ? synthesizeEnvConnection(env) : null
   if (!envConnection) return null
 
   return {

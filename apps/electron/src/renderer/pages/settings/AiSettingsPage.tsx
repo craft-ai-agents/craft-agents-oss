@@ -197,6 +197,7 @@ interface ConnectionRowProps {
   validationError?: string
 }
 
+/** Sort Settings AI connections with env-backed connections pinned before defaults. */
 export function sortLlmConnectionsForSettings(connections: LlmConnectionWithStatus[]): LlmConnectionWithStatus[] {
   return [...connections].sort((a, b) => {
     if (a.isEnvironmentConnection && !b.isEnvironmentConnection) return -1
@@ -207,6 +208,7 @@ export function sortLlmConnectionsForSettings(connections: LlmConnectionWithStat
   })
 }
 
+/** Render one Settings AI connection row with actions or an env read-only badge. */
 export function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
