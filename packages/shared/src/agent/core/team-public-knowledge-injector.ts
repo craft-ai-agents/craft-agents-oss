@@ -18,7 +18,7 @@ export interface PrefetchEntry {
   updatedAt: number;
 }
 
-export interface TriggerTermEntry {
+interface TriggerTermEntry {
   term: string;
   kind: MarkdownEntryKind;
   priority: number;
@@ -96,8 +96,6 @@ ${entryBlocks.join('\n')}
 </reference_data>`;
 }
 
-// ── Internal helpers ────────────────────────────────────────────
-
 function parseAllFilteredEntries(entries: TeamPublicKnowledgeCacheEntry[]): MarkdownEntry[] {
   const result: MarkdownEntry[] = [];
   for (const entry of entries) {
@@ -145,7 +143,7 @@ function buildNormalizedTermIndex(parsed: MarkdownEntry[]): Map<string, TermInde
       normalizedTerm: normalized,
       kind: entry.kind,
       summary: entry.summary ?? entry.content.slice(0, 200),
-      source: entry.sourceTitle ?? entry.headingPath.join(' > ') ?? '',
+      source: entry.sourceTitle ?? entry.headingPath.join(' > '),
       updatedAt: entry.updatedAt ?? 0,
     };
 
@@ -173,8 +171,6 @@ function scanMessageForMatches(
     for (const entry of entries) {
       if (results.length >= MAX_PREFETCH) break;
 
-      // Check if the normalized message contains the exact normalized term
-      // using word boundary or substring matching
       const confidence = computeMatchConfidence(normalizedMessage, entry.normalizedTerm);
       if (confidence <= 0) continue;
 
@@ -189,7 +185,6 @@ function scanMessageForMatches(
     }
   }
 
-  // Sort by confidence descending, then by updatedAt descending (newer first)
   results.sort((a, b) => b.confidence - a.confidence || b.updatedAt - a.updatedAt);
 
   return results.slice(0, MAX_PREFETCH);
@@ -198,14 +193,11 @@ function scanMessageForMatches(
 function computeMatchConfidence(normalizedMessage: string, normalizedTerm: string): number {
   if (normalizedTerm.length === 0) return 0;
 
-  // Exact match of the whole message
   if (normalizedMessage === normalizedTerm) return 1;
 
-  // Word-boundary match: term appears as a complete word in the message
   const wordBoundary = new RegExp(`\\b${escapeRegex(normalizedTerm)}\\b`);
   if (wordBoundary.test(normalizedMessage)) return 1;
 
-  // Substring match within the message (for multi-word terms or partials)
   if (normalizedMessage.includes(normalizedTerm)) return 0.9;
 
   return 0;
