@@ -191,14 +191,13 @@ interface ConnectionRowProps {
   onDelete: () => void
   onSetDefault: () => void
   onValidate: () => void
-  onReauthenticate: () => void
   onEdit: () => void
   onSetMidStreamBehavior: (behavior: MidStreamBehavior) => void
   validationState: ValidationState
   validationError?: string
 }
 
-function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
+function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
@@ -314,17 +313,10 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
               <span>{t("settings.ai.setAsDefault")}</span>
             </StyledDropdownMenuItem>
           )}
-          {connection.authType === 'oauth' ? (
-            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onReauthenticate)}>
-              <RefreshCcw className="h-3.5 w-3.5" />
-              <span>{t("settings.ai.reAuthenticate")}</span>
-            </StyledDropdownMenuItem>
-          ) : (
-            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
-              <Settings2 className="h-3.5 w-3.5" />
-              <span>{t("common.edit")}</span>
-            </StyledDropdownMenuItem>
-          )}
+          <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
+            <Settings2 className="h-3.5 w-3.5" />
+            <span>{t("common.edit")}</span>
+          </StyledDropdownMenuItem>
           <StyledDropdownMenuItem
             onClick={onValidate}
             disabled={validationState === 'validating'}
@@ -606,7 +598,6 @@ export default function AiSettingsPage() {
   // API Setup overlay state
   const [showApiSetup, setShowApiSetup] = useState(false)
   const [editingConnectionSlug, setEditingConnectionSlug] = useState<string | null>(null)
-  const [isDirectEdit, setIsDirectEdit] = useState(false)
   const [editInitialValues, setEditInitialValues] = useState<{
     apiKey?: string
     baseUrl?: string
@@ -699,7 +690,8 @@ export default function AiSettingsPage() {
 
   // OnboardingWizard hook for editing API connection
   const apiSetupOnboarding = useOnboarding({
-    initialStep: 'provider-select',
+    initialStep: 'credentials',
+    initialApiSetupMethod: 'pi_api_key',
     onConfigSaved: refreshLlmConnections,
     onComplete: () => {
       closeApiSetup()
@@ -720,7 +712,6 @@ export default function AiSettingsPage() {
     apiSetupOnboarding.reset()
     // Clear any credential health issues after successful re-authentication
     setCredentialHealthIssues([])
-    setIsDirectEdit(false)
     setEditInitialValues(undefined)
   }, [closeApiSetup, refreshLlmConnections, apiSetupOnboarding])
 
@@ -728,20 +719,13 @@ export default function AiSettingsPage() {
   const handleCloseApiSetup = useCallback(() => {
     closeApiSetup()
     apiSetupOnboarding.reset()
-    setIsDirectEdit(false)
     setEditInitialValues(undefined)
   }, [closeApiSetup, apiSetupOnboarding])
 
   // Handler for re-authenticate button in credential health banner
   const handleReauthenticate = useCallback(() => {
-    // Open API setup for the default connection (or first connection if available)
-    const defaultConn = llmConnections.find(c => c.isDefault) || llmConnections[0]
-    if (defaultConn) {
-      openApiSetup(defaultConn.slug)
-    } else {
-      openApiSetup()
-    }
-  }, [llmConnections, openApiSetup])
+    openApiSetup()
+  }, [openApiSetup])
 
   // Connection action handlers
   const handleRenameClick = useCallback((connection: LlmConnectionWithStatus) => {
@@ -779,18 +763,6 @@ export default function AiSettingsPage() {
     setRenameValue('')
   }, [renamingConnection, renameValue, refreshLlmConnections])
 
-  const handleReauthenticateConnection = useCallback((connection: LlmConnectionWithStatus) => {
-    openApiSetup(connection.slug)
-    apiSetupOnboarding.reset()
-
-    if (connection.authType === 'oauth') {
-      const method = connection.providerType === 'pi'
-                   ? (connection.piAuthProvider === 'github-copilot' ? 'pi_copilot_oauth' : 'pi_chatgpt_oauth')
-                   : 'claude_oauth'
-      apiSetupOnboarding.handleStartOAuth(method, connection.slug)
-    }
-  }, [apiSetupOnboarding, openApiSetup])
-
   const handleEditConnection = useCallback(async (connection: LlmConnectionWithStatus) => {
     // Fetch stored API key (best-effort — if IPC not available yet, skip pre-fill)
     let apiKey: string | undefined
@@ -823,7 +795,6 @@ export default function AiSettingsPage() {
 
     // Open overlay and jump directly to credentials step (no reset — jumpToCredentials sets state)
     openApiSetup(connection.slug)
-    setIsDirectEdit(true)
     const method = getApiKeyMethodForConnection(connection)
     apiSetupOnboarding.jumpToCredentials(method)
   }, [apiSetupOnboarding, openApiSetup])
@@ -1095,7 +1066,6 @@ export default function AiSettingsPage() {
                         onDelete={() => handleDeleteConnection(conn.slug)}
                         onSetDefault={() => handleSetDefaultConnection(conn.slug)}
                         onValidate={() => handleValidateConnection(conn.slug)}
-                        onReauthenticate={() => handleReauthenticateConnection(conn)}
                         onEdit={() => handleEditConnection(conn)}
                         onSetMidStreamBehavior={(behavior) => handleSetMidStreamBehavior(conn, behavior)}
                         validationState={validationStates[conn.slug]?.state || 'idle'}
@@ -1199,17 +1169,12 @@ export default function AiSettingsPage() {
                 <OnboardingWizard
                   state={apiSetupOnboarding.state}
                   onContinue={apiSetupOnboarding.handleContinue}
-                  onBack={isDirectEdit ? handleCloseApiSetup : apiSetupOnboarding.handleBack}
+                  onBack={handleCloseApiSetup}
                   onSelectProvider={apiSetupOnboarding.handleSelectProvider}
                   onSelectApiSetupMethod={apiSetupOnboarding.handleSelectApiSetupMethod}
                   onSubmitCredential={apiSetupOnboarding.handleSubmitCredential}
                   onSubmitLocalModel={apiSetupOnboarding.handleSubmitLocalModel}
-                  onStartOAuth={apiSetupOnboarding.handleStartOAuth}
                   onFinish={handleApiSetupFinish}
-                  isWaitingForCode={apiSetupOnboarding.isWaitingForCode}
-                  onSubmitAuthCode={apiSetupOnboarding.handleSubmitAuthCode}
-                  onCancelOAuth={apiSetupOnboarding.handleCancelOAuth}
-                  copilotDeviceCode={apiSetupOnboarding.copilotDeviceCode}
                   editInitialValues={editInitialValues}
                   className="h-full"
                 />

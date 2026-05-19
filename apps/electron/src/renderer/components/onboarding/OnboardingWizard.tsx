@@ -41,16 +41,7 @@ interface OnboardingWizardProps {
   onBack: () => void
   onSelectApiSetupMethod: (method: ApiSetupMethod) => void
   onSubmitCredential: (data: ApiKeySubmitData) => void
-  onStartOAuth?: (methodOverride?: ApiSetupMethod) => void
   onFinish: () => void
-
-  // Claude OAuth (two-step flow)
-  isWaitingForCode?: boolean
-  onSubmitAuthCode?: (code: string) => void
-  onCancelOAuth?: () => void
-
-  // Copilot device flow
-  copilotDeviceCode?: { userCode: string; verificationUri: string }
 
   // Git Bash (Windows)
   onBrowseGitBash?: () => Promise<string | null>
@@ -84,8 +75,8 @@ interface OnboardingWizardProps {
  *
  * Manages the step-by-step flow for setting up MDP:
  * 1. Welcome
- * 2. Provider Select (Claude / ChatGPT / Copilot / API Key / Local)
- * 3. Credentials (API Key or OAuth) or Local Model
+ * 2. Provider Select (API Key / Local)
+ * 3. Credentials (API Key) or Local Model
  * 4. Completion
  */
 export function OnboardingWizard({
@@ -94,14 +85,7 @@ export function OnboardingWizard({
   onBack,
   onSelectApiSetupMethod,
   onSubmitCredential,
-  onStartOAuth,
   onFinish,
-  // Two-step OAuth flow
-  isWaitingForCode,
-  onSubmitAuthCode,
-  onCancelOAuth,
-  // Copilot device flow
-  copilotDeviceCode,
   // Git Bash (Windows)
   onBrowseGitBash,
   onUseGitBashPath,
@@ -166,13 +150,8 @@ export function OnboardingWizard({
             status={state.credentialStatus}
             errorMessage={state.errorMessage}
             onSubmit={onSubmitCredential}
-            onStartOAuth={onStartOAuth}
             onBack={onBack}
-            isWaitingForCode={isWaitingForCode}
-            onSubmitAuthCode={onSubmitAuthCode}
             editInitialValues={editInitialValues}
-            onCancelOAuth={onCancelOAuth}
-            copilotDeviceCode={copilotDeviceCode}
           />
         )
 

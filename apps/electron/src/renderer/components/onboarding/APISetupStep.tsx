@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
-import { Check, CreditCard, Key, Cpu } from "lucide-react"
+import { Check, Key } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 import type { LlmAuthType, LlmProviderType } from "@craft-agent/shared/config/llm-connections"
 
@@ -18,17 +18,11 @@ const BetaBadge = ({ label }: { label: string }) => (
  * API setup method for onboarding.
  * Maps to specific LlmProviderType + LlmAuthType combinations.
  *
- * - 'claude_oauth' → anthropic + oauth
  * - 'anthropic_api_key' → anthropic + api_key
- * - 'pi_chatgpt_oauth' → pi + oauth
- * - 'pi_copilot_oauth' → pi + oauth
  * - 'pi_api_key' → pi + api_key
  */
 export type ApiSetupMethod =
   | 'anthropic_api_key'
-  | 'claude_oauth'
-  | 'pi_chatgpt_oauth'
-  | 'pi_copilot_oauth'
   | 'pi_api_key'
 
 /**
@@ -39,14 +33,8 @@ export function apiSetupMethodToConnectionTypes(method: ApiSetupMethod): {
   authType: LlmAuthType;
 } {
   switch (method) {
-    case 'claude_oauth':
-      return { providerType: 'anthropic', authType: 'oauth' };
     case 'anthropic_api_key':
       return { providerType: 'anthropic', authType: 'api_key' };
-    case 'pi_chatgpt_oauth':
-      return { providerType: 'pi', authType: 'oauth' };
-    case 'pi_copilot_oauth':
-      return { providerType: 'pi', authType: 'oauth' };
     case 'pi_api_key':
       return { providerType: 'pi', authType: 'api_key' };
   }
@@ -61,10 +49,7 @@ interface ApiSetupOption {
 }
 
 const API_SETUP_ICONS: Record<ApiSetupMethod, React.ReactNode> = {
-  claude_oauth: <CreditCard className="size-4" />,
   anthropic_api_key: <Key className="size-4" />,
-  pi_chatgpt_oauth: <Cpu className="size-4" />,
-  pi_copilot_oauth: <Cpu className="size-4" />,
   pi_api_key: <Key className="size-4" />,
 }
 
@@ -174,9 +159,8 @@ function ProviderSegmentedControl({
  * APISetupStep - Choose how to connect your AI agents
  *
  * Features a segmented control to filter by provider:
- * - Anthropic - Claude Pro/Max or API Key
- * - OpenAI - ChatGPT Plus/Pro or API Key
- * - GitHub Copilot - Copilot subscription
+ * - Anthropic - API Key
+ * - MDP Backend - API Key
  */
 export function APISetupStep({
   selectedMethod,
@@ -200,32 +184,11 @@ export function APISetupStep({
 
   const API_SETUP_OPTIONS: ApiSetupOption[] = [
     {
-      id: 'claude_oauth',
-      name: t("onboarding.apiSetup.claudeProMax"),
-      description: t("onboarding.apiSetup.claudeProMaxDesc"),
-      icon: API_SETUP_ICONS.claude_oauth,
-      providerType: 'anthropic',
-    },
-    {
       id: 'anthropic_api_key',
       name: t("onboarding.apiSetup.anthropicApiKey"),
       description: t("onboarding.apiSetup.anthropicApiKeyDesc"),
       icon: API_SETUP_ICONS.anthropic_api_key,
       providerType: 'anthropic',
-    },
-    {
-      id: 'pi_chatgpt_oauth',
-      name: 'ChatGPT Plus',
-      description: t("onboarding.apiSetup.chatGPTPlusDesc"),
-      icon: API_SETUP_ICONS.pi_chatgpt_oauth,
-      providerType: 'pi',
-    },
-    {
-      id: 'pi_copilot_oauth',
-      name: 'GitHub Copilot',
-      description: t("onboarding.apiSetup.githubCopilotDesc"),
-      icon: API_SETUP_ICONS.pi_copilot_oauth,
-      providerType: 'pi',
     },
     {
       id: 'pi_api_key',
