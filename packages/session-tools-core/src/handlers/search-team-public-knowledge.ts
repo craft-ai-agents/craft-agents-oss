@@ -178,15 +178,7 @@ export async function handleSearchTeamPublicKnowledge(
     if (staleReason === 'stale_ttl_expired') ttlExpiredDocIds.add(entry.id);
   }
 
-  const conflictTerms = new Map<string, string>();
-  for (const group of groupExactTermMatches(allEntries).values()) {
-    const resolution = resolveTeamKnowledgeMatches(group);
-    if (resolution.status === 'conflict') {
-      for (const entry of group) {
-        conflictTerms.set(entryKey(entry), resolution.conflictReason ?? 'unresolved_conflict');
-      }
-    }
-  }
+  const conflictTerms = buildConflictTermMap(allEntries);
 
   const scored = allEntries
     .map(e => {
@@ -250,6 +242,19 @@ function groupExactTermMatches(entries: MarkdownEntry[]): Map<string, MarkdownEn
     }
   }
   return groups;
+}
+
+function buildConflictTermMap(entries: MarkdownEntry[]): Map<string, string> {
+  const conflictTerms = new Map<string, string>();
+  for (const group of groupExactTermMatches(entries).values()) {
+    const resolution = resolveTeamKnowledgeMatches(group);
+    if (resolution.status !== 'conflict') continue;
+
+    for (const entry of group) {
+      conflictTerms.set(entryKey(entry), resolution.conflictReason ?? 'unresolved_conflict');
+    }
+  }
+  return conflictTerms;
 }
 
 function entryKey(entry: MarkdownEntry): string {

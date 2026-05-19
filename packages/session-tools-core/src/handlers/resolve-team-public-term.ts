@@ -187,11 +187,7 @@ export async function handleResolveTeamPublicTerm(
   }
 
   const staleConflicts = findStaleConflicts(cache);
-  const staleDocIds = new Set(
-    Object.values(cache.entries)
-      .filter(e => getCacheEntryStaleReason(e) === 'document_stale')
-      .map(e => e.id),
-  );
+  const staleDocIds = new Set(staleConflicts.map(c => c.id));
   const ttlExpiredDocIds = new Set<string>();
   const hasStaleConflicts = staleConflicts.length > 0;
 
@@ -199,21 +195,19 @@ export async function handleResolveTeamPublicTerm(
 
   const exactMatches = findExactTermMatches(allEntries, term);
 
-  if (exactMatches.some(e => getMarkdownEntryStaleReason(e, staleDocIds, ttlExpiredDocIds) !== undefined)) {
-    const staleMatches = exactMatches.filter(e => getMarkdownEntryStaleReason(e, staleDocIds, ttlExpiredDocIds) !== undefined);
-    if (staleMatches.length > 0) {
-      const result: ResolveResult = {
-        status: 'conflict',
-        conflicts: staleConflicts,
-        matches: exactMatches.map(e => buildTermMatch(e, staleDocIds, ttlExpiredDocIds)),
-        match: buildTermMatch(staleMatches[0]!, staleDocIds, ttlExpiredDocIds),
-        source: staleMatches[0]!.sourceTitle,
-        confidence: 0.5,
-        relevance: 'low',
-        matchReason: 'Matched entry comes from stale document',
-      };
-      return successResponse(JSON.stringify(result, null, 2));
-    }
+  const staleMatches = exactMatches.filter(e => getMarkdownEntryStaleReason(e, staleDocIds, ttlExpiredDocIds) !== undefined);
+  if (staleMatches.length > 0) {
+    const result: ResolveResult = {
+      status: 'conflict',
+      conflicts: staleConflicts,
+      matches: exactMatches.map(e => buildTermMatch(e, staleDocIds, ttlExpiredDocIds)),
+      match: buildTermMatch(staleMatches[0]!, staleDocIds, ttlExpiredDocIds),
+      source: staleMatches[0]!.sourceTitle,
+      confidence: 0.5,
+      relevance: 'low',
+      matchReason: 'Matched entry comes from stale document',
+    };
+    return successResponse(JSON.stringify(result, null, 2));
   }
 
   if (exactMatches.length > 0) {
