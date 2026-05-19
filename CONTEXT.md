@@ -241,3 +241,17 @@ Avoid: SSO skip, auth bypass, dev mode login.
 The custom URL scheme `mdp://` registered by the Electron app for OS-level deep linking. Replaces the former `craftagents://` scheme entirely. Used for all deep links including the SSO callback (`mdp://sso-callback`), session navigation, and actions.
 
 Avoid: craftagents protocol, custom protocol.
+
+### Environment Connection
+A virtual LLM connection auto-synthesized at startup from environment variables. Not persisted to `config.json`; re-derived on every launch. Appears pinned at the top of Settings → AI with a read-only "Environment" badge — no Edit, Delete, or Rename actions. Always set as the default connection when present.
+
+Required env var: `LLM_BASE_URL` (OpenAI Chat Completions–compatible endpoint). Optional: `LLM_MODEL` (default model name). Requires an active SSO Session; the **Session Token** (`sso.token`) is injected as the bare `Authorization` header on every request (no `Bearer` prefix). A `501` response from the backend signals an expired token and triggers a redirect to the Login Page.
+
+The underlying connection is `providerType: 'pi_compat'`, `authType: 'none'`, `piAuthProvider: 'openai'`. Token injection happens via the network interceptor inside the Pi subprocess, driven by the `CRAFT_LLM_SSO_TOKEN` and `CRAFT_LLM_SSO_BASE_URL` env vars set at subprocess spawn time.
+
+Avoid: env provider, default provider, built-in connection.
+
+### Custom Provider Connection
+A user-configured LLM connection added through Settings → AI → Add Connection. The only user-editable connection type after the removal of OAuth-based flows. Created via a single-step form: provider preset dropdown (Anthropic, OpenAI, Groq, Bedrock, etc.) + API key field + optional base URL. Backed by `providerType: 'anthropic'` or `providerType: 'pi'` depending on the selected preset.
+
+Avoid: API key connection, manual connection.
