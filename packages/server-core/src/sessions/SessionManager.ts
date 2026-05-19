@@ -15,8 +15,10 @@ import {
   cleanupSourceRuntimeArtifacts,
   providerTypeToAgentProvider,
   type AgentBackend,
+  type BackendRuntimeUpdate,
   type BackendHostRuntimeContext,
   type PostInitResult,
+  type ResolvedBackendContext,
 } from '@craft-agent/shared/agent/backend'
 import { ENV_CONNECTION_SLUG, ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
@@ -961,6 +963,32 @@ export function createManagedSession(
   }
 
   return managed
+}
+
+export function buildRuntimeConfigUpdate(backendContext: ResolvedBackendContext): BackendRuntimeUpdate {
+  const connection = backendContext.connection
+  return {
+    model: backendContext.resolvedModel,
+    providerType: connection?.providerType,
+    authType: backendContext.authType,
+    runtime: connection ? {
+      baseUrl: connection.baseUrl,
+      piAuthProvider: connection.piAuthProvider,
+      customEndpoint: connection.customEndpoint,
+      customModels: connection.models?.map(model => {
+        if (typeof model === 'string') return model
+        const supportsImages = typeof model.supportsImages === 'boolean' ? model.supportsImages : undefined
+        if (model.contextWindow || supportsImages !== undefined) {
+          return {
+            id: model.id,
+            ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
+            ...(supportsImages !== undefined ? { supportsImages } : {}),
+          }
+        }
+        return model.id
+      }),
+    } : undefined,
+  }
 }
 
 /**
@@ -2824,32 +2852,10 @@ export class SessionManager implements ISessionManager {
       return
     }
 
-    const connection = backendContext.connection
     let refreshed = false
     if (managed.agent?.updateRuntimeConfig) {
       try {
-        refreshed = await managed.agent.updateRuntimeConfig({
-          model: backendContext.resolvedModel,
-          providerType: connection?.providerType,
-          authType: backendContext.authType,
-          runtime: connection ? {
-            baseUrl: connection.baseUrl,
-            piAuthProvider: connection.piAuthProvider,
-            customEndpoint: connection.customEndpoint,
-            customModels: connection.models?.map(model => {
-              if (typeof model === 'string') return model
-              const supportsImages = typeof model.supportsImages === 'boolean' ? model.supportsImages : undefined
-              if (model.contextWindow || supportsImages !== undefined) {
-                return {
-                  id: model.id,
-                  ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
-                  ...(supportsImages !== undefined ? { supportsImages } : {}),
-                }
-              }
-              return model.id
-            }),
-          } : undefined,
-        })
+        refreshed = await managed.agent.updateRuntimeConfig(buildRuntimeConfigUpdate(backendContext))
       } catch (error) {
         sessionLog.warn(`Runtime config in-place refresh failed for ${managed.id}: ${error instanceof Error ? error.message : error}`)
       }
