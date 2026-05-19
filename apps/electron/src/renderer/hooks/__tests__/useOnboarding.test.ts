@@ -40,6 +40,13 @@ describe('resolveSlugForMethod', () => {
       expect(slug).toBe(BASE_SLUG_FOR_METHOD[method])
     }
   })
+
+  it('only exposes API-key setup methods', () => {
+    expect(Object.keys(BASE_SLUG_FOR_METHOD).sort()).toEqual([
+      'anthropic_api_key',
+      'pi_api_key',
+    ])
+  })
 })
 
 // ============================================================

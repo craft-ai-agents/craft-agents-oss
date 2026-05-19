@@ -1995,18 +1995,14 @@ export default function App() {
       <DismissibleLayerProvider>
         <ModalProvider>
           <WindowCloseHandler />
-          <OnboardingWizard
-            state={onboarding.state}
-            onContinue={onboarding.handleContinue}
-            onBack={onboarding.handleBack}
-            onSelectProvider={onboarding.handleSelectProvider}
-            onSkipSetup={onboarding.handleSkipSetup}
-            onSelectApiSetupMethod={onboarding.handleSelectApiSetupMethod}
-            onSubmitCredential={onboarding.handleSubmitCredential}
-            onSubmitLocalModel={onboarding.handleSubmitLocalModel}
-            onFinish={onboarding.handleFinish}
-            onBrowseGitBash={onboarding.handleBrowseGitBash}
-            onUseGitBashPath={onboarding.handleUseGitBashPath}
+            <OnboardingWizard
+              state={onboarding.state}
+              onContinue={onboarding.handleContinue}
+              onBack={onboarding.handleBack}
+              onSubmitCredential={onboarding.handleSubmitCredential}
+              onFinish={onboarding.handleFinish}
+              onBrowseGitBash={onboarding.handleBrowseGitBash}
+              onUseGitBashPath={onboarding.handleUseGitBashPath}
             onRecheckGitBash={onboarding.handleRecheckGitBash}
             onClearError={onboarding.handleClearError}
           />

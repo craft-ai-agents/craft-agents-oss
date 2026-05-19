@@ -167,10 +167,6 @@ export const RPC_CHANNELS = {
     GET_AUTH_STATE: 'onboarding:getAuthState',
     VALIDATE_MCP: 'onboarding:validateMcp',
     START_MCP_OAUTH: 'onboarding:startMcpOAuth',
-    START_CLAUDE_OAUTH: 'onboarding:startClaudeOAuth',
-    EXCHANGE_CLAUDE_CODE: 'onboarding:exchangeClaudeCode',
-    HAS_CLAUDE_OAUTH_STATE: 'onboarding:hasClaudeOAuthState',
-    CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
     DEFER_SETUP: 'onboarding:deferSetup',
   },
   sso: {

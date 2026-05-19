@@ -1,8 +1,6 @@
 import type { ComponentEntry } from './types'
 import { OnboardingFlowDemo } from '../demos/OnboardingFlowDemo'
-import { ProviderSelectStep } from '@/components/onboarding/ProviderSelectStep'
 import { WelcomeStep } from '@/components/onboarding/WelcomeStep'
-import { APISetupStep } from '@/components/onboarding/APISetupStep'
 import { CredentialsStep } from '@/components/onboarding/CredentialsStep'
 import { CompletionStep } from '@/components/onboarding/CompletionStep'
 import { GitBashWarning, type GitBashStatus } from '@/components/onboarding/GitBashWarning'
@@ -29,24 +27,11 @@ export const onboardingComponents: ComponentEntry[] = [
     id: 'onboarding-flow-demo',
     name: 'Onboarding Flow (Interactive)',
     category: 'Onboarding',
-    description: 'Click through the full onboarding: Welcome → Provider → Credentials → Done',
+    description: 'Click through the full onboarding: Welcome -> Credentials -> Done',
     component: OnboardingFlowDemo,
     props: [],
     variants: [],
     layout: 'full',
-  },
-  {
-    id: 'provider-select-step',
-    name: 'ProviderSelectStep',
-    category: 'Onboarding',
-    description: 'First-launch screen — pick API key or local model setup',
-    component: ProviderSelectStep,
-    props: [],
-    variants: [],
-    mockData: () => ({
-      onSelect: (choice: string) => console.log('[Playground] Provider selected:', choice),
-      onSkip: () => console.log('[Playground] Setup deferred'),
-    }),
   },
   {
     id: 'welcome-step',
@@ -75,51 +60,6 @@ export const onboardingComponents: ComponentEntry[] = [
     ],
     mockData: () => ({
       onContinue: noopHandler,
-    }),
-  },
-  {
-    id: 'api-setup-step',
-    name: 'APISetupStep',
-    category: 'Onboarding',
-    description: 'Choose API key method for AI usage with provider segmented control',
-    component: APISetupStep,
-    props: [
-      {
-        name: 'selectedMethod',
-        description: 'Currently selected API setup method',
-        control: {
-          type: 'select',
-          options: [
-            { label: 'None', value: '' },
-            { label: 'Anthropic API Key', value: 'anthropic_api_key' },
-            { label: 'CAB API Key', value: 'pi_api_key' },
-          ],
-        },
-        defaultValue: '',
-      },
-      {
-        name: 'initialSegment',
-        description: 'Initial provider segment to show',
-        control: {
-          type: 'select',
-          options: [
-            { label: 'Anthropic', value: 'anthropic' },
-            { label: 'MDP Backend', value: 'pi' },
-          ],
-        },
-        defaultValue: 'anthropic',
-      },
-    ],
-    variants: [
-      { name: 'Anthropic Segment', props: { selectedMethod: null, initialSegment: 'anthropic' } },
-      { name: 'Anthropic - API Key Selected', props: { selectedMethod: 'anthropic_api_key', initialSegment: 'anthropic' } },
-      { name: 'CAB Segment', props: { selectedMethod: null, initialSegment: 'pi' } },
-      { name: 'CAB - API Key Selected', props: { selectedMethod: 'pi_api_key', initialSegment: 'pi' } },
-    ],
-    mockData: () => ({
-      onSelect: (method: string) => console.log('[Playground] Selected method:', method),
-      onContinue: noopHandler,
-      onBack: noopHandler,
     }),
   },
   {
@@ -303,7 +243,6 @@ export const onboardingComponents: ComponentEntry[] = [
       className: 'min-h-0 h-full',
       onContinue: noopHandler,
       onBack: noopHandler,
-      onSelectApiSetupMethod: (method: string) => console.log('[Playground] Selected method:', method),
       onSubmitCredential: (data: { apiKey: string; baseUrl?: string; connectionDefaultModel?: string; models?: string[] }) => console.log('[Playground] Submitted:', data),
       onFinish: noopHandler,
       onBrowseGitBash: async () => {
@@ -313,7 +252,6 @@ export const onboardingComponents: ComponentEntry[] = [
       onUseGitBashPath: (path: string) => console.log('[Playground] Use Git Bash path:', path),
       onRecheckGitBash: noopHandler,
       onClearError: noopHandler,
-      onSkipSetup: () => console.log('[Playground] Setup deferred'),
     }),
   },
 ]

@@ -5,9 +5,8 @@
  * Flow:
  * 1. Welcome
  * 2. Git Bash (Windows only, if not found)
- * 3. API Setup (API Key)
- * 4. Credentials (API Key)
- * 5. Complete
+ * 3. Credentials (API Key)
+ * 4. Complete
  */
 import { useState, useCallback, useEffect } from 'react'
 import type {
@@ -15,8 +14,6 @@ import type {
   OnboardingStep,
   ApiSetupMethod,
 } from '@/components/onboarding'
-import type { ProviderChoice } from '@/components/onboarding/ProviderSelectStep'
-import type { LocalModelSubmitData } from '@/components/onboarding/LocalModelStep'
 import type { ApiKeySubmitData } from '@/components/apisetup'
 import type { CustomEndpointConfig } from '@config/llm-connections'
 import type { SetupNeeds, LlmConnectionSetup } from '../../shared/types'
@@ -26,7 +23,7 @@ interface UseOnboardingOptions {
   onComplete: () => void
   /** Initial setup needs from auth state check */
   initialSetupNeeds?: SetupNeeds
-  /** Start the wizard at a specific step (default: 'welcome') */
+  /** Start the wizard at a specific step (default: 'credentials') */
   initialStep?: OnboardingStep
   /** Pre-select an API setup method (useful when editing an existing connection) */
   initialApiSetupMethod?: ApiSetupMethod
@@ -49,17 +46,11 @@ interface UseOnboardingReturn {
   handleContinue: () => void
   handleBack: () => void
 
-  // Provider select (new flow)
-  handleSelectProvider: (choice: ProviderChoice) => void
-
-  // API Setup (legacy — kept for direct edit)
+  // API setup method selection for direct edit flows
   handleSelectApiSetupMethod: (method: ApiSetupMethod) => void
 
   // Credentials
   handleSubmitCredential: (data: ApiKeySubmitData) => void
-
-  // Local model
-  handleSubmitLocalModel: (data: LocalModelSubmitData) => void
 
   // Git Bash (Windows)
   handleBrowseGitBash: () => Promise<string | null>
@@ -171,8 +162,8 @@ export function apiSetupMethodToConnectionSetup(
 export function useOnboarding({
   onComplete,
   initialSetupNeeds,
-  initialStep = 'provider-select',
-  initialApiSetupMethod,
+  initialStep = 'credentials',
+  initialApiSetupMethod = 'pi_api_key',
   onDismiss,
   onConfigSaved,
   editingSlug = null,
@@ -192,7 +183,7 @@ export function useOnboarding({
   })
 
   // Check Git Bash on Windows at mount. If missing, redirect to git-bash step
-  // regardless of the initial step (provider-select skips the welcome gate).
+  // regardless of the initial step (credentials skips the welcome gate).
   useEffect(() => {
     const checkGitBash = async () => {
       try {
@@ -280,25 +271,17 @@ export function useOnboarding({
   // Continue to next step
   const handleContinue = useCallback(async () => {
     switch (state.step) {
-      case 'provider-select':
-        // Handled by handleSelectProvider (card click navigates directly)
-        break
-
       case 'welcome':
         // On Windows, check if Git Bash is needed
         if (state.gitBashStatus?.platform === 'win32' && !state.gitBashStatus?.found) {
           setState(s => ({ ...s, step: 'git-bash' }))
         } else {
-          setState(s => ({ ...s, step: 'provider-select' }))
+          setState(s => ({ ...s, step: 'credentials' }))
         }
         break
 
       case 'git-bash':
-        setState(s => ({ ...s, step: 'provider-select' }))
-        break
-
-      case 'local-model':
-        // Handled by handleSubmitLocalModel
+        setState(s => ({ ...s, step: 'credentials' }))
         break
 
       case 'credentials':
@@ -309,7 +292,7 @@ export function useOnboarding({
         onComplete()
         break
     }
-  }, [state.step, state.gitBashStatus, state.apiSetupMethod, onComplete])
+  }, [state.step, state.gitBashStatus, onComplete])
 
   // Go back to previous step. If at the initial step, call onDismiss instead.
   const handleBack = useCallback(() => {
@@ -323,24 +306,17 @@ export function useOnboarding({
           onDismiss()
         }
         break
-      case 'provider-select':
-        // If on Windows and Git Bash was needed, go back to git-bash step
+      case 'credentials':
         if (state.gitBashStatus?.platform === 'win32' && state.gitBashStatus?.found === false) {
-          setState(s => ({ ...s, step: 'git-bash' }))
+          setState(s => ({ ...s, step: 'git-bash', credentialStatus: 'idle', errorMessage: undefined }))
         } else if (onDismiss) {
           onDismiss()
         }
         break
-      case 'credentials':
-        setState(s => ({ ...s, step: 'provider-select', credentialStatus: 'idle', errorMessage: undefined }))
-        break
-      case 'local-model':
-        setState(s => ({ ...s, step: 'provider-select', credentialStatus: 'idle', errorMessage: undefined }))
-        break
     }
   }, [state.step, state.gitBashStatus, initialStep, onDismiss])
 
-  // Select API setup method (legacy — kept for direct edit flows)
+  // Select API setup method for direct edit flows.
   const handleSelectApiSetupMethod = useCallback((method: ApiSetupMethod) => {
     setState(s => ({ ...s, apiSetupMethod: method }))
   }, [])
@@ -452,55 +428,6 @@ export function useOnboarding({
     }
   }, [handleSaveConfig, state.apiSetupMethod])
 
-  // Map ProviderChoice → ApiSetupMethod and navigate to the right step
-  const handleSelectProvider = useCallback((choice: ProviderChoice) => {
-    const CHOICE_TO_METHOD: Record<Exclude<ProviderChoice, 'local'>, ApiSetupMethod> = {
-      api_key: 'pi_api_key',
-    }
-
-    if (choice === 'local') {
-      // Local uses anthropic_api_key with custom endpoint (Ollama doesn't need an API key)
-      setState(s => ({ ...s, step: 'local-model', apiSetupMethod: 'anthropic_api_key', credentialStatus: 'idle', errorMessage: undefined }))
-      return
-    }
-
-    const method = CHOICE_TO_METHOD[choice]
-    setState(s => ({
-      ...s,
-      apiSetupMethod: method,
-      step: 'credentials',
-      credentialStatus: 'idle',
-      errorMessage: undefined,
-    }))
-  }, [])
-
-  // Submit local model configuration (Ollama or any OpenAI-compatible local server)
-  const handleSubmitLocalModel = useCallback(async (data: LocalModelSubmitData) => {
-    setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
-
-    try {
-      // apiSetupMethod was set to 'anthropic_api_key' when entering local-model step
-      const saved = await handleSaveConfig(undefined, {
-        baseUrl: data.baseUrl,
-        connectionDefaultModel: data.model,
-        models: data.models,
-        customEndpoint: { api: 'openai-completions' },
-      })
-
-      if (saved) {
-        setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
-      } else {
-        setState(s => ({ ...s, credentialStatus: 'error' }))
-      }
-    } catch (error) {
-      setState(s => ({
-        ...s,
-        credentialStatus: 'error',
-        errorMessage: error instanceof Error ? error.message : 'Failed to save configuration',
-      }))
-    }
-  }, [handleSaveConfig])
-
   // Git Bash handlers (Windows only)
   const handleBrowseGitBash = useCallback(async () => {
     return window.electronAPI.browseForGitBash()
@@ -513,7 +440,7 @@ export function useOnboarding({
       setState(s => ({
         ...s,
         gitBashStatus: { ...s.gitBashStatus!, found: true, path },
-        step: 'provider-select',
+        step: 'credentials',
       }))
     } else {
       setState(s => ({
@@ -532,7 +459,7 @@ export function useOnboarding({
         gitBashStatus: status,
         isRecheckingGitBash: false,
         // If found, automatically continue to next step
-        step: status.found ? 'provider-select' : s.step,
+        step: status.found ? 'credentials' : s.step,
       }))
     } catch (error) {
       console.error('[Onboarding] Failed to recheck Git Bash:', error)
@@ -592,10 +519,8 @@ export function useOnboarding({
     state,
     handleContinue,
     handleBack,
-    handleSelectProvider,
     handleSelectApiSetupMethod,
     handleSubmitCredential,
-    handleSubmitLocalModel,
     // Git Bash (Windows)
     handleBrowseGitBash,
     handleUseGitBashPath,

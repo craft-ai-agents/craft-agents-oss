@@ -6,7 +6,7 @@
  */
 
 import { useTranslation } from "react-i18next"
-import type { ApiSetupMethod } from "./APISetupStep"
+import type { ApiSetupMethod } from "./setup-types"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 import {
   ApiKeyInput,

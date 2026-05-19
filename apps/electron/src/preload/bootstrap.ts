@@ -318,29 +318,6 @@ client.onConnectionStateChanged((state) => {
   }
 }
 
-// ── startClaudeOAuth ─────────────────────────────────────────────────────
-// Override the channel-map stub: the server now returns authUrl without opening
-// the browser. We open it locally so it works in remote mode.
-// Claude OAuth is two-step: browser opens → user copies code → pastes in UI.
-;(api as any).startClaudeOAuth = async (): Promise<{
-  success: boolean
-  authUrl?: string
-  error?: string
-}> => {
-  try {
-    const result = await client.invoke('onboarding:startClaudeOAuth')
-    if (result.success && result.authUrl) {
-      await shell.openExternal(result.authUrl)
-    }
-    return result
-  } catch (err) {
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : 'Claude OAuth failed',
-    }
-  }
-}
-
 // App lifecycle — direct IPC (not WS RPC) since it restarts the server itself
 ;(api as ElectronAPI).relaunchApp = () => ipcRenderer.invoke('app:relaunch')
 ;(api as ElectronAPI).removeWorkspace = (workspaceId: string) => ipcRenderer.invoke('workspace:remove', workspaceId)

@@ -304,14 +304,6 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.llmConnections.REFRESH_MODELS,
   RPC_CHANNELS.llmConnections.CHANGED,
 
-  // Claude OAuth — runs on workspace server so credentials and connection config
-  // end up on the same server that will use them. Browser opening is client-side.
-  // (ChatGPT OAuth stays LOCAL_ONLY — requires localhost callback server.)
-  RPC_CHANNELS.onboarding.START_CLAUDE_OAUTH,
-  RPC_CHANNELS.onboarding.EXCHANGE_CLAUDE_CODE,
-  RPC_CHANNELS.onboarding.HAS_CLAUDE_OAUTH_STATE,
-  RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE,
-
   // settings — workspace-level settings
   RPC_CHANNELS.settings.SETUP_LLM_CONNECTION,
   RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP,

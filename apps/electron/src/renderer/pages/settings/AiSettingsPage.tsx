@@ -1183,10 +1183,7 @@ export default function AiSettingsPage() {
                   state={apiSetupOnboarding.state}
                   onContinue={apiSetupOnboarding.handleContinue}
                   onBack={handleCloseApiSetup}
-                  onSelectProvider={apiSetupOnboarding.handleSelectProvider}
-                  onSelectApiSetupMethod={apiSetupOnboarding.handleSelectApiSetupMethod}
                   onSubmitCredential={apiSetupOnboarding.handleSubmitCredential}
-                  onSubmitLocalModel={apiSetupOnboarding.handleSubmitLocalModel}
                   onFinish={handleApiSetupFinish}
                   editInitialValues={editInitialValues}
                   className="h-full"
