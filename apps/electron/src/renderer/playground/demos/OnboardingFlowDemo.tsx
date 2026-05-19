@@ -2,7 +2,7 @@
  * OnboardingFlowDemo — Interactive walkthrough of the new onboarding flow.
  *
  * Manages its own state so you can click through the entire sequence
- * in the playground without needing real IPC or OAuth.
+ * in the playground without needing real IPC.
  *
  * Flow: WelcomeStep → ProviderSelectStep → CredentialsStep / LocalModelStep → CompletionStep
  */
@@ -20,9 +20,6 @@ type DemoStep = 'welcome' | 'provider-select' | 'credentials' | 'local-model' | 
 
 /** Map ProviderChoice → ApiSetupMethod for the credentials step */
 const CHOICE_TO_METHOD: Record<Exclude<ProviderChoice, 'local'>, ApiSetupMethod> = {
-  claude: 'claude_oauth',
-  chatgpt: 'pi_chatgpt_oauth',
-  copilot: 'pi_copilot_oauth',
   api_key: 'pi_api_key',
 }
 
@@ -67,14 +64,6 @@ export function OnboardingFlowDemo() {
         break
     }
   }, [step])
-
-  const simulateOAuthSuccess = useCallback(() => {
-    setCredStatus('validating')
-    setTimeout(() => {
-      setCredStatus('success')
-      setTimeout(() => setStep('complete'), 600)
-    }, 1500)
-  }, [])
 
   const simulateApiKeySubmit = useCallback(() => {
     setCredStatus('validating')
@@ -168,16 +157,7 @@ export function OnboardingFlowDemo() {
             status={credStatus}
             errorMessage={errorMessage}
             onSubmit={simulateApiKeySubmit}
-            onStartOAuth={simulateOAuthSuccess}
             onBack={handleBack}
-            isWaitingForCode={false}
-            onSubmitAuthCode={() => simulateOAuthSuccess()}
-            onCancelOAuth={handleBack}
-            copilotDeviceCode={
-              method === 'pi_copilot_oauth' && credStatus === 'validating'
-                ? { userCode: 'DEMO-1234', verificationUri: 'https://github.com/login/device' }
-                : undefined
-            }
           />
         )}
 

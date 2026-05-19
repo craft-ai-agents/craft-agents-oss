@@ -10,7 +10,7 @@
  * the decision path directly.
  */
 import { describe, it, expect, mock, beforeEach } from 'bun:test'
-import { createBuiltInConnection } from '@craft-agent/server-core/domain'
+import { createBuiltInConnection } from '../../../../../packages/server-core/src/domain'
 import type { LlmConnectionSetup } from '@craft-agent/shared/protocol'
 
 // ============================================================
@@ -72,7 +72,7 @@ describe('SETUP_LLM_CONNECTION updateOnly guard', () => {
 
   it('updateOnly=true + missing slug → cleans up orphaned credentials', () => {
     evaluateSetupGuard(
-      { slug: 'chatgpt-plus-2', updateOnly: true },
+      { slug: 'pi-api-key-2', updateOnly: true },
       {
         getLlmConnection: () => null,
         deleteLlmCredentials: mockDeleteCreds as any,
@@ -80,14 +80,14 @@ describe('SETUP_LLM_CONNECTION updateOnly guard', () => {
         addLlmConnection: () => true,
       },
     )
-    expect(mockDeleteCreds).toHaveBeenCalledWith('chatgpt-plus-2')
+    expect(mockDeleteCreds).toHaveBeenCalledWith('pi-api-key-2')
   })
 
   it('updateOnly=true + existing slug → updates normally', () => {
     const result = evaluateSetupGuard(
-      { slug: 'chatgpt-plus', updateOnly: true },
+      { slug: 'pi-api-key', updateOnly: true },
       {
-        getLlmConnection: () => ({ slug: 'chatgpt-plus', name: 'ChatGPT Plus' }),
+        getLlmConnection: () => ({ slug: 'pi-api-key', name: 'MDP Backend API Key' }),
         deleteLlmCredentials: mockDeleteCreds as any,
         createBuiltInConnection,
         addLlmConnection: () => true,
@@ -99,7 +99,7 @@ describe('SETUP_LLM_CONNECTION updateOnly guard', () => {
 
   it('default flow (no updateOnly) + missing slug → creates', () => {
     const result = evaluateSetupGuard(
-      { slug: 'chatgpt-plus-2' },
+      { slug: 'pi-api-key-2' },
       {
         getLlmConnection: () => null,
         deleteLlmCredentials: mockDeleteCreds as any,
@@ -113,9 +113,9 @@ describe('SETUP_LLM_CONNECTION updateOnly guard', () => {
 
   it('default flow + existing slug → updates', () => {
     const result = evaluateSetupGuard(
-      { slug: 'chatgpt-plus' },
+      { slug: 'pi-api-key' },
       {
-        getLlmConnection: () => ({ slug: 'chatgpt-plus' }),
+        getLlmConnection: () => ({ slug: 'pi-api-key' }),
         deleteLlmCredentials: mockDeleteCreds as any,
         createBuiltInConnection,
         addLlmConnection: () => true,

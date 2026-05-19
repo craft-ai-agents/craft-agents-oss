@@ -140,19 +140,6 @@ export const CHANNEL_MAP = {
   onSsoLoginResult: listener(RPC_CHANNELS.sso.LOGIN_RESULT),
   logoutSso: invoke(RPC_CHANNELS.sso.LOGOUT),
 
-  // ChatGPT OAuth
-  startChatGptOAuth: invoke(RPC_CHANNELS.chatgpt.START_OAUTH),
-  cancelChatGptOAuth: invoke(RPC_CHANNELS.chatgpt.CANCEL_OAUTH),
-  getChatGptAuthStatus: invoke(RPC_CHANNELS.chatgpt.GET_AUTH_STATUS),
-  chatGptLogout: invoke(RPC_CHANNELS.chatgpt.LOGOUT),
-
-  // GitHub Copilot OAuth
-  startCopilotOAuth: invoke(RPC_CHANNELS.copilot.START_OAUTH),
-  cancelCopilotOAuth: invoke(RPC_CHANNELS.copilot.CANCEL_OAUTH),
-  getCopilotAuthStatus: invoke(RPC_CHANNELS.copilot.GET_AUTH_STATUS),
-  copilotLogout: invoke(RPC_CHANNELS.copilot.LOGOUT),
-  onCopilotDeviceCode: listener(RPC_CHANNELS.copilot.DEVICE_CODE),
-
   // Server info (REMOTE_ELIGIBLE)
   getServerHomeDir: invoke(RPC_CHANNELS.server.HOME_DIR),
 

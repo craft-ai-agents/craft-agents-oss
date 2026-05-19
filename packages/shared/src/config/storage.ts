@@ -2283,29 +2283,7 @@ export function migrateLegacyLlmConnectionsConfig(): void {
   if (legacyAuthType) {
     let migrated: LlmConnection | null = null;
 
-    if (legacyAuthType === 'oauth_token') {
-      // Claude Max OAuth
-      migrated = {
-        slug: 'claude-max',
-        name: 'Claude Max',
-        providerType: 'anthropic',
-        authType: 'oauth',
-        models: getDefaultModelsForConnection('anthropic'),
-        createdAt: Date.now(),
-      };
-    } else if (legacyAuthType === 'codex_oauth') {
-      // ChatGPT Plus OAuth → Pi backend
-      migrated = {
-        slug: 'codex',
-        name: 'ChatGPT Plus (via Pi)',
-        providerType: 'pi',
-        authType: 'oauth',
-        piAuthProvider: 'openai-codex',
-        modelSelectionMode: 'automaticallySyncedFromProvider',
-        models: getDefaultModelsForConnection('pi', 'openai-codex'),
-        createdAt: Date.now(),
-      };
-    } else if (legacyAuthType === 'codex_api_key') {
+    if (legacyAuthType === 'codex_api_key') {
       // OpenAI API Key → Pi backend
       migrated = {
         slug: 'codex-api',

@@ -194,20 +194,6 @@ export const RPC_CHANNELS = {
     REFRESH_MODELS: 'LLM_Connection:refreshModels',
     CHANGED: 'LLM_Connection:changed',
   },
-  chatgpt: {
-    START_OAUTH: 'chatgpt:startOAuth',
-    COMPLETE_OAUTH: 'chatgpt:completeOAuth',
-    CANCEL_OAUTH: 'chatgpt:cancelOAuth',
-    GET_AUTH_STATUS: 'chatgpt:getAuthStatus',
-    LOGOUT: 'chatgpt:logout',
-  },
-  copilot: {
-    START_OAUTH: 'copilot:startOAuth',
-    CANCEL_OAUTH: 'copilot:cancelOAuth',
-    GET_AUTH_STATUS: 'copilot:getAuthStatus',
-    LOGOUT: 'copilot:logout',
-    DEVICE_CODE: 'copilot:deviceCode',
-  },
   settings: {
     SETUP_LLM_CONNECTION: 'settings:setupLlmConnection',
     TEST_LLM_CONNECTION_SETUP: 'settings:testLlmConnectionSetup',
