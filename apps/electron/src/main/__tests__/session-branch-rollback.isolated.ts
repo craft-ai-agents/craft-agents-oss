@@ -91,6 +91,9 @@ mock.module('@craft-agent/shared/config', () => ({
   setActiveWorkspace: () => {},
   getSummarizationModel: () => 'claude-haiku-4-5-20251001',
   defaultMidStreamBehavior: (providerType: string) => providerType === 'anthropic' ? 'queue' : 'steer',
+  ENV_CONNECTION_SLUG: 'env-provider',
+  ENV_CONNECTION_SSO_TOKEN_ENV_VAR: 'CRAFT_LLM_SSO_TOKEN',
+  ENV_CONNECTION_SSO_BASE_URL_ENV_VAR: 'CRAFT_LLM_SSO_BASE_URL',
   resolveMidStreamBehavior: (connection: { midStreamBehavior?: string; providerType: string }) => (
     connection.midStreamBehavior === 'queue' || connection.midStreamBehavior === 'steer'
       ? connection.midStreamBehavior
