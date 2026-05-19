@@ -62,8 +62,8 @@ import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
 // Skill types
-import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult } from '@craft-agent/shared/skills';
-export type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult };
+import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult } from '@craft-agent/shared/skills';
+export type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult };
 
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
@@ -491,9 +491,9 @@ export interface ElectronAPI {
   // Skills
   getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
-  createSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string): Promise<CreateSkillResult>
-  forceWriteSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string): Promise<{ created: true }>
-  deleteSkill(workspaceId: string, skillSlug: string): Promise<void>
+  createSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string, scope?: 'global' | 'workspace'): Promise<CreateSkillResult>
+  forceWriteSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string, scope?: 'global' | 'workspace'): Promise<{ created: true }>
+  deleteSkill(workspaceId: string, skillSlug: string, source?: 'global' | 'workspace' | 'project', skillPath?: string): Promise<void>
   openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInFinder(workspaceId: string, skillSlug: string): Promise<void>
   extractSkillsFromZip(zipPath: string): Promise<DiscoveredSkill[]>
@@ -502,6 +502,10 @@ export interface ElectronAPI {
   updateMarketplaceSkill(workspaceId: string, input: MarketplaceSkillUpdateInput): Promise<MarketplaceInstallResult>
   publishMarketplaceSkill(workspaceId: string, input: MarketplaceLocalSkillPublishInput): Promise<MarketplacePublishLocalResult>
   publishDirectMarketplaceSkill(workspaceId: string, input: MarketplaceDirectSkillPublishInput): Promise<MarketplacePublishDirectResult>
+  // CoPaw market service
+  listMarketSkills(): Promise<CopawMarketSkill[]>
+  uploadMarketSkill(input: CopawMarketUploadInput): Promise<CopawMarketUploadResult>
+  deleteMarketSkill(skillName: string): Promise<{ success: true }>
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void

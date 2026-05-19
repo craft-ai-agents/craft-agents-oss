@@ -96,3 +96,17 @@ export type {
   MarketplaceServiceConfigInput,
   MarketplaceServiceEnvironment,
 } from './marketplace-config.ts';
+
+export {
+  COPAW_MARKET_BASE_URL,
+  listCopawMarketSkills,
+  uploadCopawMarketSkill,
+  deleteCopawMarketSkill,
+  generateMarketSkillVersion,
+} from './copaw-market-api.ts';
+export type {
+  CopawMarketSkill,
+  CopawMarketUploadInput,
+  CopawMarketUploadPayload,
+  CopawMarketUploadResult,
+} from './copaw-market-api.ts';

@@ -13,9 +13,176 @@ import type {
   MarketplaceSkillUpdateInput,
   MarketplaceDirectSkillPublishInput,
   MarketplacePublishDirectResult,
+  CopawMarketSkill,
+  CopawMarketUploadInput,
 } from '@craft-agent/shared/skills'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
+
+// ============================================================================
+// Mock switch — set to false to use real API
+// ============================================================================
+
+const USE_MOCK_MARKET = false
+
+const MOCK_MARKET_SKILLS: CopawMarketSkill[] = [
+  {
+    fileKey: 'mock-key-1',
+    userName: '张三',
+    employeeId: 'EMP001',
+    department: '研发部',
+    name: 'code-review',
+    chineseName: '代码审查助手',
+    description: '自动审查代码质量，给出改进建议，支持多种编程语言。',
+    tag: 'A',
+    hot: 128,
+    createdAt: '2024-01-15T08:00:00Z',
+    version: '20240115080000',
+  },
+  {
+    fileKey: 'mock-key-2',
+    userName: '李四',
+    employeeId: 'EMP002',
+    department: 'DevOps团队',
+    name: 'k8s-deploy',
+    chineseName: 'K8s 部署助手',
+    description: '一键生成 Kubernetes 部署配置，支持 Deployment、Service、Ingress 等资源。',
+    tag: 'B',
+    hot: 256,
+    createdAt: '2024-02-20T10:00:00Z',
+    version: '20240220100000',
+  },
+  {
+    fileKey: 'mock-key-3',
+    userName: '王五',
+    employeeId: 'EMP003',
+    department: '测试部',
+    name: 'test-generator',
+    chineseName: '单测生成器',
+    description: '根据函数签名和逻辑自动生成单元测试用例，覆盖边界条件。',
+    tag: 'A',
+    hot: 87,
+    createdAt: '2024-03-10T14:00:00Z',
+    version: '20240310140000',
+  },
+  {
+    fileKey: 'mock-key-4',
+    userName: '赵六',
+    employeeId: 'EMP004',
+    department: 'DevOps团队',
+    name: 'ci-pipeline',
+    chineseName: 'CI 流水线助手',
+    description: '快速生成 Jenkins / GitLab CI / GitHub Actions 流水线配置文件。',
+    tag: 'B',
+    hot: 312,
+    createdAt: '2024-03-22T09:00:00Z',
+    version: '20240322090000',
+  },
+  {
+    fileKey: 'mock-key-5',
+    userName: '陈七',
+    employeeId: 'EMP005',
+    department: '研发部',
+    name: 'sql-optimizer',
+    chineseName: 'SQL 优化器',
+    description: '分析慢查询，给出索引优化和 SQL 改写建议。',
+    tag: 'A',
+    hot: 45,
+    createdAt: '2024-04-01T11:00:00Z',
+    version: '20240401110000',
+  },
+  {
+    fileKey: 'mock-key-6',
+    userName: '周八',
+    employeeId: 'EMP006',
+    department: 'DevOps团队',
+    name: 'docker-builder',
+    chineseName: 'Docker 镜像构建',
+    description: '智能生成多阶段 Dockerfile，优化镜像体积，支持 Node.js / Python / Java 等常见运行时。',
+    tag: 'B',
+    hot: 198,
+    createdAt: '2024-04-10T09:30:00Z',
+    version: '20240410093000',
+  },
+  {
+    fileKey: 'mock-key-7',
+    userName: '吴九',
+    employeeId: 'EMP007',
+    department: '架构组',
+    name: 'api-designer',
+    chineseName: 'RESTful API 设计师',
+    description: '根据业务描述自动生成 OpenAPI 3.0 规范文档，包含请求体、响应体和错误码定义。',
+    tag: 'A',
+    hot: 163,
+    createdAt: '2024-04-18T15:00:00Z',
+    version: '20240418150000',
+  },
+  {
+    fileKey: 'mock-key-8',
+    userName: '郑十',
+    employeeId: 'EMP008',
+    department: 'DevOps团队',
+    name: 'log-analyzer',
+    chineseName: '日志分析助手',
+    description: '解析应用日志，自动识别异常模式，定位报错根因，生成排查报告。',
+    tag: 'B',
+    hot: 74,
+    createdAt: '2024-05-02T11:00:00Z',
+    version: '20240502110000',
+  },
+  {
+    fileKey: 'mock-key-9',
+    userName: '孙十一',
+    employeeId: 'EMP009',
+    department: '研发部',
+    name: 'commit-writer',
+    chineseName: 'Git Commit 生成器',
+    description: '分析 git diff 内容，自动生成符合 Conventional Commits 规范的提交信息。',
+    tag: 'A',
+    hot: 221,
+    createdAt: '2024-05-15T08:00:00Z',
+    version: '20240515080000',
+  },
+  {
+    fileKey: 'mock-key-10',
+    userName: '李十二',
+    employeeId: 'EMP010',
+    department: '研发部',
+    name: 'doc-writer',
+    chineseName: '技术文档助手',
+    description: '根据代码或功能描述自动撰写技术文档、README 和接口说明，支持中英文输出。',
+    tag: 'A',
+    hot: 309,
+    createdAt: '2024-05-20T14:00:00Z',
+    version: '20240520140000',
+  },
+  {
+    fileKey: 'mock-key-11',
+    userName: '赵十三',
+    employeeId: 'EMP011',
+    department: 'DevOps团队',
+    name: 'infra-cost',
+    chineseName: '云资源成本分析',
+    description: '扫描 Terraform / CloudFormation 配置，估算月度云资源费用并给出优化建议。',
+    tag: 'B',
+    hot: 56,
+    createdAt: '2024-06-01T10:00:00Z',
+    version: '20240601100000',
+  },
+  {
+    fileKey: 'mock-key-12',
+    userName: '钱十四',
+    employeeId: 'EMP012',
+    department: '安全团队',
+    name: 'security-scanner',
+    chineseName: '代码安全扫描',
+    description: '检测代码中的 OWASP Top10 漏洞，包括 SQL 注入、XSS、敏感信息泄露等，输出修复建议。',
+    tag: 'A',
+    hot: 142,
+    createdAt: '2024-06-10T09:00:00Z',
+    version: '20240610090000',
+  },
+]
 
 // ============================================================================
 // Types
@@ -452,6 +619,49 @@ export function createStaticMarketplaceApi(options?: StaticMarketplaceApiOptions
 const defaultMarketplaceApi = createStaticMarketplaceApi()
 
 // ============================================================================
+// CoPaw market skill mapping
+// ============================================================================
+
+/** Convert a raw CoPaw market skill to the renderer's MarketplaceSkillListing format. */
+const SKILL_ICON_COLORS = [
+  'bg-blue-500', 'bg-indigo-500', 'bg-gray-700', 'bg-purple-600',
+  'bg-orange-500', 'bg-red-500', 'bg-emerald-500', 'bg-cyan-500',
+  'bg-green-500', 'bg-violet-500', 'bg-pink-500', 'bg-teal-500',
+  'bg-amber-500', 'bg-sky-500',
+]
+
+function skillIconBg(name: string): string {
+  const hash = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0)
+  return SKILL_ICON_COLORS[hash % SKILL_ICON_COLORS.length]
+}
+
+function mapCopawSkillToListing(
+  skill: CopawMarketSkill,
+  localSlugs: Set<string>,
+): MarketplaceSkillListing {
+  const category = skill.tag === 'B' ? 'DevOps' : '公共'
+  const iconBg = skillIconBg(skill.name)
+  const displayName = skill.chineseName?.trim() || skill.name
+  const installState: MarketplaceInstallState = localSlugs.has(skill.name) ? 'installed' : 'install'
+
+  return {
+    id: skill.name,
+    slug: skill.name,
+    ownerId: skill.employeeId,
+    icon: displayName.charAt(0).toUpperCase(),
+    iconBg,
+    name: displayName,
+    description: skill.description,
+    owner: skill.userName,
+    category,
+    tags: [],
+    latestVersion: skill.version ?? '1.0.0',
+    installCount: skill.hot,
+    installState,
+  }
+}
+
+// ============================================================================
 // Categories
 // ============================================================================
 
@@ -846,22 +1056,10 @@ ${skill.slug} config export --format json --output ./backup/
 // 本地技能专属组件（不复用市场组件）
 // ============================================================================
 
-const LOCAL_ICON_COLORS = [
-  'bg-blue-500', 'bg-indigo-500', 'bg-violet-600', 'bg-purple-600',
-  'bg-emerald-500', 'bg-teal-500', 'bg-cyan-500', 'bg-orange-500',
-  'bg-rose-500', 'bg-gray-600',
-]
-
-function getLocalIconColor(slug: string): string {
-  let hash = 0
-  for (let i = 0; i < slug.length; i++) hash = (hash * 31 + slug.charCodeAt(i)) >>> 0
-  return LOCAL_ICON_COLORS[hash % LOCAL_ICON_COLORS.length]
-}
-
 function LocalSkillIcon({ skill }: { skill: LoadedSkill }) {
   const name = skill.metadata?.name ?? skill.slug
   const label = name.slice(0, 2).toUpperCase()
-  const colorClass = getLocalIconColor(skill.slug)
+  const colorClass = skillIconBg(skill.slug)
 
   return (
     <div className={cn('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white', colorClass)}>
@@ -1104,7 +1302,7 @@ ${skill.content || '（内容为空）'}`
             type="button"
             onClick={() => {
               onClose()
-              navigate(routes.action.newSession({ input: `@${skill.slug} ` }))
+              navigate(routes.action.newSession({ input: `[skill:${skill.slug}] ` }))
             }}
             className="inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-85"
           >
@@ -1210,7 +1408,7 @@ function CreateSkillDialog({
 
     setSaving(true)
     try {
-      const result = await window.electronAPI.createSkill(workspaceId, trimmedSlug, metadata, body)
+      const result = await window.electronAPI.createSkill(workspaceId, trimmedSlug, metadata, body, 'global')
       if ('conflict' in result && result.conflict) {
         setErrors({ slug: '此标识符已存在，请更换一个' })
         setSaving(false)
@@ -1227,7 +1425,7 @@ function CreateSkillDialog({
       slug: trimmedSlug,
       metadata,
       content: body,
-      path: `~/.agents/${trimmedSlug}`,
+      path: `~/.agents/skills/${trimmedSlug}`,
       source: 'global',
       // 无 marketplaceOrigin → 归入「本地上传」分类
     }
@@ -1379,13 +1577,11 @@ function buildSkillMd(skill: LoadedSkill): string {
 function PublishSkillDialog({
   open,
   onClose,
-  workspaceId,
   currentUserId,
   sourceSkill,
 }: {
   open: boolean
   onClose: () => void
-  workspaceId: string
   currentUserId: string | null
   sourceSkill?: LoadedSkill
 }) {
@@ -1457,14 +1653,13 @@ function PublishSkillDialog({
   const handleSubmit = async () => {
     const errs = validate()
     if (Object.keys(errs).length > 0) { setErrors(errs); return }
-    if (!currentUserId) { setErrors({ submit: '无法获取用户信息，请重新登录' }); return }
     setUploading(true)
 
     try {
-      let skillData: { slug: string; metadata: { name?: string; description?: string; author?: string }; content: string }
-
+      // Determine SKILL.md content to upload
+      let skillContent: string
       if (sourceSkill) {
-        skillData = { slug: sourceSkill.slug, metadata: sourceSkill.metadata, content: sourceSkill.content }
+        skillContent = buildSkillMd(sourceSkill)
       } else if (file) {
         const buffer = await file.arrayBuffer()
         const unzipped = unzipSync(new Uint8Array(buffer))
@@ -1476,36 +1671,31 @@ function PublishSkillDialog({
           setUploading(false)
           return
         }
-        const rawContent = new TextDecoder().decode(unzipped[skillMdKey])
-        const fmMatch = rawContent.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
-        const body = fmMatch ? fmMatch[2].trim() : rawContent
-        const yamlStr = fmMatch ? fmMatch[1] : ''
-        const getYamlVal = (key: string) => {
-          const m = yamlStr.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'))
-          return m ? m[1].trim().replace(/^['"]|['"]$/g, '') : undefined
-        }
-        const slug = file.name.replace(/\.zip$/i, '').replace(/[\s]+/g, '-').toLowerCase()
-        skillData = {
-          slug,
-          metadata: { name: getYamlVal('name') ?? slug, description: getYamlVal('description') ?? description },
-          content: body,
-        }
+        skillContent = new TextDecoder().decode(unzipped[skillMdKey])
       } else {
         setUploading(false)
         return
       }
 
-      const marketplaceSlug = name.trim().replace(/_/g, '-')
-      const result = await window.electronAPI.publishDirectMarketplaceSkill(workspaceId, {
-        userId: currentUserId,
-        skill: skillData,
-        marketplaceSlug,
-        version: '1.0.0',
-        category: tag === 'B' ? 'DevOps' : '公共',
-      })
+      const input: CopawMarketUploadInput = {
+        name: name.trim(),
+        chineseName: chineseName.trim(),
+        description: description.trim(),
+        tag,
+        skillContent,
+      }
 
-      if (result.status === 'slug-conflict') {
-        setErrors({ name: `市场标识符"${result.marketplaceSlug}"已被占用，请换一个名称` })
+      const result: import('@craft-agent/shared/skills').CopawMarketUploadResult = USE_MOCK_MARKET
+        ? { status: 'published', skill: { fileKey: 'mock', userName: 'mock', employeeId: 'mock', department: null, name: input.name, chineseName: input.chineseName, description: input.description, tag: input.tag, hot: 0, createdAt: new Date().toISOString() } }
+        : await window.electronAPI.uploadMarketSkill(input)
+
+      if (result.status === 'conflict') {
+        setErrors({ name: result.message })
+        setUploading(false)
+        return
+      }
+      if (result.status === 'error') {
+        setErrors({ submit: result.message })
         setUploading(false)
         return
       }
@@ -1835,8 +2025,12 @@ export function SkillMarketplacePage({
   const uploadZipInputRef = React.useRef<HTMLInputElement>(null)
 
   const { skills: ctxSkills = [] } = useAppShellContext()
-  const baseLocalSkills = ctxSkills.length > 0 ? ctxSkills : MOCK_LOCAL_SKILLS
-  const localSkills = React.useMemo(() => [...baseLocalSkills, ...uploadedSkills], [baseLocalSkills, uploadedSkills])
+  const baseLocalSkills = USE_MOCK_MARKET ? (ctxSkills.length > 0 ? ctxSkills : MOCK_LOCAL_SKILLS) : ctxSkills
+  const localSkills = React.useMemo(() => {
+    const ctxSlugs = new Set(baseLocalSkills.map((s) => s.slug))
+    const uniqueUploaded = uploadedSkills.filter((s) => !ctxSlugs.has(s.slug))
+    return [...baseLocalSkills, ...uniqueUploaded]
+  }, [baseLocalSkills, uploadedSkills])
 
   const handleUploadZip = React.useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -1891,7 +2085,7 @@ export function SkillMarketplacePage({
 
       // 写入磁盘（覆盖同名技能）
       try {
-        await window.electronAPI.forceWriteSkill(workspaceId, slug, parsedMetadata, body)
+        await window.electronAPI.forceWriteSkill(workspaceId, slug, parsedMetadata, body, 'global')
       } catch {
         // 写入失败时仍在 UI 中显示，等待下次自动刷新
       }
@@ -1912,9 +2106,29 @@ export function SkillMarketplacePage({
     }
   }, [workspaceId])
 
+  const localSlugs = React.useMemo(() => new Set(localSkills.map((s) => s.slug)), [localSkills])
+  const rawMarketSkillsRef = React.useRef<import('@shared/types').CopawMarketSkill[]>([])
+
+  // Fetch once on mount
   React.useEffect(() => {
-    api.listSkills().then(setMarketSkills).catch(console.error)
-  }, [api])
+    const load = USE_MOCK_MARKET
+      ? Promise.resolve(MOCK_MARKET_SKILLS)
+      : window.electronAPI.listMarketSkills()
+    load
+      .then((raw) => {
+        rawMarketSkillsRef.current = raw
+        setMarketSkills(raw.map((s) => mapCopawSkillToListing(s, localSlugs)))
+      })
+      .catch(console.error)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Re-map install states when local skills change, without re-fetching
+  React.useEffect(() => {
+    if (rawMarketSkillsRef.current.length > 0) {
+      setMarketSkills(rawMarketSkillsRef.current.map((s) => mapCopawSkillToListing(s, localSlugs)))
+    }
+  }, [localSlugs])
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -1953,6 +2167,9 @@ export function SkillMarketplacePage({
   }, [])
 
   const handleUninstall = React.useCallback((s: MarketplaceSkillListing) => {
+    if (!USE_MOCK_MARKET) {
+      window.electronAPI.deleteMarketSkill(s.slug).catch(console.error)
+    }
     setInstalledIds((prev) => { const n = new Set(prev); n.delete(s.id); return n })
     setSelectedSkill((prev) => prev?.id === s.id ? { ...prev, installState: 'install' } : prev)
   }, [])
@@ -1963,8 +2180,9 @@ export function SkillMarketplacePage({
   }, [onSkillClick])
 
   const handleLocalUninstall = React.useCallback((s: LoadedSkill) => {
+    window.electronAPI.deleteSkill(workspaceId, s.slug, s.source, s.path).catch(console.error)
     setLocalSkillSlugs((prev) => new Set([...prev, s.slug]))
-  }, [])
+  }, [workspaceId])
 
   const handleToggleLocalEnabled = React.useCallback((s: LoadedSkill) => {
     setEnabledLocalSlugs((prev) => {
@@ -1997,7 +2215,6 @@ export function SkillMarketplacePage({
     <PublishSkillDialog
       open={publishOpen}
       onClose={() => { setPublishOpen(false); setPublishSourceSkill(null) }}
-      workspaceId={workspaceId}
       currentUserId={currentUserId}
       sourceSkill={publishSourceSkill ?? undefined}
     />

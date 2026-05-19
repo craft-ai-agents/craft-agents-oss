@@ -253,6 +253,9 @@ export const CHANNEL_MAP = {
   updateMarketplaceSkill: invoke(RPC_CHANNELS.skills.UPDATE_MARKETPLACE),
   publishMarketplaceSkill: invoke(RPC_CHANNELS.skills.PUBLISH_MARKETPLACE),
   publishDirectMarketplaceSkill: invoke(RPC_CHANNELS.skills.PUBLISH_DIRECT_MARKETPLACE),
+  listMarketSkills: invoke(RPC_CHANNELS.skills.LIST_MARKET),
+  uploadMarketSkill: invoke(RPC_CHANNELS.skills.UPLOAD_MARKET),
+  deleteMarketSkill: invoke(RPC_CHANNELS.skills.DELETE_MARKET),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
 
   // Statuses
