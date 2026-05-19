@@ -71,6 +71,7 @@ import { useStaleSessionRecovery } from '@/hooks/useStaleSessionRecovery'
 import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '@/components/app-shell/TransportConnectionBanner'
 import { getFileManagerName } from '@/lib/platform'
 import { rendererLog } from '@/lib/logger'
+import { resolveAuthenticatedStartupState } from '@/lib/app-startup'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
@@ -669,18 +670,12 @@ export default function App() {
         const needs = await window.electronAPI.getSetupNeeds()
         setSetupNeeds(needs)
 
-        if (needs.isFullyConfigured) {
-          // If no workspace is selected (thin client without CRAFT_WORKSPACE_ID),
-          // show workspace picker before entering the main app
-          if (!wsId) {
-            setAppState('workspace-picker')
-          } else {
-            setAppState('ready')
-          }
-        } else {
-          // New user or needs setup - show onboarding
-          setAppState('onboarding')
-        }
+        const nextState = await resolveAuthenticatedStartupState({
+          setupNeeds: needs,
+          windowWorkspaceId: wsId,
+          listLlmConnectionsWithStatus: () => window.electronAPI.listLlmConnectionsWithStatus(),
+        })
+        setAppState(nextState)
       } catch (error) {
         console.error('Failed to check auth state:', error)
         setAppState('sso-login')
@@ -1973,9 +1968,18 @@ export default function App() {
           <WindowCloseHandler />
           <SsoLoginPage
             result={ssoLoginResult}
-            onSuccess={() => {
+            onSuccess={async () => {
               setSsoLoginResult(null)
-              setAppState('onboarding')
+              const wsId = await window.electronAPI.getWindowWorkspace()
+              setWindowWorkspaceId(wsId)
+              const needs = await window.electronAPI.getSetupNeeds()
+              setSetupNeeds(needs)
+              const nextState = await resolveAuthenticatedStartupState({
+                setupNeeds: needs,
+                windowWorkspaceId: wsId,
+                listLlmConnectionsWithStatus: () => window.electronAPI.listLlmConnectionsWithStatus(),
+              })
+              setAppState(nextState)
             }}
           />
         </ModalProvider>

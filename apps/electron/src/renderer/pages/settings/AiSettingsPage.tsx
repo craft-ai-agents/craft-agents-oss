@@ -197,7 +197,17 @@ interface ConnectionRowProps {
   validationError?: string
 }
 
-function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
+export function sortLlmConnectionsForSettings(connections: LlmConnectionWithStatus[]): LlmConnectionWithStatus[] {
+  return [...connections].sort((a, b) => {
+    if (a.isEnvironmentConnection && !b.isEnvironmentConnection) return -1
+    if (!a.isEnvironmentConnection && b.isEnvironmentConnection) return 1
+    if (a.isDefault && !b.isDefault) return -1
+    if (!a.isDefault && b.isDefault) return 1
+    return a.name.localeCompare(b.name)
+  })
+}
+
+export function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
@@ -293,71 +303,77 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
       )}
       description={getDescription()}
     >
-      <DropdownMenu modal={false} onOpenChange={setMenuOpen}>
-        <DropdownMenuTrigger asChild>
-          <button
-            className="p-1.5 rounded-md hover:bg-foreground/[0.05] data-[state=open]:bg-foreground/[0.05] transition-colors"
-            data-state={menuOpen ? 'open' : 'closed'}
-          >
-            <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-          </button>
-        </DropdownMenuTrigger>
-        <StyledDropdownMenuContent align="end">
-          <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onRenameClick)}>
-            <Pencil className="h-3.5 w-3.5" />
-            <span>{t("common.rename")}</span>
-          </StyledDropdownMenuItem>
-          {!connection.isDefault && (
-            <StyledDropdownMenuItem onClick={onSetDefault}>
-              <Star className="h-3.5 w-3.5" />
-              <span>{t("settings.ai.setAsDefault")}</span>
+      {connection.isEnvironmentConnection ? (
+        <span className="inline-flex items-center h-6 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
+          Environment
+        </span>
+      ) : (
+        <DropdownMenu modal={false} onOpenChange={setMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="p-1.5 rounded-md hover:bg-foreground/[0.05] data-[state=open]:bg-foreground/[0.05] transition-colors"
+              data-state={menuOpen ? 'open' : 'closed'}
+            >
+              <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <StyledDropdownMenuContent align="end">
+            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onRenameClick)}>
+              <Pencil className="h-3.5 w-3.5" />
+              <span>{t("common.rename")}</span>
             </StyledDropdownMenuItem>
-          )}
-          <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
-            <Settings2 className="h-3.5 w-3.5" />
-            <span>{t("common.edit")}</span>
-          </StyledDropdownMenuItem>
-          <StyledDropdownMenuItem
-            onClick={onValidate}
-            disabled={validationState === 'validating'}
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            <span>{t("settings.ai.validateConnection")}</span>
-          </StyledDropdownMenuItem>
-          {(() => {
-            const currentBehavior = resolveMidStreamBehavior(connection)
-            return (
-              <DropdownMenuSub>
-                <StyledDropdownMenuSubTrigger>
-                  <MessageSquareMore className="h-3.5 w-3.5" />
-                  <span>{t("settings.ai.midStream.title")}</span>
-                </StyledDropdownMenuSubTrigger>
-                <StyledDropdownMenuSubContent>
-                  <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('steer')}>
-                    <Zap className="h-3.5 w-3.5" />
-                    <span className="flex-1">{t("settings.ai.midStream.steer")}</span>
-                    {currentBehavior === 'steer' && <Check className="h-3.5 w-3.5" />}
-                  </StyledDropdownMenuItem>
-                  <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('queue')}>
-                    <Clock className="h-3.5 w-3.5" />
-                    <span className="flex-1">{t("settings.ai.midStream.queue")}</span>
-                    {currentBehavior === 'queue' && <Check className="h-3.5 w-3.5" />}
-                  </StyledDropdownMenuItem>
-                </StyledDropdownMenuSubContent>
-              </DropdownMenuSub>
-            )
-          })()}
-          <StyledDropdownMenuSeparator />
-          <StyledDropdownMenuItem
-            onClick={onDelete}
-            variant="destructive"
-            disabled={isLastConnection}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            <span>{t("common.delete")}</span>
-          </StyledDropdownMenuItem>
-        </StyledDropdownMenuContent>
-      </DropdownMenu>
+            {!connection.isDefault && (
+              <StyledDropdownMenuItem onClick={onSetDefault}>
+                <Star className="h-3.5 w-3.5" />
+                <span>{t("settings.ai.setAsDefault")}</span>
+              </StyledDropdownMenuItem>
+            )}
+            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
+              <Settings2 className="h-3.5 w-3.5" />
+              <span>{t("common.edit")}</span>
+            </StyledDropdownMenuItem>
+            <StyledDropdownMenuItem
+              onClick={onValidate}
+              disabled={validationState === 'validating'}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              <span>{t("settings.ai.validateConnection")}</span>
+            </StyledDropdownMenuItem>
+            {(() => {
+              const currentBehavior = resolveMidStreamBehavior(connection)
+              return (
+                <DropdownMenuSub>
+                  <StyledDropdownMenuSubTrigger>
+                    <MessageSquareMore className="h-3.5 w-3.5" />
+                    <span>{t("settings.ai.midStream.title")}</span>
+                  </StyledDropdownMenuSubTrigger>
+                  <StyledDropdownMenuSubContent>
+                    <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('steer')}>
+                      <Zap className="h-3.5 w-3.5" />
+                      <span className="flex-1">{t("settings.ai.midStream.steer")}</span>
+                      {currentBehavior === 'steer' && <Check className="h-3.5 w-3.5" />}
+                    </StyledDropdownMenuItem>
+                    <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('queue')}>
+                      <Clock className="h-3.5 w-3.5" />
+                      <span className="flex-1">{t("settings.ai.midStream.queue")}</span>
+                      {currentBehavior === 'queue' && <Check className="h-3.5 w-3.5" />}
+                    </StyledDropdownMenuItem>
+                  </StyledDropdownMenuSubContent>
+                </DropdownMenuSub>
+              )
+            })()}
+            <StyledDropdownMenuSeparator />
+            <StyledDropdownMenuItem
+              onClick={onDelete}
+              variant="destructive"
+              disabled={isLastConnection}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>{t("common.delete")}</span>
+            </StyledDropdownMenuItem>
+          </StyledDropdownMenuContent>
+        </DropdownMenu>
+      )}
     </SettingsRow>
   )
 }
@@ -1051,12 +1067,7 @@ export default function AiSettingsPage() {
                       {t("settings.ai.noConnections")}
                     </div>
                   ) : (
-                    [...llmConnections]
-                      .sort((a, b) => {
-                        if (a.isDefault && !b.isDefault) return -1
-                        if (!a.isDefault && b.isDefault) return 1
-                        return a.name.localeCompare(b.name)
-                      })
+                    sortLlmConnectionsForSettings(llmConnections)
                       .map((conn) => (
                       <ConnectionRow
                         key={conn.slug}
