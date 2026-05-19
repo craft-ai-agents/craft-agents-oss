@@ -7,7 +7,7 @@
  * - LLM connection type mapping
  * - Available providers list
  */
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { join } from 'node:path';
 import {
   detectProvider,
@@ -326,35 +326,47 @@ describe('phase4 backend abstraction APIs', () => {
     expect(result.error).toBe('Connection not found');
   });
 
-  it('resolves and preserves the environment connection for Pi backend sessions', () => {
-    const originalBaseUrl = process.env.LLM_BASE_URL;
-    const originalModel = process.env.LLM_MODEL;
-    const originalName = process.env.LLM_CONNECTION_NAME;
+  describe('env-provider session Pi backend routing', () => {
+    const savedEnv: Record<string, string | undefined> = {};
 
-    try {
+    beforeEach(() => {
+      savedEnv.LLM_BASE_URL = process.env.LLM_BASE_URL;
+      savedEnv.LLM_MODEL = process.env.LLM_MODEL;
+      savedEnv.LLM_CONNECTION_NAME = process.env.LLM_CONNECTION_NAME;
       process.env.LLM_BASE_URL = 'http://localhost:11434/v1';
       process.env.LLM_MODEL = 'gpt-oss-120b';
       process.env.LLM_CONNECTION_NAME = 'Local LLM';
+    });
 
+    afterEach(() => {
+      for (const [key, value] of Object.entries(savedEnv)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    });
+
+    it('resolveSessionConnection returns a pi_compat/none env connection', () => {
       const connection = resolveSessionConnection(ENV_CONNECTION_SLUG);
       expect(connection?.slug).toBe(ENV_CONNECTION_SLUG);
       expect(connection?.providerType).toBe('pi_compat');
       expect(connection?.authType).toBe('none');
+    });
 
-      const context = resolveBackendContext({
-        sessionConnectionSlug: ENV_CONNECTION_SLUG,
-      });
+    it('resolveBackendContext routes env-provider sessions to the Pi backend', () => {
+      const context = resolveBackendContext({ sessionConnectionSlug: ENV_CONNECTION_SLUG });
       expect(context.provider).toBe('pi');
       expect(context.connection?.slug).toBe(ENV_CONNECTION_SLUG);
       expect(context.connection?.providerType).toBe('pi_compat');
       expect(context.connection?.authType).toBe('none');
+    });
 
+    it('session-restore orphan-clear does not clear the env-provider slug', () => {
       const managed: { llmConnection: string | undefined; connectionLocked: boolean } = {
         llmConnection: ENV_CONNECTION_SLUG,
         connectionLocked: true,
       };
 
-      const restoredConnection = resolveSessionConnection(managed.llmConnection, undefined);
+      const restoredConnection = resolveSessionConnection(managed.llmConnection);
       if (managed.llmConnection && !restoredConnection) {
         managed.llmConnection = undefined;
         managed.connectionLocked = false;
@@ -362,16 +374,7 @@ describe('phase4 backend abstraction APIs', () => {
 
       expect(managed.llmConnection).toBe(ENV_CONNECTION_SLUG);
       expect(managed.connectionLocked).toBe(true);
-    } finally {
-      if (originalBaseUrl === undefined) delete process.env.LLM_BASE_URL;
-      else process.env.LLM_BASE_URL = originalBaseUrl;
-
-      if (originalModel === undefined) delete process.env.LLM_MODEL;
-      else process.env.LLM_MODEL = originalModel;
-
-      if (originalName === undefined) delete process.env.LLM_CONNECTION_NAME;
-      else process.env.LLM_CONNECTION_NAME = originalName;
-    }
+    });
   });
 
   it('testBackendConnection keeps required model argument and validates key presence', async () => {
