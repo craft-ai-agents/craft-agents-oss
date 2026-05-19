@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
+import { ENV_CONNECTION_SLUG, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -113,12 +113,22 @@ export function setSessionPlatform(platform: PlatformServices): void {
   sessionLog = createScopedLogger(platform.logger, 'session')
 }
 
-async function buildSsoSubprocessEnvOverrides(): Promise<Record<string, string>> {
-  const baseUrl = process.env.MDP_API_URL?.trim()
+interface SsoSubprocessEnvOptions {
+  env?: Pick<NodeJS.ProcessEnv, 'LLM_BASE_URL'>
+  loadSsoSession?: () => Promise<{ token?: string | null } | null>
+}
+
+export async function buildSsoSubprocessEnvOverrides(
+  connectionSlug: string | undefined,
+  options: SsoSubprocessEnvOptions = {},
+): Promise<Record<string, string>> {
+  if (connectionSlug !== ENV_CONNECTION_SLUG) return {}
+
+  const baseUrl = (options.env?.LLM_BASE_URL ?? process.env.LLM_BASE_URL)?.trim()
   if (!baseUrl) return {}
 
   try {
-    const session = await new SsoCredentialStore().load()
+    const session = await (options.loadSsoSession ?? (() => new SsoCredentialStore().load()))()
     if (!session?.token) return {}
     return {
       CRAFT_LLM_SSO_TOKEN: session.token,
@@ -2974,7 +2984,7 @@ export class SessionManager implements ISessionManager {
         // Pass mini model to SDK subprocess so built-in tools like WebFetch
         // use the correct model for summarization (instead of hardcoded Haiku)
         ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
-        ...(await buildSsoSubprocessEnvOverrides()),
+        ...(await buildSsoSubprocessEnvOverrides(backendContext.connection?.slug ?? managed.llmConnection)),
       }
       managed.envOverrides = envOverrides
 
@@ -7331,7 +7341,7 @@ export class SessionManager implements ISessionManager {
     const envOverrides: Record<string, string> = {
       CRAFT_WORKSPACE_PATH: workspaceRootPath,
       ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
-      ...(await buildSsoSubprocessEnvOverrides()),
+      ...(await buildSsoSubprocessEnvOverrides(backendContext.connection?.slug ?? managed.llmConnection)),
     }
 
     const agent = createBackendFromResolvedContext({

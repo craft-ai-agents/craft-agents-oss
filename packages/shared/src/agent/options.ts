@@ -200,6 +200,9 @@ export function buildClaudeSubprocessEnv(
     delete env.AWS_BEARER_TOKEN_BEDROCK;
     delete env.ANTHROPIC_BEDROCK_BASE_URL;
 
+    if (!envOverrides?.CRAFT_LLM_SSO_TOKEN) delete env.CRAFT_LLM_SSO_TOKEN;
+    if (!envOverrides?.CRAFT_LLM_SSO_BASE_URL) delete env.CRAFT_LLM_SSO_BASE_URL;
+
     return env;
 }
 

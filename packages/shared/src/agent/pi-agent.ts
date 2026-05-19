@@ -411,23 +411,12 @@ export class PiAgent extends BaseAgent {
       this.debug('Custom endpoint mode: no provider credential configured, sending empty API key');
     }
 
-    // Derive AWS env vars from the piAuth credential (single fetch, no race).
-    const awsEnv = this.buildAwsEnv(piAuth, runtime);
+    const subprocessEnv = this.buildSubprocessEnv(piAuth, runtime, sessionDir);
 
-    // Spawn the subprocess
     const child = spawn(nodePath, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        ...getProxyEnvVars(),
-        ...this.config.envOverrides,
-        ...awsEnv,
-        // Pass session dir for cross-process toolMetadataStore
-        ...(sessionDir ? { CRAFT_SESSION_DIR: sessionDir } : {}),
-        // Propagate debug mode
-        CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
-      },
+      env: subprocessEnv,
     });
 
     this.subprocess = child;
@@ -673,6 +662,28 @@ export class PiAgent extends BaseAgent {
     if (!process.env.AWS_BEDROCK_FORCE_HTTP1) {
       env.AWS_BEDROCK_FORCE_HTTP1 = '1';
     }
+
+    return env;
+  }
+
+  private buildSubprocessEnv(
+    piAuth: Awaited<ReturnType<PiAgent['getPiAuth']>>,
+    runtime: { piAuthProvider?: string },
+    sessionDir?: string,
+  ): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...getProxyEnvVars(),
+      ...this.config.envOverrides,
+      ...this.buildAwsEnv(piAuth, runtime),
+      // Pass session dir for cross-process toolMetadataStore
+      ...(sessionDir ? { CRAFT_SESSION_DIR: sessionDir } : {}),
+      // Propagate debug mode
+      CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+    };
+
+    if (!this.config.envOverrides?.CRAFT_LLM_SSO_TOKEN) delete env.CRAFT_LLM_SSO_TOKEN;
+    if (!this.config.envOverrides?.CRAFT_LLM_SSO_BASE_URL) delete env.CRAFT_LLM_SSO_BASE_URL;
 
     return env;
   }
