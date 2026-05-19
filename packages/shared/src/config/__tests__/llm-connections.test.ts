@@ -34,6 +34,15 @@ describe('synthesizeEnvConnection', () => {
     })
   })
 
+  it('uses LLM_CONNECTION_NAME as the Environment connection display name when present', () => {
+    const conn = synthesizeEnvConnection({
+      LLM_BASE_URL: 'https://llm.example.test/v1',
+      LLM_CONNECTION_NAME: 'OpenLLM',
+    })
+
+    expect(conn?.name).toBe('OpenLLM')
+  })
+
   it('populates models and defaultModel from LLM_MODEL when present', () => {
     const conn = synthesizeEnvConnection({
       LLM_BASE_URL: 'https://llm.example.test/v1',

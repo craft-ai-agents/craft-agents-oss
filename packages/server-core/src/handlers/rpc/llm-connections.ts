@@ -432,6 +432,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     const envConnection = synthesizeEnvConnectionWithStatus({
       LLM_BASE_URL: process.env.LLM_BASE_URL,
       LLM_MODEL: process.env.LLM_MODEL,
+      LLM_CONNECTION_NAME: process.env.LLM_CONNECTION_NAME,
     }, ssoToken)
     if (!envConnection) return persistedConnections
 

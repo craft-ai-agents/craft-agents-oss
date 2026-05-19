@@ -62,6 +62,7 @@ function getBuildDefines(): string[] {
     // Environment LLM connection
     "LLM_BASE_URL",
     "LLM_MODEL",
+    "LLM_CONNECTION_NAME",
   ];
 
   return definedVars.map((varName) => {

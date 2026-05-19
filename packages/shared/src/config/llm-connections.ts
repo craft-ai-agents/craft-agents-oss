@@ -224,6 +224,9 @@ export interface EnvConnectionEnv {
 
   /** Optional model ID used as both the available and default model. */
   LLM_MODEL?: string;
+
+  /** Optional display name for the synthesized Environment connection. */
+  LLM_CONNECTION_NAME?: string;
 }
 
 /** Reserved slug used by the protected Environment connection. */
@@ -255,7 +258,7 @@ export function synthesizeEnvConnection(
 
   return {
     slug: ENV_CONNECTION_SLUG,
-    name: 'Environment',
+    name: env.LLM_CONNECTION_NAME ?? 'Environment',
     providerType: 'pi_compat',
     authType: 'none',
     piAuthProvider: 'openai',
