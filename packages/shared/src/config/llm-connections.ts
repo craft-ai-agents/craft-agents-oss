@@ -262,7 +262,7 @@ export function synthesizeEnvConnection(
     customEndpoint: { api: 'openai-completions' },
     baseUrl,
     models: model ? [model] : [],
-    defaultModel: model ? model : undefined,
+    defaultModel: model || undefined,
     createdAt: 0,
   };
 }

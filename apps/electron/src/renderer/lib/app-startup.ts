@@ -19,14 +19,12 @@ export async function resolveAuthenticatedStartupState({
   windowWorkspaceId?: string | null
   listLlmConnectionsWithStatus: () => Promise<LlmConnectionWithStatus[]>
 }): Promise<StartupAppState> {
-  if (setupNeeds.isFullyConfigured) {
-    return windowWorkspaceId ? 'ready' : 'workspace-picker'
-  }
+  const afterAuth: StartupAppState = windowWorkspaceId ? 'ready' : 'workspace-picker'
+
+  if (setupNeeds.isFullyConfigured) return afterAuth
 
   const connections = await listLlmConnectionsWithStatus()
-  if (hasReadyEnvironmentConnection(connections)) {
-    return windowWorkspaceId ? 'ready' : 'workspace-picker'
-  }
+  if (hasReadyEnvironmentConnection(connections)) return afterAuth
 
   return 'onboarding'
 }
