@@ -70,6 +70,7 @@ import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceSelectorPopover } from '@/components/ui/SourceSelectorPopover'
 import { CompactSourceSelector } from '@/components/ui/CompactSourceSelector'
+import { CompactWorkingDirectorySelector } from '@/components/ui/CompactWorkingDirectorySelector'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import { derivePickerMode } from './picker-mode'
@@ -1885,7 +1886,7 @@ export function FreeFormInput({
             </div>
           )}
           {onWorkingDirectoryChange && (
-            <WorkingDirectoryBadge
+            <CompactWorkingDirectorySelector
               workingDirectory={workingDirectory}
               onWorkingDirectoryChange={onWorkingDirectoryChange}
               sessionFolderPath={sessionFolderPath}
