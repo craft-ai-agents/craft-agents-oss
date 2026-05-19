@@ -81,7 +81,7 @@ export class MdpAuthClient {
 
   /** Refresh an existing MDP SSO session token. */
   refresh(token: string): Promise<SsoSession> {
-    return this.post(REFRESH_TOKEN_ENDPOINT, { token });
+    return this.get(REFRESH_TOKEN_ENDPOINT, token);
   }
 
   private async post(endpoint: string, body: Record<string, string>): Promise<SsoSession> {
@@ -90,7 +90,18 @@ export class MdpAuthClient {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
+    return this.parseResponse(response, endpoint);
+  }
 
+  private async get(endpoint: string, token: string): Promise<SsoSession> {
+    const response = await this.fetchFn(`${this.baseUrl}${endpoint}`, {
+      method: 'GET',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    return this.parseResponse(response, endpoint);
+  }
+
+  private async parseResponse(response: Response, endpoint: string): Promise<SsoSession> {
     if (!response.ok) {
       throw new MdpAuthHttpError(
         response.status,

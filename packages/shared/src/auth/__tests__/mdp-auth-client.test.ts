@@ -81,7 +81,7 @@ describe('MdpAuthClient', () => {
     expect(id1).not.toBe(id2);
   });
 
-  it('refresh posts the session token and returns a parsed SSO session', async () => {
+  it('refresh sends a GET with the token in the Authorization header', async () => {
     const fetchMock = mock(() =>
       Promise.resolve(
         new Response(
@@ -100,9 +100,8 @@ describe('MdpAuthClient', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       'https://mdp.example.test/api/mdp/auth/refresh-token',
       {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ token: 'old-session-token' }),
+        method: 'GET',
+        headers: { authorization: 'Bearer old-session-token' },
       },
     );
     expect(session.token).toBe('new-session-token');
