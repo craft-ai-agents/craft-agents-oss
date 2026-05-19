@@ -1,9 +1,8 @@
-// Load user's shell environment first (before other imports that may use env)
-// This ensures tools like Homebrew, nvm, etc. are available to the agent
-import { loadShellEnv } from './shell-env'
-loadShellEnv()
-
+// Load .env and shell environment before anything else reads process.env
+import { loadDotEnv, loadShellEnv } from './shell-env'
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
+loadDotEnv(app.getAppPath())
+loadShellEnv()
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
@@ -67,9 +66,10 @@ setupI18n()
 const machineId = createHash('sha256').update(hostname() + homedir()).digest('hex').slice(0, 16)
 Sentry.setUser({ id: machineId })
 
-import { join, delimiter } from 'path'
+import { join, delimiter, resolve } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { handleSsoCallback } from '@craft-agent/server-core/handlers/rpc/sso'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
 import { registerAllRpcHandlers } from './handlers/index'
 import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient, cleanupWorkspaceFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
@@ -94,6 +94,7 @@ import { setBundledAssetsRoot } from '@craft-agent/shared/utils'
 import { initializeBackendHostRuntime } from '@craft-agent/shared/agent/backend'
 import { setPowerShellValidatorRoot } from '@craft-agent/shared/agent'
 import { handleDeepLink } from './deep-link'
+import { getDeepLinkScheme } from './deep-link-scheme'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
@@ -182,9 +183,9 @@ registerPiModelResolver((piAuthProvider) =>
   piAuthProvider ? getPiModelsForAuthProvider(piAuthProvider) : getAllPiModels()
 )
 
-// Custom URL scheme for deeplinks (e.g., craftagents://auth-complete)
-// Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (craftagents1, craftagents2, etc.)
-const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'
+// Custom URL scheme for deeplinks (e.g., mdp://auth-complete)
+// Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (mdp1, mdp2, etc.)
+const DEEPLINK_SCHEME = getDeepLinkScheme()
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
@@ -192,6 +193,11 @@ let browserPaneManager: BrowserPaneManager | null = null
 let oauthFlowStore: OAuthFlowStore | null = null
 let moduleSink: EventSink | null = null
 let moduleClientResolver: ((webContentsId: number) => string | undefined) | null = null
+
+const handleDeepLinkSsoCallback = (code: string, state?: string) => {
+  const payload = { code, state }
+  return handleSsoCallback(payload)
+}
 
 // Messaging gateway: the bootstrap handle is created once sessionManager is
 // available (inside createHandlerDeps) and populated with the WS publisher
@@ -207,12 +213,12 @@ let pendingDeepLink: string | null = null
 // Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "MDP [1]")
 app.setName(process.env.CRAFT_APP_NAME || 'MDP')
 
-// Register as default protocol client for craftagents:// URLs
+// Register as default protocol client for mdp:// URLs
 // This must be done before app.whenReady() on some platforms
 if (process.defaultApp) {
   // Development mode: need to pass the app path
   if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient(DEEPLINK_SCHEME, process.execPath, [process.argv[1]])
+    app.setAsDefaultProtocolClient(DEEPLINK_SCHEME, process.execPath, [resolve(process.argv[1])])
   }
 } else {
   // Production mode
@@ -270,7 +276,11 @@ app.on('open-url', (event, url) => {
   mainLog.info('Received deeplink:', url)
 
   if (windowManager) {
-    handleDeepLink(url, windowManager, moduleSink ?? undefined, moduleClientResolver ?? undefined).catch(err => {
+    handleDeepLink(url, windowManager, {
+      sink: moduleSink ?? undefined,
+      resolveClientId: moduleClientResolver ?? undefined,
+      handleSsoCallback: handleDeepLinkSsoCallback,
+    }).catch(err => {
       mainLog.error('Failed to handle deep link:', err)
     })
   } else {
@@ -288,19 +298,23 @@ if (!gotTheLock) {
     // Someone tried to run a second instance, we should focus our window.
     // On Windows/Linux, the deeplink is in commandLine
     const url = commandLine.find(arg => arg.startsWith(`${DEEPLINK_SCHEME}://`))
-    if (url && windowManager) {
-      mainLog.info('Received deeplink from second instance:', url)
-      handleDeepLink(url, windowManager, moduleSink ?? undefined, moduleClientResolver ?? undefined).catch(err => {
-        mainLog.error('Failed to handle deep link:', err)
-      })
-    } else if (windowManager) {
-      // No deep link - just focus the first window
+    if (windowManager) {
       const windows = windowManager.getAllWindows()
       if (windows.length > 0) {
         const win = windows[0].window
         if (win.isMinimized()) win.restore()
         win.focus()
       }
+    }
+    if (url && windowManager) {
+      mainLog.info('Received deeplink from second instance:', url)
+      handleDeepLink(url, windowManager, {
+        sink: moduleSink ?? undefined,
+        resolveClientId: moduleClientResolver ?? undefined,
+        handleSsoCallback: handleDeepLinkSsoCallback,
+      }).catch(err => {
+        mainLog.error('Failed to handle deep link:', err)
+      })
     }
   })
 }
@@ -1044,7 +1058,11 @@ app.whenReady().then(async () => {
     // Process pending deep link from cold start
     if (pendingDeepLink) {
       mainLog.info('Processing pending deep link:', pendingDeepLink)
-      await handleDeepLink(pendingDeepLink, windowManager, moduleSink ?? undefined, moduleClientResolver ?? undefined)
+      await handleDeepLink(pendingDeepLink, windowManager, {
+        sink: moduleSink ?? undefined,
+        resolveClientId: moduleClientResolver ?? undefined,
+        handleSsoCallback: handleDeepLinkSsoCallback,
+      })
       pendingDeepLink = null
     }
 

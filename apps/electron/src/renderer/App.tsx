@@ -12,7 +12,7 @@ import { useEventProcessor } from './event-processor'
 import type { AgentEvent, Effect } from './event-processor'
 import { AppShell } from '@/components/app-shell/AppShell'
 import type { AppShellContextType } from '@/context/AppShellContext'
-import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
+import { OnboardingWizard, ReauthScreen, SsoLoginPage } from '@/components/onboarding'
 import { WorkspacePicker } from '@/components/workspace'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
@@ -74,7 +74,7 @@ import { rendererLog } from '@/lib/logger'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
-type AppState = 'loading' | 'onboarding' | 'reauth' | 'workspace-picker' | 'ready'
+type AppState = 'loading' | 'sso-login' | 'onboarding' | 'reauth' | 'workspace-picker' | 'ready'
 
 /** Type for the Jotai store returned by useStore() */
 type JotaiStore = ReturnType<typeof getDefaultStore>
@@ -235,6 +235,7 @@ export default function App() {
   // App state: loading -> check auth -> onboarding or ready
   const [appState, setAppState] = useState<AppState>('loading')
   const [setupNeeds, setSetupNeeds] = useState<SetupNeeds | null>(null)
+  const [ssoLoginResult, setSsoLoginResult] = useState<{ success: boolean; error?: string } | null>(null)
 
   // Per-session Jotai atom setters for isolated updates
   // NOTE: No sessionsAtom - we don't store a Session[] array anywhere to prevent memory leaks
@@ -655,6 +656,12 @@ export default function App() {
   useEffect(() => {
     const initialize = async () => {
       try {
+        const ssoSession = await window.electronAPI.getSsoSession()
+        if (!ssoSession.authenticated) {
+          setAppState('sso-login')
+          return
+        }
+
         // Get this window's workspace ID (passed via URL query param from main process)
         const wsId = await window.electronAPI.getWindowWorkspace()
         setWindowWorkspaceId(wsId)
@@ -676,12 +683,17 @@ export default function App() {
         }
       } catch (error) {
         console.error('Failed to check auth state:', error)
-        // If check fails, show onboarding to be safe
-        setAppState('onboarding')
+        setAppState('sso-login')
       }
     }
 
     initialize()
+  }, [])
+
+  useEffect(() => {
+    return window.electronAPI.onSsoLoginResult((result) => {
+      setSsoLoginResult(result)
+    })
   }, [])
 
   // Session selection state
@@ -1676,6 +1688,34 @@ export default function App() {
     setShowResetDialog(true)
   }, [])
 
+  const clearRendererSsoSessionState = useCallback(() => {
+    initializeSessions([])
+    setWorkspaces([])
+    setWindowWorkspaceId(null)
+    setSetupNeeds(null)
+    setLlmConnections([])
+    setDefaultLlmConnectionSlug(undefined)
+    setWorkspaceDefaultLlmConnection(undefined)
+    setSession({ selected: null })
+    setPendingPermissions(new Map())
+    setPendingCredentials(new Map())
+    setSessionOptions(new Map())
+    setSessionLoadError(null)
+    setSsoLoginResult(null)
+    sessionDraftsRef.current.clear()
+    clearStreamingState()
+    store.set(sourcesAtom, [])
+    store.set(skillsAtom, [])
+    store.set(sessionMetaMapAtom, new Map())
+    store.set(sessionIdsAtom, [])
+  }, [clearStreamingState, initializeSessions, setSession, store])
+
+  const handleSsoLogout = useCallback(async () => {
+    await window.electronAPI.logoutSso()
+    clearRendererSsoSessionState()
+    setAppState('sso-login')
+  }, [clearRendererSsoSessionState])
+
   // Execute reset after user confirms in dialog
   const executeReset = useCallback(async () => {
     try {
@@ -1817,6 +1857,7 @@ export default function App() {
     onOpenKeyboardShortcuts: handleOpenKeyboardShortcuts,
     onOpenStoredUserPreferences: handleOpenStoredUserPreferences,
     onReset: handleReset,
+    onSsoLogout: handleSsoLogout,
     // Session options
     onSessionOptionsChange: handleSessionOptionsChange,
     onInputChange: handleInputChange,
@@ -1859,6 +1900,7 @@ export default function App() {
     handleOpenKeyboardShortcuts,
     handleOpenStoredUserPreferences,
     handleReset,
+    handleSsoLogout,
     handleSessionOptionsChange,
     handleInputChange,
     handleAttachmentsChange,
@@ -1912,6 +1954,23 @@ export default function App() {
             open={showResetDialog}
             onConfirm={executeReset}
             onCancel={() => setShowResetDialog(false)}
+          />
+        </ModalProvider>
+      </DismissibleLayerProvider>
+    )
+  }
+
+  if (appState === 'sso-login') {
+    return (
+      <DismissibleLayerProvider>
+        <ModalProvider>
+          <WindowCloseHandler />
+          <SsoLoginPage
+            result={ssoLoginResult}
+            onSuccess={() => {
+              setSsoLoginResult(null)
+              setAppState('onboarding')
+            }}
           />
         </ModalProvider>
       </DismissibleLayerProvider>
