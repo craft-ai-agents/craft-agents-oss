@@ -1413,7 +1413,10 @@ function PublishSkillDialog({
     setTag('B'); setFile(null); setErrors({})
   }, [open, sourceSkill])
 
-  const displayUserId = currentUserId ?? '—'
+  const { ssoUser } = useAppShellContext()
+  const displayUser = ssoUser?.userName
+    ? `${ssoUser.userName}（${ssoUser.employeeId ?? currentUserId ?? '—'}）`
+    : (currentUserId ?? '—')
 
   const TAG_OPTIONS = [
     { value: 'B' as const, label: 'DevOps（DevOps 相关能力，天眼、乐高等）' },
@@ -1638,7 +1641,7 @@ function PublishSkillDialog({
           <div>
             <label className="mb-1.5 block text-[13px] font-medium text-foreground">上传人信息</label>
             <p className="text-[13px] text-muted-foreground">
-              {displayUserId}
+              {displayUser}
             </p>
           </div>
 
