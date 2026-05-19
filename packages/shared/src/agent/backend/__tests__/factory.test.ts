@@ -21,6 +21,8 @@ import {
   connectionAuthTypeToBackendAuthType,
   providerTypeToAgentProvider,
   resolveSetupTestConnectionHint,
+  resolveBackendContext,
+  resolveSessionConnection,
   createBackendFromConnection,
   testBackendConnection,
   validateStoredBackendConnection,
@@ -30,7 +32,7 @@ import type { Workspace, LlmConnection } from '../../../config/storage.ts';
 import type { SessionConfig as Session } from '../../../sessions/storage.ts';
 import { ClaudeAgent } from '../../claude-agent.ts';
 import { PiAgent } from '../../pi-agent.ts';
-import { isValidProviderAuthCombination } from '../../../config/llm-connections.ts';
+import { ENV_CONNECTION_SLUG, isValidProviderAuthCombination } from '../../../config/llm-connections.ts';
 
 // Test helpers
 function createTestWorkspace(): Workspace {
@@ -322,6 +324,37 @@ describe('phase4 backend abstraction APIs', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('Connection not found');
+  });
+
+  it('resolves the environment connection to the Pi backend when LLM_BASE_URL is set', () => {
+    const originalBaseUrl = process.env.LLM_BASE_URL;
+    const originalModel = process.env.LLM_MODEL;
+    const originalName = process.env.LLM_CONNECTION_NAME;
+
+    try {
+      process.env.LLM_BASE_URL = 'http://localhost:11434/v1';
+      process.env.LLM_MODEL = 'gpt-oss-120b';
+      process.env.LLM_CONNECTION_NAME = 'Local LLM';
+
+      const connection = resolveSessionConnection(ENV_CONNECTION_SLUG);
+      expect(connection?.slug).toBe(ENV_CONNECTION_SLUG);
+      expect(connection?.providerType).toBe('pi_compat');
+
+      const context = resolveBackendContext({
+        sessionConnectionSlug: ENV_CONNECTION_SLUG,
+      });
+      expect(context.provider).toBe('pi');
+      expect(context.connection?.slug).toBe(ENV_CONNECTION_SLUG);
+    } finally {
+      if (originalBaseUrl === undefined) delete process.env.LLM_BASE_URL;
+      else process.env.LLM_BASE_URL = originalBaseUrl;
+
+      if (originalModel === undefined) delete process.env.LLM_MODEL;
+      else process.env.LLM_MODEL = originalModel;
+
+      if (originalName === undefined) delete process.env.LLM_CONNECTION_NAME;
+      else process.env.LLM_CONNECTION_NAME = originalName;
+    }
   });
 
   it('testBackendConnection keeps required model argument and validates key presence', async () => {

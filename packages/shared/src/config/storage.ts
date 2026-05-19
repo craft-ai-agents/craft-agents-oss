@@ -42,7 +42,7 @@ import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
 import type { LlmConnection } from './llm-connections.ts';
-import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
+import { ENV_CONNECTION_SLUG, isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, synthesizeEnvConnection, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
 import {
   getModelProvider,
   getModelById,
@@ -2511,6 +2511,14 @@ export function getLlmConnections(): LlmConnection[] {
  * @returns Connection or null if not found
  */
 export function getLlmConnection(slug: string): LlmConnection | null {
+  if (slug === ENV_CONNECTION_SLUG) {
+    return synthesizeEnvConnection({
+      LLM_BASE_URL: process.env.LLM_BASE_URL,
+      LLM_MODEL: process.env.LLM_MODEL,
+      LLM_CONNECTION_NAME: process.env.LLM_CONNECTION_NAME,
+    });
+  }
+
   const connections = getLlmConnections();
   return connections.find(c => c.slug === slug) || null;
 }
