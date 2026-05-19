@@ -54,6 +54,14 @@ function getBuildDefines(): string[] {
     "MICROSOFT_OAUTH_CLIENT_SECRET",
     "SENTRY_ELECTRON_INGEST_URL",
     "CRAFT_DEV_RUNTIME",
+    // MDP SSO / deployment config
+    "MDP_AUTH_URL",
+    "MDP_CLIENT_ID",
+    "MDP_RELAY_URL",
+    "MDP_ENABLE_SSO_STATE_CHECK",
+    // Environment LLM connection
+    "LLM_BASE_URL",
+    "LLM_MODEL",
   ];
 
   return definedVars.map((varName) => {
