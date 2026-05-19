@@ -36,6 +36,13 @@ import { resolveRequestContext } from './interceptor-request-utils.ts';
 // Type alias for fetch's HeadersInit
 type HeadersInitType = Headers | Record<string, string> | string[][];
 
+export const SSO_TOKEN_EXPIRED_SIGNAL = 'SSO_TOKEN_EXPIRED';
+
+export interface SsoInterceptorConfig {
+  token: string;
+  baseUrl: string;
+}
+
 /**
  * When `CRAFT_DEBUG_SSE_RAW=1`, the OpenAI strip streams dump every raw SSE
  * line they see (in) and emit (out) to interceptor.log. Used to diagnose
@@ -95,6 +102,68 @@ function getProxyForUrl(url: string): string | undefined {
 
 if (PROXY_URL) {
   debugLog(`[proxy] Configured: ${redactProxyUrl(PROXY_URL)}${NO_PROXY ? `, NO_PROXY: ${NO_PROXY}` : ''}`);
+}
+
+// ============================================================================
+// SSO TOKEN INJECTION (Pi subprocess only; enabled by spawn env vars)
+// ============================================================================
+
+export function resolveSsoInterceptorConfig(env: NodeJS.ProcessEnv = process.env): SsoInterceptorConfig | null {
+  const token = env.CRAFT_LLM_SSO_TOKEN;
+  const baseUrl = env.CRAFT_LLM_SSO_BASE_URL?.trim();
+  if (!token || !baseUrl) return null;
+  return { token, baseUrl };
+}
+
+export function isSsoBaseUrlRequest(url: string, config: SsoInterceptorConfig | null = resolveSsoInterceptorConfig()): boolean {
+  return Boolean(config && url.startsWith(config.baseUrl));
+}
+
+function collectRequestHeaders(input: string | URL | Request, init?: RequestInit): Headers {
+  const headers = new Headers(input instanceof Request ? input.headers : undefined);
+  const initHeaders = init?.headers;
+  if (initHeaders) {
+    new Headers(initHeaders).forEach((value, key) => headers.set(key, value));
+  }
+  return headers;
+}
+
+export function applySsoTokenInjection(
+  input: string | URL | Request,
+  init: RequestInit | undefined,
+  url: string,
+  config: SsoInterceptorConfig | null = resolveSsoInterceptorConfig(),
+): RequestInit | undefined {
+  if (!isSsoBaseUrlRequest(url, config)) return init;
+  const headers = collectRequestHeaders(input, init);
+  headers.set('Authorization', config!.token);
+  debugLog(`[sso] Injected Authorization header for ${url}`);
+  return { ...init, headers };
+}
+
+export function shouldEmitSsoTokenExpired(
+  url: string,
+  status: number,
+  config: SsoInterceptorConfig | null = resolveSsoInterceptorConfig(),
+): boolean {
+  return status === 501 && isSsoBaseUrlRequest(url, config);
+}
+
+export function emitSsoTokenExpiredSignal(
+  write: (line: string) => void = (line) => process.stdout.write(line),
+): void {
+  write(JSON.stringify({ type: 'sso_token_expired', signal: SSO_TOKEN_EXPIRED_SIGNAL }) + '\n');
+}
+
+export function handleSsoTokenExpiredResponse(
+  response: Response,
+  url: string,
+  config: SsoInterceptorConfig | null = resolveSsoInterceptorConfig(),
+  emit: () => void = () => emitSsoTokenExpiredSignal(),
+): void {
+  if (!shouldEmitSsoTokenExpired(url, response.status, config)) return;
+  debugLog(`[sso] ${SSO_TOKEN_EXPIRED_SIGNAL} from ${url}`);
+  emit();
 }
 
 // ============================================================================
@@ -2105,11 +2174,13 @@ async function interceptedFetch(
         : input.url;
 
   const startTime = Date.now();
+  const ssoConfig = resolveSsoInterceptorConfig();
+  const requestInit = applySsoTokenInjection(input, init, url, ssoConfig);
 
   if (DEBUG) {
     debugLog('\n' + '='.repeat(80));
     debugLog('\u2192 REQUEST');
-    debugLog(toCurl(url, init));
+    debugLog(toCurl(url, requestInit));
   }
 
   // Find matching adapter for this URL
@@ -2117,10 +2188,10 @@ async function interceptedFetch(
 
   if (
     adapter &&
-    ((init?.method ?? (input instanceof Request ? input.method : undefined))?.toUpperCase() === 'POST')
+    ((requestInit?.method ?? (input instanceof Request ? input.method : undefined))?.toUpperCase() === 'POST')
   ) {
     try {
-      const { bodyStr, normalizedInit } = await resolveRequestContext(input, init);
+      const { bodyStr, normalizedInit } = await resolveRequestContext(input, requestInit);
       if (bodyStr) {
         let parsed = JSON.parse(bodyStr);
 
@@ -2169,6 +2240,7 @@ async function interceptedFetch(
 
         debugLog(`[${adapter.name}] Intercepted request to ${url}`);
         const response = await originalFetch(url, finalInit);
+        handleSsoTokenExpiredResponse(response, url, ssoConfig);
 
         // Process SSE response through adapter's stream processor
         const contentType = response.headers.get('content-type') ?? '';
@@ -2203,8 +2275,9 @@ async function interceptedFetch(
   }
 
   const proxy = getProxyForUrl(url);
-  const proxyInit = proxy ? { ...init, proxy } : init;
+  const proxyInit = proxy ? { ...requestInit, proxy } : requestInit;
   const response = await originalFetch(input, proxyInit);
+  handleSsoTokenExpiredResponse(response, url, ssoConfig);
   return logResponse(response, url, startTime);
 }
 

@@ -921,6 +921,12 @@ export class PiAgent extends BaseAgent {
         }
         break;
 
+      case 'sso_token_expired':
+        if (msg.signal === 'SSO_TOKEN_EXPIRED') {
+          this.eventQueue.enqueue({ type: 'error', message: 'SSO_TOKEN_EXPIRED' });
+        }
+        break;
+
       case 'error': {
         const errorCode = typeof msg.code === 'string' ? msg.code : undefined;
         const rawMessage = String(msg.message || 'Unknown subprocess error');

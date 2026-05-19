@@ -907,6 +907,12 @@ export default function App() {
       const workspaceId = windowWorkspaceId ?? ''
 
       // Session lifecycle events are handled explicitly (not by the agent event processor).
+      if (event.type === 'sso_token_expired') {
+        setSsoLoginResult(null)
+        setAppState('sso-login')
+        return
+      }
+
       if (event.type === 'session_created') {
         window.electronAPI.getSessionMessages(sessionId)
           .then((createdSession: Session | null) => {
