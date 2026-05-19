@@ -43,6 +43,19 @@ export class MdpAuthHttpError extends Error {
   }
 }
 
+/** Error thrown when the MDP API returns a non-SUC0000 returnCode. */
+export class MdpAuthApiError extends Error {
+  readonly name = 'MdpAuthApiError';
+
+  constructor(
+    readonly returnCode: string,
+    readonly errMsg: string | null,
+    readonly endpoint: string,
+  ) {
+    super(errMsg ?? `MDP API error: ${returnCode}`);
+  }
+}
+
 /** Dependencies and endpoint configuration for the MDP auth client. */
 export interface MdpAuthClientOptions {
   /** Base MDP API URL. Defaults to MDP_API_URL. */
@@ -59,6 +72,13 @@ import { randomUUID } from 'node:crypto';
 
 const SSO_LOGIN_ENDPOINT = '/api/mdp/auth/sso-login';
 const REFRESH_TOKEN_ENDPOINT = '/api/mdp/auth/refresh-token';
+const MDP_SUCCESS_CODE = 'SUC0000';
+
+interface MdpApiEnvelope {
+  returnCode: string;
+  errMsg: string | null;
+  body: unknown;
+}
 
 /** Client for the MDP SSO login and refresh-token endpoints. */
 export class MdpAuthClient {
@@ -111,7 +131,12 @@ export class MdpAuthClient {
       );
     }
 
-    return parseSsoSession(await response.json(), this.now);
+    const envelope = await response.json() as MdpApiEnvelope;
+    if (envelope.returnCode !== MDP_SUCCESS_CODE) {
+      throw new MdpAuthApiError(envelope.returnCode, envelope.errMsg, endpoint);
+    }
+
+    return parseSsoSession(envelope.body, this.now);
   }
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it, mock } from 'bun:test';
 import {
   MdpAuthClient,
+  MdpAuthApiError,
   MdpAuthHttpError,
   type SsoSession,
 } from '../mdp-auth-client.ts';
@@ -21,11 +22,15 @@ function serverSession(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function envelope(body: unknown, returnCode = 'SUC0000', errMsg: string | null = null) {
+  return JSON.stringify({ returnCode, errMsg, body });
+}
+
 describe('MdpAuthClient', () => {
   it('login posts the SSO code with a loginId and converts expiresIn to expiresAt', async () => {
     const fetchMock = mock(() =>
       Promise.resolve(
-        new Response(JSON.stringify(serverSession()), { status: 200 }),
+        new Response(envelope(serverSession()), { status: 200 }),
       )
     );
 
@@ -62,7 +67,7 @@ describe('MdpAuthClient', () => {
     const bodies: string[] = [];
     const fetchMock = mock((_url: string, init: RequestInit) => {
       bodies.push(init.body as string);
-      return Promise.resolve(new Response(JSON.stringify(serverSession()), { status: 200 }));
+      return Promise.resolve(new Response(envelope(serverSession()), { status: 200 }));
     });
     const client = new MdpAuthClient({
       baseUrl: 'https://mdp.example.test',
@@ -85,7 +90,7 @@ describe('MdpAuthClient', () => {
     const fetchMock = mock(() =>
       Promise.resolve(
         new Response(
-          JSON.stringify(serverSession({ token: 'new-session-token', expiresIn: 5 })),
+          envelope(serverSession({ token: 'new-session-token', expiresIn: 5 })),
           { status: 200 },
         ),
       )
@@ -125,5 +130,26 @@ describe('MdpAuthClient', () => {
     expect(error.statusText).toBe('Unauthorized');
     expect(error.body).toBe('bad code');
     expect(error.endpoint).toBe('/api/mdp/auth/sso-login');
+  });
+
+  it('throws MdpAuthApiError when returnCode is not SUC0000', async () => {
+    const fetchMock = mock(() =>
+      Promise.resolve(
+        new Response(envelope(null, 'ERR1001', 'Token expired'), { status: 200 }),
+      )
+    );
+
+    const client = new MdpAuthClient({
+      baseUrl: 'https://mdp.example.test',
+      fetchFn: fetchMock as unknown as typeof fetch,
+      now: fixedNow,
+    });
+    const error = await client.refresh('expired-token').catch((err) => err);
+
+    expect(error).toBeInstanceOf(MdpAuthApiError);
+    expect(error.returnCode).toBe('ERR1001');
+    expect(error.errMsg).toBe('Token expired');
+    expect(error.message).toBe('Token expired');
+    expect(error.endpoint).toBe('/api/mdp/auth/refresh-token');
   });
 });
