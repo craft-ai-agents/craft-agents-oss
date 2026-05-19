@@ -70,6 +70,7 @@ import {
   isSkillMarketplaceNavigation,
   isAutomationsNavigation,
   isArchivedNavigation,
+  isAdminNavigation,
   DEFAULT_NAVIGATION_STATE,
 } from '../../shared/types'
 import { sessionMetaMapAtom, updateSessionMetaAtom, type SessionMeta } from '@/atoms/sessions'
@@ -100,6 +101,7 @@ export {
   isSkillMarketplaceNavigation,
   isAutomationsNavigation,
   isArchivedNavigation,
+  isAdminNavigation,
 }
 
 // =============================================================================
