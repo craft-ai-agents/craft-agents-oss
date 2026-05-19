@@ -3,6 +3,7 @@ import '../../../tests/setup/register-pi-model-resolver.ts'
 import {
   getDefaultModelsForConnection,
   getDefaultModelForConnection,
+  synthesizeEnvConnection,
   isCompatProvider,
   isAnthropicProvider,
   isPiProvider,
@@ -12,6 +13,46 @@ import {
   deriveBedrockRegionPrefix,
 } from '../llm-connections'
 import { ANTHROPIC_MODELS, getModelDisplayName, getModelContextWindow, getModelShortName, isClaudeModel } from '../models'
+
+describe('synthesizeEnvConnection', () => {
+  it('returns null when LLM_BASE_URL is absent', () => {
+    expect(synthesizeEnvConnection({}, undefined)).toBeNull()
+  })
+
+  it('returns the Environment connection shape when LLM_BASE_URL is set', () => {
+    expect(synthesizeEnvConnection({ LLM_BASE_URL: 'http://localhost:11434/v1' }, undefined)).toEqual({
+      slug: 'env-provider',
+      name: 'Environment',
+      providerType: 'pi_compat',
+      authType: 'none',
+      piAuthProvider: 'openai',
+      customEndpoint: { api: 'openai-completions' },
+      baseUrl: 'http://localhost:11434/v1',
+      models: [],
+      defaultModel: undefined,
+      createdAt: 0,
+    })
+  })
+
+  it('populates models and defaultModel from LLM_MODEL when present', () => {
+    const conn = synthesizeEnvConnection({
+      LLM_BASE_URL: 'https://llm.example.test/v1',
+      LLM_MODEL: 'gpt-oss-120b',
+    }, undefined)
+
+    expect(conn?.models).toEqual(['gpt-oss-120b'])
+    expect(conn?.defaultModel).toBe('gpt-oss-120b')
+  })
+
+  it('uses pi_compat regardless of base URL content', () => {
+    const conn = synthesizeEnvConnection({
+      LLM_BASE_URL: 'https://api.anthropic.com/v1/messages',
+      LLM_MODEL: 'claude-sonnet-4-6',
+    }, undefined)
+
+    expect(conn?.providerType).toBe('pi_compat')
+  })
+})
 
 // ============================================================
 // getDefaultModelsForConnection
