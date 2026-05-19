@@ -1,5 +1,5 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, synthesizeEnvConnection, type EnvConnectionEnv, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, synthesizeEnvConnection, ENV_CONNECTION_SLUG, type EnvConnectionEnv, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { SsoCredentialStore } from '@craft-agent/shared/auth'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
@@ -13,6 +13,8 @@ import { parseTestConnectionError, createBuiltInConnection, validateModelList, p
 import { getWorkspaceOrThrow, buildBackendHostRuntimeContext } from '@craft-agent/server-core/handlers'
 import { type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+
+export { ENV_CONNECTION_SLUG } from '@craft-agent/shared/config'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.LIST,
@@ -32,8 +34,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.pi.GET_PROVIDER_MODELS,
 ] as const
 
-export const ENV_CONNECTION_SLUG = 'env-provider'
-
+/** Return the shared error result for attempted Environment connection mutations. */
 export function rejectEnvironmentConnectionMutation(): { success: false; error: string } {
   return {
     success: false,
@@ -41,12 +42,14 @@ export function rejectEnvironmentConnectionMutation(): { success: false; error: 
   }
 }
 
+/** Return true when a connection slug targets the reserved Environment connection. */
 export function isEnvironmentConnectionSlug(slug: string): boolean {
   return slug === ENV_CONNECTION_SLUG
 }
 
-export function synthesizeEnvConnectionWithStatus(env: EnvConnectionEnv, ssoToken: string | undefined): LlmConnectionWithStatus | null {
-  const envConnection = ssoToken ? synthesizeEnvConnection(env, ssoToken) : null
+/** Build the UI-facing Environment connection when an active SSO token is available. */
+export function synthesizeEnvConnectionWithStatus(env: EnvConnectionEnv, activeSsoToken: string | undefined): LlmConnectionWithStatus | null {
+  const envConnection = activeSsoToken ? synthesizeEnvConnection(env, activeSsoToken) : null
   if (!envConnection) return null
 
   return {

@@ -226,6 +226,9 @@ export interface EnvConnectionEnv {
   LLM_MODEL?: string;
 }
 
+/** Reserved slug used by the protected Environment connection. */
+export const ENV_CONNECTION_SLUG = 'env-provider';
+
 // ============================================================
 // Helpers
 // ============================================================
@@ -249,7 +252,7 @@ export function synthesizeEnvConnection(
   const model = env.LLM_MODEL;
 
   return {
-    slug: 'env-provider',
+    slug: ENV_CONNECTION_SLUG,
     name: 'Environment',
     providerType: 'pi_compat',
     authType: 'none',
