@@ -98,6 +98,12 @@ import type { RtkContext } from './core/rtk-rewrite.ts';
 // Workspace slug extraction for skill qualification
 import { extractWorkspaceSlug } from '../utils/workspace.ts';
 
+import {
+  formatTeamKnowledgePolicy,
+  prefetchTeamKnowledge,
+  formatPrefetchBlock,
+} from './core/team-public-knowledge-injector.ts';
+
 // LLM tool types
 import { LLM_QUERY_TIMEOUT_MS, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
 import { executeBrowserToolCommand } from './browser-tool-runtime.ts';
@@ -1965,8 +1971,16 @@ export class PiAgent extends BaseAgent {
       )
 
       // Build context parts using centralized PromptBuilder
+      const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.config.workspace.rootPath);
+      const prefetchResults = prefetchTeamKnowledge(this.config.workspace.rootPath, message);
+      const teamKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
+
       const contextParts = this.promptBuilder.buildContextParts(
-        { plansFolderPath: getSessionPlansPath(this.config.workspace.rootPath, this._sessionId) },
+        {
+          plansFolderPath: getSessionPlansPath(this.config.workspace.rootPath, this._sessionId),
+          teamKnowledgePolicy,
+          teamKnowledgePrefetchBlock,
+        },
         sourceContext
       );
 

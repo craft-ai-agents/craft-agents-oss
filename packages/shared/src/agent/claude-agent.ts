@@ -126,6 +126,12 @@ export type { LoadedSource } from '../sources/types.ts';
 import { AbortReason, type RecoveryMessage } from './core/index.ts';
 export { AbortReason, type RecoveryMessage };
 
+import {
+  formatTeamKnowledgePolicy,
+  prefetchTeamKnowledge,
+  formatPrefetchBlock,
+} from './core/team-public-knowledge-injector.ts';
+
 /** File extensions that can be converted to readable text by CLI tools. */
 const CONVERTIBLE_FILE_HINTS: Record<string, string> = {
   pdf: 'markitdown or pdf-tool extract',
@@ -2133,8 +2139,18 @@ This is a branched conversation. All prior messages in this conversation are par
       `[ModeSnapshot] sessionId=${this.modeSessionId} buildTextPrompt mode=${textPromptDiagnostics.permissionMode} ` +
       `modeVersion=${textPromptDiagnostics.modeVersion} changedBy=${textPromptDiagnostics.lastChangedBy} changedAt=${textPromptDiagnostics.lastChangedAt}`
     )
+
+    // Compute team public knowledge policy and prefetch for this turn
+    const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.workspaceRootPath);
+    const prefetchResults = prefetchTeamKnowledge(this.workspaceRootPath, text);
+    const teamKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
+
     const contextParts = this.promptBuilder.buildContextParts(
-      { plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId) },
+      {
+        plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId),
+        teamKnowledgePolicy,
+        teamKnowledgePrefetchBlock,
+      },
       this.sourceManager.formatSourceState()
     );
 
@@ -2179,8 +2195,18 @@ This is a branched conversation. All prior messages in this conversation are par
       `[ModeSnapshot] sessionId=${this.modeSessionId} buildSDKUserMessage mode=${sdkPromptDiagnostics.permissionMode} ` +
       `modeVersion=${sdkPromptDiagnostics.modeVersion} changedBy=${sdkPromptDiagnostics.lastChangedBy} changedAt=${sdkPromptDiagnostics.lastChangedAt}`
     )
+
+    // Compute team public knowledge policy and prefetch for this turn
+    const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.workspaceRootPath);
+    const prefetchResults = prefetchTeamKnowledge(this.workspaceRootPath, text);
+    const teamKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
+
     const contextParts = this.promptBuilder.buildContextParts(
-      { plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId) },
+      {
+        plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId),
+        teamKnowledgePolicy,
+        teamKnowledgePrefetchBlock,
+      },
       this.sourceManager.formatSourceState()
     );
 
