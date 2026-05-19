@@ -34,7 +34,7 @@ export function HeaderMenu({ route, children, helpFeature }: HeaderMenuProps) {
   const { t } = useTranslation()
   const handleOpenInNewWindow = async () => {
     const separator = route.includes('?') ? '&' : '?'
-    const url = `craftagents://${route}${separator}window=focused`
+    const url = `mdp://${route}${separator}window=focused`
     try {
       await window.electronAPI?.openUrl(url)
     } catch (error) {

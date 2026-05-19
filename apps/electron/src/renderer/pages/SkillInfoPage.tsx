@@ -133,7 +133,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
 
   // Handle opening in new window
   const handleOpenInNewWindow = useCallback(() => {
-    window.electronAPI.openUrl(`craftagents://skills/skill/${skillSlug}?window=focused`)
+    window.electronAPI.openUrl(`mdp://skills/skill/${skillSlug}?window=focused`)
   }, [skillSlug])
 
   const handlePublish = useCallback(async () => {

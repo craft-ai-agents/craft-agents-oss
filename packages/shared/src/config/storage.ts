@@ -87,6 +87,8 @@ export interface StoredConfig {
   setupDeferred?: boolean;
   // Server mode — embedded remote server settings
   serverConfig?: import('./server-config.ts').ServerConfig;
+  // MDP SSO identity fields. Sensitive tokens live in the credential manager.
+  ssoSessionIdentity?: import('../auth/sso-credential-store.ts').SsoSessionIdentity;
   // One-shot migration markers. Used by migrations that should run at most
   // once per user (e.g. restoring a previously-removed model to connection
   // lists without re-adding it if the user later removes it deliberately).

@@ -15,6 +15,8 @@ import {
   requestClientShowInFolder,
   requestClientOpenFileDialog,
 } from '@craft-agent/server-core/transport'
+import { getDeepLinkProtocol } from '../deep-link-scheme'
+import { handleSsoCallback } from '@craft-agent/server-core/handlers/rpc/sso'
 
 export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.theme.GET_SYSTEM_PREFERENCE,
@@ -202,19 +204,27 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
     deps.platform.logger.info('[renderer]', ...args)
   })
 
-  // Shell operations - open URL in external browser (or handle craftagents:// internally)
+  // Shell operations - open URL in external browser (or handle mdp:// internally)
   server.handle(RPC_CHANNELS.shell.OPEN_URL, async (ctx, url: string) => {
     deps.platform.logger.info('[OPEN_URL] Received request:', url)
     try {
       const parsed = new URL(url)
 
-      // Handle craftagents:// URLs internally via deep link handler (GUI only)
-      if (parsed.protocol === 'craftagents:') {
+      // Handle mdp:// URLs internally via deep link handler (GUI only)
+      if (parsed.protocol === getDeepLinkProtocol()) {
         if (!windowManager) return
         deps.platform.logger.info('[OPEN_URL] Handling as deep link')
         const { handleDeepLink } = await import('../deep-link')
         const resolver = (wcId: number) => windowManager.getClientIdForWindow(wcId)
-        const result = await handleDeepLink(url, windowManager, server.push.bind(server), resolver, ctx.clientId)
+        const result = await handleDeepLink(url, windowManager, {
+          sink: server.push.bind(server),
+          resolveClientId: resolver,
+          preferredClientId: ctx.clientId,
+          handleSsoCallback: (code, state) => {
+            const payload = { code, state }
+            return handleSsoCallback(payload)
+          },
+        })
         deps.platform.logger.info('[OPEN_URL] Deep link result:', result)
         return
       }

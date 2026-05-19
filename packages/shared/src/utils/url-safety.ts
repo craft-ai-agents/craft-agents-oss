@@ -1,3 +1,5 @@
+import { DEFAULT_DEEPLINK_PROTOCOL } from '../protocol/deep-link-scheme.ts'
+
 /**
  * Classification of external URLs for `shell.openExternal`-style handlers.
  *
@@ -21,8 +23,6 @@ const DANGEROUS_SCHEMES: ReadonlySet<string> = new Set([
   'file:',
 ])
 
-const INTERNAL_DEEPLINK_SCHEME = 'craftagents:'
-
 export function classifyExternalUrl(rawUrl: string): UrlClassification {
   if (typeof rawUrl !== 'string' || rawUrl.trim() === '') {
     return { kind: 'dangerous', reason: 'empty URL' }
@@ -41,7 +41,7 @@ export function classifyExternalUrl(rawUrl: string): UrlClassification {
     return { kind: 'dangerous', reason: `blocked scheme "${protocol}"` }
   }
 
-  if (protocol === INTERNAL_DEEPLINK_SCHEME) {
+  if (protocol === DEFAULT_DEEPLINK_PROTOCOL) {
     return { kind: 'internal-deeplink' }
   }
 

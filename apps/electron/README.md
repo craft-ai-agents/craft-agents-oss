@@ -248,14 +248,14 @@ navigate(routes.sidebar.flagged())        // Show flagged
 
 ### Deep Links
 
-External apps can navigate using `craftagents://` URLs:
+External apps can navigate using `mdp://` URLs:
 
 ```
-craftagents://settings
-craftagents://allSessions/session/session123
-craftagents://sources/source/github
-craftagents://action/new-chat
-craftagents://workspace/{id}/allSessions/session/abc123
+mdp://settings
+mdp://allSessions/session/session123
+mdp://sources/source/github
+mdp://action/new-chat
+mdp://workspace/{id}/allSessions/session/abc123
 ```
 
 See `CLAUDE.md` for complete route reference.
