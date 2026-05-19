@@ -3,9 +3,10 @@ import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { resolveBackendContext } from '@craft-agent/shared/agent/backend'
+import type { LlmConnection } from '@craft-agent/shared/config'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
-import { SessionManager, buildRuntimeConfigUpdate, createManagedSession } from './SessionManager.ts'
-import { buildRestartRequiredSignature } from './runtime-config.ts'
+import { SessionManager, createManagedSession } from './SessionManager.ts'
+import { buildRestartRequiredSignature, buildRuntimeConfigUpdate } from './runtime-config.ts'
 
 // Regression coverage for the stale-Pi-subprocess bug where toggling
 // `supportsImages` on a custom-endpoint model wrote to disk but never reached
@@ -215,7 +216,7 @@ describe('refreshConnectionRuntime', () => {
           { id: 'vision-model', contextWindow: 262_144, supportsImages: true },
           { id: 'text-only-model', supportsImages: false },
           { id: 'plain-model' },
-        ],
+        ] as unknown as LlmConnection['models'],
         createdAt: Date.now(),
       },
     })

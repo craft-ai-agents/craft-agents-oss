@@ -32,6 +32,7 @@ export type {
   AgentProvider,
   CoreBackendConfig,
   BackendConfig,
+  BackendRuntimeUpdate,
   BackendHostRuntimeContext,
   PermissionCallback,
   PlanCallback,
@@ -78,6 +79,10 @@ export {
   testBackendConnection,
   // Connection validation
   validateConnection,
+} from './factory.ts';
+
+export type {
+  ResolvedBackendContext,
 } from './factory.ts';
 
 // Shared infrastructure

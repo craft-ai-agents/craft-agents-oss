@@ -15,10 +15,8 @@ import {
   cleanupSourceRuntimeArtifacts,
   providerTypeToAgentProvider,
   type AgentBackend,
-  type BackendRuntimeUpdate,
   type BackendHostRuntimeContext,
   type PostInitResult,
-  type ResolvedBackendContext,
 } from '@craft-agent/shared/agent/backend'
 import { ENV_CONNECTION_SLUG, ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
@@ -96,7 +94,7 @@ import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels
 import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
-import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
+import { buildBackendRuntimeSignature, buildRestartRequiredSignature, buildRuntimeConfigUpdate, filterAttachmentsForModelInput } from './runtime-config'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
@@ -963,32 +961,6 @@ export function createManagedSession(
   }
 
   return managed
-}
-
-export function buildRuntimeConfigUpdate(backendContext: ResolvedBackendContext): BackendRuntimeUpdate {
-  const connection = backendContext.connection
-  return {
-    model: backendContext.resolvedModel,
-    providerType: connection?.providerType,
-    authType: backendContext.authType,
-    runtime: connection ? {
-      baseUrl: connection.baseUrl,
-      piAuthProvider: connection.piAuthProvider,
-      customEndpoint: connection.customEndpoint,
-      customModels: connection.models?.map(model => {
-        if (typeof model === 'string') return model
-        const supportsImages = typeof model.supportsImages === 'boolean' ? model.supportsImages : undefined
-        if (model.contextWindow || supportsImages !== undefined) {
-          return {
-            id: model.id,
-            ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
-            ...(supportsImages !== undefined ? { supportsImages } : {}),
-          }
-        }
-        return model.id
-      }),
-    } : undefined,
-  }
 }
 
 /**
