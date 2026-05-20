@@ -40,6 +40,7 @@ export function groupConnectionsByProvider<T extends LlmConnection>(
     'Anthropic': [],
     'Local': [],
     'Craft Agents Backend': [],
+    'OpenLLM': [],
   }
   for (const conn of connections) {
     const provider = conn.providerType || 'anthropic'
@@ -49,6 +50,8 @@ export function groupConnectionsByProvider<T extends LlmConnection>(
       groups['Local'].push(conn)
     } else if (provider === 'pi' || provider === 'pi_compat') {
       groups['Craft Agents Backend'].push(conn)
+    } else if (provider === 'openllm') {
+      groups['OpenLLM'].push(conn)
     }
   }
   return Object.entries(groups).filter(([, conns]) => conns.length > 0)
