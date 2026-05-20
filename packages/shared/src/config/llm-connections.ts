@@ -44,6 +44,7 @@ export function registerPiModelResolver(resolver: PiModelResolver): void {
  * - 'anthropic': Direct Anthropic API (api.anthropic.com) — uses Claude Agent SDK
  * - 'pi': Pi unified LLM API (20+ providers via @mariozechner/pi-ai)
  * - 'pi_compat': Pi with custom endpoint (Ollama, self-hosted models, Anthropic-compat endpoints)
+ * - 'openllm': OpenLLM-compatible endpoint with user-defined models
  *
  * Legacy values (bedrock, vertex, anthropic_compat) are migrated on startup
  * by migrateLegacyProviderTypes() in storage.ts.
@@ -51,7 +52,8 @@ export function registerPiModelResolver(resolver: PiModelResolver): void {
 export type LlmProviderType =
   | 'anthropic'
   | 'pi'
-  | 'pi_compat';
+  | 'pi_compat'
+  | 'openllm';
 
 /**
  * @deprecated Use LlmProviderType instead. Kept for migration compatibility.
@@ -484,10 +486,10 @@ export function authTypeRequiresEndpoint(authType: LlmAuthType): boolean {
  * Check if a provider type is a "compat" provider.
  * Compat providers use custom endpoints and require explicit model lists.
  * @param providerType - Provider type to check
- * @returns true if this is a compat provider (pi_compat)
+ * @returns true if this is a compat provider (pi_compat/openllm)
  */
 export function isCompatProvider(providerType: LlmProviderType): boolean {
-  return providerType === 'pi_compat';
+  return providerType === 'pi_compat' || providerType === 'openllm';
 }
 
 /**
@@ -520,7 +522,7 @@ export function isLocalConnection(conn: Pick<LlmConnection, 'baseUrl'>): boolean
  * @returns true if this provider uses Pi
  */
 export function isPiProvider(providerType: LlmProviderType): boolean {
-  return providerType === 'pi' || providerType === 'pi_compat';
+  return providerType === 'pi' || providerType === 'pi_compat' || providerType === 'openllm';
 }
 
 /**
@@ -717,7 +719,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType, piA
     }
     return models;
   }
-  if (providerType === 'pi_compat') return [];  // Dynamic — user specifies
+  if (providerType === 'pi_compat' || providerType === 'openllm') return [];  // Dynamic — user specifies
   // anthropic
   return ANTHROPIC_MODELS;
 }
@@ -805,6 +807,7 @@ export function isValidProviderAuthCombination(
     anthropic: ['api_key', 'oauth'],
     pi: ['api_key', 'oauth', 'iam_credentials', 'environment', 'none'],
     pi_compat: ['api_key_with_endpoint', 'none'],
+    openllm: ['api_key'],
   };
 
   return validCombinations[providerType]?.includes(authType) ?? false;

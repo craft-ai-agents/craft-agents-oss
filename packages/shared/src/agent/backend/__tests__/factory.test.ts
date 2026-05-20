@@ -190,6 +190,10 @@ describe('providerTypeToAgentProvider', () => {
     it('should map pi_compat to pi', () => {
       expect(providerTypeToAgentProvider('pi_compat')).toBe('pi');
     });
+
+    it('should map openllm to pi', () => {
+      expect(providerTypeToAgentProvider('openllm')).toBe('pi');
+    });
   });
 });
 
@@ -237,6 +241,22 @@ describe('isValidProviderAuthCombination', () => {
 
     it('should accept none auth (for local models like Ollama)', () => {
       expect(isValidProviderAuthCombination('pi_compat', 'none')).toBe(true);
+    });
+  });
+
+  describe('OpenLLM provider', () => {
+    it('should accept api_key auth', () => {
+      expect(isValidProviderAuthCombination('openllm', 'api_key')).toBe(true);
+    });
+
+    it('should reject every non-api_key auth type', () => {
+      expect(isValidProviderAuthCombination('openllm', 'api_key_with_endpoint')).toBe(false);
+      expect(isValidProviderAuthCombination('openllm', 'oauth')).toBe(false);
+      expect(isValidProviderAuthCombination('openllm', 'iam_credentials')).toBe(false);
+      expect(isValidProviderAuthCombination('openllm', 'bearer_token')).toBe(false);
+      expect(isValidProviderAuthCombination('openllm', 'service_account_file')).toBe(false);
+      expect(isValidProviderAuthCombination('openllm', 'environment')).toBe(false);
+      expect(isValidProviderAuthCombination('openllm', 'none')).toBe(false);
     });
   });
 

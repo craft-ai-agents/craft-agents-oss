@@ -257,6 +257,7 @@ export function providerTypeToAgentProvider(providerType: LlmProviderType): Agen
     // Pi backends (includes former bedrock/vertex/anthropic_compat via migration)
     case 'pi':
     case 'pi_compat':
+    case 'openllm':
       return 'pi';
 
     default:

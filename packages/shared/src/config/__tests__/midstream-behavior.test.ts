@@ -26,6 +26,10 @@ describe('defaultMidStreamBehavior', () => {
   it("returns 'steer' for pi_compat (same backend as pi)", () => {
     expect(defaultMidStreamBehavior('pi_compat')).toBe('steer')
   })
+
+  it("returns 'steer' for openllm (Pi-backed compat provider)", () => {
+    expect(defaultMidStreamBehavior('openllm')).toBe('steer')
+  })
 })
 
 describe('resolveMidStreamBehavior', () => {
