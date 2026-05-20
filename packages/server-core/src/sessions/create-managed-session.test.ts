@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { createManagedSession } from './SessionManager.ts'
+import { ENV_CONNECTION_SLUG } from '@craft-agent/shared/config'
+import { buildSsoSubprocessEnvOverrides, createManagedSession } from './SessionManager.ts'
 
 describe('createManagedSession', () => {
   const workspace = {
@@ -25,5 +26,29 @@ describe('createManagedSession', () => {
     }, workspace as any)
 
     expect(managed.thinkingLevel).toBeUndefined()
+  })
+})
+
+describe('buildSsoSubprocessEnvOverrides', () => {
+  it('injects the current SSO token and LLM_BASE_URL for the environment connection', async () => {
+    const env = await buildSsoSubprocessEnvOverrides(ENV_CONNECTION_SLUG, {
+      env: { LLM_BASE_URL: ' https://llm.example.test/v1 ' },
+      loadSsoSession: async () => ({ token: 'sso-token' }),
+    })
+
+    expect(env).toEqual({
+      CRAFT_LLM_SSO_TOKEN: 'sso-token',
+      CRAFT_LLM_SSO_BASE_URL: 'https://llm.example.test/v1',
+    })
+  })
+
+  it('does not expose SSO env vars for non-environment connections', async () => {
+    const env = await buildSsoSubprocessEnvOverrides('default-api', {
+      env: { LLM_BASE_URL: 'https://llm.example.test/v1' },
+      loadSsoSession: async () => ({ token: 'sso-token' }),
+    })
+
+    expect(env.CRAFT_LLM_SSO_TOKEN).toBeUndefined()
+    expect(env.CRAFT_LLM_SSO_BASE_URL).toBeUndefined()
   })
 })

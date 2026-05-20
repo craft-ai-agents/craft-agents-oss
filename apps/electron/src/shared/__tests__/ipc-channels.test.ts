@@ -64,16 +64,6 @@ const EXPECTED_CHANNELS: string[] = [
   'caching:getExtendedPromptCache',
   'caching:setEnable1MContext',
   'caching:setExtendedPromptCache',
-  'chatgpt:cancelOAuth',
-  'chatgpt:completeOAuth',
-  'chatgpt:getAuthStatus',
-  'chatgpt:logout',
-  'chatgpt:startOAuth',
-  'copilot:cancelOAuth',
-  'copilot:deviceCode',
-  'copilot:getAuthStatus',
-  'copilot:logout',
-  'copilot:startOAuth',
   'credentials:healthCheck',
   'debug:log',
   'deeplink:navigate',
@@ -179,12 +169,8 @@ const EXPECTED_CHANNELS: string[] = [
   'oauth:complete',
   'oauth:revoke',
   'oauth:start',
-  'onboarding:clearClaudeOAuthState',
   'onboarding:deferSetup',
-  'onboarding:exchangeClaudeCode',
   'onboarding:getAuthState',
-  'onboarding:hasClaudeOAuthState',
-  'onboarding:startClaudeOAuth',
   'onboarding:startMcpOAuth',
   'onboarding:validateMcp',
   'permissions:defaultsChanged',
@@ -372,6 +358,14 @@ describe('RPC_CHANNELS wire-format stability', () => {
     const values = flattenValues(RPC_CHANNELS)
     const unique = new Set(values)
     expect(values.length).toBe(unique.size)
+  })
+
+  it('does not expose removed LLM OAuth onboarding channels', () => {
+    const actual = new Set(flattenValues(RPC_CHANNELS))
+    expect(actual.has('onboarding:startClaudeOAuth')).toBe(false)
+    expect(actual.has('onboarding:exchangeClaudeCode')).toBe(false)
+    expect(actual.has('onboarding:hasClaudeOAuthState')).toBe(false)
+    expect(actual.has('onboarding:clearClaudeOAuthState')).toBe(false)
   })
 })
 

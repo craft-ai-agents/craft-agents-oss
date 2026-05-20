@@ -59,9 +59,9 @@ interface UseEventProcessorResult {
   ) => { session: Session; effects: Effect[] }
 
   /**
-   * Clear streaming state for a session (e.g., on error or complete)
+   * Clear streaming state for a session, or all sessions when omitted.
    */
-  clearStreamingState: (sessionId: string) => void
+  clearStreamingState: (sessionId?: string) => void
 
   /**
    * Get current streaming state for a session (for debugging/testing)
@@ -114,8 +114,12 @@ export function useEventProcessor(): UseEventProcessorResult {
     }
   }, [])
 
-  const clearStreamingState = useCallback((sessionId: string) => {
-    streamingStates.current.delete(sessionId)
+  const clearStreamingState = useCallback((sessionId?: string) => {
+    if (sessionId) {
+      streamingStates.current.delete(sessionId)
+    } else {
+      streamingStates.current.clear()
+    }
   }, [])
 
   const getStreamingState = useCallback((sessionId: string): StreamingState | null => {

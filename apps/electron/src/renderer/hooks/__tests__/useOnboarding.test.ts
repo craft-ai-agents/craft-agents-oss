@@ -33,13 +33,19 @@ describe('resolveSlugForMethod', () => {
 
   it('works for all setup methods', () => {
     const methods: ApiSetupMethod[] = [
-      'anthropic_api_key', 'claude_oauth',
-      'pi_chatgpt_oauth', 'pi_copilot_oauth', 'pi_api_key',
+      'anthropic_api_key', 'pi_api_key',
     ]
     for (const method of methods) {
       const slug = resolveSlugForMethod(method, null, new Set())
       expect(slug).toBe(BASE_SLUG_FOR_METHOD[method])
     }
+  })
+
+  it('only exposes API-key setup methods', () => {
+    expect(Object.keys(BASE_SLUG_FOR_METHOD).sort()).toEqual([
+      'anthropic_api_key',
+      'pi_api_key',
+    ])
   })
 })
 
@@ -60,28 +66,6 @@ describe('apiSetupMethodToConnectionSetup', () => {
     expect(setup.baseUrl).toBe('https://custom.api')
     expect(setup.defaultModel).toBe('claude-sonnet-4-6')
     expect(setup.models).toEqual(['model-a'])
-  })
-
-  it('claude_oauth includes only credential', () => {
-    const setup = apiSetupMethodToConnectionSetup(
-      'claude_oauth',
-      { credential: 'oauth-token-123' },
-      null,
-      new Set(),
-    )
-    expect(setup.slug).toBe('claude-max')
-    expect(setup.credential).toBe('oauth-token-123')
-    expect(setup.baseUrl).toBeUndefined()
-  })
-
-  it('pi_chatgpt_oauth maps to chatgpt-plus slug', () => {
-    const setup = apiSetupMethodToConnectionSetup('pi_chatgpt_oauth', {}, null, new Set())
-    expect(setup.slug).toBe('chatgpt-plus')
-  })
-
-  it('pi_copilot_oauth maps to github-copilot slug', () => {
-    const setup = apiSetupMethodToConnectionSetup('pi_copilot_oauth', {}, null, new Set())
-    expect(setup.slug).toBe('github-copilot')
   })
 
   it('pi_api_key includes piAuthProvider and modelSelectionMode', () => {
@@ -113,59 +97,11 @@ describe('apiSetupMethodToConnectionSetup', () => {
 
   it('generates unique slug when base is taken', () => {
     const setup = apiSetupMethodToConnectionSetup(
-      'claude_oauth',
+      'pi_api_key',
       {},
       null,
-      new Set(['claude-max']),
+      new Set(['pi-api-key']),
     )
-    expect(setup.slug).toBe('claude-max-2')
-  })
-})
-
-// ============================================================
-// Reauth slug regression tests
-// ============================================================
-
-describe('reauth slug resolution', () => {
-  it('slug override wins over null editingSlug (stale closure scenario)', () => {
-    // Simulates the reauth bug: editingSlug is null (stale closure),
-    // but connectionSlugOverride provides the correct slug.
-    const existingSlugs = new Set(['chatgpt-plus'])
-
-    // Without override: generates -2 (the bug)
-    const wrongSlug = resolveSlugForMethod('pi_chatgpt_oauth', null, existingSlugs)
-    expect(wrongSlug).toBe('chatgpt-plus-2')
-
-    // With override: reuses existing slug (the fix)
-    const correctSlug = resolveSlugForMethod('pi_chatgpt_oauth', 'chatgpt-plus', existingSlugs)
-    expect(correctSlug).toBe('chatgpt-plus')
-  })
-
-  it('apiSetupMethodToConnectionSetup uses override slug for reauth', () => {
-    const existingSlugs = new Set(['chatgpt-plus'])
-    const setup = apiSetupMethodToConnectionSetup(
-      'pi_chatgpt_oauth',
-      {},
-      'chatgpt-plus',  // override slug (reauth)
-      existingSlugs,
-    )
-    expect(setup.slug).toBe('chatgpt-plus')
-  })
-
-  it('new connection flow still generates unique slugs when base is taken', () => {
-    const existingSlugs = new Set(['chatgpt-plus'])
-    const setup = apiSetupMethodToConnectionSetup(
-      'pi_chatgpt_oauth',
-      {},
-      null,  // no editing slug (new connection)
-      existingSlugs,
-    )
-    expect(setup.slug).toBe('chatgpt-plus-2')
-  })
-
-  it('copilot reauth uses override slug', () => {
-    const existingSlugs = new Set(['github-copilot'])
-    const slug = resolveSlugForMethod('pi_copilot_oauth', 'github-copilot', existingSlugs)
-    expect(slug).toBe('github-copilot')
+    expect(setup.slug).toBe('pi-api-key-2')
   })
 })

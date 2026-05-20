@@ -71,6 +71,7 @@ import { useStaleSessionRecovery } from '@/hooks/useStaleSessionRecovery'
 import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '@/components/app-shell/TransportConnectionBanner'
 import { getFileManagerName } from '@/lib/platform'
 import { rendererLog } from '@/lib/logger'
+import { resolveAuthenticatedStartupState } from '@/lib/app-startup'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
@@ -236,6 +237,7 @@ export default function App() {
   const [appState, setAppState] = useState<AppState>('loading')
   const [setupNeeds, setSetupNeeds] = useState<SetupNeeds | null>(null)
   const [ssoLoginResult, setSsoLoginResult] = useState<{ success: boolean; error?: string } | null>(null)
+  const [ssoUser, setSsoUser] = useState<{ userName?: string; department?: string; employeeId?: string } | undefined>(undefined)
 
   // Per-session Jotai atom setters for isolated updates
   // NOTE: No sessionsAtom - we don't store a Session[] array anywhere to prevent memory leaks
@@ -661,6 +663,11 @@ export default function App() {
           setAppState('sso-login')
           return
         }
+        setSsoUser({
+          userName: ssoSession.userName,
+          department: ssoSession.department,
+          employeeId: ssoSession.employeeId,
+        })
 
         // Get this window's workspace ID (passed via URL query param from main process)
         const wsId = await window.electronAPI.getWindowWorkspace()
@@ -669,18 +676,12 @@ export default function App() {
         const needs = await window.electronAPI.getSetupNeeds()
         setSetupNeeds(needs)
 
-        if (needs.isFullyConfigured) {
-          // If no workspace is selected (thin client without CRAFT_WORKSPACE_ID),
-          // show workspace picker before entering the main app
-          if (!wsId) {
-            setAppState('workspace-picker')
-          } else {
-            setAppState('ready')
-          }
-        } else {
-          // New user or needs setup - show onboarding
-          setAppState('onboarding')
-        }
+        const nextState = await resolveAuthenticatedStartupState({
+          setupNeeds: needs,
+          windowWorkspaceId: wsId,
+          listLlmConnectionsWithStatus: () => window.electronAPI.listLlmConnectionsWithStatus(),
+        })
+        setAppState(nextState)
       } catch (error) {
         console.error('Failed to check auth state:', error)
         setAppState('sso-login')
@@ -907,6 +908,12 @@ export default function App() {
       const workspaceId = windowWorkspaceId ?? ''
 
       // Session lifecycle events are handled explicitly (not by the agent event processor).
+      if (event.type === 'sso_token_expired') {
+        setSsoLoginResult(null)
+        setAppState('sso-login')
+        return
+      }
+
       if (event.type === 'session_created') {
         window.electronAPI.getSessionMessages(sessionId)
           .then((createdSession: Session | null) => {
@@ -1858,6 +1865,7 @@ export default function App() {
     onOpenStoredUserPreferences: handleOpenStoredUserPreferences,
     onReset: handleReset,
     onSsoLogout: handleSsoLogout,
+    ssoUser,
     // Session options
     onSessionOptionsChange: handleSessionOptionsChange,
     onInputChange: handleInputChange,
@@ -1901,6 +1909,7 @@ export default function App() {
     handleOpenStoredUserPreferences,
     handleReset,
     handleSsoLogout,
+    ssoUser,
     handleSessionOptionsChange,
     handleInputChange,
     handleAttachmentsChange,
@@ -1967,9 +1976,18 @@ export default function App() {
           <WindowCloseHandler />
           <SsoLoginPage
             result={ssoLoginResult}
-            onSuccess={() => {
+            onSuccess={async () => {
               setSsoLoginResult(null)
-              setAppState('onboarding')
+              const wsId = await window.electronAPI.getWindowWorkspace()
+              setWindowWorkspaceId(wsId)
+              const needs = await window.electronAPI.getSetupNeeds()
+              setSetupNeeds(needs)
+              const nextState = await resolveAuthenticatedStartupState({
+                setupNeeds: needs,
+                windowWorkspaceId: wsId,
+                listLlmConnectionsWithStatus: () => window.electronAPI.listLlmConnectionsWithStatus(),
+              })
+              setAppState(nextState)
             }}
           />
         </ModalProvider>
@@ -1985,23 +2003,14 @@ export default function App() {
       <DismissibleLayerProvider>
         <ModalProvider>
           <WindowCloseHandler />
-          <OnboardingWizard
-            state={onboarding.state}
-            onContinue={onboarding.handleContinue}
-            onBack={onboarding.handleBack}
-            onSelectProvider={onboarding.handleSelectProvider}
-            onSkipSetup={onboarding.handleSkipSetup}
-            onSelectApiSetupMethod={onboarding.handleSelectApiSetupMethod}
-            onSubmitCredential={onboarding.handleSubmitCredential}
-            onSubmitLocalModel={onboarding.handleSubmitLocalModel}
-            onStartOAuth={onboarding.handleStartOAuth}
-            onFinish={onboarding.handleFinish}
-            isWaitingForCode={onboarding.isWaitingForCode}
-            onSubmitAuthCode={onboarding.handleSubmitAuthCode}
-            onCancelOAuth={onboarding.handleCancelOAuth}
-            copilotDeviceCode={onboarding.copilotDeviceCode}
-            onBrowseGitBash={onboarding.handleBrowseGitBash}
-            onUseGitBashPath={onboarding.handleUseGitBashPath}
+            <OnboardingWizard
+              state={onboarding.state}
+              onContinue={onboarding.handleContinue}
+              onBack={onboarding.handleBack}
+              onSubmitCredential={onboarding.handleSubmitCredential}
+              onFinish={onboarding.handleFinish}
+              onBrowseGitBash={onboarding.handleBrowseGitBash}
+              onUseGitBashPath={onboarding.handleUseGitBashPath}
             onRecheckGitBash={onboarding.handleRecheckGitBash}
             onClearError={onboarding.handleClearError}
           />

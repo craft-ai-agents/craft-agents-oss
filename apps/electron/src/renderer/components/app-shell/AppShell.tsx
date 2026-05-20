@@ -21,6 +21,7 @@ import {
   Radio,
   Bot,
   Info,
+  ShieldCheck,
 } from "lucide-react"
 import { TopBar } from "./TopBar"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
@@ -81,9 +82,10 @@ import {
   isSkillMarketplaceNavigation,
   isAutomationsNavigation,
   isArchivedNavigation,
+  isAdminNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
-import type { SettingsSubpage } from "../../../shared/types"
+import type { SettingsSubpage, AdminSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { ArchivedSessionsPanel } from "./ArchivedSessionsPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
@@ -98,6 +100,7 @@ import { FabNewChat } from "./FabNewChat"
 import { SendToWorkspaceDialog } from "./SendToWorkspaceDialog"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
+import AdminNavigator from "@/pages/admin/AdminNavigator"
 import {
   PANEL_GAP,
   PANEL_EDGE_INSET,
@@ -1175,6 +1178,11 @@ function AppShellContent({
     navigate(routes.view.settings(subpage))
   }, [])
 
+  // Handler for admin view.
+  const handleAdminClick = useCallback((subpage?: AdminSubpage) => {
+    navigate(routes.view.admin(subpage))
+  }, [])
+
   const handleSessionListNavigateToView = useCallback((view: 'allSessions' | 'flagged') => {
     switch (view) {
       case 'allSessions':
@@ -1569,6 +1577,7 @@ function AppShellContent({
 
     // Settings navigator
     if (isSettingsNavigation(navState)) return t("sidebar.settings")
+    if (isAdminNavigation(navState)) return "后台管理"
 
     // Sessions navigator - use sessionFilter
     if (!sessionFilter) return t("sidebar.allSessions")
@@ -1956,6 +1965,14 @@ function AppShellContent({
                     },
                     // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },
+                    // --- Admin ---
+                    {
+                      id: "nav:admin",
+                      title: "后台管理",
+                      icon: ShieldCheck,
+                      variant: isAdminNavigation(navState) ? "default" : "ghost",
+                      onClick: () => handleAdminClick(),
+                    },
                     // --- Settings ---
                     {
                       id: "nav:settings",
@@ -2128,6 +2145,13 @@ function AppShellContent({
               <SettingsNavigator
                 selectedSubpage={navState.subpage}
                 onSelectSubpage={(subpage) => handleSettingsClick(subpage)}
+              />
+            )}
+            {isAdminNavigation(navState) && (
+              /* Admin Navigator */
+              <AdminNavigator
+                selectedSubpage={navState.subpage}
+                onSelectSubpage={(subpage) => handleAdminClick(subpage)}
               />
             )}
             {/* Mobile/compact-only FAB for starting a new chat — only on the

@@ -33,6 +33,7 @@ import {
   isSkillMarketplaceNavigation,
   isAutomationsNavigation,
   isArchivedNavigation,
+  isAdminNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
@@ -41,6 +42,8 @@ import type { SessionStatusId } from '@/config/session-status-config'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
+import PermissionAdminPage from '@/pages/admin/PermissionAdminPage'
+import FeedbackAdminPage from '@/pages/admin/FeedbackAdminPage'
 import { AutomationInfoPage } from '../automations/AutomationInfoPage'
 import type { ExecutionEntry } from '../automations/types'
 import { automationsAtom } from '@/atoms/automations'
@@ -84,6 +87,7 @@ export function MainContentPanel({
     automationTestResults,
     getAutomationHistory,
     activeSessionWorkingDirectory,
+    ssoUser,
   } = useAppShellContext()
 
   // Session multi-select state
@@ -247,6 +251,17 @@ export function MainContentPanel({
     )
   }
 
+  // Admin navigator
+  if (isAdminNavigation(navState)) {
+    const subpage = navState.subpage ?? 'permission'
+    const AdminPageComponent = subpage === 'feedback' ? FeedbackAdminPage : PermissionAdminPage
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <AdminPageComponent />
+      </Panel>
+    )
+  }
+
   // Sources navigator - show source info, multi-select panel, or empty state
   if (isSourcesNavigation(navState)) {
     if (isSourceMultiSelectActive) {
@@ -285,7 +300,7 @@ export function MainContentPanel({
   if (isSkillMarketplaceNavigation(navState)) {
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <SkillMarketplacePage workspaceId={activeWorkspaceId || ''} currentUserId={activeWorkspaceId ? 'local-marketplace-user' : null} />
+        <SkillMarketplacePage workspaceId={activeWorkspaceId || ''} currentUserId={ssoUser?.employeeId ?? null} />
       </Panel>
     )
   }

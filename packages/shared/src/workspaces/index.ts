@@ -16,6 +16,20 @@ export type {
 
 // Storage functions
 export {
+  CHAT_FEEDBACK_STATE_FILE,
+  deleteChatFeedbackState,
+  getChatFeedbackState,
+  listChatFeedbackState,
+  loadChatFeedbackState,
+  setChatFeedbackState,
+} from './chat-feedback-state.ts';
+
+export type {
+  ChatFeedbackStateEntry,
+  ChatFeedbackStateFile,
+} from './chat-feedback-state.ts';
+
+export {
   // Path utilities
   getDefaultWorkspacesDir,
   ensureDefaultWorkspacesDir,
