@@ -73,6 +73,7 @@ import { buildCallLlmRequest, withTimeout, LLM_QUERY_TIMEOUT_MS } from '../../sh
 import type { LLMQueryRequest, LLMQueryResult } from '../../shared/src/agent/llm-tool.ts';
 import { PI_TOOL_NAME_MAP, THINKING_TO_PI } from '../../shared/src/agent/backend/pi/constants.ts';
 import { getDefaultSummarizationModel } from '../../shared/src/config/models.ts';
+import { ENV_CONNECTION_SSO_TOKEN_ENV_VAR } from '../../shared/src/config/llm-connections.ts';
 import { createWebFetchTool } from './tools/web-fetch.ts';
 import { resolveSearchProvider } from './tools/search/resolve-provider.ts';
 import { createSearchTool } from './tools/search/create-search-tool.ts';
@@ -409,6 +410,17 @@ function resolveCustomEndpointApiKey(): string {
       // Pi SDK requires a truthy apiKey to register models, so use a placeholder.
       return 'not-needed';
     }
+    // SSO mode: the network interceptor injects the real Authorization header at
+    // HTTP level, so Pi SDK just needs a truthy placeholder to proceed.
+    if (process.env[ENV_CONNECTION_SSO_TOKEN_ENV_VAR]) {
+      return 'not-needed';
+    }
+    // authType 'none' serialises as undefined through connectionAuthTypeToBackendAuthType.
+    // Auth is handled externally (SSO interceptor when token arrives, or endpoint needs none).
+    // Return a placeholder so the Pi SDK doesn't reject the session before the request is made.
+    if (!initConfig?.authType) {
+      return 'not-needed';
+    }
     debugLog('[custom-endpoint] Warning: no API key found for non-localhost endpoint — requests will likely fail');
   }
   return key;
@@ -492,6 +504,14 @@ function createAuthenticatedRegistry(): {
   } else if (initConfig?.apiKey) {
     authStorage.set('anthropic', { type: 'api_key', key: initConfig.apiKey });
     debugLog('Injected API key into auth storage (legacy fallback)');
+  } else if (initConfig?.baseUrl?.trim() && (process.env[ENV_CONNECTION_SSO_TOKEN_ENV_VAR] || !initConfig.authType)) {
+    // No explicit credential, but auth is handled outside the Pi SDK:
+    //   - SSO mode: network interceptor replaces the Authorization header at HTTP level.
+    //   - authType 'none' (→ undefined): endpoint needs no auth or auth is injected later.
+    // Pi SDK still checks authStorage before running prompt() — inject a placeholder
+    // so it doesn't reject the session before the request even reaches the wire.
+    authStorage.set('custom-endpoint', { type: 'api_key', key: 'not-needed' } as unknown as AuthCredential);
+    debugLog('Injected placeholder credential for custom-endpoint provider (no-auth / SSO mode)');
   }
 
   const modelRegistry = PiModelRegistry.inMemory(authStorage);
@@ -920,6 +940,18 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
       const fallback = providerDefault ?? getDefaultSummarizationModel();
       debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider} (resolved: ${resolvedProvider}), falling back to ${fallback}`);
       model = fallback;
+    }
+  } else if (shouldPreferCustomEndpoint()) {
+    // No piAuth (SSO / no-auth custom endpoint): the default Anthropic Haiku resolves
+    // to 'anthropic' provider in the Pi SDK catalog but no Anthropic credentials exist
+    // in authStorage. Fall back to the custom endpoint's own registered model instead.
+    const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
+    const resolved = resolvePiModel(modelRegistry, bareModel, undefined, true);
+    const resolvedProvider = (resolved as any)?.provider;
+    if (!resolved || resolvedProvider !== 'custom-endpoint') {
+      const customModel = initConfig.model || [...customEndpointModelIds][0] || model;
+      debugLog(`[queryLlm] Model ${bareModel} not resolvable via custom-endpoint (resolved: ${resolvedProvider ?? 'none'}), falling back to ${customModel}`);
+      model = customModel;
     }
   }
 

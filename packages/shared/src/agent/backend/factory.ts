@@ -362,7 +362,7 @@ export function resolveBackendContext(args: {
 
   const provider = connection
     ? providerTypeToAgentProvider(connection.providerType || 'anthropic')
-    : 'anthropic';
+    : 'pi';
 
   const authType = connection
     ? connectionAuthTypeToBackendAuthType(connection.authType)

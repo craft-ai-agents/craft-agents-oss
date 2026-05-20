@@ -243,9 +243,11 @@ The custom URL scheme `mdp://` registered by the Electron app for OS-level deep 
 Avoid: craftagents protocol, custom protocol.
 
 ### Environment Connection
-A virtual LLM connection auto-synthesized at startup from environment variables. Not persisted to `config.json`; re-derived on every launch. Appears pinned at the top of Settings → AI with a read-only "Environment" badge — no Edit, Delete, or Rename actions. Always set as the default connection when present.
+A virtual LLM connection auto-synthesized at startup from environment variables. Not persisted to `config.json`; re-derived on every launch. Appears pinned at the top of Settings → AI with the **Default** badge. Has a three-dot menu with exactly two actions: **Validate Connection** and **Mid-stream behavior** — no Edit, Delete, or Rename. Always set as the default connection when present.
 
-Required env var: `LLM_BASE_URL` (OpenAI Chat Completions–compatible endpoint). Optional: `LLM_MODEL` (default model name). Requires an active SSO Session; the **Session Token** (`sso.token`) is injected as the bare `Authorization` header on every request (no `Bearer` prefix). A `501` response from the backend signals an expired token and triggers a redirect to the Login Page.
+Required env var: `LLM_BASE_URL` (OpenAI Chat Completions–compatible endpoint). Optional: `LLM_MODEL` (default model name), `LLM_CONNECTION_NAME` (display name shown in Settings → AI; falls back to `"Environment"` when unset). Requires an active SSO Session; the **Session Token** (`sso.token`) is injected as the bare `Authorization` header on every request (no `Bearer` prefix). A `501` response from the backend signals an expired token and triggers a redirect to the Login Page.
+
+Mid-stream behavior for the Environment Connection is stored as a standalone app-level preference (`envConnectionMidStreamBehavior`), not as a field on the virtual connection record — the connection is never written to `config.json` so the per-connection save path is unavailable.
 
 The underlying connection is `providerType: 'pi_compat'`, `authType: 'none'`, `piAuthProvider: 'openai'`. Token injection happens via the network interceptor inside the Pi subprocess, driven by the `CRAFT_LLM_SSO_TOKEN` and `CRAFT_LLM_SSO_BASE_URL` env vars set at subprocess spawn time.
 
@@ -255,3 +257,8 @@ Avoid: env provider, default provider, built-in connection.
 A user-configured LLM connection added through Settings → AI → Add Connection. The only user-editable connection type after the removal of OAuth-based flows. Created via a single-step form: provider preset dropdown (Anthropic, OpenAI, Groq, Bedrock, etc.) + API key field + optional base URL. Backed by `providerType: 'anthropic'` or `providerType: 'pi'` depending on the selected preset.
 
 Avoid: API key connection, manual connection.
+
+### OpenLLM Connection
+A user-configured LLM connection that routes to a self-hosted OpenLLM server. User provides an API key and model list; the deployment provides the host via the `OPENLLM_HOST` environment variable. The host is never stored in the connection record — it is read from `OPENLLM_HOST` at call time. The endpoint URL is constructed per-model as `{OPENLLM_HOST}/llm/{model_name}/v1`, so switching models changes the URL. Backed by `providerType: 'openllm'` (routed through the Pi subprocess). Mid-stream behavior defaults to `'steer'`.
+
+Avoid: OpenLLM provider, OpenLLM endpoint.
