@@ -1,6 +1,6 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
-import type { HandlerDeps, ISessionManager } from '../handler-deps'
+import type { HandlerDeps } from '../handler-deps'
 
 /** RPC channels handled by the user profile module. */
 export const HANDLED_CHANNELS = [
@@ -8,7 +8,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.userProfile.GET,
 ] as const
 
-type Deps = Pick<HandlerDeps<ISessionManager>, 'sessionManager'>
+type Deps = Pick<HandlerDeps, 'sessionManager'>
 
 /**
  * Register RPC handlers for manual user profile refresh and read.

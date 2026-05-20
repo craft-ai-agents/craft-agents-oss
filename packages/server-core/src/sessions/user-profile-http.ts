@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { dirname, join } from 'path'
 import { CONFIG_DIR } from '@craft-agent/shared/config'
-import { UserProfile, UserProfileProvider, sanitizeProfile, hasProfileContent } from './user-profile-context'
+import { type UserProfile, type UserProfileProvider, sanitizeProfile, hasProfileContent } from './user-profile-context'
 
 /**
  * Fetches user profile data from a remote HTTP API, validates it,
@@ -9,7 +9,7 @@ import { UserProfile, UserProfileProvider, sanitizeProfile, hasProfileContent } 
  */
 export class HttpUserProfileProvider implements UserProfileProvider {
   private readonly apiUrl: string
-  private readonly fetchFn: typeof fetch
+  private readonly fetchFn: (url: string) => Promise<Response>
   private readonly profilePath: string
 
   constructor(options: HttpUserProfileProviderOptions = {}) {
@@ -44,7 +44,7 @@ export class HttpUserProfileProvider implements UserProfileProvider {
 
 export interface HttpUserProfileProviderOptions {
   apiUrl?: string
-  fetchFn?: typeof fetch
+  fetchFn?: (url: string) => Promise<Response>
   profilePath?: string
 }
 
@@ -65,7 +65,7 @@ export function readLocalUserProfile(profilePath?: string): UserProfile | null {
  * on a configurable interval.
  */
 export class UserProfileRefreshLoop {
-  private readonly provider: HttpUserProfileProvider
+  private readonly provider: UserProfileProvider
   private readonly intervalMs: number
   private readonly onError?: (error: unknown) => void
   private timer: ReturnType<typeof setInterval> | null = null
@@ -78,9 +78,9 @@ export class UserProfileRefreshLoop {
 
   /** Start the refresh loop. Fires an immediate first fetch. */
   start(): void {
-    this.refresh().catch(() => {})
+    this.refresh()
     this.timer = setInterval(() => {
-      this.refresh().catch(() => {})
+      this.refresh()
     }, this.intervalMs)
   }
 
@@ -104,7 +104,7 @@ export class UserProfileRefreshLoop {
 }
 
 export interface UserProfileRefreshLoopOptions {
-  provider: HttpUserProfileProvider
+  provider: UserProfileProvider
   intervalMs?: number
   onError?: (error: unknown) => void
 }

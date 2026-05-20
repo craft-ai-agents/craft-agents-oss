@@ -109,7 +109,7 @@ export interface SessionManagerOptions {
   userProfileContextEnabled?: boolean
   userProfileCachePath?: string
   /** HTTP fetch implementation override (defaults to globalThis.fetch). */
-  fetchFn?: typeof fetch
+  fetchFn?: (url: string) => Promise<Response>
   /** Refresh interval for HTTP user profile polling in ms (default 43_200_000 = 12h). */
   userProfileRefreshIntervalMs?: number
 }
