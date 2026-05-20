@@ -264,6 +264,11 @@ export const RPC_CHANNELS = {
     UPDATE_MARKETPLACE: 'skills:updateMarketplace',
     PUBLISH_MARKETPLACE: 'skills:publishMarketplace',
     PUBLISH_DIRECT_MARKETPLACE: 'skills:publishDirectMarketplace',
+    LIST_MARKET: 'skills:listMarket',
+    UPLOAD_MARKET: 'skills:uploadMarket',
+    INSTALL_MARKET: 'skills:installMarket',
+    DELETE_MARKET: 'skills:deleteMarket',
+    FETCH_MARKET_CONTENT: 'skills:fetchMarketContent',
     CHANGED: 'skills:changed',
   },
   statuses: {
