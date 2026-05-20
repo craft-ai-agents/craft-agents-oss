@@ -2729,14 +2729,16 @@ export function deleteLlmConnection(slug: string): boolean {
  */
 export function getDefaultLlmConnection(): string | null {
   const config = loadStoredConfig();
-  if (!config) return null;
 
-  // If no connections, return null
-  if (!config.llmConnections || config.llmConnections.length === 0) {
-    return null;
-  }
+  // User-set explicit default takes priority over everything
+  if (config?.defaultLlmConnection) return config.defaultLlmConnection;
 
-  return config.defaultLlmConnection || config.llmConnections[0]?.slug || null;
+  // Env-provider is the implicit default when LLM_BASE_URL is configured —
+  // matches the UI contract where it always shows with the "Default" badge.
+  if (process.env.LLM_BASE_URL) return ENV_CONNECTION_SLUG;
+
+  // Fall back to first stored connection
+  return config?.llmConnections?.[0]?.slug || null;
 }
 
 /**

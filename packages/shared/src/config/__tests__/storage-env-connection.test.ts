@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test'
 import {
   ENV_CONNECTION_SLUG,
+  getDefaultLlmConnection,
   getLlmConnection,
   synthesizeEnvConnection,
 } from '../index'
@@ -46,5 +47,22 @@ describe('getLlmConnection environment connection', () => {
     delete process.env.LLM_CONNECTION_NAME
 
     expect(getLlmConnection(ENV_CONNECTION_SLUG)).toBeNull()
+  })
+})
+
+describe('getDefaultLlmConnection environment connection fallback', () => {
+  afterEach(() => {
+    restoreEnv()
+  })
+
+  it('returns env-provider slug when LLM_BASE_URL is set and no stored default exists', () => {
+    process.env.LLM_BASE_URL = 'http://localhost:11434/v1'
+    // In test env loadStoredConfig() returns null, so no persisted default
+    expect(getDefaultLlmConnection()).toBe(ENV_CONNECTION_SLUG)
+  })
+
+  it('returns null when LLM_BASE_URL is absent and no stored connections exist', () => {
+    delete process.env.LLM_BASE_URL
+    expect(getDefaultLlmConnection()).toBeNull()
   })
 })
