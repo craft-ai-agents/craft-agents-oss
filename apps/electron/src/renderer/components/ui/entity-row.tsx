@@ -29,7 +29,19 @@ import {
   StyledContextMenuContent,
 } from '@/components/ui/styled-context-menu'
 import { DropdownMenuProvider, ContextMenuProvider } from '@/components/ui/menu-context'
+import {
+  LONG_PRESS_MS,
+  MOVE_TOLERANCE_PX,
+  shouldFireLongPress,
+} from '@/components/ui/long-press-state'
 import { cn } from '@/lib/utils'
+
+/** Window the long-press / right-click handler keeps `suppressNextActivation`
+ *  asserted for after the drawer opens. Activation events (`onMouseDown` /
+ *  `onClick`) within this window are dropped so the row doesn't get selected
+ *  underneath the drawer when the user releases the press. A normal tap is
+ *  <300ms, so the window doesn't eat real taps. */
+const SUPPRESS_ACTIVATION_MS = 300
 
 export interface EntityRowProps {
   /** Left icon area — rendered in-flow as a flex child before the content column.
@@ -78,6 +90,19 @@ export interface EntityRowProps {
   contextMenuContent?: React.ReactNode
   /** Whether to hide the more button (e.g. when overlay is showing) */
   hideMoreButton?: boolean
+  /** Whether to render the menu surface in compact (drawer) mode. Pass-through
+   *  from the consumer so EntityRow stays generic and usable from playground /
+   *  non-AppShell surfaces. Only meaningful in combination with `compactMenu`. */
+  isCompactMode?: boolean
+  /** Render-prop for the compact (drawer) menu surface. EntityRow owns the
+   *  open state (driven by both the `…` button and long-press / right-click)
+   *  and hands it to the consumer so a single drawer instance is controlled
+   *  by both triggers. When omitted OR `isCompactMode` is false: the
+   *  existing dropdown/context-menu behaviour kicks in. */
+  compactMenu?: (props: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+  }) => React.ReactNode
 
   // --- Passthrough ---
   /** Additional props spread onto the <button> (aria attrs, keyboard handlers, tabIndex, ref) */
@@ -109,6 +134,8 @@ export function EntityRow({
   menuContent,
   contextMenuContent,
   hideMoreButton = false,
+  isCompactMode = false,
+  compactMenu,
   buttonProps,
   dataAttributes,
   className,
@@ -116,9 +143,120 @@ export function EntityRow({
 }: EntityRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
+  const [compactMenuOpen, setCompactMenuOpen] = useState(false)
 
-  // Resolve context menu content: use override if provided, else fall back to dropdown menu content
-  const resolvedContextMenu = contextMenuContent ?? menuContent
+  // Compact branch only kicks in when both the flag and the render-prop are
+  // provided. Desktop callsites that don't pass `compactMenu` keep the
+  // existing Radix dropdown/context-menu behaviour.
+  const useCompactMenu = isCompactMode && !!compactMenu
+
+  // Long-press + suppression state. Refs (not React state) because the
+  // pointer event handlers run outside React's commit cycle — updating state
+  // would re-render the row on every move, which we explicitly don't want.
+  const pointerDownRef = React.useRef<{
+    x: number
+    y: number
+    timer: number
+  } | null>(null)
+  const suppressNextActivationRef = React.useRef(false)
+
+  const cancelLongPress = React.useCallback(() => {
+    if (pointerDownRef.current) {
+      window.clearTimeout(pointerDownRef.current.timer)
+      pointerDownRef.current = null
+    }
+  }, [])
+
+  // Cleanup pending long-press timer on unmount — otherwise a row that
+  // unmounts mid-press would fire its callback after the React tree is gone.
+  React.useEffect(() => {
+    return () => {
+      if (pointerDownRef.current) {
+        window.clearTimeout(pointerDownRef.current.timer)
+        pointerDownRef.current = null
+      }
+    }
+  }, [])
+
+  const armSuppression = React.useCallback(() => {
+    suppressNextActivationRef.current = true
+    window.setTimeout(() => {
+      suppressNextActivationRef.current = false
+    }, SUPPRESS_ACTIVATION_MS)
+  }, [])
+
+  const openCompactMenuFromGesture = React.useCallback(() => {
+    setCompactMenuOpen(true)
+    armSuppression()
+  }, [armSuppression])
+
+  const onPointerDown = React.useCallback(
+    (e: React.PointerEvent) => {
+      // Mouse uses the native context menu path (onContextMenu). Touch / pen
+      // are the only inputs that need the long-press fallback.
+      if (e.pointerType === 'mouse') return
+      const start = { x: e.clientX, y: e.clientY }
+      const timer = window.setTimeout(() => {
+        openCompactMenuFromGesture()
+        pointerDownRef.current = null
+      }, LONG_PRESS_MS)
+      pointerDownRef.current = { ...start, timer }
+    },
+    [openCompactMenuFromGesture],
+  )
+
+  const onPointerMove = React.useCallback(
+    (e: React.PointerEvent) => {
+      const state = pointerDownRef.current
+      if (!state) return
+      const decision = shouldFireLongPress(
+        { x: state.x, y: state.y },
+        { x: e.clientX, y: e.clientY },
+        0, // elapsedMs is irrelevant for the move-cancellation path
+        LONG_PRESS_MS,
+        MOVE_TOLERANCE_PX,
+      )
+      if (decision.cancel) cancelLongPress()
+    },
+    [cancelLongPress],
+  )
+
+  const onContextMenuCompact = React.useCallback(
+    (e: React.MouseEvent) => {
+      // Desktop right-click in compact mode: open the drawer instead of
+      // falling through to the native context menu (no Radix ContextMenu is
+      // rendered in the compact branch).
+      e.preventDefault()
+      openCompactMenuFromGesture()
+    },
+    [openCompactMenuFromGesture],
+  )
+
+  // Wrap consumer handlers so a long-press / right-click that just opened
+  // the drawer doesn't also trigger row selection on pointer release.
+  const wrappedOnMouseDown = React.useCallback(
+    (e: React.MouseEvent) => {
+      if (suppressNextActivationRef.current) {
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+      onMouseDown?.(e)
+    },
+    [onMouseDown],
+  )
+
+  const wrappedOnClick = React.useCallback(() => {
+    if (suppressNextActivationRef.current) return
+    onClick?.()
+  }, [onClick])
+
+  // In compact mode we don't render Radix ContextMenu, so don't expose the
+  // override either — the batch menu / right-click is handled by the drawer.
+  // In desktop mode the existing fallback applies.
+  const resolvedContextMenu = useCompactMenu
+    ? null
+    : contextMenuContent ?? menuContent
 
   // Build the inner content (shared between with-context-menu and without)
   const innerContent = (
@@ -139,8 +277,14 @@ export function EntityRow({
             : "hover:bg-foreground/2",
           (buttonProps as Record<string, unknown>)?.className as string | undefined,
         )}
-        onMouseDown={onMouseDown}
-        onClick={!onMouseDown ? onClick : undefined}
+        onMouseDown={wrappedOnMouseDown}
+        onClick={!onMouseDown ? wrappedOnClick : undefined}
+        onPointerDown={useCompactMenu ? onPointerDown : undefined}
+        onPointerMove={useCompactMenu ? onPointerMove : undefined}
+        onPointerUp={useCompactMenu ? cancelLongPress : undefined}
+        onPointerCancel={useCompactMenu ? cancelLongPress : undefined}
+        onPointerLeave={useCompactMenu ? cancelLongPress : undefined}
+        onContextMenu={useCompactMenu ? onContextMenuCompact : undefined}
       >
         {/* Content column */}
         <div className="flex flex-col gap-1.5 min-w-0 flex-1">
@@ -157,30 +301,50 @@ export function EntityRow({
               </div>
               {titleSuffix && <div className="shrink-0 flex items-center">{titleSuffix}</div>}
               <div className="shrink-0 ml-auto relative -mr-1">
-                <span className={cn(menuOpen || contextMenuOpen ? "invisible" : "group-hover:invisible")}>
+                <span className={cn(
+                  menuOpen || contextMenuOpen || compactMenuOpen
+                    ? "invisible"
+                    : useCompactMenu ? undefined : "group-hover:invisible",
+                )}>
                   {titleTrailing}
                 </span>
-                {menuContent && !hideMoreButton && (
+                {(menuContent || useCompactMenu) && !hideMoreButton && (
                   <div
                     data-touch-reveal="true"
                     className={cn(
                       "absolute inset-0 flex items-center justify-end overflow-visible",
-                      menuOpen || contextMenuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                      menuOpen || contextMenuOpen || compactMenuOpen
+                        ? "opacity-100"
+                        : useCompactMenu
+                          ? "opacity-100"
+                          : "opacity-0 group-hover:opacity-100",
                     )}
                     onMouseDown={(e) => e.stopPropagation()}
                   >
-                    <DropdownMenu modal={true} open={menuOpen} onOpenChange={setMenuOpen}>
-                      <DropdownMenuTrigger asChild>
-                        <div className="p-1 rounded-[6px] hover:bg-foreground/10 data-[state=open]:bg-foreground/10 cursor-pointer">
-                          <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-                        </div>
-                      </DropdownMenuTrigger>
-                      <StyledDropdownMenuContent align="end">
-                        <DropdownMenuProvider>
-                          {menuContent}
-                        </DropdownMenuProvider>
-                      </StyledDropdownMenuContent>
-                    </DropdownMenu>
+                    {useCompactMenu ? (
+                      <button
+                        type="button"
+                        onClick={() => setCompactMenuOpen(true)}
+                        className="p-1 rounded-[6px] hover:bg-foreground/10 data-[state=open]:bg-foreground/10 cursor-pointer"
+                        aria-haspopup="dialog"
+                        aria-expanded={compactMenuOpen}
+                      >
+                        <MoreHorizontal className="h-3.5 w-3.5 text-foreground/40" />
+                      </button>
+                    ) : (
+                      <DropdownMenu modal={true} open={menuOpen} onOpenChange={setMenuOpen}>
+                        <DropdownMenuTrigger asChild>
+                          <div className="p-1 rounded-[6px] hover:bg-foreground/10 data-[state=open]:bg-foreground/10 cursor-pointer">
+                            <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                          </div>
+                        </DropdownMenuTrigger>
+                        <StyledDropdownMenuContent align="end">
+                          <DropdownMenuProvider>
+                            {menuContent}
+                          </DropdownMenuProvider>
+                        </StyledDropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 )}
               </div>
@@ -250,31 +414,55 @@ export function EntityRow({
       {overlay}
 
       {/* More menu button — visible on hover or when menu is open (skipped when titleTrailing handles it inline) */}
-      {menuContent && !hideMoreButton && !titleTrailing && (
+      {(menuContent || useCompactMenu) && !hideMoreButton && !titleTrailing && (
         <div
           data-touch-reveal="true"
           className={cn(
             "absolute right-2 top-2 transition-opacity z-10",
-            menuOpen || contextMenuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            menuOpen || contextMenuOpen || compactMenuOpen
+              ? "opacity-100"
+              : useCompactMenu
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100",
           )}
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="flex items-center rounded-[8px] overflow-hidden border border-transparent hover:border-border/50">
-            <DropdownMenu modal={true} open={menuOpen} onOpenChange={setMenuOpen}>
-              <DropdownMenuTrigger asChild>
-                <div className="p-1.5 hover:bg-foreground/10 data-[state=open]:bg-foreground/10 cursor-pointer">
-                  <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </DropdownMenuTrigger>
-              <StyledDropdownMenuContent align="end">
-                <DropdownMenuProvider>
-                  {menuContent}
-                </DropdownMenuProvider>
-              </StyledDropdownMenuContent>
-            </DropdownMenu>
+            {useCompactMenu ? (
+              <button
+                type="button"
+                onClick={() => setCompactMenuOpen(true)}
+                className="p-1.5 hover:bg-foreground/10 data-[state=open]:bg-foreground/10 cursor-pointer"
+                aria-haspopup="dialog"
+                aria-expanded={compactMenuOpen}
+              >
+                <MoreHorizontal className="h-4 w-4 text-foreground/40" />
+              </button>
+            ) : (
+              <DropdownMenu modal={true} open={menuOpen} onOpenChange={setMenuOpen}>
+                <DropdownMenuTrigger asChild>
+                  <div className="p-1.5 hover:bg-foreground/10 data-[state=open]:bg-foreground/10 cursor-pointer">
+                    <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </DropdownMenuTrigger>
+                <StyledDropdownMenuContent align="end">
+                  <DropdownMenuProvider>
+                    {menuContent}
+                  </DropdownMenuProvider>
+                </StyledDropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
       )}
+
+      {/* Compact drawer mount — the render-prop is rendered here as a
+       *  sibling of the row so the drawer's portal can mount above the
+       *  current panel without being clipped by the row's overflow. */}
+      {useCompactMenu && compactMenu?.({
+        open: compactMenuOpen,
+        onOpenChange: setCompactMenuOpen,
+      })}
     </div>
   )
 

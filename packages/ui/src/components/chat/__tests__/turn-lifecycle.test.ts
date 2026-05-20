@@ -314,6 +314,71 @@ describe('turn lifecycle scenarios', () => {
       expect(deriveTurnPhase(assistantTurn)).toBe('awaiting')
     })
   })
+
+  // Mirrors the messaging-gateway/renderer.ts lastAssistantText fallback (PR #779).
+  // When the Pi agent emits intermediate text + a tool call and then completes
+  // without a non-intermediate text_complete, the chat must not sit on "Thinking…"
+  // forever. The session.isProcessing=false signal triggers the existing
+  // "promote last intermediate text to response" branch in groupMessagesByTurn.
+  describe('tool-terminated run — session-complete fallback', () => {
+    it('intermediate text + completed tool + session done → phase complete, intermediate promoted to response', () => {
+      resetCounters()
+      turnIdCounter++
+
+      const messages: Message[] = [
+        createUserMessage('do the thing'),
+        createAssistantMessage(false, /* isIntermediate */ true), // "I'll run the requested echo hello"
+        createToolMessage('completed', 'Bash'),
+      ]
+      const turns = groupMessagesByTurn(messages, { isSessionProcessing: false })
+      const turn = getLastAssistantTurn(turns)!
+      expect(deriveTurnPhase(turn)).toBe('complete')
+      expect(turn.response?.text).toBe('Response text') // promoted from the intermediate
+    })
+
+    it('intermediate text + completed tool + session still processing → phase awaiting', () => {
+      resetCounters()
+      turnIdCounter++
+
+      const messages: Message[] = [
+        createUserMessage('do the thing'),
+        createAssistantMessage(false, true),
+        createToolMessage('completed', 'Bash'),
+      ]
+      const turns = groupMessagesByTurn(messages, { isSessionProcessing: true })
+      const turn = getLastAssistantTurn(turns)!
+      expect(deriveTurnPhase(turn)).toBe('awaiting')
+    })
+
+    it('only tool + session done + no text → phase complete, no response promoted', () => {
+      resetCounters()
+      turnIdCounter++
+
+      const messages: Message[] = [
+        createUserMessage('do the thing'),
+        createToolMessage('completed', 'Bash'),
+      ]
+      const turns = groupMessagesByTurn(messages, { isSessionProcessing: false })
+      const turn = getLastAssistantTurn(turns)!
+      expect(deriveTurnPhase(turn)).toBe('complete')
+      expect(turn.response).toBeUndefined()
+    })
+
+    it('omitting the option keeps current behavior (backwards compat)', () => {
+      resetCounters()
+      turnIdCounter++
+
+      const messages: Message[] = [
+        createUserMessage('do the thing'),
+        createAssistantMessage(false, true),
+        createToolMessage('completed', 'Bash'),
+      ]
+      const turns = groupMessagesByTurn(messages) // no second arg
+      const turn = getLastAssistantTurn(turns)!
+      // Without the explicit signal, the turn stays open — pre-fix behavior preserved
+      expect(deriveTurnPhase(turn)).toBe('awaiting')
+    })
+  })
 })
 
 describe('edge cases', () => {
