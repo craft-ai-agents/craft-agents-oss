@@ -216,6 +216,7 @@ import type {
   DirectoryListingResult,
   RemoteSessionTransferPayload,
   ImportRemoteSessionTransferResult,
+  TeamContextPreview,
 } from '@craft-agent/shared/protocol'
 
 export interface ElectronAPI {

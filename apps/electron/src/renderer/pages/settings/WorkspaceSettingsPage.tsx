@@ -12,7 +12,7 @@
  */
 
 import * as React from 'react'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'motion/react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
@@ -75,7 +75,7 @@ export default function WorkspaceSettingsPage() {
   const [teamContextPreview, setTeamContextPreview] = useState<TeamContextPreview | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewSampleMessage, setPreviewSampleMessage] = useState('')
-  const [previewDebounceTimer, setPreviewDebounceTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
+  const previewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Default sources state
   const [availableSources, setAvailableSources] = useState<LoadedSource[]>([])
@@ -179,11 +179,11 @@ export default function WorkspaceSettingsPage() {
     }
 
     // Debounce preview loading when sample message changes
-    if (previewDebounceTimer) {
-      clearTimeout(previewDebounceTimer)
+    if (previewDebounceRef.current) {
+      clearTimeout(previewDebounceRef.current)
     }
     const timer = setTimeout(loadPreview, previewSampleMessage ? 300 : 0)
-    setPreviewDebounceTimer(timer)
+    previewDebounceRef.current = timer
 
     return () => {
       if (timer) clearTimeout(timer)

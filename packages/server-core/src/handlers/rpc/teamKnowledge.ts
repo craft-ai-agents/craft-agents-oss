@@ -1,5 +1,5 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import type { TeamContextPreview } from '@craft-agent/shared/protocol/dto'
+import type { TeamContextPreview, TeamContextPreviewTriggerTerm } from '@craft-agent/shared/protocol/dto'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -71,13 +71,12 @@ export function registerTeamKnowledgeHandlers(server: RpcServer, _deps: HandlerD
     const {
       formatTeamKnowledgePolicy,
       prefetchTeamKnowledge,
-      formatPrefetchBlock,
     } = await import('@craft-agent/shared/agent/core/team-public-knowledge-injector')
 
     const policyXml = formatTeamKnowledgePolicy(workspace.rootPath)
 
     // Extract trigger terms from the policy XML
-    const triggerTerms: import('@craft-agent/shared/protocol/dto').TeamContextPreviewTriggerTerm[] = []
+    const triggerTerms: TeamContextPreviewTriggerTerm[] = []
     if (policyXml) {
       const termRegex = /^\d+\.\s+"([^"]+)"\s+\((\w+)\)/gm
       let match
@@ -92,7 +91,7 @@ export function registerTeamKnowledgeHandlers(server: RpcServer, _deps: HandlerD
       const results = prefetchTeamKnowledge(workspace.rootPath, sampleMessage)
       if (results.length > 0) {
         prefetchResults = results.map(r => ({
-          term: r.relevance === 'exact match' ? sampleMessage : sampleMessage,
+          term: sampleMessage,
           kind: r.kind,
           summary: r.summary,
           excerpt: r.excerpt,
