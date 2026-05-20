@@ -39,7 +39,7 @@ async function permRequest<T>(path: string, token: string, options: RequestInit 
   const url = `${PERMISSION_API_BASE}${path}`
   const method = options.method ?? 'GET'
   const headers: Record<string, string> = {
-    ...(token ? { token } : {}),
+    ...(token ? { authorization: token } : {}),
     ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
   }
   const res = await fetch(url, { ...options, headers })
@@ -221,7 +221,7 @@ export default function PermissionAdminPage() {
       const api = buildPermissionApi(session.token)
       setPermApi(api)
       fetch(`${PERMISSION_API_BASE}/api/mdp/permission/checkAdmin?employeeId=${encodeURIComponent(session.employeeId)}`, {
-        headers: { token: session.token },
+        headers: { authorization: session.token },
       })
         .then((res) => res.json())
         .then((json: { body: boolean }) => setAuthStatus(json.body ? 'ok' : 'denied'))
