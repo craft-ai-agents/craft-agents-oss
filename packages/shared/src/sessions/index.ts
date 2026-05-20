@@ -124,4 +124,9 @@ export {
   MAX_BUNDLE_SIZE_BYTES,
 } from './bundle.ts';
 
+export {
+  redactDynamicContextRefForExternal,
+  redactMessageDynamicContextForExternal,
+  redactStoredSessionForExternal,
+} from './redaction.ts';
 

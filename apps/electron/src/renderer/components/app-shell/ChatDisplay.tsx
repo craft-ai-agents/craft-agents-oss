@@ -16,6 +16,16 @@ import { motion, AnimatePresence } from "motion/react"
 import { toast } from "sonner"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { Markdown, CollapsibleMarkdownProvider, StreamingMarkdown, type RenderMode } from "@/components/markdown"
 import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
@@ -74,6 +84,13 @@ import { CHAT_LAYOUT } from "@/config/layout"
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from "@/lib/file-changes"
 import { resolveBranchNewPanelOption } from "./branching"
 import { handleErrorMessageAction } from "./error-message-actions"
+import {
+  buildFeedbackConversationContext,
+  buildFeedbackStateByMessageId,
+  clampFeedbackComment,
+  resolveNextFeedbackValue,
+  type FeedbackRating,
+} from "./feedback-context"
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -115,6 +132,12 @@ type OverlayState =
   | MultiDiffOverlayState
   | MarkdownOverlayState
   | null
+
+interface DislikeFeedbackDialogState {
+  turn: AssistantTurn
+  messageId: string
+  comment: string
+}
 
 function isStackedActivityTool(activity: ActivityItem): boolean {
   const toolName = activity.toolName?.toLowerCase() || ''
@@ -225,9 +248,15 @@ interface ChatDisplayProps {
   isSearchModeActive?: boolean
   /** Callback when match info changes - for immediate UI updates */
   onMatchInfoChange?: (info: { count: number; index: number; isHighlighting: boolean; sessionId: string | null }) => void
-  // Compact mode (for EditPopover embedding)
+  // Compact mode (for EditPopover embedding and auto-compact / WebUI mobile)
   /** Enable compact mode - hides non-essential UI elements for popover embedding */
   compactMode?: boolean
+  /**
+   * When compactMode is true, enable the compact (drawer-based) model selector
+   * next to the permission-mode pill. Defaults to false so EditPopover keeps
+   * its current behavior; ChatPage opts in when in auto-compact / mobile.
+   */
+  enableCompactModelPicker?: boolean
   /** Custom placeholder for input (used in compact mode for edit context) */
   placeholder?: string | string[]
   /** Label shown as empty state in compact mode (e.g., "Permission Settings") */
@@ -484,8 +513,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   searchQuery: externalSearchQuery,
   isSearchModeActive = false,
   onMatchInfoChange,
-  // Compact mode (for EditPopover embedding)
+  // Compact mode (for EditPopover embedding and auto-compact / WebUI mobile)
   compactMode = false,
+  enableCompactModelPicker = false,
   placeholder,
   emptyStateLabel,
   // Connection unavailable
@@ -503,6 +533,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const scrollViewportRef = React.useRef<HTMLDivElement>(null)
   const prevSessionIdRef = React.useRef<string | null>(null)
+  const sessionRef = React.useRef<Session | null>(session)
+  sessionRef.current = session
   // Reverse pagination: show last N turns initially, load more on scroll up
   const TURNS_PER_PAGE = 20
   const [visibleTurnCount, setVisibleTurnCount] = React.useState(TURNS_PER_PAGE)
@@ -659,7 +691,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     if (!searchQuery.trim() || !session?.messages) return []
     const startTime = performance.now()
     const query = searchQuery.toLowerCase()
-    const turns = groupMessagesByTurn(session.messages)
+    const turns = groupMessagesByTurn(session.messages, { isSessionProcessing: session.isProcessing })
     const matches: { matchId: string; turnId: string; turnIndex: number; matchIndexInTurn: number }[] = []
 
     for (let turnIndex = 0; turnIndex < turns.length; turnIndex++) {
@@ -700,7 +732,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       }
     }
     return matches
-  }, [searchQuery, session?.messages, countOccurrences])
+  }, [searchQuery, session?.messages, session?.isProcessing, countOccurrences])
 
   // Auto-expand pagination when search is active to show all matching turns
   // This ensures match count is stable and all matches are highlightable from the start
@@ -712,7 +744,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       (min, m) => m.turnIndex < min ? m.turnIndex : min,
       matchingOccurrences[0]!.turnIndex
     )
-    const totalTurns = groupMessagesByTurn(session?.messages || []).length
+    const totalTurns = groupMessagesByTurn(session?.messages || [], { isSessionProcessing: session?.isProcessing }).length
 
     // Calculate how many turns we need to show to include all matches
     // totalTurns - visibleTurnCount = startIndex, so we need visibleTurnCount = totalTurns - earliestMatchTurnIndex + buffer
@@ -721,7 +753,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     if (requiredVisibleCount > visibleTurnCount) {
       setVisibleTurnCount(requiredVisibleCount)
     }
-  }, [isSearchActive, matchingOccurrences, session?.messages, visibleTurnCount])
+  }, [isSearchActive, matchingOccurrences, session?.messages, session?.isProcessing, visibleTurnCount])
 
   // Extract unique turn IDs that have matches (for highlighting)
   const matchingTurnIds = useMemo(() => {
@@ -969,6 +1001,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
   // Overlay state - controls which overlay is shown (if any)
   const [overlayState, setOverlayState] = useState<OverlayState>(null)
+  const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, FeedbackRating>>({})
+  const [dislikeFeedbackDialog, setDislikeFeedbackDialog] = useState<DislikeFeedbackDialogState | null>(null)
 
   // Diff viewer settings - loaded from user preferences on mount, persisted on change
   // These settings are stored in ~/.craft-agent/preferences.json (not localStorage)
@@ -1009,6 +1043,136 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const handleCloseOverlay = useCallback(() => {
     setOverlayState(null)
   }, [])
+
+  useEffect(() => {
+    setFeedbackByMessageId({})
+    setDislikeFeedbackDialog(null)
+  }, [session?.id])
+
+  useEffect(() => {
+    if (!session?.workspaceId || !session.id) {
+      setFeedbackByMessageId({})
+      return
+    }
+
+    let cancelled = false
+    const sessionId = session.id
+
+    setFeedbackByMessageId({})
+    window.electronAPI.getChatFeedbackState(session.workspaceId)
+      .then(entries => {
+        if (cancelled) return
+        setFeedbackByMessageId(buildFeedbackStateByMessageId(entries, sessionId))
+      })
+      .catch(error => {
+        console.error('[Craft Agent Feedback] Failed to load feedback state:', error)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [session?.workspaceId, session?.id])
+
+  const logFeedbackToConsole = useCallback((
+    turn: AssistantTurn,
+    rating: FeedbackRating,
+    comment: string
+  ) => {
+    const currentSession = sessionRef.current
+    if (!currentSession) return
+
+    const context = buildFeedbackConversationContext(
+      currentSession.messages,
+      turn.response?.messageId,
+      turn.turnId
+    )
+
+    console.log('[Craft Agent Feedback]', {
+      time: new Date().toISOString(),
+      action: rating === 'like' ? '点赞' : '点踩',
+      sessionId: currentSession.id,
+      turnId: turn.turnId,
+      responseMessageId: turn.response?.messageId,
+      conversationMessages: context.conversationMessages,
+      userMessages: context.userBoundaryMessages,
+      comment,
+    })
+  }, [])
+
+  const handleFeedback = useCallback((
+    turn: AssistantTurn,
+    messageId: string,
+    rating: FeedbackRating
+  ) => {
+    const currentSession = sessionRef.current
+    if (!currentSession?.workspaceId) return
+
+    const previousRating = feedbackByMessageId[messageId] ?? null
+    const nextRating = resolveNextFeedbackValue(previousRating, rating)
+
+    setFeedbackByMessageId(prev => {
+      const next = { ...prev }
+      if (nextRating) {
+        next[messageId] = nextRating
+      } else {
+        delete next[messageId]
+      }
+      return next
+    })
+
+    if (!nextRating) {
+      setDislikeFeedbackDialog(prev => prev?.messageId === messageId ? null : prev)
+      window.electronAPI.deleteChatFeedbackState(currentSession.workspaceId, currentSession.id, messageId)
+        .catch(error => {
+          console.error('[Craft Agent Feedback] Failed to delete feedback state:', error)
+        })
+      return
+    }
+
+    window.electronAPI.setChatFeedbackState(
+      currentSession.workspaceId,
+      currentSession.id,
+      messageId,
+      nextRating === 'like'
+    ).catch(error => {
+      console.error('[Craft Agent Feedback] Failed to save feedback state:', error)
+    })
+
+    if (nextRating === 'dislike') {
+      setDislikeFeedbackDialog({
+        turn,
+        messageId,
+        comment: '',
+      })
+      return
+    }
+
+    setDislikeFeedbackDialog(prev => prev?.messageId === messageId ? null : prev)
+    logFeedbackToConsole(turn, nextRating, '')
+  }, [feedbackByMessageId, logFeedbackToConsole])
+
+  const handleDislikeCommentChange = useCallback((comment: string) => {
+    setDislikeFeedbackDialog(prev => prev
+      ? { ...prev, comment: clampFeedbackComment(comment) }
+      : prev
+    )
+  }, [])
+
+  const handleCloseDislikeDialog = useCallback(() => {
+    setDislikeFeedbackDialog(null)
+  }, [])
+
+  const handleSubmitDislikeFeedback = useCallback(() => {
+    if (!dislikeFeedbackDialog) return
+
+    const comment = clampFeedbackComment(dislikeFeedbackDialog.comment)
+    setFeedbackByMessageId(prev => ({
+      ...prev,
+      [dislikeFeedbackDialog.messageId]: 'dislike',
+    }))
+    logFeedbackToConsole(dislikeFeedbackDialog.turn, 'dislike', comment)
+    setDislikeFeedbackDialog(null)
+  }, [dislikeFeedbackDialog, logFeedbackToConsole])
 
   // Extract overlay cards for activity-based overlays (Input/Output, future extensible)
   const overlayCards = useMemo(() => {
@@ -1368,8 +1532,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Memoize turn grouping - avoids O(n) iteration on every render/keystroke
   const allTurns = React.useMemo(() => {
     if (!session) return []
-    return groupMessagesByTurn(session.messages)
-  }, [session?.messages])
+    return groupMessagesByTurn(session.messages, { isSessionProcessing: session.isProcessing })
+  }, [session?.messages, session?.isProcessing])
 
   // Keep ref in sync for scroll handler
   totalTurnCountRef.current = allTurns.length
@@ -1678,6 +1842,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
                     // Assistant turns - render with TurnCard (buffered streaming)
                     const assistantUiKey = getAssistantTurnUiKey(turn, index)
+                    const responseMessageId = turn.response?.messageId
                     return (
                       <div
                         key={turnKey}
@@ -1710,6 +1875,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         compactMode={compactMode}
                         sendMessageKey={sendMessageKey}
                         openAnnotationRequest={openAnnotationRequest}
+                        feedbackValue={responseMessageId ? feedbackByMessageId[responseMessageId] ?? null : null}
+                        onFeedback={responseMessageId ? (rating: FeedbackRating) => handleFeedback(turn, responseMessageId, rating) : undefined}
                         onBranch={session?.supportsBranching ? async (messageId: string, options?: { newPanel?: boolean }) => {
                           if (!session) return
                           try {
@@ -1924,6 +2091,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                 thinkingLevel,
                 onThinkingLevelChange,
                 enabledModes,
+                enableCompactModelPicker,
                 structuredInput,
                 onStructuredResponse: handleStructuredResponse,
                 inputValue,
@@ -2090,6 +2258,44 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           />
         )
       )}
+
+      <Dialog
+        open={!!dislikeFeedbackDialog}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) handleCloseDislikeDialog()
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>点踩反馈</DialogTitle>
+            <DialogDescription>
+              可以补充这次回答的问题，最多 255 字。
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Textarea
+              value={dislikeFeedbackDialog?.comment ?? ''}
+              maxLength={255}
+              rows={5}
+              placeholder="请输入评论"
+              onChange={(event) => handleDislikeCommentChange(event.target.value)}
+            />
+            <div className="text-right text-xs text-muted-foreground">
+              {(dislikeFeedbackDialog?.comment.length ?? 0)}/255
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={handleCloseDislikeDialog}>
+              取消
+            </Button>
+            <Button onClick={handleSubmitDislikeFeedback}>
+              提交
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 })

@@ -90,6 +90,7 @@ import { SourcesListPanel } from "./SourcesListPanel"
 import { ArchivedSessionsPanel } from "./ArchivedSessionsPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
 import { SkillImportModal } from "./SkillImportModal"
+import { McpSourceFormDialog } from "./McpSourceFormDialog"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { APP_EVENTS, AGENT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
 import { useAutomations } from "@/hooks/useAutomations"
@@ -1385,6 +1386,9 @@ function AppShellContent({
     }
   }, [])
 
+  // Sources state
+  const [editingSource, setEditingSource] = React.useState<LoadedSource | null>(null)
+
   // Delete Source - simplified since agents system is removed
   const handleDeleteSource = useCallback(async (sourceSlug: string) => {
     if (!activeWorkspace) return
@@ -1396,6 +1400,11 @@ function AppShellContent({
       toast.error(t('toast.failedToDeleteSource'))
     }
   }, [activeWorkspace])
+
+  // Edit Source - opens the edit dialog with the selected source pre-filled
+  const handleEditSource = useCallback((source: LoadedSource) => {
+    setEditingSource(source)
+  }, [])
 
   // Delete Skill
   const handleDeleteSkill = useCallback(async (skillSlug: string) => {
@@ -2034,19 +2043,32 @@ function AppShellContent({
                 <>
                   {/* Add Source button (only for sources mode) - uses filter-aware edit config */}
                   {isSourcesNavigation(navState) && activeWorkspace && (
-                    <EditPopover
-                      trigger={
-                        <HeaderIconButton
-                          icon={<Plus className="h-4 w-4" />}
-                          tooltip={t("sidebarMenu.addSource")}
-                          data-tutorial="add-source-button"
-                        />
-                      }
-                      {...getEditConfig(
-                        sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
-                        activeWorkspace.rootPath
-                      )}
-                    />
+                    sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'mcp' ? (
+                      <McpSourceFormDialog
+                        workspaceId={activeWorkspace.id}
+                        trigger={
+                          <HeaderIconButton
+                            icon={<Plus className="h-4 w-4" />}
+                            tooltip={t("sidebarMenu.addSource")}
+                            data-tutorial="add-source-button"
+                          />
+                        }
+                      />
+                    ) : (
+                      <EditPopover
+                        trigger={
+                          <HeaderIconButton
+                            icon={<Plus className="h-4 w-4" />}
+                            tooltip={t("sidebarMenu.addSource")}
+                            data-tutorial="add-source-button"
+                          />
+                        }
+                        {...getEditConfig(
+                          sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
+                          activeWorkspace.rootPath
+                        )}
+                      />
+                    )
                   )}
                   {/* Add Skill button (only for skills mode) */}
                   {isLocalSkillsNav && activeWorkspace && (
@@ -2083,16 +2105,27 @@ function AppShellContent({
               />
             )}
             {isSourcesNavigation(navState) && (
-              /* Sources List - filtered by type if sourceFilter is active */
-              <SourcesListPanel
-                sources={sources}
-                sourceFilter={sourceFilter}
-                workspaceRootPath={activeWorkspace?.rootPath}
-                onDeleteSource={handleDeleteSource}
-                onSourceClick={handleSourceSelect}
-                selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
-                localMcpEnabled={localMcpEnabled}
-              />
+              <>
+                {/* Sources List - filtered by type if sourceFilter is active */}
+                <SourcesListPanel
+                  sources={sources}
+                  sourceFilter={sourceFilter}
+                  workspaceRootPath={activeWorkspace?.rootPath}
+                  onDeleteSource={handleDeleteSource}
+                  onEditSource={handleEditSource}
+                  onSourceClick={handleSourceSelect}
+                  selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
+                  localMcpEnabled={localMcpEnabled}
+                />
+                {/* Edit Source dialog */}
+                {editingSource && activeWorkspace && (
+                  <McpSourceFormDialog
+                    workspaceId={activeWorkspace.id}
+                    editSource={editingSource}
+                    onEditComplete={() => setEditingSource(null)}
+                  />
+                )}
+              </>
             )}
             {isLocalSkillsNav && activeWorkspaceId && (
               /* Skills List */

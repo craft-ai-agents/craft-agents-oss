@@ -92,6 +92,7 @@ export async function handleSsoStartupSession({
       token: session.token,
       userName: session.userName,
       department: session.department,
+      employeeId: session.employeeId,
     }
   }
 

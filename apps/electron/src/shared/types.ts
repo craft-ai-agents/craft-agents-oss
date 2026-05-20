@@ -59,19 +59,20 @@ export type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIss
 
 // Source types for session source selection
 import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@craft-agent/shared/sources/types';
-export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
+import type { McpImportBatchCreateResult, McpImportCandidate, McpImportParseResult } from '@craft-agent/shared/sources';
+export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, McpImportBatchCreateResult, McpImportCandidate, McpImportParseResult };
 
 // Skill types
-import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult } from '@craft-agent/shared/skills';
-export type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult };
+import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult } from '@craft-agent/shared/skills';
+export type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult };
 
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
 export type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult };
 
 // LLM connection types
-import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings } from '@craft-agent/shared/config';
-export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings };
+import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, MidStreamBehavior, NetworkProxySettings } from '@craft-agent/shared/config';
+export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, MidStreamBehavior, NetworkProxySettings };
 
 // =============================================================================
 // GUI-only types (not used by server/handler code)
@@ -203,7 +204,6 @@ import type {
   GitBashStatus,
   GitCommit,
   GitStatusEntry,
-  ClaudeOAuthResult,
   UpdateInfo,
   WorkspaceSettings,
   PermissionModeState,
@@ -215,6 +215,7 @@ import type {
   DirectoryListingResult,
   RemoteSessionTransferPayload,
   ImportRemoteSessionTransferResult,
+  TeamContextPreview,
 } from '@craft-agent/shared/protocol'
 
 export interface ElectronAPI {
@@ -393,11 +394,6 @@ export interface ElectronAPI {
   getAuthState(): Promise<AuthState>
   getSetupNeeds(): Promise<SetupNeeds>
   startWorkspaceMcpOAuth(mcpUrl: string): Promise<OAuthResult & { clientId?: string }>
-  // Claude OAuth (two-step flow)
-  startClaudeOAuth(): Promise<{ success: boolean; authUrl?: string; error?: string }>
-  exchangeClaudeCode(code: string, connectionSlug: string): Promise<ClaudeOAuthResult>
-  hasClaudeOAuthState(): Promise<boolean>
-  clearClaudeOAuthState(): Promise<{ success: boolean }>
   /** Defer onboarding setup — user chose "Setup later" */
   deferSetup(): Promise<{ success: boolean }>
   getSsoSession(): Promise<PublicSsoSessionState>
@@ -406,19 +402,6 @@ export interface ElectronAPI {
   handleSsoCallback(payload: { code: string; state?: string }): Promise<{ success: boolean; error?: string }>
   onSsoLoginResult(callback: (result: { success: boolean; error?: string }) => void): () => void
   logoutSso(): Promise<{ success: true }>
-
-  // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
-  startChatGptOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
-  cancelChatGptOAuth(): Promise<{ success: boolean }>
-  getChatGptAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean; expiresAt?: number; hasRefreshToken?: boolean }>
-  chatGptLogout(connectionSlug: string): Promise<{ success: boolean }>
-
-  // GitHub Copilot OAuth
-  startCopilotOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
-  cancelCopilotOAuth(): Promise<{ success: boolean }>
-  getCopilotAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean }>
-  copilotLogout(connectionSlug: string): Promise<{ success: boolean }>
-  onCopilotDeviceCode(callback: (data: { userCode: string; verificationUri: string }) => void): () => void
 
   /** Unified LLM connection setup */
   setupLlmConnection(setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>
@@ -432,6 +415,13 @@ export interface ElectronAPI {
   // Session-specific model (overrides global)
   getSessionModel(sessionId: string, workspaceId: string): Promise<string | null>
   setSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void>
+
+  // Team context session override
+  getTeamContextOverride(sessionId: string): Promise<boolean>
+  setTeamContextOverride(sessionId: string, disabled: boolean): Promise<{ success: boolean }>
+
+  // Team context debug/preview
+  getTeamContextPreview(workspaceId: string, sampleMessage?: string): Promise<TeamContextPreview>
 
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
@@ -466,7 +456,10 @@ export interface ElectronAPI {
 
   // Sources
   getSources(workspaceId: string): Promise<LoadedSource[]>
-  createSource(workspaceId: string, config: Partial<FolderSourceConfig>): Promise<FolderSourceConfig>
+  createSource(workspaceId: string, config: Partial<FolderSourceConfig> & Partial<import('@craft-agent/shared/sources').McpManualSourceInput>): Promise<FolderSourceConfig>
+  updateSource(workspaceId: string, sourceSlug: string, config: Partial<FolderSourceConfig> & { authCredential?: string }): Promise<FolderSourceConfig>
+  parseMcpJsonImport(workspaceId: string, json: string): Promise<McpImportParseResult>
+  importMcpJsonCandidates(workspaceId: string, candidates: McpImportCandidate[]): Promise<McpImportBatchCreateResult>
   deleteSource(workspaceId: string, sourceSlug: string): Promise<void>
   startSourceOAuth(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string }>
   saveSourceCredentials(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
@@ -491,9 +484,9 @@ export interface ElectronAPI {
   // Skills
   getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
-  createSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string): Promise<CreateSkillResult>
-  forceWriteSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string): Promise<{ created: true }>
-  deleteSkill(workspaceId: string, skillSlug: string): Promise<void>
+  createSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string, scope?: 'global' | 'workspace'): Promise<CreateSkillResult>
+  forceWriteSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string, scope?: 'global' | 'workspace'): Promise<{ created: true }>
+  deleteSkill(workspaceId: string, skillSlug: string, source?: 'global' | 'workspace' | 'project', skillPath?: string): Promise<void>
   openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInFinder(workspaceId: string, skillSlug: string): Promise<void>
   extractSkillsFromZip(zipPath: string): Promise<DiscoveredSkill[]>
@@ -502,6 +495,12 @@ export interface ElectronAPI {
   updateMarketplaceSkill(workspaceId: string, input: MarketplaceSkillUpdateInput): Promise<MarketplaceInstallResult>
   publishMarketplaceSkill(workspaceId: string, input: MarketplaceLocalSkillPublishInput): Promise<MarketplacePublishLocalResult>
   publishDirectMarketplaceSkill(workspaceId: string, input: MarketplaceDirectSkillPublishInput): Promise<MarketplacePublishDirectResult>
+  // CoPaw market service
+  listMarketSkills(): Promise<CopawMarketSkill[]>
+  uploadMarketSkill(input: CopawMarketUploadInput): Promise<CopawMarketUploadResult>
+  installMarketSkill(workspaceId: string, skillName: string, chineseName: string, description: string, version?: string): Promise<CopawInstallSkillResult>
+  deleteMarketSkill(skillName: string): Promise<{ success: true }>
+  fetchMarketSkillContent(skillName: string, version?: string): Promise<{ content: string }>
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void
@@ -527,6 +526,9 @@ export interface ElectronAPI {
   // Generic workspace image loading/saving
   readWorkspaceImage(workspaceId: string, relativePath: string): Promise<string>
   writeWorkspaceImage(workspaceId: string, relativePath: string, base64: string, mimeType: string): Promise<void>
+  getChatFeedbackState(workspaceId: string): Promise<import('@craft-agent/shared/workspaces').ChatFeedbackStateEntry[]>
+  setChatFeedbackState(workspaceId: string, sessionId: string, messageId: string, isLike: boolean): Promise<void>
+  deleteChatFeedbackState(workspaceId: string, sessionId: string, messageId: string): Promise<void>
 
   // Tool icon mappings
   getToolIconMappings(): Promise<ToolIconMapping[]>
@@ -658,6 +660,7 @@ export interface ElectronAPI {
   deleteLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   testLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   setDefaultLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
+  setEnvConnectionMidStreamBehavior(behavior: MidStreamBehavior): Promise<{ success: boolean; error?: string }>
   getDefaultThinkingLevel(): Promise<ThinkingLevel>
   setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>

@@ -4,6 +4,7 @@ import i18n from 'i18next'
 import { useTranslation } from 'react-i18next'
 import type { ToolDisplayMeta, AnnotationV1 } from '@craft-agent/core'
 import { normalizePath, pathStartsWith, stripPathPrefix } from '@craft-agent/core/utils'
+import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   ChevronRight,
@@ -22,6 +23,8 @@ import {
   Pencil,
   FilePenLine,
   GitBranch,
+  ThumbsDown,
+  ThumbsUp,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
@@ -81,6 +84,7 @@ import { useAnnotationIslandEvents } from '../annotations/use-annotation-island-
 import { useAnnotationCancelRestore } from '../annotations/use-annotation-cancel-restore'
 import { DocumentFormattedMarkdownOverlay } from '../overlay'
 import { AcceptPlanDropdown } from './AcceptPlanDropdown'
+import { CompactAcceptPlanDrawer } from './CompactAcceptPlanDrawer'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -210,6 +214,34 @@ export const SIZE_CONFIG = {
   staggeredAnimationLimit: 10,
 } as const
 
+function FeedbackThumbIcon({
+  type,
+  active,
+}: {
+  type: 'like' | 'dislike'
+  active: boolean
+}) {
+  if (!active) {
+    const Icon = type === 'like' ? ThumbsUp : ThumbsDown
+    return <Icon className={SIZE_CONFIG.iconSize} />
+  }
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={cn(SIZE_CONFIG.iconSize, "shrink-0")}
+      fill="currentColor"
+    >
+      {type === 'like' ? (
+        <path d="M1 21h4V9H1v12Zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2Z" />
+      ) : (
+        <path d="M15 3H6c-.83 0-1.54.5-1.84 1.22L1.14 11.27c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.58-6.59c.37-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2Zm4 0v12h4V3h-4Z" />
+      )}
+    </svg>
+  )
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -320,6 +352,10 @@ export interface TurnCardProps {
   onPopOut?: (text: string) => void
   /** Callback to open turn details in a new window */
   onOpenDetails?: () => void
+  /** Current feedback state for this assistant turn */
+  feedbackValue?: 'like' | 'dislike' | null
+  /** Callback when user selects like/dislike feedback */
+  onFeedback?: (value: 'like' | 'dislike') => void
   /** Callback to open individual activity details in Monaco */
   onOpenActivityDetails?: (activity: ActivityItem) => void
   /** Callback to open all edits/writes in multi-file diff view */
@@ -342,7 +378,9 @@ export interface TurnCardProps {
   displayMode?: 'informative' | 'detailed'
   /** Animate response appearance (for playground demos) */
   animateResponse?: boolean
-  /** Hide footers for compact embedding (EditPopover) */
+  /** Compact-footer layout. Used by EditPopover (popover embedding) and ChatPage in
+   *  auto-compact / WebUI mobile. Hides Copy / Markdown / Branch actions; keeps the
+   *  Accept Plan dropdown when a plan is the last response. */
   compactMode?: boolean
   /** Callback to branch the session from a specific message */
   onBranch?: (messageId: string, options?: { newPanel?: boolean }) => void
@@ -721,7 +759,7 @@ function getPreviewText(
   if (isStreaming && hasResponse) return i18n.t('turnCard.responding')
 
   // Find running Task tools and show their description
-  const runningTask = activities.find(a => a.toolName === 'Task' && a.status === 'running')
+  const runningTask = activities.find(a => isParentTaskTool(a.toolName ?? '') && a.status === 'running')
   if (runningTask?.toolInput?.description) {
     return runningTask.toolInput.description as string
   }
@@ -750,7 +788,7 @@ function getPreviewText(
   }
 
   // When complete, show first Task's description if available
-  const firstTask = activities.find(a => a.toolName === 'Task')
+  const firstTask = activities.find(a => isParentTaskTool(a.toolName ?? ''))
   if (firstTask?.toolInput?.description) {
     const errorSuffix = errorCount > 0
       ? i18n.t('turnCard.errorCount', { count: errorCount })
@@ -1389,6 +1427,10 @@ export interface ResponseCardProps {
   onOpenUrl?: (url: string) => void
   /** Callback to open response in Monaco editor */
   onPopOut?: () => void
+  /** Current feedback state for this response */
+  feedbackValue?: 'like' | 'dislike' | null
+  /** Callback when user selects like/dislike feedback */
+  onFeedback?: (value: 'like' | 'dislike') => void
   /** Card variant - 'response' for AI messages, 'plan' for plan messages */
   variant?: 'response' | 'plan'
   /** Parent session ID (used to reset local annotation/island UI state on session switches) */
@@ -1405,7 +1447,8 @@ export interface ResponseCardProps {
   isLastResponse?: boolean
   /** Whether to show the Accept Plan button (default: true) */
   showAcceptPlan?: boolean
-  /** Hide footer for compact embedding (EditPopover) */
+  /** Compact-footer layout. Hides Copy / Markdown / Branch in the response footer;
+   *  keeps the Accept Plan dropdown when a plan is the last response. */
   compactMode?: boolean
   /** Callback to branch the session from this response */
   onBranch?: (options?: { newPanel?: boolean }) => void
@@ -1647,6 +1690,8 @@ export function ResponseCard({
   onOpenFile,
   onOpenUrl,
   onPopOut,
+  feedbackValue,
+  onFeedback,
   variant = 'response',
   sessionId,
   messageId,
@@ -2476,7 +2521,8 @@ export function ResponseCard({
             </div>
           </div>
 
-          {/* Footer with actions - hidden in compact mode */}
+          {/* Desktop footer with actions (Copy / Markdown / Accept Plan / Branch).
+              Compact mode falls through to the slim Accept-Plan-only footer below. */}
           {!compactMode && (
             <div className={cn(
               "pl-4 pr-2.5 py-2 border-t border-border/30 flex items-center justify-between bg-muted/20",
@@ -2517,6 +2563,38 @@ export function ResponseCard({
                     <span>Markdown</span>
                   </button>
                 )}
+                {onFeedback && (
+                  <>
+                    <button
+                      type="button"
+                      aria-pressed={feedbackValue === 'like'}
+                      aria-label="点赞"
+                      onClick={() => onFeedback('like')}
+                      className={cn(
+                        "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
+                        feedbackValue === 'like' ? "text-blue-500" : "text-muted-foreground hover:text-foreground",
+                        "focus:outline-none focus-visible:underline"
+                      )}
+                    >
+                      <FeedbackThumbIcon type="like" active={feedbackValue === 'like'} />
+                      <span>点赞</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={feedbackValue === 'dislike'}
+                      aria-label="点踩"
+                      onClick={() => onFeedback('dislike')}
+                      className={cn(
+                        "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
+                        feedbackValue === 'dislike' ? "text-blue-500" : "text-muted-foreground hover:text-foreground",
+                        "focus:outline-none focus-visible:underline"
+                      )}
+                    >
+                      <FeedbackThumbIcon type="dislike" active={feedbackValue === 'dislike'} />
+                      <span>点踩</span>
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* Right side */}
@@ -2541,6 +2619,26 @@ export function ResponseCard({
                 )}
                 {onBranch && <BranchDropdown onBranch={onBranch} />}
               </div>
+            </div>
+          )}
+
+          {/* Compact footer — Accept Plan only (mobile / auto-compact / popover).
+              Uses a bottom-sheet drawer to match the CompactPermissionModeSelector
+              / CompactModelSelector pattern. Guarded by isLastResponse so older
+              plans don't render an empty strip with a hidden-but-focusable button. */}
+          {compactMode && isPlan && showAcceptPlan && isLastResponse && onAccept && onAcceptWithCompact && (
+            <div
+              className={cn(
+                "pl-3 pr-2 py-1.5 border-t border-border/30 flex items-center justify-end bg-muted/20",
+                SIZE_CONFIG.fontSize
+              )}
+            >
+              <CompactAcceptPlanDrawer
+                onAccept={onAccept}
+                onAcceptWithCompact={onAcceptWithCompact}
+                acceptLabel={hasActiveFollowUpAnnotations ? t('plan.acceptAndSendFollowups') : t('plan.acceptPlan')}
+                acceptOptionLabel={hasActiveFollowUpAnnotations ? t('plan.acceptAndSendFollowups') : t('plan.accept')}
+              />
             </div>
           )}
         </div>
@@ -2601,7 +2699,8 @@ export function ResponseCard({
           </div>
         </div>
 
-        {/* Footer - hidden in compact mode */}
+        {/* Desktop streaming footer; compact mode renders nothing here
+            (the Accept-Plan footer only applies to completed plans). */}
         {!compactMode && (
           <div className={cn("px-4 py-2 border-t border-border/30 flex items-center bg-muted/20", SIZE_CONFIG.fontSize)}>
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -2723,6 +2822,8 @@ export const TurnCard = React.memo(function TurnCard({
   onOpenUrl,
   onPopOut,
   onOpenDetails,
+  feedbackValue,
+  onFeedback,
   onOpenActivityDetails,
   onOpenMultiFileDiff,
   hasEditOrWriteActivities,
@@ -2846,7 +2947,7 @@ export const TurnCard = React.memo(function TurnCard({
 
   // Check if we have any Task subagents - if so, use grouped view
   const hasTaskSubagents = useMemo(
-    () => sortedActivities.some(a => a.toolName === 'Task'),
+    () => sortedActivities.some(a => isParentTaskTool(a.toolName ?? '')),
     [sortedActivities]
   )
 
@@ -3130,6 +3231,8 @@ export const TurnCard = React.memo(function TurnCard({
                 onOpenUrl={onOpenUrl}
                 onPopOut={onPopOut ? () => onPopOut(response.text) : undefined}
                 variant={response.isPlan ? 'plan' : 'response'}
+                feedbackValue={response.isPlan ? undefined : feedbackValue}
+                onFeedback={response.isPlan ? undefined : onFeedback}
                 messageId={response.messageId}
                 annotations={response.annotations}
                 onAddAnnotation={onAddAnnotation}
@@ -3162,6 +3265,8 @@ export const TurnCard = React.memo(function TurnCard({
             onOpenUrl={onOpenUrl}
             onPopOut={onPopOut ? () => onPopOut(response.text) : undefined}
             variant={response.isPlan ? 'plan' : 'response'}
+            feedbackValue={response.isPlan ? undefined : feedbackValue}
+            onFeedback={response.isPlan ? undefined : onFeedback}
             messageId={response.messageId}
             annotations={response.annotations}
             onAddAnnotation={onAddAnnotation}
@@ -3202,6 +3307,9 @@ export const TurnCard = React.memo(function TurnCard({
   // Re-render if displayMode changed
   if (prev.displayMode !== next.displayMode) return false
 
+  // Re-render if compactMode changed (affects ResponseCard footer rendering)
+  if (prev.compactMode !== next.compactMode) return false
+
   // Re-render if annotation interaction mode changed (interactive vs tooltip-only)
   if (prev.annotationInteractionMode !== next.annotationInteractionMode) return false
 
@@ -3216,6 +3324,9 @@ export const TurnCard = React.memo(function TurnCard({
 
   // Re-render when active follow-up annotation state changes (plan CTA label)
   if (prev.hasActiveFollowUpAnnotations !== next.hasActiveFollowUpAnnotations) return false
+
+  // Re-render when response feedback state changes
+  if (prev.feedbackValue !== next.feedbackValue) return false
 
   // For complete, non-streaming turns: skip re-render only when both
   // session and turn identities match. Prevents stale local UI state from

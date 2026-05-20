@@ -69,6 +69,14 @@ interface RenderState {
   // --- progress / final_only modes -------------------------------------
   /** Progress/final_only: non-intermediate assistant text accumulated this run. */
   finalBuffer: string
+  /**
+   * Progress/final_only: the most recent non-empty assistant text seen this
+   * run, regardless of `isIntermediate`. Used as a fallback on `complete`
+   * when the run never produced a clean non-intermediate final turn (common
+   * for automations whose last action is a tool call) so we still deliver
+   * the agent's message instead of stranding the user on "thinking…".
+   */
+  lastAssistantText: string
   /** Progress: id of the single evolving message for this run (null before first activity). */
   progressMessageId: string | null
   /** Progress: last status label written to the bubble, to avoid redundant edits. */
@@ -140,6 +148,7 @@ export class Renderer {
         lastEditedLength: 0,
         currentEditIntervalMs: DEFAULT_EDIT_INTERVAL_MS,
         finalBuffer: '',
+        lastAssistantText: '',
         progressMessageId: null,
         progressStatus: null,
       }
@@ -325,11 +334,16 @@ export class Renderer {
       case 'text_complete': {
         const isIntermediate = Boolean(event.isIntermediate)
         const text = typeof event.text === 'string' ? event.text : ''
-        if (!isIntermediate && text.trim()) {
-          // Last assistant text of the run — keep it for the final edit.
-          state.finalBuffer = appendFinal(state.finalBuffer, text)
+        if (text.trim()) {
+          if (!isIntermediate) {
+            // Last assistant text of the run — keep it for the final edit.
+            state.finalBuffer = appendFinal(state.finalBuffer, text)
+          }
+          // Always remember the latest assistant text so `complete` can fall
+          // back to it if the run never produces a non-intermediate final.
+          state.lastAssistantText = text
         }
-        // Intermediate text is dropped. Make sure the bubble exists and shows
+        // Intermediate text is dropped from the bubble. Make sure it exists and shows
         // thinking status so the user knows the run is alive.
         await this.ensureProgressBubble(state, binding, adapter, THINKING_LABEL)
         return
@@ -355,7 +369,10 @@ export class Renderer {
       }
 
       case 'complete': {
-        const finalText = state.finalBuffer.trim()
+        // Prefer the clean non-intermediate final; fall back to the last
+        // assistant text so a tool-terminated run still delivers a message
+        // instead of freezing the bubble on "thinking…".
+        const finalText = (state.finalBuffer.trim() || state.lastAssistantText.trim())
         if (state.progressMessageId && adapter.capabilities.messageEditing) {
           if (finalText) {
             await this.tryEditMessage(
@@ -366,8 +383,8 @@ export class Renderer {
               state,
             )
           }
-          // If the run ended with no final text, leave the last status in
-          // place rather than deleting/editing to an empty string — avoids
+          // If the run produced no assistant text at all, leave the last
+          // status in place rather than editing to an empty string — avoids
           // Telegram "message is not modified" errors and keeps a trace.
         } else if (finalText) {
           // Adapter can't edit (WhatsApp) — send one message at the end.
@@ -424,14 +441,21 @@ export class Renderer {
         // because it's the only thing we might ever see.
         const isIntermediate = Boolean(event.isIntermediate)
         const text = typeof event.text === 'string' ? event.text : ''
-        if (!isIntermediate && text.trim()) {
-          state.finalBuffer = appendFinal(state.finalBuffer, text)
+        if (text.trim()) {
+          if (!isIntermediate) {
+            state.finalBuffer = appendFinal(state.finalBuffer, text)
+          }
+          // Fallback for runs that never emit a non-intermediate final turn.
+          state.lastAssistantText = text
         }
         return
       }
 
       case 'complete': {
-        const finalText = state.finalBuffer.trim()
+        // Prefer the clean non-intermediate final; fall back to the last
+        // assistant text so final_only still delivers something rather than
+        // staying silent when the run ends on a tool call.
+        const finalText = (state.finalBuffer.trim() || state.lastAssistantText.trim())
         if (finalText) {
           await this.sendText(adapter, binding, finalText)
         }
@@ -640,6 +664,7 @@ Approve in the desktop app to continue.`,
     state.lastEditedLength = 0
     state.processing = false
     state.finalBuffer = ''
+    state.lastAssistantText = ''
     state.progressMessageId = null
     state.progressStatus = null
   }

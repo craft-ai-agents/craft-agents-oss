@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/shared",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "license": "Apache-2.0",
   "description": "Shared business logic for MDP - agent, auth, config, credentials, MCP integration",
   "type": "module",
@@ -64,7 +64,9 @@
     "./automations/resolve-config-path": "./src/automations/resolve-config-path.ts",
     "./protocol": "./src/protocol/index.ts",
     "./i18n": "./src/i18n/index.ts",
-    "./resources": "./src/resources/index.ts"
+    "./resources": "./src/resources/index.ts",
+    "./team-public-knowledge": "./src/team-public-knowledge/index.ts",
+    "./markdown-entry-parser": "./src/markdown-entry-parser/index.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",

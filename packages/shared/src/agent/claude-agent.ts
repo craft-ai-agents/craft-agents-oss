@@ -30,6 +30,7 @@ import type { LLMQueryRequest, LLMQueryResult } from './llm-tool.ts';
 import { consumeLlmQueryMessages } from './claude-llm-query.ts';
 import { debug } from '../utils/debug.ts';
 import { guardLargeResult } from '../utils/large-response.ts';
+import { SourceActivationDrainController } from './source-activation-drain.ts';
 import {
   getSessionPlansDir,
   getLastPlanFilePath,
@@ -125,6 +126,12 @@ export type { LoadedSource } from '../sources/types.ts';
 // Re-exported for backwards compatibility with existing imports from claude-agent.ts
 import { AbortReason, type RecoveryMessage } from './core/index.ts';
 export { AbortReason, type RecoveryMessage };
+
+import {
+  formatTeamKnowledgePolicy,
+  prefetchTeamKnowledge,
+  formatPrefetchBlock,
+} from './core/team-public-knowledge-injector.ts';
 
 /** File extensions that can be converted to readable text by CLI tools. */
 const CONVERTIBLE_FILE_HINTS: Record<string, string> = {
@@ -1439,6 +1446,12 @@ This is a branched conversation. All prior messages in this conversation are par
       let receivedAssistantContent = false;
       let suppressedSessionExpiredError = false;
       let suppressedBranchCutoffError = false;
+      // Source-activation auto-restart drain controller (#790). Captures the
+      // pending restart on the first triggering tool_result and drains sibling
+      // tool_results from the same parallel-tool batch before firing
+      // `source_activated` + `forceAbort` — otherwise the session journal
+      // ends up with orphan `tool_use` IDs that block subsequent sends.
+      const sourceActivationDrain = new SourceActivationDrainController('batch-boundary');
       try {
         for await (const message of this.currentQuery) {
           // Track if we got any text content from assistant
@@ -1474,23 +1487,15 @@ This is a branched conversation. All prior messages in this conversation are par
           for (const event of events) {
             // After source_test (or any session-scoped tool) successfully activates a
             // new source, activateSourceInSessionFn stashes a restart descriptor on the
-            // agent. Consume it here — right after the source_test tool_result has
-            // landed — so the model sees "activated" in its prior turn, then the
-            // renderer auto-resends the user's original message with a
-            // "[{slug} activated]" suffix. Same machinery as the tool-call-error path.
-            if (event.type === 'tool_result') {
-              const pendingRestart = this.consumePendingSourceActivationRestart();
-              if (pendingRestart) {
-                yield event;
-                this.onDebug?.(`source_test activated "${pendingRestart.sourceSlug}", interrupting turn for auto-retry`);
-                yield {
-                  type: 'source_activated' as const,
-                  sourceSlug: pendingRestart.sourceSlug,
-                  originalMessage: pendingRestart.userMessage,
-                };
-                this.forceAbort(AbortReason.SourceActivated);
-                return;
-              }
+            // agent. The drain controller captures the descriptor on the first
+            // triggering tool_result and short-circuits per-event handling for any
+            // sibling tool_results / synthetic background events in the same
+            // adapted batch. The fire (yield source_activated + forceAbort) happens
+            // at end-of-batch below, NOT here — see #790 for the symptoms when
+            // siblings were dropped.
+            if (sourceActivationDrain.observe(event, () => this.consumePendingSourceActivationRestart())) {
+              yield event;
+              continue;
             }
 
             // Check for tool-not-found errors on inactive sources and attempt auto-activation
@@ -1618,6 +1623,32 @@ This is a branched conversation. All prior messages in this conversation are par
             }
             yield event;
           }
+
+          // End-of-batch fire (#790): if the drain controller captured a
+          // pending source-activation restart while iterating this adapted
+          // SDK message, all sibling tool_results / interleaved synthetic
+          // events have now been yielded. Emit `source_activated` and abort.
+          const sourceActivationFire = sourceActivationDrain.shouldFireAtBoundary();
+          if (sourceActivationFire) {
+            this.onDebug?.(`source_test activated "${sourceActivationFire.sourceSlug}", drained sibling tool_results, restarting turn`);
+            yield sourceActivationFire;
+            this.forceAbort(AbortReason.SourceActivated);
+            return;
+          }
+        }
+
+        // Stream-end fallback (#790): the SDK stream ended without any batch
+        // boundary firing — defensive against the SDK closing in the same
+        // adapted batch the capture happened in. `return` is critical here —
+        // without it we fall through to flushPending + the defensive
+        // `complete` emission below, which would corrupt the auto-restart
+        // contract (renderer expects `source_activated` to be the final event).
+        const sourceActivationFireAtEnd = sourceActivationDrain.shouldFireAtBoundary();
+        if (sourceActivationFireAtEnd) {
+          this.onDebug?.(`source_test activated "${sourceActivationFireAtEnd.sourceSlug}", stream ended mid-batch, restarting turn`);
+          yield sourceActivationFireAtEnd;
+          this.forceAbort(AbortReason.SourceActivated);
+          return;
         }
 
         // Missing-UUID fallback: branch cutoff failed because resumeSessionAt target
@@ -2133,8 +2164,19 @@ This is a branched conversation. All prior messages in this conversation are par
       `[ModeSnapshot] sessionId=${this.modeSessionId} buildTextPrompt mode=${textPromptDiagnostics.permissionMode} ` +
       `modeVersion=${textPromptDiagnostics.modeVersion} changedBy=${textPromptDiagnostics.lastChangedBy} changedAt=${textPromptDiagnostics.lastChangedAt}`
     )
+
+    // Compute team public knowledge policy and prefetch for this turn
+    const teamContextDisabled = this.config.session?.teamContextDisabled;
+    const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.workspaceRootPath, teamContextDisabled);
+    const prefetchResults = teamContextDisabled ? [] : prefetchTeamKnowledge(this.workspaceRootPath, text);
+    const teamKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
+
     const contextParts = this.promptBuilder.buildContextParts(
-      { plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId) },
+      {
+        plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId),
+        teamKnowledgePolicy,
+        teamKnowledgePrefetchBlock,
+      },
       this.sourceManager.formatSourceState()
     );
 
@@ -2179,8 +2221,19 @@ This is a branched conversation. All prior messages in this conversation are par
       `[ModeSnapshot] sessionId=${this.modeSessionId} buildSDKUserMessage mode=${sdkPromptDiagnostics.permissionMode} ` +
       `modeVersion=${sdkPromptDiagnostics.modeVersion} changedBy=${sdkPromptDiagnostics.lastChangedBy} changedAt=${sdkPromptDiagnostics.lastChangedAt}`
     )
+
+    // Compute team public knowledge policy and prefetch for this turn
+    const teamContextDisabled = this.config.session?.teamContextDisabled;
+    const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.workspaceRootPath, teamContextDisabled);
+    const prefetchResults = teamContextDisabled ? [] : prefetchTeamKnowledge(this.workspaceRootPath, text);
+    const teamKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
+
     const contextParts = this.promptBuilder.buildContextParts(
-      { plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId) },
+      {
+        plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId),
+        teamKnowledgePolicy,
+        teamKnowledgePrefetchBlock,
+      },
       this.sourceManager.formatSourceState()
     );
 

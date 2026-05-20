@@ -3,6 +3,8 @@ import '../../../tests/setup/register-pi-model-resolver.ts'
 import {
   getDefaultModelsForConnection,
   getDefaultModelForConnection,
+  getModelsForProviderType,
+  synthesizeEnvConnection,
   isCompatProvider,
   isAnthropicProvider,
   isPiProvider,
@@ -12,6 +14,56 @@ import {
   deriveBedrockRegionPrefix,
 } from '../llm-connections'
 import { ANTHROPIC_MODELS, getModelDisplayName, getModelContextWindow, getModelShortName, isClaudeModel } from '../models'
+
+describe('synthesizeEnvConnection', () => {
+  it('returns null when LLM_BASE_URL is absent', () => {
+    expect(synthesizeEnvConnection({})).toBeNull()
+  })
+
+  it('returns the Environment connection shape when LLM_BASE_URL is set', () => {
+    expect(synthesizeEnvConnection({ LLM_BASE_URL: 'http://localhost:11434/v1' })).toEqual({
+      slug: 'env-provider',
+      name: 'Environment',
+      providerType: 'pi_compat',
+      authType: 'none',
+      piAuthProvider: 'openai',
+      customEndpoint: { api: 'openai-completions' },
+      baseUrl: 'http://localhost:11434/v1',
+      models: [],
+      defaultModel: undefined,
+      createdAt: 0,
+      isEnvironmentConnection: true,
+    })
+  })
+
+  it('uses LLM_CONNECTION_NAME as the Environment connection display name when present', () => {
+    const conn = synthesizeEnvConnection({
+      LLM_BASE_URL: 'https://llm.example.test/v1',
+      LLM_CONNECTION_NAME: 'OpenLLM',
+    })
+
+    expect(conn?.name).toBe('OpenLLM')
+  })
+
+  it('populates models and defaultModel from LLM_MODEL when present', () => {
+    const conn = synthesizeEnvConnection({
+      LLM_BASE_URL: 'https://llm.example.test/v1',
+      LLM_MODEL: 'gpt-oss-120b',
+    })
+
+    expect(conn?.models).toEqual(['gpt-oss-120b'])
+    expect(conn?.defaultModel).toBe('gpt-oss-120b')
+  })
+
+  it('uses pi_compat regardless of base URL content', () => {
+    const conn = synthesizeEnvConnection({
+      LLM_BASE_URL: 'https://api.anthropic.com/v1/messages',
+      LLM_MODEL: 'claude-sonnet-4-6',
+    })
+
+    expect(conn?.providerType).toBe('pi_compat')
+  })
+})
 
 // ============================================================
 // getDefaultModelsForConnection
@@ -84,6 +136,17 @@ describe('getDefaultModelForConnection', () => {
     const defaultModel = getDefaultModelForConnection('pi_compat')
     expect(defaultModel).toBe('')
   })
+
+  it('returns empty string for openllm (user-defined provider)', () => {
+    const defaultModel = getDefaultModelForConnection('openllm')
+    expect(defaultModel).toBe('')
+  })
+})
+
+describe('getModelsForProviderType', () => {
+  it('returns an empty list for openllm', () => {
+    expect(getModelsForProviderType('openllm')).toEqual([])
+  })
 })
 
 // ============================================================
@@ -93,6 +156,10 @@ describe('getDefaultModelForConnection', () => {
 describe('isCompatProvider', () => {
   it('returns true for pi_compat', () => {
     expect(isCompatProvider('pi_compat')).toBe(true)
+  })
+
+  it('returns true for openllm', () => {
+    expect(isCompatProvider('openllm')).toBe(true)
   })
 
   it('returns false for anthropic', () => {
@@ -121,6 +188,10 @@ describe('isPiProvider', () => {
 
   it('returns true for pi_compat', () => {
     expect(isPiProvider('pi_compat')).toBe(true)
+  })
+
+  it('returns true for openllm', () => {
+    expect(isPiProvider('openllm')).toBe(true)
   })
 
   it('returns false for anthropic', () => {

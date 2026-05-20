@@ -27,12 +27,14 @@ import type {
 } from './backend/types.ts';
 import { AbortReason } from './backend/types.ts';
 import { getBackendRuntime } from './backend/internal/driver-types.ts';
+import { SourceActivationDrainController } from './source-activation-drain.ts';
 
 import type { PermissionMode } from './mode-manager.ts';
 import type { ThinkingLevel } from './thinking-levels.ts';
 
 // Import models from centralized registry
 import { getModelById } from '../config/models.ts';
+import { ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR } from '../config/llm-connections.ts';
 
 // BaseAgent provides common functionality
 import { BaseAgent } from './base-agent.ts';
@@ -97,6 +99,12 @@ import type { RtkContext } from './core/rtk-rewrite.ts';
 
 // Workspace slug extraction for skill qualification
 import { extractWorkspaceSlug } from '../utils/workspace.ts';
+
+import {
+  formatTeamKnowledgePolicy,
+  prefetchTeamKnowledge,
+  formatPrefetchBlock,
+} from './core/team-public-knowledge-injector.ts';
 
 // LLM tool types
 import { LLM_QUERY_TIMEOUT_MS, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
@@ -411,23 +419,12 @@ export class PiAgent extends BaseAgent {
       this.debug('Custom endpoint mode: no provider credential configured, sending empty API key');
     }
 
-    // Derive AWS env vars from the piAuth credential (single fetch, no race).
-    const awsEnv = this.buildAwsEnv(piAuth, runtime);
+    const subprocessEnv = this.buildSubprocessEnv(piAuth, runtime, sessionDir);
 
-    // Spawn the subprocess
     const child = spawn(nodePath, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        ...getProxyEnvVars(),
-        ...this.config.envOverrides,
-        ...awsEnv,
-        // Pass session dir for cross-process toolMetadataStore
-        ...(sessionDir ? { CRAFT_SESSION_DIR: sessionDir } : {}),
-        // Propagate debug mode
-        CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
-      },
+      env: subprocessEnv,
     });
 
     this.subprocess = child;
@@ -677,6 +674,28 @@ export class PiAgent extends BaseAgent {
     return env;
   }
 
+  private buildSubprocessEnv(
+    piAuth: Awaited<ReturnType<PiAgent['getPiAuth']>>,
+    runtime: { piAuthProvider?: string },
+    sessionDir?: string,
+  ): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...getProxyEnvVars(),
+      ...this.config.envOverrides,
+      ...this.buildAwsEnv(piAuth, runtime),
+      // Pass session dir for cross-process toolMetadataStore
+      ...(sessionDir ? { CRAFT_SESSION_DIR: sessionDir } : {}),
+      // Propagate debug mode
+      CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+    };
+
+    if (!this.config.envOverrides?.[ENV_CONNECTION_SSO_TOKEN_ENV_VAR]) delete env[ENV_CONNECTION_SSO_TOKEN_ENV_VAR];
+    if (!this.config.envOverrides?.[ENV_CONNECTION_SSO_BASE_URL_ENV_VAR]) delete env[ENV_CONNECTION_SSO_BASE_URL_ENV_VAR];
+
+    return env;
+  }
+
   /**
    * Refresh OAuth tokens and push updated credentials to the running subprocess.
    * Handles both Copilot (Pi SDK) and ChatGPT Plus token refresh.
@@ -918,6 +937,12 @@ export class PiAgent extends BaseAgent {
         if (msg.sessionId) {
           this.piSessionId = msg.sessionId as string;
           this.config.onSdkSessionIdUpdate?.(this.piSessionId!);
+        }
+        break;
+
+      case 'sso_token_expired':
+        if (msg.signal === 'SSO_TOKEN_EXPIRED') {
+          this.eventQueue.enqueue({ type: 'error', message: 'SSO_TOKEN_EXPIRED' });
         }
         break;
 
@@ -1965,8 +1990,17 @@ export class PiAgent extends BaseAgent {
       )
 
       // Build context parts using centralized PromptBuilder
+      const teamContextDisabled = this.config.session?.teamContextDisabled;
+      const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.config.workspace.rootPath, teamContextDisabled);
+      const prefetchResults = teamContextDisabled ? [] : prefetchTeamKnowledge(this.config.workspace.rootPath, message);
+      const teamKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
+
       const contextParts = this.promptBuilder.buildContextParts(
-        { plansFolderPath: getSessionPlansPath(this.config.workspace.rootPath, this._sessionId) },
+        {
+          plansFolderPath: getSessionPlansPath(this.config.workspace.rootPath, this._sessionId),
+          teamKnowledgePolicy,
+          teamKnowledgePrefetchBlock,
+        },
         sourceContext
       );
 
@@ -2019,27 +2053,43 @@ export class PiAgent extends BaseAgent {
         images: images.length > 0 ? images : undefined,
       });
 
-      // Yield events as they arrive. After each tool_result, check whether
-      // a session-scoped tool (source_test) activated a new source — if so,
-      // yield source_activated and force-abort the turn for auto-retry.
-      // Mirrors the same check in ClaudeAgent.chatImpl; Pi's subprocess only
-      // picks up new proxy tools on the next handlePrompt, so the restart
-      // is needed here too.
+      // Yield events as they arrive. The source-activation drain controller
+      // captures a pending restart on the first triggering tool_result and
+      // drains sibling tool_results from the same parallel-tool batch before
+      // firing `source_activated` + `forceAbort` — Pi's subprocess only picks
+      // up new proxy tools on the next handlePrompt, so the restart is needed
+      // here too. Without the drain, sibling tool_results from parallel
+      // source_test calls are lost (#790).
+      const sourceActivationDrain = new SourceActivationDrainController('fire-on-non-tool-result');
       for await (const event of this.eventQueue.drain()) {
-        yield event;
-        if (event.type === 'tool_result') {
-          const pendingRestart = this.consumePendingSourceActivationRestart();
-          if (pendingRestart) {
-            this.debug(`source_test activated "${pendingRestart.sourceSlug}", interrupting turn for auto-retry`);
-            yield {
-              type: 'source_activated' as const,
-              sourceSlug: pendingRestart.sourceSlug,
-              originalMessage: pendingRestart.userMessage,
-            };
-            this.forceAbort(AbortReason.SourceActivated);
-            return;
-          }
+        // Pre-yield check: when we're past capture and the incoming event is
+        // not a tool_result, fire BEFORE yielding it (the event belongs to
+        // the about-to-be-aborted next turn — letting it through would leak
+        // a fragment of the cancelled response into the session journal).
+        const preFire = sourceActivationDrain.shouldFireBeforeEvent(event);
+        if (preFire) {
+          this.debug(`source_test activated "${preFire.sourceSlug}", drained sibling tool_results, restarting turn`);
+          yield preFire;
+          this.forceAbort(AbortReason.SourceActivated);
+          return;
         }
+
+        if (sourceActivationDrain.observe(event, () => this.consumePendingSourceActivationRestart())) {
+          yield event;
+          continue;
+        }
+
+        yield event;
+      }
+
+      // Stream-end fallback: queue drained naturally with a captured restart
+      // still pending. Fire and return (no further events expected).
+      const sourceActivationFireAtEnd = sourceActivationDrain.shouldFireAtBoundary();
+      if (sourceActivationFireAtEnd) {
+        this.debug(`source_test activated "${sourceActivationFireAtEnd.sourceSlug}", stream ended with pending restart, restarting turn`);
+        yield sourceActivationFireAtEnd;
+        this.forceAbort(AbortReason.SourceActivated);
+        return;
       }
     } catch (error) {
       if (error instanceof Error && error.message.includes('abort')) {

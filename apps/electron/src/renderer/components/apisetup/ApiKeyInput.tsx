@@ -32,6 +32,7 @@ import {
 } from "./submit-helpers"
 
 import type { CustomEndpointApi, CustomEndpointConfig } from '@config/llm-connections'
+import type { ApiSetupMethod } from '../onboarding/setup-types'
 
 export type ApiKeyStatus = 'idle' | 'validating' | 'success' | 'error'
 
@@ -56,6 +57,8 @@ export interface ApiKeySubmitData {
   awsRegion?: string
   /** Bedrock authentication method — determines auth type for Pi+Bedrock connections */
   bedrockAuthMethod?: 'iam_credentials' | 'environment'
+  /** Preset-level override for providers that have their own connection type. */
+  setupMethodOverride?: ApiSetupMethod
 }
 
 export interface ApiKeyInputProps {
@@ -70,7 +73,7 @@ export interface ApiKeyInputProps {
   /** Disable the input (e.g. during validation) */
   disabled?: boolean
   /** Provider type determines which presets and placeholders to show */
-  providerType?: 'anthropic' | 'openai' | 'pi' | 'google' | 'pi_api_key'
+  providerType?: 'anthropic' | 'openai' | 'pi' | 'google' | 'pi_api_key' | 'openllm'
   /** Pre-fill values when editing an existing connection */
   initialValues?: {
     apiKey?: string
@@ -113,6 +116,7 @@ const ANTHROPIC_PRESETS: Preset[] = [
   { key: 'kimi-coding', label: 'Kimi (Coding)', url: 'https://api.kimi.com/coding', placeholder: 'sk-kimi-...' },
   { key: 'vercel-ai-gateway', label: 'Vercel AI Gateway', url: 'https://ai-gateway.vercel.sh', placeholder: 'Paste your key here...' },
   { key: 'manifest', label: 'Manifest', url: 'https://app.manifest.build/v1', placeholder: 'mnfst_...' },
+  { key: 'openllm', label: 'OpenLLM', url: '', placeholder: 'Paste your key here...' },
   { key: 'custom', label: 'Custom', url: '', placeholder: 'Paste your key here...' },
 ]
 
@@ -142,6 +146,10 @@ const GOOGLE_PRESETS: Preset[] = [
   { key: 'google', label: 'Google AI Studio', url: '' },
 ]
 
+const OPENLLM_PRESETS: Preset[] = [
+  { key: 'openllm', label: 'OpenLLM', url: '', placeholder: 'Paste your key here...' },
+]
+
 /** Presets that require the Pi SDK for authentication — hidden in Anthropic API Key mode */
 const PI_ONLY_PRESET_KEYS: ReadonlySet<string> = new Set(['minimax-global', 'minimax-cn'])
 
@@ -150,7 +158,8 @@ const COMPAT_OPENAI_DEFAULTS = 'openai/gpt-5.2-codex, openai/gpt-5.1-codex-mini'
 const COMPAT_MINIMAX_DEFAULTS = 'MiniMax-M2.5, MiniMax-M2.5-highspeed'
 const COMPAT_KIMI_DEFAULTS = 'k2p5, kimi-k2-thinking'
 
-function getPresetsForProvider(providerType: 'anthropic' | 'openai' | 'pi' | 'google' | 'pi_api_key'): Preset[] {
+function getPresetsForProvider(providerType: 'anthropic' | 'openai' | 'pi' | 'google' | 'pi_api_key' | 'openllm'): Preset[] {
+  if (providerType === 'openllm') return OPENLLM_PRESETS
   if (providerType === 'pi_api_key') return ANTHROPIC_PRESETS
   if (providerType === 'google') return GOOGLE_PRESETS
   if (providerType === 'pi') return PI_PRESETS
@@ -227,6 +236,7 @@ export function ApiKeyInput({
 
   const isPiApiKeyFlow = providerType === 'pi_api_key'
   const isBedrock = activePreset === 'amazon-bedrock'
+  const isOpenLlmPreset = activePreset === 'openllm'
   // Hide endpoint/model fields for providers with well-known endpoints handled by the SDK
   const DEFAULT_ENDPOINT_PROVIDERS = new Set(['anthropic', 'openai', 'pi', 'google'])
   const isDefaultProviderPreset = DEFAULT_ENDPOINT_PROVIDERS.has(activePreset)
@@ -242,7 +252,7 @@ export function ApiKeyInput({
   // Fetch Pi SDK models when a provider is selected in pi_api_key flow.
   // Returns all models sorted by cost (expensive-first) for the searchable tier dropdowns.
   const loadPiModels = useCallback(async (provider: string) => {
-    if (!isPiApiKeyFlow || !provider || provider === 'custom' || DEFAULT_ENDPOINT_PROVIDERS.has(provider) || OPENAI_COMPAT_CUSTOM_URL_PRESETS.has(provider)) {
+    if (!isPiApiKeyFlow || !provider || provider === 'custom' || provider === 'openllm' || DEFAULT_ENDPOINT_PROVIDERS.has(provider) || OPENAI_COMPAT_CUSTOM_URL_PRESETS.has(provider)) {
       setPiModels([])
       return
     }
@@ -390,6 +400,20 @@ export function ApiKeyInput({
 
     const parsedModels = parseModelList(connectionDefaultModel)
 
+    if (isOpenLlmPreset) {
+      if (parsedModels.length === 0) {
+        setModelError('At least one OpenLLM model is required.')
+        return
+      }
+      onSubmit({
+        apiKey: apiKey.trim(),
+        connectionDefaultModel: parsedModels[0],
+        models: parsedModels,
+        setupMethodOverride: 'openllm_api_key',
+      })
+      return
+    }
+
     const isUsingDefaultEndpoint = isDefaultProviderPreset || !effectiveBaseUrl
     const requiresModel = !isDefaultProviderPreset && !!effectiveBaseUrl
     if (requiresModel && parsedModels.length === 0) {
@@ -493,7 +517,7 @@ export function ApiKeyInput({
           </DropdownMenu>
         </div>
         {/* Base URL input - hidden for default provider presets (Anthropic/OpenAI) and Bedrock */}
-        {!isDefaultProviderPreset && !isBedrock && (
+        {!isDefaultProviderPreset && !isBedrock && !isOpenLlmPreset && (
           <div className={cn(
             "rounded-md shadow-minimal transition-colors",
             "bg-foreground-2 focus-within:bg-background"
@@ -513,7 +537,7 @@ export function ApiKeyInput({
       )}
 
       {/* Protocol Toggle — visible as soon as Custom preset is selected */}
-      {activePreset === 'custom' && !isDefaultProviderPreset && (
+      {activePreset === 'custom' && !isDefaultProviderPreset && !isOpenLlmPreset && (
         <div className="space-y-2">
           <Label>Protocol</Label>
           <div className={cn(
@@ -782,12 +806,12 @@ export function ApiKeyInput({
             </>
           )}
         </div>
-      ) : !isDefaultProviderPreset && (
+      ) : (!isDefaultProviderPreset || isOpenLlmPreset) && (
         <div className="space-y-2">
           <Label htmlFor="connection-default-model" className="text-muted-foreground font-normal">
             Default Model{' '}
             <span className="text-foreground/30">
-              · {!isBedrock && baseUrl.trim() ? 'required' : 'optional'}
+              · {isOpenLlmPreset || (!isBedrock && baseUrl.trim()) ? 'required' : 'optional'}
             </span>
           </Label>
           <div className={cn(
@@ -803,7 +827,7 @@ export function ApiKeyInput({
                 setConnectionDefaultModel(e.target.value)
                 setModelError(null)
               }}
-              placeholder="e.g. claude-opus-4-7, claude-sonnet-4-6, claude-haiku-4-5"
+              placeholder={isOpenLlmPreset ? 'e.g. llama-3, mistral-7b' : 'e.g. claude-opus-4-7, claude-sonnet-4-6, claude-haiku-4-5'}
               className="border-0 bg-transparent shadow-none"
               disabled={isDisabled}
             />
@@ -816,8 +840,8 @@ export function ApiKeyInput({
           </p>
           {(activePreset === 'custom' || !activePreset) && (
             <p className="text-xs text-foreground/30">
-              Required for custom endpoints. Use the provider-specific model ID.
-            </p>
+            Required for custom endpoints. Use the provider-specific model ID.
+          </p>
           )}
         </div>
       )}

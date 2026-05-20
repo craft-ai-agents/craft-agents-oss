@@ -775,7 +775,10 @@ export function NavigationProvider({
             } else if (onInputChange) {
               setTimeout(() => {
                 onInputChange(session.id, parsed.params.input!)
-              }, 100)
+                window.dispatchEvent(new CustomEvent('craft:insert-text', {
+                  detail: { text: parsed.params.input!, sessionId: session.id },
+                }))
+              }, 150)
             }
           }
           break

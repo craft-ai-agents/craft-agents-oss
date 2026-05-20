@@ -87,6 +87,7 @@ export function MainContentPanel({
     automationTestResults,
     getAutomationHistory,
     activeSessionWorkingDirectory,
+    ssoUser,
   } = useAppShellContext()
 
   // Session multi-select state
@@ -299,7 +300,7 @@ export function MainContentPanel({
   if (isSkillMarketplaceNavigation(navState)) {
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <SkillMarketplacePage workspaceId={activeWorkspaceId || ''} currentUserId={activeWorkspaceId ? 'local-marketplace-user' : null} />
+        <SkillMarketplacePage workspaceId={activeWorkspaceId || ''} currentUserId={ssoUser?.employeeId ?? null} />
       </Panel>
     )
   }

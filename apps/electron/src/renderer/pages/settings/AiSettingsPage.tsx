@@ -191,17 +191,30 @@ interface ConnectionRowProps {
   onDelete: () => void
   onSetDefault: () => void
   onValidate: () => void
-  onReauthenticate: () => void
   onEdit: () => void
   onSetMidStreamBehavior: (behavior: MidStreamBehavior) => void
   validationState: ValidationState
   validationError?: string
 }
 
-function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
+/** Sort Settings AI connections with env-backed connections pinned before defaults. */
+export function sortLlmConnectionsForSettings(connections: LlmConnectionWithStatus[]): LlmConnectionWithStatus[] {
+  return [...connections].sort((a, b) => {
+    if (a.isEnvironmentConnection && !b.isEnvironmentConnection) return -1
+    if (!a.isEnvironmentConnection && b.isEnvironmentConnection) return 1
+    if (a.isDefault && !b.isDefault) return -1
+    if (!a.isDefault && b.isDefault) return 1
+    return a.name.localeCompare(b.name)
+  })
+}
+
+/** Render one Settings AI connection row with context-sensitive actions. */
+export function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
+  const isEnvironmentConnection = connection.isEnvironmentConnection === true
+  const isUserManagedConnection = !isEnvironmentConnection
 
   // Opening dialog/overlay flows directly from a dropdown item can race with
   // menu teardown and leave a transient interaction lock behind on some systems.
@@ -248,6 +261,9 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
         parts.push(connection.baseUrl?.toLowerCase().includes('manifest.build')
           ? 'Manifest'
           : 'Craft Agents Backend Compatible')
+        break
+      case 'openllm':
+        parts.push('OpenLLM')
         break
       default: parts.push(provider || 'Unknown')
     }
@@ -299,31 +315,29 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
           <button
             className="p-1.5 rounded-md hover:bg-foreground/[0.05] data-[state=open]:bg-foreground/[0.05] transition-colors"
             data-state={menuOpen ? 'open' : 'closed'}
+            aria-label="Connection actions"
           >
             <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
           </button>
         </DropdownMenuTrigger>
         <StyledDropdownMenuContent align="end">
-          <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onRenameClick)}>
-            <Pencil className="h-3.5 w-3.5" />
-            <span>{t("common.rename")}</span>
-          </StyledDropdownMenuItem>
-          {!connection.isDefault && (
-            <StyledDropdownMenuItem onClick={onSetDefault}>
-              <Star className="h-3.5 w-3.5" />
-              <span>{t("settings.ai.setAsDefault")}</span>
-            </StyledDropdownMenuItem>
-          )}
-          {connection.authType === 'oauth' ? (
-            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onReauthenticate)}>
-              <RefreshCcw className="h-3.5 w-3.5" />
-              <span>{t("settings.ai.reAuthenticate")}</span>
-            </StyledDropdownMenuItem>
-          ) : (
-            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
-              <Settings2 className="h-3.5 w-3.5" />
-              <span>{t("common.edit")}</span>
-            </StyledDropdownMenuItem>
+          {isUserManagedConnection && (
+            <>
+              <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onRenameClick)}>
+                <Pencil className="h-3.5 w-3.5" />
+                <span>{t("common.rename")}</span>
+              </StyledDropdownMenuItem>
+              {!connection.isDefault && (
+                <StyledDropdownMenuItem onClick={onSetDefault}>
+                  <Star className="h-3.5 w-3.5" />
+                  <span>{t("settings.ai.setAsDefault")}</span>
+                </StyledDropdownMenuItem>
+              )}
+              <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
+                <Settings2 className="h-3.5 w-3.5" />
+                <span>{t("common.edit")}</span>
+              </StyledDropdownMenuItem>
+            </>
           )}
           <StyledDropdownMenuItem
             onClick={onValidate}
@@ -355,15 +369,19 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
               </DropdownMenuSub>
             )
           })()}
-          <StyledDropdownMenuSeparator />
-          <StyledDropdownMenuItem
-            onClick={onDelete}
-            variant="destructive"
-            disabled={isLastConnection}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            <span>{t("common.delete")}</span>
-          </StyledDropdownMenuItem>
+          {isUserManagedConnection && (
+            <>
+              <StyledDropdownMenuSeparator />
+              <StyledDropdownMenuItem
+                onClick={onDelete}
+                variant="destructive"
+                disabled={isLastConnection}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{t("common.delete")}</span>
+              </StyledDropdownMenuItem>
+            </>
+          )}
         </StyledDropdownMenuContent>
       </DropdownMenu>
     </SettingsRow>
@@ -546,6 +564,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
                     label: conn.name,
                     description: conn.providerType === 'anthropic' ? 'Anthropic' :
                                  conn.providerType === 'pi' ? 'MDP Backend' :
+                                 conn.providerType === 'openllm' ? 'OpenLLM' :
                                  conn.providerType || 'Unknown',
                   })),
                 ]}
@@ -591,6 +610,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
 /** Map a connection's provider type to the corresponding API key setup method. */
 function getApiKeyMethodForConnection(conn: LlmConnectionWithStatus): ApiSetupMethod {
   const provider = conn.providerType || conn.type
+  if (provider === 'openllm') return 'openllm_api_key'
   if (provider === 'pi' || provider === 'pi_compat') return 'pi_api_key'
   return 'anthropic_api_key'
 }
@@ -606,7 +626,6 @@ export default function AiSettingsPage() {
   // API Setup overlay state
   const [showApiSetup, setShowApiSetup] = useState(false)
   const [editingConnectionSlug, setEditingConnectionSlug] = useState<string | null>(null)
-  const [isDirectEdit, setIsDirectEdit] = useState(false)
   const [editInitialValues, setEditInitialValues] = useState<{
     apiKey?: string
     baseUrl?: string
@@ -699,7 +718,8 @@ export default function AiSettingsPage() {
 
   // OnboardingWizard hook for editing API connection
   const apiSetupOnboarding = useOnboarding({
-    initialStep: 'provider-select',
+    initialStep: 'credentials',
+    initialApiSetupMethod: 'pi_api_key',
     onConfigSaved: refreshLlmConnections,
     onComplete: () => {
       closeApiSetup()
@@ -720,7 +740,6 @@ export default function AiSettingsPage() {
     apiSetupOnboarding.reset()
     // Clear any credential health issues after successful re-authentication
     setCredentialHealthIssues([])
-    setIsDirectEdit(false)
     setEditInitialValues(undefined)
   }, [closeApiSetup, refreshLlmConnections, apiSetupOnboarding])
 
@@ -728,20 +747,13 @@ export default function AiSettingsPage() {
   const handleCloseApiSetup = useCallback(() => {
     closeApiSetup()
     apiSetupOnboarding.reset()
-    setIsDirectEdit(false)
     setEditInitialValues(undefined)
   }, [closeApiSetup, apiSetupOnboarding])
 
   // Handler for re-authenticate button in credential health banner
   const handleReauthenticate = useCallback(() => {
-    // Open API setup for the default connection (or first connection if available)
-    const defaultConn = llmConnections.find(c => c.isDefault) || llmConnections[0]
-    if (defaultConn) {
-      openApiSetup(defaultConn.slug)
-    } else {
-      openApiSetup()
-    }
-  }, [llmConnections, openApiSetup])
+    openApiSetup()
+  }, [openApiSetup])
 
   // Connection action handlers
   const handleRenameClick = useCallback((connection: LlmConnectionWithStatus) => {
@@ -779,18 +791,6 @@ export default function AiSettingsPage() {
     setRenameValue('')
   }, [renamingConnection, renameValue, refreshLlmConnections])
 
-  const handleReauthenticateConnection = useCallback((connection: LlmConnectionWithStatus) => {
-    openApiSetup(connection.slug)
-    apiSetupOnboarding.reset()
-
-    if (connection.authType === 'oauth') {
-      const method = connection.providerType === 'pi'
-                   ? (connection.piAuthProvider === 'github-copilot' ? 'pi_copilot_oauth' : 'pi_chatgpt_oauth')
-                   : 'claude_oauth'
-      apiSetupOnboarding.handleStartOAuth(method, connection.slug)
-    }
-  }, [apiSetupOnboarding, openApiSetup])
-
   const handleEditConnection = useCallback(async (connection: LlmConnectionWithStatus) => {
     // Fetch stored API key (best-effort — if IPC not available yet, skip pre-fill)
     let apiKey: string | undefined
@@ -823,7 +823,6 @@ export default function AiSettingsPage() {
 
     // Open overlay and jump directly to credentials step (no reset — jumpToCredentials sets state)
     openApiSetup(connection.slug)
-    setIsDirectEdit(true)
     const method = getApiKeyMethodForConnection(connection)
     apiSetupOnboarding.jumpToCredentials(method)
   }, [apiSetupOnboarding, openApiSetup])
@@ -893,7 +892,8 @@ export default function AiSettingsPage() {
   }, [refreshLlmConnections])
 
   // Update a connection's mid-stream send behavior (steer vs queue).
-  // Uses the same saveLlmConnection RPC as other connection edits.
+  // Environment uses a dedicated app-level preference because env-provider
+  // remains protected from the normal SAVE mutation path.
   const handleSetMidStreamBehavior = useCallback(async (
     connection: LlmConnectionWithStatus,
     behavior: MidStreamBehavior,
@@ -901,8 +901,19 @@ export default function AiSettingsPage() {
     if (!window.electronAPI) return
     if (resolveMidStreamBehavior(connection) === behavior) return
     try {
+      if (connection.isEnvironmentConnection) {
+        const result = await window.electronAPI.setEnvConnectionMidStreamBehavior(behavior)
+        if (result.success) {
+          refreshLlmConnections?.()
+        } else {
+          console.error('Failed to update environment mid-stream behavior:', result.error)
+          toast.error(t('settings.ai.midStream.updateFailed'))
+        }
+        return
+      }
+
       const updated = { ...connection, midStreamBehavior: behavior }
-      const { isAuthenticated: _a, authError: _b, isDefault: _c, ...connectionData } = updated
+      const { isAuthenticated: _a, authError: _b, isDefault: _c, isEnvironmentConnection: _d, ...connectionData } = updated
       const result = await window.electronAPI.saveLlmConnection(connectionData as import('../../../shared/types').LlmConnection)
       if (result.success) {
         refreshLlmConnections?.()
@@ -1029,6 +1040,7 @@ export default function AiSettingsPage() {
                       description: conn.providerType === 'anthropic' ? 'Anthropic API' :
                                    conn.providerType === 'pi' ? 'Craft Agents Backend' :
                                    conn.providerType === 'pi_compat' ? (conn.baseUrl?.toLowerCase().includes('manifest.build') ? 'Manifest' : 'Craft Agents Backend Compatible') :
+                                   conn.providerType === 'openllm' ? 'OpenLLM' :
                                    conn.providerType || 'Unknown',
                     }))}
                   />
@@ -1080,12 +1092,7 @@ export default function AiSettingsPage() {
                       {t("settings.ai.noConnections")}
                     </div>
                   ) : (
-                    [...llmConnections]
-                      .sort((a, b) => {
-                        if (a.isDefault && !b.isDefault) return -1
-                        if (!a.isDefault && b.isDefault) return 1
-                        return a.name.localeCompare(b.name)
-                      })
+                    sortLlmConnectionsForSettings(llmConnections)
                       .map((conn) => (
                       <ConnectionRow
                         key={conn.slug}
@@ -1095,7 +1102,6 @@ export default function AiSettingsPage() {
                         onDelete={() => handleDeleteConnection(conn.slug)}
                         onSetDefault={() => handleSetDefaultConnection(conn.slug)}
                         onValidate={() => handleValidateConnection(conn.slug)}
-                        onReauthenticate={() => handleReauthenticateConnection(conn)}
                         onEdit={() => handleEditConnection(conn)}
                         onSetMidStreamBehavior={(behavior) => handleSetMidStreamBehavior(conn, behavior)}
                         validationState={validationStates[conn.slug]?.state || 'idle'}
@@ -1199,17 +1205,9 @@ export default function AiSettingsPage() {
                 <OnboardingWizard
                   state={apiSetupOnboarding.state}
                   onContinue={apiSetupOnboarding.handleContinue}
-                  onBack={isDirectEdit ? handleCloseApiSetup : apiSetupOnboarding.handleBack}
-                  onSelectProvider={apiSetupOnboarding.handleSelectProvider}
-                  onSelectApiSetupMethod={apiSetupOnboarding.handleSelectApiSetupMethod}
+                  onBack={handleCloseApiSetup}
                   onSubmitCredential={apiSetupOnboarding.handleSubmitCredential}
-                  onSubmitLocalModel={apiSetupOnboarding.handleSubmitLocalModel}
-                  onStartOAuth={apiSetupOnboarding.handleStartOAuth}
                   onFinish={handleApiSetupFinish}
-                  isWaitingForCode={apiSetupOnboarding.isWaitingForCode}
-                  onSubmitAuthCode={apiSetupOnboarding.handleSubmitAuthCode}
-                  onCancelOAuth={apiSetupOnboarding.handleCancelOAuth}
-                  copilotDeviceCode={apiSetupOnboarding.copilotDeviceCode}
                   editInitialValues={editInitialValues}
                   className="h-full"
                 />

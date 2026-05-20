@@ -142,28 +142,16 @@ export const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
     providerType: (h) => h ? 'pi_compat' : 'anthropic',
     authType: (h) => h ? 'api_key_with_endpoint' : 'api_key',
   },
-  'claude-max': {
-    name: 'Claude Max',
-    providerType: 'anthropic',
-    authType: 'oauth',
-  },
-  'chatgpt-plus': {
-    name: 'ChatGPT Plus',
-    providerType: 'pi',
-    authType: 'oauth',
-    piAuthProvider: 'openai-codex',
-  },
-  'github-copilot': {
-    name: 'GitHub Copilot',
-    providerType: 'pi',
-    authType: 'oauth',
-    piAuthProvider: 'github-copilot',
-  },
   'pi-api-key': {
     name: 'MDP Backend (API Key)',
     providerType: 'pi',
     authType: 'api_key',
     // piAuthProvider set dynamically from setup.piAuthProvider
+  },
+  'openllm-api': {
+    name: 'OpenLLM',
+    providerType: 'openllm',
+    authType: 'api_key',
   },
 }
 

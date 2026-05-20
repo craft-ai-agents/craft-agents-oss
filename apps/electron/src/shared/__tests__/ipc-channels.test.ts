@@ -20,6 +20,7 @@ const EXPECTED_CHANNELS: string[] = [
   'LLM_Connection:refreshModels',
   'LLM_Connection:save',
   'LLM_Connection:setDefault',
+  'LLM_Connection:setEnvMidStreamBehavior',
   'LLM_Connection:setWorkspaceDefault',
   'LLM_Connection:test',
   'appearance:getRichToolDescriptions',
@@ -64,16 +65,6 @@ const EXPECTED_CHANNELS: string[] = [
   'caching:getExtendedPromptCache',
   'caching:setEnable1MContext',
   'caching:setExtendedPromptCache',
-  'chatgpt:cancelOAuth',
-  'chatgpt:completeOAuth',
-  'chatgpt:getAuthStatus',
-  'chatgpt:logout',
-  'chatgpt:startOAuth',
-  'copilot:cancelOAuth',
-  'copilot:deviceCode',
-  'copilot:getAuthStatus',
-  'copilot:logout',
-  'copilot:startOAuth',
   'credentials:healthCheck',
   'debug:log',
   'deeplink:navigate',
@@ -179,12 +170,8 @@ const EXPECTED_CHANNELS: string[] = [
   'oauth:complete',
   'oauth:revoke',
   'oauth:start',
-  'onboarding:clearClaudeOAuthState',
   'onboarding:deferSetup',
-  'onboarding:exchangeClaudeCode',
   'onboarding:getAuthState',
-  'onboarding:hasClaudeOAuthState',
-  'onboarding:startClaudeOAuth',
   'onboarding:startMcpOAuth',
   'onboarding:validateMcp',
   'permissions:defaultsChanged',
@@ -274,8 +261,11 @@ const EXPECTED_CHANNELS: string[] = [
   'sources:get',
   'sources:getMcpTools',
   'sources:getPermissions',
+  'sources:importMcpJsonCandidates',
+  'sources:parseMcpJsonImport',
   'sources:saveCredentials',
   'sources:startOAuth',
+  'sources:update',
   'sso:getSession',
   'sso:handleCallback',
   'sso:loginResult',
@@ -289,6 +279,10 @@ const EXPECTED_CHANNELS: string[] = [
   'system:isDebugMode',
   'system:versions',
   'tasks:getOutput',
+  'teamKnowledge:changed',
+  'teamKnowledge:getConfig',
+  'teamKnowledge:refresh',
+  'teamKnowledge:updateConfig',
   'theme:appChanged',
   'theme:broadcastPreferences',
   'theme:broadcastWorkspaceTheme',
@@ -365,6 +359,14 @@ describe('RPC_CHANNELS wire-format stability', () => {
     const values = flattenValues(RPC_CHANNELS)
     const unique = new Set(values)
     expect(values.length).toBe(unique.size)
+  })
+
+  it('does not expose removed LLM OAuth onboarding channels', () => {
+    const actual = new Set(flattenValues(RPC_CHANNELS))
+    expect(actual.has('onboarding:startClaudeOAuth')).toBe(false)
+    expect(actual.has('onboarding:exchangeClaudeCode')).toBe(false)
+    expect(actual.has('onboarding:hasClaudeOAuthState')).toBe(false)
+    expect(actual.has('onboarding:clearClaudeOAuthState')).toBe(false)
   })
 })
 
