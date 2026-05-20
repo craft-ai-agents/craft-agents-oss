@@ -60,7 +60,12 @@ export function synthesizeEnvConnectionWithStatus(env: EnvConnectionEnv, activeS
   }
 }
 
-export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerDeps): void {
+interface LlmConnectionsHandlerOverrides {
+  testBackendConnection?: typeof testBackendConnection
+  loadSsoSession?: () => Promise<{ token?: string; expiresAt: number } | null>
+}
+
+export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerDeps, overrides: LlmConnectionsHandlerOverrides = {}): void {
   const { sessionManager } = deps
 
   // Unified handler for LLM connection setup
@@ -536,6 +541,40 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // Test an LLM connection (validate credentials and connectivity with actual API call)
   server.handle(RPC_CHANNELS.llmConnections.TEST, async (_ctx, slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      if (isEnvironmentConnectionSlug(slug)) {
+        const envConnection = synthesizeEnvConnection({
+          LLM_BASE_URL: process.env.LLM_BASE_URL,
+          LLM_MODEL: process.env.LLM_MODEL,
+          LLM_CONNECTION_NAME: process.env.LLM_CONNECTION_NAME,
+        })
+        if (!envConnection) {
+          return { success: false, error: 'Connection not found' }
+        }
+
+        const ssoSession = await (overrides.loadSsoSession ?? (() => new SsoCredentialStore().load()))()
+        if (!ssoSession?.token || ssoSession.expiresAt <= Date.now()) {
+          return { success: false, error: 'No active SSO session configured' }
+        }
+
+        const runTestBackendConnection = overrides.testBackendConnection ?? testBackendConnection
+        const result = await runTestBackendConnection({
+          provider: 'pi',
+          apiKey: ssoSession.token,
+          model: envConnection.defaultModel ?? '',
+          baseUrl: envConnection.baseUrl,
+          timeoutMs: 45000,
+          hostRuntime: buildBackendHostRuntimeContext(deps.platform),
+          connection: envConnection,
+        })
+
+        if (!result.success) {
+          return { success: false, error: result.error }
+        }
+
+        deps.platform.logger?.info(`LLM connection validated: ${slug}`)
+        return { success: true }
+      }
+
       const result = await validateStoredBackendConnection({
         slug,
         hostRuntime: buildBackendHostRuntimeContext(deps.platform),

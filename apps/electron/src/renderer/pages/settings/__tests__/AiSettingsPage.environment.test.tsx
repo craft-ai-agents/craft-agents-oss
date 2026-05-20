@@ -1,9 +1,54 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
-import { cleanup, render } from '@testing-library/react'
+import { afterAll, afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { Window } from 'happy-dom'
+import * as React from 'react'
 import type { LlmConnectionWithStatus } from '@craft-agent/shared/config'
 
 mock.module('pdfjs-dist/build/pdf.worker.min.mjs?url', () => ({ default: '' }))
+
+const DropdownTestContext = React.createContext<{
+  open: boolean
+  setOpen: (open: boolean) => void
+} | null>(null)
+
+mock.module('@/components/ui/dropdown-menu', () => ({
+  DropdownMenu: ({ children, onOpenChange }: { children: React.ReactNode; onOpenChange?: (open: boolean) => void }) => {
+    const [open, setOpenState] = React.useState(false)
+    const setOpen = (nextOpen: boolean) => {
+      setOpenState(nextOpen)
+      onOpenChange?.(nextOpen)
+    }
+    return (
+      <DropdownTestContext.Provider value={{ open, setOpen }}>
+        {children}
+      </DropdownTestContext.Provider>
+    )
+  },
+  DropdownMenuTrigger: ({ children }: { children: React.ReactElement }) => {
+    const ctx = React.useContext(DropdownTestContext)
+    return React.cloneElement(children, {
+      'aria-expanded': ctx?.open ?? false,
+      onClick: () => ctx?.setOpen(true),
+      onPointerDown: () => ctx?.setOpen(true),
+    })
+  },
+}))
+
+mock.module('@/components/ui/styled-dropdown', () => ({
+  DropdownMenu: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  DropdownMenuSub: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  StyledDropdownMenuContent: ({ children }: { children: React.ReactNode }) => {
+    const ctx = React.useContext(DropdownTestContext)
+    return ctx?.open ? <div role="menu">{children}</div> : null
+  },
+  StyledDropdownMenuItem: ({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) => (
+    <button type="button" role="menuitem" disabled={disabled} onClick={onClick}>{children}</button>
+  ),
+  StyledDropdownMenuSeparator: () => <hr />,
+  StyledDropdownMenuSubTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  StyledDropdownMenuSubContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
 
 Object.assign(globalThis, {
   DOMMatrix: class DOMMatrix {},
@@ -13,6 +58,10 @@ Object.assign(globalThis, {
 
 const { ConnectionRow, sortLlmConnectionsForSettings } = await import('../AiSettingsPage')
 
+afterAll(() => {
+  mock.restore()
+})
+
 function setupDom() {
   const window = new Window()
   Object.assign(globalThis, {
@@ -20,8 +69,12 @@ function setupDom() {
     document: window.document,
     HTMLElement: window.HTMLElement,
     SVGElement: window.SVGElement,
+    Element: window.Element,
     Node: window.Node,
     MutationObserver: window.MutationObserver,
+    Event: window.Event,
+    CustomEvent: window.CustomEvent,
+    PointerEvent: window.PointerEvent,
     getComputedStyle: window.getComputedStyle.bind(window),
     navigator: window.navigator,
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
@@ -55,6 +108,10 @@ function connection(overrides: Partial<LlmConnectionWithStatus>): LlmConnectionW
   }
 }
 
+function getText(view: ReturnType<typeof render>, fallbackKey: string, translated: string) {
+  return view.queryByText(translated) ?? view.queryByText(fallbackKey)
+}
+
 describe('Settings AI environment connection', () => {
   it('pins environment connections before defaults and named connections', () => {
     const sorted = sortLlmConnectionsForSettings([
@@ -74,7 +131,7 @@ describe('Settings AI environment connection', () => {
     expect(sorted.map((item) => item.slug)).toEqual(['env-provider', 'default-api', 'z-custom'])
   })
 
-  it('renders a read-only Environment badge instead of the connection action menu', () => {
+  it('shows only Validate Connection in the environment connection action menu', async () => {
     const view = render(
       <ConnectionRow
         connection={connection({
@@ -98,7 +155,17 @@ describe('Settings AI environment connection', () => {
     )
 
     expect(view.getByText((content) => content.includes('env.example.test'))).toBeTruthy()
-    expect(view.getAllByText('Environment').length).toBeGreaterThanOrEqual(2)
-    expect(view.queryByRole('button')).toBeNull()
+    expect(getText(view, 'common.default', 'Default')).toBeTruthy()
+    expect(view.getAllByText('Environment')).toHaveLength(1)
+
+    fireEvent.pointerDown(view.getByRole('button'), { button: 0, ctrlKey: false })
+
+    await waitFor(() => {
+      expect(getText(view, 'settings.ai.validateConnection', 'Validate Connection')).toBeTruthy()
+    })
+    expect(getText(view, 'common.rename', 'Rename')).toBeNull()
+    expect(getText(view, 'common.edit', 'Edit')).toBeNull()
+    expect(getText(view, 'common.delete', 'Delete')).toBeNull()
+    expect(getText(view, 'settings.ai.setAsDefault', 'Set as Default')).toBeNull()
   })
 })
