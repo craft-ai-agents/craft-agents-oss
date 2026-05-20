@@ -30,9 +30,13 @@ import { PairingCodeManager } from './pairing'
 import { TelegramAdapter } from './adapters/telegram/index'
 import { WhatsAppAdapter, type WhatsAppEvent } from './adapters/whatsapp/index'
 import { LarkAdapter, parseLarkCredentials, type LarkCredentials } from './adapters/lark/index'
+import { WeChatAdapter } from './adapters/wechat/index'
 import { TopicRegistry } from './topic-registry'
-import type { SessionEvent } from './renderer'
+import { Renderer, type SessionEvent } from './renderer'
 import type { EventSinkFn } from './event-fanout'
+import {
+  normalizeBindingConfig,
+} from './types'
 import type {
   BindingAccessMode,
   ChannelBinding,
@@ -88,6 +92,7 @@ interface WorkspaceState {
   botUsernames: Partial<Record<PlatformType, string>>
   whatsapp: WhatsAppAdapter | null
   whatsappOffEvent?: () => void
+  wechat: WeChatAdapter | null
   runtime: Record<PlatformType, MessagingPlatformRuntimeInfo>
 }
 
@@ -95,6 +100,14 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
   private readonly workspaces = new Map<string, WorkspaceState>()
   private readonly pairing = new PairingCodeManager()
   private readonly log: MessagingLogger
+
+  // WeChat global state — one adapter shared across workspaces
+  private readonly wechatUsers = new Map<string, {
+    activeSessionId: string | null
+    activeWorkspaceId: string | null
+  }>()
+  private wechatAdapter: WeChatAdapter | null = null
+  private wechatRenderer = new Renderer()
 
   constructor(private readonly opts: MessagingGatewayRegistryOptions) {
     this.log = (opts.logger ?? consoleLogger).child({ component: 'registry' })
@@ -197,6 +210,28 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         })
       }
     }
+
+    if (isPlatformConfigured(config, 'wechat')) {
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: true,
+        connected: false,
+        state: 'connecting',
+        lastError: undefined,
+      })
+      void this.tryConnectWeChat(workspaceId, state).catch((err) => {
+        this.log.error('background WeChat connect failed', {
+          event: 'wechat_connect_failed',
+          workspaceId,
+          error: err,
+        })
+        this.setPlatformRuntime(workspaceId, state, 'wechat', {
+          configured: true,
+          connected: false,
+          state: 'error',
+          lastError: err instanceof Error ? err.message : String(err),
+        })
+      })
+    }
   }
 
   async removeWorkspace(workspaceId: string): Promise<void> {
@@ -231,6 +266,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         telegram: cloneRuntime(state.runtime.telegram),
         whatsapp: cloneRuntime(state.runtime.whatsapp),
         lark: cloneRuntime(state.runtime.lark),
+        wechat: cloneRuntime(state.runtime.wechat),
       },
     }
   }
@@ -250,9 +286,11 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       await state.gateway.unregisterAdapter('telegram').catch(() => {})
       await state.gateway.unregisterAdapter('whatsapp').catch(() => {})
       await state.gateway.unregisterAdapter('lark').catch(() => {})
+      await state.gateway.unregisterAdapter('wechat').catch(() => {})
       state.whatsappOffEvent?.()
       state.whatsappOffEvent = undefined
       state.whatsapp = null
+      state.wechat = null
       this.setPlatformRuntime(workspaceId, state, 'telegram', {
         configured: false,
         connected: false,
@@ -274,10 +312,17 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         identity: undefined,
         lastError: undefined,
       })
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: false,
+        connected: false,
+        state: 'disconnected',
+        identity: undefined,
+        lastError: undefined,
+      })
       return
     }
 
-    for (const platform of ['telegram', 'whatsapp', 'lark'] as const) {
+    for (const platform of ['telegram', 'whatsapp', 'lark', 'wechat'] as const) {
       const configured = isPlatformConfigured(cfg, platform)
       if (!configured && state.gateway.getAdapter(platform)) {
         await state.gateway.unregisterAdapter(platform).catch(() => {})
@@ -286,6 +331,9 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         state.whatsappOffEvent?.()
         state.whatsappOffEvent = undefined
         state.whatsapp = null
+      }
+      if (!configured && platform === 'wechat') {
+        state.wechat = null
       }
       if (!configured) {
         this.setPlatformRuntime(workspaceId, state, platform, {
@@ -722,6 +770,17 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       }
     }
 
+    if (platform === 'wechat') {
+      if (state.wechat) {
+        await state.wechat.destroy().catch(() => {})
+        state.wechat = null
+      }
+      // Clear global adapter if it belongs to this workspace
+      if (this.wechatAdapter === state.wechat) {
+        this.wechatAdapter = null
+      }
+    }
+
     await state.gateway.unregisterAdapter(platform).catch(() => {})
     state.botUsernames[platform] = undefined
     this.pairing.clearWorkspace(workspaceId)
@@ -936,6 +995,10 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     const event = args[0] as SessionEvent | undefined
     if (!event?.sessionId) return
 
+    // WeChat global routing: if a WeChat user has this session as active,
+    // route directly through the global renderer (bypasses workspace gateway).
+    if (this.routeWeChatGlobalEvent(event)) return
+
     const workspaceId =
       'workspaceId' in target ? (target as { workspaceId: string }).workspaceId : undefined
     if (!workspaceId) {
@@ -1011,10 +1074,12 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       topicRegistry,
       botUsernames: {},
       whatsapp: null,
+      wechat: null,
       runtime: {
         telegram: createRuntime('telegram', isPlatformConfigured(cfg, 'telegram')),
         whatsapp: createRuntime('whatsapp', isPlatformConfigured(cfg, 'whatsapp')),
         lark: createRuntime('lark', isPlatformConfigured(cfg, 'lark')),
+        wechat: createRuntime('wechat', isPlatformConfigured(cfg, 'wechat')),
       },
     }
     this.workspaces.set(workspaceId, state)
@@ -1164,6 +1229,341 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       })
       throw err
     }
+  }
+
+  // ---- WeChat (iLink Bot API) ----
+
+  async testWeChatCredentials(
+    botToken: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!botToken) return { success: false, error: 'Bot token is empty' }
+    try {
+      const { iLinkClient } = await import('./adapters/wechat/ilink')
+      const client = new iLinkClient()
+      const valid = await client.validateToken(botToken)
+      if (!valid) return { success: false, error: 'Invalid or expired bot_token' }
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Network error' }
+    }
+  }
+
+  async saveWeChatCredentials(
+    workspaceId: string,
+    botToken: string,
+    skipValidation = false,
+  ): Promise<void> {
+    if (!botToken) throw new Error('Bot token is empty')
+    if (!skipValidation) {
+      const test = await this.testWeChatCredentials(botToken)
+      if (!test.success) throw new Error(test.error ?? 'Invalid WeChat credentials')
+    }
+
+    await this.opts.credentialManager.set(
+      { type: 'messaging_bearer', workspaceId, name: 'wechat' },
+      { value: botToken },
+    )
+
+    const state = this.workspaces.get(workspaceId) ?? this.bootstrapWorkspace(workspaceId)
+    state.configStore.update({
+      enabled: true,
+      platforms: { wechat: { enabled: true } },
+    })
+    this.setPlatformRuntime(workspaceId, state, 'wechat', {
+      configured: true,
+      connected: false,
+      state: 'connecting',
+      lastError: undefined,
+    })
+    await this.tryConnectWeChat(workspaceId, state)
+    await state.gateway.start()
+  }
+
+  private async tryConnectWeChat(workspaceId: string, state: WorkspaceState): Promise<void> {
+    const cred = await this.opts.credentialManager
+      .get({ type: 'messaging_bearer', workspaceId, name: 'wechat' })
+      .catch(() => null)
+
+    if (!cred?.value) {
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: 'WeChat bot_token is missing.',
+      })
+      return
+    }
+
+    await state.gateway.unregisterAdapter('wechat').catch(() => {})
+
+    try {
+      // One global adapter shared across workspaces
+      const adapter = this.wechatAdapter ?? new WeChatAdapter()
+
+      if (!this.wechatAdapter) {
+        await adapter.initialize({
+          token: cred.value,
+          logger: this.log.child({ component: 'wechat-adapter', platform: 'wechat' }),
+        })
+        this.wechatAdapter = adapter
+
+        // Wire global message handler — bypasses per-workspace router
+        adapter.onMessage(async (msg) => {
+          await this.handleWeChatGlobalMessage(adapter, msg)
+        })
+      }
+
+      state.wechat = adapter
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: true,
+        connected: true,
+        state: 'connected',
+        identity: 'WeChat Bot',
+        lastError: undefined,
+      })
+    } catch (err) {
+      this.log.error('failed to connect WeChat', {
+        event: 'wechat_connect_failed',
+        workspaceId,
+        error: err,
+      })
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: err instanceof Error ? err.message : String(err),
+      })
+      throw err
+    }
+  }
+
+  // ---- WeChat global message routing ----
+
+  private async handleWeChatGlobalMessage(
+    adapter: WeChatAdapter,
+    msg: import('./types').IncomingMessage,
+  ): Promise<void> {
+    const channelId = msg.channelId
+    const text = (msg.text ?? '').trim()
+
+    if (!this.wechatUsers.has(channelId)) {
+      this.wechatUsers.set(channelId, { activeSessionId: null, activeWorkspaceId: null })
+    }
+    const userState = this.wechatUsers.get(channelId)!
+
+    this.log.info('[wechat-global] inbound message', {
+      channelId: channelId.substring(0, 30),
+      textPreview: text.substring(0, 50),
+    })
+
+    if (text.startsWith('/')) {
+      await this.handleWeChatCommand(adapter, channelId, text, userState)
+      return
+    }
+
+    // Auto-connect to an active session if none selected
+    if (!userState.activeSessionId) {
+      const sessions: any[] = this.opts.sessionManager.getSessions()
+      const active = sessions.find((s: any) => s.isProcessing) ?? sessions.find((s: any) => !s.isArchived)
+      if (active) {
+        userState.activeSessionId = active.id
+        userState.activeWorkspaceId = (active as any).workspaceId ?? null
+        await adapter.sendText(channelId, `Connected to "${active.name || active.id.substring(0, 8)}"`)
+      } else {
+        await adapter.sendText(
+          channelId,
+          'No active sessions. Use /new to create one, or /help for commands.',
+        )
+        return
+      }
+    }
+
+    try {
+      await this.opts.sessionManager.sendMessage(userState.activeSessionId, text)
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+      this.log.error('[wechat-global] sendMessage failed', {
+        sessionId: userState.activeSessionId,
+        error: errorMsg,
+      })
+      await adapter.sendText(channelId, `Error: ${errorMsg}`)
+    }
+  }
+
+  private routeWeChatGlobalEvent(event: SessionEvent): boolean {
+    if (!this.wechatAdapter?.isConnected()) return false
+
+    for (const [channelId, userState] of this.wechatUsers) {
+      if (userState.activeSessionId !== event.sessionId) continue
+
+      const virtualBinding: ChannelBinding = {
+        id: `wechat-global-${channelId}`,
+        workspaceId: userState.activeWorkspaceId ?? '',
+        sessionId: event.sessionId,
+        platform: 'wechat',
+        channelId,
+        enabled: true,
+        createdAt: Date.now(),
+        config: normalizeBindingConfig('wechat', { responseMode: 'final_only' }),
+      }
+
+      this.wechatRenderer.handle(event, virtualBinding, this.wechatAdapter).catch((err) => {
+        this.log.error('[wechat-global] renderer failed', {
+          sessionId: event.sessionId,
+          channelId: channelId.substring(0, 20),
+          error: err,
+        })
+      })
+      return true
+    }
+    return false
+  }
+
+  private async handleWeChatCommand(
+    adapter: WeChatAdapter,
+    channelId: string,
+    text: string,
+    userState: { activeSessionId: string | null; activeWorkspaceId: string | null },
+  ): Promise<void> {
+    const parts = text.split(/\s+/)
+    const cmd = (parts[0] ?? '').toLowerCase()
+    const arg = parts.slice(1).join(' ')
+    const reply = (t: string) => adapter.sendText(channelId, t)
+
+    const numMatch = cmd.match(/^\/(\d+)$/)
+    if (numMatch) {
+      await this.wechatCmdSwitch(adapter, channelId, numMatch[1] ?? '', userState)
+      return
+    }
+
+    switch (cmd) {
+      case '/sessions':
+      case '/list':
+      case '/ls':
+        await this.wechatCmdListSessions(adapter, channelId, userState)
+        break
+      case '/switch':
+        if (!arg) { await reply('Usage: /switch <number or name>'); break }
+        await this.wechatCmdSwitch(adapter, channelId, arg, userState)
+        break
+      case '/new':
+        await this.wechatCmdNew(adapter, channelId, arg || undefined, userState)
+        break
+      case '/status':
+        await this.wechatCmdStatus(adapter, channelId, userState)
+        break
+      case '/help':
+        await reply(
+          'WeChat Commands:\n' +
+          '/sessions — list sessions\n' +
+          '/<n> or /switch <name> — switch session\n' +
+          '/new [name] — create session\n' +
+          '/status — current session\n' +
+          '/help — this message',
+        )
+        break
+      default:
+        // Unknown command — forward as text to active session
+        if (userState.activeSessionId) {
+          try {
+            await this.opts.sessionManager.sendMessage(userState.activeSessionId, text)
+          } catch {
+            await reply('Failed to send message.')
+          }
+        } else {
+          await reply('No active session. Use /sessions or /new.')
+        }
+    }
+  }
+
+  private async wechatCmdListSessions(
+    adapter: WeChatAdapter,
+    channelId: string,
+    userState: { activeSessionId: string | null },
+  ): Promise<void> {
+    const sessions: any[] = this.opts.sessionManager
+      .getSessions()
+      .filter((s: any) => !s.isArchived)
+      .slice(0, 20)
+
+    if (sessions.length === 0) {
+      await adapter.sendText(channelId, 'No sessions. Use /new to create one.')
+      return
+    }
+
+    const lines: string[] = ['Sessions:']
+    sessions.forEach((s: any, i: number) => {
+      const active = s.id === userState.activeSessionId ? ' <' : ''
+      const running = s.isProcessing ? '*' : ' '
+      lines.push(`${i + 1}. ${running} ${s.name || s.id.substring(0, 8)}${active}`)
+    })
+    lines.push('\nUse /<n> to switch.')
+    await adapter.sendText(channelId, lines.join('\n'))
+  }
+
+  private async wechatCmdSwitch(
+    adapter: WeChatAdapter,
+    channelId: string,
+    arg: string,
+    userState: { activeSessionId: string | null; activeWorkspaceId: string | null },
+  ): Promise<void> {
+    const sessions: any[] = this.opts.sessionManager
+      .getSessions()
+      .filter((s: any) => !s.isArchived)
+
+    const numIdx = parseInt(arg, 10)
+    if (!isNaN(numIdx) && numIdx >= 1 && numIdx <= sessions.length) {
+      const target = sessions[numIdx - 1]
+      userState.activeSessionId = target.id
+      userState.activeWorkspaceId = target.workspaceId ?? null
+      await adapter.sendText(channelId, `Switched to "${target.name || target.id.substring(0, 8)}"`)
+      return
+    }
+
+    const match = sessions.find((s: any) => s.name?.toLowerCase().includes(arg.toLowerCase()))
+    if (match) {
+      userState.activeSessionId = match.id
+      userState.activeWorkspaceId = match.workspaceId ?? null
+      await adapter.sendText(channelId, `Switched to "${match.name || match.id.substring(0, 8)}"`)
+      return
+    }
+
+    await adapter.sendText(channelId, `Session not found: "${arg}". Use /sessions.`)
+  }
+
+  private async wechatCmdNew(
+    adapter: WeChatAdapter,
+    channelId: string,
+    name: string | undefined,
+    userState: { activeSessionId: string | null; activeWorkspaceId: string | null },
+  ): Promise<void> {
+    // Use the first available workspace
+    const workspaces: any[] = (this.opts.sessionManager as any).getWorkspaces?.() ?? []
+    const wsId: string | undefined = workspaces[0]?.id ?? Array.from(this.workspaces.keys())[0]
+    if (!wsId) {
+      await adapter.sendText(channelId, 'No workspace available to create a session.')
+      return
+    }
+
+    const session = await this.opts.sessionManager.createSession(wsId, { name: name || 'WeChat' })
+    userState.activeSessionId = session.id
+    userState.activeWorkspaceId = wsId
+    await adapter.sendText(channelId, `Created & connected to "${session.name}"`)
+  }
+
+  private async wechatCmdStatus(
+    adapter: WeChatAdapter,
+    channelId: string,
+    userState: { activeSessionId: string | null; activeWorkspaceId: string | null },
+  ): Promise<void> {
+    if (!userState.activeSessionId) {
+      await adapter.sendText(channelId, 'No active session. Use /sessions or /new.')
+      return
+    }
+    const session: any = await this.opts.sessionManager.getSession(userState.activeSessionId)
+    const name = session?.name || userState.activeSessionId.substring(0, 8)
+    const running = session?.isProcessing ? ' (running)' : ''
+    await adapter.sendText(channelId, `Active: "${name}"${running}`)
   }
 
   private setPlatformRuntime(
@@ -1531,7 +1931,7 @@ function toBindingInfo(b: ChannelBinding): MessagingBindingInfo {
 }
 
 function isKnownPlatform(p: string): p is PlatformType {
-  return p === 'telegram' || p === 'whatsapp' || p === 'lark'
+  return p === 'telegram' || p === 'whatsapp' || p === 'lark' || p === 'wechat'
 }
 
 function capitalize(value: string): string {
