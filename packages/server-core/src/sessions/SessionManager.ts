@@ -61,6 +61,7 @@ import {
   writeSessionJsonl,
   serializeSession,
   validateBundle,
+  redactStoredSessionForExternal,
   type SessionBundle,
   type DispatchMode,
   type StoredSession,
@@ -4293,12 +4294,13 @@ export class SessionManager implements ISessionManager {
       if (!storedSession) {
         return { success: false, error: 'Session file not found' }
       }
+      const externalSession = redactStoredSessionForExternal(storedSession)
 
       const { VIEWER_URL } = await import('@craft-agent/shared/branding')
       const response = await fetch(`${VIEWER_URL}/s/api`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(storedSession)
+        body: JSON.stringify(externalSession)
       })
 
       if (!response.ok) {
@@ -4357,12 +4359,13 @@ export class SessionManager implements ISessionManager {
       if (!storedSession) {
         return { success: false, error: 'Session file not found' }
       }
+      const externalSession = redactStoredSessionForExternal(storedSession)
 
       const { VIEWER_URL } = await import('@craft-agent/shared/branding')
       const response = await fetch(`${VIEWER_URL}/s/api/${managed.sharedId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(storedSession)
+        body: JSON.stringify(externalSession)
       })
 
       if (!response.ok) {

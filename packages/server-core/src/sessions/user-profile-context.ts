@@ -83,8 +83,7 @@ function escapeContextValue(value: string): string {
 
 /** Builds the redacted human-readable profile summary stored with messages. */
 export function summarizeUserProfileRef(profile: UserProfile, stale: boolean): string {
-  const parts = [profile.name, profile.group, profile.department].filter(Boolean)
-  const summary = parts.length > 0 ? parts.join(', ') : 'User profile'
+  const summary = hasProfileContent(profile) ? 'User profile context available' : 'User profile'
   return stale ? `${summary}; stale profile cache` : summary
 }
 

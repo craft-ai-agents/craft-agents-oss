@@ -58,7 +58,10 @@ describe('user profile dynamic context', () => {
     expect(context?.stale).toBe(true)
     expect(context?.dynamicContext).toContain('freshness="stale"')
     expect(context?.dynamicContext).toContain('Cached profile is stale')
-    expect(context?.ref.summary).toBe('Ada Lovelace, AI Platform, Engineering; stale profile cache')
+    expect(context?.ref.summary).toBe('User profile context available; stale profile cache')
+    expect(JSON.stringify(context?.ref)).not.toContain('Ada Lovelace')
+    expect(JSON.stringify(context?.ref)).not.toContain('AI Platform')
+    expect(JSON.stringify(context?.ref)).not.toContain('Engineering')
     expect(context?.ref).not.toHaveProperty('oneStopId')
   })
 
