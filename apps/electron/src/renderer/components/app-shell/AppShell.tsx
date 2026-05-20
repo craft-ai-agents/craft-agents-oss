@@ -483,7 +483,9 @@ function AppShellContent({
     window.electronAPI.getSsoSession().then((session) => {
       if (!session.authenticated) return
       const employeeId = session.employeeId
-      fetch(`${permissionApiBase}/api/mdp/permission/checkAdmin?employeeId=${encodeURIComponent(employeeId)}`)
+      fetch(`${permissionApiBase}/api/mdp/permission/checkAdmin?employeeId=${encodeURIComponent(employeeId)}`, {
+        headers: { authorization: session.token },
+      })
         .then((res) => res.json())
         .then((json: { body: boolean }) => { if (json.body) setIsAdmin(true) })
         .catch(() => {})
