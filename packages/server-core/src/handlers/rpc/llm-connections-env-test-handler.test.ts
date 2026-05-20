@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
+import { ENV_CONNECTION_SLUG } from '@craft-agent/shared/config'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { HandlerFn, RequestContext, RpcServer } from '../../transport/types'
 import type { HandlerDeps } from '../handler-deps'
@@ -80,7 +81,7 @@ describe('Environment LLM connection TEST handler', () => {
     const handler = handlers.get(RPC_CHANNELS.llmConnections.TEST)
     expect(handler).toBeDefined()
 
-    const result = await handler?.({ clientId: 'test', workspaceId: null, webContentsId: null } satisfies RequestContext, 'env-provider')
+    const result = await handler?.({ clientId: 'test', workspaceId: null, webContentsId: null } satisfies RequestContext, ENV_CONNECTION_SLUG)
 
     expect(result).toEqual({ success: true })
     expect(testBackendConnection).toHaveBeenCalledWith(expect.objectContaining({

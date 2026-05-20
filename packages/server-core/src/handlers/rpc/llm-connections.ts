@@ -60,11 +60,20 @@ export function synthesizeEnvConnectionWithStatus(env: EnvConnectionEnv, activeS
   }
 }
 
+function getCurrentEnvConnectionEnv(): EnvConnectionEnv {
+  return {
+    LLM_BASE_URL: process.env.LLM_BASE_URL,
+    LLM_MODEL: process.env.LLM_MODEL,
+    LLM_CONNECTION_NAME: process.env.LLM_CONNECTION_NAME,
+  }
+}
+
 interface LlmConnectionsHandlerOverrides {
   testBackendConnection?: typeof testBackendConnection
   loadSsoSession?: () => Promise<{ token?: string; expiresAt: number } | null>
 }
 
+/** Register renderer-facing RPC handlers for LLM connection setup and management. */
 export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerDeps, overrides: LlmConnectionsHandlerOverrides = {}): void {
   const { sessionManager } = deps
 
@@ -434,11 +443,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       deps.platform.logger?.warn(`Failed to load SSO session for Environment connection: ${error instanceof Error ? error.message : error}`)
     }
 
-    const envConnection = synthesizeEnvConnectionWithStatus({
-      LLM_BASE_URL: process.env.LLM_BASE_URL,
-      LLM_MODEL: process.env.LLM_MODEL,
-      LLM_CONNECTION_NAME: process.env.LLM_CONNECTION_NAME,
-    }, ssoToken)
+    const envConnection = synthesizeEnvConnectionWithStatus(getCurrentEnvConnectionEnv(), ssoToken)
     if (!envConnection) return persistedConnections
 
     return [envConnection, ...persistedConnections]
@@ -542,11 +547,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   server.handle(RPC_CHANNELS.llmConnections.TEST, async (_ctx, slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
       if (isEnvironmentConnectionSlug(slug)) {
-        const envConnection = synthesizeEnvConnection({
-          LLM_BASE_URL: process.env.LLM_BASE_URL,
-          LLM_MODEL: process.env.LLM_MODEL,
-          LLM_CONNECTION_NAME: process.env.LLM_CONNECTION_NAME,
-        })
+        const envConnection = synthesizeEnvConnection(getCurrentEnvConnectionEnv())
         if (!envConnection) {
           return { success: false, error: 'Connection not found' }
         }

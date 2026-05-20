@@ -214,6 +214,7 @@ export function ConnectionRow({ connection, isLastConnection, onRenameClick, onD
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
   const isEnvironmentConnection = connection.isEnvironmentConnection === true
+  const isUserManagedConnection = !isEnvironmentConnection
 
   // Opening dialog/overlay flows directly from a dropdown item can race with
   // menu teardown and leave a transient interaction lock behind on some systems.
@@ -317,67 +318,67 @@ export function ConnectionRow({ connection, isLastConnection, onRenameClick, onD
           </button>
         </DropdownMenuTrigger>
         <StyledDropdownMenuContent align="end">
-          {!isEnvironmentConnection && (
+          {isUserManagedConnection && (
             <>
-            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onRenameClick)}>
-              <Pencil className="h-3.5 w-3.5" />
-              <span>{t("common.rename")}</span>
-            </StyledDropdownMenuItem>
-            {!connection.isDefault && (
-              <StyledDropdownMenuItem onClick={onSetDefault}>
-                <Star className="h-3.5 w-3.5" />
-                <span>{t("settings.ai.setAsDefault")}</span>
+              <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onRenameClick)}>
+                <Pencil className="h-3.5 w-3.5" />
+                <span>{t("common.rename")}</span>
               </StyledDropdownMenuItem>
-            )}
-            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
-              <Settings2 className="h-3.5 w-3.5" />
-              <span>{t("common.edit")}</span>
-            </StyledDropdownMenuItem>
+              {!connection.isDefault && (
+                <StyledDropdownMenuItem onClick={onSetDefault}>
+                  <Star className="h-3.5 w-3.5" />
+                  <span>{t("settings.ai.setAsDefault")}</span>
+                </StyledDropdownMenuItem>
+              )}
+              <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
+                <Settings2 className="h-3.5 w-3.5" />
+                <span>{t("common.edit")}</span>
+              </StyledDropdownMenuItem>
             </>
           )}
-            <StyledDropdownMenuItem
-              onClick={onValidate}
-              disabled={validationState === 'validating'}
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>{t("settings.ai.validateConnection")}</span>
-            </StyledDropdownMenuItem>
-            {!isEnvironmentConnection && (() => {
-              const currentBehavior = resolveMidStreamBehavior(connection)
-              return (
-                <DropdownMenuSub>
-                  <StyledDropdownMenuSubTrigger>
-                    <MessageSquareMore className="h-3.5 w-3.5" />
-                    <span>{t("settings.ai.midStream.title")}</span>
-                  </StyledDropdownMenuSubTrigger>
-                  <StyledDropdownMenuSubContent>
-                    <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('steer')}>
-                      <Zap className="h-3.5 w-3.5" />
-                      <span className="flex-1">{t("settings.ai.midStream.steer")}</span>
-                      {currentBehavior === 'steer' && <Check className="h-3.5 w-3.5" />}
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('queue')}>
-                      <Clock className="h-3.5 w-3.5" />
-                      <span className="flex-1">{t("settings.ai.midStream.queue")}</span>
-                      {currentBehavior === 'queue' && <Check className="h-3.5 w-3.5" />}
-                    </StyledDropdownMenuItem>
-                  </StyledDropdownMenuSubContent>
-                </DropdownMenuSub>
-              )
-            })()}
-            {!isEnvironmentConnection && (
-              <>
-                <StyledDropdownMenuSeparator />
-                <StyledDropdownMenuItem
-                  onClick={onDelete}
-                  variant="destructive"
-                  disabled={isLastConnection}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  <span>{t("common.delete")}</span>
-                </StyledDropdownMenuItem>
-              </>
-            )}
+          <StyledDropdownMenuItem
+            onClick={onValidate}
+            disabled={validationState === 'validating'}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span>{t("settings.ai.validateConnection")}</span>
+          </StyledDropdownMenuItem>
+          {isUserManagedConnection && (() => {
+            const currentBehavior = resolveMidStreamBehavior(connection)
+            return (
+              <DropdownMenuSub>
+                <StyledDropdownMenuSubTrigger>
+                  <MessageSquareMore className="h-3.5 w-3.5" />
+                  <span>{t("settings.ai.midStream.title")}</span>
+                </StyledDropdownMenuSubTrigger>
+                <StyledDropdownMenuSubContent>
+                  <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('steer')}>
+                    <Zap className="h-3.5 w-3.5" />
+                    <span className="flex-1">{t("settings.ai.midStream.steer")}</span>
+                    {currentBehavior === 'steer' && <Check className="h-3.5 w-3.5" />}
+                  </StyledDropdownMenuItem>
+                  <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('queue')}>
+                    <Clock className="h-3.5 w-3.5" />
+                    <span className="flex-1">{t("settings.ai.midStream.queue")}</span>
+                    {currentBehavior === 'queue' && <Check className="h-3.5 w-3.5" />}
+                  </StyledDropdownMenuItem>
+                </StyledDropdownMenuSubContent>
+              </DropdownMenuSub>
+            )
+          })()}
+          {isUserManagedConnection && (
+            <>
+              <StyledDropdownMenuSeparator />
+              <StyledDropdownMenuItem
+                onClick={onDelete}
+                variant="destructive"
+                disabled={isLastConnection}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{t("common.delete")}</span>
+              </StyledDropdownMenuItem>
+            </>
+          )}
         </StyledDropdownMenuContent>
       </DropdownMenu>
     </SettingsRow>
