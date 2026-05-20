@@ -2226,15 +2226,15 @@ function MessageBubble({
   if (message.role === 'assistant') {
     return (
       <div className="flex justify-start group">
-        <div className="relative max-w-[90%] bg-background shadow-minimal rounded-[8px] pl-6 pr-4 py-3 break-words min-w-0 select-text">
+        <div className="runner-chat-response relative max-w-[90%] overflow-hidden rounded-[14px] border border-white/[0.07] bg-[#101013]/92 pl-6 pr-4 py-3 text-white/78 shadow-[0_18px_46px_rgba(0,0,0,0.28)] break-words min-w-0 select-text">
           {/* Pop-out button - visible on hover */}
           {onPopOut && !message.isStreaming && (
             <button
               onClick={() => onPopOut(message)}
-              className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-foreground/5"
+              className="absolute top-2 right-2 rounded-[8px] border border-white/[0.08] bg-white/[0.055] p-1.5 opacity-0 transition-opacity hover:bg-white/[0.10] group-hover:opacity-100"
               title={t("sidebarMenu.openInNewWindow")}
             >
-              <ExternalLink className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+              <ExternalLink className="w-4 h-4 text-white/42 hover:text-white/84" />
             </button>
           )}
           {/* Use StreamingMarkdown for block-level memoization during streaming */}
@@ -2253,7 +2253,7 @@ function MessageBubble({
                 onUrlClick={onOpenUrl}
                 onFileClick={onOpenFile}
                 id={message.id}
-                className="text-sm"
+                className="text-sm text-white/78"
                 collapsible
               >
                 {message.content}

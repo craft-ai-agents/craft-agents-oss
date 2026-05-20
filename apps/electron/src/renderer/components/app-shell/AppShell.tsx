@@ -28,7 +28,6 @@ import {
   Bot,
   MessageSquare,
   BookOpen,
-  History,
   FileText,
   PackageOpen,
   Workflow as WorkflowIcon,
@@ -119,7 +118,6 @@ import { SkillsListPanel } from "./SkillsListPanel"
 // admin view in a later round.
 import { AgentSessionsPanel } from "./AgentSessionsPanel"
 import { useAgents } from "@/hooks/useAgents"
-import { useWorkflows } from "@/hooks/useWorkflows"
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 import { openAgentSessionComposer } from "@/lib/run-agent"
 import { OutputsListPanel } from "../outputs/OutputsListPanel"
@@ -582,7 +580,7 @@ function AppShellContent({
   const sessionListHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
   const { resolvedMode, isDark, setMode } = useTheme()
-  const { canGoBack, canGoForward, goBack, goForward, navigateToSource, navigateToSession } = useNavigation()
+  const { canGoBack, canGoForward, goBack, goForward, navigate: navigateInApp, navigateToSource, navigateToSession } = useNavigation()
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
   const { handleEscapePress } = useEscapeInterrupt()
@@ -1054,8 +1052,8 @@ function AppShellContent({
   // Handle selecting a skill from the list
   const handleSkillSelect = React.useCallback((skill: LoadedSkill) => {
     if (!activeWorkspaceId) return
-    navigate(routes.view.skills(skill.slug))
-  }, [activeWorkspaceId])
+    navigateInApp(routes.view.skills(skill.slug))
+  }, [activeWorkspaceId, navigateInApp])
 
   // Focus zone management
   const { focusZone, focusNextZone, focusPreviousZone } = useFocusContext()
@@ -1433,61 +1431,11 @@ function AppShellContent({
   } = useAgents(activeWorkspaceId)
   const [openingConcierge, setOpeningConcierge] = useState(false)
   const openingConciergeRef = useRef(false)
-  const { activeWorkflows } = useWorkflows(activeWorkspaceId)
   const {
     outputs,
     loading: outputsLoading,
     error: outputsError,
   } = useOutputs(activeWorkspaceId)
-
-  // Workflows sidebar children: per-workspace activated workflows + Manage + Recent runs.
-  // The slug-row links navigate to the workflow detail page; "Manage" goes to the list.
-  const workflowSidebarChildren = useMemo(() => {
-    type WfEntry = {
-      id: string
-      title: string
-      icon: React.ReactNode
-      variant: 'default' | 'ghost'
-      onClick: () => void
-    }
-    const entries: WfEntry[] = []
-    for (const wf of activeWorkflows) {
-      const isActive =
-        isWorkflowsNavigation(navState) &&
-        navState.details.type === 'workflow' &&
-        navState.details.workflowSlug === wf.slug
-      entries.push({
-        id: `nav:workflows:${wf.slug}`,
-        title: wf.metadata.name,
-        icon: (
-          <span style={{ fontSize: 13, lineHeight: 1, display: 'inline-block', width: 14, textAlign: 'center' }}>
-            {wf.metadata.avatar?.trim() || '🪄'}
-          </span>
-        ),
-        variant: isActive ? 'default' : 'ghost',
-        onClick: () => navigate(routes.view.workflow(wf.slug)),
-      })
-    }
-    entries.push({
-      id: 'nav:workflows:manage',
-      title: t('sidebar.workflows.manage'),
-      icon: <WorkflowIcon className="h-3.5 w-3.5" />,
-      variant: (isWorkflowsNavigation(navState) && navState.details.type === 'list') ? 'default' : 'ghost',
-      onClick: () => navigate(routes.view.workflows()),
-    })
-    entries.push({
-      id: 'nav:workflows:runs',
-      title: t('sidebar.workflows.recentRuns'),
-      icon: <History className="h-3.5 w-3.5" />,
-      variant:
-        (isWorkflowsNavigation(navState) && navState.details.type === 'recent-runs') ||
-        isWorkflowRunNavigation(navState)
-          ? 'default'
-          : 'ghost',
-      onClick: () => navigate(routes.view.recentRuns()),
-    })
-    return entries
-  }, [activeWorkflows, navState, t])
 
   // Filter session metadata based on sidebar mode and chat filter
   const filteredSessionMetas = useMemo(() => {
@@ -2067,11 +2015,6 @@ function AppShellContent({
 
     // 3. Workflows (top-level, between Agents and Library)
     result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
-    for (const wf of activeWorkflows) {
-      result.push({ id: `nav:workflows:${wf.slug}`, type: 'nav', action: () => navigate(routes.view.workflow(wf.slug)) })
-    }
-    result.push({ id: 'nav:workflows:manage', type: 'nav', action: () => navigate(routes.view.workflows()) })
-    result.push({ id: 'nav:workflows:runs', type: 'nav', action: () => navigate(routes.view.recentRuns()) })
     result.push({ id: 'nav:outputs', type: 'nav', action: handleOutputsClick })
 
     // 4. Library (Tools / Skills / Workspace Context)
@@ -2085,7 +2028,7 @@ function AppShellContent({
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleChatClick, handleAgentsClick, activeWorkflows, handleSourcesClick, handleSkillsClick, handleOutputsClick, handleAutomationsClick, handleSettingsClick])
+  }, [handleChatClick, handleAgentsClick, handleSourcesClick, handleSkillsClick, handleOutputsClick, handleAutomationsClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2337,8 +2280,8 @@ function AppShellContent({
       {/* === OUTER LAYOUT: Unified Panel Stack | Right Sidebar === */}
       <div
         ref={shellRef}
-        className="flex items-stretch relative bg-[radial-gradient(circle_at_55%_38%,rgba(94,106,210,0.16),transparent_32%),radial-gradient(circle_at_64%_52%,rgba(126,87,194,0.10),transparent_28%),linear-gradient(to_bottom,#0b0b0f_0%,#050507_62%,#020203_100%)]"
-        style={{ height: '100%', paddingRight: PANEL_EDGE_INSET, paddingBottom: PANEL_EDGE_INSET, paddingLeft: 0, gap: 0 }}
+        className="runneros-glass-shell flex items-stretch relative"
+        style={{ height: '100%', paddingTop: 48, paddingRight: PANEL_EDGE_INSET, paddingBottom: 64, paddingLeft: 0, gap: 0 }}
       >
         {!effectiveSidebarAndNavigatorHidden && !isAutoCompact && (
           <WorkspaceRail
@@ -2395,10 +2338,6 @@ function AppShellContent({
                       icon: WorkflowIcon,
                       variant: (isWorkflowsNavigation(navState) || isWorkflowRunNavigation(navState)) ? "default" : "ghost",
                       onClick: () => navigate(routes.view.workflows()),
-                      expandable: true,
-                      expanded: isExpanded('nav:workflows'),
-                      onToggle: () => toggleExpanded('nav:workflows'),
-                      items: workflowSidebarChildren,
                     },
                     {
                       id: "nav:outputs",

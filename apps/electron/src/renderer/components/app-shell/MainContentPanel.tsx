@@ -43,6 +43,7 @@ import { sourceSelection, skillSelection, automationSelection } from '@/hooks/us
 import { extractLabelId } from '@craft-agent/shared/labels'
 import type { SessionStatusId } from '@/config/session-status-config'
 import { ChatPage, SourceInfoPage } from '@/pages'
+import SkillInfoPage from '@/pages/SkillInfoPage'
 import AgentInfoPage from '@/pages/AgentInfoPage'
 import WorkspaceContextPage from '@/pages/WorkspaceContextPage'
 import WorkflowsListPage from '@/pages/WorkflowsListPage'
@@ -53,6 +54,7 @@ import RecentRunsPage from '@/pages/RecentRunsPage'
 import OutputDetailPage from '@/pages/OutputDetailPage'
 import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
+import { SettingsPageSwitcher } from '@/pages/settings/SettingsPageSwitcher'
 import {
   AGENT_EVENTS,
   APP_EVENTS,
@@ -67,7 +69,7 @@ import { cn } from '@/lib/utils'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import { navigate, routes } from '@/lib/navigate'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
-import { Plus, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 
 export interface MainContentPanelProps {
@@ -89,6 +91,7 @@ export function MainContentPanel({
   navStateOverride,
 }: MainContentPanelProps) {
   const { t } = useTranslation()
+  const navigation = useNavigation()
   const globalNavState = useNavigationState()
   const navState = navStateOverride ?? globalNavState
   const {
@@ -239,7 +242,18 @@ export function MainContentPanel({
   if (isSettingsNavigation(navState)) {
     const SettingsPageComponent = getSettingsPageComponent(navState.subpage)
     return wrapWithStoplight(
-      <Panel variant="grow" className={className}>
+      <Panel
+        variant="grow"
+        className={cn(
+          'runneros-glass-route relative',
+          className
+        )}
+      >
+        <div className="pointer-events-none absolute left-0 right-0 top-[42px] z-20 flex justify-center px-6">
+          <div className="pointer-events-auto">
+            <SettingsPageSwitcher activeSubpage={navState.subpage} />
+          </div>
+        </div>
         <SettingsPageComponent />
       </Panel>
     )
@@ -311,6 +325,19 @@ export function MainContentPanel({
       }
     }
 
+    if (navState.details?.type === 'skill') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <SkillInfoPage
+            skillSlug={navState.details.skillSlug}
+            workspaceId={activeWorkspaceId || ''}
+            workingDirectory={activeWorkspace?.rootPath}
+            onClose={() => navigation.navigate(routes.view.skills(), { skipAutoSelect: true })}
+          />
+        </Panel>
+      )
+    }
+
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <ResourceRows
@@ -318,6 +345,7 @@ export function MainContentPanel({
           title="Skills"
           description="Reusable instruction sets agents can invoke when the task calls for them."
           skills={skills ?? []}
+          workspaceId={activeWorkspaceId || undefined}
           workspaceRootPath={activeWorkspace?.rootPath}
           onDeleteSkill={handleDeleteSkill}
         />
@@ -552,8 +580,22 @@ function ResourceRows({
   onOpenOutput,
 }: ResourceRowsProps) {
   const [selectedSourceSlug, setSelectedSourceSlug] = React.useState<string | null>(null)
+  const [selectedSkillSlug, setSelectedSkillSlug] = React.useState<string | null>(null)
+  const [categoryOverrides, setCategoryOverrides] = React.useState<Set<string>>(() => new Set())
+  const categoriesClosedByDefault = Boolean(sources || skills)
   const closeSourceModal = React.useCallback(() => {
     setSelectedSourceSlug(null)
+  }, [])
+  const closeSkillModal = React.useCallback(() => {
+    setSelectedSkillSlug(null)
+  }, [])
+  const toggleCategory = React.useCallback((category: string) => {
+    setCategoryOverrides((current) => {
+      const next = new Set(current)
+      if (next.has(category)) next.delete(category)
+      else next.add(category)
+      return next
+    })
   }, [])
   const rows = React.useMemo<ResourceRow[]>(() => {
     if (sources) {
@@ -579,7 +621,7 @@ function ResourceRows({
         summary: cleanDisplayText(skill.metadata.description || 'Workspace skill'),
         category: getSkillRowCategory(skill),
         disabled: false,
-        onOpen: undefined,
+        onOpen: () => setSelectedSkillSlug(skill.slug),
         actions: onDeleteSkill ? [{ label: 'Delete', onClick: () => onDeleteSkill(skill.slug) }] : [],
       }))
     }
@@ -632,7 +674,7 @@ function ResourceRows({
 
   if (loading) {
     return (
-      <div className="h-full overflow-y-auto bg-[radial-gradient(circle_at_50%_8%,rgba(59,130,246,0.10),transparent_30%),#08080a]">
+      <div className="runneros-glass-route h-full overflow-y-auto">
         <div className="mx-auto flex min-h-full max-w-4xl items-center justify-center px-8 py-9 text-sm text-white/42">
           Loading...
         </div>
@@ -642,7 +684,7 @@ function ResourceRows({
 
   if (error) {
     return (
-      <div className="h-full overflow-y-auto bg-[radial-gradient(circle_at_50%_8%,rgba(59,130,246,0.10),transparent_30%),#08080a]">
+      <div className="runneros-glass-route h-full overflow-y-auto">
         <div className="mx-auto flex min-h-full max-w-4xl items-center justify-center px-8 py-9 text-sm text-red-200/70">
           {error}
         </div>
@@ -652,7 +694,7 @@ function ResourceRows({
 
   return (
     <>
-    <div className="h-full overflow-y-auto bg-[radial-gradient(circle_at_50%_8%,rgba(59,130,246,0.10),transparent_30%),#08080a]">
+    <div className="runneros-glass-route h-full overflow-y-auto">
       <div className="mx-auto flex min-h-full max-w-4xl flex-col px-8 py-9">
         <header className="mb-7 flex items-start justify-between gap-4">
           <div>
@@ -705,36 +747,64 @@ function ResourceRows({
             </div>
           )
         ) : (
-          <div className="space-y-7">
-            {groupedRows.map((group) => (
+          <div className="space-y-5">
+            {groupedRows.map((group) => {
+              const collapsed = categoriesClosedByDefault
+                ? !categoryOverrides.has(group.category)
+                : categoryOverrides.has(group.category)
+
+              return (
               <section key={group.category}>
-                <div className="mb-3 flex items-center gap-3">
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">{group.category}</h2>
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(group.category)}
+                  className="mb-2 flex w-full items-center gap-2.5 text-left"
+                  aria-expanded={!collapsed}
+                >
+                  {collapsed ? (
+                    <ChevronRight className="h-3 w-3 shrink-0 text-white/30" />
+                  ) : (
+                    <ChevronDown className="h-3 w-3 shrink-0 text-white/30" />
+                  )}
+                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">{group.category}</h2>
                   <div className="h-px flex-1 bg-white/[0.06]" />
                   <span className="text-[11px] text-white/32">{group.rows.length}</span>
-                </div>
-                <div className="overflow-hidden rounded-[16px] border border-white/[0.075] bg-[#0a0a0a] shadow-[0_0_50px_rgba(0,0,0,0.45)]">
+                </button>
+                {!collapsed && (
+                <div className="overflow-hidden rounded-[12px] border border-white/[0.075] bg-[#0a0a0a] shadow-[0_0_34px_rgba(0,0,0,0.36)]">
                   {group.rows.map((row, index) => (
-                    <button
+                    <div
                       key={row.id}
-                      type="button"
-                      onClick={row.onOpen}
+                      role={row.onOpen ? "button" : undefined}
+                      tabIndex={row.onOpen ? 0 : undefined}
+                      onPointerDown={(event) => {
+                        if (!row.onOpen || event.button !== 0) return
+                        event.preventDefault()
+                        row.onOpen()
+                      }}
+                      onClick={() => row.onOpen?.()}
+                      onKeyDown={(event) => {
+                        if (!row.onOpen) return
+                        if (event.key !== 'Enter' && event.key !== ' ') return
+                        event.preventDefault()
+                        row.onOpen()
+                      }}
                       className={cn(
-                        "group flex min-h-[92px] w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-white/[0.035]",
+                        "group flex min-h-[58px] w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-white/[0.035]",
                         index > 0 && "border-t border-white/[0.055]",
                         row.disabled && "opacity-45",
                         !row.onOpen && "cursor-default",
                       )}
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.035] font-mono text-[11px] font-semibold text-white/44">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.08] bg-white/[0.035] font-mono text-[8.5px] font-semibold text-white/44">
                         {row.title.slice(0, 2).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/28">
+                        <div className="mb-0.5 font-mono text-[8.5px] font-semibold uppercase tracking-[0.14em] text-white/26">
                           {row.kicker}
                         </div>
-                        <div className="truncate text-[15px] font-medium text-white/88">{row.title}</div>
-                        <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-white/42">{row.summary}</p>
+                        <div className="truncate text-[12.5px] font-medium text-white/88">{row.title}</div>
+                        <p className="mt-0.5 line-clamp-1 text-[10px] leading-3.5 text-white/40">{row.summary}</p>
                       </div>
                       {row.actions.length > 0 && (
                         <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -743,6 +813,9 @@ function ResourceRows({
                               key={action.label}
                               role="button"
                               tabIndex={0}
+                              onPointerDown={(event) => {
+                                event.stopPropagation()
+                              }}
                               onClick={(event) => {
                                 event.stopPropagation()
                                 action.onClick()
@@ -753,18 +826,20 @@ function ResourceRows({
                                 event.stopPropagation()
                                 action.onClick()
                               }}
-                              className="rounded-[7px] border border-white/[0.07] bg-white/[0.035] px-2 py-1 text-[11px] font-medium text-white/48 transition-colors hover:bg-white/[0.075] hover:text-white/82"
+                              className="rounded-[7px] border border-white/[0.07] bg-white/[0.035] px-1.5 py-0.5 text-[10px] font-medium text-white/48 transition-colors hover:bg-white/[0.075] hover:text-white/82"
                             >
                               {action.label}
                             </span>
                           ))}
                         </div>
                       )}
-                    </button>
+                    </div>
                   ))}
                 </div>
+                )}
               </section>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -810,6 +885,47 @@ function ResourceRows({
         </DialogContent>
       </Dialog>
     ) : null}
+
+    {skills && workspaceId && selectedSkillSlug ? (
+      <Dialog open={Boolean(selectedSkillSlug)} onOpenChange={(open) => {
+        if (!open) closeSkillModal()
+      }}>
+        <DialogContent
+          showCloseButton={false}
+          className="max-h-[86vh] !w-[min(calc(100vw-96px),780px)] !max-w-[780px] overflow-hidden !rounded-[22px] !border !border-white/[0.09] !bg-[#08080a] p-0 !text-white !shadow-[0_28px_90px_rgba(0,0,0,0.62)] sm:!max-w-[780px]"
+        >
+          <button
+            type="button"
+            aria-label="Close"
+            onPointerDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              closeSkillModal()
+            }}
+            onMouseDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              closeSkillModal()
+            }}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              closeSkillModal()
+            }}
+            className="pointer-events-auto absolute right-4 top-4 z-[1000] inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-white/[0.10] bg-[#151518] text-white/60 transition-colors hover:bg-white/[0.10] hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <div className="max-h-[86vh] overflow-y-auto">
+            <SkillInfoPage
+              skillSlug={selectedSkillSlug}
+              workspaceId={workspaceId}
+              workingDirectory={workspaceRootPath}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    ) : null}
     </>
   )
 }
@@ -836,6 +952,7 @@ function getGroupOrder(category: string) {
     'Event based': 20,
     'Agentic workflows': 30,
     'External triggers': 40,
+    Founder: 5,
     'Local tools': 10,
     'MCP tools': 20,
     'Data & APIs': 30,
@@ -874,10 +991,12 @@ function getSkillRowCategory(skill: LoadedSkill) {
     ...(Array.isArray(skill.metadata.tags) ? skill.metadata.tags : []),
   ].filter(Boolean).join(' ').toLowerCase()
 
-  if (matchesAny(text, ['creative', 'video', 'image', '3d', 'design', 'brand', 'visual', 'hyperframes'])) return 'Creative production'
+  if (skill.metadata.category === 'founder') return 'Founder'
+  if (skill.metadata.category === 'content-generation' || skill.metadata.category === 'marketing') return 'Content & marketing'
   if (matchesAny(text, ['research', 'competitor', 'customer', 'profile', 'analyze', 'analysis', 'audit', 'spy', 'perspective'])) return 'Research & analysis'
   if (matchesAny(text, ['meta ads', 'meta-ads', 'facebook ads'])) return 'Content & marketing'
   if (matchesAny(text, ['marketing', 'content', 'copy', 'ads', 'seo', 'viral', 'twitter', 'tweet', 'x-', 'pricing', 'lead'])) return 'Content & marketing'
+  if (matchesAny(text, ['creative', 'video', 'image', '3d', 'design', 'brand', 'visual', 'hyperframes'])) return 'Creative production'
   if (matchesAny(text, ['code', 'api', 'database', 'dev', 'react', 'typescript', 'debug', 'test', 'deploy', 'github'])) return 'Development'
   if (matchesAny(text, ['runneros', 'workflow', 'automation', 'source', 'orchestration', 'routing'])) return 'Core operations'
   return 'Other'

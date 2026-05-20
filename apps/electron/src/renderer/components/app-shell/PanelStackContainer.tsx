@@ -83,6 +83,7 @@ export function PanelStackContainer({
   const shouldCenterSinglePanel = !isCompact && visiblePanels.length === 1 && !hasNavigator && !hasSidebar
   const stackGap = hasSidebar && !hasNavigator ? 56 : PANEL_GAP
   const topBreathingRoom = hasSidebar ? 18 : 0
+  const bottomBreathingRoom = 2
 
   // Auto-scroll to newly pushed content panel
   useEffect(() => {
@@ -107,11 +108,11 @@ export function PanelStackContainer({
         overflowX: 'auto',
         overflowY: 'hidden',
         // Extra vertical space for box-shadows (collapsed back with negative margin)
-        paddingBottom: PANEL_STACK_VERTICAL_OVERFLOW + 6,
+        paddingBottom: PANEL_STACK_VERTICAL_OVERFLOW + bottomBreathingRoom,
         paddingTop: PANEL_STACK_VERTICAL_OVERFLOW + topBreathingRoom,
         marginTop: -PANEL_STACK_VERTICAL_OVERFLOW + topBreathingRoom,
         // Extend to window bottom so scrollbar sits at the very edge
-        marginBottom: -6,
+        marginBottom: -bottomBreathingRoom,
         // Extra horizontal space for last panel's box-shadow
         paddingRight: 8,
         marginRight: -8,
@@ -121,7 +122,7 @@ export function PanelStackContainer({
            Animated paddingLeft provides window-edge spacing when sidebar/navigator are hidden.
            Hidden slots use marginRight: -PANEL_GAP to cancel their trailing flex gap. */}
       <motion.div
-        className="flex h-full"
+        className="relative z-[1] flex h-full"
         initial={false}
         animate={{ paddingLeft: !hasSidebar ? PANEL_EDGE_INSET : 0 }}
         transition={transition}
@@ -162,7 +163,7 @@ export function PanelStackContainer({
           transition={transition}
           className={cn(
             'h-full overflow-hidden relative shrink-0 z-[2]',
-            'bg-[#09090c] shadow-[0_18px_60px_rgba(0,0,0,0.35)] border border-white/[0.06]',
+            'runneros-glass-panel',
           )}
           style={{
             // In compact mode (no content selected), navigator fills available space

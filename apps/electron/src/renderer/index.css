@@ -68,7 +68,7 @@
    Base colors:
    - background: Light/dark surface
    - foreground: Text and icons
-   - accent: Brand purple (highlights, Auto mode)
+   - accent: Brand orange (highlights, Auto mode)
    - info: Amber (warnings, Ask mode)
    - success: Green (connected, checkmarks)
    - destructive: Red (errors, failed)
@@ -91,8 +91,8 @@
   --foreground-rgb: 38, 36, 42;             /* RGB for shadow borders */
   --user-message-bubble: oklch(from var(--foreground) l c h / 0.05);
   --user-message-bubble-dimmed: oklch(from var(--foreground) l c h / 0.03);
-  --accent: oklch(0.62 0.13 293);           /* purple - brand, Auto mode */
-  --accent-rgb: 104, 78, 133;               /* darkened RGB for shadow-tinted (70% of accent) */
+  --accent: oklch(0.70 0.18 55);           /* orange - brand, Auto mode */
+  --accent-rgb: 210, 105, 30;               /* darkened RGB for shadow-tinted (70% of accent) */
   --info: oklch(0.75 0.16 70);              /* amber - warnings, Ask mode */
   --info-rgb: 180, 120, 40;                 /* RGB for shadow-tinted */
   --success: oklch(0.55 0.17 145);          /* green - connected, checkmarks */
@@ -245,8 +245,8 @@
   --foreground-rgb: 237, 236, 240;           /* RGB for shadow borders */
   --user-message-bubble: oklch(from var(--foreground) l c h / 0.05);
   --user-message-bubble-dimmed: oklch(from var(--foreground) l c h / 0.03);
-  --accent: oklch(0.65 0.22 293);            /* brighter purple in dark */
-  --accent-rgb: 130, 75, 185;               /* darkened RGB for shadow-tinted (70% of accent) */
+  --accent: oklch(0.74 0.19 55);            /* brighter orange in dark */
+  --accent-rgb: 235, 125, 35;               /* darkened RGB for shadow-tinted (70% of accent) */
   --info: oklch(0.78 0.14 70);               /* amber */
   --info-rgb: 210, 155, 55;                  /* RGB for shadow-tinted */
   --success: oklch(0.60 0.17 145);           /* green */
@@ -725,19 +725,43 @@ html[data-font="inter"] {
      - No visible border
   ============================================================================= */
   .popover-styled {
-    background: var(--background);
-    color: var(--foreground);
-    border-radius: 8px;
-    border: none;
+    background: rgba(10, 10, 12, 0.96);
+    color: rgba(255, 255, 255, 0.84);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(18px);
     box-shadow:
       rgba(0, 0, 0, 0) 0px 0px 0px 0px,
       rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 1px 1px -0.5px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 3px 3px 0px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 6px 6px 0px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 12px 12px 0px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 24px 24px 0px;
+      rgba(255, 255, 255, 0.04) 0px 0px 0px 1px,
+      rgba(0, 0, 0, 0.36) 0px 10px 30px,
+      rgba(0, 0, 0, 0.48) 0px 24px 70px;
+  }
+
+  [data-slot="dropdown-menu-content"],
+  [data-slot="dropdown-menu-sub-content"],
+  [data-slot="select-content"],
+  [data-slot="popover-content"] {
+    background: rgba(10, 10, 12, 0.96) !important;
+    color: rgba(255, 255, 255, 0.84) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
+  [data-slot="dropdown-menu-item"],
+  [data-slot="dropdown-menu-checkbox-item"],
+  [data-slot="dropdown-menu-radio-item"],
+  [data-slot="dropdown-menu-sub-trigger"],
+  [data-slot="select-item"] {
+    color: rgba(255, 255, 255, 0.76);
+  }
+
+  [data-slot="dropdown-menu-item"]:focus,
+  [data-slot="dropdown-menu-checkbox-item"]:focus,
+  [data-slot="dropdown-menu-radio-item"]:focus,
+  [data-slot="dropdown-menu-sub-trigger"]:focus,
+  [data-slot="select-item"]:focus {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.94);
   }
 
   .dialog-styled {
@@ -754,6 +778,118 @@ html[data-font="inter"] {
       rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.45)) 0px 6px 6px 0px,
       rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.45)) 0px 12px 12px 0px,
       rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.45)) 0px 24px 24px 0px;
+  }
+
+  .runneros-glass-shell {
+    position: relative;
+    overflow: hidden;
+    background: rgba(32, 32, 32, 0.52);
+    backdrop-filter: blur(30px) saturate(165%);
+    -webkit-backdrop-filter: blur(30px) saturate(165%);
+    isolation: isolate;
+    transform: translateZ(0);
+  }
+
+  .runneros-app-backdrop {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 58% 20%, rgba(249, 115, 22, 0.075), transparent 30%),
+      radial-gradient(circle at 46% 32%, rgba(220, 38, 38, 0.055), transparent 36%),
+      linear-gradient(180deg, rgba(28, 28, 31, 0.92), rgba(9, 9, 11, 0.98) 72%, rgba(4, 4, 5, 1));
+  }
+
+  .runneros-app-backdrop::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(255, 255, 255, 0.035), transparent 18%, transparent 82%, rgba(255, 255, 255, 0.025)),
+      radial-gradient(circle at 50% 44%, rgba(255, 255, 255, 0.035), transparent 42%);
+  }
+
+  .runneros-app-backdrop > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .runneros-glass-chrome {
+    background: rgba(32, 32, 32, 0.52);
+    backdrop-filter: blur(30px) saturate(165%);
+    -webkit-backdrop-filter: blur(30px) saturate(165%);
+    isolation: isolate;
+    transform: translateZ(0);
+  }
+
+  .runneros-workspace-dock {
+    width: 56px;
+    background: rgba(20, 20, 22, 0.28);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+  }
+
+  .runneros-glass-panel {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    transform: translateZ(0);
+    background: rgba(24, 24, 27, 0.38);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.085);
+    box-shadow:
+      0 22px 70px rgba(0, 0, 0, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  }
+
+  .runneros-glass-panel-strong {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    transform: translateZ(0);
+    background: transparent;
+    backdrop-filter: blur(24px) saturate(165%);
+    -webkit-backdrop-filter: blur(24px) saturate(165%);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow:
+      0 26px 82px rgba(0, 0, 0, 0.44),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .runneros-glass-route {
+    background: transparent;
+  }
+
+  .runneros-glass-shell::before,
+  .runneros-glass-chrome::before,
+  .runneros-glass-panel::before,
+  .runneros-glass-panel-strong::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.055;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.9'/%3E%3C/svg%3E");
+  }
+
+  .runneros-glass-shell > *,
+  .runneros-glass-chrome > *,
+  .runneros-glass-panel > *,
+  .runneros-glass-panel-strong > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .runneros-glass-panel,
+    .runneros-glass-panel-strong {
+      background: rgba(12, 12, 14, 0.92);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
   }
 }
 
@@ -1421,4 +1557,27 @@ html.dark[data-scenic] .fullscreen-overlay-background {
 [data-compact] .turn-action-btn {
   min-height: 31px;
   padding: 6px 8px;
+}
+
+.runner-chat-response {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.runner-chat-response :is(p, li, span, div, strong, h1, h2, h3, h4, h5, h6) {
+  color: inherit;
+}
+
+.runner-chat-response blockquote {
+  color: rgba(255, 255, 255, 0.58);
+  border-left-color: rgba(251, 146, 60, 0.58);
+  background: rgba(251, 146, 60, 0.055);
+}
+
+.runner-chat-response code {
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.runner-chat-response a {
+  color: rgb(177, 173, 255);
 }

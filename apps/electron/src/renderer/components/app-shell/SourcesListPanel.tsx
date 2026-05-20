@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { BookOpen, DatabaseZap, Plus, Search } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, DatabaseZap, Plus, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { deriveConnectionStatus } from '@/components/ui/source-status-indicator'
@@ -112,11 +112,21 @@ export function SourcesListPanel({
   const [globalSourcesReady, setGlobalSourcesReady] = React.useState(false)
   const [libraryOpen, setLibraryOpen] = React.useState(false)
   const [updatingSlug, setUpdatingSlug] = React.useState<string | null>(null)
+  const [collapsedCategories, setCollapsedCategories] = React.useState<Set<string>>(() => new Set())
 
   // Send to Workspace dialog state
   const [sendDialogOpen, setSendDialogOpen] = React.useState(false)
   const [sendResourceSlug, setSendResourceSlug] = React.useState<string | null>(null)
   const [sendResourceLabel, setSendResourceLabel] = React.useState('')
+
+  const toggleCategory = React.useCallback((category: string) => {
+    setCollapsedCategories((current) => {
+      const next = new Set(current)
+      if (next.has(category)) next.delete(category)
+      else next.add(category)
+      return next
+    })
+  }, [])
 
   const reloadGlobalSources = React.useCallback(async () => {
     if (!workspaceId) {
@@ -221,10 +231,10 @@ export function SourcesListPanel({
     <>
       <div className={className ? `flex min-h-0 flex-1 flex-col ${className}` : 'flex min-h-0 flex-1 flex-col'}>
         {className?.includes('runneros-library-grid') ? (
-          <div className="min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_50%_0%,rgba(94,106,210,0.10),transparent_35%),#101011]/0 px-8 py-8">
+          <div className="runneros-glass-route min-h-0 flex-1 overflow-y-auto px-8 py-8">
             <div className="mb-7 flex items-start justify-between gap-4">
               <div>
-                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-[#9da4ff]">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-[#fdba74]">
                   <DatabaseZap className="h-3.5 w-3.5" />
                   Tool layer
                 </div>
@@ -254,7 +264,7 @@ export function SourcesListPanel({
                   <button
                     type="button"
                     onClick={() => setLibraryOpen(true)}
-                    className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-[#7c7cff]/30 bg-[#5e6ad2]/18 px-3 text-xs font-medium text-white shadow-[0_0_24px_rgba(94,106,210,0.20)] transition-colors hover:bg-[#5e6ad2]/26"
+                    className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-[#fb923c]/30 bg-[#f97316]/18 px-3 text-xs font-medium text-white shadow-[0_0_24px_rgba(249,115,22,0.20)] transition-colors hover:bg-[#f97316]/26"
                     title={t('sourcesList.browseGlobal')}
                   >
                     <BookOpen className="size-3.5" />
@@ -269,15 +279,29 @@ export function SourcesListPanel({
                 {emptyMessage}
               </div>
             ) : (
-              <div className="space-y-7">
-                {groupedFilteredSources.map((group) => (
+              <div className="space-y-5">
+                {groupedFilteredSources.map((group) => {
+                  const collapsed = collapsedCategories.has(group.category)
+
+                  return (
                   <section key={group.category}>
-                    <div className="mb-3 flex items-center gap-3">
-                      <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">{group.category}</h2>
+                    <button
+                      type="button"
+                      onClick={() => toggleCategory(group.category)}
+                      className="mb-2 flex w-full items-center gap-2.5 text-left"
+                      aria-expanded={!collapsed}
+                    >
+                      {collapsed ? (
+                        <ChevronRight className="h-3 w-3 shrink-0 text-white/30" />
+                      ) : (
+                        <ChevronDown className="h-3 w-3 shrink-0 text-white/30" />
+                      )}
+                      <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">{group.category}</h2>
                       <div className="h-px flex-1 bg-white/[0.06]" />
                       <span className="text-[11px] text-white/32">{group.items.length}</span>
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    </button>
+                    {!collapsed && (
+                    <div className="grid grid-cols-1 gap-2 min-[520px]:grid-cols-3">
                       {group.items.map((source) => {
                   const connectionStatus = deriveConnectionStatus(source, localMcpEnabled)
                   const typeConfig = SOURCE_TYPE_CONFIG[source.config.type]
@@ -290,23 +314,23 @@ export function SourcesListPanel({
                   const canPromote = globalSourcesReady && isWorkspaceSource && !globalSlugSet.has(source.config.slug)
 
                   return (
-                    <div key={source.config.slug} className="group relative min-h-[156px] overflow-hidden rounded-[18px] border border-white/[0.075] bg-white/[0.035] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#8b8cff]/35 hover:bg-white/[0.06] hover:shadow-[0_18px_60px_rgba(0,0,0,0.32),0_0_34px_rgba(94,106,210,0.10)]">
-                      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#8b8cff]/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-                      <button type="button" onClick={() => onSourceClick(source)} className="flex w-full items-start gap-3 text-left">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-white/[0.08] bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+                    <div key={source.config.slug} className="group relative min-h-[78px] overflow-hidden rounded-[11px] border border-white/[0.075] bg-white/[0.035] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#fb923c]/35 hover:bg-white/[0.06] hover:shadow-[0_12px_34px_rgba(0,0,0,0.28),0_0_22px_rgba(249,115,22,0.10)]">
+                      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#fb923c]/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                      <button type="button" onClick={() => onSourceClick(source)} className="flex w-full items-start gap-2 text-left">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.08] bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
                           <SourceAvatar source={source} size="sm" />
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-semibold text-white">{source.config.name}</div>
-                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/46">{subtitle}</p>
+                        <div className="min-w-0 flex-1 pr-6">
+                          <div className="truncate text-[12px] font-semibold text-white">{source.config.name}</div>
+                          <p className="mt-1 line-clamp-2 text-[9.5px] leading-3.5 text-white/44">{subtitle}</p>
                         </div>
                       </button>
-                      <div className="mt-4 flex flex-wrap gap-1.5">
-                        {typeConfig && <span className={`rounded-[7px] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] ${typeConfig.colorClass}`}>{t(typeConfig.labelKey)}</span>}
-                        {tierConfig && <span className={`rounded-[7px] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] ${tierConfig.colorClass}`}>{t(tierConfig.labelKey)}</span>}
-                        {statusConfig && <span className={`rounded-[7px] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] ${statusConfig.colorClass}`}>{t(statusConfig.labelKey)}</span>}
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {typeConfig && <span className={`rounded-[6px] px-1.5 py-0.5 text-[8.5px] uppercase tracking-[0.10em] ${typeConfig.colorClass}`}>{t(typeConfig.labelKey)}</span>}
+                        {tierConfig && <span className={`rounded-[6px] px-1.5 py-0.5 text-[8.5px] uppercase tracking-[0.10em] ${tierConfig.colorClass}`}>{t(tierConfig.labelKey)}</span>}
+                        {statusConfig && <span className={`rounded-[6px] px-1.5 py-0.5 text-[8.5px] uppercase tracking-[0.10em] ${statusConfig.colorClass}`}>{t(statusConfig.labelKey)}</span>}
                       </div>
-                      <div className="absolute right-3 top-3 opacity-0 transition-opacity group-hover:opacity-100">
+                      <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
                         <SourceMenu
                           sourceSlug={source.config.slug}
                           sourceName={source.config.name}
@@ -329,8 +353,10 @@ export function SourcesListPanel({
                   )
                       })}
                     </div>
+                    )}
                   </section>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

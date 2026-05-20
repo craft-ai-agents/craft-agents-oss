@@ -54,8 +54,8 @@ export function SettingsRow({
       data-layout="settings-row"
       className={cn(
         'w-full flex items-center justify-between text-left',
-        inCard ? 'px-4 py-3.5' : 'py-3',
-        onClick && 'hover:bg-muted/70 transition-colors cursor-pointer',
+        inCard ? 'px-4 py-3' : 'py-2.5',
+        onClick && 'hover:bg-white/[0.04] transition-colors cursor-pointer',
         className
       )}
     >
@@ -68,7 +68,7 @@ export function SettingsRow({
         )}
       </div>
       {(children || action) && (
-        <div data-layout="settings-control" className="flex items-center gap-3 ml-4 shrink-0">
+        <div data-layout="settings-control" className="flex items-center gap-2.5 ml-4 shrink-0 text-[12px] text-white/55">
           {children}
           {action}
         </div>

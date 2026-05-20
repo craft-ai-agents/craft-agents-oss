@@ -234,7 +234,7 @@ export function TopBar({
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 h-[48px] z-panel titlebar-drag-region bg-[#0a0a0d]/96"
+      className="fixed top-0 left-0 right-0 h-[48px] z-panel titlebar-drag-region bg-transparent"
     >
       <div className="flex h-full w-full items-center justify-between gap-2">
       {/* === LEFT: Sidebar + Menu + Navigation + Workspace === */}

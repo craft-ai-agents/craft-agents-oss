@@ -1,8 +1,14 @@
 import * as React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence } from "motion/react"
-import { Cloud, CloudOff, FolderPlus } from "lucide-react"
+import { Cloud, CloudOff, FolderOpen, FolderPlus } from "lucide-react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+} from "@/components/ui/styled-dropdown"
 import { toast } from "sonner"
 import { useSetAtom } from "jotai"
 import { useTranslation } from "react-i18next"
@@ -33,6 +39,7 @@ export function WorkspaceRail({
 }: WorkspaceRailProps) {
   const { t } = useTranslation()
   const [showCreationScreen, setShowCreationScreen] = useState(false)
+  const [creationStep, setCreationStep] = useState<'choice' | 'create' | 'open'>('choice')
   const [reconnectTarget, setReconnectTarget] = useState<Workspace | null>(null)
   const [remoteHealthMap, setRemoteHealthMap] = useState<Map<string, 'ok' | 'error' | 'checking'>>(new Map())
   const healthCheckAbort = useRef<AbortController | null>(null)
@@ -92,10 +99,14 @@ export function WorkspaceRail({
     return remoteHealthMap.get(workspaceId) === 'error'
   }, [activeWorkspaceId, connectionState, isRemote, remoteHealthMap])
 
-  const handleNewWorkspace = () => {
+  const openWorkspaceCreation = (step: 'choice' | 'create' | 'open') => {
+    setCreationStep(step)
     setShowCreationScreen(true)
     setFullscreenOverlayOpen(true)
   }
+
+  const handleNewWorkspace = () => openWorkspaceCreation('create')
+  const handleOpenWorkspace = () => openWorkspaceCreation('open')
 
   const handleCloseCreationScreen = useCallback(() => {
     setShowCreationScreen(false)
@@ -145,14 +156,15 @@ export function WorkspaceRail({
           <WorkspaceCreationScreen
             onWorkspaceCreated={handleWorkspaceCreated}
             onClose={handleCloseCreationScreen}
+            initialStep={reconnectTarget ? undefined : creationStep}
             reconnectWorkspace={reconnectTarget ?? undefined}
             onReconnectWorkspace={handleReconnectWorkspace}
           />
         )}
       </AnimatePresence>
 
-      <aside className="titlebar-no-drag flex h-full w-[56px] shrink-0 flex-col items-center border-r border-white/[0.06] bg-[#050507]/95 py-3 shadow-[inset_-1px_0_0_rgba(255,255,255,0.03)]">
-        <div className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto px-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <aside className="titlebar-no-drag -mb-16 flex h-[calc(100%+64px)] w-[56px] shrink-0 flex-col items-center justify-end">
+        <div className="runneros-workspace-dock flex max-h-full min-h-0 flex-col items-center gap-1.5 overflow-y-auto px-1.5 pb-2.5 pt-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {workspaces.map((workspace) => {
             const active = workspace.id === activeWorkspaceId
             const disconnected = isRemoteDisconnected(workspace.id)
@@ -165,10 +177,10 @@ export function WorkspaceRail({
                     type="button"
                     onClick={(e) => handleWorkspaceSelect(workspace, e.metaKey || e.ctrlKey)}
                     className={cn(
-                      "group relative flex h-10 w-10 items-center justify-center rounded-[12px] border transition-all duration-200",
+                      "group relative flex h-8 w-8 items-center justify-center rounded-[10px] border transition-all duration-200",
                       active
-                        ? "border-[#7c7cff]/50 bg-[#151525] text-white shadow-[0_0_24px_rgba(94,106,210,0.32)]"
-                        : "border-white/[0.06] bg-white/[0.035] text-white/55 hover:border-white/15 hover:bg-white/[0.08] hover:text-white",
+                        ? "border-[#fb923c]/70 bg-transparent text-white"
+                        : "border-white/[0.08] bg-transparent text-white/42 hover:border-white/16 hover:bg-white/[0.035] hover:text-white/75",
                       disconnected && "opacity-55",
                     )}
                     aria-current={active ? "page" : undefined}
@@ -177,18 +189,15 @@ export function WorkspaceRail({
                     <CrossfadeAvatar
                       src={workspaceIconMap.get(workspace.id)}
                       alt={workspace.name}
-                      className="h-6 w-6 rounded-[8px] ring-1 ring-white/10"
+                      className="h-5 w-5 rounded-[7px]"
                       fallbackClassName={cn(
-                        "text-[11px] rounded-[8px]",
-                        active ? "bg-[#f7f8ff] text-[#101018]" : "bg-white/[0.08] text-white",
+                        "text-[10px] rounded-[7px]",
+                        active ? "bg-transparent text-white" : "bg-transparent text-white/55",
                       )}
                       fallback={workspace.name.charAt(0)}
                     />
-                    {active && (
-                      <span className="absolute -left-2 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-[#8b8cff] shadow-[0_0_14px_rgba(139,140,255,0.75)]" />
-                    )}
                     {unread && (
-                      <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-[#050507] bg-[#8b8cff]" />
+                      <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-[#050507] bg-[#fb923c]" />
                     )}
                     {workspace.remoteServer && (
                       <span
@@ -209,19 +218,27 @@ export function WorkspaceRail({
           })}
         </div>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <button
               type="button"
-              onClick={handleNewWorkspace}
-              className="mt-2 flex h-10 w-10 items-center justify-center rounded-[12px] border border-white/[0.06] bg-white/[0.035] text-white/45 transition-colors hover:border-white/15 hover:bg-white/[0.08] hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-white/[0.08] bg-transparent text-white/38 transition-colors hover:border-white/16 hover:bg-white/[0.035] hover:text-white/75"
               aria-label={t("workspace.addWorkspace")}
             >
-              <FolderPlus className="h-4 w-4" />
+              <FolderPlus className="h-3.5 w-3.5" />
             </button>
-          </TooltipTrigger>
-          <TooltipContent side="right">{t("workspace.addWorkspace")}</TooltipContent>
-        </Tooltip>
+          </DropdownMenuTrigger>
+          <StyledDropdownMenuContent side="top" align="start" sideOffset={8} minWidth="min-w-44">
+            <StyledDropdownMenuItem onClick={handleNewWorkspace}>
+              <FolderPlus className="h-3.5 w-3.5" />
+              {t("workspace.createNew")}
+            </StyledDropdownMenuItem>
+            <StyledDropdownMenuItem onClick={handleOpenWorkspace}>
+              <FolderOpen className="h-3.5 w-3.5" />
+              {t("workspace.openFolder")}
+            </StyledDropdownMenuItem>
+          </StyledDropdownMenuContent>
+        </DropdownMenu>
       </aside>
     </>
   )

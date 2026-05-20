@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
-import { CircleMinus, Pencil, Play, Plus, Trash2, Workflow as WorkflowIcon, Zap } from 'lucide-react'
+import { CircleMinus, History, Pencil, Play, Plus, Trash2, Workflow as WorkflowIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
@@ -115,23 +115,33 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_12%_0%,rgba(94,106,210,0.18),transparent_30%),#08080b]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_12%_0%,rgba(249,115,22,0.18),transparent_30%),#08080b]">
       <div className="flex items-center justify-between gap-4 border-b border-white/[0.06] px-8 py-7">
         <div className="min-w-0">
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-[#9da4ff]">
-            <Zap className="h-3.5 w-3.5" />
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-[#fdba74]">
+            <WorkflowIcon className="h-3 w-3" />
             Execution layer
           </div>
           <div className="flex items-center gap-3">
-            <WorkflowIcon className="h-6 w-6 text-[#8b8cff]" />
+            <WorkflowIcon className="h-6 w-6 text-[#fb923c]" />
             <h1 className="text-[28px] font-semibold leading-tight text-white">{t('sidebar.workflows')}</h1>
           </div>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-white/52">{t('workflows.list.subtitle')}</p>
         </div>
-        <Button size="sm" onClick={handleNew} className="rounded-[10px] bg-[#5e6ad2] text-white hover:bg-[#707cff]">
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          {t('workflows.list.new')}
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate(routes.view.recentRuns())}
+            className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-white/[0.07] bg-white/[0.035] px-2.5 text-[11px] font-medium text-white/52 transition-colors hover:bg-white/[0.07] hover:text-white/78"
+          >
+            <History className="h-3.5 w-3.5" />
+            {t('sidebar.workflows.recentRuns')}
+          </button>
+          <Button size="sm" onClick={handleNew} className="rounded-[10px] bg-[#f97316] text-white hover:bg-[#fb923c]">
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            {t('workflows.list.new')}
+          </Button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-8 py-7">
@@ -246,18 +256,19 @@ function WorkflowCard({
   onDeactivate: () => void
 }) {
   return (
-    <div className="group relative overflow-hidden rounded-[18px] border border-white/[0.075] bg-white/[0.035] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#8b8cff]/35 hover:bg-white/[0.06] hover:shadow-[0_18px_60px_rgba(0,0,0,0.32),0_0_34px_rgba(94,106,210,0.10)]">
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#8b8cff]/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-      <div className="flex items-start gap-3">
+    <div className="group relative overflow-hidden rounded-[14px] border border-white/[0.075] bg-white/[0.035] p-3 pr-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#fb923c]/35 hover:bg-white/[0.06] hover:shadow-[0_14px_42px_rgba(0,0,0,0.30),0_0_28px_rgba(249,115,22,0.10)]">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#fb923c]/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+      <div className="flex items-start gap-2">
         <button
           type="button"
           onClick={onOpen}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-white/[0.08] bg-white/[0.06] text-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.08] bg-gradient-to-br from-white/[0.10] to-white/[0.035] font-mono text-[8px] font-semibold uppercase tracking-[0.08em] text-[#fed7aa] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]"
+          aria-label={`Open ${workflow.metadata.name}`}
         >
-          {workflow.metadata.avatar?.trim() || <WorkflowIcon className="h-5 w-5 text-[#b8bcff]" />}
+          {getWorkflowInitials(workflow)}
         </button>
         <div className="min-w-0 flex-1">
-          <button type="button" onClick={onOpen} className="block max-w-full truncate text-left text-sm font-semibold text-white hover:text-[#cfd2ff]">
+          <button type="button" onClick={onOpen} className="block max-w-full truncate text-left text-sm font-semibold text-white hover:text-[#fed7aa]">
             {workflow.metadata.name}
           </button>
           <div className="mt-1 truncate font-mono text-[11px] text-white/30">{workflow.slug}</div>
@@ -267,9 +278,9 @@ function WorkflowCard({
         </span>
       </div>
 
-      <p className="mt-4 line-clamp-2 min-h-10 text-xs leading-5 text-white/50">{workflow.metadata.description}</p>
+      <p className="mt-3 line-clamp-2 min-h-10 text-xs leading-5 text-white/50">{workflow.metadata.description}</p>
 
-      <div className="mt-4 flex items-center justify-between gap-3">
+      <div className="mt-3 flex items-center justify-between gap-3">
         <div>{lastRun ? <RunStateDot state={lastRun.state} /> : <span className="text-xs text-white/30">No runs yet</span>}</div>
         <div className="flex items-center gap-1">
           {active ? (
@@ -278,7 +289,7 @@ function WorkflowCard({
               <IconAction label="Deactivate" onClick={onDeactivate}><CircleMinus className="h-3.5 w-3.5" /></IconAction>
             </>
           ) : (
-            <button type="button" onClick={onActivate} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-[#7c7cff]/25 bg-[#5e6ad2]/18 px-2.5 text-xs font-medium text-[#cfd2ff] hover:bg-[#5e6ad2]/26">
+            <button type="button" onClick={onActivate} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-[#fb923c]/25 bg-[#f97316]/18 px-2.5 text-xs font-medium text-[#fed7aa] hover:bg-[#f97316]/26">
               <Plus className="h-3.5 w-3.5" />
               Activate
             </button>
@@ -289,6 +300,18 @@ function WorkflowCard({
       </div>
     </div>
   )
+}
+
+function getWorkflowInitials(workflow: WorkflowDTO) {
+  const source = workflow.metadata.name || workflow.slug
+  return source
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || 'WF'
 }
 
 function IconAction({ label, onClick, danger, children }: { label: string; onClick: () => void; danger?: boolean; children: React.ReactNode }) {

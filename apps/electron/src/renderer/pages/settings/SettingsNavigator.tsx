@@ -18,7 +18,6 @@ import {
 } from '@/components/ui/styled-dropdown'
 import { DropdownMenuProvider } from '@/components/ui/menu-context'
 import { cn } from '@/lib/utils'
-import { Separator } from '@/components/ui/separator'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { SettingsSubpage } from '../../../shared/types'
 import { SETTINGS_ITEMS } from '../../../shared/menu-schema'
@@ -46,7 +45,6 @@ interface SettingsItem {
 interface SettingsItemRowProps {
   item: SettingsItem
   isSelected: boolean
-  isFirst: boolean
   onSelect: () => void
 }
 
@@ -54,7 +52,7 @@ interface SettingsItemRowProps {
  * SettingsItemRow - Individual settings item with dropdown menu
  * Tracks menu open state to keep "..." button visible when menu is open
  */
-function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRowProps) {
+function SettingsItemRow({ item, isSelected, onSelect }: SettingsItemRowProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const Icon = item.icon
@@ -65,66 +63,52 @@ function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRo
   }
 
   return (
-    <div className="settings-item" data-selected={isSelected || undefined}>
-      {/* Separator - only show if not first */}
-      {!isFirst && (
-        <div className="settings-separator pl-12 pr-4">
-          <Separator />
-        </div>
-      )}
-      {/* Wrapper for button with proper margins */}
-      <div className="settings-content relative group select-none pl-2 mr-2">
-        {/* Icon - positioned absolutely for consistent alignment */}
-        <div className="absolute left-[20px] top-[14px] z-10">
+    <div data-selected={isSelected || undefined}>
+      <div className="relative group select-none">
+        <div className="absolute left-[13px] top-[9px] z-10">
           <Icon
             className={cn(
-              'w-4 h-4 shrink-0',
-              isSelected ? 'text-foreground' : 'text-muted-foreground'
+              'w-3.5 h-3.5 shrink-0',
+              isSelected ? 'text-[#9b8cff]' : 'text-white/30'
             )}
           />
         </div>
-        {/* Main content button */}
         <button
           type="button"
           onClick={onSelect}
           className={cn(
-            'flex w-full items-start gap-2 pl-2 pr-4 py-3 text-left text-sm outline-none rounded-[8px]',
-            // Fast hover transition (75ms vs default 150ms)
-            'transition-[background-color] duration-75',
+            'flex w-full items-start gap-2 rounded-[11px] py-2 pl-9 pr-9 text-left outline-none',
+            'border transition-[background-color,border-color] duration-100',
             isSelected
-              ? 'bg-foreground/5 hover:bg-foreground/7'
-              : 'hover:bg-foreground/2'
+              ? 'border-white/[0.085] bg-white/[0.055]'
+              : 'border-transparent hover:border-white/[0.045] hover:bg-white/[0.03]'
           )}
         >
-          {/* Spacer for icon */}
-          <div className="w-6 h-5 shrink-0" />
-          {/* Content column */}
           <div className="flex flex-col min-w-0 flex-1">
             <span
               className={cn(
-                'font-medium',
-                isSelected ? 'text-foreground' : 'text-foreground/80'
+                'text-[12.5px] font-medium leading-4',
+                isSelected ? 'text-white/86' : 'text-white/58'
               )}
             >
               {item.label}
             </span>
-            <span className="text-xs text-foreground/60 line-clamp-1">
+            <span className="mt-0.5 line-clamp-1 text-[10.5px] leading-3 text-white/28">
               {item.description}
             </span>
           </div>
         </button>
-        {/* Action buttons - visible on hover or when menu is open */}
         <div
           className={cn(
-            'absolute right-2 top-2 transition-opacity z-10',
+            'absolute right-1.5 top-1.5 transition-opacity z-10',
             menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
           )}
         >
-          <div className="flex items-center rounded-[8px] overflow-hidden border border-transparent hover:border-border/50">
+          <div className="flex items-center rounded-[8px] overflow-hidden border border-transparent hover:border-white/[0.06]">
             <DropdownMenu modal={true} onOpenChange={setMenuOpen}>
               <DropdownMenuTrigger asChild>
-                <div className="p-1.5 hover:bg-foreground/10 data-[state=open]:bg-foreground/10 cursor-pointer">
-                  <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                <div className="p-1.5 hover:bg-white/[0.06] data-[state=open]:bg-white/[0.06] cursor-pointer">
+                  <MoreHorizontal className="h-3.5 w-3.5 text-white/36" />
                 </div>
               </DropdownMenuTrigger>
               <StyledDropdownMenuContent align="end">
@@ -162,13 +146,12 @@ export default function SettingsNavigator({
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
-        <div className="pt-2">
-          {settingsItems.map((item, index) => (
+        <div className="space-y-1 px-2 pt-5">
+          {settingsItems.map((item) => (
             <SettingsItemRow
               key={item.id}
               item={item}
               isSelected={selectedSubpage === item.id}
-              isFirst={index === 0}
               onSelect={() => onSelectSubpage(item.id)}
             />
           ))}

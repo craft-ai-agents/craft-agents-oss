@@ -18,7 +18,7 @@ export { type SessionStatusId, type SessionStatus, getStateIcon, getStateColor }
 // Shared Styles (matching slash-command-menu)
 // ============================================================================
 
-const MENU_CONTAINER_STYLE = 'min-w-[180px] overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small'
+const MENU_CONTAINER_STYLE = 'min-w-[180px] overflow-hidden rounded-[12px] border border-white/[0.08] bg-[#0a0a0c]/95 text-white/78 shadow-[0_24px_70px_rgba(0,0,0,0.48)]'
 const MENU_LIST_STYLE = 'max-h-[240px] overflow-y-auto p-1 [&_[cmdk-list-sizer]]:space-y-px'
 const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-3 rounded-[6px] px-3 py-1.5 text-[13px]'
 
@@ -87,17 +87,17 @@ export function SessionStatusMenu({
       className={cn(MENU_CONTAINER_STYLE, className)}
       defaultValue={defaultValue}
     >
-      <div className="border-b border-border/50 px-3 py-2">
+      <div className="border-b border-white/[0.06] px-3 py-2">
         <CommandPrimitive.Input
           ref={inputRef}
           value={filter}
           onValueChange={setFilter}
           placeholder={t("status.filterStatuses")}
-          className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+          className="w-full bg-transparent text-sm text-white/78 outline-none placeholder:text-white/28"
         />
       </div>
       <CommandPrimitive.List className={MENU_LIST_STYLE}>
-        <CommandPrimitive.Empty className="py-3 text-center text-sm text-muted-foreground">
+        <CommandPrimitive.Empty className="py-3 text-center text-sm text-white/38">
           No status found
         </CommandPrimitive.Empty>
         {states.map((state) => {
@@ -110,7 +110,7 @@ export function SessionStatusMenu({
               className={cn(
                 MENU_ITEM_STYLE,
                 'outline-none',
-                isActive ? 'bg-foreground/7' : 'data-[selected=true]:bg-foreground/3'
+                isActive ? 'bg-white/[0.08] text-white' : 'data-[selected=true]:bg-white/[0.045]'
               )}
             >
               <StateItemContent state={state} />

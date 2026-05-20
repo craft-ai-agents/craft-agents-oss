@@ -405,10 +405,9 @@ function FilesPopoverButton({ sessionId, sessionFolderPath }: { sessionId?: stri
           type="button"
           className={cn(
             "h-[30px] pl-[12px] pr-[14px] text-xs font-medium rounded-[8px] flex items-center gap-1.5 shrink-0",
-            "outline-none select-none transition-colors shadow-minimal",
-            "hover:bg-foreground/5 data-[state=open]:bg-foreground/5",
-            "bg-[color-mix(in_srgb,var(--background)_97%,var(--foreground)_3%)]",
-            "text-foreground/80",
+            "outline-none select-none transition-colors",
+            "border border-white/[0.08] bg-white/[0.045] text-white/64 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+            "hover:bg-white/[0.08] hover:text-white data-[state=open]:bg-white/[0.08] data-[state=open]:text-white",
           )}
         >
           <Info className="h-3.5 w-3.5 shrink-0" />
@@ -455,18 +454,18 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
   // Mode-specific styling using CSS variables (theme-aware)
   // - safe (Explore): foreground at 60% opacity - subtle, read-only feel
   // - ask (Ask to Edit): info color - amber, prompts for edits
-  // - allow-all (Auto): accent color - purple, full autonomy
+  // - allow-all (Auto): accent color - orange, full autonomy
   const modeStyles: Record<PermissionMode, { className: string; shadowVar: string }> = {
     'safe': {
-      className: 'bg-foreground/5 text-foreground/60',
+      className: 'border border-white/[0.08] bg-white/[0.045] text-white/64 hover:bg-white/[0.08] hover:text-white',
       shadowVar: 'var(--foreground-rgb)',
     },
     'ask': {
-      className: 'bg-info/10 text-info',
+      className: 'border border-[#fb923c]/25 bg-[#fb923c]/12 text-[#fed7aa] hover:bg-[#fb923c]/18 hover:text-white',
       shadowVar: 'var(--info-rgb)',
     },
     'allow-all': {
-      className: 'bg-accent/5 text-accent',
+      className: 'border border-[#fb923c]/28 bg-[#fb923c]/14 text-[#fed7aa] hover:bg-[#fb923c]/20 hover:text-white',
       shadowVar: 'var(--accent-rgb)',
     },
   }
@@ -515,4 +514,3 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
     </Popover>
   )
 }
-

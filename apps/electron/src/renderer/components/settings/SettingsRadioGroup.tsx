@@ -67,13 +67,13 @@ export function SettingsRadioGroup<T extends string = string>({
       <div
         role="radiogroup"
         className={cn(
-          'rounded-xl bg-background shadow-minimal overflow-hidden',
+          'overflow-hidden rounded-[14px] border border-white/[0.075] bg-[#0b0b0d]/95 shadow-[0_22px_55px_rgba(0,0,0,0.26)]',
           className
         )}
       >
         {childArray.map((child, index) => (
           <React.Fragment key={index}>
-            {index > 0 && <div className="h-px bg-border/50 mx-4" />}
+            {index > 0 && <div className="h-px bg-white/[0.055] mx-4" />}
             {child}
           </React.Fragment>
         ))}
@@ -148,8 +148,8 @@ export function SettingsRadioCard({
     <div
       className={cn(
         'overflow-hidden transition-colors',
-        needsCardStyling && 'rounded-xl shadow-minimal bg-background',
-        !disabled && 'hover:bg-foreground-3',
+        needsCardStyling && 'rounded-[14px] border border-white/[0.075] bg-[#0b0b0d]/95 shadow-minimal',
+        !disabled && 'hover:bg-white/[0.035]',
         disabled && 'opacity-50 cursor-not-allowed',
         className
       )}
@@ -162,7 +162,7 @@ export function SettingsRadioCard({
         disabled={disabled}
         onClick={() => !disabled && handleClick?.()}
         className={cn(
-          'w-full px-4 py-3.5 text-left flex items-start gap-3',
+          'w-full px-4 py-3 text-left flex items-start gap-3',
           !disabled && 'cursor-pointer'
         )}
       >
@@ -172,12 +172,12 @@ export function SettingsRadioCard({
             'w-4 h-4 rounded-full border-[1.5px] mt-[3px] shrink-0',
             'grid place-items-center transition-colors',
             isSelected
-              ? 'border-foreground bg-foreground'
-              : 'border-muted-foreground/40'
+              ? 'border-[#fb923c] bg-[#fb923c]'
+              : 'border-white/24'
           )}
         >
           {isSelected && (
-            <div className="w-2 h-2 rounded-full bg-background" />
+            <div className="w-2 h-2 rounded-full bg-white" />
           )}
         </div>
 
@@ -265,7 +265,7 @@ export function SettingsRadioOption({
       onClick={() => !disabled && onValueChange(value)}
       className={cn(
         'w-full px-4 py-3 text-left flex items-center gap-3',
-        'hover:bg-muted/50 transition-colors',
+        'hover:bg-white/[0.04] transition-colors',
         disabled && 'opacity-50 cursor-not-allowed',
         !disabled && 'cursor-pointer',
         className
@@ -277,20 +277,20 @@ export function SettingsRadioOption({
           'w-4 h-4 rounded-full border-[1.5px] shrink-0',
           'grid place-items-center transition-colors',
           isSelected
-            ? 'border-foreground bg-foreground'
-            : 'border-muted-foreground/40'
+            ? 'border-[#fb923c] bg-[#fb923c]'
+            : 'border-white/24'
         )}
       >
         {isSelected && (
-          <div className="w-2 h-2 rounded-full bg-background" />
+          <div className="w-2 h-2 rounded-full bg-white" />
         )}
       </div>
 
       {/* Label */}
       <div className="flex-1 min-w-0 flex items-center">
-        <span className="text-sm">{label}</span>
+        <span className="text-[13px] text-white/80">{label}</span>
         {description && (
-          <span className="text-sm text-muted-foreground ml-1.5">
+          <span className="text-[12px] text-white/38 ml-1.5">
             · {description}
           </span>
         )}

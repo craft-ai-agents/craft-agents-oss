@@ -28,9 +28,10 @@ interface SkillInfoPageProps {
   skillSlug: string
   workspaceId: string
   workingDirectory?: string
+  onClose?: () => void
 }
 
-export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory }: SkillInfoPageProps) {
+export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory, onClose }: SkillInfoPageProps) {
   const { t } = useTranslation()
   const [skill, setSkill] = useState<LoadedSkill | null>(null)
   const [loading, setLoading] = useState(true)
@@ -144,6 +145,29 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
     >
       <Info_Page.Header
         title={skillName}
+        actions={onClose ? (
+          <button
+            type="button"
+            aria-label="Close skill detail"
+            onPointerDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onClose()
+            }}
+            onMouseDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onClose()
+            }}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-white/[0.10] bg-white/[0.04] text-white/58 transition-colors hover:bg-white/[0.09] hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : undefined}
         titleMenu={
           <SkillMenu
             skillSlug={skillSlug}

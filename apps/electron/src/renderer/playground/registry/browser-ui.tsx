@@ -954,7 +954,7 @@ export const browserUiComponents: ComponentEntry[] = [
             { label: 'GitHub Dark (#24292e)', value: '#1e2327' },
             { label: 'Stripe Purple (#635bff)', value: '#635bff' },
             { label: 'Slack (#4a154b)', value: '#4a154b' },
-            { label: 'Linear (#5e6ad2)', value: 'lch(96.667% 0 282.863 / 1)' },
+            { label: 'Linear (#f97316)', value: 'lch(96.667% 0 282.863 / 1)' },
             { label: 'Twitter/X (#15202b)', value: '#15202b' },
             { label: 'YouTube Red (#ff0000)', value: '#ff0000' },
             { label: 'Light Gray (#f5f5f5)', value: '#f5f5f5' },

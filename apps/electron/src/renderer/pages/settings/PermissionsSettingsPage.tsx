@@ -207,8 +207,8 @@ export default function PermissionsSettingsPage() {
       <PanelHeader title={t("settings.permissions.title")} actions={<HeaderMenu route={routes.view.settings('permissions')} helpFeature="permissions" />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
-          <div className="px-5 py-7 max-w-3xl mx-auto">
-            <div className="space-y-8">
+          <div className="px-6 pt-24 pb-8 max-w-[760px] mx-auto">
+            <div className="space-y-6">
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />

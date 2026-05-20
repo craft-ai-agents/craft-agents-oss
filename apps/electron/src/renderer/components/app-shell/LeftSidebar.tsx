@@ -486,13 +486,12 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
         onClick={isOverlay ? undefined : (link.onClick ?? (link.expandable ? link.onToggle : undefined))}
         data-tutorial={link.dataTutorial}
         className={cn(
-          "group flex w-full items-center gap-2 rounded-[10px] text-[13px] select-none outline-none",
+          "group flex w-full items-center gap-1.5 rounded-[9px] text-[12px] select-none outline-none",
           "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
-          // Compact mode: 4px less total height (py-[3px] vs py-[5px])
-          link.compact ? "py-[5px]" : "py-[9px]",
-          "px-3 font-medium tracking-[0.01em]",
+          link.compact ? "py-[4px]" : "py-[6px]",
+          "px-2.5 font-medium tracking-[0.01em]",
           link.variant === "default"
-            ? "border border-[#7c7cff]/25 bg-white/[0.075] text-white shadow-[0_0_22px_rgba(94,106,210,0.16)]"
+            ? "border border-[#fb923c]/25 bg-white/[0.075] text-white shadow-[0_0_22px_rgba(249,115,22,0.16)]"
             // Highlight on hover, context menu open (data-state), or EditPopover active (data-edit-active)
             : "text-white/70 hover:bg-white/[0.055] hover:text-white data-[state=open]:bg-white/[0.055] data-[edit-active=true]:bg-white/[0.055]",
           extraClassName,

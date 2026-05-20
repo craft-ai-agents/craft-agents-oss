@@ -1479,8 +1479,6 @@ function BranchDropdown({ onBranch }: BranchDropdownProps) {
   )
 }
 
-const MAX_HEIGHT = 540
-
 function clearAnnotationMarks(root: HTMLElement): void {
   const annotatedInlineCodeNodes = root.querySelectorAll<HTMLElement>('code[data-ca-annotation-inline-code="true"]')
   annotatedInlineCodeNodes.forEach((codeNode) => {
@@ -1684,8 +1682,6 @@ export function ResponseCard({
   const [copied, setCopied] = useState(false)
   // Fullscreen state
   const [isFullscreen, setIsFullscreen] = useState(false)
-  // Dark mode detection - scroll fade only shown in dark mode
-  const [isDarkMode, setIsDarkMode] = useState(false)
   // Pending text selection waiting for explicit follow-up action
   const interaction = useAnnotationInteractionController()
   const {
@@ -1725,19 +1721,6 @@ export function ResponseCard({
     isStreaming,
   })
   const allowAnnotationIsland = annotationInteractionMode === 'interactive'
-
-  // Detect dark mode from document class and listen for changes
-  useEffect(() => {
-    const checkDarkMode = () => {
-      setIsDarkMode(document.documentElement.classList.contains('dark'))
-    }
-    checkDarkMode()
-
-    // Observe class changes on documentElement for theme switches
-    const observer = new MutationObserver(checkDarkMode)
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-    return () => observer.disconnect()
-  }, [])
 
   const closeSelectionMenu = useCallback(() => {
     closeAll()
@@ -2427,7 +2410,7 @@ export function ResponseCard({
 
     return (
       <>
-        <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden relative group">
+        <div className="overflow-hidden rounded-[14px] border border-white/[0.07] bg-[#101013]/92 text-white/78 shadow-[0_18px_46px_rgba(0,0,0,0.28)] relative group">
           {/* Fullscreen button - desktop only; compact mode keeps message chrome minimal */}
           {!compactMode && (
           <button
@@ -2435,8 +2418,8 @@ export function ResponseCard({
             className={cn(
               "absolute top-2 right-2 p-1 rounded-[6px] transition-all z-10 select-none",
               "opacity-0 group-hover:opacity-100",
-              "bg-background shadow-minimal",
-              "text-muted-foreground/50 hover:text-foreground",
+              "border border-white/[0.08] bg-white/[0.055]",
+              "text-white/42 hover:bg-white/[0.10] hover:text-white/84",
               "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
             )}
             title={t('common.viewFullscreen')}
@@ -2458,21 +2441,13 @@ export function ResponseCard({
             </div>
           )}
 
-          {/* Scrollable content area with subtle fade at edges (dark mode only) */}
+          {/* Let the conversation own scrolling; nested response scroll traps feel broken on long answers. */}
           <div
             ref={contentRef}
             data-search-root="response"
             onMouseDown={handleSelectionPointerDown}
             onMouseUp={handleTextSelection}
-            className="pl-[22px] pr-[16px] py-3 text-sm overflow-y-auto scrollbar-hover"
-            style={{
-              maxHeight: MAX_HEIGHT,
-              // Subtle fade at top and bottom edges (16px) - only in dark mode for better contrast
-              ...(isDarkMode && {
-                maskImage: 'linear-gradient(to bottom, transparent 0%, black 16px, black calc(100% - 16px), transparent 100%)',
-                WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 16px, black calc(100% - 16px), transparent 100%)',
-              }),
-            }}
+            className="runner-chat-response pl-[22px] pr-[16px] py-3 text-sm text-white/78"
           >
             <div ref={contentLayerRef} className="relative">
               <Markdown
@@ -2489,7 +2464,7 @@ export function ResponseCard({
           {/* Footer with actions - hidden in compact mode */}
           {!compactMode && (
             <div className={cn(
-              "pl-4 pr-2.5 py-2 border-t border-border/30 flex items-center justify-between bg-muted/20",
+              "pl-4 pr-2.5 py-2 border-t border-white/[0.06] flex items-center justify-between bg-white/[0.025]",
               SIZE_CONFIG.fontSize
             )}>
               {/* Left side - Copy, View as Markdown, Annotation hint */}
@@ -2501,8 +2476,8 @@ export function ResponseCard({
                   title={copied ? t("common.copied") : t("common.copy")}
                   className={cn(
                     "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors select-none",
-                    copied ? "text-success" : "text-muted-foreground hover:text-foreground",
-                    "hover:bg-foreground/5 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    copied ? "text-success" : "text-white/42 hover:text-white/84",
+                    "hover:bg-white/[0.07] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   )}
                 >
                   {copied ? (
@@ -2519,8 +2494,8 @@ export function ResponseCard({
                     title="View as Markdown"
                     className={cn(
                       "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors select-none",
-                      "text-muted-foreground hover:text-foreground",
-                      "hover:bg-foreground/5 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      "text-white/42 hover:text-white/84",
+                      "hover:bg-white/[0.07] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     )}
                   >
                     <FileText className={SIZE_CONFIG.iconSize} />
@@ -2536,7 +2511,7 @@ export function ResponseCard({
                     onClick={responseAction.onClick}
                     className={cn(
                       "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
-                      "text-muted-foreground hover:text-foreground",
+                      "text-white/46 hover:text-white/84",
                       "focus:outline-none focus-visible:underline"
                     )}
                   >
@@ -2594,23 +2569,14 @@ export function ResponseCard({
   // Streaming response - show throttled content with spinner
   return (
     <>
-      <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden group">
-        {/* Content area - uses displayedText (throttled) for performance */}
-        {/* Subtle fade at top and bottom edges (dark mode only) */}
+      <div className="overflow-hidden rounded-[14px] border border-white/[0.07] bg-[#101013]/92 text-white/78 shadow-[0_18px_46px_rgba(0,0,0,0.28)] group">
+        {/* Content area - uses displayedText (throttled) for performance. Outer chat owns scrolling. */}
         <div
           ref={contentRef}
           data-search-root="response"
           onMouseDown={handleSelectionPointerDown}
           onMouseUp={handleTextSelection}
-          className="pl-[22px] pr-4 py-3 text-sm overflow-y-auto scrollbar-hover"
-          style={{
-            maxHeight: MAX_HEIGHT,
-            // Subtle fade at top and bottom edges (16px) - only in dark mode for better contrast
-            ...(isDarkMode && {
-              maskImage: 'linear-gradient(to bottom, transparent 0%, black 16px, black calc(100% - 16px), transparent 100%)',
-              WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 16px, black calc(100% - 16px), transparent 100%)',
-            }),
-          }}
+          className="runner-chat-response pl-[22px] pr-4 py-3 text-sm text-white/78"
         >
           <div ref={contentLayerRef} className="relative">
             <Markdown
@@ -2626,8 +2592,8 @@ export function ResponseCard({
 
         {/* Footer - hidden in compact mode */}
         {!compactMode && (
-          <div className={cn("px-4 py-2 border-t border-border/30 flex items-center bg-muted/20", SIZE_CONFIG.fontSize)}>
-            <div className="flex items-center gap-2 text-muted-foreground">
+          <div className={cn("px-4 py-2 border-t border-white/[0.06] flex items-center bg-white/[0.025]", SIZE_CONFIG.fontSize)}>
+            <div className="flex items-center gap-2 text-white/42">
               <Spinner className={SIZE_CONFIG.spinnerSize} />
               <span>Streaming...</span>
             </div>
@@ -2643,7 +2609,7 @@ export function ResponseCard({
 // TodoList Component (for TodoWrite tool visualization)
 // ============================================================================
 
-/** Status icon for a todo item - uses purple filled icon for completed */
+/** Status icon for a todo item - uses orange filled icon for completed */
 function TodoStatusIcon({ status }: { status: TodoStatus }) {
   switch (status) {
     case 'pending':
