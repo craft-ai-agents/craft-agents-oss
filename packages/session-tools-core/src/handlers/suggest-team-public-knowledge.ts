@@ -8,7 +8,7 @@ import {
   type TeamKnowledgeStaleReason,
 } from '../../../shared/src/team-public-knowledge/entry-resolution.ts';
 import {
-  analyzeTeamKnowledgeText,
+  analyzeTeamKnowledgeEntry,
   createTeamKnowledgeExcerpt,
   type TeamKnowledgeSafety,
 } from '../../../shared/src/team-public-knowledge/safety.ts';
@@ -272,7 +272,7 @@ function toSuggestionItem(
 ): SuggestionItem {
   const staleReason = getMarkdownEntryStaleReason(score.entry, staleDocIds, ttlExpiredDocIds);
   const conflictReason = conflictTerms.get(entryKey(score.entry));
-  const safety = analyzeTeamKnowledgeText([score.entry.summary, score.entry.content].filter(Boolean).join('\n\n'));
+  const safety = analyzeTeamKnowledgeEntry(score.entry);
   return {
     id: score.entry.metadata.id ?? score.entry.sourceDocId ?? '',
     kind: score.entry.kind,

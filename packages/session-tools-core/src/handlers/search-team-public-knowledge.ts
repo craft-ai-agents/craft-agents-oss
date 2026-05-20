@@ -8,7 +8,7 @@ import {
   type TeamKnowledgeStaleReason,
 } from '../../../shared/src/team-public-knowledge/entry-resolution.ts';
 import {
-  analyzeTeamKnowledgeText,
+  analyzeTeamKnowledgeEntry,
   createTeamKnowledgeExcerpt,
   type TeamKnowledgeSafety,
 } from '../../../shared/src/team-public-knowledge/safety.ts';
@@ -203,7 +203,7 @@ export async function handleSearchTeamPublicKnowledge(
   const results: SearchResultItem[] = pageItems.map(s => {
     const staleReason = getMarkdownEntryStaleReason(s.entry, staleDocIds, ttlExpiredDocIds);
     const conflictReason = conflictTerms.get(entryKey(s.entry));
-    const safety = analyzeTeamKnowledgeText([s.entry.summary, s.entry.content].filter(Boolean).join('\n\n'));
+    const safety = analyzeTeamKnowledgeEntry(s.entry);
     return {
       id: s.entry.metadata.id ?? s.entry.sourceDocId ?? '',
       kind: s.entry.kind,

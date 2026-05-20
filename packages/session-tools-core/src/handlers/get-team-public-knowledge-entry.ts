@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { parseMarkdownEntries, type MarkdownEntry } from '../../../shared/src/markdown-entry-parser/index.ts';
 import {
-  analyzeTeamKnowledgeText,
+  analyzeTeamKnowledgeEntry,
   createTeamKnowledgeExcerpt,
 } from '../../../shared/src/team-public-knowledge/safety.ts';
 import type { SessionToolContext } from '../context.ts';
@@ -127,7 +127,7 @@ export async function handleGetTeamPublicKnowledgeEntry(
   if (truncated) {
     content = content.slice(0, MAX_CONTENT_LENGTH) + '\n... [truncated]';
   }
-  const safety = analyzeTeamKnowledgeText([entry.summary, entry.content].filter(Boolean).join('\n\n'));
+  const safety = analyzeTeamKnowledgeEntry(entry);
 
   const relatedIds = findRelatedIds(allEntries, entry);
 

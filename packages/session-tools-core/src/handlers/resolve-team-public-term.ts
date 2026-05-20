@@ -8,7 +8,7 @@ import {
   type TeamKnowledgeStaleReason,
 } from '../../../shared/src/team-public-knowledge/entry-resolution.ts';
 import {
-  analyzeTeamKnowledgeText,
+  analyzeTeamKnowledgeEntry,
   createTeamKnowledgeExcerpt,
   type TeamKnowledgeSafety,
 } from '../../../shared/src/team-public-knowledge/safety.ts';
@@ -143,7 +143,7 @@ function buildTermMatch(
   ttlExpiredDocIds: Set<string> = new Set(),
 ): TermMatch {
   const staleReason = getMarkdownEntryStaleReason(entry, staleDocIds, ttlExpiredDocIds);
-  const safety = analyzeTeamKnowledgeText([entry.summary, entry.content].filter(Boolean).join('\n\n'));
+  const safety = analyzeTeamKnowledgeEntry(entry);
   return {
     id: entry.metadata.id ?? entry.sourceDocId ?? '',
     kind: entry.kind,
