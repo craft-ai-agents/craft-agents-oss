@@ -6,7 +6,7 @@ import type { HandlerDeps } from '../handler-deps'
 
 const testBackendConnection = mock(async () => ({ success: true }))
 
-const { registerLlmConnectionsHandlers } = await import('./llm-connections')
+const { registerLlmConnectionsHandlersWithRuntime } = await import('./llm-connections')
 
 function createServer() {
   const handlers = new Map<string, HandlerFn>()
@@ -70,7 +70,7 @@ describe('Environment LLM connection TEST handler', () => {
 
   it('validates env-provider from process env and the active SSO token', async () => {
     const { server, handlers } = createServer()
-    registerLlmConnectionsHandlers(server, deps(), {
+    registerLlmConnectionsHandlersWithRuntime(server, deps(), {
       testBackendConnection,
       loadSsoSession: async () => ({
         token: 'active-sso-token',

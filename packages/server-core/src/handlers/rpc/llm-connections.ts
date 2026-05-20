@@ -1,7 +1,7 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, getEnvConnectionMidStreamBehavior, setEnvConnectionMidStreamBehavior, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, synthesizeEnvConnection, ENV_CONNECTION_SLUG, type EnvConnectionEnv, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, getEnvConnectionMidStreamBehavior, setEnvConnectionMidStreamBehavior, isMidStreamBehavior, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, synthesizeEnvConnection, ENV_CONNECTION_SLUG, type EnvConnectionEnv, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { SsoCredentialStore } from '@craft-agent/shared/auth'
+import { SsoCredentialStore, type SsoSession } from '@craft-agent/shared/auth'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
 import {
   resolveSetupTestConnectionHint,
@@ -70,13 +70,26 @@ function getCurrentEnvConnectionEnv(): EnvConnectionEnv {
   }
 }
 
-interface LlmConnectionsHandlerOverrides {
-  testBackendConnection?: typeof testBackendConnection
-  loadSsoSession?: () => Promise<{ token?: string; expiresAt: number } | null>
+/** Runtime dependencies used by LLM connection handlers at process boundaries. */
+export interface LlmConnectionsRuntimeDeps {
+  testBackendConnection: typeof testBackendConnection
+  loadSsoSession: () => Promise<Pick<SsoSession, 'token' | 'expiresAt'> | null>
 }
 
 /** Register renderer-facing RPC handlers for LLM connection setup and management. */
-export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerDeps, overrides: LlmConnectionsHandlerOverrides = {}): void {
+export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerDeps): void {
+  registerLlmConnectionsHandlersWithRuntime(server, deps, {
+    testBackendConnection,
+    loadSsoSession: () => new SsoCredentialStore().load(),
+  })
+}
+
+/** Register LLM connection handlers with explicit runtime dependencies. */
+export function registerLlmConnectionsHandlersWithRuntime(
+  server: RpcServer,
+  deps: HandlerDeps,
+  runtimeDeps: LlmConnectionsRuntimeDeps,
+): void {
   const { sessionManager } = deps
 
   // Unified handler for LLM connection setup
@@ -517,9 +530,9 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     }
   })
 
-  server.handle(RPC_CHANNELS.llmConnections.SET_ENV_MID_STREAM_BEHAVIOR, async (_ctx, behavior: string): Promise<{ success: boolean; error?: string }> => {
+  server.handle(RPC_CHANNELS.llmConnections.SET_ENV_MID_STREAM_BEHAVIOR, async (_ctx, behavior: unknown): Promise<{ success: boolean; error?: string }> => {
     try {
-      if (behavior !== 'steer' && behavior !== 'queue') {
+      if (!isMidStreamBehavior(behavior)) {
         return { success: false, error: `Invalid mid-stream behavior: ${behavior}. Valid values: 'steer', 'queue'` }
       }
       const success = setEnvConnectionMidStreamBehavior(behavior)
@@ -570,13 +583,12 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
           return { success: false, error: 'Connection not found' }
         }
 
-        const ssoSession = await (overrides.loadSsoSession ?? (() => new SsoCredentialStore().load()))()
+        const ssoSession = await runtimeDeps.loadSsoSession()
         if (!ssoSession?.token || ssoSession.expiresAt <= Date.now()) {
           return { success: false, error: 'No active SSO session configured' }
         }
 
-        const runTestBackendConnection = overrides.testBackendConnection ?? testBackendConnection
-        const result = await runTestBackendConnection({
+        const result = await runtimeDeps.testBackendConnection({
           provider: 'pi',
           apiKey: ssoSession.token,
           model: envConnection.defaultModel ?? '',

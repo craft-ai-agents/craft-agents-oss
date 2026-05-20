@@ -130,10 +130,16 @@ export type MidStreamBehavior = 'steer' | 'queue';
 type EnvConnectionMidStreamBehaviorResolver = () => MidStreamBehavior | undefined;
 let envConnectionMidStreamBehaviorResolver: EnvConnectionMidStreamBehaviorResolver = () => undefined;
 
+/** Register the app-level preference resolver used by Environment connections. */
 export function registerEnvConnectionMidStreamBehaviorResolver(
   resolver: EnvConnectionMidStreamBehaviorResolver,
 ): void {
   envConnectionMidStreamBehaviorResolver = resolver;
+}
+
+/** Return true when a value is a valid mid-stream behavior. */
+export function isMidStreamBehavior(value: unknown): value is MidStreamBehavior {
+  return value === 'steer' || value === 'queue';
 }
 
 /**
@@ -545,11 +551,11 @@ export function resolveMidStreamBehavior(
 ): MidStreamBehavior {
   if (connection.isEnvironmentConnection === true) {
     const appPreference = envConnectionMidStreamBehaviorResolver();
-    if (appPreference === 'steer' || appPreference === 'queue') {
+    if (isMidStreamBehavior(appPreference)) {
       return appPreference;
     }
   }
-  if (connection.midStreamBehavior === 'steer' || connection.midStreamBehavior === 'queue') {
+  if (isMidStreamBehavior(connection.midStreamBehavior)) {
     return connection.midStreamBehavior;
   }
   return defaultMidStreamBehavior(connection.providerType);

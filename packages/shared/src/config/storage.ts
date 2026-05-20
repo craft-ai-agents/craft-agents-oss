@@ -42,7 +42,7 @@ import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
 import type { LlmConnection, MidStreamBehavior } from './llm-connections.ts';
-import { ENV_CONNECTION_SLUG, defaultMidStreamBehavior, isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, registerEnvConnectionMidStreamBehaviorResolver, synthesizeEnvConnection, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
+import { ENV_CONNECTION_SLUG, defaultMidStreamBehavior, isMidStreamBehavior, isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, registerEnvConnectionMidStreamBehaviorResolver, synthesizeEnvConnection, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
 import {
   getModelProvider,
   getModelById,
@@ -501,10 +501,6 @@ export function setEnable1MContext(enabled: boolean): void {
   if (!config) return;
   config.enable1MContext = enabled;
   saveConfig(config);
-}
-
-function isMidStreamBehavior(value: unknown): value is MidStreamBehavior {
-  return value === 'steer' || value === 'queue';
 }
 
 /**
