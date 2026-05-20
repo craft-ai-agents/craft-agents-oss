@@ -17,6 +17,20 @@ function copyNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
+function getExportSummary(type: string, ref: DynamicContextRefLike): string | undefined {
+  switch (type) {
+    case 'user_profile':
+      return USER_PROFILE_EXPORT_SUMMARY
+    case 'team_public_knowledge':
+      return TEAM_KNOWLEDGE_EXPORT_SUMMARY
+    default:
+      return copyString(ref.summary)
+  }
+}
+
+/**
+ * Redacts a stored dynamic context reference for external exports and shares.
+ */
 export function redactDynamicContextRefForExternal(ref: unknown): StoredMessage['dynamicContextRef'] | undefined {
   if (!isRecord(ref)) return undefined
 
@@ -29,18 +43,15 @@ export function redactDynamicContextRefForExternal(ref: unknown): StoredMessage[
   if (status) redacted.status = status
   if (fetchedAt !== undefined) redacted.fetchedAt = fetchedAt
 
-  if (type === 'user_profile') {
-    redacted.summary = USER_PROFILE_EXPORT_SUMMARY
-  } else if (type === 'team_public_knowledge') {
-    redacted.summary = TEAM_KNOWLEDGE_EXPORT_SUMMARY
-  } else {
-    const summary = copyString(ref.summary)
-    if (summary) redacted.summary = summary
-  }
+  const summary = getExportSummary(type, ref)
+  if (summary) redacted.summary = summary
 
   return redacted
 }
 
+/**
+ * Returns a copy of a stored message with dynamic context details removed.
+ */
 export function redactMessageDynamicContextForExternal(message: StoredMessage): StoredMessage {
   if (!('dynamicContextRef' in message)) return message
 
@@ -54,6 +65,9 @@ export function redactMessageDynamicContextForExternal(message: StoredMessage): 
   return redactedMessage
 }
 
+/**
+ * Returns a copy of a stored session suitable for external viewers or bundles.
+ */
 export function redactStoredSessionForExternal(session: StoredSession): StoredSession {
   return {
     ...session,
