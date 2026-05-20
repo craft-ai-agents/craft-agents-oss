@@ -95,6 +95,7 @@ mock.module('@craft-agent/shared/config', () => ({
   OPENLLM_PI_AUTH_PROVIDER: 'anthropic',
   OPENLLM_CUSTOM_ENDPOINT: { api: 'anthropic-messages' },
   buildOpenLlmBaseUrl: (modelName: string) => `https://openllm.test/llm/${encodeURIComponent(modelName)}/v1`,
+  buildRuntimeCustomModels: (models: any[] | undefined) => models,
   ENV_CONNECTION_SLUG: 'env-provider',
   ENV_CONNECTION_SSO_TOKEN_ENV_VAR: 'CRAFT_LLM_SSO_TOKEN',
   ENV_CONNECTION_SSO_BASE_URL_ENV_VAR: 'CRAFT_LLM_SSO_BASE_URL',
