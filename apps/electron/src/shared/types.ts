@@ -514,6 +514,9 @@ export interface ElectronAPI {
   // Generic workspace image loading/saving
   readWorkspaceImage(workspaceId: string, relativePath: string): Promise<string>
   writeWorkspaceImage(workspaceId: string, relativePath: string, base64: string, mimeType: string): Promise<void>
+  getChatFeedbackState(workspaceId: string): Promise<import('@craft-agent/shared/workspaces').ChatFeedbackStateEntry[]>
+  setChatFeedbackState(workspaceId: string, sessionId: string, messageId: string, isLike: boolean): Promise<void>
+  deleteChatFeedbackState(workspaceId: string, sessionId: string, messageId: string): Promise<void>
 
   // Tool icon mappings
   getToolIconMappings(): Promise<ToolIconMapping[]>
@@ -884,6 +887,20 @@ export interface ArchivedNavigationState {
 }
 
 /**
+ * Admin subpage types
+ */
+export type AdminSubpage = 'permission' | 'feedback'
+
+/**
+ * Admin navigation state
+ */
+export interface AdminNavigationState {
+  navigator: 'admin'
+  subpage: AdminSubpage | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state
  */
 export type NavigationState =
@@ -894,6 +911,7 @@ export type NavigationState =
   | SkillMarketplaceNavigationState
   | AutomationsNavigationState
   | ArchivedNavigationState
+  | AdminNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -928,6 +946,10 @@ export const isAutomationsNavigation = (
 export const isArchivedNavigation = (
   state: NavigationState
 ): state is ArchivedNavigationState => state.navigator === 'archived'
+
+export const isAdminNavigation = (
+  state: NavigationState
+): state is AdminNavigationState => state.navigator === 'admin'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -964,6 +986,10 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   if (state.navigator === 'archived') {
     if (state.details) return `archived/session/${state.details.sessionId}`
     return 'archived'
+  }
+  if (state.navigator === 'admin') {
+    if (state.subpage === null) return 'admin'
+    return `admin:${state.subpage}`
   }
   // Chats
   const f = state.filter
@@ -1024,6 +1050,15 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   if (key.startsWith('archived/session/')) {
     const sessionId = key.slice(17)
     return { navigator: 'archived', details: sessionId ? { type: 'session', sessionId } : null }
+  }
+
+  // Handle admin
+  if (key === 'admin') return { navigator: 'admin', subpage: null }
+  if (key.startsWith('admin:')) {
+    const subpage = key.slice(6) as AdminSubpage
+    if (subpage === 'permission' || subpage === 'feedback') {
+      return { navigator: 'admin', subpage }
+    }
   }
 
   // Handle sessions
