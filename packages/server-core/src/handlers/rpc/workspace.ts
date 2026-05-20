@@ -18,6 +18,9 @@ export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.window.SWITCH_WORKSPACE,
   RPC_CHANNELS.workspace.READ_IMAGE,
   RPC_CHANNELS.workspace.WRITE_IMAGE,
+  RPC_CHANNELS.workspace.GET_CHAT_FEEDBACK_STATE,
+  RPC_CHANNELS.workspace.SET_CHAT_FEEDBACK_STATE,
+  RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK_STATE,
   RPC_CHANNELS.theme.GET_APP,
   RPC_CHANNELS.theme.GET_PRESETS,
   RPC_CHANNELS.theme.LOAD_PRESET,
@@ -271,6 +274,38 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
       // Small enough, write as-is
       writeFileSync(absolutePath, buffer)
     }
+  })
+
+  // ============================================================
+  // Chat Feedback State
+  // ============================================================
+
+  server.handle(RPC_CHANNELS.workspace.GET_CHAT_FEEDBACK_STATE, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { listChatFeedbackState } = await import('@craft-agent/shared/workspaces')
+    return listChatFeedbackState(workspace.rootPath)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.SET_CHAT_FEEDBACK_STATE, async (_ctx, workspaceId: string, sessionId: string, messageId: string, isLike: boolean) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { setChatFeedbackState } = await import('@craft-agent/shared/workspaces')
+    setChatFeedbackState(workspace.rootPath, {
+      session_id: sessionId,
+      message_id: messageId,
+      isLike,
+    })
+  })
+
+  server.handle(RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK_STATE, async (_ctx, workspaceId: string, sessionId: string, messageId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { deleteChatFeedbackState } = await import('@craft-agent/shared/workspaces')
+    deleteChatFeedbackState(workspace.rootPath, sessionId, messageId)
   })
 
   // ============================================================

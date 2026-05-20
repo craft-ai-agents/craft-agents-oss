@@ -113,7 +113,7 @@ function findInvalidProperties(
 export interface McpValidationConfig {
   /** MCP server URL */
   mcpUrl: string;
-  /** Transport type ('http' or 'sse'). Defaults to 'http'. */
+  /** Transport type ('streamable_http'). Defaults to 'streamable_http'. */
   mcpTransport?: McpTransport;
   /** Custom headers for MCP requests (merged before auth headers) */
   mcpHeaders?: Record<string, string>;
@@ -159,7 +159,7 @@ export async function validateMcpConnection(
   // SSE transport is not supported by CraftMcpClient (HTTP only). Streamable
   // HTTP is the modern transport; SSE servers will surface a clear connect error.
   const mcpClient = new CraftMcpClient({
-    transport: 'http',
+    transport: 'streamable_http',
     url: mcpUrl,
     headers: Object.keys(headers).length > 0 ? headers : undefined,
   });

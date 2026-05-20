@@ -22,6 +22,8 @@ import {
   Pencil,
   FilePenLine,
   GitBranch,
+  ThumbsDown,
+  ThumbsUp,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
@@ -210,6 +212,34 @@ export const SIZE_CONFIG = {
   staggeredAnimationLimit: 10,
 } as const
 
+function FeedbackThumbIcon({
+  type,
+  active,
+}: {
+  type: 'like' | 'dislike'
+  active: boolean
+}) {
+  if (!active) {
+    const Icon = type === 'like' ? ThumbsUp : ThumbsDown
+    return <Icon className={SIZE_CONFIG.iconSize} />
+  }
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={cn(SIZE_CONFIG.iconSize, "shrink-0")}
+      fill="currentColor"
+    >
+      {type === 'like' ? (
+        <path d="M1 21h4V9H1v12Zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2Z" />
+      ) : (
+        <path d="M15 3H6c-.83 0-1.54.5-1.84 1.22L1.14 11.27c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.58-6.59c.37-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2Zm4 0v12h4V3h-4Z" />
+      )}
+    </svg>
+  )
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -320,6 +350,10 @@ export interface TurnCardProps {
   onPopOut?: (text: string) => void
   /** Callback to open turn details in a new window */
   onOpenDetails?: () => void
+  /** Current feedback state for this assistant turn */
+  feedbackValue?: 'like' | 'dislike' | null
+  /** Callback when user selects like/dislike feedback */
+  onFeedback?: (value: 'like' | 'dislike') => void
   /** Callback to open individual activity details in Monaco */
   onOpenActivityDetails?: (activity: ActivityItem) => void
   /** Callback to open all edits/writes in multi-file diff view */
@@ -1389,6 +1423,10 @@ export interface ResponseCardProps {
   onOpenUrl?: (url: string) => void
   /** Callback to open response in Monaco editor */
   onPopOut?: () => void
+  /** Current feedback state for this response */
+  feedbackValue?: 'like' | 'dislike' | null
+  /** Callback when user selects like/dislike feedback */
+  onFeedback?: (value: 'like' | 'dislike') => void
   /** Card variant - 'response' for AI messages, 'plan' for plan messages */
   variant?: 'response' | 'plan'
   /** Parent session ID (used to reset local annotation/island UI state on session switches) */
@@ -1647,6 +1685,8 @@ export function ResponseCard({
   onOpenFile,
   onOpenUrl,
   onPopOut,
+  feedbackValue,
+  onFeedback,
   variant = 'response',
   sessionId,
   messageId,
@@ -2517,6 +2557,38 @@ export function ResponseCard({
                     <span>Markdown</span>
                   </button>
                 )}
+                {onFeedback && (
+                  <>
+                    <button
+                      type="button"
+                      aria-pressed={feedbackValue === 'like'}
+                      aria-label="点赞"
+                      onClick={() => onFeedback('like')}
+                      className={cn(
+                        "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
+                        feedbackValue === 'like' ? "text-blue-500" : "text-muted-foreground hover:text-foreground",
+                        "focus:outline-none focus-visible:underline"
+                      )}
+                    >
+                      <FeedbackThumbIcon type="like" active={feedbackValue === 'like'} />
+                      <span>点赞</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={feedbackValue === 'dislike'}
+                      aria-label="点踩"
+                      onClick={() => onFeedback('dislike')}
+                      className={cn(
+                        "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
+                        feedbackValue === 'dislike' ? "text-blue-500" : "text-muted-foreground hover:text-foreground",
+                        "focus:outline-none focus-visible:underline"
+                      )}
+                    >
+                      <FeedbackThumbIcon type="dislike" active={feedbackValue === 'dislike'} />
+                      <span>点踩</span>
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* Right side */}
@@ -2723,6 +2795,8 @@ export const TurnCard = React.memo(function TurnCard({
   onOpenUrl,
   onPopOut,
   onOpenDetails,
+  feedbackValue,
+  onFeedback,
   onOpenActivityDetails,
   onOpenMultiFileDiff,
   hasEditOrWriteActivities,
@@ -3130,6 +3204,8 @@ export const TurnCard = React.memo(function TurnCard({
                 onOpenUrl={onOpenUrl}
                 onPopOut={onPopOut ? () => onPopOut(response.text) : undefined}
                 variant={response.isPlan ? 'plan' : 'response'}
+                feedbackValue={response.isPlan ? undefined : feedbackValue}
+                onFeedback={response.isPlan ? undefined : onFeedback}
                 messageId={response.messageId}
                 annotations={response.annotations}
                 onAddAnnotation={onAddAnnotation}
@@ -3162,6 +3238,8 @@ export const TurnCard = React.memo(function TurnCard({
             onOpenUrl={onOpenUrl}
             onPopOut={onPopOut ? () => onPopOut(response.text) : undefined}
             variant={response.isPlan ? 'plan' : 'response'}
+            feedbackValue={response.isPlan ? undefined : feedbackValue}
+            onFeedback={response.isPlan ? undefined : onFeedback}
             messageId={response.messageId}
             annotations={response.annotations}
             onAddAnnotation={onAddAnnotation}
@@ -3216,6 +3294,9 @@ export const TurnCard = React.memo(function TurnCard({
 
   // Re-render when active follow-up annotation state changes (plan CTA label)
   if (prev.hasActiveFollowUpAnnotations !== next.hasActiveFollowUpAnnotations) return false
+
+  // Re-render when response feedback state changes
+  if (prev.feedbackValue !== next.feedbackValue) return false
 
   // For complete, non-streaming turns: skip re-render only when both
   // session and turn identities match. Prevents stale local UI state from

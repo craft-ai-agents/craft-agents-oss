@@ -11,6 +11,7 @@ import { SourceMenu } from './SourceMenu'
 import { SendResourceToWorkspaceDialog } from './SendResourceToWorkspaceDialog'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
+import { McpSourceFormDialog } from './McpSourceFormDialog'
 import type { LoadedSource, SourceConnectionStatus, SourceFilter } from '../../../shared/types'
 
 const SOURCE_TYPE_CONFIG: Record<string, { labelKey: string; colorClass: string }> = {
@@ -38,6 +39,7 @@ export interface SourcesListPanelProps {
   sourceFilter?: SourceFilter | null
   workspaceRootPath?: string
   onDeleteSource: (sourceSlug: string) => void
+  onEditSource: (source: LoadedSource) => void
   onSourceClick: (source: LoadedSource) => void
   selectedSourceSlug?: string | null
   localMcpEnabled?: boolean
@@ -49,6 +51,7 @@ export function SourcesListPanel({
   sourceFilter,
   workspaceRootPath,
   onDeleteSource,
+  onEditSource,
   onSourceClick,
   selectedSourceSlug,
   localMcpEnabled = true,
@@ -57,6 +60,7 @@ export function SourcesListPanel({
   const { t } = useTranslation()
   const { workspaces, activeWorkspaceId } = useAppShellContext()
   const hasOtherWorkspaces = workspaces.length > 1
+  const isMcpFilter = sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'mcp'
 
   // Send to Workspace dialog state
   const [sendDialogOpen, setSendDialogOpen] = React.useState(false)
@@ -94,19 +98,30 @@ export function SourcesListPanel({
           description={t('sourcesList.emptyDescription')}
           docKey="sources"
         >
-          {workspaceRootPath && (
-            <EditPopover
-              align="center"
-              trigger={
-                <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  {t('sourcesList.addSource')}
-                </button>
-              }
-              {...getEditConfig(
-                sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
-                workspaceRootPath
-              )}
-            />
+          {workspaceRootPath && activeWorkspaceId && (
+            isMcpFilter ? (
+              <McpSourceFormDialog
+                workspaceId={activeWorkspaceId}
+                trigger={
+                  <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
+                    {t('sourcesList.addSource')}
+                  </button>
+                }
+              />
+            ) : (
+              <EditPopover
+                align="center"
+                trigger={
+                  <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
+                    {t('sourcesList.addSource')}
+                  </button>
+                }
+                {...getEditConfig(
+                  sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
+                  workspaceRootPath
+                )}
+              />
+            )
           )}
         </EntityListEmptyScreen>
       }
@@ -135,6 +150,7 @@ export function SourcesListPanel({
               sourceName={source.config.name}
               onOpenInNewWindow={() => window.electronAPI.openUrl(`mdp://sources/source/${source.config.slug}?window=focused`)}
               onShowInFinder={() => window.electronAPI.showInFolder(source.folderPath)}
+              onEdit={() => onEditSource(source)}
               onDelete={() => onDeleteSource(source.config.slug)}
               onSendToWorkspace={hasOtherWorkspaces ? () => {
                 setSendResourceSlug(source.config.slug)

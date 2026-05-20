@@ -9,6 +9,8 @@
 import { describe, it, expect } from 'bun:test';
 import { discoverOAuthMetadata, getMcpBaseUrl } from '../oauth';
 
+const DISCOVERY_E2E_TIMEOUT_MS = 20_000;
+
 // Helper to check if a URL is reachable
 async function isReachable(url: string, timeoutMs = 5000): Promise<boolean> {
   try {
@@ -36,7 +38,7 @@ function describeIfReachable(name: string, mcpUrl: string, fn: () => void) {
       if (!reachable) {
         console.log(`Skipping ${name}: server unreachable`);
       }
-    });
+    }, DISCOVERY_E2E_TIMEOUT_MS);
     fn();
   });
 }
@@ -63,7 +65,7 @@ describe('E2E: OAuth Metadata Discovery', () => {
       expect(metadata.authorization_endpoint).toBeTruthy();
       expect(metadata.token_endpoint).toBeTruthy();
       console.log('GitHub MCP OAuth metadata:', metadata);
-    });
+    }, DISCOVERY_E2E_TIMEOUT_MS);
   });
 
   describe('Linear MCP (mcp.linear.app)', () => {
@@ -86,7 +88,7 @@ describe('E2E: OAuth Metadata Discovery', () => {
       expect(metadata.authorization_endpoint).toBeTruthy();
       expect(metadata.token_endpoint).toBeTruthy();
       console.log('Linear MCP OAuth metadata:', metadata);
-    });
+    }, DISCOVERY_E2E_TIMEOUT_MS);
   });
 
   describe('Ahrefs MCP (api.ahrefs.com/mcp/mcp)', () => {
@@ -110,7 +112,7 @@ describe('E2E: OAuth Metadata Discovery', () => {
       expect(metadata.authorization_endpoint).toBeTruthy();
       expect(metadata.token_endpoint).toBeTruthy();
       console.log('Ahrefs MCP OAuth metadata:', metadata);
-    });
+    }, DISCOVERY_E2E_TIMEOUT_MS);
   });
 
   describe('Multiple path segments', () => {

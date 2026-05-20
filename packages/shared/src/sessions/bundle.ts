@@ -18,6 +18,7 @@ import {
   MAX_BUNDLE_SIZE_BYTES,
   collectDirectoryFiles,
 } from '../utils/bundle-files.ts'
+import { redactMessageDynamicContextForExternal } from './redaction.ts'
 
 // Re-export BundleFile and MAX_BUNDLE_SIZE_BYTES for backward compatibility
 export { type BundleFile, MAX_BUNDLE_SIZE_BYTES } from '../utils/bundle-files.ts'
@@ -131,7 +132,7 @@ export function serializeSession(
     version: 1,
     session: {
       header,
-      messages: stored.messages,
+      messages: stored.messages.map(redactMessageDynamicContextForExternal),
     },
     files,
   }

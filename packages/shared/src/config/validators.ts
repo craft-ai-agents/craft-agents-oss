@@ -374,11 +374,17 @@ import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 const SourceTypeSchema = z.enum(['mcp', 'api', 'local']);
 
 // MCP source supports two transport types:
-// - HTTP/SSE: requires url and authType
+// - Streamable HTTP: requires url and authType
 // - Stdio: requires command (and optional args, env)
 const McpSourceConfigSchema = z.object({
-  transport: z.enum(['http', 'sse', 'stdio']).optional(),
-  // HTTP/SSE fields
+  transport: z.preprocess(
+    (val) => {
+      if (val === 'http' || val === 'sse') return 'streamable_http';
+      return val;
+    },
+    z.enum(['streamable_http', 'stdio']).optional()
+  ),
+  // Streamable HTTP fields
   url: z.string().url().optional(),
   authType: z.enum(['oauth', 'bearer', 'none']).optional(),
   clientId: z.string().optional(),
@@ -386,7 +392,7 @@ const McpSourceConfigSchema = z.object({
   command: z.string().optional(),
   args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional(),
-  // Custom headers for HTTP/SSE transport (e.g., API keys, custom auth)
+  // Custom headers for Streamable HTTP transport (e.g., API keys, custom auth)
   headers: z.record(z.string(), z.string()).optional(),
   // Header names for credential-store auth (values stored in credential store as JSON)
   headerNames: z.array(z.string()).optional(),
@@ -396,12 +402,12 @@ const McpSourceConfigSchema = z.object({
       // Stdio transport requires command
       return !!data.command;
     } else {
-      // HTTP/SSE transport (default) requires url and authType
+      // Streamable HTTP transport (default) requires url and authType
       return !!data.url && !!data.authType;
     }
   },
   {
-    message: 'MCP config requires either (url + authType) for HTTP/SSE or (command) for stdio transport',
+    message: 'MCP config requires either (url + authType) for Streamable HTTP or (command) for stdio transport',
   }
 );
 

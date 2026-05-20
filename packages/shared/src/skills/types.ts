@@ -28,6 +28,8 @@ export interface SkillMetadata {
   icon?: string;
   /** Optional source slugs to auto-enable when this skill is invoked */
   requiredSources?: string[];
+  /** Optional author display name */
+  author?: string;
 }
 
 /** Source of a loaded skill */

@@ -38,7 +38,7 @@ function createMcpSource(overrides: Partial<FolderSourceConfig> = {}): LoadedSou
       type: 'mcp',
       enabled: true,
       mcp: {
-        transport: 'http',
+        transport: 'streamable_http',
         url: 'https://example.com/mcp',
       },
       ...overrides,

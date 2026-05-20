@@ -20,6 +20,11 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.UPDATE_MARKETPLACE,
   RPC_CHANNELS.skills.PUBLISH_MARKETPLACE,
   RPC_CHANNELS.skills.PUBLISH_DIRECT_MARKETPLACE,
+  RPC_CHANNELS.skills.LIST_MARKET,
+  RPC_CHANNELS.skills.UPLOAD_MARKET,
+  RPC_CHANNELS.skills.INSTALL_MARKET,
+  RPC_CHANNELS.skills.DELETE_MARKET,
+  RPC_CHANNELS.skills.FETCH_MARKET_CONTENT,
 ] as const
 
 export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -97,15 +102,16 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     return scanDirectory(skillDir)
   })
 
-  // Create a workspace skill without overwriting an existing SKILL.md
+  // Create a skill (defaults to global ~/.agents/skills)
   server.handle(
     RPC_CHANNELS.skills.CREATE,
-    async (_ctx, workspaceId: string, slug: string, metadata: SkillMetadata, content: string) => {
+    async (_ctx, workspaceId: string, slug: string, metadata: SkillMetadata, content: string, scope: 'global' | 'workspace' = 'global') => {
       const workspace = getWorkspaceByNameOrId(workspaceId)
       if (!workspace) throw new Error('Workspace not found')
 
-      const { createSkill } = await import('@craft-agent/shared/skills')
-      const result = createSkill(workspace.rootPath, slug, metadata, content)
+      const { createSkill, GLOBAL_AGENT_SKILLS_DIR } = await import('@craft-agent/shared/skills')
+      const rootPath = scope === 'global' ? join(GLOBAL_AGENT_SKILLS_DIR, '..') : workspace.rootPath
+      const result = createSkill(rootPath, slug, metadata, content)
       if ('created' in result) {
         await pushSkillsChanged(workspace.id, workspace.rootPath)
       }
@@ -113,28 +119,48 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     }
   )
 
-  // Create or replace a workspace skill
+  // Create or replace a skill (defaults to global ~/.agents/skills)
   server.handle(
     RPC_CHANNELS.skills.FORCE_WRITE,
-    async (_ctx, workspaceId: string, slug: string, metadata: SkillMetadata, content: string) => {
+    async (_ctx, workspaceId: string, slug: string, metadata: SkillMetadata, content: string, scope: 'global' | 'workspace' = 'global') => {
       const workspace = getWorkspaceByNameOrId(workspaceId)
       if (!workspace) throw new Error('Workspace not found')
 
-      const { forceWriteSkill } = await import('@craft-agent/shared/skills')
-      const result = forceWriteSkill(workspace.rootPath, slug, metadata, content)
+      const { forceWriteSkill, GLOBAL_AGENT_SKILLS_DIR } = await import('@craft-agent/shared/skills')
+      const rootPath = scope === 'global' ? join(GLOBAL_AGENT_SKILLS_DIR, '..') : workspace.rootPath
+      const result = forceWriteSkill(rootPath, slug, metadata, content)
       await pushSkillsChanged(workspace.id, workspace.rootPath)
       return result
     }
   )
 
-  // Delete a skill from a workspace
-  server.handle(RPC_CHANNELS.skills.DELETE, async (_ctx, workspaceId: string, skillSlug: string) => {
+  // Delete a skill — routes by source to the correct directory
+  server.handle(RPC_CHANNELS.skills.DELETE, async (
+    _ctx,
+    workspaceId: string,
+    skillSlug: string,
+    source: 'global' | 'workspace' | 'project' = 'workspace',
+    skillPath?: string,
+  ) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { deleteSkill } = await import('@craft-agent/shared/skills')
-    deleteSkill(workspace.rootPath, skillSlug)
-    deps.platform.logger?.info(`Deleted skill: ${skillSlug}`)
+    const { deleteSkill, GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache } = await import('@craft-agent/shared/skills')
+
+    if (source === 'global') {
+      deleteSkill(join(GLOBAL_AGENT_SKILLS_DIR, '..'), skillSlug)
+    } else if (source === 'workspace') {
+      deleteSkill(workspace.rootPath, skillSlug)
+    } else if (source === 'project' && skillPath) {
+      const { rmSync } = await import('fs')
+      if (existsSync(skillPath)) {
+        rmSync(skillPath, { recursive: true })
+        invalidateSkillsCache()
+      }
+    }
+
+    deps.platform.logger?.info(`Deleted skill: ${skillSlug} (source: ${source})`)
+    await pushSkillsChanged(workspace.id, workspace.rootPath)
   })
 
   // Open skill SKILL.md in editor
@@ -144,9 +170,11 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (workspace.remoteServer) throw new Error('Open in editor is not available for remote workspaces')
 
     const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
+    const { GLOBAL_AGENT_SKILLS_DIR } = await import('@craft-agent/shared/skills')
 
-    const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
-    const skillFile = join(skillsDir, skillSlug, 'SKILL.md')
+    const workspaceSkillFile = join(getWorkspaceSkillsPath(workspace.rootPath), skillSlug, 'SKILL.md')
+    const globalSkillFile = join(GLOBAL_AGENT_SKILLS_DIR, skillSlug, 'SKILL.md')
+    const skillFile = existsSync(workspaceSkillFile) ? workspaceSkillFile : globalSkillFile
     await deps.platform.openPath?.(skillFile)
   })
 
@@ -157,9 +185,11 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (workspace.remoteServer) throw new Error('Show in Finder is not available for remote workspaces')
 
     const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
+    const { GLOBAL_AGENT_SKILLS_DIR } = await import('@craft-agent/shared/skills')
 
-    const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
-    const skillDir = join(skillsDir, skillSlug)
+    const workspaceSkillDir = join(getWorkspaceSkillsPath(workspace.rootPath), skillSlug)
+    const globalSkillDir = join(GLOBAL_AGENT_SKILLS_DIR, skillSlug)
+    const skillDir = existsSync(workspaceSkillDir) ? workspaceSkillDir : globalSkillDir
     await deps.platform.showItemInFolder?.(skillDir)
   })
 
@@ -223,5 +253,141 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     return publishDirectSkillToMarketplaceService(input, {
       baseUrl: serviceConfig.baseUrl,
     })
+  })
+
+  // ── CoPaw market service handlers ──────────────────────────────────────────
+
+  /** Fetch the full catalogue from the CoPaw market service. */
+  server.handle(RPC_CHANNELS.skills.LIST_MARKET, async () => {
+    const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+    const { listCopawMarketSkills, COPAW_MARKET_BASE_URL } = await import('@craft-agent/shared/skills')
+
+    const session = await new SsoCredentialStore().load()
+    if (!session) throw new Error('未登录，无法获取市场技能列表')
+
+    return listCopawMarketSkills(COPAW_MARKET_BASE_URL, session.token)
+  })
+
+  /** Upload/publish a skill to the CoPaw market service. */
+  server.handle(RPC_CHANNELS.skills.UPLOAD_MARKET, async (_ctx, input: import('@craft-agent/shared/skills').CopawMarketUploadInput) => {
+    const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+    const {
+      uploadCopawMarketSkill,
+      generateMarketSkillVersion,
+      COPAW_MARKET_BASE_URL,
+    } = await import('@craft-agent/shared/skills')
+    const { strToU8, zipSync } = await import('fflate')
+
+    const session = await new SsoCredentialStore().load()
+    if (!session) throw new Error('未登录，无法发布技能')
+
+    const version = generateMarketSkillVersion()
+    const zipBytes = zipSync({ 'SKILL.md': strToU8(input.skillContent) })
+
+    return uploadCopawMarketSkill(
+      {
+        name: input.name,
+        chineseName: input.chineseName,
+        description: input.description,
+        tag: input.tag,
+        userName: session.userName,
+        employeeId: session.employeeId,
+        version,
+      },
+      zipBytes,
+      COPAW_MARKET_BASE_URL,
+      session.token,
+    )
+  })
+
+  /**
+   * Install a market skill locally.
+   * Downloads the zip, extracts SKILL.md body, injects market chineseName/description
+   * as frontmatter, and writes to the global skills directory.
+   */
+  server.handle(RPC_CHANNELS.skills.INSTALL_MARKET, async (
+    _ctx,
+    workspaceId: string,
+    skillName: string,
+    chineseName: string,
+    description: string,
+    version?: string,
+  ) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL, GLOBAL_AGENT_SKILLS_DIR, forceWriteSkill } = await import('@craft-agent/shared/skills')
+    const { unzipSync } = await import('fflate')
+    const { join } = await import('path')
+
+    const session = await new SsoCredentialStore().load()
+    if (!session) throw new Error('未登录，无法安装技能')
+
+    // Download zip from market
+    const zipBytes = await downloadCopawMarketSkillZip(skillName, COPAW_MARKET_BASE_URL, session.token, version)
+    const unzipped = unzipSync(zipBytes)
+
+    // Find SKILL.md in zip
+    const skillMdKey = Object.keys(unzipped).find((k) =>
+      k.toLowerCase() === 'skill.md' || k.toLowerCase().match(/^[^/]+\/skill\.md$/)
+    )
+
+    // Extract body content (strip existing frontmatter if any)
+    let body = ''
+    if (skillMdKey) {
+      const raw = new TextDecoder().decode(unzipped[skillMdKey]).trimStart()
+      if (raw.startsWith('---')) {
+        const end = raw.indexOf('\n---', 3)
+        body = end !== -1 ? raw.slice(end + 4).trim() : raw
+      } else {
+        body = raw.trim()
+      }
+    }
+
+    // Write to global skills directory with injected metadata
+    const metadata = { name: chineseName, description }
+    const rootPath = join(GLOBAL_AGENT_SKILLS_DIR, '..')
+    forceWriteSkill(rootPath, skillName, metadata, body)
+
+    await pushSkillsChanged(workspace.id, workspace.rootPath)
+
+    return { imported: [skillName], count: 1, conflicts: [] }
+  })
+
+  /**
+   * Fetch SKILL.md content for a market skill preview.
+   * Downloads the zip in-memory, extracts SKILL.md, returns the content string.
+   * Nothing is written to disk.
+   */
+  server.handle(RPC_CHANNELS.skills.FETCH_MARKET_CONTENT, async (_ctx, skillName: string, version?: string) => {
+    const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL } = await import('@craft-agent/shared/skills')
+    const { unzipSync } = await import('fflate')
+
+    const session = await new SsoCredentialStore().load()
+    if (!session) throw new Error('未登录，无法获取技能内容')
+
+    const zipBytes = await downloadCopawMarketSkillZip(skillName, COPAW_MARKET_BASE_URL, session.token, version)
+    const unzipped = unzipSync(zipBytes)
+
+    const skillMdKey = Object.keys(unzipped).find((k) =>
+      k.toLowerCase() === 'skill.md' || k.toLowerCase().match(/^[^/]+\/skill\.md$/)
+    )
+    if (!skillMdKey) throw new Error('zip 中未找到 SKILL.md 文件')
+
+    return { content: new TextDecoder().decode(unzipped[skillMdKey]) }
+  })
+
+  /** Delete a skill from the CoPaw market service. */
+  server.handle(RPC_CHANNELS.skills.DELETE_MARKET, async (_ctx, skillName: string) => {
+    const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+    const { deleteCopawMarketSkill, COPAW_MARKET_BASE_URL } = await import('@craft-agent/shared/skills')
+
+    const session = await new SsoCredentialStore().load()
+    if (!session) throw new Error('未登录，无法删除技能')
+
+    await deleteCopawMarketSkill(skillName, COPAW_MARKET_BASE_URL, session.token)
+    return { success: true }
   })
 }

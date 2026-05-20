@@ -161,6 +161,10 @@ export const CHANNEL_MAP = {
   getSessionModel: invoke(RPC_CHANNELS.sessions.GET_MODEL),
   setSessionModel: invoke(RPC_CHANNELS.sessions.SET_MODEL),
 
+  // Team context session override
+  getTeamContextOverride: invoke(RPC_CHANNELS.sessions.GET_TEAM_CONTEXT_OVERRIDE),
+  setTeamContextOverride: invoke(RPC_CHANNELS.sessions.SET_TEAM_CONTEXT_OVERRIDE),
+
   // Workspace Settings
   getWorkspaceSettings: invoke(RPC_CHANNELS.workspace.SETTINGS_GET),
   updateWorkspaceSetting: invoke(RPC_CHANNELS.workspace.SETTINGS_UPDATE),
@@ -204,6 +208,9 @@ export const CHANNEL_MAP = {
   // Sources
   getSources: invoke(RPC_CHANNELS.sources.GET),
   createSource: invoke(RPC_CHANNELS.sources.CREATE),
+  updateSource: invoke(RPC_CHANNELS.sources.UPDATE),
+  parseMcpJsonImport: invoke(RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT),
+  importMcpJsonCandidates: invoke(RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES),
   deleteSource: invoke(RPC_CHANNELS.sources.DELETE),
   startSourceOAuth: invoke(RPC_CHANNELS.sources.START_OAUTH),
   saveSourceCredentials: invoke(RPC_CHANNELS.sources.SAVE_CREDENTIALS),
@@ -236,12 +243,24 @@ export const CHANNEL_MAP = {
   updateMarketplaceSkill: invoke(RPC_CHANNELS.skills.UPDATE_MARKETPLACE),
   publishMarketplaceSkill: invoke(RPC_CHANNELS.skills.PUBLISH_MARKETPLACE),
   publishDirectMarketplaceSkill: invoke(RPC_CHANNELS.skills.PUBLISH_DIRECT_MARKETPLACE),
+  listMarketSkills: invoke(RPC_CHANNELS.skills.LIST_MARKET),
+  uploadMarketSkill: invoke(RPC_CHANNELS.skills.UPLOAD_MARKET),
+  installMarketSkill: invoke(RPC_CHANNELS.skills.INSTALL_MARKET),
+  deleteMarketSkill: invoke(RPC_CHANNELS.skills.DELETE_MARKET),
+  fetchMarketSkillContent: invoke(RPC_CHANNELS.skills.FETCH_MARKET_CONTENT),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
 
   // Statuses
   listStatuses: invoke(RPC_CHANNELS.statuses.LIST),
   reorderStatuses: invoke(RPC_CHANNELS.statuses.REORDER),
   onStatusesChanged: listener(RPC_CHANNELS.statuses.CHANGED),
+
+  // Team Knowledge
+  getTeamKnowledgeConfig: invoke(RPC_CHANNELS.teamKnowledge.GET_CONFIG),
+  updateTeamKnowledgeConfig: invoke(RPC_CHANNELS.teamKnowledge.UPDATE_CONFIG),
+  refreshTeamKnowledge: invoke(RPC_CHANNELS.teamKnowledge.REFRESH),
+  onTeamKnowledgeChanged: listener(RPC_CHANNELS.teamKnowledge.CHANGED),
+  getTeamContextPreview: invoke(RPC_CHANNELS.teamKnowledge.GET_PREVIEW),
 
   // Labels
   listLabels: invoke(RPC_CHANNELS.labels.LIST),
@@ -262,6 +281,9 @@ export const CHANNEL_MAP = {
   // Workspace images
   readWorkspaceImage: invoke(RPC_CHANNELS.workspace.READ_IMAGE),
   writeWorkspaceImage: invoke(RPC_CHANNELS.workspace.WRITE_IMAGE),
+  getChatFeedbackState: invoke(RPC_CHANNELS.workspace.GET_CHAT_FEEDBACK_STATE),
+  setChatFeedbackState: invoke(RPC_CHANNELS.workspace.SET_CHAT_FEEDBACK_STATE),
+  deleteChatFeedbackState: invoke(RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK_STATE),
 
   // Theme
   getAppTheme: invoke(RPC_CHANNELS.theme.GET_APP),

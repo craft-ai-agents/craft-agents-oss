@@ -253,6 +253,16 @@ export interface Message {
   role: MessageRole;
   content: string;
   timestamp: number;
+  /**
+   * Redacted reference to transient dynamic context sent with this message.
+   * The expanded context block is not persisted.
+   */
+  dynamicContextRef?: {
+    type: 'user_profile' | string;
+    status?: 'fresh' | 'stale' | string;
+    fetchedAt?: number;
+    summary?: string;
+  };
   // Tool-specific fields
   toolName?: string;
   toolUseId?: string;
@@ -340,6 +350,16 @@ export interface StoredMessage {
   type: MessageRole;
   content: string;
   timestamp?: number;
+  /**
+   * Redacted reference to transient dynamic context sent with this message.
+   * The expanded context block is not persisted.
+   */
+  dynamicContextRef?: {
+    type: 'user_profile' | string;
+    status?: 'fresh' | 'stale' | string;
+    fetchedAt?: number;
+    summary?: string;
+  };
   // Tool-specific fields
   toolName?: string;
   toolUseId?: string;
