@@ -16,7 +16,7 @@
  */
 
 import * as React from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Check, Pencil, Plus, Search, X } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -26,8 +26,9 @@ import {
 } from '@/components/ui/dialog'
 import { useAgents } from '@/hooks/useAgents'
 import { AgentEditDialog } from './AgentEditDialog'
+import { useAgentDisplayNames } from '@/hooks/useAgentDisplayNames'
 import type { AgentDefinitionDTO } from '../../../shared/types'
-import { ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
+import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
 
 interface AgentLibraryDialogProps {
   open: boolean
@@ -37,85 +38,83 @@ interface AgentLibraryDialogProps {
 
 export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLibraryDialogProps) {
   const { allAgents, activeSlugs, setActive } = useAgents(workspaceId)
+  const { getDisplayName, setDisplayName } = useAgentDisplayNames()
   const [query, setQuery] = React.useState('')
   const [createOpen, setCreateOpen] = React.useState(false)
 
   const sortedAgents = React.useMemo(() => {
-    // Orchestrator first, then alphabetical. The Orchestrator is foundational
-    // to the sidebar UX, so it leads even when search filters the rest.
-    const others = allAgents
-      .filter((a) => a.slug !== ORCHESTRATOR_SLUG)
-      .sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
-    const orch = allAgents.find((a) => a.slug === ORCHESTRATOR_SLUG)
-    return orch ? [orch, ...others] : others
-  }, [allAgents])
+    return allAgents
+      .filter((a) => !isSystemAgent(a.slug))
+      .sort((a, b) => getDisplayName(a).localeCompare(getDisplayName(b)))
+  }, [allAgents, getDisplayName])
 
   const filteredAgents = React.useMemo(() => {
     if (!query.trim()) return sortedAgents
     const q = query.toLowerCase()
     return sortedAgents.filter(
       (a) =>
+        getDisplayName(a).toLowerCase().includes(q) ||
         a.metadata.name.toLowerCase().includes(q) ||
         a.metadata.description.toLowerCase().includes(q) ||
         a.slug.toLowerCase().includes(q),
     )
-  }, [sortedAgents, query])
+  }, [sortedAgents, query, getDisplayName])
 
   const activeSet = new Set(activeSlugs)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Manage Agents</DialogTitle>
-          <DialogDescription>
-            Pick which agents are active in this workspace. Inactive agents stay in the global library at <code className="font-mono">~/.agents/agents/</code> — flip them on anytime.
+      <DialogContent className="max-h-[86vh] max-w-2xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_28px_90px_rgba(0,0,0,0.62)]">
+        <DialogHeader className="border-b border-white/[0.06] bg-[radial-gradient(circle_at_18%_0%,rgba(94,106,210,0.20),transparent_34%),#0b0b0f] px-6 py-5">
+          <DialogTitle className="text-[22px] font-semibold leading-tight text-white">Manage agents</DialogTitle>
+          <DialogDescription className="max-w-xl text-sm leading-6 text-white/52">
+            Choose which agents appear in this workspace.
           </DialogDescription>
         </DialogHeader>
 
-        {/* Search + new */}
-        <div className="flex items-center gap-2">
+        <div className="min-w-0 space-y-4 px-6 py-5">
           <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/34" />
             <input
               type="text"
-              placeholder="Search agents…"
+              placeholder="Search agents"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-sm border border-border/40 rounded-md bg-background"
+              className="h-10 w-full rounded-[12px] border border-white/[0.08] bg-white/[0.035] pl-9 pr-3 text-sm text-white outline-none placeholder:text-white/28 focus:border-[#8b8cff]/40"
             />
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="absolute right-1.5 top-1/2 inline-flex h-7 -translate-y-1/2 items-center gap-1.5 rounded-[9px] border border-[#8b8cff]/24 bg-[#5e6ad2]/18 px-2.5 text-[11px] font-medium text-[#c3c6ff] transition-colors hover:bg-[#5e6ad2]/28 hover:text-white"
+              title="Create a new agent from scratch"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-border/40 hover:bg-foreground/5 shrink-0"
-            title="Create a new agent from scratch"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New agent
-          </button>
-        </div>
 
-        {/* List */}
-        <div className="flex flex-col gap-1 max-h-[55vh] overflow-y-auto pr-1">
-          {filteredAgents.length === 0 && (
-            <div className="text-xs text-foreground/50 py-4 text-center">
-              No agents match your search.
-            </div>
-          )}
-          {filteredAgents.map((agent) => (
-            <AgentRow
-              key={agent.slug}
-              agent={agent}
-              active={activeSet.has(agent.slug)}
-              onToggle={() => setActive(agent.slug, !activeSet.has(agent.slug))}
-            />
-          ))}
-        </div>
+          <div className="max-h-[54vh] min-w-0 space-y-2 overflow-y-auto overflow-x-hidden pr-1">
+            {filteredAgents.length === 0 && (
+              <div className="rounded-[14px] border border-dashed border-white/[0.10] px-4 py-8 text-center text-xs text-white/38">
+                No agents match your search.
+              </div>
+            )}
+            {filteredAgents.map((agent) => (
+              <AgentRow
+                key={agent.slug}
+                agent={agent}
+                displayName={getDisplayName(agent)}
+                active={activeSet.has(agent.slug)}
+                onToggle={() => setActive(agent.slug, !activeSet.has(agent.slug))}
+                onRename={(name) => setDisplayName(agent, name)}
+              />
+            ))}
+          </div>
 
-        <p className="text-[11px] text-foreground/50 mt-2">
-          {activeSet.size} of {allAgents.length} active in this workspace.
-        </p>
+          <p className="border-t border-white/[0.06] pt-3 text-[11px] text-white/34">
+            {filteredActiveCount(activeSet, allAgents)} of {allAgents.filter((agent) => !isSystemAgent(agent.slug)).length} active in this workspace.
+          </p>
+        </div>
       </DialogContent>
 
       <AgentEditDialog
@@ -129,47 +128,120 @@ export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLib
 
 interface AgentRowProps {
   agent: AgentDefinitionDTO
+  displayName: string
   active: boolean
   onToggle: () => void
+  onRename: (name: string) => void
 }
 
-function AgentRow({ agent, active, onToggle }: AgentRowProps) {
-  const avatar = agent.metadata.avatar?.trim() || '🤖'
-  const isOrchestrator = agent.slug === ORCHESTRATOR_SLUG
+function AgentRow({ agent, displayName, active, onToggle, onRename }: AgentRowProps) {
+  const [editing, setEditing] = React.useState(false)
+  const [draft, setDraft] = React.useState(displayName)
+  const cleanName = cleanDisplayText(displayName)
+  const initials = cleanName.slice(0, 2)
+
+  React.useEffect(() => {
+    if (!editing) setDraft(displayName)
+  }, [displayName, editing])
+
+  const save = React.useCallback(() => {
+    onRename(draft)
+    setEditing(false)
+  }, [draft, onRename])
+
   return (
-    <label
-      className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-foreground/5 cursor-pointer"
+    <div
+      className="group flex min-w-0 cursor-pointer items-center gap-3 rounded-[14px] border border-white/[0.065] bg-white/[0.032] px-3 py-3 transition-colors hover:border-[#8b8cff]/28 hover:bg-white/[0.055]"
       style={{ opacity: active ? 1 : 0.7 }}
     >
       <input
         type="checkbox"
         checked={active}
         onChange={onToggle}
-        className="h-3.5 w-3.5 cursor-pointer"
+        className="h-3.5 w-3.5 cursor-pointer accent-[#8b8cff]"
       />
       <div
-        className="flex items-center justify-center shrink-0"
+        className="flex shrink-0 items-center justify-center border border-white/[0.08] bg-white/[0.055] font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#b8bcff]"
         style={{
-          width: 28,
-          height: 28,
-          borderRadius: 8,
-          fontSize: 16,
-          background: 'rgba(125,125,125,0.10)',
+          width: 32,
+          height: 32,
+          borderRadius: 11,
         }}
       >
-        {avatar}
+        {initials}
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-sm">{agent.metadata.name}</span>
-          {isOrchestrator && (
-            <span className="text-[10px] uppercase tracking-wider text-foreground/50 px-1.5 py-0.5 rounded bg-foreground/5">
-              core
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-foreground/55 truncate">{agent.metadata.description}</p>
+      <div className="min-w-0 flex-1 overflow-hidden">
+        {editing ? (
+          <form
+            className="flex min-w-0 items-center gap-1.5"
+            onSubmit={(event) => {
+              event.preventDefault()
+              save()
+            }}
+          >
+            <input
+              autoFocus
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  setDraft(displayName)
+                  setEditing(false)
+                }
+              }}
+              className="h-7 min-w-0 flex-1 rounded-[8px] border border-[#8b8cff]/28 bg-black/30 px-2 text-sm font-medium text-white outline-none placeholder:text-white/28"
+              placeholder={agent.metadata.name}
+            />
+            <button
+              type="submit"
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-[#b8bcff] hover:bg-white/[0.06] hover:text-white"
+              title="Save display name"
+            >
+              <Check className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(displayName)
+                setEditing(false)
+              }}
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-white/42 hover:bg-white/[0.06] hover:text-white"
+              title="Cancel"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </form>
+        ) : (
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 truncate text-sm font-medium text-white">{cleanName}</span>
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] text-white/24 opacity-0 transition-colors hover:bg-white/[0.06] hover:text-[#c3c6ff] group-hover:opacity-100"
+              title="Edit display name"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+        <p className="mt-0.5 min-w-0 truncate text-xs text-white/42">{cleanDisplayText(agent.metadata.description)}</p>
       </div>
-    </label>
+    </div>
   )
+}
+
+function cleanDisplayText(value: string) {
+  return value
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function filteredActiveCount(activeSet: Set<string>, agents: AgentDefinitionDTO[]) {
+  return agents.filter((agent) => !isSystemAgent(agent.slug) && activeSet.has(agent.slug)).length
+}
+
+function isSystemAgent(slug: string) {
+  return slug === CONCIERGE_SLUG || slug === ORCHESTRATOR_SLUG
 }

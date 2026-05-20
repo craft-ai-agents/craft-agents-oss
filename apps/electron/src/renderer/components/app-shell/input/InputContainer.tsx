@@ -236,9 +236,9 @@ export function InputContainer({
       {/* Visible animated container */}
       <motion.div
         className={cn(
-          "input-container relative rounded-[12px] overflow-hidden transition-colors",
+          "input-container relative rounded-[12px] overflow-hidden border border-white/[0.08] text-white/78 transition-colors",
           isFocusedPanel ? "shadow-middle" : "shadow-minimal",
-          "bg-background"
+          "bg-[#121214] shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)]"
         )}
         style={{
           height: heightMotionValue,

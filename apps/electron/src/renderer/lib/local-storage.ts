@@ -52,6 +52,7 @@ export const KEYS = {
 
   // Appearance
   showConnectionIcons: 'show-connection-icons',
+  agentDisplayNames: 'agent-display-names',
 
   // What's New
   whatsNewLastSeenVersion: 'whats-new-last-seen-version',

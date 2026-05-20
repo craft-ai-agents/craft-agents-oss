@@ -188,6 +188,91 @@ export function SourcesListPanel({
   return (
     <>
       <div className={className ? `flex min-h-0 flex-1 flex-col ${className}` : 'flex min-h-0 flex-1 flex-col'}>
+        {className?.includes('runneros-library-grid') ? (
+          <div className="min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_50%_0%,rgba(94,106,210,0.10),transparent_35%),#101011]/0 px-8 py-8">
+            <div className="mb-7 flex items-start justify-between gap-4">
+              <div>
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-[#9da4ff]">
+                  <DatabaseZap className="h-3.5 w-3.5" />
+                  Tool layer
+                </div>
+                <h1 className="text-[28px] font-semibold leading-tight text-white">{t('sidebar.tools')}</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">Connected tools and data channels available to the workspace.</p>
+              </div>
+              {workspaceId && (
+                <button
+                  type="button"
+                  onClick={() => setLibraryOpen(true)}
+                  className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-[#7c7cff]/30 bg-[#5e6ad2]/18 px-3 text-xs font-medium text-white shadow-[0_0_24px_rgba(94,106,210,0.20)] transition-colors hover:bg-[#5e6ad2]/26"
+                  title={t('sourcesList.browseGlobal')}
+                >
+                  <BookOpen className="size-3.5" />
+                  {t('sourcesList.library')}
+                </button>
+              )}
+            </div>
+
+            {filteredSources.length === 0 ? (
+              <div className="rounded-[18px] border border-dashed border-white/[0.12] bg-white/[0.03] p-8 text-center text-sm text-white/55">
+                {emptyMessage}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {filteredSources.map((source) => {
+                  const connectionStatus = deriveConnectionStatus(source, localMcpEnabled)
+                  const typeConfig = SOURCE_TYPE_CONFIG[source.config.type]
+                  const statusConfig = source.tier === 'global-dormant' ? null : SOURCE_STATUS_CONFIG[connectionStatus]
+                  const tierConfig = SOURCE_TIER_CONFIG[source.tier ?? 'workspace']
+                  const subtitle = source.config.tagline || source.config.provider || source.config.slug
+                  const isWorkspaceSource = (source.tier ?? 'workspace') === 'workspace'
+                  const isGlobalSource = source.tier === 'global'
+                  const isDormantGlobal = source.tier === 'global-dormant'
+                  const canPromote = globalSourcesReady && isWorkspaceSource && !globalSlugSet.has(source.config.slug)
+
+                  return (
+                    <div key={source.config.slug} className="group relative min-h-[156px] overflow-hidden rounded-[18px] border border-white/[0.075] bg-white/[0.035] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#8b8cff]/35 hover:bg-white/[0.06] hover:shadow-[0_18px_60px_rgba(0,0,0,0.32),0_0_34px_rgba(94,106,210,0.10)]">
+                      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#8b8cff]/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                      <button type="button" onClick={() => onSourceClick(source)} className="flex w-full items-start gap-3 text-left">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-white/[0.08] bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+                          <SourceAvatar source={source} size="sm" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-white">{source.config.name}</div>
+                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/46">{subtitle}</p>
+                        </div>
+                      </button>
+                      <div className="mt-4 flex flex-wrap gap-1.5">
+                        {typeConfig && <span className={`rounded-[7px] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] ${typeConfig.colorClass}`}>{t(typeConfig.labelKey)}</span>}
+                        {tierConfig && <span className={`rounded-[7px] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] ${tierConfig.colorClass}`}>{t(tierConfig.labelKey)}</span>}
+                        {statusConfig && <span className={`rounded-[7px] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] ${statusConfig.colorClass}`}>{t(statusConfig.labelKey)}</span>}
+                      </div>
+                      <div className="absolute right-3 top-3 opacity-0 transition-opacity group-hover:opacity-100">
+                        <SourceMenu
+                          sourceSlug={source.config.slug}
+                          sourceName={source.config.name}
+                          onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://sources/source/${source.config.slug}?window=focused`)}
+                          onShowInFinder={source.folderPath ? () => window.electronAPI.showInFolder(source.folderPath) : undefined}
+                          onDelete={() => onDeleteSource(source.config.slug)}
+                          canDelete={isWorkspaceSource}
+                          deleteLabel={isWorkspaceSource ? undefined : t('sourcesList.managedSource')}
+                          onActivateGlobal={isDormantGlobal ? () => void handleToggleGlobal(source, true) : undefined}
+                          onDeactivateGlobal={isGlobalSource ? () => void handleToggleGlobal(source, false) : undefined}
+                          onPromoteToGlobal={canPromote ? () => void handlePromoteToGlobal(source) : undefined}
+                          onSendToWorkspace={hasOtherWorkspaces && isWorkspaceSource ? () => {
+                            setSendResourceSlug(source.config.slug)
+                            setSendResourceLabel(source.config.name)
+                            setSendDialogOpen(true)
+                          } : undefined}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+        <>
         {workspaceId && (
           <div className="flex shrink-0 items-center justify-end px-2 py-1">
             <button
@@ -278,6 +363,8 @@ export function SourcesListPanel({
         }
       }}
     />
+        </>
+        )}
     </div>
 
     {workspaceId && (
