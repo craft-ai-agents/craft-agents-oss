@@ -129,6 +129,13 @@ export interface CustomEndpointConfig {
   supportsImages?: boolean;
 }
 
+/** Runtime model shape accepted by the Pi custom-endpoint registration path. */
+export type RuntimeCustomModel = string | {
+  id: string;
+  contextWindow?: number;
+  supportsImages?: boolean;
+};
+
 /** OpenLLM speaks the Anthropic Messages protocol through Pi's custom endpoint path. */
 export const OPENLLM_CUSTOM_ENDPOINT = { api: 'anthropic-messages' } as const satisfies CustomEndpointConfig;
 
@@ -618,6 +625,32 @@ export function setModelSupportsImages(
   const nextModels = connection.models.slice();
   nextModels[idx] = nextEntry as ModelDefinition;
   return { ...connection, models: nextModels };
+}
+
+/**
+ * Convert persisted connection models into the runtime `customModels` payload
+ * consumed by the Pi subprocess. String entries stay compact; object entries
+ * only carry fields that the runtime registration path understands.
+ */
+export function buildRuntimeCustomModels(
+  models: LlmConnection['models'] | undefined,
+): RuntimeCustomModel[] | undefined {
+  return models?.map(model => {
+    if (typeof model === 'string') return model;
+
+    const supportsImages = typeof model.supportsImages === 'boolean'
+      ? model.supportsImages
+      : undefined;
+    if (model.contextWindow || supportsImages !== undefined) {
+      return {
+        id: model.id,
+        ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
+        ...(supportsImages !== undefined ? { supportsImages } : {}),
+      };
+    }
+
+    return model.id;
+  });
 }
 
 /**
