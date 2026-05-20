@@ -271,6 +271,9 @@ export const CHANNEL_MAP = {
   // Workspace images
   readWorkspaceImage: invoke(RPC_CHANNELS.workspace.READ_IMAGE),
   writeWorkspaceImage: invoke(RPC_CHANNELS.workspace.WRITE_IMAGE),
+  getChatFeedbackState: invoke(RPC_CHANNELS.workspace.GET_CHAT_FEEDBACK_STATE),
+  setChatFeedbackState: invoke(RPC_CHANNELS.workspace.SET_CHAT_FEEDBACK_STATE),
+  deleteChatFeedbackState: invoke(RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK_STATE),
 
   // Theme
   getAppTheme: invoke(RPC_CHANNELS.theme.GET_APP),

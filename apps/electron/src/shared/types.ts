@@ -519,6 +519,9 @@ export interface ElectronAPI {
   // Generic workspace image loading/saving
   readWorkspaceImage(workspaceId: string, relativePath: string): Promise<string>
   writeWorkspaceImage(workspaceId: string, relativePath: string, base64: string, mimeType: string): Promise<void>
+  getChatFeedbackState(workspaceId: string): Promise<import('@craft-agent/shared/workspaces').ChatFeedbackStateEntry[]>
+  setChatFeedbackState(workspaceId: string, sessionId: string, messageId: string, isLike: boolean): Promise<void>
+  deleteChatFeedbackState(workspaceId: string, sessionId: string, messageId: string): Promise<void>
 
   // Tool icon mappings
   getToolIconMappings(): Promise<ToolIconMapping[]>
