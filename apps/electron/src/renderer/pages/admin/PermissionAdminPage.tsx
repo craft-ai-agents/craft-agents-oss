@@ -5,8 +5,8 @@
  * Migrated from CoPaw console. Falls back to stub data if API is unavailable.
  */
 
-import { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Plus, Trash2, ShieldX } from 'lucide-react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
@@ -35,10 +35,11 @@ const STUB_DATA: PermissionPO[] = [
   { employeeId: 'EMP002', userType: 'admin', createTime: '2025-03-15 09:30:00', updateTime: '2025-03-15 09:30:00' },
 ]
 
-async function permRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function permRequest<T>(path: string, token: string, options: RequestInit = {}): Promise<T> {
   const url = `${PERMISSION_API_BASE}${path}`
   const method = options.method ?? 'GET'
   const headers: Record<string, string> = {
+    ...(token ? { authorization: token } : {}),
     ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
   }
   const res = await fetch(url, { ...options, headers })
@@ -47,17 +48,19 @@ async function permRequest<T>(path: string, options: RequestInit = {}): Promise<
   return json.body
 }
 
-const permissionApi = {
-  getList: () => permRequest<PermissionPO[]>('/api/mdp/permission/list'),
-  saveOrUpdate: (employeeId: string, userType: string) =>
-    permRequest<boolean>('/api/mdp/permission/saveOrUpdate', {
-      method: 'POST',
-      body: JSON.stringify({ employeeId, userType }),
-    }),
-  delete: (employeeId: string) =>
-    permRequest<void>(`/api/mdp/permission/delete?employeeId=${encodeURIComponent(employeeId)}`, {
-      method: 'POST',
-    }),
+function buildPermissionApi(token: string) {
+  return {
+    getList: () => permRequest<PermissionPO[]>('/api/mdp/permission/list', token),
+    saveOrUpdate: (employeeId: string, userType: string) =>
+      permRequest<boolean>('/api/mdp/permission/saveOrUpdate', token, {
+        method: 'POST',
+        body: JSON.stringify({ employeeId, userType }),
+      }),
+    delete: (employeeId: string) =>
+      permRequest<void>(`/api/mdp/permission/delete?employeeId=${encodeURIComponent(employeeId)}`, token, {
+        method: 'POST',
+      }),
+  }
 }
 
 // ============================================================
@@ -201,11 +204,30 @@ function PermissionRow({ record, deleting, onDelete }: PermissionRowProps) {
 // ============================================================
 
 export default function PermissionAdminPage() {
+  const [authStatus, setAuthStatus] = useState<'checking' | 'ok' | 'denied'>('checking')
   const [list, setList] = useState<PermissionPO[]>([])
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [permApi, setPermApi] = useState<ReturnType<typeof buildPermissionApi> | null>(null)
+  const checkedRef = useRef(false)
+
+  useEffect(() => {
+    if (checkedRef.current) return
+    checkedRef.current = true
+    window.electronAPI.getSsoSession().then((session) => {
+      if (!session.authenticated) { setAuthStatus('denied'); return }
+      const api = buildPermissionApi(session.token)
+      setPermApi(api)
+      fetch(`${PERMISSION_API_BASE}/api/mdp/permission/checkAdmin?employeeId=${encodeURIComponent(session.employeeId)}`, {
+        headers: { authorization: session.token },
+      })
+        .then((res) => res.json())
+        .then((json: { body: boolean }) => setAuthStatus(json.body ? 'ok' : 'denied'))
+        .catch(() => setAuthStatus('denied'))
+    }).catch(() => setAuthStatus('denied'))
+  }, [])
 
   const showNotice = (type: 'success' | 'error', msg: string) => {
     setNotice({ type, msg })
@@ -213,23 +235,25 @@ export default function PermissionAdminPage() {
   }
 
   const fetchList = useCallback(async () => {
+    if (!permApi) return
     setLoading(true)
     try {
-      const data = await permissionApi.getList()
+      const data = await permApi.getList()
       setList(data ?? [])
     } catch {
       setList(STUB_DATA)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [permApi])
 
   useEffect(() => { fetchList() }, [fetchList])
 
   const handleAdd = async (employeeId: string, userType: string) => {
+    if (!permApi) return
     setSubmitting(true)
     try {
-      await permissionApi.saveOrUpdate(employeeId, userType)
+      await permApi.saveOrUpdate(employeeId, userType)
       showNotice('success', '权限保存成功')
       fetchList()
     } catch {
@@ -240,9 +264,10 @@ export default function PermissionAdminPage() {
   }
 
   const handleDelete = async (employeeId: string) => {
+    if (!permApi) return
     setDeletingId(employeeId)
     try {
-      await permissionApi.delete(employeeId)
+      await permApi.delete(employeeId)
       showNotice('success', '权限已删除')
       fetchList()
     } catch {
@@ -250,6 +275,29 @@ export default function PermissionAdminPage() {
     } finally {
       setDeletingId(null)
     }
+  }
+
+  if (authStatus === 'checking') {
+    return (
+      <div className="flex flex-col h-full">
+        <PanelHeader title="权限管理" />
+        <div className="flex flex-1 items-center justify-center text-sm text-foreground/40">
+          验证权限中...
+        </div>
+      </div>
+    )
+  }
+
+  if (authStatus === 'denied') {
+    return (
+      <div className="flex flex-col h-full">
+        <PanelHeader title="权限管理" />
+        <div className="flex flex-col flex-1 items-center justify-center gap-3 text-foreground/40">
+          <ShieldX className="h-10 w-10 opacity-30" />
+          <p className="text-sm">您没有访问该页面的权限</p>
+        </div>
+      </div>
+    )
   }
 
   return (
