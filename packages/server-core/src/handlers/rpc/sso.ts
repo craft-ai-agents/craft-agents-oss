@@ -89,6 +89,7 @@ export async function handleSsoStartupSession({
     return {
       authenticated: true,
       employeeId: session.employeeId,
+      token: session.token,
       userName: session.userName,
       department: session.department,
     }

@@ -35,10 +35,11 @@ const STUB_DATA: PermissionPO[] = [
   { employeeId: 'EMP002', userType: 'admin', createTime: '2025-03-15 09:30:00', updateTime: '2025-03-15 09:30:00' },
 ]
 
-async function permRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function permRequest<T>(path: string, token: string, options: RequestInit = {}): Promise<T> {
   const url = `${PERMISSION_API_BASE}${path}`
   const method = options.method ?? 'GET'
   const headers: Record<string, string> = {
+    ...(token ? { token } : {}),
     ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
   }
   const res = await fetch(url, { ...options, headers })
@@ -47,17 +48,19 @@ async function permRequest<T>(path: string, options: RequestInit = {}): Promise<
   return json.body
 }
 
-const permissionApi = {
-  getList: () => permRequest<PermissionPO[]>('/api/mdp/permission/list'),
-  saveOrUpdate: (employeeId: string, userType: string) =>
-    permRequest<boolean>('/api/mdp/permission/saveOrUpdate', {
-      method: 'POST',
-      body: JSON.stringify({ employeeId, userType }),
-    }),
-  delete: (employeeId: string) =>
-    permRequest<void>(`/api/mdp/permission/delete?employeeId=${encodeURIComponent(employeeId)}`, {
-      method: 'POST',
-    }),
+function buildPermissionApi(token: string) {
+  return {
+    getList: () => permRequest<PermissionPO[]>('/api/mdp/permission/list', token),
+    saveOrUpdate: (employeeId: string, userType: string) =>
+      permRequest<boolean>('/api/mdp/permission/saveOrUpdate', token, {
+        method: 'POST',
+        body: JSON.stringify({ employeeId, userType }),
+      }),
+    delete: (employeeId: string) =>
+      permRequest<void>(`/api/mdp/permission/delete?employeeId=${encodeURIComponent(employeeId)}`, token, {
+        method: 'POST',
+      }),
+  }
 }
 
 // ============================================================
@@ -207,6 +210,7 @@ export default function PermissionAdminPage() {
   const [submitting, setSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [permApi, setPermApi] = useState<ReturnType<typeof buildPermissionApi> | null>(null)
   const checkedRef = useRef(false)
 
   useEffect(() => {
@@ -214,7 +218,11 @@ export default function PermissionAdminPage() {
     checkedRef.current = true
     window.electronAPI.getSsoSession().then((session) => {
       if (!session.authenticated) { setAuthStatus('denied'); return }
-      fetch(`${PERMISSION_API_BASE}/api/mdp/permission/checkAdmin?employeeId=${encodeURIComponent(session.employeeId)}`)
+      const api = buildPermissionApi(session.token)
+      setPermApi(api)
+      fetch(`${PERMISSION_API_BASE}/api/mdp/permission/checkAdmin?employeeId=${encodeURIComponent(session.employeeId)}`, {
+        headers: { token: session.token },
+      })
         .then((res) => res.json())
         .then((json: { body: boolean }) => setAuthStatus(json.body ? 'ok' : 'denied'))
         .catch(() => setAuthStatus('denied'))
@@ -227,23 +235,25 @@ export default function PermissionAdminPage() {
   }
 
   const fetchList = useCallback(async () => {
+    if (!permApi) return
     setLoading(true)
     try {
-      const data = await permissionApi.getList()
+      const data = await permApi.getList()
       setList(data ?? [])
     } catch {
       setList(STUB_DATA)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [permApi])
 
   useEffect(() => { fetchList() }, [fetchList])
 
   const handleAdd = async (employeeId: string, userType: string) => {
+    if (!permApi) return
     setSubmitting(true)
     try {
-      await permissionApi.saveOrUpdate(employeeId, userType)
+      await permApi.saveOrUpdate(employeeId, userType)
       showNotice('success', '权限保存成功')
       fetchList()
     } catch {
@@ -254,9 +264,10 @@ export default function PermissionAdminPage() {
   }
 
   const handleDelete = async (employeeId: string) => {
+    if (!permApi) return
     setDeletingId(employeeId)
     try {
-      await permissionApi.delete(employeeId)
+      await permApi.delete(employeeId)
       showNotice('success', '权限已删除')
       fetchList()
     } catch {
