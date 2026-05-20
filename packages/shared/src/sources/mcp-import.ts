@@ -693,6 +693,7 @@ function extractBearerAuthFromSecrets(candidate: McpImportCandidate): void {
   if (authSecretIndex === -1) return;
 
   const authSecret = secrets[authSecretIndex];
+  if (!authSecret) return;
   const bearerMatch = authSecret.value.match(/^Bearer\s+(.+)$/i);
   if (!bearerMatch) return;
 

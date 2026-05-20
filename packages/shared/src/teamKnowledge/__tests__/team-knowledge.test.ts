@@ -407,7 +407,7 @@ describe('stale TTL', () => {
         {
           id: 'barely-fresh', title: 'Barely Fresh', url: 'https://example.com/barely.md', priority: 1,
           content: '# Barely', contentHash: 'aaa', lastFetchedAt: now,
-          staleAt: now + 1, // 1ms in the future
+          staleAt: now + 60_000, // in the future
         },
       ],
     })

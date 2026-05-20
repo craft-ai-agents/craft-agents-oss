@@ -22,7 +22,7 @@ describe('MCP source form flow wiring', () => {
     expect(formSource).toContain('Streamable HTTP')
     expect(formSource).toContain('Command')
     expect(formSource).toContain('JSON')
-    expect(formSource).toContain('className="grid w-full grid-cols-3"')
+    expect(formSource).toContain("'grid w-full grid-cols-3'")
     expect(formSource).toContain('args: parseListLines(values.argsText)')
     expect(formSource).not.toContain('.split(\' \')')
     expect(formSource).not.toContain('.split(" ")')
