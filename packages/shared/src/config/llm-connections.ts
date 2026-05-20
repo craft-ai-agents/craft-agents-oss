@@ -532,9 +532,9 @@ export function isPiProvider(providerType: LlmProviderType): boolean {
  *   has a real failure mode — if no tool fires before the turn ends, the steer
  *   becomes `steer_undelivered` and gets re-queued anyway, paying for the
  *   original turn's tokens for nothing. Default to queue for predictability.
- * - 'pi' / 'pi_compat' → 'steer': Pi's native `.steer()` is non-destructive
- *   (delivers after the current tool finishes, keeps full context). No
- *   downside to defaulting to immediate steering.
+ * - Pi-backed providers (`pi`, `pi_compat`, `openllm`) → 'steer': Pi's native
+ *   `.steer()` is non-destructive (delivers after the current tool finishes,
+ *   keeps full context). No downside to defaulting to immediate steering.
  */
 export function defaultMidStreamBehavior(providerType: LlmProviderType): MidStreamBehavior {
   return providerType === 'anthropic' ? 'queue' : 'steer';
@@ -604,16 +604,16 @@ export function setModelSupportsImages(
 /**
  * Resolve whether a given model on a connection accepts image input.
  *
- * For `pi_compat` (custom-endpoint) connections this mirrors the precedence used
- * by Pi's `buildCustomEndpointModelDef`:
+ * For compat connections this mirrors the precedence used by Pi's
+ * `buildCustomEndpointModelDef`:
  *   per-model `supportsImages` override
  *   ?? connection-level `customEndpoint.supportsImages` default
  *   ?? false
  *
- * For non-`pi_compat` connections the renderer doesn't own the catalog — Pi SDK's
+ * For non-compat connections the renderer doesn't own the catalog — Pi SDK's
  * bundled provider definitions and Anthropic's API do. This helper conservatively
  * returns `true` there (we don't know better; the upstream decides). The
- * pre-flight banner gates on `pi_compat` separately, so this just reports what
+ * pre-flight banner gates on compat providers separately, so this reports what
  * the renderer can know with confidence.
  */
 export function modelSupportsImages(
@@ -719,7 +719,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType, piA
     }
     return models;
   }
-  if (providerType === 'pi_compat' || providerType === 'openllm') return [];  // Dynamic — user specifies
+  if (isCompatProvider(providerType)) return [];  // Dynamic — user specifies
   // anthropic
   return ANTHROPIC_MODELS;
 }
