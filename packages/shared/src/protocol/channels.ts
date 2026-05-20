@@ -167,10 +167,6 @@ export const RPC_CHANNELS = {
     GET_AUTH_STATE: 'onboarding:getAuthState',
     VALIDATE_MCP: 'onboarding:validateMcp',
     START_MCP_OAUTH: 'onboarding:startMcpOAuth',
-    START_CLAUDE_OAUTH: 'onboarding:startClaudeOAuth',
-    EXCHANGE_CLAUDE_CODE: 'onboarding:exchangeClaudeCode',
-    HAS_CLAUDE_OAUTH_STATE: 'onboarding:hasClaudeOAuthState',
-    CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
     DEFER_SETUP: 'onboarding:deferSetup',
   },
   sso: {
@@ -193,20 +189,6 @@ export const RPC_CHANNELS = {
     SET_WORKSPACE_DEFAULT: 'LLM_Connection:setWorkspaceDefault',
     REFRESH_MODELS: 'LLM_Connection:refreshModels',
     CHANGED: 'LLM_Connection:changed',
-  },
-  chatgpt: {
-    START_OAUTH: 'chatgpt:startOAuth',
-    COMPLETE_OAUTH: 'chatgpt:completeOAuth',
-    CANCEL_OAUTH: 'chatgpt:cancelOAuth',
-    GET_AUTH_STATUS: 'chatgpt:getAuthStatus',
-    LOGOUT: 'chatgpt:logout',
-  },
-  copilot: {
-    START_OAUTH: 'copilot:startOAuth',
-    CANCEL_OAUTH: 'copilot:cancelOAuth',
-    GET_AUTH_STATUS: 'copilot:getAuthStatus',
-    LOGOUT: 'copilot:logout',
-    DEVICE_CODE: 'copilot:deviceCode',
   },
   settings: {
     SETUP_LLM_CONNECTION: 'settings:setupLlmConnection',

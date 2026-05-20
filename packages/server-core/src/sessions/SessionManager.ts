@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
+import { ENV_CONNECTION_SLUG, ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -72,7 +72,7 @@ import {
 } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
-import { getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
+import { getValidClaudeOAuthToken, SsoCredentialStore } from '@craft-agent/shared/auth'
 import { resolveAuthEnvVars } from '@craft-agent/shared/config'
 import { toolMetadataStore, getLastApiError } from '@craft-agent/shared/interceptor'
 import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
@@ -111,6 +111,33 @@ let sessionLog: Logger = createScopedLogger(CONSOLE_LOGGER, 'session')
 export function setSessionPlatform(platform: PlatformServices): void {
   _platform = platform
   sessionLog = createScopedLogger(platform.logger, 'session')
+}
+
+interface SsoSubprocessEnvOptions {
+  env?: Pick<NodeJS.ProcessEnv, 'LLM_BASE_URL'>
+  loadSsoSession?: () => Promise<{ token?: string | null } | null>
+}
+
+export async function buildSsoSubprocessEnvOverrides(
+  connectionSlug: string | undefined,
+  options: SsoSubprocessEnvOptions = {},
+): Promise<Record<string, string>> {
+  if (connectionSlug !== ENV_CONNECTION_SLUG) return {}
+
+  const baseUrl = (options.env?.LLM_BASE_URL ?? process.env.LLM_BASE_URL)?.trim()
+  if (!baseUrl) return {}
+
+  try {
+    const session = await (options.loadSsoSession ?? (() => new SsoCredentialStore().load()))()
+    if (!session?.token) return {}
+    return {
+      [ENV_CONNECTION_SSO_TOKEN_ENV_VAR]: session.token,
+      [ENV_CONNECTION_SSO_BASE_URL_ENV_VAR]: baseUrl,
+    }
+  } catch (error) {
+    sessionLog.warn('Failed to load SSO session for subprocess env injection:', error)
+    return {}
+  }
 }
 
 interface SessionRuntimeHooks {
@@ -2957,6 +2984,7 @@ export class SessionManager implements ISessionManager {
         // Pass mini model to SDK subprocess so built-in tools like WebFetch
         // use the correct model for summarization (instead of hardcoded Haiku)
         ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
+        ...(await buildSsoSubprocessEnvOverrides(backendContext.connection?.slug ?? managed.llmConnection)),
       }
       managed.envOverrides = envOverrides
 
@@ -6851,6 +6879,14 @@ export class SessionManager implements ISessionManager {
       }
 
       case 'error': {
+        if (event.message === 'SSO_TOKEN_EXPIRED') {
+          void new SsoCredentialStore().clear().catch(error => {
+            sessionLog.warn('Failed to clear expired SSO session after interceptor signal:', error)
+          })
+          this.sendEvent({ type: 'sso_token_expired', sessionId }, workspaceId)
+          break
+        }
+
         // Skip errors after handoff (plan submission, auth request) — the SDK may emit
         // an error from the interrupted query after we've already stopped processing.
         if (!managed.isProcessing) {
@@ -7305,6 +7341,7 @@ export class SessionManager implements ISessionManager {
     const envOverrides: Record<string, string> = {
       CRAFT_WORKSPACE_PATH: workspaceRootPath,
       ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
+      ...(await buildSsoSubprocessEnvOverrides(backendContext.connection?.slug ?? managed.llmConnection)),
     }
 
     const agent = createBackendFromResolvedContext({
