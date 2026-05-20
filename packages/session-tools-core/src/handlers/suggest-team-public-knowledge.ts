@@ -59,8 +59,11 @@ interface SuggestionResult {
 }
 
 export interface SuggestTeamPublicKnowledgeArgs {
+  /** Full user message to use for message-level team knowledge suggestions. */
   message: string;
+  /** Optional entry kinds to include in suggestions. */
   kinds?: MarkdownEntryKind[];
+  /** Maximum suggestions to return. Defaults to 3 and is capped at 5. */
   limit?: number;
 }
 
@@ -120,6 +123,7 @@ function loadCache(workspacePath: string, fs: SessionToolContext['fs']): TeamPub
   }
 }
 
+/** Suggests relevant team public knowledge for a full user message. */
 export async function handleSuggestTeamPublicKnowledge(
   ctx: SessionToolContext,
   args: SuggestTeamPublicKnowledgeArgs,
@@ -155,8 +159,8 @@ export async function handleSuggestTeamPublicKnowledge(
 }
 
 function normalizeLimit(limit: number | undefined): number {
-  if (!Number.isFinite(limit)) return DEFAULT_LIMIT;
-  return Math.max(1, Math.min(MAX_LIMIT, Math.floor(limit!)));
+  if (limit === undefined || !Number.isFinite(limit)) return DEFAULT_LIMIT;
+  return Math.max(1, Math.min(MAX_LIMIT, Math.floor(limit)));
 }
 
 function parseCacheEntries(cache: TeamPublicKnowledgeCache): {
