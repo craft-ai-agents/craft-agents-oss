@@ -62,8 +62,8 @@ import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
 // Skill types
-import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult } from '@craft-agent/shared/skills';
-export type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult };
+import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult } from '@craft-agent/shared/skills';
+export type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult };
 
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
@@ -505,7 +505,9 @@ export interface ElectronAPI {
   // CoPaw market service
   listMarketSkills(): Promise<CopawMarketSkill[]>
   uploadMarketSkill(input: CopawMarketUploadInput): Promise<CopawMarketUploadResult>
+  installMarketSkill(workspaceId: string, skillName: string, chineseName: string, description: string, version?: string): Promise<CopawInstallSkillResult>
   deleteMarketSkill(skillName: string): Promise<{ success: true }>
+  fetchMarketSkillContent(skillName: string, version?: string): Promise<{ content: string }>
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void

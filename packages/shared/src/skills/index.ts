@@ -101,7 +101,9 @@ export {
   COPAW_MARKET_BASE_URL,
   listCopawMarketSkills,
   uploadCopawMarketSkill,
+  installCopawMarketSkill,
   deleteCopawMarketSkill,
+  downloadCopawMarketSkillZip,
   generateMarketSkillVersion,
 } from './copaw-market-api.ts';
 export type {
@@ -109,4 +111,6 @@ export type {
   CopawMarketUploadInput,
   CopawMarketUploadPayload,
   CopawMarketUploadResult,
+  CopawInstallConflict,
+  CopawInstallSkillResult,
 } from './copaw-market-api.ts';

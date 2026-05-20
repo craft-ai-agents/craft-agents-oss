@@ -64,6 +64,20 @@ export type CopawMarketUploadResult =
   | { status: 'conflict'; message: string }
   | { status: 'error'; message: string }
 
+// ── Install result types (mirrors CoPaw InstallSkillResult) ──────────────────
+
+export interface CopawInstallConflict {
+  reason: string
+  skill_name: string
+  suggested_name: string
+}
+
+export interface CopawInstallSkillResult {
+  imported: string[]
+  count: number
+  conflicts: CopawInstallConflict[]
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 interface MarketApiEnvelope<T = unknown> {
@@ -105,9 +119,7 @@ export async function listCopawMarketSkills(
 
 /**
  * Publish a skill to the market.
- *
- * The SKILL.md content is zipped in-process before sending so the server
- * receives a standard bundle archive.
+ * Sends multipart/form-data with fields matching CoPaw's uploadSkill().
  */
 export async function uploadCopawMarketSkill(
   input: CopawMarketUploadPayload,
@@ -142,6 +154,56 @@ export async function uploadCopawMarketSkill(
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : '发布失败' }
   }
+}
+
+/**
+ * Install a market skill via the backend API.
+ *   POST {baseUrl}/api/skills/market/install
+ *   body: { skill_name, version?, overwrite? }
+ *   response: { imported: string[], count: number, conflicts: CopawInstallConflict[] }
+ */
+export async function installCopawMarketSkill(
+  skillName: string,
+  baseUrl: string,
+  token: string,
+  version?: string,
+  overwrite = false,
+  fetchImpl: typeof fetch = fetch,
+): Promise<CopawInstallSkillResult> {
+  const res = await fetchImpl(`${baseUrl}/api/skills/market/install`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader(token) },
+    body: JSON.stringify({ skill_name: skillName, version, overwrite }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`安装失败: ${res.status}${text ? ` - ${text}` : ''}`)
+  }
+  return res.json() as Promise<CopawInstallSkillResult>
+}
+
+/**
+ * Download a market skill zip by name (and optional version).
+ * Returns raw zip bytes for in-memory extraction — nothing is written to disk.
+ */
+export async function downloadCopawMarketSkillZip(
+  skillName: string,
+  baseUrl: string,
+  token: string,
+  version?: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Uint8Array> {
+  const params = new URLSearchParams({ name: skillName })
+  if (version) params.set('version', version)
+  const res = await fetchImpl(`${baseUrl}/api/mdp/skill/download?${params}`, {
+    headers: authHeader(token),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`下载失败: ${res.status}${text ? ` - ${text}` : ''}`)
+  }
+  const buffer = await res.arrayBuffer()
+  return new Uint8Array(buffer)
 }
 
 /** Delete a market skill by name. Only the original uploader can delete. */

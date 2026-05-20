@@ -22,7 +22,9 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.PUBLISH_DIRECT_MARKETPLACE,
   RPC_CHANNELS.skills.LIST_MARKET,
   RPC_CHANNELS.skills.UPLOAD_MARKET,
+  RPC_CHANNELS.skills.INSTALL_MARKET,
   RPC_CHANNELS.skills.DELETE_MARKET,
+  RPC_CHANNELS.skills.FETCH_MARKET_CONTENT,
 ] as const
 
 export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -296,6 +298,85 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       COPAW_MARKET_BASE_URL,
       session.token,
     )
+  })
+
+  /**
+   * Install a market skill locally.
+   * Downloads the zip, extracts SKILL.md body, injects market chineseName/description
+   * as frontmatter, and writes to the global skills directory.
+   */
+  server.handle(RPC_CHANNELS.skills.INSTALL_MARKET, async (
+    _ctx,
+    workspaceId: string,
+    skillName: string,
+    chineseName: string,
+    description: string,
+    version?: string,
+  ) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL, GLOBAL_AGENT_SKILLS_DIR, forceWriteSkill } = await import('@craft-agent/shared/skills')
+    const { unzipSync } = await import('fflate')
+    const { join } = await import('path')
+
+    const session = await new SsoCredentialStore().load()
+    if (!session) throw new Error('未登录，无法安装技能')
+
+    // Download zip from market
+    const zipBytes = await downloadCopawMarketSkillZip(skillName, COPAW_MARKET_BASE_URL, session.token, version)
+    const unzipped = unzipSync(zipBytes)
+
+    // Find SKILL.md in zip
+    const skillMdKey = Object.keys(unzipped).find((k) =>
+      k.toLowerCase() === 'skill.md' || k.toLowerCase().match(/^[^/]+\/skill\.md$/)
+    )
+
+    // Extract body content (strip existing frontmatter if any)
+    let body = ''
+    if (skillMdKey) {
+      const raw = new TextDecoder().decode(unzipped[skillMdKey]).trimStart()
+      if (raw.startsWith('---')) {
+        const end = raw.indexOf('\n---', 3)
+        body = end !== -1 ? raw.slice(end + 4).trim() : raw
+      } else {
+        body = raw.trim()
+      }
+    }
+
+    // Write to global skills directory with injected metadata
+    const metadata = { name: chineseName, description }
+    const rootPath = join(GLOBAL_AGENT_SKILLS_DIR, '..')
+    forceWriteSkill(rootPath, skillName, metadata, body)
+
+    await pushSkillsChanged(workspace.id, workspace.rootPath)
+
+    return { imported: [skillName], count: 1, conflicts: [] }
+  })
+
+  /**
+   * Fetch SKILL.md content for a market skill preview.
+   * Downloads the zip in-memory, extracts SKILL.md, returns the content string.
+   * Nothing is written to disk.
+   */
+  server.handle(RPC_CHANNELS.skills.FETCH_MARKET_CONTENT, async (_ctx, skillName: string, version?: string) => {
+    const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL } = await import('@craft-agent/shared/skills')
+    const { unzipSync } = await import('fflate')
+
+    const session = await new SsoCredentialStore().load()
+    if (!session) throw new Error('未登录，无法获取技能内容')
+
+    const zipBytes = await downloadCopawMarketSkillZip(skillName, COPAW_MARKET_BASE_URL, session.token, version)
+    const unzipped = unzipSync(zipBytes)
+
+    const skillMdKey = Object.keys(unzipped).find((k) =>
+      k.toLowerCase() === 'skill.md' || k.toLowerCase().match(/^[^/]+\/skill\.md$/)
+    )
+    if (!skillMdKey) throw new Error('zip 中未找到 SKILL.md 文件')
+
+    return { content: new TextDecoder().decode(unzipped[skillMdKey]) }
   })
 
   /** Delete a skill from the CoPaw market service. */

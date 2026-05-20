@@ -1,8 +1,8 @@
 import * as React from 'react'
+import { toast } from 'sonner'
 import { Check, ChevronDown, ExternalLink, FilePlus2, Folder, FolderUp, Loader2, MessageCircle, Minus, MoreHorizontal, Plus, Search, Store, Upload, UserCog, Zap } from 'lucide-react'
 import { Markdown, Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { Switch } from '@/components/ui/switch'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { strToU8, unzipSync, zipSync } from 'fflate'
 import type {
@@ -23,13 +23,13 @@ import { navigate, routes } from '@/lib/navigate'
 // Mock switch — set to false to use real API
 // ============================================================================
 
-const USE_MOCK_MARKET = false
+const USE_MOCK_MARKET = true
 
 const MOCK_MARKET_SKILLS: CopawMarketSkill[] = [
   {
     fileKey: 'mock-key-1',
     userName: '张三',
-    employeeId: 'EMP001',
+    employeeId: 'MOCK_CURRENT_USER',
     department: '研发部',
     name: 'code-review',
     chineseName: '代码审查助手',
@@ -42,7 +42,7 @@ const MOCK_MARKET_SKILLS: CopawMarketSkill[] = [
   {
     fileKey: 'mock-key-2',
     userName: '李四',
-    employeeId: 'EMP002',
+    employeeId: 'MOCK_CURRENT_USER',
     department: 'DevOps团队',
     name: 'k8s-deploy',
     chineseName: 'K8s 部署助手',
@@ -214,6 +214,7 @@ export interface MarketplaceSkillListing {
   latestVersion: string
   installCount: number
   installState: MarketplaceInstallState
+  publishedAt?: string
 }
 
 export interface MarketplaceSkillVersion {
@@ -658,6 +659,7 @@ function mapCopawSkillToListing(
     latestVersion: skill.version ?? '1.0.0',
     installCount: skill.hot,
     installState,
+    publishedAt: skill.createdAt,
   }
 }
 
@@ -688,7 +690,7 @@ function HeroBanner() {
       <div className="pointer-events-none absolute -bottom-16 -right-16 h-64 w-64 rounded-full bg-indigo-300/30 blur-3xl dark:bg-indigo-500/20" />
 
       <div className="relative flex flex-col items-center px-8 py-10">
-        <div className="mb-6 flex w-full max-w-lg items-center gap-3 rounded-xl bg-white/80 px-5 py-3 shadow-sm backdrop-blur-sm dark:bg-black/30">
+        <div className="mb-6 flex w-full max-w-lg items-center gap-3 rounded-xl bg-white/80 px-5 py-3 shadow-thin backdrop-blur-sm dark:bg-black/30">
           <div className={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white', slide.color)}>
             {slide.icon}
           </div>
@@ -734,13 +736,20 @@ function SkillIcon({ icon, iconBg }: { icon: string; iconBg?: string }) {
 function SkillRow({
   skill,
   onInstall,
+  onDelete,
   onClick,
+  currentUserId,
+  isInstalling = false,
 }: {
   skill: MarketplaceSkillListing
   onInstall: (s: MarketplaceSkillListing) => void
+  onDelete: (s: MarketplaceSkillListing) => void
   onClick: (s: MarketplaceSkillListing) => void
+  currentUserId: string | null
+  isInstalling?: boolean
 }) {
   const installed = skill.installState === 'installed'
+  const isOwner = Boolean(currentUserId && skill.ownerId === currentUserId)
 
   return (
     <button
@@ -773,19 +782,55 @@ function SkillRow({
         </div>
       </div>
 
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={(e) => { e.stopPropagation(); if (!installed) onInstall(skill) }}
-        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !installed) { e.stopPropagation(); onInstall(skill) } }}
-        className={cn(
-          'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border transition-colors',
-          installed
-            ? 'cursor-default border-foreground/15 text-foreground/40'
-            : 'cursor-pointer border-foreground/20 text-foreground/50 hover:border-foreground/50 hover:text-foreground',
+      {/* 操作按钮区：横排，删除从左侧淡入 */}
+      <div className="flex flex-shrink-0 items-center gap-1.5">
+        {/* 删除按钮 — 仅上传人可见，hover 时从左侧淡入 */}
+        {isOwner && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); onDelete(skill) }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onDelete(skill) } }}
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-rose-300 text-rose-400 opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 hover:border-rose-500 hover:text-rose-600 dark:border-rose-500/40 dark:text-rose-400/70 dark:hover:border-rose-400 dark:hover:text-rose-400"
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="text-xs">删除</TooltipContent>
+          </Tooltip>
         )}
-      >
-        {installed ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+
+        {/* 安装状态 */}
+        {installed ? (
+          <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+            <Check className="h-3 w-3" />
+            已安装
+          </span>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { if (isInstalling) return; e.stopPropagation(); onInstall(skill) }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { if (isInstalling) return; e.stopPropagation(); onInstall(skill) } }}
+                className={cn(
+                  'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border transition-colors',
+                  isInstalling
+                    ? 'cursor-default border-foreground/10 text-foreground/30'
+                    : 'cursor-pointer border-foreground/20 text-foreground/50 hover:border-foreground/50 hover:text-foreground',
+                )}
+              >
+                {isInstalling
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Plus className="h-3.5 w-3.5" />}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="text-xs">{isInstalling ? '安装中…' : '安装'}</TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </button>
   )
@@ -794,11 +839,17 @@ function SkillRow({
 function SkillGrid({
   skills,
   onInstall,
+  onDelete,
   onClick,
+  currentUserId,
+  installingIds = new Set(),
 }: {
   skills: MarketplaceSkillListing[]
   onInstall: (s: MarketplaceSkillListing) => void
+  onDelete: (s: MarketplaceSkillListing) => void
   onClick: (s: MarketplaceSkillListing) => void
+  currentUserId: string | null
+  installingIds?: Set<string>
 }) {
   if (skills.length === 0) {
     return <p className="py-12 text-center text-sm text-muted-foreground">暂无匹配的技能</p>
@@ -810,10 +861,10 @@ function SkillGrid({
   return (
     <div className="grid grid-cols-2 gap-x-6">
       <div className="divide-y divide-border/50">
-        {left.map((s) => <SkillRow key={s.id} skill={s} onInstall={onInstall} onClick={onClick} />)}
+        {left.map((s) => <SkillRow key={s.id} skill={s} onInstall={onInstall} onDelete={onDelete} onClick={onClick} currentUserId={currentUserId} isInstalling={installingIds.has(s.id)} />)}
       </div>
       <div className="divide-y divide-border/50">
-        {right.map((s) => <SkillRow key={s.id} skill={s} onInstall={onInstall} onClick={onClick} />)}
+        {right.map((s) => <SkillRow key={s.id} skill={s} onInstall={onInstall} onDelete={onDelete} onClick={onClick} currentUserId={currentUserId} isInstalling={installingIds.has(s.id)} />)}
       </div>
     </div>
   )
@@ -824,15 +875,42 @@ function SkillDetailDialog({
   onClose,
   onInstall,
   onUninstall,
+  currentUserId,
+  isInstalling = false,
 }: {
   skill: MarketplaceSkillListing | null
   onClose: () => void
   onInstall: (s: MarketplaceSkillListing) => void
   onUninstall: (s: MarketplaceSkillListing) => void
+  currentUserId: string | null
+  isInstalling?: boolean
 }) {
+  const [skillContent, setSkillContent] = React.useState<string | null>(null)
+  const [contentLoading, setContentLoading] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!skill) return
+    setSkillContent(null)
+    setContentLoading(true)
+    if (USE_MOCK_MARKET) {
+      const t = setTimeout(() => {
+        setSkillContent(null) // 降级到 mockMarkdown
+        setContentLoading(false)
+      }, 800)
+      return () => clearTimeout(t)
+    }
+    let active = true
+    window.electronAPI.fetchMarketSkillContent(skill.slug, skill.latestVersion)
+      .then(({ content }) => { if (active) setSkillContent(content) })
+      .catch(() => { if (active) setSkillContent(null) })
+      .finally(() => { if (active) setContentLoading(false) })
+    return () => { active = false }
+  }, [skill?.slug])
+
   if (!skill) return null
 
   const installed = skill.installState === 'installed'
+  const isOwner = Boolean(currentUserId && skill.ownerId === currentUserId)
 
   const mockMarkdown = `## 概述
 
@@ -984,7 +1062,9 @@ ${skill.slug} config export --format json --output ./backup/
 - 初始版本发布
 - 支持基础的部署与监控功能`
 
-  const publishedAt = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
+  const publishedAt = skill.publishedAt
+    ? new Date(skill.publishedAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
+    : new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
@@ -1004,14 +1084,6 @@ ${skill.slug} config export --format json --output ./backup/
               <p className="mt-0.5 text-[13px] text-muted-foreground">{skill.description}</p>
             </div>
           </div>
-          <div className="ml-4 flex flex-shrink-0 items-center gap-2 pt-1">
-            <button
-              type="button"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-          </div>
         </div>
 
         {/* 作者 + 发布时间 + 安装数 */}
@@ -1025,27 +1097,44 @@ ${skill.slug} config export --format json --output ./backup/
 
         {/* Markdown 内容区 */}
         <div className="mx-7 mb-5 min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/20 px-6 py-5 text-[13px] leading-relaxed">
-          <Markdown>{mockMarkdown}</Markdown>
+          {contentLoading ? (
+            <div className="flex h-full items-center justify-center text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+            </div>
+          ) : (
+            <Markdown>{skillContent ?? mockMarkdown}</Markdown>
+          )}
         </div>
 
         {/* 底部操作栏 */}
         <div className="flex items-center justify-between border-t border-border px-7 py-4">
-          <button
-            type="button"
-            onClick={() => onUninstall(skill)}
-            className="rounded-lg bg-rose-100 px-4 py-2 text-[13px] font-medium text-rose-500 transition-colors hover:bg-rose-200 dark:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500/25"
-          >
-            删除
-          </button>
-          <button
-            type="button"
-            onClick={() => onInstall(skill)}
-            disabled={installed}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            安装
-          </button>
+          <div>
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() => onUninstall(skill)}
+                className="rounded-lg bg-rose-100 px-4 py-2 text-[13px] font-medium text-rose-500 transition-colors hover:bg-rose-200 dark:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500/25"
+              >
+                删除
+              </button>
+            )}
+          </div>
+          {installed ? (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 px-4 py-2 text-[13px] font-medium text-emerald-600 dark:border-emerald-500/40 dark:text-emerald-400">
+              <Check className="h-3.5 w-3.5" />
+              已安装
+            </span>
+          ) : (
+            <button
+              type="button"
+              disabled={isInstalling}
+              onClick={() => onInstall(skill)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-85 disabled:opacity-50 disabled:cursor-default"
+            >
+              {isInstalling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              {isInstalling ? '安装中…' : '安装'}
+            </button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -1178,7 +1267,7 @@ function LocalSkillMoreMenu({ slug, workspaceId }: { slug: string; workspaceId: 
         <MoreHorizontal className="h-4 w-4" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-[172px] overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg">
+        <div className="absolute right-0 top-full z-50 mt-1 w-[172px] overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-thin">
           <button
             type="button"
             onClick={() => { setOpen(false); window.electronAPI.openSkillInEditor(workspaceId, slug) }}
@@ -1201,51 +1290,78 @@ function LocalSkillMoreMenu({ slug, workspaceId }: { slug: string; workspaceId: 
   )
 }
 
+// ── 通用确认对话框 ─────────────────────────────────────────────────────────────
+
+function ConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel = '确认',
+  cancelLabel = '取消',
+  destructive = true,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean
+  title: string
+  description: string
+  confirmLabel?: string
+  cancelLabel?: string
+  destructive?: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  if (!open) return null
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onCancel() }}>
+      <DialogContent className="w-full max-w-[360px] sm:max-w-[360px] gap-0 p-6">
+        <p className="text-[15px] font-semibold text-foreground">{title}</p>
+        <p className="mt-2 text-[13px] text-muted-foreground leading-relaxed">{description}</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-lg border border-border px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={cn(
+              'rounded-lg px-4 py-2 text-[13px] font-medium transition-colors',
+              destructive
+                ? 'bg-rose-500 text-white hover:bg-rose-600'
+                : 'bg-foreground text-background hover:opacity-85',
+            )}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function LocalSkillDetailDialog({
   skill,
-  enabled,
   workspaceId,
   onClose,
   onUninstall,
-  onToggleEnabled,
   onPublish,
+  isFromMarket = false,
 }: {
   skill: LoadedSkill | null
-  enabled: boolean
   workspaceId: string
   onClose: () => void
   onUninstall: (s: LoadedSkill) => void
-  onToggleEnabled: (s: LoadedSkill) => void
   onPublish: (s: LoadedSkill) => void
+  isFromMarket?: boolean
 }) {
   if (!skill) return null
 
   const name = skill.metadata?.name ?? skill.slug
   const description = skill.metadata?.description ?? ''
-
-  const mockMarkdown = `## 概述
-
-${description || '本地技能，无描述信息。'}
-
-## 使用方式
-
-在对话中直接引用此技能，或将其作为工作区默认技能启用。
-
-## 技能路径
-
-\`\`\`
-${skill.path}
-\`\`\`
-
-## 配置信息
-
-- **标识符**：\`${skill.slug}\`
-${skill.metadata?.globs?.length ? `- **触发规则**：\`${skill.metadata.globs.join(', ')}\`` : ''}
-${skill.metadata?.requiredSources?.length ? `- **依赖来源**：${skill.metadata.requiredSources.join(', ')}` : ''}
-
-## 内容预览
-
-${skill.content || '（内容为空）'}`
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
@@ -1264,7 +1380,6 @@ ${skill.content || '（内容为空）'}`
             </div>
           </div>
           <div className="ml-4 flex flex-shrink-0 items-center gap-2 pt-1">
-            <Switch checked={enabled} onCheckedChange={() => onToggleEnabled(skill)} />
             <LocalSkillMoreMenu slug={skill.slug} workspaceId={workspaceId} />
           </div>
         </div>
@@ -1272,7 +1387,7 @@ ${skill.content || '（内容为空）'}`
         {/* 路径信息 + 发布到市场 */}
         <div className="flex items-center justify-between px-7 pb-4 pt-2">
           <span className="text-[12px] text-muted-foreground/55">路径：{skill.path}</span>
-          {!skill.marketplaceOrigin && (
+          {!skill.marketplaceOrigin && !isFromMarket && (
             <button
               type="button"
               onClick={() => { onClose(); onPublish(skill) }}
@@ -1286,14 +1401,17 @@ ${skill.content || '（内容为空）'}`
 
         {/* Markdown 内容区 */}
         <div className="mx-7 mb-5 min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/20 px-6 py-5 text-[13px] leading-relaxed">
-          <Markdown>{mockMarkdown}</Markdown>
+          {skill.content
+            ? <Markdown>{skill.content}</Markdown>
+            : <p className="text-muted-foreground">（内容为空）</p>
+          }
         </div>
 
         {/* 底部操作栏 */}
         <div className="flex items-center justify-between border-t border-border px-7 py-4">
           <button
             type="button"
-            onClick={() => { onUninstall(skill); onClose() }}
+            onClick={() => onUninstall(skill)}
             className="rounded-lg bg-rose-100 px-4 py-2 text-[13px] font-medium text-rose-500 transition-colors hover:bg-rose-200 dark:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500/25"
           >
             卸载
@@ -1342,7 +1460,7 @@ function LocalOriginDropdown({ value, onChange }: { value: LocalOriginFilter; on
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[110px] overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg">
+        <div className="absolute right-0 top-full z-50 mt-1 min-w-[110px] overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-thin">
           {LOCAL_ORIGIN_OPTIONS.map((opt) => (
             <button
               key={opt}
@@ -1420,6 +1538,7 @@ function CreateSkillDialog({
       return
     }
     setSaving(false)
+    toast.success(`「${metadata.name}」创建成功`)
 
     const newSkill: LoadedSkill = {
       slug: trimmedSlug,
@@ -1564,11 +1683,18 @@ function CreateSkillDialog({
 // 发布 Skill 弹窗
 // ============================================================================
 
+/** Wrap a YAML scalar value in double quotes if it contains special characters. */
+function yamlScalar(v: string): string {
+  return /[:#\[\]{},|>&*!'"?\\]/.test(v) || v.trimStart() !== v || v.trimEnd() !== v
+    ? `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+    : v
+}
+
 function buildSkillMd(skill: LoadedSkill): string {
   const lines = ['---']
-  lines.push(`name: ${skill.metadata?.name ?? skill.slug}`)
-  lines.push(`description: ${skill.metadata?.description ?? ''}`)
-  if (skill.metadata?.author) lines.push(`author: ${skill.metadata.author}`)
+  lines.push(`name: ${yamlScalar(skill.metadata?.name ?? skill.slug)}`)
+  lines.push(`description: ${yamlScalar(skill.metadata?.description ?? '')}`)
+  if (skill.metadata?.author) lines.push(`author: ${yamlScalar(skill.metadata.author)}`)
   lines.push('---')
   if (skill.content) { lines.push(''); lines.push(skill.content) }
   return lines.join('\n')
@@ -1579,11 +1705,13 @@ function PublishSkillDialog({
   onClose,
   currentUserId,
   sourceSkill,
+  onPublished,
 }: {
   open: boolean
   onClose: () => void
   currentUserId: string | null
   sourceSkill?: LoadedSkill
+  onPublished?: (skillName: string) => void
 }) {
   const [name, setName] = React.useState('')
   const [chineseName, setChineseName] = React.useState('')
@@ -1700,7 +1828,10 @@ function PublishSkillDialog({
         return
       }
 
+      const publishedName = input.chineseName?.trim() || input.name
       setUploading(false)
+      toast.success(`「${publishedName}」已成功发布到市场`)
+      onPublished?.(input.name)
       handleClose()
     } catch (err) {
       setErrors({ submit: err instanceof Error ? err.message : '发布失败，请稍后重试' })
@@ -1807,7 +1938,7 @@ function PublishSkillDialog({
                 <ChevronDown className="ml-2 h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
               </button>
               {tagOpen && (
-                <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg">
+                <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-thin">
                   {TAG_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
@@ -1918,14 +2049,14 @@ function LocalCreateDropdown({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3.5 py-1.5 text-[13px] font-medium text-foreground shadow-sm transition-colors hover:bg-foreground/[0.04]"
+        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3.5 py-1.5 text-[13px] font-medium text-foreground shadow-xs transition-colors hover:bg-foreground/[0.04]"
       >
         创建
         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1.5 w-[168px] overflow-hidden rounded-xl border border-border bg-popover py-1.5 shadow-lg">
+        <div className="absolute right-0 top-full z-50 mt-1.5 w-[168px] overflow-hidden rounded-xl border border-border bg-popover py-1.5 shadow-thin">
           <button
             type="button"
             onClick={() => { onUpload(); setOpen(false) }}
@@ -1971,7 +2102,7 @@ function CategoryDropdown({ value, onChange }: { value: Category; onChange: (v: 
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[120px] overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg">
+        <div className="absolute right-0 top-full z-50 mt-1 min-w-[120px] overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-thin">
           {CATEGORIES.map((cat) => (
             <button
               key={cat}
@@ -2008,21 +2139,45 @@ export function SkillMarketplacePage({
   onSkillClick?: (skill: MarketplaceSkillListing) => void
 }) {
   const [tab, setTab] = React.useState<PageTab>('market')
-  const [search, setSearch] = React.useState('')
+  const [marketSearch, setMarketSearch] = React.useState('')
+  const [localSearch, setLocalSearch] = React.useState('')
   const [category, setCategory] = React.useState<Category>('DevOps')
   const [marketSkills, setMarketSkills] = React.useState<MarketplaceSkillListing[]>([])
   const [installedIds, setInstalledIds] = React.useState<Set<string>>(new Set())
+  const [installingIds, setInstallingIds] = React.useState<Set<string>>(new Set())
   const [selectedSkill, setSelectedSkill] = React.useState<MarketplaceSkillListing | null>(null)
   const [selectedLocalSkill, setSelectedLocalSkill] = React.useState<LoadedSkill | null>(null)
   const [localSkillSlugs, setLocalSkillSlugs] = React.useState<Set<string>>(new Set())
-  const [enabledLocalSlugs, setEnabledLocalSlugs] = React.useState<Set<string>>(new Set())
   const [localOriginFilter, setLocalOriginFilter] = React.useState<LocalOriginFilter>('全部')
   const [publishOpen, setPublishOpen] = React.useState(false)
   const [publishSourceSkill, setPublishSourceSkill] = React.useState<LoadedSkill | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [uploadedSkills, setUploadedSkills] = React.useState<LoadedSkill[]>([])
+  const [confirmDialog, setConfirmDialog] = React.useState<{
+    title: string
+    description: string
+    onConfirm: () => void
+  } | null>(null)
   const [uploadError, setUploadError] = React.useState<string | null>(null)
   const uploadZipInputRef = React.useRef<HTMLInputElement>(null)
+
+  // Persist CoPaw market-installed skill slugs across sessions via localStorage
+  const copawInstalledSlugsRef = React.useRef<Set<string>>(
+    (() => {
+      try {
+        const stored = localStorage.getItem('copaw-installed-slugs')
+        return new Set<string>(stored ? JSON.parse(stored) as string[] : [])
+      } catch { return new Set<string>() }
+    })()
+  )
+  const addCopawInstalledSlug = React.useCallback((slug: string) => {
+    copawInstalledSlugsRef.current.add(slug)
+    try {
+      localStorage.setItem('copaw-installed-slugs', JSON.stringify([...copawInstalledSlugsRef.current]))
+    } catch { /* ignore */ }
+  }, [])
+
+  const effectiveCurrentUserId = USE_MOCK_MARKET ? 'MOCK_CURRENT_USER' : currentUserId
 
   const { skills: ctxSkills = [] } = useAppShellContext()
   const baseLocalSkills = USE_MOCK_MARKET ? (ctxSkills.length > 0 ? ctxSkills : MOCK_LOCAL_SKILLS) : ctxSkills
@@ -2068,7 +2223,14 @@ export function SkillMarketplacePage({
         return m ? m[1].trim().replace(/^['"]|['"]$/g, '') : undefined
       }
 
-      const slug = file.name.replace(/\.zip$/i, '').replace(/[\s]+/g, '-').toLowerCase()
+      // Sanitize: strip non-slug characters so the directory name is always valid
+      const slug = file.name
+        .replace(/\.zip$/i, '')
+        .toLowerCase()
+        .replace(/[\s]+/g, '-')
+        .replace(/[^a-z0-9_-]/g, '')
+        .replace(/^[-_]+|[-_]+$/g, '') // trim leading/trailing separators
+        || 'skill'
       const name = getYamlVal('name') ?? slug
       const description = getYamlVal('description') ?? ''
       const author = getYamlVal('author')
@@ -2078,16 +2240,17 @@ export function SkillMarketplacePage({
         slug,
         metadata: parsedMetadata,
         content: body,
-        path: `/workspace/.agents/${slug}`,
-        source: 'workspace',
+        path: `~/.agents/skills/${slug}`,
+        source: 'global',
         // 无 marketplaceOrigin → 自动归入「本地上传」
       }
 
       // 写入磁盘（覆盖同名技能）
+      let diskSaved = true
       try {
         await window.electronAPI.forceWriteSkill(workspaceId, slug, parsedMetadata, body, 'global')
       } catch {
-        // 写入失败时仍在 UI 中显示，等待下次自动刷新
+        diskSaved = false
       }
 
       setUploadedSkills((prev) => {
@@ -2100,6 +2263,13 @@ export function SkillMarketplacePage({
         }
         return [...prev, newSkill]
       })
+      // Clear from optimistic-hide set so a previously uninstalled skill with the same slug reappears
+      setLocalSkillSlugs((prev) => { const n = new Set(prev); n.delete(slug); return n })
+      if (diskSaved) {
+        toast.success(`「${name}」上传成功`)
+      } else {
+        toast.warning(`「${name}」已加载，但保存到磁盘失败，重启后将丢失`)
+      }
       setTab('local')
     } catch {
       setUploadError('解析 zip 失败，请检查文件格式')
@@ -2107,7 +2277,7 @@ export function SkillMarketplacePage({
   }, [workspaceId])
 
   const localSlugs = React.useMemo(() => new Set(localSkills.map((s) => s.slug)), [localSkills])
-  const rawMarketSkillsRef = React.useRef<import('@shared/types').CopawMarketSkill[]>([])
+  const rawMarketSkillsRef = React.useRef<CopawMarketSkill[]>([])
 
   // Fetch once on mount
   React.useEffect(() => {
@@ -2131,7 +2301,7 @@ export function SkillMarketplacePage({
   }, [localSlugs])
 
   const filtered = React.useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = marketSearch.trim().toLowerCase()
     return marketSkills
       .filter((s) => {
         const matchCat = category === '全部' || s.category === category
@@ -2143,15 +2313,17 @@ export function SkillMarketplacePage({
         installState: (installedIds.has(s.id) ? 'installed' : s.installState) as MarketplaceInstallState,
       }))
       .sort((a, b) => b.installCount - a.installCount)
-  }, [marketSkills, category, search, installedIds])
+  }, [marketSkills, category, marketSearch, installedIds])
 
   const filteredLocal = React.useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = localSearch.trim().toLowerCase()
+    const isMarketInstalled = (s: LoadedSkill) =>
+      s.marketplaceOrigin != null || copawInstalledSlugsRef.current.has(s.slug)
     return localSkills.filter((s) => {
       const matchOrigin =
         localOriginFilter === '全部' ||
-        (localOriginFilter === '市场安装' && s.marketplaceOrigin != null) ||
-        (localOriginFilter === '本地上传' && s.marketplaceOrigin == null)
+        (localOriginFilter === '市场安装' && isMarketInstalled(s)) ||
+        (localOriginFilter === '本地上传' && !isMarketInstalled(s))
       const matchQ =
         !q ||
         s.slug.toLowerCase().includes(q) ||
@@ -2159,19 +2331,65 @@ export function SkillMarketplacePage({
         (s.metadata?.description ?? '').toLowerCase().includes(q)
       return matchOrigin && matchQ
     })
-  }, [localSkills, search, localOriginFilter])
+  }, [localSkills, localSearch, localOriginFilter])
 
-  const handleInstall = React.useCallback((s: MarketplaceSkillListing) => {
-    setInstalledIds((prev) => new Set([...prev, s.id]))
-    setSelectedSkill((prev) => prev?.id === s.id ? { ...prev, installState: 'installed' } : prev)
-  }, [])
+  const handleInstall = React.useCallback(async (s: MarketplaceSkillListing) => {
+    if (installingIds.has(s.id)) return
+    setInstallingIds((prev) => new Set([...prev, s.id]))
+    try {
+      if (USE_MOCK_MARKET) {
+        await new Promise((r) => setTimeout(r, 600)) // simulate network
+        setInstalledIds((prev) => new Set([...prev, s.id]))
+        setSelectedSkill((prev) => prev?.id === s.id ? { ...prev, installState: 'installed' } : prev)
+        toast.success(`「${s.name}」安装成功`)
+        return
+      }
+      const result = await window.electronAPI.installMarketSkill(
+        workspaceId,
+        s.slug,
+        s.name,          // chineseName (已由 mapCopawSkillToListing 取 chineseName ?? name)
+        s.description,
+        s.latestVersion,
+      )
+      if (result.conflicts.length > 0 && result.count === 0) {
+        const conflictNames = result.conflicts.map((c) => c.skill_name).join('、')
+        toast.warning(`安装冲突，与本地已有技能冲突：${conflictNames}`)
+        return
+      }
+      addCopawInstalledSlug(s.slug)
+      setInstalledIds((prev) => new Set([...prev, s.id]))
+      // Clear from optimistic-hide set in case the user is reinstalling a previously uninstalled skill
+      setLocalSkillSlugs((prev) => { const n = new Set(prev); n.delete(s.slug); return n })
+      setSelectedSkill((prev) => prev?.id === s.id ? { ...prev, installState: 'installed' } : prev)
+      toast.success(`「${s.name}」安装成功`)
+    } catch (err) {
+      toast.error(`安装失败：${err instanceof Error ? err.message : '请稍后重试'}`)
+    } finally {
+      setInstallingIds((prev) => { const n = new Set(prev); n.delete(s.id); return n })
+    }
+  }, [workspaceId, installingIds, addCopawInstalledSlug])
 
   const handleUninstall = React.useCallback((s: MarketplaceSkillListing) => {
-    if (!USE_MOCK_MARKET) {
-      window.electronAPI.deleteMarketSkill(s.slug).catch(console.error)
-    }
-    setInstalledIds((prev) => { const n = new Set(prev); n.delete(s.id); return n })
-    setSelectedSkill((prev) => prev?.id === s.id ? { ...prev, installState: 'install' } : prev)
+    setConfirmDialog({
+      title: '删除技能',
+      description: `确定要从市场删除「${s.name}」吗？此操作不可撤销。`,
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        if (!USE_MOCK_MARKET) {
+          try {
+            await window.electronAPI.deleteMarketSkill(s.slug)
+          } catch (err) {
+            toast.error(`删除失败：${err instanceof Error ? err.message : '请稍后重试'}`)
+            return
+          }
+        }
+        // Remove from market list
+        rawMarketSkillsRef.current = rawMarketSkillsRef.current.filter((r) => r.name !== s.slug)
+        setMarketSkills((prev) => prev.filter((m) => m.id !== s.id))
+        setSelectedSkill(null)
+        toast.success(`「${s.name}」已从市场删除`)
+      },
+    })
   }, [])
 
   const handleClick = React.useCallback((s: MarketplaceSkillListing) => {
@@ -2180,25 +2398,61 @@ export function SkillMarketplacePage({
   }, [onSkillClick])
 
   const handleLocalUninstall = React.useCallback((s: LoadedSkill) => {
-    window.electronAPI.deleteSkill(workspaceId, s.slug, s.source, s.path).catch(console.error)
-    setLocalSkillSlugs((prev) => new Set([...prev, s.slug]))
+    const name = s.metadata?.name ?? s.slug
+    setConfirmDialog({
+      title: '卸载技能',
+      description: `确定要卸载本地技能「${name}」吗？`,
+      onConfirm: () => {
+        setConfirmDialog(null)
+        setLocalSkillSlugs((prev) => new Set([...prev, s.slug]))
+        setSelectedLocalSkill(null)
+        window.electronAPI.deleteSkill(workspaceId, s.slug, s.source, s.path)
+          .then(() => {
+            // Clean up copaw-installed marker so the slug can be reused
+            copawInstalledSlugsRef.current.delete(s.slug)
+            try { localStorage.setItem('copaw-installed-slugs', JSON.stringify([...copawInstalledSlugsRef.current])) } catch { /* ignore */ }
+            toast.success(`「${name}」已卸载`)
+          })
+          .catch((err) => {
+            // Revert optimistic removal on failure
+            setLocalSkillSlugs((prev) => { const n = new Set(prev); n.delete(s.slug); return n })
+            toast.error(`卸载失败：${err instanceof Error ? err.message : '请稍后重试'}`)
+          })
+      },
+    })
   }, [workspaceId])
 
-  const handleToggleLocalEnabled = React.useCallback((s: LoadedSkill) => {
-    setEnabledLocalSlugs((prev) => {
-      const n = new Set(prev)
-      n.has(s.slug) ? n.delete(s.slug) : n.add(s.slug)
-      return n
-    })
-  }, [])
+  const handleMarketRefresh = React.useCallback(() => {
+    if (USE_MOCK_MARKET) return
+    window.electronAPI.listMarketSkills()
+      .then((raw) => {
+        rawMarketSkillsRef.current = raw
+        setMarketSkills(raw.map((s) => mapCopawSkillToListing(s, localSlugs)))
+      })
+      .catch(console.error)
+  }, [localSlugs])
 
   const displayedLocalSkills = React.useMemo(
     () => filteredLocal.filter((s) => !localSkillSlugs.has(s.slug)),
     [filteredLocal, localSkillSlugs],
   )
 
+  // Derive selectedSkill from filtered so it stays in sync with marketSkills re-maps
+  const derivedSelectedSkill = React.useMemo(
+    () => selectedSkill ? (filtered.find((s) => s.id === selectedSkill.id) ?? selectedSkill) : null,
+    [filtered, selectedSkill],
+  )
+
   return (
     <>
+    <ConfirmDialog
+      open={Boolean(confirmDialog)}
+      title={confirmDialog?.title ?? ''}
+      description={confirmDialog?.description ?? ''}
+      confirmLabel={confirmDialog?.title?.includes('卸载') ? '卸载' : '删除'}
+      onConfirm={confirmDialog?.onConfirm ?? (() => {})}
+      onCancel={() => setConfirmDialog(null)}
+    />
     <CreateSkillDialog
       open={createOpen}
       workspaceId={workspaceId}
@@ -2215,23 +2469,25 @@ export function SkillMarketplacePage({
     <PublishSkillDialog
       open={publishOpen}
       onClose={() => { setPublishOpen(false); setPublishSourceSkill(null) }}
-      currentUserId={currentUserId}
+      currentUserId={effectiveCurrentUserId}
       sourceSkill={publishSourceSkill ?? undefined}
+      onPublished={handleMarketRefresh}
     />
     <SkillDetailDialog
-      skill={selectedSkill}
+      skill={derivedSelectedSkill}
       onClose={() => setSelectedSkill(null)}
       onInstall={handleInstall}
       onUninstall={handleUninstall}
+      currentUserId={effectiveCurrentUserId}
+      isInstalling={selectedSkill ? installingIds.has(selectedSkill.id) : false}
     />
     <LocalSkillDetailDialog
       skill={selectedLocalSkill}
-      enabled={selectedLocalSkill ? enabledLocalSlugs.has(selectedLocalSkill.slug) : false}
       workspaceId={workspaceId}
       onClose={() => setSelectedLocalSkill(null)}
       onUninstall={handleLocalUninstall}
-      onToggleEnabled={handleToggleLocalEnabled}
       onPublish={(s) => { setSelectedLocalSkill(null); setPublishSourceSkill(s); setPublishOpen(true) }}
+      isFromMarket={selectedLocalSkill ? copawInstalledSlugsRef.current.has(selectedLocalSkill.slug) : false}
     />
     <div className="flex h-full flex-col bg-background">
 
@@ -2267,10 +2523,9 @@ export function SkillMarketplacePage({
           <button
             type="button"
             onClick={() => { setPublishSourceSkill(null); setPublishOpen(true) }}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3.5 py-1.5 text-[13px] font-medium text-foreground shadow-sm transition-colors hover:bg-foreground/[0.04]"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3.5 py-1.5 text-[13px] font-medium text-foreground shadow-xs transition-colors hover:bg-foreground/[0.04]"
           >
             发布技能
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
         )}
         {tab === 'local' && (
@@ -2294,8 +2549,8 @@ export function SkillMarketplacePage({
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  value={localSearch}
+                  onChange={(e) => setLocalSearch(e.target.value)}
                   placeholder="搜索本地技能"
                   className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 />
@@ -2305,7 +2560,7 @@ export function SkillMarketplacePage({
             {uploadError && <p className="mt-2 text-[12px] text-rose-500">{uploadError}</p>}
 
             {/* 空状态（无技能时） */}
-            {localSkills.length === 0 && !search && (
+            {localSkills.length === 0 && !localSearch && (
               <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
                 <Zap className="h-8 w-8 opacity-30" />
                 <p className="text-sm">还没有本地技能，前往市场安装吧</p>
@@ -2319,15 +2574,23 @@ export function SkillMarketplacePage({
               </div>
             )}
 
+            {/* 空状态（筛选无结果） */}
+            {localSkills.length > 0 && displayedLocalSkills.length === 0 && (
+              <div className="py-12 text-center text-[13px] text-muted-foreground">
+                {localSearch ? '没有匹配的技能' : `当前分类下没有技能`}
+              </div>
+            )}
+
             {/* 技能列表 */}
-            {(localSkills.length > 0 || search) && (
+            {(localSkills.length > 0 || localSearch) && (
               localOriginFilter === '全部' ? (
                 // 全部：本地上传在上，市场安装在下
                 <>
                   {(['本地上传', '市场安装'] as const).map((section) => {
-                    const sectionSkills = displayedLocalSkills.filter((s) =>
-                      section === '市场安装' ? s.marketplaceOrigin != null : s.marketplaceOrigin == null
-                    )
+                    const sectionSkills = displayedLocalSkills.filter((s) => {
+                      const fromMarket = s.marketplaceOrigin != null || copawInstalledSlugsRef.current.has(s.slug)
+                      return section === '市场安装' ? fromMarket : !fromMarket
+                    })
                     if (sectionSkills.length === 0) return null
                     return (
                       <div key={section} className="mb-8">
@@ -2373,8 +2636,8 @@ export function SkillMarketplacePage({
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={marketSearch}
+              onChange={(e) => setMarketSearch(e.target.value)}
               placeholder="搜索技能"
               className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />
@@ -2396,7 +2659,7 @@ export function SkillMarketplacePage({
               return (
                 <div key={cat} className="mb-8">
                   <h2 className="mb-3 text-[15px] font-semibold text-foreground">{cat}</h2>
-                  <SkillGrid skills={catSkills} onInstall={handleInstall} onClick={handleClick} />
+                  <SkillGrid skills={catSkills} onInstall={handleInstall} onDelete={handleUninstall} onClick={handleClick} currentUserId={effectiveCurrentUserId} installingIds={installingIds} />
                 </div>
               )
             })}
@@ -2404,7 +2667,7 @@ export function SkillMarketplacePage({
         ) : (
           <div>
             <h2 className="mb-3 text-[15px] font-semibold text-foreground">{category}</h2>
-            <SkillGrid skills={filtered} onInstall={handleInstall} onClick={handleClick} />
+            <SkillGrid skills={filtered} onInstall={handleInstall} onDelete={handleUninstall} onClick={handleClick} currentUserId={effectiveCurrentUserId} installingIds={installingIds} />
           </div>
         )}
           </>
@@ -2563,8 +2826,8 @@ export function MarketplacePublishSkillDialog({
 }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-modal-small">
         <h2 className="mb-4 text-base font-semibold">发布技能</h2>
         <p className="text-sm text-muted-foreground">发布功能开发中。</p>
         <div className="mt-4 flex justify-end">
