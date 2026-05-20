@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { BookOpen, Search, Zap } from 'lucide-react'
+import { BookOpen, Plus, Search, Zap } from 'lucide-react'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
 import { Button } from '@/components/ui/button'
@@ -254,17 +254,34 @@ export function SkillsListPanel({
                 <h1 className="text-[28px] font-semibold leading-tight text-white">{t('sidebar.skills')}</h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">Reusable capabilities available to agents in this workspace.</p>
               </div>
-              {workspaceId && (
-                <button
-                  type="button"
-                  onClick={() => setLibraryOpen(true)}
-                  className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-[#7c7cff]/30 bg-[#5e6ad2]/18 px-3 text-xs font-medium text-white shadow-[0_0_24px_rgba(94,106,210,0.20)] transition-colors hover:bg-[#5e6ad2]/26"
-                  title="Open global skills library"
-                >
-                  <BookOpen className="size-3.5" />
-                  Library
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {workspaceRootPath && (
+                  <EditPopover
+                    align="end"
+                    trigger={
+                      <button
+                        type="button"
+                        className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-white/[0.08] bg-white/[0.045] px-3 text-xs font-medium text-white/76 transition-colors hover:bg-white/[0.08] hover:text-white"
+                      >
+                        <Plus className="size-3.5" />
+                        Add skill
+                      </button>
+                    }
+                    {...getEditConfig('add-skill', workspaceRootPath)}
+                  />
+                )}
+                {workspaceId && (
+                  <button
+                    type="button"
+                    onClick={() => setLibraryOpen(true)}
+                    className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-[#7c7cff]/30 bg-[#5e6ad2]/18 px-3 text-xs font-medium text-white shadow-[0_0_24px_rgba(94,106,210,0.20)] transition-colors hover:bg-[#5e6ad2]/26"
+                    title="Open global skills library"
+                  >
+                    <BookOpen className="size-3.5" />
+                    Library
+                  </button>
+                )}
+              </div>
             </div>
 
             {visibleSkills.length === 0 ? (

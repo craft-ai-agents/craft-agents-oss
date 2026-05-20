@@ -1541,8 +1541,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                   {/* Empty state for compact mode - inviting conversational prompt, centered in full popover */}
                   {compactMode && turns.length === 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center select-none gap-1 pointer-events-none">
-                      <span className="text-sm text-muted-foreground">{t("editPopover.whatToChange")}</span>
-                      <span className="text-xs text-muted-foreground/50">{t("editPopover.justDescribe")}</span>
+                      <span className="text-sm font-medium text-white/56">{t("editPopover.whatToChange")}</span>
+                      <span className="text-xs text-white/32">{t("editPopover.justDescribe")}</span>
                     </div>
                   )}
                   {/* Load more indicator - shown when there are older messages */}

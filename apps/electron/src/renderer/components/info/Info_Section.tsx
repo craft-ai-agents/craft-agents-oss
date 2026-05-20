@@ -31,16 +31,16 @@ export function Info_Section({
     <section className={cn('space-y-3 pt-2', className)}>
       <div className="flex items-start justify-between pl-1">
         <div className="space-y-0.5">
-          <h3 className="text-base font-semibold">
+          <h3 className="text-[15px] font-semibold text-white/90">
             {title}
           </h3>
           {description && (
-            <p className="text-sm text-muted-foreground">{description}</p>
+            <p className="text-[13px] leading-5 text-white/46">{description}</p>
           )}
         </div>
         {actions}
       </div>
-      <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden">
+      <div className="overflow-hidden rounded-[14px] border border-white/[0.075] bg-white/[0.035] shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
         {children}
       </div>
     </section>

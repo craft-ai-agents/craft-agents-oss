@@ -97,7 +97,7 @@ export function Info_DataTable<TData, TValue>({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Spinner className="text-muted-foreground" />
+        <Spinner className="text-white/40" />
       </div>
     )
   }
@@ -105,7 +105,7 @@ export function Info_DataTable<TData, TValue>({
   // Error state
   if (error) {
     return (
-      <div className="px-4 py-6 text-sm text-muted-foreground">
+      <div className="px-4 py-6 text-[13px] text-white/44">
         {error === 'Source requires authentication' ? (
           <span>{t('sourceInfo.authenticateToViewData')}</span>
         ) : (
@@ -138,7 +138,7 @@ export function Info_DataTable<TData, TValue>({
 
       {/* Inner wrapper handles horizontal overflow independently so the table
           can scroll horizontally without dragging the floating action along. */}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto text-white/66 [&_button]:text-white/62 [&_th]:!bg-[#111114] [&_th]:!text-white/42 [&_td]:!border-white/[0.055] [&_tr:hover]:!bg-white/[0.035]">
         <DataTable
           columns={columns}
           data={data}

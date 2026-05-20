@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { BookOpen, DatabaseZap, Search } from 'lucide-react'
+import { BookOpen, DatabaseZap, Plus, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { deriveConnectionStatus } from '@/components/ui/source-status-indicator'
@@ -48,6 +48,37 @@ const SOURCE_TIER_CONFIG: Record<SourceTier, { labelKey: string; colorClass: str
   global: { labelKey: 'sourcesList.tier.global', colorClass: 'bg-info/10 text-info' },
   'global-dormant': { labelKey: 'sourcesList.tier.dormant', colorClass: 'bg-foreground/10 text-foreground/50' },
   project: { labelKey: 'sourcesList.tier.project', colorClass: 'bg-accent/10 text-accent' },
+}
+
+type SourceCategory = 'Local tools' | 'MCP tools' | 'Data & APIs' | 'Other'
+
+function getSourceCategory(source: LoadedSource): SourceCategory {
+  const text = [
+    source.config.slug,
+    source.config.name,
+    source.config.type,
+    source.config.provider,
+    source.config.tagline,
+  ].filter(Boolean).join(' ').toLowerCase()
+
+  if (source.config.type === 'local' || text.includes('local') || text.includes('filesystem') || text.includes('bash') || text.includes('computer')) return 'Local tools'
+  if (source.config.type === 'mcp' || text.includes('mcp')) return 'MCP tools'
+  if (source.config.type === 'api' || text.includes('api') || text.includes('exa') || text.includes('search') || text.includes('ads') || text.includes('data')) return 'Data & APIs'
+  return 'Other'
+}
+
+function groupSourcesByCategory(sources: LoadedSource[]) {
+  const order: SourceCategory[] = ['Local tools', 'MCP tools', 'Data & APIs', 'Other']
+  const grouped = new Map<SourceCategory, LoadedSource[]>()
+  for (const category of order) grouped.set(category, [])
+  for (const source of sources) grouped.get(getSourceCategory(source))?.push(source)
+
+  return order
+    .map((category) => ({
+      category,
+      items: (grouped.get(category) ?? []).slice().sort((a, b) => a.config.name.localeCompare(b.config.name)),
+    }))
+    .filter((group) => group.items.length > 0)
 }
 
 export interface SourcesListPanelProps {
@@ -144,6 +175,7 @@ export function SourcesListPanel({
     if (!sourceFilter) return effectiveSources
     return effectiveSources.filter(s => s.config.type === sourceFilter.sourceType)
   }, [effectiveSources, sourceFilter])
+  const groupedFilteredSources = React.useMemo(() => groupSourcesByCategory(filteredSources), [filteredSources])
 
   const handleToggleGlobal = React.useCallback(async (source: LoadedSource, enabled: boolean) => {
     if (!workspaceId) return
@@ -199,17 +231,37 @@ export function SourcesListPanel({
                 <h1 className="text-[28px] font-semibold leading-tight text-white">{t('sidebar.tools')}</h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">Connected tools and data channels available to the workspace.</p>
               </div>
-              {workspaceId && (
-                <button
-                  type="button"
-                  onClick={() => setLibraryOpen(true)}
-                  className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-[#7c7cff]/30 bg-[#5e6ad2]/18 px-3 text-xs font-medium text-white shadow-[0_0_24px_rgba(94,106,210,0.20)] transition-colors hover:bg-[#5e6ad2]/26"
-                  title={t('sourcesList.browseGlobal')}
-                >
-                  <BookOpen className="size-3.5" />
-                  {t('sourcesList.library')}
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {workspaceRootPath && (
+                  <EditPopover
+                    align="end"
+                    trigger={
+                      <button
+                        type="button"
+                        className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-white/[0.08] bg-white/[0.045] px-3 text-xs font-medium text-white/76 transition-colors hover:bg-white/[0.08] hover:text-white"
+                      >
+                        <Plus className="size-3.5" />
+                        Add tool
+                      </button>
+                    }
+                    {...getEditConfig(
+                      sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
+                      workspaceRootPath
+                    )}
+                  />
+                )}
+                {workspaceId && (
+                  <button
+                    type="button"
+                    onClick={() => setLibraryOpen(true)}
+                    className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-[#7c7cff]/30 bg-[#5e6ad2]/18 px-3 text-xs font-medium text-white shadow-[0_0_24px_rgba(94,106,210,0.20)] transition-colors hover:bg-[#5e6ad2]/26"
+                    title={t('sourcesList.browseGlobal')}
+                  >
+                    <BookOpen className="size-3.5" />
+                    {t('sourcesList.library')}
+                  </button>
+                )}
+              </div>
             </div>
 
             {filteredSources.length === 0 ? (
@@ -217,8 +269,16 @@ export function SourcesListPanel({
                 {emptyMessage}
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {filteredSources.map((source) => {
+              <div className="space-y-7">
+                {groupedFilteredSources.map((group) => (
+                  <section key={group.category}>
+                    <div className="mb-3 flex items-center gap-3">
+                      <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">{group.category}</h2>
+                      <div className="h-px flex-1 bg-white/[0.06]" />
+                      <span className="text-[11px] text-white/32">{group.items.length}</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {group.items.map((source) => {
                   const connectionStatus = deriveConnectionStatus(source, localMcpEnabled)
                   const typeConfig = SOURCE_TYPE_CONFIG[source.config.type]
                   const statusConfig = source.tier === 'global-dormant' ? null : SOURCE_STATUS_CONFIG[connectionStatus]
@@ -267,7 +327,10 @@ export function SourcesListPanel({
                       </div>
                     </div>
                   )
-                })}
+                      })}
+                    </div>
+                  </section>
+                ))}
               </div>
             )}
           </div>

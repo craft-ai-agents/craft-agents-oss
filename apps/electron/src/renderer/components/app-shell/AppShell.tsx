@@ -25,11 +25,7 @@ import {
   Calendar,
   Layers,
   ListTodo,
-  Clock,
-  Radio,
   Bot,
-  Info,
-  Webhook,
   MessageSquare,
   BookOpen,
   History,
@@ -82,7 +78,7 @@ import { useFocusZone } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
-import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, AutomationFilter } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
@@ -126,9 +122,7 @@ import { useAgents } from "@/hooks/useAgents"
 import { useWorkflows } from "@/hooks/useWorkflows"
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 import { openAgentSessionComposer } from "@/lib/run-agent"
-import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { OutputsListPanel } from "../outputs/OutputsListPanel"
-import { APP_EVENTS, AGENT_EVENTS, EXTERNAL_INPUT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
 import { useAutomations } from "@/hooks/useAutomations"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
@@ -634,9 +628,6 @@ function AppShellContent({
   // Derive source filter from navigation state (only when in sources navigator)
   const sourceFilter: SourceFilter | null = isSourcesNavigation(navState) ? navState.filter ?? null : null
 
-  // Derive automation filter from navigation state (only when in automations navigator)
-  const automationFilter: AutomationFilter | null = isAutomationsNavigation(navState) ? navState.filter ?? null : null
-
   // Per-view filter storage: each session list view (allSessions, flagged, state:X, label:X, view:X)
   // has its own independent set of status and label filters.
   // Each filter entry stores a mode ('include' or 'exclude') for tri-state filtering.
@@ -1066,13 +1057,6 @@ function AppShellContent({
     navigate(routes.view.skills(skill.slug))
   }, [activeWorkspaceId])
 
-  // Handle selecting an automation from the list
-  const handleAutomationSelect = React.useCallback((automationId: string) => {
-    // Preserve current automation filter when selecting an automation
-    const type = isAutomationsNavigation(navState) ? navState.filter?.automationType : undefined
-    navigate(routes.view.automations({ automationId, type }))
-  }, [navState])
-
   // Focus zone management
   const { focusZone, focusNextZone, focusPreviousZone } = useFocusContext()
 
@@ -1439,18 +1423,6 @@ function AppShellContent({
     return counts
   }, [sources])
 
-  // Count automations by type for the Automations dropdown subcategories
-  const automationTypeCounts = useMemo(() => {
-    const counts = { scheduled: 0, event: 0, agentic: 0, external: 0 }
-    for (const automation of automations) {
-      if ((EXTERNAL_INPUT_EVENTS as string[]).includes(automation.event)) counts.external++
-      else if (automation.event === 'SchedulerTick') counts.scheduled++
-      else if ((APP_EVENTS as string[]).includes(automation.event)) counts.event++
-      else if ((AGENT_EVENTS as string[]).includes(automation.event)) counts.agentic++
-    }
-    return counts
-  }, [automations])
-
   // Agents library powers chat routing and the main Agents screen.
   const {
     activeAgents,
@@ -1799,22 +1771,6 @@ function AppShellContent({
 
   const handleOutputSelect = useCallback((outputId: string) => {
     navigate(routes.view.output(outputId))
-  }, [])
-
-  const handleAutomationsScheduledClick = useCallback(() => {
-    navigate(routes.view.automationsScheduled())
-  }, [])
-
-  const handleAutomationsEventClick = useCallback(() => {
-    navigate(routes.view.automationsEvent())
-  }, [])
-
-  const handleAutomationsAgenticClick = useCallback(() => {
-    navigate(routes.view.automationsAgentic())
-  }, [])
-
-  const handleAutomationsExternalClick = useCallback(() => {
-    navigate(routes.view.automationsExternal())
   }, [])
 
   // Handler for settings view
@@ -2261,17 +2217,7 @@ function AppShellContent({
       return 'Outputs'
     }
 
-    // Automations navigator
-    if (isAutomationsNavigation(navState)) {
-      if (!automationFilter) return t("sidebar.allAutomations")
-      switch (automationFilter.automationType) {
-        case 'scheduled': return t("sidebar.scheduled")
-        case 'event': return t("sidebar.eventBased")
-        case 'agentic': return t("sidebar.agentic")
-        case 'external': return 'External Triggers'
-        default: return t("sidebar.allAutomations")
-      }
-    }
+    if (isAutomationsNavigation(navState)) return t("sidebar.allAutomations")
 
     // Settings navigator
     if (isSettingsNavigation(navState)) return t("sidebar.settings")
@@ -2293,7 +2239,7 @@ function AppShellContent({
       default:
         return t("sidebar.allSessions")
     }
-  }, [navState, t, sessionFilter, automationFilter, labelConfigs, viewConfigs, effectiveSessionStatuses])
+  }, [navState, t, sessionFilter, labelConfigs, viewConfigs, effectiveSessionStatuses])
 
   // Build recursive sidebar items from the shared display-sorted label tree.
   // Each node renders with condensed height (compact: true) since many labels expected.
@@ -2511,53 +2457,12 @@ function AppShellContent({
                       title: t("sidebar.automations"),
                       label: String(automations.length),
                       icon: ListTodo,
-                      variant: (isAutomationsNavigation(navState) && !automationFilter) ? "default" : "ghost",
+                      variant: isAutomationsNavigation(navState) ? "default" : "ghost",
                       onClick: handleAutomationsClick,
-                      expandable: true,
-                      expanded: isExpanded('nav:automations'),
-                      onToggle: () => toggleExpanded('nav:automations'),
                       contextMenu: {
                         type: 'automations' as const,
                         onAddAutomation: openAddAutomation,
                       },
-                      items: [
-                        {
-                          id: "nav:automations:scheduled",
-                          title: t("sidebar.scheduled"),
-                          label: String(automationTypeCounts.scheduled),
-                          icon: Clock,
-                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'scheduled') ? "default" : "ghost",
-                          onClick: handleAutomationsScheduledClick,
-                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
-                        },
-                        {
-                          id: "nav:automations:event",
-                          title: t("sidebar.eventBased"),
-                          label: String(automationTypeCounts.event),
-                          icon: Radio,
-                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'event') ? "default" : "ghost",
-                          onClick: handleAutomationsEventClick,
-                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
-                        },
-                        {
-                          id: "nav:automations:agentic",
-                          title: t("sidebar.agentic"),
-                          label: String(automationTypeCounts.agentic),
-                          icon: Bot,
-                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'agentic') ? "default" : "ghost",
-                          onClick: handleAutomationsAgenticClick,
-                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
-                        },
-                        {
-                          id: "nav:automations:external",
-                          title: 'External',
-                          label: String(automationTypeCounts.external),
-                          icon: Webhook,
-                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'external') ? "default" : "ghost",
-                          onClick: handleAutomationsExternalClick,
-                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
-                        },
-                      ],
                     },
                     { id: "separator:sessions", type: "separator" },
                     {
@@ -2609,18 +2514,6 @@ function AppShellContent({
             <PanelHeader
               title={isSidebarVisible ? listTitle : undefined}
               compensateForStoplight={!isSidebarVisible}
-              badge={automationFilter?.automationType === 'scheduled' ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-muted-foreground/50 cursor-default flex items-center titlebar-no-drag">
-                      <Info className="h-3 w-3" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[220px]">
-                    Scheduling requires your machine to be running. It can be locked, but must be powered on.
-                  </TooltipContent>
-                </Tooltip>
-              ) : undefined}
               actions={
                 <>
                   {/* Filter dropdown - available in ALL chat views.
@@ -3262,20 +3155,6 @@ function AppShellContent({
                 agentSlug={navState.details.agentSlug}
                 workspaceId={activeWorkspaceId}
                 remoteWorkspaceId={remoteWorkspaceId}
-              />
-            )}
-            {isAutomationsNavigation(navState) && (
-              /* Automations List - filtered by type if automationFilter is active */
-              <AutomationsListPanel
-                automations={automations}
-                automationFilter={automationFilter ? { kind: AUTOMATION_TYPE_TO_FILTER_KIND[automationFilter.automationType] ?? 'all' } : undefined}
-                onAutomationClick={handleAutomationSelect}
-                onTestAutomation={handleTestAutomation}
-                onToggleAutomation={handleToggleAutomation}
-                onDuplicateAutomation={handleDuplicateAutomation}
-                onDeleteAutomation={handleDeleteAutomation}
-                selectedAutomationId={isAutomationsNavigation(navState) && navState.details ? navState.details.automationId : null}
-                workspaceRootPath={activeWorkspace?.rootPath}
               />
             )}
             {isOutputsNavigation(navState) && (
