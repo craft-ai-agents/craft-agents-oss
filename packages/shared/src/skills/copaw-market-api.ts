@@ -5,8 +5,9 @@
  * All requests carry an Authorization header with the SSO session token.
  */
 
-/** Default CoPaw market service base URL (UAT). */
-export const COPAW_MARKET_BASE_URL = 'http://withdataservice.paasuat.cmbchina.cn'
+/** CoPaw market service base URL. Reads COPAW_MARKET_BASE_URL env var, falls back to UAT. */
+export const COPAW_MARKET_BASE_URL =
+  process.env.COPAW_MARKET_BASE_URL ?? 'http://withdataservice.paasuat.cmbchina.cn'
 
 // ── Response types ────────────────────────────────────────────────────────────
 
@@ -110,7 +111,7 @@ export async function listCopawMarketSkills(
   token: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<CopawMarketSkill[]> {
-  const res = await fetchImpl(`${baseUrl}/skills/market`, {
+  const res = await fetchImpl(`${baseUrl}/api/mdp/skill/list`, {
     headers: authHeader(token),
   })
   const skills = await parseEnvelope<CopawMarketSkill[]>(res)
@@ -131,14 +132,14 @@ export async function uploadCopawMarketSkill(
   const formData = new FormData()
   formData.append('file', new Blob([zipBytes.buffer as ArrayBuffer], { type: 'application/zip' }), `${input.name}.zip`)
   formData.append('name', input.name)
-  formData.append('chinese_name', input.chineseName)
+  formData.append('chineseName', input.chineseName)
   formData.append('description', input.description)
   formData.append('tag', input.tag)
-  formData.append('user_name', input.userName)
-  formData.append('employee_id', input.employeeId)
+  formData.append('userName', input.userName)
+  formData.append('employeeId', input.employeeId)
   formData.append('version', input.version)
 
-  const res = await fetchImpl(`${baseUrl}/skills/market/upload`, {
+  const res = await fetchImpl(`${baseUrl}/api/mdp/skill/upload`, {
     method: 'POST',
     headers: authHeader(token),
     body: formData,
@@ -156,31 +157,6 @@ export async function uploadCopawMarketSkill(
   }
 }
 
-/**
- * Install a market skill via the backend API.
- *   POST {baseUrl}/api/skills/market/install
- *   body: { skill_name, version?, overwrite? }
- *   response: { imported: string[], count: number, conflicts: CopawInstallConflict[] }
- */
-export async function installCopawMarketSkill(
-  skillName: string,
-  baseUrl: string,
-  token: string,
-  version?: string,
-  overwrite = false,
-  fetchImpl: typeof fetch = fetch,
-): Promise<CopawInstallSkillResult> {
-  const res = await fetchImpl(`${baseUrl}/api/skills/market/install`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeader(token) },
-    body: JSON.stringify({ skill_name: skillName, version, overwrite }),
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`安装失败: ${res.status}${text ? ` - ${text}` : ''}`)
-  }
-  return res.json() as Promise<CopawInstallSkillResult>
-}
 
 /**
  * Download a market skill zip by name (and optional version).
@@ -214,8 +190,8 @@ export async function deleteCopawMarketSkill(
   fetchImpl: typeof fetch = fetch,
 ): Promise<void> {
   const res = await fetchImpl(
-    `${baseUrl}/skills/market/${encodeURIComponent(skillName)}`,
-    { method: 'DELETE', headers: authHeader(token) },
+    `${baseUrl}/api/mdp/skill/delete?name=${encodeURIComponent(skillName)}`,
+    { method: 'GET', headers: authHeader(token) },
   )
   if (!res.ok) {
     const text = await res.text().catch(() => '')

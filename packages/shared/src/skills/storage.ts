@@ -366,6 +366,7 @@ export function deleteSkill(workspaceRoot: string, slug: string): boolean {
 
   try {
     rmSync(skillDir, { recursive: true });
+    invalidateSkillsCache();
     return true;
   } catch {
     return false;
