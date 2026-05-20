@@ -851,9 +851,7 @@ function SkillGrid({
   currentUserId: string | null
   installingIds?: Set<string>
 }) {
-  if (skills.length === 0) {
-    return <p className="py-12 text-center text-sm text-muted-foreground">暂无匹配的技能</p>
-  }
+  if (skills.length === 0) return null
 
   const left = skills.filter((_, i) => i % 2 === 0)
   const right = skills.filter((_, i) => i % 2 === 1)
@@ -1222,14 +1220,7 @@ function LocalSkillGrid({
   onUninstall: (s: LoadedSkill) => void
   onClick: (s: LoadedSkill) => void
 }) {
-  if (skills.length === 0) {
-    return (
-      <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-        <Zap className="h-8 w-8 opacity-30" />
-        <p className="text-sm">暂无匹配的本地技能</p>
-      </div>
-    )
-  }
+  if (skills.length === 0) return null
 
   const left = skills.filter((_, i) => i % 2 === 0)
   const right = skills.filter((_, i) => i % 2 === 1)
@@ -2559,7 +2550,7 @@ export function SkillMarketplacePage({
             </div>
             {uploadError && <p className="mt-2 text-[12px] text-rose-500">{uploadError}</p>}
 
-            {/* 空状态（无技能时） */}
+            {/* 空状态：完全没有本地技能 */}
             {localSkills.length === 0 && !localSearch && (
               <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
                 <Zap className="h-8 w-8 opacity-30" />
@@ -2574,15 +2565,8 @@ export function SkillMarketplacePage({
               </div>
             )}
 
-            {/* 空状态（筛选无结果） */}
-            {localSkills.length > 0 && displayedLocalSkills.length === 0 && (
-              <div className="py-12 text-center text-[13px] text-muted-foreground">
-                {localSearch ? '没有匹配的技能' : `当前分类下没有技能`}
-              </div>
-            )}
-
-            {/* 技能列表 */}
-            {(localSkills.length > 0 || localSearch) && (
+            {/* 技能列表（有技能时） */}
+            {displayedLocalSkills.length > 0 && (
               localOriginFilter === '全部' ? (
                 // 全部：本地上传在上，市场安装在下
                 <>
@@ -2621,6 +2605,13 @@ export function SkillMarketplacePage({
                 </>
               )
             )}
+
+            {/* 空状态：有技能但当前搜索/筛选无结果 */}
+            {displayedLocalSkills.length === 0 && (localSkills.length > 0 || localSearch) && (
+              <div className="py-12 text-center text-[13px] text-muted-foreground">
+                {localSearch ? '没有匹配的技能' : '当前分类下没有技能'}
+              </div>
+            )}
           </div>
         ) : (
           /* ── 市场 Tab ── */
@@ -2651,7 +2642,11 @@ export function SkillMarketplacePage({
         </div>
 
         {/* 技能列表 */}
-        {category === '全部' ? (
+        {filtered.length === 0 ? (
+          <p className="py-12 text-center text-[13px] text-muted-foreground">
+            {marketSearch.trim() ? '没有匹配的技能' : '暂无技能'}
+          </p>
+        ) : category === '全部' ? (
           <>
             {(['DevOps', '公共'] as const).map((cat) => {
               const catSkills = filtered.filter((s) => s.category === cat)
