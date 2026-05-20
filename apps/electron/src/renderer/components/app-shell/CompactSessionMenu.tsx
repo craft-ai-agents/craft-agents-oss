@@ -4,9 +4,10 @@
  * Bottom-sheet replacement for the desktop ChatPage title dropdown
  * (`SessionMenu` wrapped by `PanelHeader`'s Radix DropdownMenu) when
  * `AppShellContext.isCompactMode === true`. Mirrors the same actions but
- * routes Labels / Share / Connect Messaging submenus through
+ * routes Status / Labels / Share / Connect Messaging submenus through
  * an internal view stack instead of nested Radix popovers — Radix submenus
- * get clipped by the panel container query on narrow viewports.
+ * get clipped by the panel container query on narrow viewports, and the
+ * Status submenu in particular falls off the right edge.
  *
  * Pattern matches the other compact pickers (`CompactSessionListFilter`,
  * `CompactWorkspaceSwitcher`, `CompactPermissionModeSelector`) and also
@@ -42,6 +43,7 @@ import {
   Globe,
   Link2Off,
   MailOpen,
+  MessageSquare,
   Pencil,
   RefreshCw,
   Send,
@@ -63,12 +65,20 @@ import {
   type LabelMenuItem,
 } from '@/components/ui/label-menu-utils'
 import type { LabelConfig } from '@craft-agent/shared/labels'
+import {
+  getStateColor,
+  getStateIcon,
+  getStatusIconStyle,
+  type SessionStatus,
+  type SessionStatusId,
+} from '@/config/session-status-config'
 import type { SessionMeta } from '@/atoms/sessions'
-import { hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
+import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
 import { getFileManagerName } from '@/lib/platform'
+import { useMessagingConnect, type MessagingPlatform } from '@/components/messaging/MessagingSessionMenuItem'
 import { useSessionMenuActions } from '@/hooks/useSessionMenuActions'
 
-type View = 'root' | 'labels' | 'share'
+type View = 'root' | 'status' | 'labels' | 'share' | 'messaging'
 
 export interface CompactSessionMenuProps {
   /** Title text shown in the trigger button + drawer header. */
@@ -80,6 +90,7 @@ export interface CompactSessionMenuProps {
 
   // Session data — same as SessionMenu
   item: SessionMeta
+  sessionStatuses: SessionStatus[]
   labels?: LabelConfig[]
   hasRemoteWorkspaces?: boolean
 
@@ -91,6 +102,7 @@ export interface CompactSessionMenuProps {
   onArchive: () => void
   onUnarchive: () => void
   onMarkUnread: () => void
+  onSessionStatusChange: (state: SessionStatusId) => void
   onOpenInNewWindow: () => void
   onSendToWorkspace?: () => void
   onDelete: () => void
@@ -116,6 +128,7 @@ export function CompactSessionMenu({
   badge,
   isRegeneratingTitle,
   item,
+  sessionStatuses,
   labels = [],
   hasRemoteWorkspaces,
   onLabelsChange,
@@ -125,6 +138,7 @@ export function CompactSessionMenu({
   onArchive,
   onUnarchive,
   onMarkUnread,
+  onSessionStatusChange,
   onOpenInNewWindow,
   onSendToWorkspace,
   onDelete,
@@ -162,6 +176,7 @@ export function CompactSessionMenu({
   const isFlagged = item.isFlagged ?? false
   const isArchived = item.isArchived ?? false
   const sharedUrl = item.sharedUrl
+  const currentSessionStatus = getSessionStatus(item)
   const sessionLabels = item.labels ?? []
   const _hasMessages = hasMessagesMeta(item)
   const _hasUnread = hasUnreadMeta(item)
@@ -187,14 +202,22 @@ export function CompactSessionMenu({
     [setOpen],
   )
 
+  const connectMessaging = useMessagingConnect({ sessionId: item.id })
+  const handleConnectMessaging = (platform: MessagingPlatform) => {
+    setOpen(false)
+    void connectMessaging(platform)
+  }
+
   // ---------------------------------------------------------------------------
   // Drawer header — shared between root + sub-panes. Sub-panes show a back
   // chevron; the root pane shows the session title.
   // ---------------------------------------------------------------------------
   const headerTitle = (() => {
     switch (view) {
+      case 'status':    return t('sessionMenu.status')
       case 'labels':    return t('sessionMenu.labels')
       case 'share':     return t('sessionMenu.shared')
+      case 'messaging': return t('sessionMenu.connectMessaging')
       default:          return title ?? ''
     }
   })()
@@ -267,6 +290,8 @@ export function CompactSessionMenu({
           {view === 'root' && (
             <RootPane
               sharedUrl={sharedUrl}
+              sessionStatuses={sessionStatuses}
+              currentSessionStatus={currentSessionStatus}
               labelsCount={sessionLabels.length}
               hasLabels={labels.length > 0}
               isFlagged={isFlagged}
@@ -277,6 +302,8 @@ export function CompactSessionMenu({
               onShare={closeAfter(actions.share)}
               onOpenShareSub={() => setView('share')}
               onSendToWorkspace={closeAfter(onSendToWorkspace)}
+              onOpenMessagingSub={() => setView('messaging')}
+              onOpenStatusSub={() => setView('status')}
               onOpenLabelsSub={() => setView('labels')}
               onFlag={closeAfter(onFlag)}
               onUnflag={closeAfter(onUnflag)}
@@ -290,6 +317,17 @@ export function CompactSessionMenu({
               onShowInFinder={closeAfter(actions.showInFinder)}
               onCopyPath={closeAfter(actions.copyPath)}
               onDelete={closeAfter(onDelete)}
+            />
+          )}
+
+          {view === 'status' && (
+            <StatusPane
+              sessionStatuses={sessionStatuses}
+              activeStateId={currentSessionStatus}
+              onSelect={(id) => {
+                onSessionStatusChange(id)
+                setOpen(false)
+              }}
             />
           )}
 
@@ -310,6 +348,9 @@ export function CompactSessionMenu({
             />
           )}
 
+          {view === 'messaging' && (
+            <MessagingPane onConnect={handleConnectMessaging} />
+          )}
         </div>
       </DrawerContent>
     </Drawer>
@@ -322,6 +363,8 @@ export function CompactSessionMenu({
 
 interface RootPaneProps {
   sharedUrl?: string
+  sessionStatuses: SessionStatus[]
+  currentSessionStatus: SessionStatusId
   labelsCount: number
   hasLabels: boolean
   isFlagged: boolean
@@ -332,6 +375,8 @@ interface RootPaneProps {
   onShare?: () => void
   onOpenShareSub: () => void
   onSendToWorkspace?: () => void
+  onOpenMessagingSub: () => void
+  onOpenStatusSub: () => void
   onOpenLabelsSub: () => void
   onFlag?: () => void
   onUnflag?: () => void
@@ -349,6 +394,8 @@ interface RootPaneProps {
 
 function RootPane({
   sharedUrl,
+  sessionStatuses,
+  currentSessionStatus,
   labelsCount,
   hasLabels,
   isFlagged,
@@ -359,6 +406,8 @@ function RootPane({
   onShare,
   onOpenShareSub,
   onSendToWorkspace,
+  onOpenMessagingSub,
+  onOpenStatusSub,
   onOpenLabelsSub,
   onFlag,
   onUnflag,
@@ -374,6 +423,14 @@ function RootPane({
   onDelete,
 }: RootPaneProps) {
   const { t } = useTranslation()
+
+  const statusIconNode = (() => {
+    const icon = getStateIcon(currentSessionStatus, sessionStatuses)
+    return React.isValidElement(icon)
+      ? React.cloneElement(icon as React.ReactElement<{ bare?: boolean }>, { bare: true })
+      : icon
+  })()
+  const statusColor = getStateColor(currentSessionStatus, sessionStatuses) ?? undefined
 
   return (
     <div className="flex flex-col">
@@ -393,7 +450,21 @@ function RootPane({
         <Row icon={<Send className="h-4 w-4" />} label={t('sessionMenu.sendToWorkspace')} onTap={onSendToWorkspace} />
       )}
 
+      <Row
+        icon={<MessageSquare className="h-4 w-4" />}
+        label={t('sessionMenu.connectMessaging')}
+        chevron
+        onTap={onOpenMessagingSub}
+      />
+
       <Separator />
+
+      <Row
+        icon={<span style={statusColor ? { color: statusColor } : undefined}>{statusIconNode}</span>}
+        label={t('sessionMenu.status')}
+        chevron
+        onTap={onOpenStatusSub}
+      />
 
       {hasLabels && (
         <Row
@@ -451,6 +522,35 @@ function RootPane({
   )
 }
 
+function StatusPane({
+  sessionStatuses,
+  activeStateId,
+  onSelect,
+}: {
+  sessionStatuses: SessionStatus[]
+  activeStateId?: SessionStatusId | null
+  onSelect: (id: SessionStatusId) => void
+}) {
+  return (
+    <div className="flex flex-col">
+      {sessionStatuses.map((state) => {
+        const bareStateIcon = React.isValidElement(state.icon)
+          ? React.cloneElement(state.icon as React.ReactElement<{ bare?: boolean }>, { bare: true })
+          : state.icon
+        return (
+          <Row
+            key={state.id}
+            icon={<span style={getStatusIconStyle(state)}>{bareStateIcon}</span>}
+            label={state.label}
+            radioSelected={activeStateId === state.id}
+            onTap={() => onSelect(state.id)}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
 function LabelsPane({
   items,
   appliedLabelIds,
@@ -504,6 +604,16 @@ function SharePane({
       <Row icon={<RefreshCw className="h-4 w-4" />} label={t('sessionMenu.updateShare')} onTap={onUpdateShare} />
       <Separator />
       <Row icon={<Link2Off className="h-4 w-4" />} label={t('sessionMenu.stopSharing')} destructive onTap={onRevokeShare} />
+    </div>
+  )
+}
+
+function MessagingPane({ onConnect }: { onConnect: (platform: MessagingPlatform) => void }) {
+  return (
+    <div className="flex flex-col">
+      <Row icon={<MessageSquare className="h-4 w-4" />} label="Telegram" onTap={() => onConnect('telegram')} />
+      <Row icon={<MessageSquare className="h-4 w-4" />} label="WhatsApp" onTap={() => onConnect('whatsapp')} />
+      <Row icon={<MessageSquare className="h-4 w-4" />} label="Lark / Feishu" onTap={() => onConnect('lark')} />
     </div>
   )
 }
