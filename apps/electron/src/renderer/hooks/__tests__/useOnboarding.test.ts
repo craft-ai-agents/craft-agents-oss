@@ -33,7 +33,7 @@ describe('resolveSlugForMethod', () => {
 
   it('works for all setup methods', () => {
     const methods: ApiSetupMethod[] = [
-      'anthropic_api_key', 'pi_api_key',
+      'anthropic_api_key', 'pi_api_key', 'openllm_api_key',
     ]
     for (const method of methods) {
       const slug = resolveSlugForMethod(method, null, new Set())
@@ -44,6 +44,7 @@ describe('resolveSlugForMethod', () => {
   it('only exposes API-key setup methods', () => {
     expect(Object.keys(BASE_SLUG_FOR_METHOD).sort()).toEqual([
       'anthropic_api_key',
+      'openllm_api_key',
       'pi_api_key',
     ])
   })
@@ -83,6 +84,25 @@ describe('apiSetupMethodToConnectionSetup', () => {
     expect(setup.credential).toBe('sk-pi')
     expect(setup.piAuthProvider).toBe('anthropic')
     expect(setup.modelSelectionMode).toBe('userDefined3Tier')
+  })
+
+  it('openllm_api_key includes credential and user-defined models without a baseUrl', () => {
+    const setup = apiSetupMethodToConnectionSetup(
+      'openllm_api_key',
+      {
+        credential: 'sk-openllm',
+        connectionDefaultModel: 'llama-3',
+        models: ['llama-3', 'mistral-7b'],
+      },
+      null,
+      new Set(),
+    )
+
+    expect(setup.slug).toBe('openllm-api')
+    expect(setup.credential).toBe('sk-openllm')
+    expect(setup.baseUrl).toBeUndefined()
+    expect(setup.defaultModel).toBe('llama-3')
+    expect(setup.models).toEqual(['llama-3', 'mistral-7b'])
   })
 
   it('uses editingSlug when editing', () => {

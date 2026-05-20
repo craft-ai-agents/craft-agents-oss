@@ -9,6 +9,7 @@
 
 import type { Message } from '@craft-agent/core/types'
 import type { LabelConfig } from '@craft-agent/shared/labels'
+import type { LlmConnectionWithStatus } from '@config/llm-connections'
 import type { LoadedSource, LoadedSkill, Session, Workspace } from '../../../../shared/types'
 import type { SessionMeta } from '@/atoms/sessions'
 import type { SessionStatus } from '@/config/session-status-config'
@@ -266,6 +267,57 @@ export const MOCK_SOURCES: LoadedSource[] = [
 ]
 
 export const MOCK_SKILLS: LoadedSkill[] = []
+
+/**
+ * Mock LLM connections for the mobile playground.
+ *
+ * One Anthropic and one pi_compat connection — enough for the
+ * CompactModelSelector to render its switcher path (multi-connection),
+ * its vision-toggle path (pi_compat), and its flat-list path (single
+ * connection) when downstream demos slice this list.
+ */
+export const MOCK_LLM_CONNECTIONS: LlmConnectionWithStatus[] = [
+  {
+    slug: 'anthropic-builtin',
+    name: 'Anthropic',
+    providerType: 'anthropic',
+    authType: 'api_key',
+    defaultModel: 'claude-opus-4-7',
+    isAuthenticated: true,
+    createdAt: now() - ONE_DAY,
+  },
+  {
+    slug: 'pi-openrouter',
+    name: 'OpenRouter (pi_compat)',
+    providerType: 'pi_compat',
+    authType: 'api_key_with_endpoint',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    customEndpoint: { api: 'openai-completions' },
+    models: [
+      {
+        id: 'deepseek/deepseek-chat',
+        name: 'DeepSeek Chat',
+        shortName: 'DeepSeek',
+        description: 'OpenRouter-hosted DeepSeek',
+        provider: 'pi',
+        contextWindow: 128_000,
+        supportsImages: false,
+      },
+      {
+        id: 'qwen/qwen-2.5-coder-32b',
+        name: 'Qwen 2.5 Coder',
+        shortName: 'Qwen 2.5',
+        description: 'OpenRouter-hosted Qwen 2.5 Coder',
+        provider: 'pi',
+        contextWindow: 32_768,
+        supportsImages: false,
+      },
+    ],
+    defaultModel: 'deepseek/deepseek-chat',
+    isAuthenticated: true,
+    createdAt: now() - 2 * ONE_DAY,
+  },
+]
 
 /**
  * Build a full Session with messages, given a session id and a slice of mocks.

@@ -1,5 +1,5 @@
-import type { AgentProvider, LlmAuthType } from '@craft-agent/shared/agent/backend'
-import { isCompatProvider, modelSupportsImages, type LlmConnection } from '@craft-agent/shared/config'
+import type { AgentProvider, BackendRuntimeUpdate, LlmAuthType, ResolvedBackendContext } from '@craft-agent/shared/agent/backend'
+import { buildOpenLlmBaseUrl, buildRuntimeCustomModels, isCompatProvider, modelSupportsImages, OPENLLM_CUSTOM_ENDPOINT, type LlmConnection } from '@craft-agent/shared/config'
 import type { FileAttachment } from '@craft-agent/shared/protocol'
 
 export interface BackendRuntimeSignatureInput {
@@ -31,6 +31,31 @@ function normalizeCustomModels(connection: LlmConnection): Array<Record<string, 
       })
     })
     .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+}
+
+/**
+ * Build the in-place backend runtime update payload from a resolved backend
+ * context. This mirrors the runtime envelope accepted by live Pi subprocesses.
+ */
+export function buildRuntimeConfigUpdate(backendContext: ResolvedBackendContext): BackendRuntimeUpdate {
+  const connection = backendContext.connection
+  const baseUrl = connection?.providerType === 'openllm'
+    ? buildOpenLlmBaseUrl(backendContext.resolvedModel)
+    : connection?.baseUrl
+
+  return {
+    model: backendContext.resolvedModel,
+    providerType: connection?.providerType,
+    authType: backendContext.authType,
+    runtime: connection ? {
+      baseUrl,
+      piAuthProvider: connection.piAuthProvider,
+      customEndpoint: connection.providerType === 'openllm'
+        ? OPENLLM_CUSTOM_ENDPOINT
+        : connection.customEndpoint,
+      customModels: buildRuntimeCustomModels(connection.models),
+    } : undefined,
+  }
 }
 
 /**

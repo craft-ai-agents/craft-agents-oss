@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/shared",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "license": "Apache-2.0",
   "description": "Shared business logic for MDP - agent, auth, config, credentials, MCP integration",
   "type": "module",

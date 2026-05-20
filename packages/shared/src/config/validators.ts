@@ -65,7 +65,7 @@ const WorkspaceSchema = z.object({
 // --- LLM Connection schema for config validation ---
 
 const LlmProviderTypeSchema = z.enum([
-  'anthropic', 'openai', 'openai_compat', 'pi', 'pi_compat', 'copilot',
+  'anthropic', 'openai', 'openai_compat', 'pi', 'pi_compat', 'openllm', 'copilot',
   // Legacy values kept for config parsing tolerance (migrated at runtime):
   'anthropic_compat', 'bedrock', 'vertex',
 ]);
@@ -101,6 +101,7 @@ export const StoredConfigSchema = z.object({
   llmConnections: z.array(LlmConnectionSchema).optional(),
   defaultLlmConnection: z.string().optional(),
   defaultThinkingLevel: z.enum([...THINKING_LEVEL_IDS, 'think'] as [string, ...string[]]).transform(v => v === 'think' ? 'medium' : v).optional(),
+  envConnectionMidStreamBehavior: z.enum(['steer', 'queue']).optional(),
   // Note: tokenDisplay, showCost, cumulativeUsage, defaultPermissionMode removed
   // Permission mode and cyclable modes are now per-workspace in workspace config.json
 });
