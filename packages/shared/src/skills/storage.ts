@@ -85,7 +85,7 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
 
     return {
       metadata: {
-        name: parsed.data.name as string,
+        name: (parsed.data.display_name || parsed.data.name) as string,
         description: parsed.data.description as string,
         globs: parsed.data.globs as string[] | undefined,
         alwaysAllow: parsed.data.alwaysAllow as string[] | undefined,

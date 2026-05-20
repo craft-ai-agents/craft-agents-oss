@@ -2231,7 +2231,7 @@ export function SkillMarketplacePage({
         .replace(/[^a-z0-9_-]/g, '')
         .replace(/^[-_]+|[-_]+$/g, '') // trim leading/trailing separators
         || 'skill'
-      const name = getYamlVal('name') ?? slug
+      const name = getYamlVal('display_name') ?? getYamlVal('name') ?? slug
       const description = getYamlVal('description') ?? ''
       const author = getYamlVal('author')
 
