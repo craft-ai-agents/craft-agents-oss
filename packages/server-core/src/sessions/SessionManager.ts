@@ -96,7 +96,8 @@ import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
 import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
-import { UserProfileContextManager, type UserProfileProvider, type LoadedUserProfileContext } from './user-profile-context'
+import { UserProfileContextManager, type UserProfileProvider, type UserProfile, type LoadedUserProfileContext } from './user-profile-context'
+import { HttpUserProfileProvider, UserProfileRefreshLoop, readLocalUserProfile } from './user-profile-http'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
@@ -107,6 +108,10 @@ export interface SessionManagerOptions {
   userProfileProvider?: UserProfileProvider
   userProfileContextEnabled?: boolean
   userProfileCachePath?: string
+  /** HTTP fetch implementation override (defaults to globalThis.fetch). */
+  fetchFn?: typeof fetch
+  /** Refresh interval for HTTP user profile polling in ms (default 43_200_000 = 12h). */
+  userProfileRefreshIntervalMs?: number
 }
 
 // Module-level platform ref — set once during init via setSessionPlatform()
@@ -1076,12 +1081,25 @@ export class SessionManager implements ISessionManager {
   /** Monotonic clock to ensure strictly increasing message timestamps */
   private lastTimestamp = 0
   private readonly userProfileContextManager: UserProfileContextManager
+  private readonly httpUserProfileProvider: HttpUserProfileProvider
+  private readonly userProfileRefreshLoop: UserProfileRefreshLoop
 
   constructor(options: SessionManagerOptions = {}) {
     this.userProfileContextManager = new UserProfileContextManager({
       provider: options.userProfileProvider,
       enabled: options.userProfileContextEnabled,
       cachePath: options.userProfileCachePath,
+    })
+
+    this.httpUserProfileProvider = new HttpUserProfileProvider({
+      fetchFn: options.fetchFn,
+    })
+    this.userProfileRefreshLoop = new UserProfileRefreshLoop({
+      provider: this.httpUserProfileProvider,
+      intervalMs: options.userProfileRefreshIntervalMs,
+      onError: (error) => {
+        sessionLog.error('User profile refresh failed:', error)
+      },
     })
   }
 
@@ -1661,6 +1679,9 @@ export class SessionManager implements ISessionManager {
 
       // Load existing sessions from disk
       this.loadSessionsFromDisk()
+
+      // Start the user profile HTTP refresh loop
+      this.userProfileRefreshLoop.start()
 
       // Signal that initialization is complete — IPC handlers waiting on initGate will proceed
       this.initGate.markReady()
@@ -7735,6 +7756,18 @@ export class SessionManager implements ISessionManager {
     return match?.slug ?? null
   }
 
+  // ---------------------------------------------------------------------------
+  // User profile
+  // ---------------------------------------------------------------------------
+
+  async refreshUserProfile(): Promise<UserProfile | null> {
+    return this.userProfileRefreshLoop.refresh()
+  }
+
+  getUserProfile(): Promise<UserProfile | null> {
+    return Promise.resolve(readLocalUserProfile())
+  }
+
   /**
    * Clean up all resources held by the SessionManager.
    * Should be called on app shutdown to prevent resource leaks.
@@ -7776,6 +7809,9 @@ export class SessionManager implements ISessionManager {
     for (const sessionId of this.sessions.keys()) {
       unregisterSessionScopedToolCallbacks(sessionId)
     }
+
+    // Stop the user profile HTTP refresh loop
+    this.userProfileRefreshLoop.stop()
 
     sessionLog.info('Cleanup complete')
   }

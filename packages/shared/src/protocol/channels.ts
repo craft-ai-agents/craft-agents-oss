@@ -400,6 +400,10 @@ export const RPC_CHANNELS = {
     CHANGED: 'teamKnowledge:changed',
     GET_PREVIEW: 'teamKnowledge:getPreview',
   },
+  userProfile: {
+    REFRESH: 'userProfile:refresh',
+    GET: 'userProfile:get',
+  },
   resources: {
     EXPORT: 'resources:export',
     IMPORT: 'resources:import',

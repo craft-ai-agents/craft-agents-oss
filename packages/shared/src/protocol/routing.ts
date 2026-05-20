@@ -424,6 +424,10 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.resources.EXPORT,
   RPC_CHANNELS.resources.IMPORT,
 
+  // userProfile — server-side user profile refresh/read
+  RPC_CHANNELS.userProfile.REFRESH,
+  RPC_CHANNELS.userProfile.GET,
+
   // teamKnowledge — workspace-scoped team knowledge cache
   RPC_CHANNELS.teamKnowledge.GET_CONFIG,
   RPC_CHANNELS.teamKnowledge.UPDATE_CONFIG,
