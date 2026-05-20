@@ -5,6 +5,7 @@ import { tmpdir } from 'os'
 import { pathToFileURL } from 'url'
 import {
   defaultMidStreamBehavior,
+  registerEnvConnectionMidStreamBehaviorResolver,
   resolveMidStreamBehavior,
   type LlmConnection,
 } from '../llm-connections.ts'
@@ -49,6 +50,18 @@ describe('resolveMidStreamBehavior', () => {
     const corruptPi = { ...basePi, midStreamBehavior: '' as never }
     expect(resolveMidStreamBehavior(corruptAnthropic)).toBe('queue')
     expect(resolveMidStreamBehavior(corruptPi)).toBe('steer')
+  })
+
+  it('returns the app-level environment preference for environment connections', () => {
+    registerEnvConnectionMidStreamBehaviorResolver(() => 'queue')
+    try {
+      expect(resolveMidStreamBehavior({
+        providerType: 'pi_compat',
+        isEnvironmentConnection: true,
+      })).toBe('queue')
+    } finally {
+      registerEnvConnectionMidStreamBehaviorResolver(() => undefined)
+    }
   })
 })
 
@@ -110,7 +123,7 @@ function setupConfig(llmConnections: LlmConnection[]) {
     return config.llmConnections.find((c: { slug: string }) => c.slug === slug)
   }
 
-  return { runUpdate, readConnection }
+  return { configDir, configPath, runUpdate, readConnection }
 }
 
 function makeConnection(overrides: Partial<LlmConnection> = {}): LlmConnection {
@@ -155,3 +168,36 @@ describe('updateLlmConnection persists midStreamBehavior', () => {
     expect(readConnection('pi-test').midStreamBehavior).toBe('queue')
   })
 })
+
+describe('environment connection mid-stream behavior storage', () => {
+  it('falls back to the pi_compat default when no app-level preference is set', () => {
+    const { configDir } = setupConfig([])
+    const output = runStorageEval(configDir, "console.log(String(getEnvConnectionMidStreamBehavior()))")
+    expect(output).toBe('steer')
+  })
+
+  it('persists envConnectionMidStreamBehavior to config.json', () => {
+    const { configDir, configPath } = setupConfig([])
+    runStorageEval(configDir, "setEnvConnectionMidStreamBehavior('queue')")
+    const config = JSON.parse(readFileSync(configPath, 'utf-8'))
+    expect(config.envConnectionMidStreamBehavior).toBe('queue')
+  })
+})
+
+function runStorageEval(configDir: string, code: string): string {
+  const run = Bun.spawnSync([
+    process.execPath,
+    '--eval',
+    `import { getEnvConnectionMidStreamBehavior, setEnvConnectionMidStreamBehavior } from '${STORAGE_MODULE_PATH}'; ${code}`,
+  ], {
+    env: { ...process.env, CRAFT_CONFIG_DIR: configDir },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+
+  if (run.exitCode !== 0) {
+    throw new Error(`subprocess failed (exit ${run.exitCode})\nstderr:\n${run.stderr.toString()}`)
+  }
+
+  return run.stdout.toString().trim()
+}

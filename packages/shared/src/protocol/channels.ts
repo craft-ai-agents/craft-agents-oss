@@ -186,6 +186,7 @@ export const RPC_CHANNELS = {
     DELETE: 'LLM_Connection:delete',
     TEST: 'LLM_Connection:test',
     SET_DEFAULT: 'LLM_Connection:setDefault',
+    SET_ENV_MID_STREAM_BEHAVIOR: 'LLM_Connection:setEnvMidStreamBehavior',
     SET_WORKSPACE_DEFAULT: 'LLM_Connection:setWorkspaceDefault',
     REFRESH_MODELS: 'LLM_Connection:refreshModels',
     CHANGED: 'LLM_Connection:changed',

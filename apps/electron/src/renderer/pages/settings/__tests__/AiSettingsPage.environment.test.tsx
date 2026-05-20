@@ -108,8 +108,12 @@ function connection(overrides: Partial<LlmConnectionWithStatus>): LlmConnectionW
   }
 }
 
-function getText(view: ReturnType<typeof render>, fallbackKey: string, translated: string) {
-  return view.queryByText(translated) ?? view.queryByText(fallbackKey)
+function getText(view: ReturnType<typeof render>, fallbackKey: string, ...translated: string[]) {
+  for (const label of translated) {
+    const element = view.queryByText(label)
+    if (element) return element
+  }
+  return view.queryByText(fallbackKey)
 }
 
 describe('Settings AI environment connection', () => {
@@ -131,7 +135,8 @@ describe('Settings AI environment connection', () => {
     expect(sorted.map((item) => item.slug)).toEqual(['env-provider', 'default-api', 'z-custom'])
   })
 
-  it('shows only Validate Connection in the environment connection action menu', async () => {
+  it('shows Validate Connection and Mid-stream submenu in the environment connection action menu', async () => {
+    const onSetMidStreamBehavior = mock(() => {})
     const view = render(
       <ConnectionRow
         connection={connection({
@@ -142,6 +147,7 @@ describe('Settings AI environment connection', () => {
           baseUrl: 'https://env.example.test/v1',
           isDefault: true,
           isEnvironmentConnection: true,
+          midStreamBehavior: 'queue',
         })}
         isLastConnection={false}
         onRenameClick={() => {}}
@@ -149,7 +155,7 @@ describe('Settings AI environment connection', () => {
         onSetDefault={() => {}}
         onValidate={() => {}}
         onEdit={() => {}}
-        onSetMidStreamBehavior={() => {}}
+        onSetMidStreamBehavior={onSetMidStreamBehavior}
         validationState="idle"
       />,
     )
@@ -163,6 +169,14 @@ describe('Settings AI environment connection', () => {
     await waitFor(() => {
       expect(getText(view, 'settings.ai.validateConnection', 'Validate Connection')).toBeTruthy()
     })
+    expect(getText(view, 'settings.ai.midStream.title', 'Mid-stream behavior', 'Mid-stream sends')).toBeTruthy()
+    expect(getText(view, 'settings.ai.midStream.steer', 'Steer', 'Steer immediately')).toBeTruthy()
+    expect(getText(view, 'settings.ai.midStream.queue', 'Queue', 'Queue until ready')).toBeTruthy()
+    expect(view.container.querySelectorAll('svg.lucide-check')).toHaveLength(1)
+
+    fireEvent.click(getText(view, 'settings.ai.midStream.steer', 'Steer', 'Steer immediately')!)
+    expect(onSetMidStreamBehavior).toHaveBeenCalledWith('steer')
+
     expect(getText(view, 'common.rename', 'Rename')).toBeNull()
     expect(getText(view, 'common.edit', 'Edit')).toBeNull()
     expect(getText(view, 'common.delete', 'Delete')).toBeNull()

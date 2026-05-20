@@ -1,5 +1,5 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, synthesizeEnvConnection, ENV_CONNECTION_SLUG, type EnvConnectionEnv, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, getEnvConnectionMidStreamBehavior, setEnvConnectionMidStreamBehavior, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, synthesizeEnvConnection, ENV_CONNECTION_SLUG, type EnvConnectionEnv, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { SsoCredentialStore } from '@craft-agent/shared/auth'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
@@ -25,6 +25,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.DELETE,
   RPC_CHANNELS.llmConnections.TEST,
   RPC_CHANNELS.llmConnections.SET_DEFAULT,
+  RPC_CHANNELS.llmConnections.SET_ENV_MID_STREAM_BEHAVIOR,
   RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT,
   RPC_CHANNELS.llmConnections.REFRESH_MODELS,
   RPC_CHANNELS.settings.SETUP_LLM_CONNECTION,
@@ -57,6 +58,7 @@ export function synthesizeEnvConnectionWithStatus(env: EnvConnectionEnv, activeS
     isAuthenticated: true,
     isDefault: true,
     isEnvironmentConnection: true,
+    midStreamBehavior: getEnvConnectionMidStreamBehavior(),
   }
 }
 
@@ -511,6 +513,22 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       return { success: true }
     } catch (error) {
       deps.platform.logger?.error('Failed to save LLM connection:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  server.handle(RPC_CHANNELS.llmConnections.SET_ENV_MID_STREAM_BEHAVIOR, async (_ctx, behavior: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (behavior !== 'steer' && behavior !== 'queue') {
+        return { success: false, error: `Invalid mid-stream behavior: ${behavior}. Valid values: 'steer', 'queue'` }
+      }
+      const success = setEnvConnectionMidStreamBehavior(behavior)
+      if (!success) {
+        return { success: false, error: 'Failed to persist environment mid-stream behavior' }
+      }
+      return { success: true }
+    } catch (error) {
+      deps.platform.logger?.error('Failed to save environment mid-stream behavior:', error)
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
     }
   })

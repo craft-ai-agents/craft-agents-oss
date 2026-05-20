@@ -343,7 +343,7 @@ export function ConnectionRow({ connection, isLastConnection, onRenameClick, onD
             <CheckCircle2 className="h-3.5 w-3.5" />
             <span>{t("settings.ai.validateConnection")}</span>
           </StyledDropdownMenuItem>
-          {isUserManagedConnection && (() => {
+          {(() => {
             const currentBehavior = resolveMidStreamBehavior(connection)
             return (
               <DropdownMenuSub>
@@ -887,7 +887,8 @@ export default function AiSettingsPage() {
   }, [refreshLlmConnections])
 
   // Update a connection's mid-stream send behavior (steer vs queue).
-  // Uses the same saveLlmConnection RPC as other connection edits.
+  // Environment uses a dedicated app-level preference because env-provider
+  // remains protected from the normal SAVE mutation path.
   const handleSetMidStreamBehavior = useCallback(async (
     connection: LlmConnectionWithStatus,
     behavior: MidStreamBehavior,
@@ -895,8 +896,19 @@ export default function AiSettingsPage() {
     if (!window.electronAPI) return
     if (resolveMidStreamBehavior(connection) === behavior) return
     try {
+      if (connection.isEnvironmentConnection) {
+        const result = await window.electronAPI.setEnvConnectionMidStreamBehavior(behavior)
+        if (result.success) {
+          refreshLlmConnections?.()
+        } else {
+          console.error('Failed to update environment mid-stream behavior:', result.error)
+          toast.error(t('settings.ai.midStream.updateFailed'))
+        }
+        return
+      }
+
       const updated = { ...connection, midStreamBehavior: behavior }
-      const { isAuthenticated: _a, authError: _b, isDefault: _c, ...connectionData } = updated
+      const { isAuthenticated: _a, authError: _b, isDefault: _c, isEnvironmentConnection: _d, ...connectionData } = updated
       const result = await window.electronAPI.saveLlmConnection(connectionData as import('../../../shared/types').LlmConnection)
       if (result.success) {
         refreshLlmConnections?.()

@@ -377,6 +377,7 @@ export const CHANNEL_MAP = {
   deleteLlmConnection: invoke(RPC_CHANNELS.llmConnections.DELETE),
   testLlmConnection: invoke(RPC_CHANNELS.llmConnections.TEST),
   setDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_DEFAULT),
+  setEnvConnectionMidStreamBehavior: invoke(RPC_CHANNELS.llmConnections.SET_ENV_MID_STREAM_BEHAVIOR),
   setWorkspaceDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT),
 
   // Automations

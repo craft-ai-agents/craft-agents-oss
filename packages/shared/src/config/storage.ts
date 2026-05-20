@@ -41,8 +41,8 @@ export type {
 import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
-import type { LlmConnection } from './llm-connections.ts';
-import { ENV_CONNECTION_SLUG, isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, synthesizeEnvConnection, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
+import type { LlmConnection, MidStreamBehavior } from './llm-connections.ts';
+import { ENV_CONNECTION_SLUG, defaultMidStreamBehavior, isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, registerEnvConnectionMidStreamBehaviorResolver, synthesizeEnvConnection, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
 import {
   getModelProvider,
   getModelById,
@@ -54,6 +54,7 @@ export interface StoredConfig {
   llmConnections?: LlmConnection[];
   defaultLlmConnection?: string;  // Slug of default connection for new sessions
   defaultThinkingLevel?: ThinkingLevel;  // App-level default thinking level for new sessions
+  envConnectionMidStreamBehavior?: MidStreamBehavior;  // App-level mid-stream behavior for the protected Environment connection
 
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
@@ -501,6 +502,37 @@ export function setEnable1MContext(enabled: boolean): void {
   config.enable1MContext = enabled;
   saveConfig(config);
 }
+
+function isMidStreamBehavior(value: unknown): value is MidStreamBehavior {
+  return value === 'steer' || value === 'queue';
+}
+
+/**
+ * Get the app-level Environment connection mid-stream behavior.
+ * Falls back to the Environment connection's provider default when unset.
+ */
+export function getEnvConnectionMidStreamBehavior(): MidStreamBehavior {
+  const config = loadStoredConfig();
+  if (isMidStreamBehavior(config?.envConnectionMidStreamBehavior)) {
+    return config.envConnectionMidStreamBehavior;
+  }
+  return defaultMidStreamBehavior('pi_compat');
+}
+
+/**
+ * Set the app-level Environment connection mid-stream behavior.
+ * @returns true if persisted, false if config could not be loaded
+ */
+export function setEnvConnectionMidStreamBehavior(behavior: MidStreamBehavior): boolean {
+  const config = loadStoredConfig();
+  if (!config) return false;
+
+  config.envConnectionMidStreamBehavior = behavior;
+  saveConfig(config);
+  return true;
+}
+
+registerEnvConnectionMidStreamBehaviorResolver(getEnvConnectionMidStreamBehavior);
 
 /**
  * Get whether rtk Bash-output compression is enabled.

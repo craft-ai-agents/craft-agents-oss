@@ -31,6 +31,7 @@ describe('synthesizeEnvConnection', () => {
       models: [],
       defaultModel: undefined,
       createdAt: 0,
+      isEnvironmentConnection: true,
     })
   })
 

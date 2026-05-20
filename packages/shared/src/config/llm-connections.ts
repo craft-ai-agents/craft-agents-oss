@@ -127,6 +127,15 @@ export interface CustomEndpointConfig {
  */
 export type MidStreamBehavior = 'steer' | 'queue';
 
+type EnvConnectionMidStreamBehaviorResolver = () => MidStreamBehavior | undefined;
+let envConnectionMidStreamBehaviorResolver: EnvConnectionMidStreamBehaviorResolver = () => undefined;
+
+export function registerEnvConnectionMidStreamBehaviorResolver(
+  resolver: EnvConnectionMidStreamBehaviorResolver,
+): void {
+  envConnectionMidStreamBehaviorResolver = resolver;
+}
+
 /**
  * LLM Connection configuration.
  * Stored in config.llmConnections array.
@@ -195,6 +204,9 @@ export interface LlmConnection {
 
   /** Timestamp when connection was last used */
   lastUsedAt?: number;
+
+  /** Whether this is the protected connection synthesized from process env. */
+  isEnvironmentConnection?: boolean;
 }
 
 /**
@@ -267,6 +279,7 @@ export function synthesizeEnvConnection(
     models: model ? [model] : [],
     defaultModel: model || undefined,
     createdAt: 0,
+    isEnvironmentConnection: true,
   };
 }
 
@@ -528,8 +541,14 @@ export function defaultMidStreamBehavior(providerType: LlmProviderType): MidStre
  * provider-appropriate default.
  */
 export function resolveMidStreamBehavior(
-  connection: Pick<LlmConnection, 'midStreamBehavior' | 'providerType'>,
+  connection: Pick<LlmConnection, 'midStreamBehavior' | 'providerType' | 'isEnvironmentConnection'>,
 ): MidStreamBehavior {
+  if (connection.isEnvironmentConnection === true) {
+    const appPreference = envConnectionMidStreamBehaviorResolver();
+    if (appPreference === 'steer' || appPreference === 'queue') {
+      return appPreference;
+    }
+  }
   if (connection.midStreamBehavior === 'steer' || connection.midStreamBehavior === 'queue') {
     return connection.midStreamBehavior;
   }
