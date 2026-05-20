@@ -43,7 +43,12 @@ export function Info_Markdown({
     <>
       <div
         className={cn(
-          'px-6 pb-3 text-sm',
+          'px-5 pb-4 text-[13px] leading-6 text-white/68',
+          '[&_a]:text-[#9d94ff] [&_a]:underline-offset-4',
+          '[&_blockquote]:border-l-[#8d7cff] [&_blockquote]:bg-white/[0.035] [&_blockquote]:text-white/62',
+          '[&_code]:rounded-[4px] [&_code]:bg-white/[0.07] [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-white/76',
+          '[&_h1]:text-white/90 [&_h2]:text-white/86 [&_h3]:text-white/82 [&_strong]:text-white/86',
+          '[&_li::marker]:text-white/34 [&_p]:text-white/68',
           maxHeight && 'overflow-y-auto',
           startsWithHeading ? 'pt-0' : 'pt-1',
           // Add relative + group for fullscreen button positioning
@@ -59,8 +64,8 @@ export function Info_Markdown({
             className={cn(
               'absolute top-2 right-2 p-1 rounded-[6px] transition-all z-10',
               'opacity-0 group-hover:opacity-100',
-              'bg-background shadow-minimal',
-              'text-muted-foreground/50 hover:text-foreground',
+              'border border-white/[0.08] bg-[#111114] shadow-[0_8px_24px_rgba(0,0,0,0.28)]',
+              'text-white/42 hover:text-white/76',
               'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100'
             )}
             title={t("table.viewFullscreen")}

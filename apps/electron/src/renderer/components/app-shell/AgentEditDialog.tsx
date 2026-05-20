@@ -112,6 +112,24 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
   const { upsert, allAgents } = useAgents(workspaceId)
   const skills = useAtomValue(skillsAtom)
   const sources = useAtomValue(sourcesAtom)
+  const groupedSkills = React.useMemo(
+    () => groupBundleOptions(skills.map((s) => ({
+      slug: s.slug,
+      label: s.metadata.name,
+      description: s.metadata.description,
+      category: inferSkillCategory(s.slug, s.metadata.name, s.metadata.description),
+    }))),
+    [skills],
+  )
+  const groupedSources = React.useMemo(
+    () => groupBundleOptions(sources.map((s) => ({
+      slug: s.config.slug,
+      label: s.config.name,
+      description: s.config.type ?? '',
+      category: inferSourceCategory(s.config.slug, s.config.name, s.config.type ?? ''),
+    }))),
+    [sources],
+  )
 
   // Connections list comes from a one-shot RPC fetch — no global atom for it
   // in this codebase. Refetch on every open so the dropdown is fresh; this
@@ -136,6 +154,8 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
   const [form, setForm] = React.useState<FormState>(initial)
   const [slugDirty, setSlugDirty] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
+  const [bundlePicker, setBundlePicker] = React.useState<'skills' | 'sources' | null>(null)
+  const [promptEditorOpen, setPromptEditorOpen] = React.useState(false)
 
   // Reset state every time the dialog opens fresh.
   React.useEffect(() => {
@@ -153,11 +173,6 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
       name: value,
       ...(slugDirty || isEditing ? {} : { slug: slugify(value) }),
     }))
-  }
-
-  const handleSlugChange = (value: string) => {
-    setSlugDirty(true)
-    setForm((prev) => ({ ...prev, slug: value }))
   }
 
   const handleToggleArrayMember = (key: 'skills' | 'sources', slug: string) => {
@@ -241,60 +256,38 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{isEditing ? `Edit ${agent!.metadata.name}` : 'New Agent'}</DialogTitle>
-          <DialogDescription>
+      <DialogContent className="max-h-[88vh] max-w-3xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_28px_90px_rgba(0,0,0,0.62)]">
+        <DialogHeader className="border-b border-white/[0.06] bg-[radial-gradient(circle_at_18%_0%,rgba(94,106,210,0.20),transparent_34%),#0b0b0f] px-5 pb-3 pt-4">
+          <DialogTitle className="text-[20px] font-semibold leading-tight text-white">
+            {isEditing ? `Edit ${agent!.metadata.name}` : 'New agent'}
+          </DialogTitle>
+          <DialogDescription className="max-w-2xl text-sm leading-5 text-white/52">
             {isEditing
-              ? 'Edit this agent\'s configuration. Saved to ~/.agents/agents/<slug>/AGENT.md.'
-              : 'Build a saved persona — LLM, prompt, skills, and tools bundled together. Activates in this workspace automatically.'}
+              ? 'Update this agent without touching internal routing names.'
+              : 'Build a saved operator with a prompt, runtime, skills, tools, context, and memory.'}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-5 max-h-[70vh] overflow-y-auto pr-1 py-2">
+        <div className="flex max-h-[calc(88vh-132px)] flex-col gap-3 overflow-y-auto px-5 pb-4 pt-2">
           {/* Identity */}
           <FormSection title="Identity">
-            <div className="grid grid-cols-[1fr_auto] gap-3 items-start">
-              <Field label="Name *">
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => handleNameChange(e.target.value)}
-                  placeholder="Researcher"
-                  className="form-input"
-                  autoFocus
-                />
-              </Field>
-              <Field label="Avatar" hint="emoji">
-                <input
-                  type="text"
-                  value={form.avatar}
-                  onChange={(e) => setForm((p) => ({ ...p, avatar: e.target.value }))}
-                  placeholder="🔬"
-                  className="form-input w-16 text-center"
-                  maxLength={4}
-                />
-              </Field>
-            </div>
-            <Field label="Slug *" hint={isEditing ? 'locked when editing' : 'auto-derived from name; URL-safe'}>
+            <Field label="Name *">
               <input
                 type="text"
-                value={form.slug}
-                onChange={(e) => handleSlugChange(e.target.value)}
-                placeholder="researcher"
-                className="form-input font-mono"
-                disabled={isEditing}
+                value={form.name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                className="form-input"
+                autoFocus
               />
               {slugConflict && (
-                <p className="text-xs text-amber-500 mt-1">{slugConflict}</p>
+                <p className="mt-1 text-xs text-amber-300">{slugConflict}</p>
               )}
             </Field>
-            <Field label="Description *" hint="one sentence shown in pickers">
+            <Field label="Description *">
               <input
                 type="text"
                 value={form.description}
                 onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-                placeholder="Investigates topics deeply and returns cited summaries."
                 className="form-input"
               />
             </Field>
@@ -302,53 +295,26 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
 
           {/* Behavior — system prompt + greeting */}
           <FormSection title="Behavior">
-            <Field label="System prompt" hint="the instructions the agent sees at session start">
-              <textarea
-                value={form.systemPrompt}
-                onChange={(e) => setForm((p) => ({ ...p, systemPrompt: e.target.value }))}
-                placeholder="You are a research specialist…"
-                className="form-input font-mono text-xs min-h-[160px] resize-y"
-              />
-            </Field>
-            <Field label="Greeting" hint="prefilled into the composer when summoned (optional)">
-              <input
-                type="text"
-                value={form.greeting}
-                onChange={(e) => setForm((p) => ({ ...p, greeting: e.target.value }))}
-                placeholder="Give me a topic and the depth you want."
-                className="form-input"
-              />
-            </Field>
+            <PromptSummaryButton
+              value={form.systemPrompt}
+              onClick={() => setPromptEditorOpen(true)}
+            />
           </FormSection>
 
           {/* Bundles — skills + sources */}
           <FormSection title="Bundles" hint="auto-activated with this agent">
-            <Field label="Skills">
-              {skills.length === 0 ? (
-                <p className="text-xs text-foreground/50">No skills installed in this workspace.</p>
-              ) : (
-                <CheckboxList
-                  items={skills.map((s) => ({ slug: s.slug, label: s.metadata.name, description: s.metadata.description }))}
-                  selected={form.skills}
-                  onToggle={(slug) => handleToggleArrayMember('skills', slug)}
-                />
-              )}
-            </Field>
-            <Field label="Sources">
-              {sources.length === 0 ? (
-                <p className="text-xs text-foreground/50">No sources configured in this workspace.</p>
-              ) : (
-                <CheckboxList
-                  items={sources.map((s) => ({
-                    slug: s.config.slug,
-                    label: s.config.name,
-                    description: s.config.type ?? '',
-                  }))}
-                  selected={form.sources}
-                  onToggle={(slug) => handleToggleArrayMember('sources', slug)}
-                />
-              )}
-            </Field>
+            <div className="grid gap-3 md:grid-cols-2">
+              <BundleSummaryButton
+                title="Skills"
+                count={form.skills.length}
+                onClick={() => setBundlePicker('skills')}
+              />
+              <BundleSummaryButton
+                title="Tools"
+                count={form.sources.length}
+                onClick={() => setBundlePicker('sources')}
+              />
+            </div>
           </FormSection>
 
           {/* Runtime */}
@@ -376,7 +342,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
                 className="form-input font-mono"
               />
             </Field>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 md:grid-cols-2">
               <Field label="Permission mode">
                 <select
                   value={form.permissionMode}
@@ -440,33 +406,67 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
           </CollapsibleSection>
         </div>
 
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+        <DialogFooter className="border-t border-white/[0.06] px-5 py-4">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 rounded-[9px] border-white/[0.10] bg-transparent px-3 text-xs text-white/70 hover:bg-white/[0.06]"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
             Cancel
           </Button>
-          <Button type="button" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : isEditing ? 'Save' : 'Create agent'}
+          <Button
+            type="button"
+            className="h-8 rounded-[9px] bg-[#5e6ad2] px-3 text-xs text-white hover:bg-[#6d76df]"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? 'Saving...' : isEditing ? 'Save' : 'Create agent'}
           </Button>
         </DialogFooter>
+
+        <BundlePickerDialog
+          open={bundlePicker !== null}
+          title={bundlePicker === 'skills' ? 'Skills' : 'Tools'}
+          empty={bundlePicker === 'skills' ? 'No skills installed in this workspace.' : 'No tools configured in this workspace.'}
+          groups={bundlePicker === 'skills' ? groupedSkills : groupedSources}
+          selected={bundlePicker === 'skills' ? form.skills : form.sources}
+          onToggle={(slug) => handleToggleArrayMember(bundlePicker === 'skills' ? 'skills' : 'sources', slug)}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) setBundlePicker(null)
+          }}
+        />
+
+        <PromptEditorDialog
+          open={promptEditorOpen}
+          value={form.systemPrompt}
+          onChange={(value) => setForm((p) => ({ ...p, systemPrompt: value }))}
+          onOpenChange={setPromptEditorOpen}
+        />
 
         <style>{`
           .form-input {
             display: block;
             width: 100%;
-            padding: 0.4rem 0.6rem;
+            min-height: 2.5rem;
+            padding: 0.48rem 0.7rem;
             font-size: 13px;
-            background: rgba(0,0,0,0);
-            border: 1px solid rgba(125,125,125,0.25);
-            border-radius: 6px;
-            color: inherit;
+            background: rgba(255,255,255,0.045);
+            border: 1px solid rgba(255,255,255,0.09);
+            border-radius: 10px;
+            color: rgba(255,255,255,0.88);
             outline: none;
           }
           .form-input:focus {
-            border-color: rgba(80,160,250,0.6);
+            border-color: rgba(139,140,255,0.55);
           }
           .form-input:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+          }
+          .form-input::placeholder {
+            color: rgba(255,255,255,0.28);
           }
         `}</style>
       </DialogContent>
@@ -525,10 +525,10 @@ interface FormSectionProps {
 
 function FormSection({ title, hint, children }: FormSectionProps) {
   return (
-    <section className="flex flex-col gap-3">
+    <section className="flex flex-col gap-3 rounded-[14px] border border-white/[0.07] bg-white/[0.035] p-3">
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground/60">{title}</h3>
-        {hint && <p className="text-[11px] text-foreground/50 mt-0.5">{hint}</p>}
+        <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/42">{title}</h3>
+        {hint && <p className="mt-0.5 text-[11px] text-white/34">{hint}</p>}
       </div>
       {children}
     </section>
@@ -544,16 +544,16 @@ interface CollapsibleSectionProps {
 function CollapsibleSection({ title, hint, children }: CollapsibleSectionProps) {
   const [open, setOpen] = React.useState(false)
   return (
-    <section className="flex flex-col gap-3">
+    <section className="flex flex-col gap-3 rounded-[14px] border border-white/[0.07] bg-white/[0.035] p-3">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-start gap-2 text-left hover:text-foreground/80"
+        className="flex items-start gap-2 text-left transition-colors hover:text-white"
       >
-        {open ? <ChevronDown className="h-3.5 w-3.5 mt-0.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
+        {open ? <ChevronDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#9da4ff]" /> : <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#9da4ff]" />}
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground/60">{title}</h3>
-          {hint && <p className="text-[11px] text-foreground/50 mt-0.5">{hint}</p>}
+          <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/42">{title}</h3>
+          {hint && <p className="mt-0.5 text-[11px] text-white/34">{hint}</p>}
         </div>
       </button>
       {open && <div className="flex flex-col gap-3 pl-5">{children}</div>}
@@ -570,12 +570,160 @@ interface FieldProps {
 function Field({ label, hint, children }: FieldProps) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-foreground/80">
+      <span className="text-xs font-medium text-white/72">
         {label}
-        {hint && <span className="text-[10px] text-foreground/45 font-normal ml-1.5">— {hint}</span>}
+        {hint && <span className="ml-1.5 text-[10px] font-normal text-white/34">- {hint}</span>}
       </span>
       {children}
     </label>
+  )
+}
+
+function BundleSummaryButton({
+  title,
+  count,
+  onClick,
+}: {
+  title: string
+  count: number
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center justify-between gap-3 rounded-[13px] border border-white/[0.065] bg-black/20 px-3 py-3 text-left transition-colors hover:border-[#8b8cff]/30 hover:bg-white/[0.045]"
+    >
+      <div>
+        <div className="text-sm font-medium text-white/82">{title}</div>
+        <div className="mt-0.5 text-xs text-white/34">
+          {count === 0 ? 'None selected' : `${count} selected`}
+        </div>
+      </div>
+      <div className="rounded-full border border-white/[0.08] bg-white/[0.045] px-2 py-1 text-[11px] text-white/54">
+        Open
+      </div>
+    </button>
+  )
+}
+
+function PromptSummaryButton({
+  value,
+  onClick,
+}: {
+  value: string
+  onClick: () => void
+}) {
+  const cleaned = cleanDisplayText(value)
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex min-h-[74px] items-center justify-between gap-4 rounded-[13px] border border-white/[0.065] bg-black/20 px-3 py-3 text-left transition-colors hover:border-[#8b8cff]/30 hover:bg-white/[0.045]"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium text-white/82">System prompt</div>
+        <div className="mt-1 line-clamp-2 text-xs leading-5 text-white/38">
+          {cleaned || 'Empty'}
+        </div>
+      </div>
+      <div className="shrink-0 rounded-full border border-white/[0.08] bg-white/[0.045] px-2 py-1 text-[11px] text-white/54">
+        Open
+      </div>
+    </button>
+  )
+}
+
+function PromptEditorDialog({
+  open,
+  value,
+  onChange,
+  onOpenChange,
+}: {
+  open: boolean
+  value: string
+  onChange: (value: string) => void
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[84vh] max-w-4xl overflow-hidden !rounded-[16px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_24px_80px_rgba(0,0,0,0.62)]">
+        <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
+          <DialogTitle className="text-lg font-semibold text-white">System prompt</DialogTitle>
+        </DialogHeader>
+
+        <div className="px-5 py-4">
+          <textarea
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            className="h-[52vh] w-full resize-none rounded-[14px] border border-white/[0.09] bg-black/30 p-4 font-mono text-sm leading-6 text-white/84 outline-none transition-colors focus:border-[#8b8cff]/55"
+            autoFocus
+          />
+        </div>
+
+        <DialogFooter className="border-t border-white/[0.06] px-5 py-4">
+          <Button
+            type="button"
+            className="h-8 rounded-[9px] bg-[#5e6ad2] px-3 text-xs text-white hover:bg-[#6d76df]"
+            onClick={() => onOpenChange(false)}
+          >
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function BundlePickerDialog({
+  open,
+  title,
+  empty,
+  groups,
+  selected,
+  onToggle,
+  onOpenChange,
+}: {
+  open: boolean
+  title: string
+  empty: string
+  groups: BundleGroup[]
+  selected: string[]
+  onToggle: (slug: string) => void
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[76vh] max-w-2xl overflow-hidden !rounded-[16px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_24px_80px_rgba(0,0,0,0.62)]">
+        <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
+          <DialogTitle className="text-lg font-semibold text-white">{title}</DialogTitle>
+          <DialogDescription className="text-sm text-white/48">
+            Choose what this agent carries into new sessions.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-[52vh] overflow-y-auto px-5 py-4">
+          <CategorizedCheckboxList
+            title={title}
+            empty={empty}
+            groups={groups}
+            selected={selected}
+            onToggle={onToggle}
+            fullWidth
+          />
+        </div>
+
+        <DialogFooter className="border-t border-white/[0.06] px-5 py-4">
+          <Button
+            type="button"
+            className="h-8 rounded-[9px] bg-[#5e6ad2] px-3 text-xs text-white hover:bg-[#6d76df]"
+            onClick={() => onOpenChange(false)}
+          >
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -583,37 +731,155 @@ interface CheckboxListItem {
   slug: string
   label: string
   description?: string
+  category: string
 }
 
-interface CheckboxListProps {
+interface BundleGroup {
+  category: string
   items: CheckboxListItem[]
+}
+
+interface CategorizedCheckboxListProps {
+  title: string
+  empty: string
+  groups: BundleGroup[]
   selected: string[]
   onToggle: (slug: string) => void
+  fullWidth?: boolean
 }
 
-function CheckboxList({ items, selected, onToggle }: CheckboxListProps) {
-  const set = new Set(selected)
+function CategorizedCheckboxList({ title, empty, groups, selected, onToggle, fullWidth }: CategorizedCheckboxListProps) {
+  const selectedSet = new Set(selected)
+  const [openGroups, setOpenGroups] = React.useState<Set<string>>(new Set())
+  const toggleGroup = (category: string) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(category)) next.delete(category)
+      else next.add(category)
+      return next
+    })
+  }
+
   return (
-    <div className="flex flex-col gap-1 max-h-40 overflow-y-auto border border-border/30 rounded-md p-2">
-      {items.map((item) => (
-        <label
-          key={item.slug}
-          className="flex items-start gap-2 px-1.5 py-1 rounded-md hover:bg-foreground/5 cursor-pointer"
-        >
-          <input
-            type="checkbox"
-            checked={set.has(item.slug)}
-            onChange={() => onToggle(item.slug)}
-            className="h-3.5 w-3.5 mt-0.5 cursor-pointer"
-          />
-          <div className="flex-1 min-w-0">
-            <div className="text-sm">{item.label}</div>
-            {item.description && (
-              <div className="text-[11px] text-foreground/50 truncate">{item.description}</div>
-            )}
-          </div>
-        </label>
-      ))}
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-xs font-medium text-white/72">{title}</div>
+        <div className="text-[11px] text-white/32">{selected.length} selected</div>
+      </div>
+      {groups.length === 0 ? (
+        <div className="rounded-[12px] border border-dashed border-white/[0.10] p-4 text-center text-xs text-white/38">
+          {empty}
+        </div>
+      ) : (
+        <div className={`${fullWidth ? 'space-y-2' : 'max-h-[280px] space-y-2 overflow-y-auto'}`}>
+          {groups.map((group) => {
+            const isOpen = openGroups.has(group.category)
+            const selectedCount = group.items.filter((item) => selectedSet.has(item.slug)).length
+            return (
+              <div key={group.category} className="overflow-hidden rounded-[13px] border border-white/[0.065] bg-black/20">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.category)}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-white/[0.04]"
+                >
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-white/48">
+                    {group.category}
+                  </span>
+                  <span className="flex items-center gap-2 text-[11px] text-white/32">
+                    {selectedCount > 0 ? `${selectedCount} selected` : group.items.length}
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                  </span>
+                </button>
+                {isOpen ? (
+                  <div className="space-y-1.5 border-t border-white/[0.055] p-2">
+                    {group.items.map((item) => (
+                      <label
+                        key={item.slug}
+                        className="flex cursor-pointer items-start gap-3 rounded-[10px] px-3 py-2.5 transition-colors hover:bg-white/[0.045]"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedSet.has(item.slug)}
+                          onChange={() => onToggle(item.slug)}
+                          className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-[#8b8cff]"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-white">{cleanDisplayText(item.label)}</div>
+                          {item.description ? (
+                            <div className="mt-0.5 truncate text-xs text-white/40">{cleanDisplayText(item.description)}</div>
+                          ) : null}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
+}
+
+function groupBundleOptions(options: CheckboxListItem[]): BundleGroup[] {
+  const groups = new Map<string, CheckboxListItem[]>()
+  for (const option of options) {
+    const items = groups.get(option.category) ?? []
+    items.push(option)
+    groups.set(option.category, items)
+  }
+
+  return Array.from(groups.entries())
+    .map(([category, items]) => ({
+      category,
+      items: items.sort((a, b) => a.label.localeCompare(b.label)),
+    }))
+    .sort((a, b) => bundleCategoryRank(a.category) - bundleCategoryRank(b.category) || a.category.localeCompare(b.category))
+}
+
+function bundleCategoryRank(category: string) {
+  const order = [
+    'Core operations',
+    'Research & analysis',
+    'Content & marketing',
+    'Creative production',
+    'Development',
+    'Local tools',
+    'MCP tools',
+    'Data & APIs',
+    'Other',
+  ]
+  const index = order.indexOf(category)
+  return index === -1 ? order.length : index
+}
+
+function inferSkillCategory(slug: string, name: string, description?: string) {
+  const text = `${slug} ${name} ${description ?? ''}`.toLowerCase()
+  if (matchesAny(text, ['creative', 'video', 'image', '3d', 'design', 'brand', 'visual', 'hyperframes'])) return 'Creative production'
+  if (matchesAny(text, ['research', 'competitor', 'customer', 'profile', 'analyze', 'analysis', 'audit', 'spy', 'perspective'])) return 'Research & analysis'
+  if (matchesAny(text, ['meta ads', 'meta-ads', 'facebook ads'])) return 'Content & marketing'
+  if (matchesAny(text, ['marketing', 'content', 'copy', 'ads', 'seo', 'viral', 'twitter', 'tweet', 'x-', 'pricing', 'lead'])) return 'Content & marketing'
+  if (matchesAny(text, ['code', 'api', 'database', 'dev', 'react', 'typescript', 'debug', 'test', 'deploy', 'github'])) return 'Development'
+  if (matchesAny(text, ['runneros', 'workflow', 'automation', 'source', 'orchestration', 'routing'])) return 'Core operations'
+  return 'Other'
+}
+
+function inferSourceCategory(slug: string, name: string, type: string) {
+  const text = `${slug} ${name} ${type}`.toLowerCase()
+  if (type.toLowerCase() === 'local' || matchesAny(text, ['local', 'filesystem', 'bash', 'computer'])) return 'Local tools'
+  if (type.toLowerCase() === 'mcp' || text.includes('mcp')) return 'MCP tools'
+  if (matchesAny(text, ['api', 'exa', 'search', 'ads', 'data'])) return 'Data & APIs'
+  return 'Other'
+}
+
+function matchesAny(value: string, needles: string[]) {
+  return needles.some((needle) => value.includes(needle))
+}
+
+function cleanDisplayText(value: string) {
+  return value
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }

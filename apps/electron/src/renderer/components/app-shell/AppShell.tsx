@@ -5,7 +5,6 @@ import { useAtomValue, useStore } from "jotai"
 import { motion, AnimatePresence } from "motion/react"
 import {
   Archive,
-  Settings,
   ChevronRight,
   ChevronDown,
   MoreHorizontal,
@@ -23,15 +22,10 @@ import {
   Inbox,
   Globe,
   FolderOpen,
-  Cake,
   Calendar,
   Layers,
   ListTodo,
-  Clock,
-  Radio,
   Bot,
-  Info,
-  Webhook,
   MessageSquare,
   BookOpen,
   History,
@@ -42,6 +36,7 @@ import {
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
 import { TopBar } from "./TopBar"
+import { WorkspaceRail } from "./WorkspaceRail"
 import { McpIcon } from "../icons/McpIcon"
 import { cn } from "@/lib/utils"
 import { isMac } from "@/lib/platform"
@@ -83,7 +78,7 @@ import { useFocusZone } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
-import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, AutomationFilter } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
@@ -122,15 +117,12 @@ import { SkillsListPanel } from "./SkillsListPanel"
 // AgentsListPanel intentionally not imported — sidebar children carry the
 // per-workspace list now. Component preserved for a possible "all agents"
 // admin view in a later round.
-import { AgentLibraryDialog } from "./AgentLibraryDialog"
 import { AgentSessionsPanel } from "./AgentSessionsPanel"
 import { useAgents } from "@/hooks/useAgents"
 import { useWorkflows } from "@/hooks/useWorkflows"
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 import { openAgentSessionComposer } from "@/lib/run-agent"
-import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { OutputsListPanel } from "../outputs/OutputsListPanel"
-import { APP_EVENTS, AGENT_EVENTS, EXTERNAL_INPUT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
 import { useAutomations } from "@/hooks/useAutomations"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
@@ -566,6 +558,8 @@ function AppShellContent({
   const isAutoCompact = shellWidth > 0 && shellWidth < MOBILE_THRESHOLD
 
   const effectiveSidebarAndNavigatorHidden = isSidebarAndNavigatorHidden || isAutoCompact
+  const usesWorkspaceRail = !effectiveSidebarAndNavigatorHidden && !isAutoCompact
+  const effectiveSidebarWidth = usesWorkspaceRail ? 136 : sidebarWidth
 
   // What's New overlay
   const [showWhatsNew, setShowWhatsNew] = React.useState(false)
@@ -633,9 +627,6 @@ function AppShellContent({
 
   // Derive source filter from navigation state (only when in sources navigator)
   const sourceFilter: SourceFilter | null = isSourcesNavigation(navState) ? navState.filter ?? null : null
-
-  // Derive automation filter from navigation state (only when in automations navigator)
-  const automationFilter: AutomationFilter | null = isAutomationsNavigation(navState) ? navState.filter ?? null : null
 
   // Per-view filter storage: each session list view (allSessions, flagged, state:X, label:X, view:X)
   // has its own independent set of status and label filters.
@@ -1066,13 +1057,6 @@ function AppShellContent({
     navigate(routes.view.skills(skill.slug))
   }, [activeWorkspaceId])
 
-  // Handle selecting an automation from the list
-  const handleAutomationSelect = React.useCallback((automationId: string) => {
-    // Preserve current automation filter when selecting an automation
-    const type = isAutomationsNavigation(navState) ? navState.filter?.automationType : undefined
-    navigate(routes.view.automations({ automationId, type }))
-  }, [navState])
-
   // Focus zone management
   const { focusZone, focusNextZone, focusPreviousZone } = useFocusContext()
 
@@ -1250,7 +1234,7 @@ function AppShellContent({
           setSidebarHandleY(e.clientY - rect.top)
         }
       } else if (isResizing === 'session-list') {
-        const offset = isSidebarVisible ? sidebarWidth : 0
+        const offset = isSidebarVisible ? effectiveSidebarWidth : 0
         const newWidth = Math.min(Math.max(e.clientX - offset, 240), 480)
         setSessionListWidth(newWidth)
         if (sessionListHandleRef.current) {
@@ -1281,6 +1265,7 @@ function AppShellContent({
   }, [
     isResizing,
     sidebarWidth,
+    effectiveSidebarWidth,
     sessionListWidth,
     isSidebarVisible,
   ])
@@ -1438,22 +1423,7 @@ function AppShellContent({
     return counts
   }, [sources])
 
-  // Count automations by type for the Automations dropdown subcategories
-  const automationTypeCounts = useMemo(() => {
-    const counts = { scheduled: 0, event: 0, agentic: 0, external: 0 }
-    for (const automation of automations) {
-      if ((EXTERNAL_INPUT_EVENTS as string[]).includes(automation.event)) counts.external++
-      else if (automation.event === 'SchedulerTick') counts.scheduled++
-      else if ((APP_EVENTS as string[]).includes(automation.event)) counts.event++
-      else if ((AGENT_EVENTS as string[]).includes(automation.event)) counts.agentic++
-    }
-    return counts
-  }, [automations])
-
-  // Agents sidebar (expandable). Pinned first: Orchestrator. Then: every other
-  // agent activated in this workspace. Last row: a "+ Manage" entry that
-  // opens the full library picker. Keeping it lean — users curate their
-  // working set, the global library lives behind the modal.
+  // Agents library powers chat routing and the main Agents screen.
   const {
     activeAgents,
     allAgents: allAgentsForChat,
@@ -1469,51 +1439,6 @@ function AppShellContent({
     loading: outputsLoading,
     error: outputsError,
   } = useOutputs(activeWorkspaceId)
-  const [agentLibraryOpen, setAgentLibraryOpen] = useState(false)
-  const agentSidebarChildren = useMemo(() => {
-    const orchestrator = activeAgents.find((a) => a.slug === ORCHESTRATOR_SLUG)
-    const others = activeAgents
-      .filter((a) => a.slug !== ORCHESTRATOR_SLUG)
-      .sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
-
-    type AgentChildEntry = {
-      id: string
-      title: string
-      icon: React.ReactNode
-      variant: 'default' | 'ghost'
-      onClick: () => void
-    }
-
-    const buildEntry = (slug: string, name: string, avatar: string): AgentChildEntry => ({
-      id: `nav:agents:${slug}`,
-      title: name,
-      icon: (
-        <span style={{ fontSize: 13, lineHeight: 1, display: 'inline-block', width: 14, textAlign: 'center' }}>
-          {avatar?.trim() || '🤖'}
-        </span>
-      ),
-      variant: (isAgentsNavigation(navState) && navState.details?.type === 'agent' && navState.details.agentSlug === slug)
-        ? 'default'
-        : 'ghost',
-      onClick: () => navigate(routes.view.agents(slug)),
-    })
-
-    const entries: AgentChildEntry[] = []
-    if (orchestrator) {
-      entries.push(buildEntry(orchestrator.slug, orchestrator.metadata.name, orchestrator.metadata.avatar ?? '🎯'))
-    }
-    for (const a of others) {
-      entries.push(buildEntry(a.slug, a.metadata.name, a.metadata.avatar ?? '🤖'))
-    }
-    entries.push({
-      id: 'nav:agents:manage',
-      title: 'Manage agents',
-      icon: <Plus className="h-3.5 w-3.5" />,
-      variant: 'ghost',
-      onClick: () => setAgentLibraryOpen(true),
-    })
-    return entries
-  }, [activeAgents, navState])
 
   // Workflows sidebar children: per-workspace activated workflows + Manage + Recent runs.
   // The slug-row links navigate to the workflow detail page; "Manage" goes to the list.
@@ -1563,11 +1488,6 @@ function AppShellContent({
     })
     return entries
   }, [activeWorkflows, navState, t])
-
-  // Build the Past entry as a separate sibling appended to Agents children at
-  // render time — it needs i18n + the same allSessions click handler used by
-  // the previous "All Sessions" header. Keep it out of agentSidebarChildren so
-  // its memo deps stay tight and its unselected state is handled here.
 
   // Filter session metadata based on sidebar mode and chat filter
   const filteredSessionMetas = useMemo(() => {
@@ -1851,22 +1771,6 @@ function AppShellContent({
 
   const handleOutputSelect = useCallback((outputId: string) => {
     navigate(routes.view.output(outputId))
-  }, [])
-
-  const handleAutomationsScheduledClick = useCallback(() => {
-    navigate(routes.view.automationsScheduled())
-  }, [])
-
-  const handleAutomationsEventClick = useCallback(() => {
-    navigate(routes.view.automationsEvent())
-  }, [])
-
-  const handleAutomationsAgenticClick = useCallback(() => {
-    navigate(routes.view.automationsAgentic())
-  }, [])
-
-  const handleAutomationsExternalClick = useCallback(() => {
-    navigate(routes.view.automationsExternal())
   }, [])
 
   // Handler for settings view
@@ -2158,12 +2062,8 @@ function AppShellContent({
     // 1. Chat (Concierge entry point)
     result.push({ id: 'nav:chat', type: 'nav', action: handleChatClick })
 
-    // 2. Agents (expandable with per-workspace agents + Past)
+    // 2. Agents
     result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
-    for (const a of activeAgents) {
-      result.push({ id: `nav:agents:${a.slug}`, type: 'nav', action: () => navigate(routes.view.agents(a.slug)) })
-    }
-    result.push({ id: 'nav:agents:past', type: 'nav', action: handleAllSessionsClick })
 
     // 3. Workflows (top-level, between Agents and Library)
     result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
@@ -2180,13 +2080,12 @@ function AppShellContent({
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
     result.push({ id: 'nav:workspace-context', type: 'nav', action: () => navigate(routes.view.workspaceContext()) })
 
-    // 4. Automations, Settings, What's New (preserved)
+    // 5. Automations and Settings
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
-    result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleChatClick, handleAgentsClick, activeAgents, activeWorkflows, handleAllSessionsClick, handleSourcesClick, handleSkillsClick, handleOutputsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleChatClick, handleAgentsClick, activeWorkflows, handleSourcesClick, handleSkillsClick, handleOutputsClick, handleAutomationsClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2318,17 +2217,7 @@ function AppShellContent({
       return 'Outputs'
     }
 
-    // Automations navigator
-    if (isAutomationsNavigation(navState)) {
-      if (!automationFilter) return t("sidebar.allAutomations")
-      switch (automationFilter.automationType) {
-        case 'scheduled': return t("sidebar.scheduled")
-        case 'event': return t("sidebar.eventBased")
-        case 'agentic': return t("sidebar.agentic")
-        case 'external': return 'External Triggers'
-        default: return t("sidebar.allAutomations")
-      }
-    }
+    if (isAutomationsNavigation(navState)) return t("sidebar.allAutomations")
 
     // Settings navigator
     if (isSettingsNavigation(navState)) return t("sidebar.settings")
@@ -2350,7 +2239,7 @@ function AppShellContent({
       default:
         return t("sidebar.allSessions")
     }
-  }, [navState, t, sessionFilter, automationFilter, labelConfigs, viewConfigs, effectiveSessionStatuses])
+  }, [navState, t, sessionFilter, labelConfigs, viewConfigs, effectiveSessionStatuses])
 
   // Build recursive sidebar items from the shared display-sorted label tree.
   // Each node renders with condensed height (compact: true) since many labels expected.
@@ -2408,16 +2297,26 @@ function AppShellContent({
     })
   }, [sessionFilter, labelCounts, activeWorkspace?.id, handleLabelClick, isExpanded, toggleExpanded, openConfigureLabels, handleAddLabel, handleDeleteLabel, t])
 
+  const shouldShowNavigator = useMemo(() => {
+    if (isAutoCompact) return true
+    if (effectiveSidebarAndNavigatorHidden) return false
+    if (isSessionsNavigation(navState)) return false
+    if (isAgentsNavigation(navState)) return false
+    if (isWorkflowsNavigation(navState)) return false
+    if (isSourcesNavigation(navState)) return false
+    if (isSkillsNavigation(navState)) return false
+    if (isAutomationsNavigation(navState)) return false
+    if (isWorkspaceContextNavigation(navState)) return false
+    if (isOutputsNavigation(navState)) return false
+    if (isSettingsNavigation(navState)) return false
+    return true
+  }, [effectiveSidebarAndNavigatorHidden, isAutoCompact, navState])
+
   return (
     <AppShellProvider value={appShellContextValue}>
         {/* === TOP BAR === */}
         <TopBar
-          workspaces={workspaces}
           activeWorkspaceId={activeWorkspaceId}
-          onSelectWorkspace={onSelectWorkspace}
-          workspaceUnreadMap={workspaceUnreadMap}
-          onWorkspaceCreated={() => onRefreshWorkspaces?.()}
-          onWorkspaceRemoved={() => onRefreshWorkspaces?.()}
           activeSessionId={effectiveSessionId}
           onNewChat={() => handleNewChat()}
           onNewWindow={() => window.electronAPI.menuNewWindow()}
@@ -2438,14 +2337,24 @@ function AppShellContent({
       {/* === OUTER LAYOUT: Unified Panel Stack | Right Sidebar === */}
       <div
         ref={shellRef}
-        className="flex items-stretch relative"
-        style={{ height: '100%', paddingRight: PANEL_EDGE_INSET, paddingBottom: PANEL_EDGE_INSET, paddingLeft: 0, gap: PANEL_GAP }}
+        className="flex items-stretch relative bg-[radial-gradient(circle_at_55%_38%,rgba(94,106,210,0.16),transparent_32%),radial-gradient(circle_at_64%_52%,rgba(126,87,194,0.10),transparent_28%),linear-gradient(to_bottom,#0b0b0f_0%,#050507_62%,#020203_100%)]"
+        style={{ height: '100%', paddingRight: PANEL_EDGE_INSET, paddingBottom: PANEL_EDGE_INSET, paddingLeft: 0, gap: 0 }}
       >
-        <PanelStackContainer
-          sidebarSlot={
+        {!effectiveSidebarAndNavigatorHidden && !isAutoCompact && (
+          <WorkspaceRail
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+            onSelect={onSelectWorkspace}
+            onWorkspaceCreated={() => onRefreshWorkspaces?.()}
+            workspaceUnreadMap={workspaceUnreadMap}
+          />
+        )}
+        <div className="flex min-w-0 flex-1">
+          <PanelStackContainer
+            sidebarSlot={
             <div
               ref={sidebarRef}
-              style={{ width: sidebarWidth }}
+              style={{ width: effectiveSidebarWidth }}
               className="h-full font-sans relative"
               data-focus-zone="sidebar"
               tabIndex={sidebarFocused ? 0 : -1}
@@ -2456,7 +2365,7 @@ function AppShellContent({
               <div className="flex-1 flex flex-col min-h-0">
                 {/* Primary Nav: All Sessions (▸ Statuses, Flagged, Archived), Labels | Sources, Skills | Settings */}
                 {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
-                <div className="flex-1 overflow-y-auto min-h-0 mask-fade-bottom pb-4">
+                <div className="flex-1 w-full overflow-y-auto min-h-0 mask-fade-bottom pt-[18px] pb-4">
                 <LeftSidebar
                   isCollapsed={false}
                   getItemProps={getSidebarItemProps}
@@ -2471,26 +2380,13 @@ function AppShellContent({
                       onClick: handleChatClick,
                       label: openingConcierge ? '…' : undefined,
                     },
-                    // --- Agents (with Past as a chronological "all sessions" view) ---
+                    // --- Agents ---
                     {
                       id: "nav:agents",
                       title: 'Agents',
                       icon: Bot,
                       variant: isAgentsNavigation(navState) ? "default" : "ghost",
                       onClick: handleAgentsClick,
-                      expandable: true,
-                      expanded: isExpanded('nav:agents'),
-                      onToggle: () => toggleExpanded('nav:agents'),
-                      items: [
-                        ...agentSidebarChildren,
-                        {
-                          id: "nav:agents:past",
-                          title: t("sidebar.past"),
-                          icon: History,
-                          variant: (sessionFilter?.kind === 'allSessions' ? "default" : "ghost") as "default" | "ghost",
-                          onClick: handleAllSessionsClick,
-                        },
-                      ],
                     },
                     // --- Workflows (top-level — see docs/workflows/03-ux.md) ---
                     {
@@ -2561,79 +2457,46 @@ function AppShellContent({
                       title: t("sidebar.automations"),
                       label: String(automations.length),
                       icon: ListTodo,
-                      variant: (isAutomationsNavigation(navState) && !automationFilter) ? "default" : "ghost",
+                      variant: isAutomationsNavigation(navState) ? "default" : "ghost",
                       onClick: handleAutomationsClick,
-                      expandable: true,
-                      expanded: isExpanded('nav:automations'),
-                      onToggle: () => toggleExpanded('nav:automations'),
                       contextMenu: {
                         type: 'automations' as const,
                         onAddAutomation: openAddAutomation,
                       },
-                      items: [
-                        {
-                          id: "nav:automations:scheduled",
-                          title: t("sidebar.scheduled"),
-                          label: String(automationTypeCounts.scheduled),
-                          icon: Clock,
-                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'scheduled') ? "default" : "ghost",
-                          onClick: handleAutomationsScheduledClick,
-                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
-                        },
-                        {
-                          id: "nav:automations:event",
-                          title: t("sidebar.eventBased"),
-                          label: String(automationTypeCounts.event),
-                          icon: Radio,
-                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'event') ? "default" : "ghost",
-                          onClick: handleAutomationsEventClick,
-                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
-                        },
-                        {
-                          id: "nav:automations:agentic",
-                          title: t("sidebar.agentic"),
-                          label: String(automationTypeCounts.agentic),
-                          icon: Bot,
-                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'agentic') ? "default" : "ghost",
-                          onClick: handleAutomationsAgenticClick,
-                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
-                        },
-                        {
-                          id: "nav:automations:external",
-                          title: 'External',
-                          label: String(automationTypeCounts.external),
-                          icon: Webhook,
-                          variant: (automationFilter?.kind === 'type' && automationFilter.automationType === 'external') ? "default" : "ghost",
-                          onClick: handleAutomationsExternalClick,
-                          contextMenu: { type: 'automations' as const, onAddAutomation: openAddAutomation },
-                        },
-                      ],
                     },
-                    // --- Separator ---
-                    { id: "separator:skills-settings", type: "separator" },
-                    // --- Settings ---
+                    { id: "separator:sessions", type: "separator" },
                     {
-                      id: "nav:settings",
-                      title: t("sidebar.settings"),
-                      icon: Settings,
-                      variant: isSettingsNavigation(navState) ? "default" : "ghost",
-                      onClick: () => handleSettingsClick('app'),
-                    },
-                    // --- What's New ---
-                    {
-                      id: "nav:whats-new",
-                      title: t("sidebar.whatsNew"),
-                      icon: hasUnseenReleaseNotes ? (
-                        <span className="relative">
-                          <Cake className="h-3.5 w-3.5" />
-                          <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-accent" />
-                        </span>
-                      ) : Cake,
-                      variant: "ghost" as const,
-                      onClick: handleWhatsNewClick,
+                      id: "nav:sessions",
+                      title: "Sessions",
+                      label: String(workspaceSessionMetas.length),
+                      icon: MessageSquare,
+                      variant: isSessionsNavigation(navState) ? "default" : "ghost",
+                      onClick: handleAllSessionsClick,
                     },
                   ]}
                 />
+                {isSessionsNavigation(navState) && (
+                  <div className="mt-2 space-y-0.5 px-4 pb-5">
+                    {(searchActive ? workspaceSessionMetas : filteredSessionMetas).map((item) => {
+                      const active = item.id === session.selected
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => navigateToSession(item.id)}
+                          className={cn(
+                            "block w-full truncate rounded-[7px] px-3 py-1.5 text-left text-[13px] leading-5 transition-colors",
+                            active
+                              ? "bg-white/[0.055] text-white"
+                              : "text-white/38 hover:bg-white/[0.035] hover:text-white/66",
+                          )}
+                        >
+                          {getSessionTitle(item)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
                 {/* Agent Tree: Hierarchical list of agents */}
                 {/* Agents section removed */}
                 </div>
@@ -2642,8 +2505,8 @@ function AppShellContent({
             </div>
           </div>
           }
-          sidebarWidth={effectiveSidebarAndNavigatorHidden ? 0 : (isSidebarVisible ? sidebarWidth : 0)}
-          navigatorSlot={
+            sidebarWidth={effectiveSidebarAndNavigatorHidden ? 0 : (isSidebarVisible ? effectiveSidebarWidth : 0)}
+            navigatorSlot={shouldShowNavigator ? (
             <div
               style={{ width: isAutoCompact ? '100%' : sessionListWidth }}
               className="h-full flex flex-col min-w-0 relative z-panel"
@@ -2651,18 +2514,6 @@ function AppShellContent({
             <PanelHeader
               title={isSidebarVisible ? listTitle : undefined}
               compensateForStoplight={!isSidebarVisible}
-              badge={automationFilter?.automationType === 'scheduled' ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-muted-foreground/50 cursor-default flex items-center titlebar-no-drag">
-                      <Info className="h-3 w-3" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[220px]">
-                    Scheduling requires your machine to be running. It can be locked, but must be powered on.
-                  </TooltipContent>
-                </Tooltip>
-              ) : undefined}
               actions={
                 <>
                   {/* Filter dropdown - available in ALL chat views.
@@ -3306,20 +3157,6 @@ function AppShellContent({
                 remoteWorkspaceId={remoteWorkspaceId}
               />
             )}
-            {isAutomationsNavigation(navState) && (
-              /* Automations List - filtered by type if automationFilter is active */
-              <AutomationsListPanel
-                automations={automations}
-                automationFilter={automationFilter ? { kind: AUTOMATION_TYPE_TO_FILTER_KIND[automationFilter.automationType] ?? 'all' } : undefined}
-                onAutomationClick={handleAutomationSelect}
-                onTestAutomation={handleTestAutomation}
-                onToggleAutomation={handleToggleAutomation}
-                onDuplicateAutomation={handleDuplicateAutomation}
-                onDeleteAutomation={handleDeleteAutomation}
-                selectedAutomationId={isAutomationsNavigation(navState) && navState.details ? navState.details.automationId : null}
-                workspaceRootPath={activeWorkspace?.rootPath}
-              />
-            )}
             {isOutputsNavigation(navState) && (
               <OutputsListPanel
                 outputs={outputs}
@@ -3394,16 +3231,17 @@ function AppShellContent({
               </>
             )}
             </div>
-          }
-          navigatorWidth={isAutoCompact ? sessionListWidth : (effectiveSidebarAndNavigatorHidden ? 0 : sessionListWidth)}
-          isSidebarAndNavigatorHidden={effectiveSidebarAndNavigatorHidden}
-          isRightSidebarVisible={false}
-          isCompact={isAutoCompact}
-          isResizing={!!isResizing}
-        />
+          ) : null}
+            navigatorWidth={shouldShowNavigator ? sessionListWidth : 0}
+            isSidebarAndNavigatorHidden={effectiveSidebarAndNavigatorHidden}
+            isRightSidebarVisible={false}
+            isCompact={isAutoCompact}
+            isResizing={!!isResizing}
+          />
+        </div>
 
         {/* Sidebar Resize Handle (absolute, hidden in focused mode) */}
-        {!effectiveSidebarAndNavigatorHidden && (
+        {!effectiveSidebarAndNavigatorHidden && !usesWorkspaceRail && (
         <div
           ref={resizeHandleRef}
           onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
@@ -3420,7 +3258,7 @@ function AppShellContent({
             top: PANEL_STACK_VERTICAL_OVERFLOW,
             bottom: PANEL_STACK_VERTICAL_OVERFLOW,
             left: isSidebarVisible
-              ? sidebarWidth + (PANEL_GAP / 2) - PANEL_SASH_HALF_HIT_WIDTH
+              ? effectiveSidebarWidth + (PANEL_GAP / 2) - PANEL_SASH_HALF_HIT_WIDTH
               : -PANEL_GAP,
             transition: isResizing === 'sidebar' ? undefined : 'left 0.15s ease-out',
           }}
@@ -3429,14 +3267,15 @@ function AppShellContent({
             className="h-full"
             style={{
               ...getResizeGradientStyle(sidebarHandleY, resizeHandleRef.current?.clientHeight ?? null),
-              width: PANEL_SASH_LINE_WIDTH,
+              width: isResizing === 'sidebar' ? PANEL_SASH_LINE_WIDTH : 0,
+              opacity: isResizing === 'sidebar' ? 1 : 0,
             }}
           />
         </div>
         )}
 
         {/* Session List Resize Handle (absolute, hidden in focused mode) */}
-        {!effectiveSidebarAndNavigatorHidden && (
+        {!effectiveSidebarAndNavigatorHidden && shouldShowNavigator && (
         <div
           ref={sessionListHandleRef}
           onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
@@ -3453,7 +3292,7 @@ function AppShellContent({
             top: PANEL_STACK_VERTICAL_OVERFLOW,
             bottom: PANEL_STACK_VERTICAL_OVERFLOW,
             left:
-              (isSidebarVisible ? sidebarWidth + PANEL_GAP : PANEL_EDGE_INSET) +
+              (isSidebarVisible ? effectiveSidebarWidth + PANEL_GAP : PANEL_EDGE_INSET) +
               sessionListWidth +
               (PANEL_GAP / 2) -
               PANEL_SASH_HALF_HIT_WIDTH,
@@ -3464,7 +3303,8 @@ function AppShellContent({
             className="h-full"
             style={{
               ...getResizeGradientStyle(sessionListHandleY, sessionListHandleRef.current?.clientHeight ?? null),
-              width: PANEL_SASH_LINE_WIDTH,
+              width: isResizing === 'session-list' ? PANEL_SASH_LINE_WIDTH : 0,
+              opacity: isResizing === 'session-list' ? 1 : 0,
             }}
           />
         </div>
@@ -3491,7 +3331,7 @@ function AppShellContent({
             trigger={
               <div
                 className="fixed w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                style={{ left: effectiveSidebarWidth + 20, top: editPopoverAnchorY.current }}
                 aria-hidden="true"
               />
             }
@@ -3511,7 +3351,7 @@ function AppShellContent({
             trigger={
               <div
                 className="fixed w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                style={{ left: effectiveSidebarWidth + 20, top: editPopoverAnchorY.current }}
                 aria-hidden="true"
               />
             }
@@ -3547,7 +3387,7 @@ function AppShellContent({
             trigger={
               <div
                 className="fixed w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                style={{ left: effectiveSidebarWidth + 20, top: editPopoverAnchorY.current }}
                 aria-hidden="true"
               />
             }
@@ -3571,7 +3411,7 @@ function AppShellContent({
               trigger={
                 <div
                   className="fixed w-0 h-0 pointer-events-none"
-                  style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                  style={{ left: effectiveSidebarWidth + 20, top: editPopoverAnchorY.current }}
                   aria-hidden="true"
                 />
               }
@@ -3588,7 +3428,7 @@ function AppShellContent({
             trigger={
               <div
                 className="fixed w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                style={{ left: effectiveSidebarWidth + 20, top: editPopoverAnchorY.current }}
                 aria-hidden="true"
               />
             }
@@ -3604,7 +3444,7 @@ function AppShellContent({
             trigger={
               <div
                 className="fixed w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                style={{ left: effectiveSidebarWidth + 20, top: editPopoverAnchorY.current }}
                 aria-hidden="true"
               />
             }
@@ -3620,7 +3460,7 @@ function AppShellContent({
             trigger={
               <div
                 className="fixed w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                style={{ left: effectiveSidebarWidth + 20, top: editPopoverAnchorY.current }}
                 aria-hidden="true"
               />
             }
@@ -3687,13 +3527,6 @@ function AppShellContent({
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
         onTransferComplete={handleTransferComplete}
-      />
-
-      {/* Agent library picker — opened from the sidebar's "+ Manage agents" entry */}
-      <AgentLibraryDialog
-        open={agentLibraryOpen}
-        onOpenChange={setAgentLibraryOpen}
-        workspaceId={activeWorkspaceId}
       />
 
       {/* Messaging dialogs (pairing-code + WA connect) — driven by messagingDialogAtom.

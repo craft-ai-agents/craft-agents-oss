@@ -113,7 +113,7 @@ export function PanelSlot({
         className={cn(
           'h-full overflow-hidden relative @container/panel',
           !isOnly && isFocusedPanel ? 'shadow-panel-focused z-[1]' : 'shadow-middle z-0',
-          'bg-foreground-2',
+          'border border-white/[0.07] bg-[#101011]/88 shadow-[0_30px_90px_rgba(0,0,0,0.46),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl',
         )}
         style={{
           // In multi-panel, unfocused panels override --background so all
@@ -131,7 +131,15 @@ export function PanelSlot({
           borderBottomLeftRadius: isAtLeftEdge ? RADIUS_EDGE : RADIUS_INNER,
           borderTopRightRadius: RADIUS_INNER,
           borderBottomRightRadius: isAtRightEdge ? RADIUS_EDGE : RADIUS_INNER,
-          ...(isOnly
+          ...(isOnly && !isCompact
+            ? {
+                flexGrow: 0,
+                flexShrink: 1,
+                flexBasis: 'min(62vw, 980px)',
+                width: 'min(62vw, 980px)',
+                minWidth: 'min(680px, 100%)',
+              }
+            : isOnly
             ? { flexGrow: 1, minWidth: 0 }
             : { flexGrow: proportion, flexShrink: 1, flexBasis: 0, minWidth: PANEL_MIN_WIDTH }
           ),

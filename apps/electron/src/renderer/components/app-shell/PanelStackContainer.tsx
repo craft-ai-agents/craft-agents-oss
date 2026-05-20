@@ -80,6 +80,9 @@ export function PanelStackContainer({
   const hasNavigator = isCompact ? (navigatorWidth > 0 && !hasSelectedContent) : navigatorWidth > 0
   const isMultiPanel = visiblePanels.length > 1
   const isLeftEdge = !hasSidebar && !hasNavigator
+  const shouldCenterSinglePanel = !isCompact && visiblePanels.length === 1 && !hasNavigator && !hasSidebar
+  const stackGap = hasSidebar && !hasNavigator ? 56 : PANEL_GAP
+  const topBreathingRoom = hasSidebar ? 18 : 0
 
   // Auto-scroll to newly pushed content panel
   useEffect(() => {
@@ -104,11 +107,11 @@ export function PanelStackContainer({
         overflowX: 'auto',
         overflowY: 'hidden',
         // Extra vertical space for box-shadows (collapsed back with negative margin)
-        paddingBlock: PANEL_STACK_VERTICAL_OVERFLOW,
-        marginBlock: -PANEL_STACK_VERTICAL_OVERFLOW,
+        paddingBottom: PANEL_STACK_VERTICAL_OVERFLOW + 6,
+        paddingTop: PANEL_STACK_VERTICAL_OVERFLOW + topBreathingRoom,
+        marginTop: -PANEL_STACK_VERTICAL_OVERFLOW + topBreathingRoom,
         // Extend to window bottom so scrollbar sits at the very edge
         marginBottom: -6,
-        paddingBottom: 6,
         // Extra horizontal space for last panel's box-shadow
         paddingRight: 8,
         marginRight: -8,
@@ -122,7 +125,12 @@ export function PanelStackContainer({
         initial={false}
         animate={{ paddingLeft: !hasSidebar ? PANEL_EDGE_INSET : 0 }}
         transition={transition}
-        style={{ gap: PANEL_GAP, flexGrow: 1, minWidth: 0 }}
+        style={{
+          gap: stackGap,
+          flexGrow: 1,
+          minWidth: 0,
+          justifyContent: shouldCenterSinglePanel ? 'center' : 'flex-start',
+        }}
       >
         {/* === SIDEBAR SLOT === */}
         <motion.div
@@ -130,7 +138,7 @@ export function PanelStackContainer({
           initial={false}
           animate={{
             width: hasSidebar ? sidebarWidth : 0,
-            marginRight: hasSidebar ? 0 : -PANEL_GAP,
+            marginRight: hasSidebar ? 0 : -stackGap,
             opacity: hasSidebar ? 1 : 0,
           }}
           transition={transition}
@@ -148,13 +156,13 @@ export function PanelStackContainer({
           initial={false}
           animate={{
             width: hasNavigator ? navigatorWidth : 0,
-            marginRight: hasNavigator ? 0 : -PANEL_GAP,
+            marginRight: hasNavigator ? 0 : -stackGap,
             opacity: hasNavigator ? 1 : 0,
           }}
           transition={transition}
           className={cn(
             'h-full overflow-hidden relative shrink-0 z-[2]',
-            'bg-background shadow-middle',
+            'bg-[#09090c] shadow-[0_18px_60px_rgba(0,0,0,0.35)] border border-white/[0.06]',
           )}
           style={{
             // In compact mode (no content selected), navigator fills available space

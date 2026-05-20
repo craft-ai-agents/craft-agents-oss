@@ -20,6 +20,8 @@ import { EntityPanel } from '@/components/ui/entity-panel'
 import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
 import { agentSelection } from '@/hooks/useEntitySelection'
 import { useAgents } from '@/hooks/useAgents'
+import { useAgentDisplayNames } from '@/hooks/useAgentDisplayNames'
+import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO } from '../../../shared/types'
 
 interface AgentsListPanelProps {
@@ -36,6 +38,11 @@ export function AgentsListPanel({
   className,
 }: AgentsListPanelProps) {
   const { allAgents, activeSlugs, loading, setActive } = useAgents(workspaceId)
+  const { getDisplayName } = useAgentDisplayNames()
+  const visibleAgents = React.useMemo(
+    () => allAgents.filter((agent) => agent.slug !== CONCIERGE_SLUG && agent.slug !== ORCHESTRATOR_SLUG),
+    [allAgents],
+  )
 
   if (loading && allAgents.length === 0) {
     // First-load placeholder — keep panel in flow rather than flicker an empty state
@@ -48,7 +55,7 @@ export function AgentsListPanel({
 
   return (
     <EntityPanel<AgentDefinitionDTO>
-      items={allAgents}
+      items={visibleAgents}
       getId={(a) => a.slug}
       selection={agentSelection}
       selectedId={selectedSlug}
@@ -64,10 +71,11 @@ export function AgentsListPanel({
       }
       mapItem={(agent) => {
         const isActive = activeSlugs.includes(agent.slug)
+        const displayName = getDisplayName(agent)
         return {
-          icon: <AgentAvatarBadge avatar={agent.metadata.avatar} active={isActive} />,
+          icon: <AgentAvatarBadge name={displayName} active={isActive} />,
           title: (
-            <span style={{ opacity: isActive ? 1 : 0.55 }}>{agent.metadata.name}</span>
+            <span style={{ opacity: isActive ? 1 : 0.55 }}>{displayName}</span>
           ),
           badges: (
             <span
@@ -90,14 +98,12 @@ export function AgentsListPanel({
 }
 
 interface AgentAvatarBadgeProps {
-  avatar?: string
+  name: string
   active: boolean
 }
 
-function AgentAvatarBadge({ avatar, active }: AgentAvatarBadgeProps) {
-  // Inline emoji-or-fallback. Keeps the component dependency-light;
-  // a richer SVG/image avatar comes in a follow-up round.
-  const display = avatar?.trim() || '🤖'
+function AgentAvatarBadge({ name, active }: AgentAvatarBadgeProps) {
+  const display = name.trim().slice(0, 2).toUpperCase()
   return (
     <div
       style={{

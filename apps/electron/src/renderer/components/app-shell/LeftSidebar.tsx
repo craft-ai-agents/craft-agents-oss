@@ -176,10 +176,10 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
   } : {}
 
   return (
-    <div className={cn("flex flex-col select-none", !isNested && "py-1")}>
+    <div className={cn("flex w-full flex-col select-none", !isNested && "py-1")}>
       <NavWrapper
         className={cn(
-          "grid gap-0.5",
+          "grid w-full gap-0.5",
           isNested ? "pl-5 pr-0 relative" : "px-2"
         )}
         role="navigation"
@@ -483,18 +483,18 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
           else if (forwardedRef) forwardedRef.current = el
           if (!isOverlay && itemProps?.ref) itemProps.ref(el)
         }}
-        onClick={isOverlay ? undefined : link.onClick}
+        onClick={isOverlay ? undefined : (link.onClick ?? (link.expandable ? link.onToggle : undefined))}
         data-tutorial={link.dataTutorial}
         className={cn(
-          "group flex w-full items-center gap-2 rounded-[6px] text-[13px] select-none outline-none",
+          "group flex w-full items-center gap-2 rounded-[10px] text-[13px] select-none outline-none",
           "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
           // Compact mode: 4px less total height (py-[3px] vs py-[5px])
-          link.compact ? "py-[3px]" : "py-[5px]",
-          "px-2",
+          link.compact ? "py-[5px]" : "py-[9px]",
+          "px-3 font-medium tracking-[0.01em]",
           link.variant === "default"
-            ? "bg-foreground/[0.07]"
+            ? "border border-[#7c7cff]/25 bg-white/[0.075] text-white shadow-[0_0_22px_rgba(94,106,210,0.16)]"
             // Highlight on hover, context menu open (data-state), or EditPopover active (data-edit-active)
-            : "hover:bg-sidebar-hover data-[state=open]:bg-sidebar-hover data-[edit-active=true]:bg-sidebar-hover",
+            : "text-white/70 hover:bg-white/[0.055] hover:text-white data-[state=open]:bg-white/[0.055] data-[edit-active=true]:bg-white/[0.055]",
           extraClassName,
         )}
       >

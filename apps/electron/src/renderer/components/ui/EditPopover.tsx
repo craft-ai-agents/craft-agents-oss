@@ -11,7 +11,7 @@ import * as React from 'react'
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from 'i18next'
-import { GripHorizontal } from 'lucide-react'
+import { GripHorizontal, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react' // motion used for backdrop only
 import { Popover, PopoverTrigger, PopoverContent } from './popover'
 import { Button } from './button'
@@ -1034,25 +1034,50 @@ export function EditPopover({
             {/* Container */}
             <div
               ref={popoverRef}
-              className="relative bg-foreground-2 overflow-hidden w-full h-full shadow-modal-small"
+              className="relative flex h-full w-full flex-col overflow-hidden border border-white/[0.09] bg-[#08080a] shadow-[0_28px_90px_rgba(0,0,0,0.58)]"
               style={{
                 transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
-                borderRadius: 16,
+                borderRadius: 22,
               }}
             >
-              {/* Drag handle - floating overlay */}
+              {/* Header / drag handle */}
               <div
                 onMouseDown={handleDragStart}
                 className={cn(
-                  "absolute top-0 left-1/2 -translate-x-1/2 z-50 px-4 py-2 cursor-grab rounded pointer-events-auto titlebar-no-drag",
+                  "flex h-12 shrink-0 cursor-grab items-center justify-between border-b border-white/[0.065] px-4 titlebar-no-drag",
                   isDragging && "cursor-grabbing"
                 )}
               >
-                <GripHorizontal className="w-4 h-4 text-muted-foreground/30" />
+                <div className="flex min-w-0 items-center gap-2">
+                  <GripHorizontal className="h-4 w-4 shrink-0 text-white/26" />
+                  <span className="truncate text-[13px] font-medium text-white/72">
+                    {displayLabel || context.label}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  onMouseDown={(event) => {
+                    event.stopPropagation()
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setOpen(false)
+                  }}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-white/[0.08] bg-white/[0.035] text-white/42 transition-colors hover:bg-white/[0.08] hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
 
               {/* Content area - always uses compact ChatDisplay */}
-              <div className="flex-1 flex flex-col bg-foreground-2" style={{ height: '100%' }}>
+              <div
+                className={cn(
+                  "min-h-0 flex-1 bg-[radial-gradient(circle_at_50%_0%,rgba(139,140,255,0.08),transparent_34%),#08080a]",
+                  "[&_textarea]:text-white [&_textarea::placeholder]:text-white/34",
+                  "[&_[contenteditable='true']]:text-white [&_[contenteditable='true']:empty:before]:text-white/34"
+                )}
+              >
                 <ChatDisplay
                   session={displaySession}
                   onSendMessage={inlineExecution ? handleInlineSendMessage : handleLegacySendMessage}
@@ -1107,7 +1132,7 @@ export const EditButton = React.forwardRef<
       variant="ghost"
       size="sm"
       // Merge our base styles with any className from asChild props
-      className={cn("h-8 px-3 rounded-[6px] bg-background shadow-minimal text-foreground/70 hover:text-foreground", className)}
+      className={cn("h-8 rounded-[9px] border border-white/[0.08] bg-white/[0.045] px-3 text-xs text-white/64 shadow-none hover:bg-white/[0.08] hover:text-white", className)}
       {...props}
     >
       {t("common.edit")}

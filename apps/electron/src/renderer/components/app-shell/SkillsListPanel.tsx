@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { BookOpen, Search, Zap } from 'lucide-react'
+import { BookOpen, Plus, Search, Zap } from 'lucide-react'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
 import { Button } from '@/components/ui/button'
@@ -243,6 +243,117 @@ export function SkillsListPanel({
   return (
     <>
       <div className={className ? `flex min-h-0 flex-1 flex-col ${className}` : 'flex min-h-0 flex-1 flex-col'}>
+        {className?.includes('runneros-library-grid') ? (
+          <div className="min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_50%_0%,rgba(94,106,210,0.10),transparent_35%),#101011]/0 px-8 py-8">
+            <div className="mb-7 flex items-start justify-between gap-4">
+              <div>
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-[#9da4ff]">
+                  <Zap className="h-3.5 w-3.5" />
+                  Skill layer
+                </div>
+                <h1 className="text-[28px] font-semibold leading-tight text-white">{t('sidebar.skills')}</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">Reusable capabilities available to agents in this workspace.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {workspaceRootPath && (
+                  <EditPopover
+                    align="end"
+                    trigger={
+                      <button
+                        type="button"
+                        className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-white/[0.08] bg-white/[0.045] px-3 text-xs font-medium text-white/76 transition-colors hover:bg-white/[0.08] hover:text-white"
+                      >
+                        <Plus className="size-3.5" />
+                        Add skill
+                      </button>
+                    }
+                    {...getEditConfig('add-skill', workspaceRootPath)}
+                  />
+                )}
+                {workspaceId && (
+                  <button
+                    type="button"
+                    onClick={() => setLibraryOpen(true)}
+                    className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-[#7c7cff]/30 bg-[#5e6ad2]/18 px-3 text-xs font-medium text-white shadow-[0_0_24px_rgba(94,106,210,0.20)] transition-colors hover:bg-[#5e6ad2]/26"
+                    title="Open global skills library"
+                  >
+                    <BookOpen className="size-3.5" />
+                    Library
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {visibleSkills.length === 0 ? (
+              <div className="rounded-[18px] border border-dashed border-white/[0.12] bg-white/[0.03] p-8 text-center text-sm text-white/55">
+                {t('skillsList.noSkillsConfigured')}
+              </div>
+            ) : (
+              <div className="space-y-7">
+                {groupSkillsByCategory(visibleSkills).map((group) => (
+                  <section key={group.key}>
+                    <div className="mb-3 flex items-center gap-3">
+                      <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">{group.label}</h2>
+                      <div className="h-px flex-1 bg-white/[0.06]" />
+                      <span className="text-[11px] text-white/32">{group.items.length}</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {group.items.map((skill) => {
+                        const tags = getSkillTags(skill)
+                        return (
+                          <div key={skill.slug} className="group relative min-h-[156px] overflow-hidden rounded-[18px] border border-white/[0.075] bg-white/[0.035] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#8b8cff]/35 hover:bg-white/[0.06] hover:shadow-[0_18px_60px_rgba(0,0,0,0.32),0_0_34px_rgba(94,106,210,0.10)]">
+                            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#8b8cff]/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                            <button type="button" onClick={() => onSkillClick(skill)} className="flex w-full items-start gap-3 text-left">
+                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-white/[0.08] bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+                                <SkillAvatar skill={skill} size="sm" workspaceId={workspaceId} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-semibold text-white">{skill.metadata.name}</div>
+                                <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/46">{skill.metadata.description}</p>
+                              </div>
+                            </button>
+                            <div className="mt-4 flex flex-wrap gap-1.5">
+                              {skill.source === 'project' && (
+                                <span className="rounded-[7px] border border-white/[0.06] bg-black/20 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-white/38">
+                                  {t('skillsList.projectBadge')}
+                                </span>
+                              )}
+                              {tags.slice(0, 3).map(tag => (
+                                <span key={tag} className="rounded-[7px] border border-white/[0.06] bg-black/20 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-white/38">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="absolute right-3 top-3 opacity-0 transition-opacity group-hover:opacity-100">
+                              <SkillMenu
+                                skillSlug={skill.slug}
+                                skillName={skill.metadata.name}
+                                onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://skills/skill/${skill.slug}?window=focused`)}
+                                onShowInFinder={() => {
+                                  if (canRevealLocally) void window.electronAPI.showInFolder(`${skill.path}/SKILL.md`)
+                                }}
+                                canShowInFinder={canRevealLocally}
+                                onDelete={skill.source === 'workspace' ? () => onDeleteSkill(skill.slug) : undefined}
+                                canDelete={skill.source === 'workspace'}
+                                deleteLabel={skill.source === 'workspace' ? t('skillsList.deleteSkill') : t('skillsList.managedByProject')}
+                                onSendToWorkspace={hasOtherWorkspaces && skill.source === 'workspace' ? () => {
+                                  setSendResourceSlug(skill.slug)
+                                  setSendResourceLabel(skill.metadata.name)
+                                  setSendDialogOpen(true)
+                                } : undefined}
+                              />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+        <>
         {workspaceId && (
           <div className="flex shrink-0 items-center justify-end px-2 py-1">
             <button
@@ -317,6 +428,8 @@ export function SkillsListPanel({
             ),
           })}
         />
+        </>
+        )}
       </div>
 
       {workspaceId && (

@@ -48,9 +48,9 @@ const colorConfig: Record<
     shadowColor: 'var(--foreground-rgb)',
   },
   muted: {
-    bg: 'bg-background',
-    text: 'text-foreground/70',
-    shadow: 'shadow-minimal',
+    bg: 'bg-white/[0.055]',
+    text: 'text-white/68',
+    shadow: 'shadow-none',
   },
 }
 

@@ -1784,7 +1784,7 @@ export function FreeFormInput({
             sessionId={sessionId}
           />
 
-          <div className={cn("flex items-center gap-1 px-2 py-2", !compactMode && "border-t border-border/50")}>
+          <div className={cn("flex items-center gap-1 px-2 py-2", !compactMode && "border-t border-white/[0.06]")}>
           {/* Hidden file input for attach button (shared by compact and desktop) */}
           <input
             ref={fileInputRef}

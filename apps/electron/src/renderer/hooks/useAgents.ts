@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useAtom } from 'jotai'
 import { agentsStateAtomFamily, type AgentsState } from '@/atoms/agents'
+import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO } from '../../shared/types'
 
 export interface UseAgentsResult {
@@ -40,6 +41,7 @@ export interface UseAgentsResult {
 }
 
 const NULL_WORKSPACE_KEY = '__no_workspace__'
+const SYSTEM_AGENT_SLUGS = [CONCIERGE_SLUG, ORCHESTRATOR_SLUG] as const
 const inFlightRefreshes = new Map<string, Promise<void>>()
 const mountedWorkspaceKeys = new Map<string, number>()
 let globalDefinitionsCleanup: (() => void) | null = null
@@ -51,6 +53,14 @@ function getWorkspaceKey(activeWorkspaceId: string | null | undefined): string {
 
 function sortAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {
   return [...agents].sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
+}
+
+function withSystemActiveSlugs(slugs: string[], agents: AgentDefinitionDTO[]): string[] {
+  const next = new Set(slugs)
+  for (const systemSlug of SYSTEM_AGENT_SLUGS) {
+    if (agents.some((agent) => agent.slug === systemSlug)) next.add(systemSlug)
+  }
+  return Array.from(next)
 }
 
 export function useAgents(activeWorkspaceId: string | null | undefined): UseAgentsResult {
@@ -70,9 +80,10 @@ export function useAgents(activeWorkspaceId: string | null | undefined): UseAgen
             ? window.electronAPI.listActiveAgentDefinitions(activeWorkspaceId)
             : Promise.resolve([] as string[]),
         ])
+        const allAgents = sortAgents(libraryRaw)
         const next: AgentsState = {
-          allAgents: sortAgents(libraryRaw),
-          activeSlugs: activeRaw,
+          allAgents,
+          activeSlugs: withSystemActiveSlugs(activeRaw, allAgents),
           loading: false,
           error: null,
         }
@@ -128,8 +139,12 @@ export function useAgents(activeWorkspaceId: string | null | undefined): UseAgen
 
   const setActive = useCallback(async (slug: string, active: boolean) => {
     if (!activeWorkspaceId) return
+    if ((SYSTEM_AGENT_SLUGS as readonly string[]).includes(slug) && !active) {
+      setState((prev) => ({ ...prev, activeSlugs: withSystemActiveSlugs(prev.activeSlugs, prev.allAgents) }))
+      return
+    }
     const result = await window.electronAPI.setAgentDefinitionActive(activeWorkspaceId, slug, active)
-    setState((prev) => ({ ...prev, activeSlugs: result.active }))
+    setState((prev) => ({ ...prev, activeSlugs: withSystemActiveSlugs(result.active, prev.allAgents) }))
   }, [activeWorkspaceId, setState])
 
   const upsert = useCallback(async (input: {

@@ -118,17 +118,17 @@ function Info_PageHeader({ className, ...props }: Info_PageHeaderProps) {
 function Info_PageHero({ avatar, title, tagline, className }: Info_PageHeroProps) {
   return (
     <div className={cn('flex items-start gap-3', className)}>
-      <div className="h-[32px] w-[32px] shrink-0 mt-[2px] rounded-[4px] ring-1 ring-border/30 overflow-hidden">
+      <div className="mt-[2px] h-[34px] w-[34px] shrink-0 overflow-hidden rounded-[11px] ring-1 ring-white/[0.09]">
         {avatar}
       </div>
       <div className="flex-1 min-w-0">
         {title && (
-          <h2 className="text-base font-semibold text-foreground leading-tight">
+          <h2 className="text-[16px] font-semibold leading-tight text-white/86">
             {title}
           </h2>
         )}
         {tagline && (
-          <p className={cn('text-sm text-foreground/60 leading-snug line-clamp-1', title ? 'mt-0.5' : 'mt-0')}>
+          <p className={cn('line-clamp-1 text-[13px] leading-snug text-white/38', title ? 'mt-0.5' : 'mt-0')}>
             {tagline}
           </p>
         )}
@@ -149,7 +149,7 @@ function Info_PageContent({ children, className }: Info_PageContentProps) {
         }}
       >
         <ScrollArea className="h-full">
-          <div className={cn(CHAT_LAYOUT.maxWidth, 'mx-auto px-5 pt-6 pb-10')}>
+          <div className={cn(CHAT_LAYOUT.maxWidth, 'mx-auto px-5 pt-5 pb-10')}>
             <div className={cn('space-y-6', className)}>{children}</div>
           </div>
         </ScrollArea>

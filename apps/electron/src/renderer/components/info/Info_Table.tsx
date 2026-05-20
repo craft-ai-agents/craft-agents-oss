@@ -35,9 +35,9 @@ function Info_TableRoot({
   className,
 }: Info_TableProps) {
   return (
-    <div className={cn('py-2', className)}>
+    <div className={cn('py-1.5', className)}>
       <dl
-        className="divide-y divide-border/30"
+        className="divide-y divide-white/[0.055]"
         style={{ '--label-width': `${labelWidth}px` } as React.CSSProperties}
       >
         {children}
@@ -51,14 +51,14 @@ function Info_TableRow({ label, value, children, className }: Info_TableRowProps
   const content = children ?? value
 
   return (
-    <div className={cn('flex py-2.5 px-4 text-sm', className)}>
+    <div className={cn('flex px-4 py-3 text-[13px]', className)}>
       <dt
-        className="text-muted-foreground shrink-0"
+        className="shrink-0 text-white/36"
         style={{ width: 'var(--label-width)' }}
       >
         {label}
       </dt>
-      <dd className="flex-1 min-w-0">{content}</dd>
+      <dd className="min-w-0 flex-1 text-white/72">{content}</dd>
     </div>
   )
 }

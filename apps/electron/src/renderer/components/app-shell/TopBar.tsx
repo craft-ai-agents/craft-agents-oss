@@ -1,7 +1,7 @@
 /**
  * TopBar - Persistent top bar above all panels (Slack-style)
  *
- * Layout: [Sidebar] [Menu] [Back] [Forward] [Workspace selector] ... [Browser strip] [+] [Help]
+ * Layout: [Sidebar] [Menu] [Back] [Forward] ... [Browser strip] [+] [Help]
  *
  * Fixed at top of window, 48px tall.
  * macOS: offset left to avoid stoplight controls.
@@ -38,8 +38,6 @@ import { SETTINGS_ICONS } from "../icons/SettingsIcons"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
 import { useEffect, useRef, useState } from "react"
 import { BrowserTabStrip } from "../browser/BrowserTabStrip"
-import type { Workspace } from "../../../shared/types"
-import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
 import { BellMenu } from "../notifications/BellMenu"
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
 
@@ -139,12 +137,7 @@ function renderMenuSection(
 // --- TopBar ---
 
 interface TopBarProps {
-  workspaces: Workspace[]
   activeWorkspaceId: string | null
-  onSelectWorkspace: (workspaceId: string, openInNewWindow?: boolean) => void | Promise<void>
-  workspaceUnreadMap?: Record<string, boolean>
-  onWorkspaceCreated?: (workspace: Workspace) => void
-  onWorkspaceRemoved?: () => void
   activeSessionId?: string | null
   onNewChat: () => void
   onNewWindow?: () => void
@@ -165,12 +158,7 @@ interface TopBarProps {
 }
 
 export function TopBar({
-  workspaces,
   activeWorkspaceId,
-  onSelectWorkspace,
-  workspaceUnreadMap,
-  onWorkspaceCreated,
-  onWorkspaceRemoved,
   activeSessionId,
   onNewChat,
   onNewWindow,
@@ -235,7 +223,7 @@ export function TopBar({
       if (frame) cancelAnimationFrame(frame)
       observer.disconnect()
     }
-  }, [workspaces.length, activeWorkspaceId])
+  }, [activeWorkspaceId])
 
   const actionHandlers: MenuActionHandlers = {
     toggleFocusMode: onToggleFocusMode,
@@ -246,7 +234,7 @@ export function TopBar({
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 h-[48px] z-panel titlebar-drag-region"
+      className="fixed top-0 left-0 right-0 h-[48px] z-panel titlebar-drag-region bg-[#0a0a0d]/96"
     >
       <div className="flex h-full w-full items-center justify-between gap-2">
       {/* === LEFT: Sidebar + Menu + Navigation + Workspace === */}
@@ -377,8 +365,8 @@ export function TopBar({
         </DropdownMenu>
         </div>
 
-        {/* Back / Forward / Workspace selector (moved from center) */}
-        <div className={cn("ml-1 flex min-w-0 items-center gap-1", isCompact ? "flex-1" : "w-[clamp(220px,42vw,640px)]")}>
+        {/* Back / Forward */}
+        <div className={cn("ml-1 flex min-w-0 items-center gap-1", isCompact ? "flex-1" : "w-auto")}>
           <Tooltip>
             <TooltipTrigger asChild>
               <TopBarButton onClick={onBack} disabled={!canGoBack} aria-label={t("common.back")}>
@@ -396,18 +384,6 @@ export function TopBar({
             </TooltipTrigger>
             <TooltipContent side="bottom">{t("common.forward")} {goForwardHotkey}</TooltipContent>
           </Tooltip>
-
-          <div className="min-w-0 flex-1">
-            <WorkspaceSwitcher
-              variant="topbar"
-              workspaces={workspaces}
-              activeWorkspaceId={activeWorkspaceId}
-              onSelect={onSelectWorkspace}
-              onWorkspaceCreated={onWorkspaceCreated}
-              onWorkspaceRemoved={onWorkspaceRemoved}
-              workspaceUnreadMap={workspaceUnreadMap}
-            />
-          </div>
         </div>
       </div>
 
@@ -418,6 +394,14 @@ export function TopBar({
           <BrowserTabStrip activeSessionId={activeSessionId} maxVisibleBadges={maxVisibleBrowserBadges} />
         </div>
         <BellMenu workspaceId={activeWorkspaceId} />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <TopBarButton onClick={onOpenSettings} aria-label={t("menu.settings")} className="h-[26px] w-[26px] rounded-lg">
+              <Icons.Settings className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+            </TopBarButton>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t("menu.settings")}</TooltipContent>
+        </Tooltip>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <TopBarButton aria-label={t("menu.addPanelMenu")} className="ml-1 h-[26px] w-[26px] rounded-lg">

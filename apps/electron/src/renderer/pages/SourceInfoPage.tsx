@@ -8,9 +8,8 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, KeyRound } from 'lucide-react'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
-import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceMenu } from '@/components/app-shell/SourceMenu'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -193,6 +192,14 @@ function getSourceTierLabel(source: LoadedSource, t: (key: string) => string): s
   }
 }
 
+function SourceInitialAvatar({ name }: { name: string }) {
+  return (
+    <div className="flex h-full w-full items-center justify-center rounded-[12px] border border-white/[0.10] bg-white/[0.045] font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-white/58">
+      {name.slice(0, 2)}
+    </div>
+  )
+}
+
 function getCredentialScopeLabel(
   source: LoadedSource,
   credentialScope: SourceCredentialScopeResult | null,
@@ -314,10 +321,10 @@ function SourceCredentialDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="!max-w-md !rounded-[18px] !border !border-white/[0.09] !bg-[#0a0a0c] p-5 !text-white shadow-[0_24px_80px_rgba(0,0,0,0.62)]">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-white/90">{title}</DialogTitle>
+          <DialogDescription className="text-white/46">
             {isRevert
               ? t('sourceInfo.credentialDialog.revertDescription')
               : usesOAuth
@@ -332,28 +339,29 @@ function SourceCredentialDialog({
 
         {!isRevert && !usesOAuth && (
           <div className="grid gap-2">
-            <Label htmlFor="source-credential">{t('sourceInfo.credentialDialog.credentialLabel')}</Label>
+            <Label htmlFor="source-credential" className="text-white/64">{t('sourceInfo.credentialDialog.credentialLabel')}</Label>
             <Input
               id="source-credential"
               type="password"
               value={credential}
               onChange={(event) => setCredential(event.target.value)}
               placeholder={t('sourceInfo.credentialDialog.credentialPlaceholder')}
+              className="border-white/[0.09] bg-white/[0.045] text-white placeholder:text-white/24"
               autoFocus
             />
           </div>
         )}
 
         <DialogFooter>
-          <Button type="button" variant="ghost" onClick={close} disabled={submitting}>
+          <Button type="button" variant="ghost" onClick={close} disabled={submitting} className="text-white/56 hover:bg-white/[0.06] hover:text-white">
             {t('common.cancel')}
           </Button>
           {isRevert ? (
-            <Button type="button" onClick={handleRevert} disabled={submitting}>
+            <Button type="button" onClick={handleRevert} disabled={submitting} className="bg-[#8d7cff] text-white hover:bg-[#9f91ff]">
               {t('sourceInfo.credentialDialog.revertConfirm')}
             </Button>
           ) : (
-            <Button type="button" onClick={handleOverride} disabled={submitting || (!usesOAuth && !credential.trim())}>
+            <Button type="button" onClick={handleOverride} disabled={submitting || (!usesOAuth && !credential.trim())} className="bg-[#8d7cff] text-white hover:bg-[#9f91ff]">
               {usesOAuth ? t('sourceInfo.credentialDialog.continueOAuth') : t('common.save')}
             </Button>
           )}
@@ -580,6 +588,28 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
 
   // Get source name for header
   const sourceName = source?.config.name || sourceSlug
+  const credentialAction = useMemo(() => {
+    if (!source || !credentialScope) return null
+    if (credentialScope.canOverride) {
+      return {
+        label: t("sourceInfo.useWorkspaceCredentials"),
+        onClick: () => setCredentialDialogMode('override' as const),
+      }
+    }
+    if (credentialScope.canAuthenticate && source.tier === 'global') {
+      return {
+        label: t("sourceInfo.setGlobalCredentials"),
+        onClick: () => setCredentialDialogMode('global' as const),
+      }
+    }
+    if (credentialScope.canRevert) {
+      return {
+        label: t("sourceInfo.revertGlobalCredentials"),
+        onClick: () => setCredentialDialogMode('revert' as const),
+      }
+    }
+    return null
+  }, [credentialScope, source, t])
 
   return (
     <Info_Page
@@ -609,7 +639,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
         <Info_Page.Content>
           {/* Hero: Avatar, title, and tagline */}
           <Info_Page.Hero
-            avatar={<SourceAvatar source={source} fluid />}
+            avatar={<SourceInitialAvatar name={source.config.name} />}
             title={source.config.name}
             tagline={source.config.tagline}
           />
@@ -629,15 +659,28 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
             title={t('sourceInfo.connection')}
             description={getConnectionDescription(source, t)}
             actions={
-              // EditPopover for AI-assisted config.json editing with "Edit File" as secondary action
-              <EditPopover
-                trigger={<EditButton />}
-                {...getEditConfig('source-config', source.folderPath)}
-                secondaryAction={{
-                  label: t('common.editFile'),
-                  filePath: `${source.folderPath}/config.json`,
-                }}
-              />
+              <div className="flex items-center gap-2">
+                {credentialAction && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={credentialAction.onClick}
+                    className="h-8 gap-1.5 rounded-[9px] border-white/[0.10] bg-white/[0.04] px-2.5 text-[11px] text-white/72 hover:bg-white/[0.08] hover:text-white"
+                  >
+                    <KeyRound className="h-3.5 w-3.5" />
+                    {credentialAction.label}
+                  </Button>
+                )}
+                <EditPopover
+                  trigger={<EditButton />}
+                  {...getEditConfig('source-config', source.folderPath)}
+                  secondaryAction={{
+                    label: t('common.editFile'),
+                    filePath: `${source.folderPath}/config.json`,
+                  }}
+                />
+              </div>
             }
           >
             <Info_Table
@@ -657,7 +700,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
                 <Info_Table.Row label={t('common.url')}>
                   <button
                     onClick={handleOpenUrl}
-                    className="truncate hover:underline text-foreground focus:outline-none focus-visible:underline text-left block w-full"
+                    className="block w-full truncate text-left text-white/72 hover:text-white hover:underline focus:outline-none focus-visible:underline"
                   >
                     {sourceUrl}
                   </button>
