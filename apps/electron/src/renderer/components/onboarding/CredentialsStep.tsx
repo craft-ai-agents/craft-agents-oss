@@ -44,11 +44,14 @@ export function CredentialsStep({
 }: CredentialsStepProps) {
   const { t } = useTranslation()
   const isPiApiKey = apiSetupMethod === 'pi_api_key'
+  const isOpenLlmApiKey = apiSetupMethod === 'openllm_api_key'
 
   // --- API Key flow ---
   // Determine provider type and description based on selected method
-  const providerType = isPiApiKey ? 'pi_api_key' : 'anthropic'
-  const apiKeyDescription = isPiApiKey
+  const providerType = isOpenLlmApiKey ? 'openllm' : isPiApiKey ? 'pi_api_key' : 'anthropic'
+  const apiKeyDescription = isOpenLlmApiKey
+    ? "Enter the OpenLLM API key and the model IDs exposed by your OpenLLM deployment. The host is read from OPENLLM_HOST."
+    : isPiApiKey
     ? "Select a provider preset and enter the API key. For arbitrary Anthropic-compatible endpoints, use Anthropic API Key mode."
     : "Enter your API key. Optionally configure a custom endpoint for OpenRouter, Ollama, or compatible APIs."
 

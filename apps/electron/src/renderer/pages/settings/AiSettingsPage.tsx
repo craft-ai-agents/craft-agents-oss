@@ -262,6 +262,9 @@ export function ConnectionRow({ connection, isLastConnection, onRenameClick, onD
           ? 'Manifest'
           : 'Craft Agents Backend Compatible')
         break
+      case 'openllm':
+        parts.push('OpenLLM')
+        break
       default: parts.push(provider || 'Unknown')
     }
 
@@ -561,6 +564,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
                     label: conn.name,
                     description: conn.providerType === 'anthropic' ? 'Anthropic' :
                                  conn.providerType === 'pi' ? 'MDP Backend' :
+                                 conn.providerType === 'openllm' ? 'OpenLLM' :
                                  conn.providerType || 'Unknown',
                   })),
                 ]}
@@ -606,6 +610,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
 /** Map a connection's provider type to the corresponding API key setup method. */
 function getApiKeyMethodForConnection(conn: LlmConnectionWithStatus): ApiSetupMethod {
   const provider = conn.providerType || conn.type
+  if (provider === 'openllm') return 'openllm_api_key'
   if (provider === 'pi' || provider === 'pi_compat') return 'pi_api_key'
   return 'anthropic_api_key'
 }
@@ -1035,6 +1040,7 @@ export default function AiSettingsPage() {
                       description: conn.providerType === 'anthropic' ? 'Anthropic API' :
                                    conn.providerType === 'pi' ? 'Craft Agents Backend' :
                                    conn.providerType === 'pi_compat' ? (conn.baseUrl?.toLowerCase().includes('manifest.build') ? 'Manifest' : 'Craft Agents Backend Compatible') :
+                                   conn.providerType === 'openllm' ? 'OpenLLM' :
                                    conn.providerType || 'Unknown',
                     }))}
                   />

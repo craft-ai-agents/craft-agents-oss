@@ -148,6 +148,11 @@ export const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
     authType: 'api_key',
     // piAuthProvider set dynamically from setup.piAuthProvider
   },
+  'openllm-api': {
+    name: 'OpenLLM',
+    providerType: 'openllm',
+    authType: 'api_key',
+  },
 }
 
 // ============================================================

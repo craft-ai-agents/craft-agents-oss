@@ -341,7 +341,7 @@ export function registerLlmConnectionsHandlersWithRuntime(
   // Unified connection test — uses the agent factory to spawn a real agent subprocess
   // and validate credentials via runMiniCompletion(). Same code path as actual chat.
   server.handle(RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP, async (_ctx, params: import('@craft-agent/shared/protocol').TestLlmConnectionParams): Promise<import('@craft-agent/shared/protocol').TestLlmConnectionResult> => {
-    const { provider, apiKey, baseUrl, model, piAuthProvider, customEndpoint } = params
+    const { provider, apiKey, baseUrl, model, piAuthProvider, customEndpoint, providerType } = params
     const trimmedKey = apiKey?.trim() ?? ''
     const allowEmptyApiKey = !setupTestRequiresApiKey(baseUrl)
 
@@ -354,7 +354,9 @@ export function registerLlmConnectionsHandlersWithRuntime(
       return { success: false, error: setupValidation.error }
     }
 
-    const hint = resolveSetupTestConnectionHint({ provider, baseUrl, piAuthProvider, customEndpoint })
+    const hint = providerType === 'openllm'
+      ? { providerType: 'openllm' as const }
+      : resolveSetupTestConnectionHint({ provider, baseUrl, piAuthProvider, customEndpoint })
     deps.platform.logger?.info(`[testLlmConnectionSetup] Testing: provider=${provider}${piAuthProvider ? ` piAuth=${piAuthProvider}` : ''}${baseUrl ? ` baseUrl=${baseUrl}` : ''} hasCustomEndpoint=${!!customEndpoint} hintProvider=${hint.providerType}`)
 
     const startedAt = Date.now()
