@@ -55,8 +55,13 @@ export type LlmProviderType =
   | 'pi_compat'
   | 'openllm';
 
+/** Environment variable that provides the deployment-owned OpenLLM host. */
 export const OPENLLM_HOST_ENV_VAR = 'OPENLLM_HOST';
 
+/** Pi auth-provider hint used for Anthropic Messages-compatible OpenLLM endpoints. */
+export const OPENLLM_PI_AUTH_PROVIDER = 'anthropic';
+
+/** Build the per-model OpenLLM endpoint URL from `OPENLLM_HOST` and the active model. */
 export function buildOpenLlmBaseUrl(modelName: string, env: NodeJS.ProcessEnv = process.env): string {
   const host = env[OPENLLM_HOST_ENV_VAR]?.trim();
   if (!host) {
@@ -123,6 +128,9 @@ export interface CustomEndpointConfig {
   /** Explicit capability hint for arbitrary endpoints — never guessed automatically. */
   supportsImages?: boolean;
 }
+
+/** OpenLLM speaks the Anthropic Messages protocol through Pi's custom endpoint path. */
+export const OPENLLM_CUSTOM_ENDPOINT = { api: 'anthropic-messages' } as const satisfies CustomEndpointConfig;
 
 /**
  * Per-connection behavior when the user sends a message while the agent is

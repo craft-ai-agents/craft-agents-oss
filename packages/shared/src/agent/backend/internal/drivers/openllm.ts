@@ -1,5 +1,5 @@
 import type { ProviderDriver } from '../driver-types.ts';
-import { buildOpenLlmBaseUrl } from '../../../../config/llm-connections.ts';
+import { buildOpenLlmBaseUrl, OPENLLM_CUSTOM_ENDPOINT, OPENLLM_PI_AUTH_PROVIDER } from '../../../../config/llm-connections.ts';
 
 function buildCustomModels(args: Parameters<ProviderDriver['buildRuntime']>[0]) {
   return args.context.connection?.models?.map(m => {
@@ -26,9 +26,9 @@ export const openllmDriver: ProviderDriver = {
       interceptor: args.resolvedPaths.interceptorBundlePath,
       node: args.resolvedPaths.nodeRuntimePath,
     },
-    piAuthProvider: 'anthropic',
+    piAuthProvider: OPENLLM_PI_AUTH_PROVIDER,
     baseUrl: buildOpenLlmBaseUrl(args.context.resolvedModel),
-    customEndpoint: { api: 'anthropic-messages' },
+    customEndpoint: OPENLLM_CUSTOM_ENDPOINT,
     customModels: buildCustomModels(args),
   }),
   validateStoredConnection: async () => ({ success: true }),
