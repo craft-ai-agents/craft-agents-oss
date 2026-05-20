@@ -58,8 +58,17 @@ export type LlmProviderType =
 /** Environment variable that provides the deployment-owned OpenLLM host. */
 export const OPENLLM_HOST_ENV_VAR = 'OPENLLM_HOST';
 
-/** Pi auth-provider hint used for Anthropic Messages-compatible OpenLLM endpoints. */
-export const OPENLLM_PI_AUTH_PROVIDER = 'anthropic';
+/** Pi auth-provider hint used for OpenAI Chat Completions-compatible OpenLLM endpoints. */
+export const OPENLLM_PI_AUTH_PROVIDER = 'openai';
+
+/** Reserved slug for the synthesized OpenLLM environment connection. */
+export const OPENLLM_ENV_CONNECTION_SLUG = 'openllm-env';
+
+/** Comma-separated model list env var for the OpenLLM environment connection. First entry is the default model. */
+export const OPENLLM_MODELS_ENV_VAR = 'OPENLLM_MODELS';
+
+/** Optional display name override for the synthesized OpenLLM environment connection. */
+export const OPENLLM_CONNECTION_NAME_ENV_VAR = 'OPENLLM_CONNECTION_NAME';
 
 /** Build the per-model OpenLLM endpoint URL from `OPENLLM_HOST` and the active model. */
 export function buildOpenLlmBaseUrl(modelName: string, env: NodeJS.ProcessEnv = process.env): string {
@@ -136,8 +145,8 @@ export type RuntimeCustomModel = string | {
   supportsImages?: boolean;
 };
 
-/** OpenLLM speaks the Anthropic Messages protocol through Pi's custom endpoint path. */
-export const OPENLLM_CUSTOM_ENDPOINT = { api: 'anthropic-messages' } as const satisfies CustomEndpointConfig;
+/** OpenLLM speaks the OpenAI Chat Completions protocol through Pi's custom endpoint path. */
+export const OPENLLM_CUSTOM_ENDPOINT = { api: 'openai-completions' } as const satisfies CustomEndpointConfig;
 
 /**
  * Per-connection behavior when the user sends a message while the agent is
@@ -312,6 +321,39 @@ export function synthesizeEnvConnection(
     baseUrl,
     models: model ? [model] : [],
     defaultModel: model || undefined,
+    createdAt: 0,
+    isEnvironmentConnection: true,
+  };
+}
+
+/**
+ * Build the synthesized OpenLLM environment connection from process environment.
+ *
+ * Returns null when `OPENLLM_HOST` is absent. When present the connection is
+ * auto-default and uses SSO-header auth (no API key stored). The host is
+ * read at call time so the connection always reflects the current deployment.
+ */
+export function synthesizeOpenLlmEnvConnection(
+  env: NodeJS.ProcessEnv = process.env,
+): LlmConnection | null {
+  const host = env[OPENLLM_HOST_ENV_VAR]?.trim();
+  if (!host) return null;
+
+  const rawModels = env[OPENLLM_MODELS_ENV_VAR]?.trim();
+  const models = rawModels
+    ? rawModels.split(',').map(m => m.trim()).filter(Boolean)
+    : [];
+  const defaultModel = models[0];
+
+  return {
+    slug: OPENLLM_ENV_CONNECTION_SLUG,
+    name: env[OPENLLM_CONNECTION_NAME_ENV_VAR]?.trim() ?? 'OpenLLM',
+    providerType: 'openllm',
+    authType: 'none',
+    piAuthProvider: OPENLLM_PI_AUTH_PROVIDER,
+    customEndpoint: OPENLLM_CUSTOM_ENDPOINT,
+    models,
+    defaultModel,
     createdAt: 0,
     isEnvironmentConnection: true,
   };

@@ -28,3 +28,8 @@ The host is deployment-owned infrastructure, not user-owned credential data. Sto
 - `isCompatProvider('openllm')` returns `true` — model list is user-defined, not fetched from a registry.
 - The Add Connection preset is always shown regardless of whether `OPENLLM_HOST` is set; a missing env var surfaces as a runtime error when the connection is used.
 - `isValidProviderAuthCombination` allows `openllm + api_key` only.
+- **Protocol**: `OPENLLM_CUSTOM_ENDPOINT = { api: 'openai-completions' }` and `OPENLLM_PI_AUTH_PROVIDER = 'openai'`. OpenLLM speaks the OpenAI Chat Completions protocol — the initial `anthropic-messages` value in this file was incorrect. The constant is injected at runtime by the driver and `runtime-config.ts`, not stored on the connection record, so no migration is required.
+
+## Amendment — OpenLLM Environment Connection (slug `openllm-env`)
+
+A synthesized virtual connection activated when `OPENLLM_HOST` is set, parallel to the Environment Connection (`env-provider`). It becomes the implicit default in `getDefaultLlmConnection` when `OPENLLM_HOST` is present and no user-set explicit default exists — taking priority over env-provider. Auth is SSO-token injection via the network interceptor (`CRAFT_LLM_SSO_BASE_URL = OPENLLM_HOST`, matching all per-model paths). `OPENLLM_MODELS` (comma-separated, first is default) supplies the model list; `OPENLLM_CONNECTION_NAME` overrides the display name (defaults to `"OpenLLM"`). `isValidProviderAuthCombination` is not consulted for synthesized connections.

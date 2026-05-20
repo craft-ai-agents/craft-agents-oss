@@ -1,5 +1,5 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, getEnvConnectionMidStreamBehavior, setEnvConnectionMidStreamBehavior, isMidStreamBehavior, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, synthesizeEnvConnection, ENV_CONNECTION_SLUG, type EnvConnectionEnv, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, getEnvConnectionMidStreamBehavior, setEnvConnectionMidStreamBehavior, isMidStreamBehavior, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, synthesizeEnvConnection, synthesizeOpenLlmEnvConnection, ENV_CONNECTION_SLUG, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_HOST_ENV_VAR, type EnvConnectionEnv, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { SsoCredentialStore, type SsoSession } from '@craft-agent/shared/auth'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
@@ -14,7 +14,7 @@ import { getWorkspaceOrThrow, buildBackendHostRuntimeContext } from '@craft-agen
 import { type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
-export { ENV_CONNECTION_SLUG } from '@craft-agent/shared/config'
+export { ENV_CONNECTION_SLUG, OPENLLM_ENV_CONNECTION_SLUG } from '@craft-agent/shared/config'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.LIST,
@@ -43,9 +43,9 @@ export function rejectEnvironmentConnectionMutation(): { success: false; error: 
   }
 }
 
-/** Return true when a connection slug targets the reserved Environment connection. */
+/** Return true when a connection slug targets a reserved synthesized connection (env-provider or openllm-env). */
 export function isEnvironmentConnectionSlug(slug: string): boolean {
-  return slug === ENV_CONNECTION_SLUG
+  return slug === ENV_CONNECTION_SLUG || slug === OPENLLM_ENV_CONNECTION_SLUG
 }
 
 /** Build the UI-facing Environment connection when an active SSO token is available. */
@@ -59,6 +59,23 @@ export function synthesizeEnvConnectionWithStatus(env: EnvConnectionEnv, activeS
     isDefault: true,
     isEnvironmentConnection: true,
     midStreamBehavior: getEnvConnectionMidStreamBehavior(),
+  }
+}
+
+/** Build the UI-facing OpenLLM environment connection when an active SSO token is available. */
+export function synthesizeOpenLlmEnvConnectionWithStatus(
+  env: NodeJS.ProcessEnv,
+  activeSsoToken: string | undefined,
+  defaultSlug: string | null,
+): LlmConnectionWithStatus | null {
+  const conn = activeSsoToken ? synthesizeOpenLlmEnvConnection(env) : null
+  if (!conn) return null
+
+  return {
+    ...conn,
+    isAuthenticated: true,
+    isDefault: conn.slug === defaultSlug,
+    isEnvironmentConnection: true,
   }
 }
 
@@ -460,10 +477,14 @@ export function registerLlmConnectionsHandlersWithRuntime(
       deps.platform.logger?.warn(`Failed to load SSO session for Environment connection: ${error instanceof Error ? error.message : error}`)
     }
 
+    const openLlmEnvConnection = synthesizeOpenLlmEnvConnectionWithStatus(process.env, ssoToken, defaultSlug)
     const envConnection = synthesizeEnvConnectionWithStatus(getCurrentEnvConnectionEnv(), ssoToken)
-    if (!envConnection) return persistedConnections
 
-    return [envConnection, ...persistedConnections]
+    return [
+      ...(openLlmEnvConnection ? [openLlmEnvConnection] : []),
+      ...(envConnection ? [envConnection] : []),
+      ...persistedConnections,
+    ]
   })
 
   // Get a specific LLM connection by slug
@@ -580,7 +601,10 @@ export function registerLlmConnectionsHandlersWithRuntime(
   server.handle(RPC_CHANNELS.llmConnections.TEST, async (_ctx, slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
       if (isEnvironmentConnectionSlug(slug)) {
-        const envConnection = synthesizeEnvConnection(getCurrentEnvConnectionEnv())
+        const envConnection = slug === OPENLLM_ENV_CONNECTION_SLUG
+          ? synthesizeOpenLlmEnvConnection(process.env)
+          : synthesizeEnvConnection(getCurrentEnvConnectionEnv())
+
         if (!envConnection) {
           return { success: false, error: 'Connection not found' }
         }
