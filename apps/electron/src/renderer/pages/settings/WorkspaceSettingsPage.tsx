@@ -398,8 +398,8 @@ export default function WorkspaceSettingsPage() {
       const result = await window.electronAPI.refreshUserProfile()
       if (result) {
         setUserProfile(result)
+        setUserProfileFetchedAt(Date.now())
       }
-      setUserProfileFetchedAt(Date.now())
     } catch (error) {
       console.error('Failed to refresh user profile:', error)
     } finally {
