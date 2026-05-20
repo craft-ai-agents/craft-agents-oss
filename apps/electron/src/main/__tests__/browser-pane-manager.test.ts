@@ -290,14 +290,14 @@ describe('BrowserPaneManager', () => {
     const openHandler = instance.pageView.webContents.setWindowOpenHandler.mock.calls[0][0]
 
     const result = openHandler({
-      url: 'craftagents://settings',
+      url: 'mdp://settings',
       disposition: 'new-popup',
       frameName: '',
     })
 
     expect(result).toEqual({ action: 'deny' })
     await Bun.sleep(0)
-    expect(mockShellOpenExternal).toHaveBeenCalledWith('craftagents://settings')
+    expect(mockShellOpenExternal).toHaveBeenCalledWith('mdp://settings')
   })
 
   it('destroys child popups when parent instance is destroyed', () => {

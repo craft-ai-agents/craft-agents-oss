@@ -111,11 +111,15 @@ export interface AppShellContextType {
   onSelectWorkspace: (id: string, openInNewWindow?: boolean) => void | Promise<void>
   onRefreshWorkspaces?: () => void
 
+  /** Authenticated SSO user info (undefined when not logged in) */
+  ssoUser?: { userName?: string; department?: string; employeeId?: string }
+
   // App actions
   onOpenSettings: () => void
   onOpenKeyboardShortcuts: () => void
   onOpenStoredUserPreferences: () => void
   onReset: () => void
+  onSsoLogout: () => Promise<void>
 
   // Unified session options callback
   onSessionOptionsChange: (sessionId: string, updates: SessionOptionUpdates) => void

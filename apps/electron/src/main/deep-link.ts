@@ -1,20 +1,20 @@
 /**
  * Deep Link Handler
  *
- * Parses craftagents:// URLs and routes to appropriate actions.
+ * Parses mdp:// URLs and routes to appropriate actions.
  *
  * URL Formats (workspace is optional - uses active window if omitted):
  *
  * Compound format (hierarchical navigation):
- *   craftagents://allSessions[/session/{sessionId}]            - Session list (all sessions)
- *   craftagents://flagged[/session/{sessionId}]             - Session list (flagged filter)
- *   craftagents://state/{stateId}[/session/{sessionId}]     - Session list (state filter)
- *   craftagents://sources[/source/{sourceSlug}]          - Sources list
- *   craftagents://settings[/{subpage}]                   - Settings (general, shortcuts, preferences)
+ *   mdp://allSessions[/session/{sessionId}]            - Session list (all sessions)
+ *   mdp://flagged[/session/{sessionId}]             - Session list (flagged filter)
+ *   mdp://state/{stateId}[/session/{sessionId}]     - Session list (state filter)
+ *   mdp://sources[/source/{sourceSlug}]          - Sources list
+ *   mdp://settings[/{subpage}]                   - Settings (general, shortcuts, preferences)
  *
  * Action format:
- *   craftagents://action/{actionName}[/{id}][?params]
- *   craftagents://workspace/{workspaceId}/action/{actionName}[?params]
+ *   mdp://action/{actionName}[/{id}][?params]
+ *   mdp://workspace/{workspaceId}/action/{actionName}[?params]
  *
  * Actions:
  *   new-chat                  - Create new chat, optional ?input=text&name=name&send=true
@@ -25,22 +25,27 @@
  *   unflag-session/{id}       - Unflag session
  *
  * Examples:
- *   craftagents://allSessions                               (all sessions view)
- *   craftagents://allSessions/session/abc123                (specific session)
- *   craftagents://settings/shortcuts                     (shortcuts page)
- *   craftagents://sources/source/github                  (github source info)
- *   craftagents://action/new-chat                        (uses active window)
- *   craftagents://action/resume-sdk-session/{sdkId}      (resume Claude Code session)
- *   craftagents://workspace/ws123/allSessions/session/abc123   (targets specific workspace)
+ *   mdp://allSessions                               (all sessions view)
+ *   mdp://allSessions/session/abc123                (specific session)
+ *   mdp://settings/shortcuts                     (shortcuts page)
+ *   mdp://sources/source/github                  (github source info)
+ *   mdp://action/new-chat                        (uses active window)
+ *   mdp://action/resume-sdk-session/{sdkId}      (resume Claude Code session)
+ *   mdp://workspace/ws123/allSessions/session/abc123   (targets specific workspace)
  */
 
 import type { BrowserWindow } from 'electron'
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
-import { RPC_CHANNELS } from '../shared/types'
+import { RPC_CHANNELS, SSO_CALLBACK_HOST } from '../shared/types'
 import type { EventSink } from '@craft-agent/server-core/transport'
+import { getDeepLinkProtocol } from './deep-link-scheme'
 
 export interface DeepLinkTarget {
+  /** SSO authorization-code callback, handled in main instead of renderer navigation */
+  ssoCallbackCode?: string
+  /** SSO callback nonce returned by the OAuth relay. */
+  ssoCallbackState?: string
   /** Workspace ID - undefined means use active window */
   workspaceId?: string
   /** Compound route format (e.g., 'allSessions/session/abc123', 'settings/shortcuts') */
@@ -58,6 +63,23 @@ export interface DeepLinkResult {
   success: boolean
   error?: string
   windowId?: number
+}
+
+/** Exchanges an SSO authorization code and returns the renderer-safe login result. */
+export type SsoCallbackHandler = (code: string, state?: string) => Promise<{ success: boolean; error?: string }>
+
+type SsoLoginResult = Awaited<ReturnType<SsoCallbackHandler>>
+
+/** Optional collaborators used while routing a parsed deep link. */
+export interface HandleDeepLinkOptions {
+  /** Event sink used to push navigation or SSO callback results to renderers. */
+  sink?: EventSink
+  /** Resolves the renderer client ID for a window webContents ID. */
+  resolveClientId?: (webContentsId: number) => string | undefined
+  /** Client ID to prefer when no resolver is available. */
+  preferredClientId?: string
+  /** Main-process handler used to exchange SSO callback authorization codes. */
+  handleSsoCallback?: SsoCallbackHandler
 }
 
 /**
@@ -96,21 +118,30 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
   try {
     const parsed = new URL(url)
 
-    if (parsed.protocol !== 'craftagents:') {
+    if (parsed.protocol !== getDeepLinkProtocol()) {
       return null
     }
 
     // For custom protocols, the hostname contains the first path segment
-    // e.g., craftagents://workspace/ws123 → hostname='workspace', pathname='/ws123'
-    // e.g., craftagents://allSessions/chat/abc → hostname='allSessions', pathname='/chat/abc'
+    // e.g., mdp://workspace/ws123 -> hostname='workspace', pathname='/ws123'
+    // e.g., mdp://allSessions/chat/abc -> hostname='allSessions', pathname='/chat/abc'
     const host = parsed.hostname
     const pathParts = parsed.pathname.split('/').filter(Boolean)
     const windowMode = parseWindowMode(parsed)
     const rightSidebar = parseRightSidebar(parsed)
 
-    // craftagents://auth-callback?... (OAuth callbacks - return null to let existing handler process)
+    // mdp://auth-callback?... (OAuth callbacks - return null to let existing handler process)
     if (host === 'auth-callback') {
       return null
+    }
+
+    if (host === SSO_CALLBACK_HOST) {
+      const code = parsed.searchParams.get('code')
+      if (!code) return null
+      return {
+        ssoCallbackCode: code,
+        ssoCallbackState: parsed.searchParams.get('state') ?? undefined,
+      }
     }
 
     // Compound route prefixes
@@ -118,7 +149,7 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
       'allSessions', 'flagged', 'state', 'sources', 'settings', 'skills'
     ]
 
-    // craftagents://allSessions/..., craftagents://settings/..., etc. (compound routes)
+    // mdp://allSessions/..., mdp://settings/..., etc. (compound routes)
     if (COMPOUND_ROUTE_PREFIXES.includes(host)) {
       // Reconstruct the full compound route from host + pathname
       const viewRoute = pathParts.length > 0 ? `${host}/${pathParts.join('/')}` : host
@@ -130,7 +161,7 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
       }
     }
 
-    // craftagents://workspace/{workspaceId}/... (with workspace targeting)
+    // mdp://workspace/{workspaceId}/... (with workspace targeting)
     if (host === 'workspace') {
       const workspaceId = pathParts[0]
       if (!workspaceId) return null
@@ -168,7 +199,7 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
       return result
     }
 
-    // craftagents://action/... (no workspace - uses active window)
+    // mdp://action/... (no workspace - uses active window)
     if (host === 'action') {
       const result: DeepLinkTarget = {
         workspaceId: undefined,
@@ -229,16 +260,48 @@ function buildDeepLinkWithoutWindowParam(url: string): string {
   return parsed.toString()
 }
 
+function resolvePushClientId(
+  webContentsId: number,
+  resolveClientId?: (webContentsId: number) => string | undefined,
+  preferredClientId?: string,
+): string | undefined {
+  const resolvedClientId = resolveClientId?.(webContentsId)
+
+  // Prefer the resolved target window client. Only use preferredClientId as
+  // fallback when no resolver was provided (legacy call sites).
+  return resolvedClientId ?? (!resolveClientId ? preferredClientId : undefined)
+}
+
+function pushSsoLoginResult(
+  sink: EventSink | undefined,
+  windowManager: WindowManager,
+  window: BrowserWindow | null,
+  result: SsoLoginResult,
+  resolveClientId?: (webContentsId: number) => string | undefined,
+  preferredClientId?: string,
+): void {
+  if (!window || !sink) return
+
+  const webContentsId = window.webContents.id
+  const wsId = windowManager.getWorkspaceForWindow(webContentsId)
+  const clientId = resolvePushClientId(webContentsId, resolveClientId, preferredClientId)
+
+  if (clientId) {
+    sink(RPC_CHANNELS.sso.LOGIN_RESULT, { to: 'client', clientId }, result)
+  } else if (wsId) {
+    sink(RPC_CHANNELS.sso.LOGIN_RESULT, { to: 'workspace', workspaceId: wsId }, result)
+  }
+}
+
 /**
  * Handle a deep link by navigating to the target
  */
 export async function handleDeepLink(
   url: string,
   windowManager: WindowManager,
-  sink?: EventSink,
-  resolveClientId?: (webContentsId: number) => string | undefined,
-  preferredClientId?: string,
+  options: HandleDeepLinkOptions = {},
 ): Promise<DeepLinkResult> {
+  const { sink, resolveClientId, preferredClientId, handleSsoCallback } = options
   const target = parseDeepLink(url)
 
   if (!target) {
@@ -250,6 +313,18 @@ export async function handleDeepLink(
   }
 
   mainLog.info('[DeepLink] Handling:', target)
+
+  if (target.ssoCallbackCode) {
+    if (!handleSsoCallback) {
+      return { success: false, error: 'SSO callback handler unavailable' }
+    }
+
+    const window = windowManager.getFocusedWindow() ?? windowManager.getLastActiveWindow()
+    const result = await handleSsoCallback(target.ssoCallbackCode, target.ssoCallbackState)
+    pushSsoLoginResult(sink, windowManager, window, result, resolveClientId, preferredClientId)
+
+    return { success: result.success, error: result.error, windowId: window?.webContents.id }
+  }
 
   // If windowMode is set, create a new window instead of navigating in existing
   if (target.windowMode) {
@@ -324,12 +399,9 @@ export async function handleDeepLink(
       action: target.action,
       actionParams: target.actionParams,
     }
-    const wsId = target.workspaceId ?? windowManager.getWorkspaceForWindow(window.webContents.id)
-    const resolvedClientId = resolveClientId?.(window.webContents.id)
-
-    // Prefer the resolved target window client. Only use preferredClientId as
-    // fallback when no resolver was provided (legacy call sites).
-    const clientId = resolvedClientId ?? (!resolveClientId ? preferredClientId : undefined)
+    const webContentsId = window.webContents.id
+    const wsId = target.workspaceId ?? windowManager.getWorkspaceForWindow(webContentsId)
+    const clientId = resolvePushClientId(webContentsId, resolveClientId, preferredClientId)
 
     if (sink && clientId) {
       sink(RPC_CHANNELS.deeplink.NAVIGATE, { to: 'client', clientId }, navigation)

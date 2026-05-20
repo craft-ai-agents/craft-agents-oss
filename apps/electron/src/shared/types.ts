@@ -50,6 +50,8 @@ export type {
 import type { AuthState, SetupNeeds } from '@craft-agent/shared/auth/types';
 import type { AuthType } from '@craft-agent/shared/config/types';
 export type { AuthState, SetupNeeds, AuthType };
+import type { PublicSsoSessionState } from '@craft-agent/shared/auth';
+export type { PublicSsoSessionState };
 
 // Credential health types
 import type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType } from '@craft-agent/shared/credentials/types';
@@ -60,8 +62,8 @@ import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
 // Skill types
-import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult } from '@craft-agent/shared/skills';
-export type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult };
+import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult } from '@craft-agent/shared/skills';
+export type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult };
 
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
@@ -201,7 +203,6 @@ import type {
   GitBashStatus,
   GitCommit,
   GitStatusEntry,
-  ClaudeOAuthResult,
   UpdateInfo,
   WorkspaceSettings,
   PermissionModeState,
@@ -376,7 +377,7 @@ export interface ElectronAPI {
   onMenuToggleFocusMode(callback: () => void): () => void
   onMenuToggleSidebar(callback: () => void): () => void
 
-  // Deep link navigation listener (for external craftagents:// URLs)
+  // Deep link navigation listener (for external mdp:// URLs)
   onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void
 
   // Auth
@@ -391,26 +392,14 @@ export interface ElectronAPI {
   getAuthState(): Promise<AuthState>
   getSetupNeeds(): Promise<SetupNeeds>
   startWorkspaceMcpOAuth(mcpUrl: string): Promise<OAuthResult & { clientId?: string }>
-  // Claude OAuth (two-step flow)
-  startClaudeOAuth(): Promise<{ success: boolean; authUrl?: string; error?: string }>
-  exchangeClaudeCode(code: string, connectionSlug: string): Promise<ClaudeOAuthResult>
-  hasClaudeOAuthState(): Promise<boolean>
-  clearClaudeOAuthState(): Promise<{ success: boolean }>
   /** Defer onboarding setup — user chose "Setup later" */
   deferSetup(): Promise<{ success: boolean }>
-
-  // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
-  startChatGptOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
-  cancelChatGptOAuth(): Promise<{ success: boolean }>
-  getChatGptAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean; expiresAt?: number; hasRefreshToken?: boolean }>
-  chatGptLogout(connectionSlug: string): Promise<{ success: boolean }>
-
-  // GitHub Copilot OAuth
-  startCopilotOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
-  cancelCopilotOAuth(): Promise<{ success: boolean }>
-  getCopilotAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean }>
-  copilotLogout(connectionSlug: string): Promise<{ success: boolean }>
-  onCopilotDeviceCode(callback: (data: { userCode: string; verificationUri: string }) => void): () => void
+  getSsoSession(): Promise<PublicSsoSessionState>
+  refreshSsoSession(): Promise<{ success: boolean }>
+  startSsoLogin(): Promise<string>
+  handleSsoCallback(payload: { code: string; state?: string }): Promise<{ success: boolean; error?: string }>
+  onSsoLoginResult(callback: (result: { success: boolean; error?: string }) => void): () => void
+  logoutSso(): Promise<{ success: true }>
 
   /** Unified LLM connection setup */
   setupLlmConnection(setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>
@@ -483,9 +472,9 @@ export interface ElectronAPI {
   // Skills
   getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
-  createSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string): Promise<CreateSkillResult>
-  forceWriteSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string): Promise<{ created: true }>
-  deleteSkill(workspaceId: string, skillSlug: string): Promise<void>
+  createSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string, scope?: 'global' | 'workspace'): Promise<CreateSkillResult>
+  forceWriteSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string, scope?: 'global' | 'workspace'): Promise<{ created: true }>
+  deleteSkill(workspaceId: string, skillSlug: string, source?: 'global' | 'workspace' | 'project', skillPath?: string): Promise<void>
   openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInFinder(workspaceId: string, skillSlug: string): Promise<void>
   extractSkillsFromZip(zipPath: string): Promise<DiscoveredSkill[]>
@@ -494,6 +483,12 @@ export interface ElectronAPI {
   updateMarketplaceSkill(workspaceId: string, input: MarketplaceSkillUpdateInput): Promise<MarketplaceInstallResult>
   publishMarketplaceSkill(workspaceId: string, input: MarketplaceLocalSkillPublishInput): Promise<MarketplacePublishLocalResult>
   publishDirectMarketplaceSkill(workspaceId: string, input: MarketplaceDirectSkillPublishInput): Promise<MarketplacePublishDirectResult>
+  // CoPaw market service
+  listMarketSkills(): Promise<CopawMarketSkill[]>
+  uploadMarketSkill(input: CopawMarketUploadInput): Promise<CopawMarketUploadResult>
+  installMarketSkill(workspaceId: string, skillName: string, chineseName: string, description: string, version?: string): Promise<CopawInstallSkillResult>
+  deleteMarketSkill(skillName: string): Promise<{ success: true }>
+  fetchMarketSkillContent(skillName: string, version?: string): Promise<{ content: string }>
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void

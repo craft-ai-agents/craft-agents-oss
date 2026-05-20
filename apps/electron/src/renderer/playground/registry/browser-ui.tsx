@@ -223,7 +223,7 @@ function BrowserAgentEmptyState({
 }) {
   const handlePromptSelect = useCallback(async (prompt: string) => {
     const deepLinkRoute = routes.action.newSession({ input: prompt, send: true })
-    const deepLinkUrl = `craftagents://${deepLinkRoute}`
+    const deepLinkUrl = `mdp://${deepLinkRoute}`
 
     try {
       if (typeof window !== 'undefined' && window.electronAPI?.openUrl) {

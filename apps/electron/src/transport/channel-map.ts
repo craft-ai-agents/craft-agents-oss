@@ -126,24 +126,15 @@ export const CHANNEL_MAP = {
   getAuthState: invoke(RPC_CHANNELS.onboarding.GET_AUTH_STATE),
   getSetupNeeds: invoke(RPC_CHANNELS.onboarding.GET_AUTH_STATE, r => r.setupNeeds),
   startWorkspaceMcpOAuth: invoke(RPC_CHANNELS.onboarding.START_MCP_OAUTH),
-  startClaudeOAuth: invoke(RPC_CHANNELS.onboarding.START_CLAUDE_OAUTH),
-  exchangeClaudeCode: invoke(RPC_CHANNELS.onboarding.EXCHANGE_CLAUDE_CODE),
-  hasClaudeOAuthState: invoke(RPC_CHANNELS.onboarding.HAS_CLAUDE_OAUTH_STATE),
-  clearClaudeOAuthState: invoke(RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE),
   deferSetup: invoke(RPC_CHANNELS.onboarding.DEFER_SETUP),
 
-  // ChatGPT OAuth
-  startChatGptOAuth: invoke(RPC_CHANNELS.chatgpt.START_OAUTH),
-  cancelChatGptOAuth: invoke(RPC_CHANNELS.chatgpt.CANCEL_OAUTH),
-  getChatGptAuthStatus: invoke(RPC_CHANNELS.chatgpt.GET_AUTH_STATUS),
-  chatGptLogout: invoke(RPC_CHANNELS.chatgpt.LOGOUT),
-
-  // GitHub Copilot OAuth
-  startCopilotOAuth: invoke(RPC_CHANNELS.copilot.START_OAUTH),
-  cancelCopilotOAuth: invoke(RPC_CHANNELS.copilot.CANCEL_OAUTH),
-  getCopilotAuthStatus: invoke(RPC_CHANNELS.copilot.GET_AUTH_STATUS),
-  copilotLogout: invoke(RPC_CHANNELS.copilot.LOGOUT),
-  onCopilotDeviceCode: listener(RPC_CHANNELS.copilot.DEVICE_CODE),
+  // SSO startup session
+  getSsoSession: invoke(RPC_CHANNELS.sso.GET_SESSION),
+  refreshSsoSession: invoke(RPC_CHANNELS.sso.REFRESH),
+  startSsoLogin: invoke(RPC_CHANNELS.sso.START_LOGIN),
+  handleSsoCallback: invoke(RPC_CHANNELS.sso.HANDLE_CALLBACK),
+  onSsoLoginResult: listener(RPC_CHANNELS.sso.LOGIN_RESULT),
+  logoutSso: invoke(RPC_CHANNELS.sso.LOGOUT),
 
   // Server info (REMOTE_ELIGIBLE)
   getServerHomeDir: invoke(RPC_CHANNELS.server.HOME_DIR),
@@ -245,6 +236,11 @@ export const CHANNEL_MAP = {
   updateMarketplaceSkill: invoke(RPC_CHANNELS.skills.UPDATE_MARKETPLACE),
   publishMarketplaceSkill: invoke(RPC_CHANNELS.skills.PUBLISH_MARKETPLACE),
   publishDirectMarketplaceSkill: invoke(RPC_CHANNELS.skills.PUBLISH_DIRECT_MARKETPLACE),
+  listMarketSkills: invoke(RPC_CHANNELS.skills.LIST_MARKET),
+  uploadMarketSkill: invoke(RPC_CHANNELS.skills.UPLOAD_MARKET),
+  installMarketSkill: invoke(RPC_CHANNELS.skills.INSTALL_MARKET),
+  deleteMarketSkill: invoke(RPC_CHANNELS.skills.DELETE_MARKET),
+  fetchMarketSkillContent: invoke(RPC_CHANNELS.skills.FETCH_MARKET_CONTENT),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
 
   // Statuses

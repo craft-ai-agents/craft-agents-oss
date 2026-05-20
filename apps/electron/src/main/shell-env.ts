@@ -10,6 +10,8 @@
  */
 
 import { execSync } from 'child_process'
+import { existsSync, readFileSync } from 'fs'
+import { join } from 'path'
 import { mainLog } from './logger'
 
 // Environment variables that should NOT be imported from the shell
@@ -25,6 +27,47 @@ const shouldSkipEnvVar = (key: string): boolean => {
  * It spawns the user's login shell to get the full environment including
  * PATH modifications from .zshrc, .bashrc, .zprofile, etc.
  */
+/**
+ * Load a .env file into process.env without overriding already-set variables.
+ * Only runs in development (unpackaged) builds. In production the OS environment
+ * or a secrets manager provides these values.
+ */
+export function loadDotEnv(appPath: string): void {
+  // app.isPackaged is not available this early, but __dirname points inside
+  // apps/electron/dist in production and apps/electron/src/main in dev,
+  // so we use VITE_DEV_SERVER_URL as a reliable dev-mode signal instead.
+  const isPackaged = !process.env.VITE_DEV_SERVER_URL && process.env.NODE_ENV === 'production'
+  if (isPackaged) return
+
+  // In dev, the repo root is two levels above apps/electron
+  const dotEnvPath = join(appPath, '..', '..', '.env')
+  if (!existsSync(dotEnvPath)) return
+
+  const content = readFileSync(dotEnvPath, 'utf-8')
+  let loaded = 0
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eq = trimmed.indexOf('=')
+    if (eq <= 0) continue
+    const key = trimmed.slice(0, eq).trim()
+    let value = trimmed.slice(eq + 1).trim()
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1)
+    }
+    // Don't override vars already set in the environment
+    if (process.env[key] === undefined) {
+      process.env[key] = value
+      loaded++
+    }
+  }
+
+  if (loaded > 0) {
+    mainLog.info(`[dot-env] Loaded ${loaded} variables from ${dotEnvPath}`)
+  }
+}
+
 export function loadShellEnv(): void {
   // Only needed on macOS where GUI apps have minimal environment
   if (process.platform !== 'darwin') {

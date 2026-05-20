@@ -153,9 +153,9 @@ export class WindowManager {
         frame: true, // Keep native frame for better UX
         autoHideMenuBar: true, // Menu is null on Windows, this is just for safety
         // Note: Don't use transparent:true with backgroundMaterial - it hides the window frame
-        ...(windowsBackgroundMaterial && {
-          backgroundMaterial: windowsBackgroundMaterial,
-        }),
+        // ...(windowsBackgroundMaterial && {
+        //   backgroundMaterial: windowsBackgroundMaterial,
+        // }),
       }),
       // Linux: use native frame
       ...(!isMac && !isWindows && {

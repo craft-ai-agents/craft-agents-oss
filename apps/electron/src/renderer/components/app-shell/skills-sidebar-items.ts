@@ -1,4 +1,4 @@
-import { Store, Zap } from 'lucide-react'
+import { Zap } from 'lucide-react'
 import type { SidebarItem } from './LeftSidebar'
 
 /** Sidebar item ID for the local skills entry. */
@@ -18,36 +18,29 @@ interface CreateSkillsSidebarItemsInput {
 }
 
 /**
- * Builds the flat top-level sidebar entries for local skills and the skill marketplace.
+ * 合并后的单一"技能"入口，内部通过 tab 切换本地/市场。
  */
 export function createSkillsSidebarItems({
   skillsCount,
   isLocalSkillsNav,
   isSkillMarketplaceNav,
-  onLocalSkillsClick,
   onSkillMarketplaceClick,
   onAddSkill,
   t,
 }: CreateSkillsSidebarItemsInput): SidebarItem[] {
+  const isActive = isLocalSkillsNav || isSkillMarketplaceNav
   return [
     {
-      id: LOCAL_SKILLS_NAV_ID,
+      id: SKILL_MARKETPLACE_NAV_ID,
       title: t('sidebar.skills'),
       label: String(skillsCount),
       icon: Zap,
-      variant: isLocalSkillsNav ? 'default' : 'ghost',
-      onClick: onLocalSkillsClick,
+      variant: isActive ? 'default' : 'ghost',
+      onClick: onSkillMarketplaceClick,
       contextMenu: {
         type: 'skills',
         onAddSkill,
       },
-    },
-    {
-      id: SKILL_MARKETPLACE_NAV_ID,
-      title: t('sidebar.marketplace'),
-      icon: Store,
-      variant: isSkillMarketplaceNav ? 'default' : 'ghost',
-      onClick: onSkillMarketplaceClick,
     },
   ]
 }

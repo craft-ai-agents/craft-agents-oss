@@ -87,6 +87,8 @@ export interface StoredConfig {
   setupDeferred?: boolean;
   // Server mode — embedded remote server settings
   serverConfig?: import('./server-config.ts').ServerConfig;
+  // MDP SSO identity fields. Sensitive tokens live in the credential manager.
+  ssoSessionIdentity?: import('../auth/sso-credential-store.ts').SsoSessionIdentity;
   // One-shot migration markers. Used by migrations that should run at most
   // once per user (e.g. restoring a previously-removed model to connection
   // lists without re-adding it if the user later removes it deliberately).
@@ -2281,29 +2283,7 @@ export function migrateLegacyLlmConnectionsConfig(): void {
   if (legacyAuthType) {
     let migrated: LlmConnection | null = null;
 
-    if (legacyAuthType === 'oauth_token') {
-      // Claude Max OAuth
-      migrated = {
-        slug: 'claude-max',
-        name: 'Claude Max',
-        providerType: 'anthropic',
-        authType: 'oauth',
-        models: getDefaultModelsForConnection('anthropic'),
-        createdAt: Date.now(),
-      };
-    } else if (legacyAuthType === 'codex_oauth') {
-      // ChatGPT Plus OAuth → Pi backend
-      migrated = {
-        slug: 'codex',
-        name: 'ChatGPT Plus (via Pi)',
-        providerType: 'pi',
-        authType: 'oauth',
-        piAuthProvider: 'openai-codex',
-        modelSelectionMode: 'automaticallySyncedFromProvider',
-        models: getDefaultModelsForConnection('pi', 'openai-codex'),
-        createdAt: Date.now(),
-      };
-    } else if (legacyAuthType === 'codex_api_key') {
+    if (legacyAuthType === 'codex_api_key') {
       // OpenAI API Key → Pi backend
       migrated = {
         slug: 'codex-api',
