@@ -265,6 +265,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.sessions.IMPORT,
   RPC_CHANNELS.sessions.EXPORT_REMOTE_TRANSFER,
   RPC_CHANNELS.sessions.IMPORT_REMOTE_TRANSFER,
+  RPC_CHANNELS.sessions.GET_TEAM_CONTEXT_OVERRIDE,
+  RPC_CHANNELS.sessions.SET_TEAM_CONTEXT_OVERRIDE,
 
   // transfer — chunked large-payload import (sessions, resources)
   RPC_CHANNELS.transfer.START,
@@ -441,6 +443,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.teamKnowledge.UPDATE_CONFIG,
   RPC_CHANNELS.teamKnowledge.REFRESH,
   RPC_CHANNELS.teamKnowledge.CHANGED,
+  RPC_CHANNELS.teamKnowledge.GET_PREVIEW,
 
   // messaging — gateway channels run on workspace server
   RPC_CHANNELS.messaging.WA_REGISTER,

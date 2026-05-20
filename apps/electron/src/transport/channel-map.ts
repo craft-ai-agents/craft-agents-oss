@@ -178,6 +178,10 @@ export const CHANNEL_MAP = {
   getSessionModel: invoke(RPC_CHANNELS.sessions.GET_MODEL),
   setSessionModel: invoke(RPC_CHANNELS.sessions.SET_MODEL),
 
+  // Team context session override
+  getTeamContextOverride: invoke(RPC_CHANNELS.sessions.GET_TEAM_CONTEXT_OVERRIDE),
+  setTeamContextOverride: invoke(RPC_CHANNELS.sessions.SET_TEAM_CONTEXT_OVERRIDE),
+
   // Workspace Settings
   getWorkspaceSettings: invoke(RPC_CHANNELS.workspace.SETTINGS_GET),
   updateWorkspaceSetting: invoke(RPC_CHANNELS.workspace.SETTINGS_UPDATE),
@@ -268,6 +272,7 @@ export const CHANNEL_MAP = {
   updateTeamKnowledgeConfig: invoke(RPC_CHANNELS.teamKnowledge.UPDATE_CONFIG),
   refreshTeamKnowledge: invoke(RPC_CHANNELS.teamKnowledge.REFRESH),
   onTeamKnowledgeChanged: listener(RPC_CHANNELS.teamKnowledge.CHANGED),
+  getTeamContextPreview: invoke(RPC_CHANNELS.teamKnowledge.GET_PREVIEW),
 
   // Labels
   listLabels: invoke(RPC_CHANNELS.labels.LIST),

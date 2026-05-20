@@ -38,9 +38,11 @@ interface TriggerTermEntry {
 
 /**
  * Formats a compact team public knowledge policy block with top 5 trigger terms.
- * Returns null when team public knowledge is disabled or no trigger terms exist.
+ * Returns null when team public knowledge is disabled, session override is active,
+ * or no trigger terms exist.
  */
-export function formatTeamKnowledgePolicy(workspaceRoot: string): string | null {
+export function formatTeamKnowledgePolicy(workspaceRoot: string, disabled?: boolean): string | null {
+  if (disabled) return null;
   const config = loadWorkspaceConfig(workspaceRoot);
   if (!config?.teamPublicKnowledge?.enabled) return null;
 

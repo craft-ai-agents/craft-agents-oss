@@ -101,6 +101,7 @@ export interface Session {
   isArchived?: boolean
   archivedAt?: number
   supportsBranching?: boolean
+  teamContextDisabled?: boolean
 }
 
 export interface CreateSessionOptions {
@@ -209,6 +210,7 @@ export type SessionEvent =
   | { type: 'usage_update'; sessionId: string; tokenUsage: { inputTokens: number; contextWindow?: number } }
   | { type: 'message_annotations_updated'; sessionId: string; messageId: string; annotations: AnnotationV1[] }
   | { type: 'working_directory_error'; sessionId: string; error: string }
+  | { type: 'session_team_context_override_changed'; sessionId: string; disabled: boolean }
 
 export interface SendMessageOptions {
   skillSlugs?: string[]
@@ -534,6 +536,44 @@ export interface WorkspaceSettings {
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
   enabledSourceSlugs?: string[]
+  /** Whether team public knowledge is enabled for this workspace. */
+  teamPublicKnowledgeEnabled?: boolean
+  /** Number of configured team public knowledge documents. */
+  teamKnowledgeDocumentsCount?: number
+}
+
+// ---------------------------------------------------------------------------
+// Team context preview types
+// ---------------------------------------------------------------------------
+
+export interface TeamContextPreviewTriggerTerm {
+  term: string
+  kind: string
+  priority: number
+}
+
+export interface TeamContextPrefetchPreview {
+  term: string
+  kind: string
+  summary: string
+  excerpt?: string
+  confidence: number
+  relevance: string
+  source: string
+  updatedAt: number
+}
+
+export interface TeamContextPreview {
+  /** Whether team public knowledge is enabled in workspace config. */
+  enabled: boolean
+  /** Number of cached documents. */
+  documentsCount: number
+  /** Formatted policy XML block, if available. */
+  policyXml?: string
+  /** Extracted trigger terms. */
+  triggerTerms: TeamContextPreviewTriggerTerm[]
+  /** Sample prefetch results for a given term, if available. */
+  prefetchResults?: TeamContextPrefetchPreview[]
 }
 
 // ---------------------------------------------------------------------------

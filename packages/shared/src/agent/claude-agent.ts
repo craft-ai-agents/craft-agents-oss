@@ -2141,8 +2141,9 @@ This is a branched conversation. All prior messages in this conversation are par
     )
 
     // Compute team public knowledge policy and prefetch for this turn
-    const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.workspaceRootPath);
-    const prefetchResults = prefetchTeamKnowledge(this.workspaceRootPath, text);
+    const teamContextDisabled = this.config.session?.teamContextDisabled;
+    const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.workspaceRootPath, teamContextDisabled);
+    const prefetchResults = teamContextDisabled ? [] : prefetchTeamKnowledge(this.workspaceRootPath, text);
     const teamKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
 
     const contextParts = this.promptBuilder.buildContextParts(
@@ -2197,8 +2198,9 @@ This is a branched conversation. All prior messages in this conversation are par
     )
 
     // Compute team public knowledge policy and prefetch for this turn
-    const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.workspaceRootPath);
-    const prefetchResults = prefetchTeamKnowledge(this.workspaceRootPath, text);
+    const teamContextDisabled = this.config.session?.teamContextDisabled;
+    const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.workspaceRootPath, teamContextDisabled);
+    const prefetchResults = teamContextDisabled ? [] : prefetchTeamKnowledge(this.workspaceRootPath, text);
     const teamKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
 
     const contextParts = this.promptBuilder.buildContextParts(

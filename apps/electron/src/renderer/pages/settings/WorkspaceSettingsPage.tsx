@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
 import { Spinner } from '@craft-agent/ui'
 import { RenameDialog } from '@/components/ui/rename-dialog'
-import type { PermissionMode, WorkspaceSettings, LoadedSource } from '../../../shared/types'
+import type { PermissionMode, WorkspaceSettings, LoadedSource, TeamContextPreview } from '../../../shared/types'
 import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
 import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
 import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
@@ -67,6 +67,16 @@ export default function WorkspaceSettingsPage() {
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
+  // Team public knowledge state
+  const [teamPublicKnowledgeEnabled, setTeamPublicKnowledgeEnabled] = useState(false)
+  const [teamKnowledgeDocumentsCount, setTeamKnowledgeDocumentsCount] = useState(0)
+
+  // Team context preview state
+  const [teamContextPreview, setTeamContextPreview] = useState<TeamContextPreview | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewSampleMessage, setPreviewSampleMessage] = useState('')
+  const [previewDebounceTimer, setPreviewDebounceTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
+
   // Default sources state
   const [availableSources, setAvailableSources] = useState<LoadedSource[]>([])
   const [enabledSourceSlugs, setEnabledSourceSlugs] = useState<string[]>([])
@@ -99,6 +109,10 @@ export default function WorkspaceSettingsPage() {
 
           // Load default source slugs
           const savedSlugs = settings.enabledSourceSlugs ?? []
+
+          // Load team public knowledge config
+          setTeamPublicKnowledgeEnabled(settings.teamPublicKnowledgeEnabled ?? false)
+          setTeamKnowledgeDocumentsCount(settings.teamKnowledgeDocumentsCount ?? 0)
 
           // Load available sources and auto-heal stale slugs
           const sources = await window.electronAPI.getSources(activeWorkspaceId)
@@ -147,6 +161,34 @@ export default function WorkspaceSettingsPage() {
 
     loadWorkspaceSettings()
   }, [activeWorkspaceId])
+
+  // Load team context preview when team knowledge state changes
+  useEffect(() => {
+    if (!window.electronAPI || !activeWorkspaceId) return
+
+    const loadPreview = async () => {
+      setPreviewLoading(true)
+      try {
+        const preview = await window.electronAPI.getTeamContextPreview(activeWorkspaceId, previewSampleMessage || undefined)
+        setTeamContextPreview(preview)
+      } catch (error) {
+        console.error('Failed to load team context preview:', error)
+      } finally {
+        setPreviewLoading(false)
+      }
+    }
+
+    // Debounce preview loading when sample message changes
+    if (previewDebounceTimer) {
+      clearTimeout(previewDebounceTimer)
+    }
+    const timer = setTimeout(loadPreview, previewSampleMessage ? 300 : 0)
+    setPreviewDebounceTimer(timer)
+
+    return () => {
+      if (timer) clearTimeout(timer)
+    }
+  }, [activeWorkspaceId, teamPublicKnowledgeEnabled, previewSampleMessage])
 
   // Subscribe to live source changes (additions/removals)
   useEffect(() => {
@@ -278,6 +320,14 @@ export default function WorkspaceSettingsPage() {
     async (enabled: boolean) => {
       setLocalMcpEnabled(enabled)
       await updateWorkspaceSetting('localMcpEnabled', enabled)
+    },
+    [updateWorkspaceSetting]
+  )
+
+  const handleTeamPublicKnowledgeEnabledChange = useCallback(
+    async (enabled: boolean) => {
+      setTeamPublicKnowledgeEnabled(enabled)
+      await updateWorkspaceSetting('teamPublicKnowledgeEnabled', enabled)
     },
     [updateWorkspaceSetting]
   )
@@ -511,6 +561,114 @@ export default function WorkspaceSettingsPage() {
                 <p className="text-sm text-muted-foreground">{t("settings.workspace.noSourcesConfigured")}</p>
               )}
             </SettingsSection>
+
+            {/* Team Public Knowledge */}
+            <SettingsSection
+              title={t("settings.workspace.teamPublicKnowledge")}
+              description={t("settings.workspace.teamPublicKnowledgeDesc")}
+            >
+              <SettingsCard>
+                <SettingsToggle
+                  label={t("settings.workspace.teamPublicKnowledgeToggle")}
+                  description={
+                    teamKnowledgeDocumentsCount > 0
+                      ? t("settings.workspace.teamPublicKnowledgeDocsCount", { count: teamKnowledgeDocumentsCount })
+                      : t("settings.workspace.teamPublicKnowledgeNoDocs")
+                  }
+                  checked={teamPublicKnowledgeEnabled}
+                  onCheckedChange={handleTeamPublicKnowledgeEnabledChange}
+                />
+              </SettingsCard>
+            </SettingsSection>
+
+            {/* Team Context Preview */}
+            {teamPublicKnowledgeEnabled && teamContextPreview && (
+              <SettingsSection
+                title={t("settings.workspace.teamContextPreview")}
+                description={t("settings.workspace.teamContextPreviewDesc")}
+              >
+                <SettingsCard>
+                  {/* Trigger Terms */}
+                  {teamContextPreview.triggerTerms.length > 0 && (
+                    <div className="px-4 py-3">
+                      <h4 className="text-sm font-medium mb-2">Trigger Terms</h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {teamContextPreview.triggerTerms.map((t, i) => (
+                          <span
+                            key={i}
+                            className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-foreground/5 text-foreground/70 font-mono"
+                          >
+                            {t.term}
+                            <span className="ml-1 text-foreground/40">({t.kind})</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Policy XML */}
+                  <div className="border-t border-border/50 px-4 py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-medium">Policy Block</h4>
+                      <span className="text-xs text-muted-foreground">{teamContextPreview.documentsCount} document(s)</span>
+                    </div>
+                    {teamContextPreview.policyXml ? (
+                      <pre className="text-xs font-mono text-foreground/70 bg-foreground/[0.03] rounded-lg p-3 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto">
+                        {teamContextPreview.policyXml}
+                      </pre>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No policy generated (no valid entries).</p>
+                    )}
+                  </div>
+
+                  {/* Prefetch Preview */}
+                  <div className="border-t border-border/50 px-4 py-3">
+                    <h4 className="text-sm font-medium mb-2">Prefetch Test</h4>
+                    <input
+                      type="text"
+                      value={previewSampleMessage}
+                      onChange={(e) => setPreviewSampleMessage(e.target.value)}
+                      placeholder="Type a message to test prefetch matching..."
+                      className="w-full text-sm bg-background border border-border/50 rounded-lg px-3 py-2 mb-2 placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-foreground/20"
+                    />
+                    {previewLoading && (
+                      <div className="flex items-center gap-2 py-2">
+                        <Spinner className="text-muted-foreground text-[8px]" />
+                        <span className="text-xs text-muted-foreground">Matching...</span>
+                      </div>
+                    )}
+                    {!previewLoading && teamContextPreview.prefetchResults && teamContextPreview.prefetchResults.length > 0 && (
+                      <div className="space-y-2 mt-1">
+                        {teamContextPreview.prefetchResults.map((r, i) => (
+                          <div key={i} className="text-xs bg-foreground/[0.03] rounded-lg p-3 space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium">{r.kind}</span>
+                              <span className={cn(
+                                "px-1.5 py-0.5 rounded text-[10px] font-medium",
+                                r.confidence >= 1
+                                  ? "bg-green-500/10 text-green-600"
+                                  : "bg-amber-500/10 text-amber-600"
+                              )}>
+                                {(r.confidence * 100).toFixed(0)}%
+                              </span>
+                              <span className="text-muted-foreground">{r.relevance}</span>
+                            </div>
+                            <p className="text-muted-foreground">{r.summary}</p>
+                            <div className="flex gap-3 text-muted-foreground/60">
+                              <span>Source: {r.source}</span>
+                              <span>Updated: {new Date(r.updatedAt).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {!previewLoading && previewSampleMessage && (!teamContextPreview.prefetchResults || teamContextPreview.prefetchResults.length === 0) && (
+                      <p className="text-xs text-muted-foreground">No matching entries found.</p>
+                    )}
+                  </div>
+                </SettingsCard>
+              </SettingsSection>
+            )}
 
             {/* Advanced */}
             <SettingsSection title={t("settings.workspace.advanced")}>

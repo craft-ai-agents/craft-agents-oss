@@ -882,6 +882,8 @@ interface ManagedSession {
   // Whether the previous turn was interrupted (for context injection on next message).
   // Ephemeral — not persisted to disk. Cleared after one-shot injection.
   wasInterrupted?: boolean
+  // When true, session-level override disables team context injection for this session.
+  teamContextDisabled?: boolean
 }
 
 /**
@@ -4871,6 +4873,23 @@ export class SessionManager implements ISessionManager {
       // Notify renderer of the model change
       this.sendEvent({ type: 'session_model_changed', sessionId, model }, managed.workspace.id)
       sessionLog.info(`Session ${sessionId} model updated to: ${model ?? '(global config)'}`)
+    }
+  }
+
+  /**
+   * Update the team context disabled override for a session.
+   * When true, team public knowledge injection is disabled for this session.
+   */
+  async updateSessionTeamContextOverride(sessionId: string, disabled: boolean): Promise<void> {
+    sessionLog.info(`[updateSessionTeamContextOverride] sessionId=${sessionId}, disabled=${disabled}`)
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.teamContextDisabled = disabled
+      await updateSessionMetadata(managed.workspace.rootPath, sessionId, { teamContextDisabled: disabled })
+      // Notify renderer
+      this.sendEvent({ type: 'session_team_context_override_changed', sessionId, disabled }, managed.workspace.id)
+    } else {
+      sessionLog.warn(`[updateSessionTeamContextOverride] Session not found: ${sessionId}`)
     }
   }
 

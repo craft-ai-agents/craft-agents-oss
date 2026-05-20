@@ -47,6 +47,8 @@ export const RPC_CHANNELS = {
     IMPORT: 'sessions:import',
     EXPORT_REMOTE_TRANSFER: 'sessions:exportRemoteTransfer',
     IMPORT_REMOTE_TRANSFER: 'sessions:importRemoteTransfer',
+    GET_TEAM_CONTEXT_OVERRIDE: 'sessions:getTeamContextOverride',
+    SET_TEAM_CONTEXT_OVERRIDE: 'sessions:setTeamContextOverride',
   },
   transfer: {
     START: 'transfer:start',
@@ -406,6 +408,7 @@ export const RPC_CHANNELS = {
     UPDATE_CONFIG: 'teamKnowledge:updateConfig',
     REFRESH: 'teamKnowledge:refresh',
     CHANGED: 'teamKnowledge:changed',
+    GET_PREVIEW: 'teamKnowledge:getPreview',
   },
   resources: {
     EXPORT: 'resources:export',

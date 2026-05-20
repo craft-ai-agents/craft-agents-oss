@@ -1971,8 +1971,9 @@ export class PiAgent extends BaseAgent {
       )
 
       // Build context parts using centralized PromptBuilder
-      const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.config.workspace.rootPath);
-      const prefetchResults = prefetchTeamKnowledge(this.config.workspace.rootPath, message);
+      const teamContextDisabled = this.config.session?.teamContextDisabled;
+      const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.config.workspace.rootPath, teamContextDisabled);
+      const prefetchResults = teamContextDisabled ? [] : prefetchTeamKnowledge(this.config.workspace.rootPath, message);
       const teamKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
 
       const contextParts = this.promptBuilder.buildContextParts(

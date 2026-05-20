@@ -73,6 +73,7 @@ export interface ISessionManager {
   setSessionLabels(sessionId: string, labels: string[]): void
   setSessionConnection(sessionId: string, connectionSlug: string): Promise<void>
   updateSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void>
+  updateSessionTeamContextOverride(sessionId: string, disabled: boolean): Promise<void>
 
   // ---------------------------------------------------------------------------
   // Messaging

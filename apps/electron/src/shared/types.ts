@@ -434,6 +434,13 @@ export interface ElectronAPI {
   getSessionModel(sessionId: string, workspaceId: string): Promise<string | null>
   setSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void>
 
+  // Team context session override
+  getTeamContextOverride(sessionId: string): Promise<boolean>
+  setTeamContextOverride(sessionId: string, disabled: boolean): Promise<{ success: boolean }>
+
+  // Team context debug/preview
+  getTeamContextPreview(workspaceId: string, sampleMessage?: string): Promise<TeamContextPreview>
+
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>

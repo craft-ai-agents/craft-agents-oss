@@ -157,6 +157,27 @@ describe('TeamPublicKnowledgeInjector', () => {
       expect(formatTeamKnowledgePolicy(ws)).toBeNull();
     });
 
+    it('returns null when disabled parameter is explicitly true', () => {
+      const ws = createWorkspace({ enabled: true });
+      writeTeamKnowledgeCache(ws, {
+        'team-slang': { title: 'Team Slang', content: slangContent, priority: 10 },
+      });
+
+      // Even though workspace config enables it, the explicit disabled flag should win
+      expect(formatTeamKnowledgePolicy(ws, true)).toBeNull();
+    });
+
+    it('returns policy when disabled parameter is false', () => {
+      const ws = createWorkspace({ enabled: true });
+      writeTeamKnowledgeCache(ws, {
+        'team-slang': { title: 'Team Slang', content: slangContent, priority: 10 },
+      });
+
+      const policy = formatTeamKnowledgePolicy(ws, false);
+      expect(policy).not.toBeNull();
+      expect(policy).toContain('<team_public_knowledge>');
+    });
+
     it('returns null when no trigger terms exist in the cache', () => {
       const ws = createWorkspace();
       // Entries with no alias/slang/concept terms
