@@ -168,6 +168,7 @@ export {
   // Team Public Knowledge
   handleResolveTeamPublicTerm,
   handleSearchTeamPublicKnowledge,
+  handleSuggestTeamPublicKnowledge,
   handleGetTeamPublicKnowledgeEntry,
 } from './handlers/index.ts';
 
@@ -190,6 +191,7 @@ export type {
   // Team Public Knowledge
   ResolveTeamPublicTermArgs,
   SearchTeamPublicKnowledgeArgs,
+  SuggestTeamPublicKnowledgeArgs,
   GetTeamPublicKnowledgeEntryArgs,
 } from './handlers/index.ts';
 
@@ -215,6 +217,7 @@ export {
   // Team public knowledge schemas
   ResolveTeamPublicTermSchema,
   SearchTeamPublicKnowledgeSchema,
+  SuggestTeamPublicKnowledgeSchema,
   GetTeamPublicKnowledgeEntrySchema,
   // Descriptions
   TOOL_DESCRIPTIONS,

@@ -78,5 +78,7 @@ export { handleResolveTeamPublicTerm } from './resolve-team-public-term.ts';
 export type { ResolveTeamPublicTermArgs } from './resolve-team-public-term.ts';
 export { handleSearchTeamPublicKnowledge } from './search-team-public-knowledge.ts';
 export type { SearchTeamPublicKnowledgeArgs } from './search-team-public-knowledge.ts';
+export { handleSuggestTeamPublicKnowledge } from './suggest-team-public-knowledge.ts';
+export type { SuggestTeamPublicKnowledgeArgs } from './suggest-team-public-knowledge.ts';
 export { handleGetTeamPublicKnowledgeEntry } from './get-team-public-knowledge-entry.ts';
 export type { GetTeamPublicKnowledgeEntryArgs } from './get-team-public-knowledge-entry.ts';

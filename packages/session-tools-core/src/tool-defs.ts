@@ -42,6 +42,7 @@ import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
 import { handleResolveTeamPublicTerm } from './handlers/resolve-team-public-term.ts';
 import { handleSearchTeamPublicKnowledge } from './handlers/search-team-public-knowledge.ts';
+import { handleSuggestTeamPublicKnowledge } from './handlers/suggest-team-public-knowledge.ts';
 import { handleGetTeamPublicKnowledgeEntry } from './handlers/get-team-public-knowledge-entry.ts';
 
 // ============================================================
@@ -236,6 +237,13 @@ export const SearchTeamPublicKnowledgeSchema = z.object({
   scope: z.string().optional().describe('Filter by scope'),
   limit: z.number().optional().describe('Max results per page (default 20)'),
   cursor: z.string().optional().describe('Pagination cursor from previous response'),
+});
+
+export const SuggestTeamPublicKnowledgeSchema = z.object({
+  message: z.string().min(1).describe('Full user message to use for message-level team knowledge suggestions'),
+  kinds: z.array(z.enum(['alias', 'slang', 'concept', 'convention', 'rule', 'process', 'warning', 'background'])).optional()
+    .describe('Optional entry kinds to include'),
+  limit: z.number().optional().describe('Maximum suggestions to return (default 3, maximum 5)'),
 });
 
 export const GetTeamPublicKnowledgeEntrySchema = z.object({
@@ -529,6 +537,16 @@ Results include confidence scores, relevance, source document info, matched text
 
 Use this for open-ended knowledge retrieval when you need to find relevant information across all team public knowledge.`,
 
+  suggest_team_public_knowledge: `Suggest relevant team public knowledge for a full user message.
+
+Requires a non-empty \`message\` string. Supports optional filters:
+- \`kinds\`: Include only selected entry kinds (alias, slang, concept, convention, rule, process, warning, background)
+- \`limit\`: Max suggestions (default 3, maximum 5)
+
+Suggestions include separate confidence and relevance scores, source document info, matched text, tags, scope, stale/conflict flags, and match reasons. Stale, conflicted, or low-relevance entries are excluded from default suggestions.
+
+Use this when the user asks generally how the team does something, or when a message may need conventions, rules, processes, warnings, or background without naming an explicit team term.`,
+
   get_team_public_knowledge_entry: `Retrieve a single team public knowledge entry by its metadata id.
 
 Returns the full entry content (truncated if exceeding ~4000 chars with a truncated flag), along with tags, scope, defaults, validUntil, and related entry ids.
@@ -612,6 +630,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   // Team public knowledge tools
   { name: 'resolve_team_public_term', description: TOOL_DESCRIPTIONS.resolve_team_public_term, inputSchema: ResolveTeamPublicTermSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleResolveTeamPublicTerm },
   { name: 'search_team_public_knowledge', description: TOOL_DESCRIPTIONS.search_team_public_knowledge, inputSchema: SearchTeamPublicKnowledgeSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleSearchTeamPublicKnowledge },
+  { name: 'suggest_team_public_knowledge', description: TOOL_DESCRIPTIONS.suggest_team_public_knowledge, inputSchema: SuggestTeamPublicKnowledgeSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleSuggestTeamPublicKnowledge },
   { name: 'get_team_public_knowledge_entry', description: TOOL_DESCRIPTIONS.get_team_public_knowledge_entry, inputSchema: GetTeamPublicKnowledgeEntrySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetTeamPublicKnowledgeEntry },
 ];
 
