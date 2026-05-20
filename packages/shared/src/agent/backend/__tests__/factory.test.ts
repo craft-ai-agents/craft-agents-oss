@@ -24,6 +24,7 @@ import {
   resolveBackendContext,
   resolveSessionConnection,
   createBackendFromConnection,
+  createBackendFromResolvedContext,
   testBackendConnection,
   validateStoredBackendConnection,
 } from '../factory.ts';
@@ -331,6 +332,48 @@ describe('phase4 backend abstraction APIs', () => {
     });
 
     expect(result.models.length).toBeGreaterThan(0);
+  });
+
+  it('uses the OpenLLM driver for resolved OpenLLM contexts', () => {
+    const previousHost = process.env.OPENLLM_HOST;
+    process.env.OPENLLM_HOST = 'http://myserver:8000';
+
+    try {
+      const agent = createBackendFromResolvedContext({
+        context: {
+          provider: 'pi',
+          authType: 'api_key',
+          resolvedModel: 'llama-3',
+          capabilities: { needsHttpPoolServer: false },
+          connection: {
+            slug: 'openllm',
+            name: 'OpenLLM',
+            providerType: 'openllm',
+            authType: 'api_key',
+            defaultModel: 'llama-3',
+            createdAt: Date.now(),
+          },
+        },
+        coreConfig: {
+          workspace: createTestWorkspace(),
+          session: createTestSession(),
+          isHeadless: true,
+        },
+        hostRuntime: {
+          appRootPath: process.cwd(),
+          isPackaged: false,
+        },
+      }) as PiAgent & { config: BackendConfig };
+
+      expect(agent).toBeInstanceOf(PiAgent);
+      expect(agent.config.provider).toBe('pi');
+      expect(agent.config.providerType).toBe('openllm');
+      expect(agent.config.runtime?.baseUrl).toBe('http://myserver:8000/llm/llama-3/v1');
+      agent.destroy();
+    } finally {
+      if (previousHost === undefined) delete process.env.OPENLLM_HOST;
+      else process.env.OPENLLM_HOST = previousHost;
+    }
   });
 
   it('validateStoredBackendConnection returns not found for unknown slug', async () => {

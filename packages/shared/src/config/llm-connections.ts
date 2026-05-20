@@ -55,6 +55,17 @@ export type LlmProviderType =
   | 'pi_compat'
   | 'openllm';
 
+export const OPENLLM_HOST_ENV_VAR = 'OPENLLM_HOST';
+
+export function buildOpenLlmBaseUrl(modelName: string, env: NodeJS.ProcessEnv = process.env): string {
+  const host = env[OPENLLM_HOST_ENV_VAR]?.trim();
+  if (!host) {
+    throw new Error(`${OPENLLM_HOST_ENV_VAR} is required for OpenLLM connections`);
+  }
+
+  return `${host.replace(/\/+$/, '')}/llm/${encodeURIComponent(modelName)}/v1`;
+}
+
 /**
  * @deprecated Use LlmProviderType instead. Kept for migration compatibility.
  */

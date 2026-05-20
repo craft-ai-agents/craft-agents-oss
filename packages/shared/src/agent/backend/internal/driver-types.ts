@@ -45,6 +45,8 @@ export interface BackendProviderOptions {
   piAuthProvider?: string;
 }
 
+export type ProviderDriverKey = AgentProvider | 'openllm';
+
 export interface BackendModelFetchCredentials {
   apiKey?: string;
   oauthAccessToken?: string;
@@ -93,7 +95,7 @@ export interface DriverTestConnectionArgs extends DriverHostRuntimeArgs {
 }
 
 export interface ProviderDriver {
-  provider: AgentProvider;
+  provider: ProviderDriverKey;
   initializeHostRuntime?: (args: DriverHostRuntimeArgs) => void;
   fetchModels?: (args: DriverFetchModelsArgs) => Promise<ModelFetchResult>;
   validateStoredConnection?: (args: DriverValidateStoredConnectionArgs) => Promise<StoredConnectionValidationResult>;

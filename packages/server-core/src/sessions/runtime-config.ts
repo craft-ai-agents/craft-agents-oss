@@ -1,5 +1,5 @@
 import type { AgentProvider, BackendRuntimeUpdate, LlmAuthType, ResolvedBackendContext } from '@craft-agent/shared/agent/backend'
-import { isCompatProvider, modelSupportsImages, type LlmConnection } from '@craft-agent/shared/config'
+import { buildOpenLlmBaseUrl, isCompatProvider, modelSupportsImages, type LlmConnection } from '@craft-agent/shared/config'
 import type { FileAttachment } from '@craft-agent/shared/protocol'
 
 export interface BackendRuntimeSignatureInput {
@@ -56,14 +56,20 @@ function buildRuntimeCustomModels(connection: LlmConnection): NonNullable<Backen
  */
 export function buildRuntimeConfigUpdate(backendContext: ResolvedBackendContext): BackendRuntimeUpdate {
   const connection = backendContext.connection
+  const baseUrl = connection?.providerType === 'openllm'
+    ? buildOpenLlmBaseUrl(backendContext.resolvedModel)
+    : connection?.baseUrl
+
   return {
     model: backendContext.resolvedModel,
     providerType: connection?.providerType,
     authType: backendContext.authType,
     runtime: connection ? {
-      baseUrl: connection.baseUrl,
+      baseUrl,
       piAuthProvider: connection.piAuthProvider,
-      customEndpoint: connection.customEndpoint,
+      customEndpoint: connection.providerType === 'openllm'
+        ? { api: 'anthropic-messages' }
+        : connection.customEndpoint,
       customModels: buildRuntimeCustomModels(connection),
     } : undefined,
   }
