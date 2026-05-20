@@ -7,6 +7,11 @@ import {
   resolveTeamKnowledgeMatches,
   type TeamKnowledgeStaleReason,
 } from '../../../shared/src/team-public-knowledge/entry-resolution.ts';
+import {
+  analyzeTeamKnowledgeText,
+  createTeamKnowledgeExcerpt,
+  type TeamKnowledgeSafety,
+} from '../../../shared/src/team-public-knowledge/safety.ts';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse } from '../response.ts';
@@ -37,6 +42,7 @@ interface TermMatch {
   canonical?: string;
   title?: string;
   summary?: string;
+  excerpt: string;
   content: string;
   headingPath: string[];
   sourceDocId?: string;
@@ -51,6 +57,7 @@ interface TermMatch {
   confidence: number;
   relevance: string;
   matchReason: string;
+  safety: TeamKnowledgeSafety;
 }
 
 interface ResolveResult {
@@ -136,6 +143,7 @@ function buildTermMatch(
   ttlExpiredDocIds: Set<string> = new Set(),
 ): TermMatch {
   const staleReason = getMarkdownEntryStaleReason(entry, staleDocIds, ttlExpiredDocIds);
+  const safety = analyzeTeamKnowledgeText([entry.summary, entry.content].filter(Boolean).join('\n\n'));
   return {
     id: entry.metadata.id ?? entry.sourceDocId ?? '',
     kind: entry.kind,
@@ -143,6 +151,7 @@ function buildTermMatch(
     canonical: entry.canonical,
     title: entry.title,
     summary: entry.summary,
+    excerpt: createTeamKnowledgeExcerpt(entry.content),
     content: entry.content,
     headingPath: entry.headingPath,
     sourceDocId: entry.sourceDocId,
@@ -157,6 +166,7 @@ function buildTermMatch(
     confidence: 1,
     relevance: 'high',
     matchReason: entry.term ? 'Term matches entry term field' : 'Content match',
+    safety,
   };
 }
 

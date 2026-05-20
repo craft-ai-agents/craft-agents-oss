@@ -7,6 +7,11 @@ import {
   resolveTeamKnowledgeMatches,
   type TeamKnowledgeStaleReason,
 } from '../../../shared/src/team-public-knowledge/entry-resolution.ts';
+import {
+  analyzeTeamKnowledgeText,
+  createTeamKnowledgeExcerpt,
+  type TeamKnowledgeSafety,
+} from '../../../shared/src/team-public-knowledge/safety.ts';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
@@ -35,6 +40,7 @@ interface SuggestionItem {
   kind: MarkdownEntryKind;
   title?: string;
   summary?: string;
+  excerpt: string;
   term?: string;
   content: string;
   headingPath: string[];
@@ -51,6 +57,7 @@ interface SuggestionItem {
   confidence: number;
   relevance: number;
   matchReason: string;
+  safety: TeamKnowledgeSafety;
 }
 
 interface SuggestionResult {
@@ -265,11 +272,13 @@ function toSuggestionItem(
 ): SuggestionItem {
   const staleReason = getMarkdownEntryStaleReason(score.entry, staleDocIds, ttlExpiredDocIds);
   const conflictReason = conflictTerms.get(entryKey(score.entry));
+  const safety = analyzeTeamKnowledgeText([score.entry.summary, score.entry.content].filter(Boolean).join('\n\n'));
   return {
     id: score.entry.metadata.id ?? score.entry.sourceDocId ?? '',
     kind: score.entry.kind,
     title: score.entry.title,
     summary: score.entry.summary,
+    excerpt: createTeamKnowledgeExcerpt(score.entry.content),
     term: score.entry.term,
     content: score.entry.content,
     headingPath: score.entry.headingPath,
@@ -286,6 +295,7 @@ function toSuggestionItem(
     confidence: score.confidence,
     relevance: score.relevance,
     matchReason: score.matchReason,
+    safety,
   };
 }
 

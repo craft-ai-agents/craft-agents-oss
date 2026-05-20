@@ -1,5 +1,9 @@
 import { join } from 'node:path';
 import { parseMarkdownEntries, type MarkdownEntry } from '../../../shared/src/markdown-entry-parser/index.ts';
+import {
+  analyzeTeamKnowledgeText,
+  createTeamKnowledgeExcerpt,
+} from '../../../shared/src/team-public-knowledge/safety.ts';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse } from '../response.ts';
@@ -119,9 +123,11 @@ export async function handleGetTeamPublicKnowledgeEntry(
 
   let content = entry.content;
   const truncated = content.length > MAX_CONTENT_LENGTH;
+  const excerpt = createTeamKnowledgeExcerpt(content);
   if (truncated) {
     content = content.slice(0, MAX_CONTENT_LENGTH) + '\n... [truncated]';
   }
+  const safety = analyzeTeamKnowledgeText([entry.summary, entry.content].filter(Boolean).join('\n\n'));
 
   const relatedIds = findRelatedIds(allEntries, entry);
 
@@ -133,6 +139,7 @@ export async function handleGetTeamPublicKnowledgeEntry(
       kind: entry.kind,
       title: entry.title,
       summary: entry.summary,
+      excerpt,
       term: entry.term,
       canonical: entry.canonical,
       content,
@@ -143,6 +150,7 @@ export async function handleGetTeamPublicKnowledgeEntry(
       scope: entry.metadata.scope,
       defaults: entry.metadata.defaults,
       validUntil: entry.metadata.validUntil,
+      safety,
     },
     relatedIds: relatedIds.length > 0 ? relatedIds : undefined,
   };

@@ -7,6 +7,11 @@ import {
   resolveTeamKnowledgeMatches,
   type TeamKnowledgeStaleReason,
 } from '../../../shared/src/team-public-knowledge/entry-resolution.ts';
+import {
+  analyzeTeamKnowledgeText,
+  createTeamKnowledgeExcerpt,
+  type TeamKnowledgeSafety,
+} from '../../../shared/src/team-public-knowledge/safety.ts';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
@@ -35,6 +40,7 @@ interface SearchResultItem {
   kind: string;
   title?: string;
   summary?: string;
+  excerpt: string;
   term?: string;
   content: string;
   headingPath: string[];
@@ -51,6 +57,7 @@ interface SearchResultItem {
   confidence: number;
   relevance: string;
   matchReason: string;
+  safety: TeamKnowledgeSafety;
 }
 
 interface SearchResult {
@@ -196,11 +203,13 @@ export async function handleSearchTeamPublicKnowledge(
   const results: SearchResultItem[] = pageItems.map(s => {
     const staleReason = getMarkdownEntryStaleReason(s.entry, staleDocIds, ttlExpiredDocIds);
     const conflictReason = conflictTerms.get(entryKey(s.entry));
+    const safety = analyzeTeamKnowledgeText([s.entry.summary, s.entry.content].filter(Boolean).join('\n\n'));
     return {
       id: s.entry.metadata.id ?? s.entry.sourceDocId ?? '',
       kind: s.entry.kind,
       title: s.entry.title,
       summary: s.entry.summary,
+      excerpt: createTeamKnowledgeExcerpt(s.entry.content),
       term: s.entry.term,
       content: s.entry.content,
       headingPath: s.entry.headingPath,
@@ -217,6 +226,7 @@ export async function handleSearchTeamPublicKnowledge(
       confidence: s.confidence,
       relevance: s.relevance,
       matchReason: s.matchReason,
+      safety,
     };
   });
 
