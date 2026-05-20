@@ -303,11 +303,11 @@ export interface ChatOptions {
 
 /**
  * SDK-compatible MCP server configuration.
- * Supports HTTP/SSE (remote) and stdio (local subprocess) transports.
+ * Supports Streamable HTTP (remote) and stdio (local subprocess) transports.
  */
 export type SdkMcpServerConfig =
   | {
-      type: 'http' | 'sse';
+      type: 'streamable_http';
       url: string;
       headers?: Record<string, string>;
       /** Environment variable name containing bearer token (Codex-specific) */

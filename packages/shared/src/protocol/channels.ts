@@ -47,6 +47,8 @@ export const RPC_CHANNELS = {
     IMPORT: 'sessions:import',
     EXPORT_REMOTE_TRANSFER: 'sessions:exportRemoteTransfer',
     IMPORT_REMOTE_TRANSFER: 'sessions:importRemoteTransfer',
+    GET_TEAM_CONTEXT_OVERRIDE: 'sessions:getTeamContextOverride',
+    SET_TEAM_CONTEXT_OVERRIDE: 'sessions:setTeamContextOverride',
   },
   transfer: {
     START: 'transfer:start',
@@ -222,6 +224,9 @@ export const RPC_CHANNELS = {
   sources: {
     GET: 'sources:get',
     CREATE: 'sources:create',
+    UPDATE: 'sources:update',
+    PARSE_MCP_JSON_IMPORT: 'sources:parseMcpJsonImport',
+    IMPORT_MCP_JSON_CANDIDATES: 'sources:importMcpJsonCandidates',
     DELETE: 'sources:delete',
     START_OAUTH: 'sources:startOAuth',
     SAVE_CREDENTIALS: 'sources:saveCredentials',
@@ -387,6 +392,13 @@ export const RPC_CHANNELS = {
     GET_LAST_EXECUTED: 'automations:getLastExecuted',
     REPLAY: 'automations:replay',
     CHANGED: 'automations:changed',
+  },
+  teamKnowledge: {
+    GET_CONFIG: 'teamKnowledge:getConfig',
+    UPDATE_CONFIG: 'teamKnowledge:updateConfig',
+    REFRESH: 'teamKnowledge:refresh',
+    CHANGED: 'teamKnowledge:changed',
+    GET_PREVIEW: 'teamKnowledge:getPreview',
   },
   resources: {
     EXPORT: 'resources:export',

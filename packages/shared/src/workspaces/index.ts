@@ -7,6 +7,8 @@
 // Types
 export type {
   WorkspaceConfig,
+  TeamPublicKnowledgeConfig,
+  TeamPublicKnowledgeDocumentConfig,
   CreateWorkspaceInput,
   LoadedWorkspace,
   WorkspaceSummary,

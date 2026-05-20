@@ -527,7 +527,7 @@ function writeHttpMcpSource(
     tagline: 'A test HTTP MCP source',
     icon: '🧪',
     mcp: {
-      transport: 'http',
+      transport: 'streamable_http',
       url: 'https://mcp.example.test',
       authType: 'oauth',
     },
@@ -585,7 +585,7 @@ describe('source_test HTTP MCP probe credential forwarding (regression for #720)
   it('OAuth MCP with cached token forwards accessToken to the probe (no refresh)', async () => {
     writeHttpMcpSource(tempDir, 'oauth-cached', {
       mcp: {
-        transport: 'http',
+        transport: 'streamable_http',
         url: 'https://mcp.example.test',
         authType: 'oauth',
       },
@@ -618,7 +618,7 @@ describe('source_test HTTP MCP probe credential forwarding (regression for #720)
   it('OAuth MCP without cached token falls back to refresh and forwards the fresh token', async () => {
     writeHttpMcpSource(tempDir, 'oauth-refresh', {
       mcp: {
-        transport: 'http',
+        transport: 'streamable_http',
         url: 'https://mcp.example.test',
         authType: 'oauth',
       },
@@ -645,7 +645,7 @@ describe('source_test HTTP MCP probe credential forwarding (regression for #720)
   it('Bearer MCP without headerNames forwards accessToken (defense-in-depth)', async () => {
     writeHttpMcpSource(tempDir, 'bearer-cached', {
       mcp: {
-        transport: 'http',
+        transport: 'streamable_http',
         url: 'https://mcp.example.test',
         authType: 'bearer',
       },
@@ -673,7 +673,7 @@ describe('source_test HTTP MCP probe credential forwarding (regression for #720)
     // Multi-header credential — credential value is a JSON object keyed by header name.
     writeHttpMcpSource(tempDir, 'header-style', {
       mcp: {
-        transport: 'http',
+        transport: 'streamable_http',
         url: 'https://mcp.example.test',
         headerNames: ['X-Api-Key'],
       },

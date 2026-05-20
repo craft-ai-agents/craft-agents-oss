@@ -161,6 +161,10 @@ export const CHANNEL_MAP = {
   getSessionModel: invoke(RPC_CHANNELS.sessions.GET_MODEL),
   setSessionModel: invoke(RPC_CHANNELS.sessions.SET_MODEL),
 
+  // Team context session override
+  getTeamContextOverride: invoke(RPC_CHANNELS.sessions.GET_TEAM_CONTEXT_OVERRIDE),
+  setTeamContextOverride: invoke(RPC_CHANNELS.sessions.SET_TEAM_CONTEXT_OVERRIDE),
+
   // Workspace Settings
   getWorkspaceSettings: invoke(RPC_CHANNELS.workspace.SETTINGS_GET),
   updateWorkspaceSetting: invoke(RPC_CHANNELS.workspace.SETTINGS_UPDATE),
@@ -204,6 +208,9 @@ export const CHANNEL_MAP = {
   // Sources
   getSources: invoke(RPC_CHANNELS.sources.GET),
   createSource: invoke(RPC_CHANNELS.sources.CREATE),
+  updateSource: invoke(RPC_CHANNELS.sources.UPDATE),
+  parseMcpJsonImport: invoke(RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT),
+  importMcpJsonCandidates: invoke(RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES),
   deleteSource: invoke(RPC_CHANNELS.sources.DELETE),
   startSourceOAuth: invoke(RPC_CHANNELS.sources.START_OAUTH),
   saveSourceCredentials: invoke(RPC_CHANNELS.sources.SAVE_CREDENTIALS),
@@ -247,6 +254,13 @@ export const CHANNEL_MAP = {
   listStatuses: invoke(RPC_CHANNELS.statuses.LIST),
   reorderStatuses: invoke(RPC_CHANNELS.statuses.REORDER),
   onStatusesChanged: listener(RPC_CHANNELS.statuses.CHANGED),
+
+  // Team Knowledge
+  getTeamKnowledgeConfig: invoke(RPC_CHANNELS.teamKnowledge.GET_CONFIG),
+  updateTeamKnowledgeConfig: invoke(RPC_CHANNELS.teamKnowledge.UPDATE_CONFIG),
+  refreshTeamKnowledge: invoke(RPC_CHANNELS.teamKnowledge.REFRESH),
+  onTeamKnowledgeChanged: listener(RPC_CHANNELS.teamKnowledge.CHANGED),
+  getTeamContextPreview: invoke(RPC_CHANNELS.teamKnowledge.GET_PREVIEW),
 
   // Labels
   listLabels: invoke(RPC_CHANNELS.labels.LIST),

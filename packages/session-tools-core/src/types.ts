@@ -222,7 +222,7 @@ export type SourceType = 'mcp' | 'api' | 'local';
 /**
  * MCP transport type
  */
-export type McpTransport = 'http' | 'sse' | 'stdio';
+export type McpTransport = 'streamable_http' | 'stdio';
 
 /**
  * MCP auth type

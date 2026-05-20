@@ -43,7 +43,7 @@ export function getDocsSource(workspaceId: string, workspaceRootPath: string): L
     provider: 'mintlify',
     type: 'mcp',
     mcp: {
-      transport: 'http',
+      transport: 'streamable_http',
       url: 'https://agents.craft.do/docs/mcp',
       authType: 'none',
     },
