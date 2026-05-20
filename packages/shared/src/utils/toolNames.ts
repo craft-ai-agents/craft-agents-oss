@@ -17,6 +17,7 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   'Edit': 'Editing File',
   'Bash': 'Running Command',
   'Task': 'Running Agent',
+  'Agent': 'Running Agent',
   'WebFetch': 'Fetching URL',
   'WebSearch': 'Searching Web',
   'TodoWrite': 'Updating Tasks',

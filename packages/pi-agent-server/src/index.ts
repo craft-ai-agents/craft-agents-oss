@@ -1256,15 +1256,48 @@ function handleSessionEvent(event: AgentSessionEvent): void {
     }
 
     if (msg?.role === 'assistant' && piSession) {
-      const sdkTurnAnchor = piSession.sessionManager.getLeafId();
-      if (sdkTurnAnchor) {
-        // Enrichment: main process reads `sdkTurnAnchor` off the forwarded event to
-        // set branch cutoff points. The SDK's event shape doesn't declare this field,
-        // so the cast is intentional.
+      // CRITICAL: do NOT read `getLeafId()` here.
+      //
+      // The Pi SDK fires `message_end` synchronously BEFORE calling
+      // `appendMessage(event.message)` (see `agent-session.js:_processAgentEvent`).
+      // At this moment the assistant entry does not yet exist in the
+      // SessionManager — `leafId` still points at the *previous* leaf, which for
+      // a plain text turn is the user message that triggered the response.
+      // Recording that wrong anchor and using it for `branch()` makes the next
+      // turn a sibling of the assistant message, dropping the assistant reply
+      // from the LLM's view of history (craft-agents-oss#782).
+      //
+      // Instead, attach the SDK's message id to the forwarded event so the main
+      // process can correlate this turn, then queue a microtask to read the
+      // correct leaf AFTER `appendMessage` has run. The microtask drains before
+      // any subsequent SDK event is dispatched, so the follow-up
+      // `pi_turn_anchor` event is delivered to the main process in the right
+      // order (after this `message_end`, before the next event).
+      const sdkMessageId = (msg as { id?: string }).id;
+      if (sdkMessageId) {
         forwardedEvent = {
           ...(event as Record<string, unknown>),
-          sdkTurnAnchor,
+          sdkMessageId,
         } as unknown as OutboundAgentEvent;
+
+        const sessionManagerSnapshot = piSession.sessionManager;
+        queueMicrotask(() => {
+          // Defensive: session may have been disposed between the message_end
+          // emit and the microtask drain.
+          if (!piSession || piSession.sessionManager !== sessionManagerSnapshot) {
+            return;
+          }
+          const sdkTurnAnchor = sessionManagerSnapshot.getLeafId();
+          if (!sdkTurnAnchor) return;
+          send({
+            type: 'event',
+            event: {
+              type: 'pi_turn_anchor',
+              sdkMessageId,
+              sdkTurnAnchor,
+            } as unknown as OutboundAgentEvent,
+          });
+        });
       }
 
       // Speculative prefetch: if the assistant message contains 2+ prefetchable tool calls,

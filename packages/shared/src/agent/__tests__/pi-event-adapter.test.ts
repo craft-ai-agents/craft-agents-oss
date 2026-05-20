@@ -162,20 +162,52 @@ describe('PiEventAdapter', () => {
       });
     });
 
-    it('should forward sdkTurnAnchor from message_end into text_complete', () => {
+    it('should attach sdkMessageId from message_end onto the text_complete', () => {
       collect(adapter.adaptEvent({ type: 'turn_start' } as any));
       const events = collect(adapter.adaptEvent({
         type: 'message_end',
-        sdkTurnAnchor: 'entry_abc123',
-        message: { role: 'assistant', stopReason: 'stop', content: 'Anchored output' },
+        sdkMessageId: 'msg_pi_abc123',
+        message: { role: 'assistant', stopReason: 'stop', content: 'Anchored output', id: 'msg_pi_abc123' },
       } as any));
 
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({
         type: 'text_complete',
         text: 'Anchored output',
+        sdkMessageId: 'msg_pi_abc123',
+      });
+      // sdkTurnAnchor is delivered separately by a follow-up pi_turn_anchor event.
+      expect((events[0] as { sdkTurnAnchor?: string }).sdkTurnAnchor).toBeUndefined();
+    });
+
+    it('should forward pi_turn_anchor events as Craft AgentEvents', () => {
+      const events = collect(adapter.adaptEvent({
+        type: 'pi_turn_anchor',
+        sdkMessageId: 'msg_pi_abc123',
+        sdkTurnAnchor: 'entry_abc123',
+      } as any));
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({
+        type: 'pi_turn_anchor',
+        sdkMessageId: 'msg_pi_abc123',
         sdkTurnAnchor: 'entry_abc123',
       });
+    });
+
+    it('should drop pi_turn_anchor events with missing fields', () => {
+      // No sdkTurnAnchor — useless to consumers.
+      const e1 = collect(adapter.adaptEvent({
+        type: 'pi_turn_anchor',
+        sdkMessageId: 'msg_pi_abc123',
+      } as any));
+      expect(e1).toHaveLength(0);
+      // No sdkMessageId — cannot correlate.
+      const e2 = collect(adapter.adaptEvent({
+        type: 'pi_turn_anchor',
+        sdkTurnAnchor: 'entry_abc123',
+      } as any));
+      expect(e2).toHaveLength(0);
     });
 
     it('should skip non-assistant message_end', () => {

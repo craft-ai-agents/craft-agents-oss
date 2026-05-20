@@ -9,6 +9,7 @@ import { EntityRow } from "@/components/ui/entity-row"
 import { EntityListBadge } from "@/components/ui/entity-list-badge"
 import { SessionMenu } from "./SessionMenu"
 import { BatchSessionMenu } from "./BatchSessionMenu"
+import { CompactSessionMenu } from "./CompactSessionMenu"
 import { SessionStatusIcon } from "./SessionStatusIcon"
 import { SessionBadges } from "./SessionBadges"
 import { getSessionTitle, getSessionPreviewText, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
@@ -138,6 +139,30 @@ export function SessionItem({
         />
       }
       contextMenuContent={ctx.isMultiSelectActive && isInMultiSelect ? <BatchSessionMenu /> : undefined}
+      isCompactMode={isCompactMode}
+      compactMenu={({ open, onOpenChange }) => (
+        <CompactSessionMenu
+          open={open}
+          onOpenChange={onOpenChange}
+          trigger={null}
+          title={title}
+          item={item}
+          sessionStatuses={ctx.sessionStatuses}
+          labels={ctx.labels}
+          hasRemoteWorkspaces={hasRemoteWorkspaces}
+          onLabelsChange={ctx.onLabelsChange ? (ls) => ctx.onLabelsChange!(item.id, ls) : undefined}
+          onRename={() => ctx.onRenameClick(item.id, title)}
+          onFlag={() => ctx.onFlag?.(item.id)}
+          onUnflag={() => ctx.onUnflag?.(item.id)}
+          onArchive={() => ctx.onArchive?.(item.id)}
+          onUnarchive={() => ctx.onUnarchive?.(item.id)}
+          onMarkUnread={() => ctx.onMarkUnread(item.id)}
+          onSessionStatusChange={(s) => ctx.onSessionStatusChange(item.id, s)}
+          onOpenInNewWindow={() => ctx.onOpenInNewWindow(item)}
+          onSendToWorkspace={ctx.onSendToWorkspace ? () => ctx.onSendToWorkspace!([item.id]) : undefined}
+          onDelete={() => ctx.onDelete(item.id)}
+        />
+      )}
       icon={
         <>
           <SessionStatusIcon item={item} />

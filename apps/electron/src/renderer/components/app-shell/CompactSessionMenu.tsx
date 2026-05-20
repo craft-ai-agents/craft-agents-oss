@@ -106,6 +106,21 @@ export interface CompactSessionMenuProps {
   onOpenInNewWindow: () => void
   onSendToWorkspace?: () => void
   onDelete: () => void
+
+  // ---------------------------------------------------------------------------
+  // Controlled-component shim — used by EntityRow / SessionItem so a single
+  // drawer instance can be driven from multiple triggers (`…` button + long-
+  // press). When `open` is omitted the component owns its own state (the
+  // chat-header callsite, unchanged). Matches the Radix Dialog convention.
+  // ---------------------------------------------------------------------------
+  /** Controlled open state. When omitted, the component owns its own state. */
+  open?: boolean
+  /** Notifies the consumer when the controlled open state should change. */
+  onOpenChange?: (open: boolean) => void
+  /** Custom trigger node. `null` opts out of rendering ANY trigger (the row
+   *  provides its own). When omitted, renders the title-pill trigger used
+   *  by the chat header. */
+  trigger?: React.ReactNode | null
 }
 
 export function CompactSessionMenu({
@@ -127,9 +142,21 @@ export function CompactSessionMenu({
   onOpenInNewWindow,
   onSendToWorkspace,
   onDelete,
+  open: controlledOpen,
+  onOpenChange,
+  trigger,
 }: CompactSessionMenuProps) {
   const { t } = useTranslation()
-  const [open, setOpen] = React.useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false)
+  const isControlled = controlledOpen !== undefined
+  const open = isControlled ? controlledOpen : uncontrolledOpen
+  const setOpen = React.useCallback(
+    (next: boolean) => {
+      if (!isControlled) setUncontrolledOpen(next)
+      onOpenChange?.(next)
+    },
+    [isControlled, onOpenChange],
+  )
   const [view, setView] = React.useState<View>('root')
 
   // Reset to root pane every time the drawer closes so the next open
@@ -144,7 +171,7 @@ export function CompactSessionMenu({
   React.useEffect(() => {
     setOpen(false)
     setView('root')
-  }, [item.id])
+  }, [item.id, setOpen])
 
   const isFlagged = item.isFlagged ?? false
   const isArchived = item.isArchived ?? false
@@ -172,7 +199,7 @@ export function CompactSessionMenu({
         setOpen(false)
       }) as T
     },
-    [],
+    [setOpen],
   )
 
   const connectMessaging = useMessagingConnect({ sessionId: item.id })
@@ -197,40 +224,52 @@ export function CompactSessionMenu({
 
   const showBack = view !== 'root'
 
+  // Resolve the trigger node:
+  //   - `trigger === null`  → don't render any trigger (row provides its own).
+  //   - `trigger` provided  → render the consumer's node inside DrawerTrigger.
+  //   - `trigger` omitted   → render the default title-pill button (chat header).
+  const triggerNode = trigger === null
+    ? null
+    : trigger !== undefined
+      ? <DrawerTrigger asChild>{trigger}</DrawerTrigger>
+      : (
+        <DrawerTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              'flex items-center gap-1 px-2 py-1 rounded-md titlebar-no-drag min-w-0',
+              'hover:bg-foreground/[0.03] transition-colors',
+              'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+              'data-[state=open]:bg-foreground/[0.03]',
+            )}
+            aria-label={title}
+          >
+            <motion.div
+              initial={false}
+              animate={{ opacity: title ? 1 : 0 }}
+              transition={{ duration: 0.15 }}
+              className="flex items-center gap-1 min-w-0"
+            >
+              <h1
+                className={cn(
+                  'text-sm font-semibold truncate font-sans leading-tight',
+                  isRegeneratingTitle && 'animate-shimmer-text',
+                )}
+              >
+                {title}
+              </h1>
+              {badge}
+            </motion.div>
+            <span className="shrink-0 flex items-center justify-center">
+              <ChevronDown className="h-3.5 w-3.5 text-foreground/50 translate-y-[1px]" />
+            </span>
+          </button>
+        </DrawerTrigger>
+      )
+
   return (
     <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'flex items-center gap-1 px-2 py-1 rounded-md titlebar-no-drag min-w-0',
-            'hover:bg-foreground/[0.03] transition-colors',
-            'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-            'data-[state=open]:bg-foreground/[0.03]',
-          )}
-          aria-label={title}
-        >
-          <motion.div
-            initial={false}
-            animate={{ opacity: title ? 1 : 0 }}
-            transition={{ duration: 0.15 }}
-            className="flex items-center gap-1 min-w-0"
-          >
-            <h1
-              className={cn(
-                'text-sm font-semibold truncate font-sans leading-tight',
-                isRegeneratingTitle && 'animate-shimmer-text',
-              )}
-            >
-              {title}
-            </h1>
-            {badge}
-          </motion.div>
-          <span className="shrink-0 flex items-center justify-center">
-            <ChevronDown className="h-3.5 w-3.5 text-foreground/50 translate-y-[1px]" />
-          </span>
-        </button>
-      </DrawerTrigger>
+      {triggerNode}
 
       <DrawerContent className="max-h-[85vh]">
         <DrawerHeader className="!flex flex-row items-center gap-2 !text-left pr-3">

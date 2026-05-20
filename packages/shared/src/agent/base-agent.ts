@@ -217,6 +217,18 @@ export abstract class BaseAgent implements AgentBackend {
   protected _currentTurnUserMessage: string | null = null;
 
   setPendingSourceActivationRestart(pending: { sourceSlug: string; userMessage: string }): void {
+    // First-writer-wins under parallel `mcp__session__source_test` calls. The
+    // overwrite race itself is harmless (each activation runs independently and
+    // succeeds), but the surviving slug is what the renderer displays in the
+    // "[{slug} activated]" suffix on the auto-resend. Keeping the first writer
+    // gives a stable user-facing label without forcing all source_tests to
+    // serialize. See #790.
+    if (this._pendingSourceActivationRestart) {
+      this.debug(
+        `source-activation restart already pending (${this._pendingSourceActivationRestart.sourceSlug}); ignoring overlapping activation of "${pending.sourceSlug}"`,
+      );
+      return;
+    }
     this._pendingSourceActivationRestart = pending;
   }
 
