@@ -1280,6 +1280,11 @@ function AppShellContent({
   // This prevents closures from retaining full message arrays
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const setSessionMetaMap = useSetAtom(sessionMetaMapAtom)
+  const selectedSessionMeta = effectiveSessionId ? sessionMetaMap.get(effectiveSessionId) : undefined
+  const isConciergeSession =
+    selectedSessionMeta?.launchReceipt?.origin === 'concierge' ||
+    selectedSessionMeta?.launchReceipt?.agent?.slug === CONCIERGE_SLUG ||
+    selectedSessionMeta?.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
 
   const hasPendingPrompt = React.useCallback((sessionId: string) => {
     return (pendingPermissions.get(sessionId)?.length ?? 0) > 0
@@ -1895,6 +1900,7 @@ function AppShellContent({
   // in this workspace if it isn't already.
   const handleChatClick = useCallback(async () => {
     if (!activeWorkspace || openingConciergeRef.current) return
+    setSessionsNavExpanded(false)
     openingConciergeRef.current = true
     setOpeningConcierge(true)
     try {
@@ -2327,7 +2333,7 @@ function AppShellContent({
                       id: "nav:chat",
                       title: "HNIC",
                       icon: MessageSquare,
-                      variant: "ghost",
+                      variant: isConciergeSession ? "default" : "ghost",
                       onClick: handleChatClick,
                       label: openingConcierge ? '…' : undefined,
                     },
@@ -2417,7 +2423,7 @@ function AppShellContent({
                       title: "Sessions",
                       label: String(workspaceSessionMetas.length),
                       icon: MessageSquare,
-                      variant: isSessionsNavigation(navState) ? "default" : "ghost",
+                      variant: sessionsNavExpanded ? "default" : "ghost",
                       onClick: handleSessionsNavClick,
                     },
                   ]}

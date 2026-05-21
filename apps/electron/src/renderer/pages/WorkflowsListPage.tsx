@@ -1,8 +1,15 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
-import { CircleMinus, History, Pencil, Play, Plus, Trash2, Workflow as WorkflowIcon } from 'lucide-react'
+import { CircleMinus, History, Pencil, Play, Plus, Trash2, X, Workflow as WorkflowIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
 import { useWorkflows } from '@/hooks/useWorkflows'
@@ -43,6 +50,7 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   const { allWorkflows, activeWorkflows, activeSlugs, loading, error, remove, setActive } = useWorkflows(workspaceId)
   const { runs } = useWorkflowRuns(workspaceId)
   const [runDialogWorkflow, setRunDialogWorkflow] = React.useState<WorkflowDTO | null>(null)
+  const [detailWorkflow, setDetailWorkflow] = React.useState<WorkflowDTO | null>(null)
   const activeSlugSet = React.useMemo(() => new Set(activeSlugs), [activeSlugs])
   const inactiveWorkflows = React.useMemo(
     () => allWorkflows.filter((wf) => !activeSlugSet.has(wf.slug)),
@@ -115,36 +123,33 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_12%_0%,rgba(249,115,22,0.12),transparent_40%)]">
-      <div className="flex items-center justify-between gap-4 border-b border-white/[0.06] px-8 py-7">
-        <div className="min-w-0">
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[#fdba74]">
-            <WorkflowIcon className="h-3 w-3" />
-            Execution layer
-          </div>
-          <div className="flex items-center gap-3">
-            <WorkflowIcon className="h-6 w-6 text-[#fb923c]" />
+    <div className="runneros-glass-route h-full overflow-y-auto">
+      <div className="mx-auto max-w-6xl px-7 py-7">
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div className="min-w-0">
             <h1 className="text-[28px] font-semibold leading-tight text-white">{t('sidebar.workflows')}</h1>
+            <p className="mt-1 max-w-md text-[12px] leading-[18px] text-white/54">{t('workflows.list.subtitle')}</p>
           </div>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">{t('workflows.list.subtitle')}</p>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => navigate(routes.view.recentRuns())}
+              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] font-medium text-white/72 transition-colors hover:bg-white/[0.08] hover:text-white"
+            >
+              <History className="h-3 w-3" />
+              {t('sidebar.workflows.recentRuns')}
+            </button>
+            <button
+              type="button"
+              onClick={handleNew}
+              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 shadow-[0_0_18px_rgba(249,115,22,0.16)] transition-colors hover:bg-[#f97316]/24"
+            >
+              <Plus className="h-3 w-3" />
+              {t('workflows.list.new')}
+            </button>
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => navigate(routes.view.recentRuns())}
-            className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-white/[0.07] bg-white/[0.035] px-2.5 text-[11px] font-medium text-white/52 transition-colors hover:bg-white/[0.07] hover:text-white/78"
-          >
-            <History className="h-3.5 w-3.5" />
-            {t('sidebar.workflows.recentRuns')}
-          </button>
-          <Button size="sm" onClick={handleNew} className="rounded-[10px] bg-[#f97316] text-white hover:bg-[#fb923c]">
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            {t('workflows.list.new')}
-          </Button>
-        </div>
-      </div>
 
-      <div className="min-h-0 flex-1 overflow-auto px-8 py-7">
         {loading ? (
           <div className="flex h-full items-center justify-center text-sm text-white/50">{t('common.loading')}</div>
         ) : error ? (
@@ -173,12 +178,9 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
                       workflow={wf}
                       active
                       lastRun={lastRunBySlug.get(wf.slug)}
-                      onOpen={() => navigate(routes.view.workflow(wf.slug))}
+                      onOpen={() => setDetailWorkflow(wf)}
                       onRun={() => setRunDialogWorkflow(wf)}
-                      onEdit={() => navigate(routes.view.workflowEdit(wf.slug))}
-                      onDelete={() => void handleDelete(wf)}
                       onActivate={() => void handleActivate(wf)}
-                      onDeactivate={() => void handleDeactivate(wf)}
                     />
                   ))}
                 </div>
@@ -194,12 +196,9 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
                       workflow={wf}
                       active={false}
                       lastRun={lastRunBySlug.get(wf.slug)}
-                      onOpen={() => navigate(routes.view.workflow(wf.slug))}
+                      onOpen={() => setDetailWorkflow(wf)}
                       onRun={() => setRunDialogWorkflow(wf)}
-                      onEdit={() => navigate(routes.view.workflowEdit(wf.slug))}
-                      onDelete={() => void handleDelete(wf)}
                       onActivate={() => void handleActivate(wf)}
-                      onDeactivate={() => void handleDeactivate(wf)}
                     />
                   ))}
                 </div>
@@ -215,6 +214,19 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
           onOpenChange={(open) => { if (!open) setRunDialogWorkflow(null) }}
           workflow={runDialogWorkflow}
           workspaceId={workspaceId}
+        />
+      )}
+      {detailWorkflow && (
+        <WorkflowDetailDialog
+          workflow={detailWorkflow}
+          active={activeSlugSet.has(detailWorkflow.slug)}
+          lastRun={lastRunBySlug.get(detailWorkflow.slug)}
+          onOpenChange={(open) => { if (!open) setDetailWorkflow(null) }}
+          onRun={() => setRunDialogWorkflow(detailWorkflow)}
+          onEdit={() => navigate(routes.view.workflowEdit(detailWorkflow.slug))}
+          onDelete={() => void handleDelete(detailWorkflow)}
+          onActivate={() => void handleActivate(detailWorkflow)}
+          onDeactivate={() => void handleDeactivate(detailWorkflow)}
         />
       )}
     </div>
@@ -240,6 +252,80 @@ function WorkflowCard({
   lastRun,
   onOpen,
   onRun,
+  onActivate,
+}: {
+  workflow: WorkflowDTO
+  active: boolean
+  lastRun?: WorkflowRunDTO
+  onOpen: () => void
+  onRun: () => void
+  onActivate: () => void
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        onOpen()
+      }}
+      className="group relative overflow-hidden rounded-[13px] border border-white/[0.07] bg-white/[0.035] p-3 text-left shadow-[0_2px_8px_rgb(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.13] hover:bg-white/[0.055] hover:shadow-[0_8px_24px_rgba(0,0,0,0.24)]"
+    >
+      <div className="flex items-start gap-2">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            onOpen()
+          }}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.08] bg-gradient-to-br from-white/[0.10] to-white/[0.035] font-mono text-[8px] font-semibold uppercase tracking-[0.08em] text-[#fed7aa] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]"
+          aria-label={`Open ${workflow.metadata.name}`}
+        >
+          {getWorkflowInitials(workflow)}
+        </button>
+        <div className="min-w-0 flex-1">
+          <button type="button" onClick={(event) => {
+            event.stopPropagation()
+            onOpen()
+          }} className="block max-w-full truncate text-left text-sm font-semibold text-white hover:text-[#fed7aa]">
+            {workflow.metadata.name}
+          </button>
+        </div>
+        <span className="rounded-full border border-white/[0.09] bg-black/20 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-white/50">
+          {active ? workflow.metadata.trigger.type : 'inactive'}
+        </span>
+      </div>
+
+      <p className="mt-2 line-clamp-2 min-h-9 text-[11.5px] leading-[18px] text-white/62">{workflow.metadata.description}</p>
+
+      <div className="mt-2.5 flex items-center justify-between gap-3">
+        <div>{lastRun ? <RunStateDot state={lastRun.state} /> : <span />}</div>
+        <div className="flex items-center gap-1">
+          {active ? (
+            <IconAction label="Run" onClick={onRun}><Play className="h-3.5 w-3.5" /></IconAction>
+          ) : (
+            <button type="button" onClick={(event) => {
+              event.stopPropagation()
+              onActivate()
+            }} className="inline-flex h-6 items-center gap-1 rounded-[7px] border border-[#fb923c]/18 bg-[#f97316]/12 px-2 text-[10.5px] font-medium text-[#fed7aa] hover:bg-[#f97316]/20">
+              <Plus className="h-3 w-3" />
+              Activate
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function WorkflowDetailDialog({
+  workflow,
+  active,
+  lastRun,
+  onOpenChange,
+  onRun,
   onEdit,
   onDelete,
   onActivate,
@@ -248,56 +334,151 @@ function WorkflowCard({
   workflow: WorkflowDTO
   active: boolean
   lastRun?: WorkflowRunDTO
-  onOpen: () => void
+  onOpenChange: (open: boolean) => void
   onRun: () => void
   onEdit: () => void
   onDelete: () => void
   onActivate: () => void
   onDeactivate: () => void
 }) {
+  const steps = workflow.metadata.steps ?? []
+  const inputs = workflow.metadata.trigger.inputs ?? []
+
   return (
-    <div className="group relative overflow-hidden rounded-[14px] border border-white/[0.08] bg-white/[0.04] p-3 pr-4 shadow-[0_2px_8px_rgb(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#fb923c]/35 hover:bg-white/[0.06] hover:shadow-[0_8px_24px_rgba(0,0,0,0.25),0_0_16px_rgba(249,115,22,0.1)]">
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#fb923c]/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-      <div className="flex items-start gap-2">
-        <button
-          type="button"
-          onClick={onOpen}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.08] bg-gradient-to-br from-white/[0.10] to-white/[0.035] font-mono text-[8px] font-semibold uppercase tracking-[0.08em] text-[#fed7aa] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]"
-          aria-label={`Open ${workflow.metadata.name}`}
-        >
-          {getWorkflowInitials(workflow)}
-        </button>
-        <div className="min-w-0 flex-1">
-          <button type="button" onClick={onOpen} className="block max-w-full truncate text-left text-sm font-semibold text-white hover:text-[#fed7aa]">
-            {workflow.metadata.name}
-          </button>
-          <div className="mt-1 truncate font-mono text-[11px] text-white/50">{workflow.slug}</div>
-        </div>
-        <span className="rounded-full border border-white/[0.1] bg-black/20 px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
-          {active ? workflow.metadata.trigger.type : 'inactive'}
-        </span>
-      </div>
-
-      <p className="mt-3 line-clamp-2 min-h-10 text-xs leading-5 text-white/70">{workflow.metadata.description}</p>
-
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <div>{lastRun ? <RunStateDot state={lastRun.state} /> : <span className="text-xs text-white/30">No runs yet</span>}</div>
-        <div className="flex items-center gap-1">
-          {active ? (
-            <>
-              <IconAction label="Run" onClick={onRun}><Play className="h-3.5 w-3.5" /></IconAction>
-              <IconAction label="Deactivate" onClick={onDeactivate}><CircleMinus className="h-3.5 w-3.5" /></IconAction>
-            </>
-          ) : (
-            <button type="button" onClick={onActivate} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-[#fb923c]/25 bg-[#f97316]/18 px-2.5 text-xs font-medium text-[#fed7aa] hover:bg-[#f97316]/26">
-              <Plus className="h-3.5 w-3.5" />
-              Activate
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent showCloseButton={false} className="max-h-[86vh] max-w-3xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_28px_90px_rgba(0,0,0,0.62)]">
+        <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-white/48">
+                <WorkflowIcon className="h-3 w-3" />
+                Workflow
+              </div>
+              <DialogTitle className="truncate text-[20px] font-semibold leading-tight text-white">
+                {workflow.metadata.name}
+              </DialogTitle>
+              <DialogDescription className="mt-1 max-w-2xl text-sm leading-5 text-white/52">
+                {workflow.metadata.description}
+              </DialogDescription>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.07] bg-white/[0.04] text-white/54 transition-colors hover:bg-white/[0.08] hover:text-white"
+              aria-label="Close workflow details"
+            >
+              <X className="h-4 w-4" />
             </button>
+          </div>
+        </DialogHeader>
+
+        <div className="max-h-[calc(86vh-86px)] overflow-y-auto px-5 py-5">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <InfoTile label="Status" value={active ? 'Active' : 'Inactive'} />
+            <InfoTile label="Trigger" value={workflow.metadata.trigger.type} />
+            <InfoTile label="Last run" value={lastRun ? lastRun.state : 'None'} />
+          </div>
+
+          {inputs.length > 0 && (
+            <section className="mt-5">
+              <SectionLabel>Inputs</SectionLabel>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {inputs.map((input) => (
+                  <span key={input.name} className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-xs text-white/62">
+                    {input.name}{input.required ? ' *' : ''}
+                  </span>
+                ))}
+              </div>
+            </section>
           )}
-          <IconAction label="Edit" onClick={onEdit}><Pencil className="h-3.5 w-3.5" /></IconAction>
-          <IconAction label="Delete" onClick={onDelete} danger><Trash2 className="h-3.5 w-3.5" /></IconAction>
+
+          <section className="mt-5">
+            <SectionLabel>Pipeline</SectionLabel>
+            <div className="mt-2 space-y-2">
+              {steps.map((step, index) => (
+                <div key={step.id} className="rounded-[13px] border border-white/[0.065] bg-white/[0.035] p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-white">{index + 1}. {step.id}</div>
+                      <div className="mt-0.5 truncate font-mono text-[11px] text-white/38">@{step.agent}</div>
+                    </div>
+                    {step.retries ? (
+                      <span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] text-white/45">
+                        {step.retries} retries
+                      </span>
+                    ) : null}
+                  </div>
+                  {step.description && (
+                    <p className="mt-2 text-xs leading-5 text-white/54">{step.description}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {workflow.body.trim() && (
+            <section className="mt-5">
+              <SectionLabel>Notes</SectionLabel>
+              <div className="mt-2 max-h-44 overflow-y-auto rounded-[13px] border border-white/[0.065] bg-black/25 p-3 text-xs leading-5 text-white/54">
+                {workflow.body.trim()}
+              </div>
+            </section>
+          )}
+
+          <div className="sticky bottom-0 -mx-5 mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] bg-[#09090c]/95 px-5 py-4 backdrop-blur-xl">
+            <div className="flex items-center gap-2">
+              {active ? (
+                <>
+                  <button type="button" onClick={onRun} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-[#fb923c]/22 bg-[#f97316]/14 px-3 text-xs font-medium text-[#fed7aa] hover:bg-[#f97316]/22">
+                    <Play className="h-3.5 w-3.5" />
+                    Run
+                  </button>
+                  <button type="button" onClick={onDeactivate} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-white/[0.08] bg-white/[0.04] px-3 text-xs font-medium text-white/58 hover:bg-white/[0.08] hover:text-white">
+                    <CircleMinus className="h-3.5 w-3.5" />
+                    Deactivate
+                  </button>
+                </>
+              ) : (
+                <button type="button" onClick={onActivate} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-[#fb923c]/22 bg-[#f97316]/14 px-3 text-xs font-medium text-[#fed7aa] hover:bg-[#f97316]/22">
+                  <Plus className="h-3.5 w-3.5" />
+                  Activate
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={onEdit} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-white/[0.08] bg-white/[0.04] px-3 text-xs font-medium text-white/58 hover:bg-white/[0.08] hover:text-white">
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </button>
+              <button type="button" onClick={() => {
+                onDelete()
+                onOpenChange(false)
+              }} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-red-400/15 bg-red-500/8 px-3 text-xs font-medium text-red-200/70 hover:bg-red-500/14 hover:text-red-100">
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function InfoTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[13px] border border-white/[0.065] bg-white/[0.035] px-3 py-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/34">{label}</div>
+      <div className="mt-1 truncate text-sm font-medium capitalize text-white/76">{value}</div>
+    </div>
+  )
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/40">{children}</h3>
+      <div className="h-px flex-1 bg-white/[0.06]" />
     </div>
   )
 }
@@ -318,7 +499,10 @@ function IconAction({ label, onClick, danger, children }: { label: string; onCli
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={(event) => {
+        event.stopPropagation()
+        onClick()
+      }}
       aria-label={label}
       title={label}
       className={`inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-white/[0.07] bg-white/[0.035] transition-colors hover:bg-white/[0.08] ${danger ? 'text-red-300/80 hover:text-red-200' : 'text-white/55 hover:text-white'}`}
