@@ -245,7 +245,12 @@ export default function PermissionAdminPage() {
     setLoading(true)
     try {
       const data = await permApi.getList()
-      setList(data ?? [])
+      const newList = data ?? []
+      setList(newList)
+      setPage(p => {
+        const maxPage = Math.max(1, Math.ceil(newList.length / PAGE_SIZE))
+        return p > maxPage ? maxPage : p
+      })
     } catch {
       setList(STUB_DATA)
     } finally {
