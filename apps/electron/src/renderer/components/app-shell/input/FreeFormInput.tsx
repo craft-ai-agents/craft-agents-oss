@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { useTranslation } from "react-i18next"
 import { Command as CommandPrimitive } from 'cmdk'
-import { toast } from 'sonner'
 import { AnimatePresence, motion } from 'motion/react'
 import {
   Paperclip,
@@ -10,6 +9,7 @@ import {
   Check,
   DatabaseZap,
   ChevronDown,
+  ChevronUp,
   AlertCircle,
   Image as ImageIcon,
   X,
@@ -58,15 +58,13 @@ import { ANTHROPIC_MODELS, getModelShortName, getModelDisplayName, getModelConte
 import {
   resolveEffectiveConnectionSlug,
   isCompatProvider,
-  isLocalConnection,
   modelSupportsImages,
-  setModelSupportsImages,
-  type LlmConnection,
 } from '@config/llm-connections'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceSelectorPopover } from '@/components/ui/SourceSelectorPopover'
 import { CompactSourceSelector } from '@/components/ui/CompactSourceSelector'
+import { CompactWorkingDirectorySelector } from '@/components/ui/CompactWorkingDirectorySelector'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import { derivePickerMode } from './picker-mode'
@@ -82,28 +80,18 @@ import { clearPendingFocusForSession, consumePendingFocusForSession } from './fo
 import {
   getRecentWorkingDirs,
   addRecentWorkingDir,
-  removeRecentWorkingDir,
 } from './working-directory-history'
+import { useWorkingDirectoryState } from './use-working-directory-state'
 import { CompactPermissionModeSelector } from './CompactPermissionModeSelector'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { lineCommentQueueAtom, clearLineCommentsAtom, formatLineCommentsMessage } from '@/atoms/line-comments'
-
-/**
- * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k")
- */
-function formatTokenCount(tokens: number): string {
-  if (tokens >= 1000000) {
-    return `${(tokens / 1000000).toFixed(1)}M`
-  }
-  if (tokens >= 1000) {
-    return `${(tokens / 1000).toFixed(tokens >= 10000 ? 0 : 1)}k`
-  }
-  return tokens.toString()
-}
-
-function stripPiPrefixForDisplay(value: string): string {
-  return value.startsWith('pi/') ? value.slice(3) : value
-}
+import { CompactModelSelector } from './CompactModelSelector'
+import {
+  formatTokenCount,
+  groupConnectionsByProvider,
+  stripPiPrefixForDisplay,
+} from './model-picker-helpers'
+import { useModelVisionToggle } from './useModelVisionToggle'
 
 function formatFollowUpChipText(text: string, fallback: string, maxLength = 50): string {
   const normalized = text.replace(/\s+/g, ' ').trim()
@@ -221,8 +209,20 @@ export interface FreeFormInputProps {
   onFollowUpClick?: (item: FollowUpInputItem, anchor?: { x: number; y: number }) => void
   /** Callback when user clicks the follow-up index badge */
   onFollowUpIndexClick?: (item: FollowUpInputItem) => void
-  /** Enable compact mode - hides attach, sources, working directory for popover embedding */
+  /**
+   * Compact-footer layout. Used by EditPopover (popover embedding) and by
+   * ChatPage in auto-compact / WebUI mobile mode. The popover case hides the
+   * model picker; the auto-compact case opts the compact picker in via
+   * `enableCompactModelPicker`.
+   */
   compactMode?: boolean
+  /**
+   * When `compactMode` is true, render the compact (drawer-based) model
+   * selector next to the permission-mode pill. Defaults to false so that
+   * EditPopover (which has no use for a model picker) keeps its current
+   * behavior.
+   */
+  enableCompactModelPicker?: boolean
   // Connection selection (hierarchical connection → model selector)
   /** Current LLM connection slug (locked after first message) */
   currentConnection?: string
@@ -230,6 +230,14 @@ export interface FreeFormInputProps {
   onConnectionChange?: (connectionSlug: string) => void
   /** When true, the session's locked connection has been removed */
   connectionUnavailable?: boolean
+  /**
+   * True when the input is collapsed because the agent is processing in
+   * compact mode and the user hasn't expanded it yet. Owned by
+   * `InputContainer`; toggle back via `onRequestExpand`.
+   */
+  isCollapsedInCompact?: boolean
+  /** Callback fired when the user clicks or hovers the collapsed-input strip. */
+  onRequestExpand?: () => void
 }
 
 /**
@@ -279,9 +287,12 @@ export function FreeFormInput({
   onFollowUpClick,
   onFollowUpIndexClick,
   compactMode = false,
+  enableCompactModelPicker = false,
   currentConnection,
   onConnectionChange,
   connectionUnavailable = false,
+  isCollapsedInCompact = false,
+  onRequestExpand,
 }: FreeFormInputProps) {
   const { t } = useTranslation()
 
@@ -374,28 +385,12 @@ export function FreeFormInput({
     return model.name ?? stripPiPrefixForDisplay(model.id)
   }, [availableModels, currentModel, connectionDefaultModel])
 
-  // Group connections by provider type for hierarchical dropdown
+  // Group connections by provider type for hierarchical dropdown.
   // Each provider (Anthropic, Pi) can have multiple connections (API Key, OAuth, etc.)
-  const connectionsByProvider = React.useMemo(() => {
-    const groups: Record<string, typeof llmConnections> = {
-      'Anthropic': [],
-      'Local': [],
-      'MDP Backend': [],
-    }
-    for (const conn of llmConnections) {
-      const provider = conn.providerType || 'anthropic'
-      // Group by SDK: only 'anthropic' uses Claude Agent SDK
-      if (provider === 'anthropic') {
-        groups['Anthropic'].push(conn)
-      } else if (provider === 'pi_compat' && isLocalConnection(conn)) {
-        groups['Local'].push(conn)
-      } else if (provider === 'pi' || provider === 'pi_compat') {
-        groups['MDP Backend'].push(conn)
-      }
-    }
-    // Return only non-empty groups
-    return Object.entries(groups).filter(([, conns]) => conns.length > 0)
-  }, [llmConnections])
+  const connectionsByProvider = React.useMemo(
+    () => groupConnectionsByProvider(llmConnections),
+    [llmConnections],
+  )
 
   // Find current connection details for display
   const currentConnectionDetails = React.useMemo(() => {
@@ -635,32 +630,7 @@ export function FreeFormInput({
     prevInputValueRef.current = ''
   }, [onInputChange])
 
-  const refreshLlmConnections = appShellCtx?.refreshLlmConnections
-  const handleToggleModelVision = React.useCallback(async (
-    connectionSlug: string,
-    modelId: string,
-    enabled: boolean,
-  ) => {
-    if (!window.electronAPI) return
-    const conn = llmConnections.find(c => c.slug === connectionSlug)
-    if (!conn) return
-    try {
-      // Strip the runtime-only status fields before passing to setModelSupportsImages,
-      // so the persisted payload matches the LlmConnection schema.
-      const { isAuthenticated: _a, authError: _b, isDefault: _c, ...bare } = conn
-      const updated = setModelSupportsImages(bare as LlmConnection, modelId, enabled)
-      const result = await window.electronAPI.saveLlmConnection(updated)
-      if (!result.success) {
-        console.error('Failed to toggle model vision:', result.error)
-        toast.error(t('chat.modelPicker.toggleVisionFailed'))
-        return
-      }
-      await refreshLlmConnections?.()
-    } catch (error) {
-      console.error('Failed to toggle model vision:', error)
-      toast.error(t('chat.modelPicker.toggleVisionFailed'))
-    }
-  }, [llmConnections, refreshLlmConnections, t])
+  const handleToggleModelVision = useModelVisionToggle()
 
   const consumeInputDraftSnapshot = React.useCallback((): string => {
     const snapshot = input.trim()
@@ -1018,16 +988,17 @@ export function FreeFormInput({
     return () => observer.disconnect()
   }, [onHeightChange])
 
-  // In compact mode, immediately report collapsed height when processing state changes
-  // This ensures smooth animation timing when input collapses/expands
+  // In compact mode, immediately report collapsed height when the input is
+  // collapsed during processing. This ensures smooth animation timing.
+  // When the user expands (or processing ends), the ResizeObserver takes
+  // over and reports the actual rendered height.
   React.useEffect(() => {
-    if (!onHeightChange || !compactMode) return
-    if (isProcessing) {
+    if (!onHeightChange) return
+    if (isCollapsedInCompact) {
       // Collapsed state - only bottom bar visible (~44px)
       onHeightChange(44)
     }
-    // When not processing, ResizeObserver will report the full height
-  }, [compactMode, isProcessing, onHeightChange])
+  }, [isCollapsedInCompact, onHeightChange])
 
   // Check if running in Electron environment (has electronAPI)
   const hasElectronAPI = typeof window !== 'undefined' && !!window.electronAPI
@@ -1650,8 +1621,9 @@ export function FreeFormInput({
         </AnimatePresence>
 
         {/* Rich Text Input with inline mention badges */}
-        {/* In compact mode, hide input while processing (collapses to just bottom bar) */}
-        {!(compactMode && isProcessing) && (
+        {/* In compact mode, hide input while the agent is processing — until the
+            user clicks / hovers the collapsed bar to expand it back. */}
+        {!isCollapsedInCompact && (
         <RichTextInput
           ref={richInputRef}
           value={input}
@@ -1704,6 +1676,19 @@ export function FreeFormInput({
             <CompactPermissionModeSelector
               permissionMode={permissionMode}
               onPermissionModeChange={onPermissionModeChange}
+            />
+          )}
+          {enableCompactModelPicker && (
+            <CompactModelSelector
+              currentModel={currentModel}
+              currentConnection={currentConnection}
+              onModelChange={onModelChange}
+              onConnectionChange={onConnectionChange}
+              thinkingLevel={thinkingLevel}
+              onThinkingLevelChange={onThinkingLevelChange}
+              isEmptySession={isEmptySession}
+              connectionUnavailable={connectionUnavailable}
+              contextStatus={contextStatus}
             />
           )}
           <FreeFormInputContextBadge
@@ -1791,7 +1776,7 @@ export function FreeFormInput({
             </div>
           )}
           {onWorkingDirectoryChange && (
-            <WorkingDirectoryBadge
+            <CompactWorkingDirectorySelector
               workingDirectory={workingDirectory}
               onWorkingDirectoryChange={onWorkingDirectoryChange}
               sessionFolderPath={sessionFolderPath}
@@ -1910,8 +1895,22 @@ export function FreeFormInput({
           </div>
           )}
 
-          {/* Spacer */}
-          <div className="flex-1" />
+          {/* Spacer — doubles as a tap / hover target while the input is
+              collapsed during processing in compact mode, so the user can
+              type a follow-up without waiting for the agent to finish. */}
+          {isCollapsedInCompact ? (
+            <button
+              type="button"
+              onClick={onRequestExpand}
+              onMouseEnter={onRequestExpand}
+              aria-label={t('chat.tapToType')}
+              className="flex-1 h-7 mx-1 flex items-center justify-center text-foreground/30 hover:text-foreground/60 transition-colors cursor-pointer rounded-[6px] hover:bg-foreground/5 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </button>
+          ) : (
+            <div className="flex-1" />
+          )}
 
           {/* Right side: Model + Send - never shrink so they're always visible */}
           <div className="flex items-center shrink-0">
@@ -2355,7 +2354,8 @@ export function FreeFormInput({
 /**
  * Format path for display, with home directory shortened
  */
-function formatPathForDisplay(path: string, homeDir: string): string {
+function formatPathForDisplay(path: string | undefined, homeDir: string): string {
+  if (!path) return ''
   let displayPath = path
   if (homeDir && path.startsWith(homeDir)) {
     const relativePath = path.slice(homeDir.length)
@@ -2385,98 +2385,49 @@ function WorkingDirectoryBadge({
   workspaceId?: string
 }) {
   const { t } = useTranslation()
-  const [recentDirs, setRecentDirs] = React.useState<string[]>([])
   const [popoverOpen, setPopoverOpen] = React.useState(false)
-  const [homeDir, setHomeDir] = React.useState<string>('')
-  const [gitBranch, setGitBranch] = React.useState<string | null>(null)
-  const [filter, setFilter] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const closePopover = React.useCallback(() => setPopoverOpen(false), [])
 
-  // Load home directory and recent directories on mount
-  React.useEffect(() => {
-    setRecentDirs(getRecentWorkingDirs(workspaceId))
-    window.electronAPI?.getHomeDir?.().then((dir: string) => {
-      if (dir) setHomeDir(dir)
-    })
-  }, [workspaceId])
+  const {
+    homeDir,
+    gitBranch,
+    filter,
+    setFilter,
+    sortedRecent: filteredRecent,
+    hasFolder,
+    folderName,
+    showReset,
+    showFilter,
+    handleSelectRecent,
+    handleReset,
+    handleRemoveRecent,
+    handleChooseFolder,
+    serverBrowser: {
+      showServerBrowser,
+      serverBrowserMode,
+      cancelServerBrowser,
+      confirmServerBrowser,
+    },
+  } = useWorkingDirectoryState({
+    workingDirectory,
+    onWorkingDirectoryChange,
+    sessionFolderPath,
+    workspaceId,
+    isOpen: popoverOpen,
+    onClose: closePopover,
+  })
 
-  // Fetch git branch when working directory changes
+  // Autofocus the filter input on popover open. Lives in the consumer (not
+  // the hook) because the compact drawer surface has no autofocus.
   React.useEffect(() => {
-    if (workingDirectory) {
-      window.electronAPI?.getGitBranch?.(workingDirectory).then((branch: string | null) => {
-        setGitBranch(branch)
-      })
-    } else {
-      setGitBranch(null)
-    }
-  }, [workingDirectory])
-
-  // Reset filter, refresh history, and focus input when popover opens
-  React.useEffect(() => {
-    if (popoverOpen) {
-      setFilter('')
-      setRecentDirs(getRecentWorkingDirs(workspaceId))
-      // Focus input after popover animation completes (only if filter is shown)
+    if (popoverOpen && showFilter) {
       const timer = setTimeout(() => {
         inputRef.current?.focus()
       }, 0)
       return () => clearTimeout(timer)
     }
-  }, [popoverOpen, workspaceId])
-
-  const handleFolderSelected = React.useCallback((selectedPath: string) => {
-    setRecentDirs(addRecentWorkingDir(selectedPath, workspaceId))
-    onWorkingDirectoryChange(selectedPath)
-  }, [onWorkingDirectoryChange, workspaceId])
-
-  const {
-    pickDirectory,
-    showServerBrowser,
-    serverBrowserMode,
-    cancelServerBrowser,
-    confirmServerBrowser,
-  } = useDirectoryPicker(handleFolderSelected)
-
-  const handleChooseFolder = () => {
-    setPopoverOpen(false)
-    pickDirectory()
-  }
-
-  const handleSelectRecent = (path: string) => {
-    setRecentDirs(addRecentWorkingDir(path, workspaceId)) // Move to top of recent list
-    onWorkingDirectoryChange(path)
-    setPopoverOpen(false)
-  }
-
-  const handleReset = () => {
-    if (sessionFolderPath) {
-      onWorkingDirectoryChange(sessionFolderPath)
-      setPopoverOpen(false)
-    }
-  }
-
-  const handleRemoveRecent = (e: React.MouseEvent, path: string) => {
-    e.stopPropagation() // Don't trigger the item's onSelect
-    setRecentDirs(removeRecentWorkingDir(path, workspaceId))
-  }
-
-  // Filter out current directory from recent list and sort alphabetically by folder name
-  const filteredRecent = recentDirs
-    .filter(p => p !== workingDirectory)
-    .sort((a, b) => {
-      const nameA = getPathBasename(a).toLowerCase()
-      const nameB = getPathBasename(b).toLowerCase()
-      return nameA.localeCompare(nameB)
-    })
-  // Show filter input only when more than 5 recent folders
-  const showFilter = filteredRecent.length > 5
-
-  // Determine label - "Work in Folder" if not set or at session root, otherwise folder name
-  const hasFolder = !!workingDirectory && workingDirectory !== sessionFolderPath
-  const folderName = hasFolder ? (getPathBasename(workingDirectory) || 'Folder') : 'Work in Folder'
-
-  // Show reset option when a folder is selected and it differs from session folder
-  const showReset = hasFolder && sessionFolderPath && sessionFolderPath !== workingDirectory
+  }, [popoverOpen, showFilter])
 
   // Styles matching todo-filter-menu.tsx for consistency
   const MENU_CONTAINER_STYLE = 'min-w-[200px] max-w-[400px] overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small p-0'
@@ -2490,7 +2441,7 @@ function WorkingDirectoryBadge({
         <span className="shrink min-w-0 overflow-hidden">
           <FreeFormInputContextBadge
             icon={<Icon_Home className="h-4 w-4" />}
-            label={folderName}
+            label={folderName ?? 'Work in Folder'}
             isExpanded={isEmptySession}
             hasSelection={hasFolder}
             showChevron={true}

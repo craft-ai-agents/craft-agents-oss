@@ -88,6 +88,8 @@ export async function handleSsoStartupSession({
     await sessionStateOptions.credentialStore.save(session)
     return {
       authenticated: true,
+      employeeId: session.employeeId,
+      token: session.token,
       userName: session.userName,
       department: session.department,
       employeeId: session.employeeId,

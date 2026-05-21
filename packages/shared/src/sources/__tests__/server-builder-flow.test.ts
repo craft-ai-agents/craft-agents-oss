@@ -248,3 +248,56 @@ describe('Full flow: Source config → ApiConfig → Headers', () => {
     expect(headers['X-API-Key']).toBe('my-simple-key');
   });
 });
+
+describe('SourceServerBuilder.buildMcpServer', () => {
+  const builder = new SourceServerBuilder();
+
+  test('preserves imported Authorization credential headers instead of wrapping credential JSON as bearer token', () => {
+    const source = createMockSource({
+      slug: 'modelscope',
+      type: 'mcp',
+      isAuthenticated: true,
+      mcp: {
+        transport: 'streamable_http',
+        url: 'https://mcp.api-inference.modelscope.net/example/mcp',
+        authType: 'bearer',
+        headerNames: ['Authorization'],
+      },
+      api: undefined,
+    });
+    const credential: MultiHeaderCredential = {
+      Authorization: 'Bearer ms-token',
+    };
+    const token = JSON.stringify(credential);
+
+    const config = builder.buildMcpServer(source, token, credential);
+
+    expect(config).not.toBeNull();
+    if (!config || config.type !== 'streamable_http') {
+      throw new Error('Expected streamable HTTP MCP config');
+    }
+    expect(config.headers?.Authorization).toBe('Bearer ms-token');
+  });
+
+  test('still builds Authorization from a plain bearer token when no imported Authorization header exists', () => {
+    const source = createMockSource({
+      slug: 'plain-bearer',
+      type: 'mcp',
+      isAuthenticated: true,
+      mcp: {
+        transport: 'streamable_http',
+        url: 'https://example.com/mcp',
+        authType: 'bearer',
+      },
+      api: undefined,
+    });
+
+    const config = builder.buildMcpServer(source, 'plain-token', null);
+
+    expect(config).not.toBeNull();
+    if (!config || config.type !== 'streamable_http') {
+      throw new Error('Expected streamable HTTP MCP config');
+    }
+    expect(config.headers?.Authorization).toBe('Bearer plain-token');
+  });
+});

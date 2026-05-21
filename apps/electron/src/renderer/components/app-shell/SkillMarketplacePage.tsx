@@ -23,7 +23,7 @@ import { navigate, routes } from '@/lib/navigate'
 // Mock switch — set to false to use real API
 // ============================================================================
 
-const USE_MOCK_MARKET = true
+const USE_MOCK_MARKET = false
 
 const MOCK_MARKET_SKILLS: CopawMarketSkill[] = [
   {
@@ -625,10 +625,9 @@ const defaultMarketplaceApi = createStaticMarketplaceApi()
 
 /** Convert a raw CoPaw market skill to the renderer's MarketplaceSkillListing format. */
 const SKILL_ICON_COLORS = [
-  'bg-blue-500', 'bg-indigo-500', 'bg-gray-700', 'bg-purple-600',
-  'bg-orange-500', 'bg-red-500', 'bg-emerald-500', 'bg-cyan-500',
-  'bg-green-500', 'bg-violet-500', 'bg-pink-500', 'bg-teal-500',
-  'bg-amber-500', 'bg-sky-500',
+  'bg-blue-500', 'bg-indigo-600', 'bg-violet-600',
+  'bg-emerald-500', 'bg-teal-600',
+  'bg-sky-500', 'bg-amber-500', 'bg-rose-500',
 ]
 
 function skillIconBg(name: string): string {
@@ -793,7 +792,7 @@ function SkillRow({
                 tabIndex={0}
                 onClick={(e) => { e.stopPropagation(); onDelete(skill) }}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onDelete(skill) } }}
-                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-rose-300 text-rose-400 opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 hover:border-rose-500 hover:text-rose-600 dark:border-rose-500/40 dark:text-rose-400/70 dark:hover:border-rose-400 dark:hover:text-rose-400"
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-red-300 text-red-400 opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 hover:border-red-500 hover:text-red-600 dark:border-red-500/40 dark:text-red-400/70 dark:hover:border-red-400 dark:hover:text-red-400"
               >
                 <Minus className="h-3.5 w-3.5" />
               </div>
@@ -804,7 +803,7 @@ function SkillRow({
 
         {/* 安装状态 */}
         {installed ? (
-          <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+          <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
             <Check className="h-3 w-3" />
             已安装
           </span>
@@ -851,9 +850,7 @@ function SkillGrid({
   currentUserId: string | null
   installingIds?: Set<string>
 }) {
-  if (skills.length === 0) {
-    return <p className="py-12 text-center text-sm text-muted-foreground">暂无匹配的技能</p>
-  }
+  if (skills.length === 0) return null
 
   const left = skills.filter((_, i) => i % 2 === 0)
   const right = skills.filter((_, i) => i % 2 === 1)
@@ -886,25 +883,27 @@ function SkillDetailDialog({
   isInstalling?: boolean
 }) {
   const [skillContent, setSkillContent] = React.useState<string | null>(null)
-  const [contentLoading, setContentLoading] = React.useState(false)
+  const [showSpinner, setShowSpinner] = React.useState(false)
 
   React.useEffect(() => {
     if (!skill) return
-    setSkillContent(null)
-    setContentLoading(true)
+    // 不立即清空旧内容，保留上一个技能的内容直到新内容加载完
+    // spinner 延迟 250ms 才显示，加载够快时完全不闪
+    let active = true
+    const spinnerTimer = setTimeout(() => { if (active) setShowSpinner(true) }, 250)
+
     if (USE_MOCK_MARKET) {
       const t = setTimeout(() => {
-        setSkillContent(null) // 降级到 mockMarkdown
-        setContentLoading(false)
+        if (active) { setSkillContent(null); setShowSpinner(false) }
       }, 800)
-      return () => clearTimeout(t)
+      return () => { active = false; clearTimeout(t); clearTimeout(spinnerTimer) }
     }
-    let active = true
+
     window.electronAPI.fetchMarketSkillContent(skill.slug, skill.latestVersion)
       .then(({ content }) => { if (active) setSkillContent(content) })
       .catch(() => { if (active) setSkillContent(null) })
-      .finally(() => { if (active) setContentLoading(false) })
-    return () => { active = false }
+      .finally(() => { if (active) { setShowSpinner(false); clearTimeout(spinnerTimer) } })
+    return () => { active = false; clearTimeout(spinnerTimer) }
   }, [skill?.slug])
 
   if (!skill) return null
@@ -1096,13 +1095,12 @@ ${skill.slug} config export --format json --output ./backup/
         </div>
 
         {/* Markdown 内容区 */}
-        <div className="mx-7 mb-5 min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/20 px-6 py-5 text-[13px] leading-relaxed">
-          {contentLoading ? (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
+        <div className="relative mx-7 mb-5 min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/20 px-6 py-5 text-[13px] leading-relaxed">
+          <Markdown>{skillContent ?? mockMarkdown}</Markdown>
+          {showSpinner && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-muted/60 backdrop-blur-[2px]">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
-          ) : (
-            <Markdown>{skillContent ?? mockMarkdown}</Markdown>
           )}
         </div>
 
@@ -1113,14 +1111,14 @@ ${skill.slug} config export --format json --output ./backup/
               <button
                 type="button"
                 onClick={() => onUninstall(skill)}
-                className="rounded-lg bg-rose-100 px-4 py-2 text-[13px] font-medium text-rose-500 transition-colors hover:bg-rose-200 dark:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500/25"
+                className="rounded-lg bg-red-50 px-4 py-2 text-[13px] font-medium text-red-500 transition-colors hover:bg-red-100 dark:bg-red-500/15 dark:text-red-400 dark:hover:bg-red-500/25"
               >
                 删除
               </button>
             )}
           </div>
           {installed ? (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 px-4 py-2 text-[13px] font-medium text-emerald-600 dark:border-emerald-500/40 dark:text-emerald-400">
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/50 px-4 py-2 text-[13px] font-medium text-muted-foreground">
               <Check className="h-3.5 w-3.5" />
               已安装
             </span>
@@ -1205,7 +1203,7 @@ function LocalSkillRow({
         tabIndex={0}
         onClick={(e) => { e.stopPropagation(); onUninstall(skill) }}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onUninstall(skill) } }}
-        className="flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-full border border-foreground/20 text-foreground/50 opacity-0 transition-all group-hover:opacity-100 hover:border-rose-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-500/10"
+        className="flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-full border border-foreground/20 text-foreground/50 opacity-0 transition-all group-hover:opacity-100 hover:border-red-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
       >
         <Minus className="h-3.5 w-3.5" />
       </div>
@@ -1222,14 +1220,7 @@ function LocalSkillGrid({
   onUninstall: (s: LoadedSkill) => void
   onClick: (s: LoadedSkill) => void
 }) {
-  if (skills.length === 0) {
-    return (
-      <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-        <Zap className="h-8 w-8 opacity-30" />
-        <p className="text-sm">暂无匹配的本地技能</p>
-      </div>
-    )
-  }
+  if (skills.length === 0) return null
 
   const left = skills.filter((_, i) => i % 2 === 0)
   const right = skills.filter((_, i) => i % 2 === 1)
@@ -1331,7 +1322,7 @@ function ConfirmDialog({
             className={cn(
               'rounded-lg px-4 py-2 text-[13px] font-medium transition-colors',
               destructive
-                ? 'bg-rose-500 text-white hover:bg-rose-600'
+                ? 'bg-red-500 text-white hover:bg-red-600'
                 : 'bg-foreground text-background hover:opacity-85',
             )}
           >
@@ -1412,7 +1403,7 @@ function LocalSkillDetailDialog({
           <button
             type="button"
             onClick={() => onUninstall(skill)}
-            className="rounded-lg bg-rose-100 px-4 py-2 text-[13px] font-medium text-rose-500 transition-colors hover:bg-rose-200 dark:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500/25"
+            className="rounded-lg bg-red-50 px-4 py-2 text-[13px] font-medium text-red-500 transition-colors hover:bg-red-100 dark:bg-red-500/15 dark:text-red-400 dark:hover:bg-red-500/25"
           >
             卸载
           </button>
@@ -2161,20 +2152,29 @@ export function SkillMarketplacePage({
   const [uploadError, setUploadError] = React.useState<string | null>(null)
   const uploadZipInputRef = React.useRef<HTMLInputElement>(null)
 
-  // Persist CoPaw market-installed skill slugs across sessions via localStorage
-  const copawInstalledSlugsRef = React.useRef<Set<string>>(
-    (() => {
-      try {
-        const stored = localStorage.getItem('copaw-installed-slugs')
-        return new Set<string>(stored ? JSON.parse(stored) as string[] : [])
-      } catch { return new Set<string>() }
-    })()
-  )
-  const addCopawInstalledSlug = React.useCallback((slug: string) => {
-    copawInstalledSlugsRef.current.add(slug)
+  // Persist CoPaw market-installed skill slugs across sessions via localStorage.
+  // useState (not useRef) so that updates trigger re-renders and filteredLocal re-classifies immediately.
+  const [copawInstalledSlugs, setCopawInstalledSlugs] = React.useState<Set<string>>(() => {
     try {
-      localStorage.setItem('copaw-installed-slugs', JSON.stringify([...copawInstalledSlugsRef.current]))
-    } catch { /* ignore */ }
+      const stored = localStorage.getItem('copaw-installed-slugs')
+      return new Set<string>(stored ? JSON.parse(stored) as string[] : [])
+    } catch { return new Set<string>() }
+  })
+  const addCopawInstalledSlug = React.useCallback((slug: string) => {
+    setCopawInstalledSlugs((prev) => {
+      const next = new Set(prev)
+      next.add(slug)
+      try { localStorage.setItem('copaw-installed-slugs', JSON.stringify([...next])) } catch { /* ignore */ }
+      return next
+    })
+  }, [])
+  const removeCopawInstalledSlug = React.useCallback((slug: string) => {
+    setCopawInstalledSlugs((prev) => {
+      const next = new Set(prev)
+      next.delete(slug)
+      try { localStorage.setItem('copaw-installed-slugs', JSON.stringify([...next])) } catch { /* ignore */ }
+      return next
+    })
   }, [])
 
   const effectiveCurrentUserId = USE_MOCK_MARKET ? 'MOCK_CURRENT_USER' : currentUserId
@@ -2231,7 +2231,7 @@ export function SkillMarketplacePage({
         .replace(/[^a-z0-9_-]/g, '')
         .replace(/^[-_]+|[-_]+$/g, '') // trim leading/trailing separators
         || 'skill'
-      const name = getYamlVal('name') ?? slug
+      const name = getYamlVal('display_name') ?? getYamlVal('name') ?? slug
       const description = getYamlVal('description') ?? ''
       const author = getYamlVal('author')
 
@@ -2318,7 +2318,7 @@ export function SkillMarketplacePage({
   const filteredLocal = React.useMemo(() => {
     const q = localSearch.trim().toLowerCase()
     const isMarketInstalled = (s: LoadedSkill) =>
-      s.marketplaceOrigin != null || copawInstalledSlugsRef.current.has(s.slug)
+      s.marketplaceOrigin != null || copawInstalledSlugs.has(s.slug)
     return localSkills.filter((s) => {
       const matchOrigin =
         localOriginFilter === '全部' ||
@@ -2331,7 +2331,7 @@ export function SkillMarketplacePage({
         (s.metadata?.description ?? '').toLowerCase().includes(q)
       return matchOrigin && matchQ
     })
-  }, [localSkills, localSearch, localOriginFilter])
+  }, [localSkills, localSearch, localOriginFilter, copawInstalledSlugs])
 
   const handleInstall = React.useCallback(async (s: MarketplaceSkillListing) => {
     if (installingIds.has(s.id)) return
@@ -2408,9 +2408,9 @@ export function SkillMarketplacePage({
         setSelectedLocalSkill(null)
         window.electronAPI.deleteSkill(workspaceId, s.slug, s.source, s.path)
           .then(() => {
-            // Clean up copaw-installed marker so the slug can be reused
-            copawInstalledSlugsRef.current.delete(s.slug)
-            try { localStorage.setItem('copaw-installed-slugs', JSON.stringify([...copawInstalledSlugsRef.current])) } catch { /* ignore */ }
+            removeCopawInstalledSlug(s.slug)
+            // Also clear from installedIds so the market tab shows the skill as not-installed
+            setInstalledIds((prev) => { const n = new Set(prev); n.delete(s.slug); return n })
             toast.success(`「${name}」已卸载`)
           })
           .catch((err) => {
@@ -2420,7 +2420,7 @@ export function SkillMarketplacePage({
           })
       },
     })
-  }, [workspaceId])
+  }, [workspaceId, removeCopawInstalledSlug])
 
   const handleMarketRefresh = React.useCallback(() => {
     if (USE_MOCK_MARKET) return
@@ -2487,7 +2487,7 @@ export function SkillMarketplacePage({
       onClose={() => setSelectedLocalSkill(null)}
       onUninstall={handleLocalUninstall}
       onPublish={(s) => { setSelectedLocalSkill(null); setPublishSourceSkill(s); setPublishOpen(true) }}
-      isFromMarket={selectedLocalSkill ? copawInstalledSlugsRef.current.has(selectedLocalSkill.slug) : false}
+      isFromMarket={selectedLocalSkill ? copawInstalledSlugs.has(selectedLocalSkill.slug) : false}
     />
     <div className="flex h-full flex-col bg-background">
 
@@ -2538,7 +2538,7 @@ export function SkillMarketplacePage({
       </div>
 
       <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-4xl px-8 pb-12 pt-6">
+      <div className="mx-auto w-full max-w-6xl px-8 pb-12 pt-6">
 
         {tab === 'local' ? (
           /* ── 本地技能 Tab ── */
@@ -2559,7 +2559,7 @@ export function SkillMarketplacePage({
             </div>
             {uploadError && <p className="mt-2 text-[12px] text-rose-500">{uploadError}</p>}
 
-            {/* 空状态（无技能时） */}
+            {/* 空状态：完全没有本地技能 */}
             {localSkills.length === 0 && !localSearch && (
               <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
                 <Zap className="h-8 w-8 opacity-30" />
@@ -2574,21 +2574,14 @@ export function SkillMarketplacePage({
               </div>
             )}
 
-            {/* 空状态（筛选无结果） */}
-            {localSkills.length > 0 && displayedLocalSkills.length === 0 && (
-              <div className="py-12 text-center text-[13px] text-muted-foreground">
-                {localSearch ? '没有匹配的技能' : `当前分类下没有技能`}
-              </div>
-            )}
-
-            {/* 技能列表 */}
-            {(localSkills.length > 0 || localSearch) && (
+            {/* 技能列表（有技能时） */}
+            {displayedLocalSkills.length > 0 && (
               localOriginFilter === '全部' ? (
                 // 全部：本地上传在上，市场安装在下
                 <>
                   {(['本地上传', '市场安装'] as const).map((section) => {
                     const sectionSkills = displayedLocalSkills.filter((s) => {
-                      const fromMarket = s.marketplaceOrigin != null || copawInstalledSlugsRef.current.has(s.slug)
+                      const fromMarket = s.marketplaceOrigin != null || copawInstalledSlugs.has(s.slug)
                       return section === '市场安装' ? fromMarket : !fromMarket
                     })
                     if (sectionSkills.length === 0) return null
@@ -2621,6 +2614,13 @@ export function SkillMarketplacePage({
                 </>
               )
             )}
+
+            {/* 空状态：有技能但当前搜索/筛选无结果 */}
+            {displayedLocalSkills.length === 0 && (localSkills.length > 0 || localSearch) && (
+              <div className="py-12 text-center text-[13px] text-muted-foreground">
+                {localSearch ? '没有匹配的技能' : '当前分类下没有技能'}
+              </div>
+            )}
           </div>
         ) : (
           /* ── 市场 Tab ── */
@@ -2651,7 +2651,11 @@ export function SkillMarketplacePage({
         </div>
 
         {/* 技能列表 */}
-        {category === '全部' ? (
+        {filtered.length === 0 ? (
+          <p className="py-12 text-center text-[13px] text-muted-foreground">
+            {marketSearch.trim() ? '没有匹配的技能' : '暂无技能'}
+          </p>
+        ) : category === '全部' ? (
           <>
             {(['DevOps', '公共'] as const).map((cat) => {
               const catSkills = filtered.filter((s) => s.category === cat)

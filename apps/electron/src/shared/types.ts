@@ -59,7 +59,8 @@ export type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIss
 
 // Source types for session source selection
 import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@craft-agent/shared/sources/types';
-export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
+import type { McpImportBatchCreateResult, McpImportCandidate, McpImportParseResult } from '@craft-agent/shared/sources';
+export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, McpImportBatchCreateResult, McpImportCandidate, McpImportParseResult };
 
 // Skill types
 import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult } from '@craft-agent/shared/skills';
@@ -70,8 +71,8 @@ import type { ExportResourcesOptions, ExportResult, ResourceImportMode, Resource
 export type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult };
 
 // LLM connection types
-import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings } from '@craft-agent/shared/config';
-export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings };
+import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, MidStreamBehavior, NetworkProxySettings } from '@craft-agent/shared/config';
+export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, MidStreamBehavior, NetworkProxySettings };
 
 // =============================================================================
 // GUI-only types (not used by server/handler code)
@@ -214,6 +215,7 @@ import type {
   DirectoryListingResult,
   RemoteSessionTransferPayload,
   ImportRemoteSessionTransferResult,
+  TeamContextPreview,
 } from '@craft-agent/shared/protocol'
 
 export interface ElectronAPI {
@@ -414,6 +416,13 @@ export interface ElectronAPI {
   getSessionModel(sessionId: string, workspaceId: string): Promise<string | null>
   setSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void>
 
+  // Team context session override
+  getTeamContextOverride(sessionId: string): Promise<boolean>
+  setTeamContextOverride(sessionId: string, disabled: boolean): Promise<{ success: boolean }>
+
+  // Team context debug/preview
+  getTeamContextPreview(workspaceId: string, sampleMessage?: string): Promise<TeamContextPreview>
+
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
@@ -447,7 +456,10 @@ export interface ElectronAPI {
 
   // Sources
   getSources(workspaceId: string): Promise<LoadedSource[]>
-  createSource(workspaceId: string, config: Partial<FolderSourceConfig>): Promise<FolderSourceConfig>
+  createSource(workspaceId: string, config: Partial<FolderSourceConfig> & Partial<import('@craft-agent/shared/sources').McpManualSourceInput>): Promise<FolderSourceConfig>
+  updateSource(workspaceId: string, sourceSlug: string, config: Partial<FolderSourceConfig> & { authCredential?: string }): Promise<FolderSourceConfig>
+  parseMcpJsonImport(workspaceId: string, json: string): Promise<McpImportParseResult>
+  importMcpJsonCandidates(workspaceId: string, candidates: McpImportCandidate[]): Promise<McpImportBatchCreateResult>
   deleteSource(workspaceId: string, sourceSlug: string): Promise<void>
   startSourceOAuth(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string }>
   saveSourceCredentials(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
@@ -652,6 +664,7 @@ export interface ElectronAPI {
   deleteLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   testLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   setDefaultLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
+  setEnvConnectionMidStreamBehavior(behavior: MidStreamBehavior): Promise<{ success: boolean; error?: string }>
   getDefaultThinkingLevel(): Promise<ThinkingLevel>
   setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>

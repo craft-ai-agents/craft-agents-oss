@@ -328,6 +328,20 @@ function extractTodosFromActivities(activities: ActivityItem[]): TodoItem[] | un
 // Main Grouping Function
 // ============================================================================
 
+export interface GroupTurnsOptions {
+  /**
+   * Whether the session is still actively processing.
+   *
+   * When `false`, the open turn (if any has activities) is marked complete
+   * before the final flush, so the existing "promote last intermediate text
+   * to response" branch fires and the chat doesn't sit on "Thinking…" forever
+   * when a turn ends on a tool call with no non-intermediate `text_complete`.
+   *
+   * Mirrors the messaging-gateway/renderer.ts lastAssistantText fallback.
+   */
+  isSessionProcessing?: boolean
+}
+
 /**
  * Groups messages into turns for TurnCard rendering
  *
@@ -343,7 +357,7 @@ function extractTodosFromActivities(activities: ActivityItem[]): TodoItem[] | un
  * as the signal: isIntermediate=true means more work coming, isIntermediate=false
  * means final response.
  */
-export function groupMessagesByTurn(messages: Message[]): Turn[] {
+export function groupMessagesByTurn(messages: Message[], options: GroupTurnsOptions = {}): Turn[] {
   // Sort by timestamp for correct chronological order
   // This ensures correct turn grouping even if messages are added out of order during streaming
   const sortedMessages = [...messages].sort((a, b) => a.timestamp - b.timestamp)
@@ -631,6 +645,19 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
       }
       continue
     }
+  }
+
+  // Session-complete fallback (mirrors messaging-gateway/renderer.ts lastAssistantText fallback).
+  // When the session has stopped processing and the open turn has activities but never received
+  // a non-intermediate assistant final, mark it complete so the existing "promote last
+  // intermediate to response" branch in flushCurrentTurn fires. Without this the chat sits on
+  // "Thinking…" forever when a turn ends on a tool call.
+  if (
+    options.isSessionProcessing === false
+    && currentTurn
+    && (currentTurn as AssistantTurn).activities.length > 0
+  ) {
+    (currentTurn as AssistantTurn).isComplete = true
   }
 
   // Flush any remaining turn

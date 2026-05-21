@@ -53,6 +53,8 @@ export const SESSION_PERSISTENT_FIELDS = [
   'transferredSessionSummaryApplied',
   // Automation origin
   'triggeredBy',
+  // Team context
+  'teamContextDisabled',
 ] as const;
 
 export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
@@ -197,6 +199,8 @@ export interface SessionConfig {
   transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
+  /** When true, session-level override disables team context injection for this session. */
+  teamContextDisabled?: boolean;
 }
 
 /**
@@ -288,6 +292,8 @@ export interface SessionHeader {
   transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
+  /** When true, session-level override disables team context injection for this session. */
+  teamContextDisabled?: boolean;
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;

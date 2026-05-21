@@ -265,6 +265,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.sessions.IMPORT,
   RPC_CHANNELS.sessions.EXPORT_REMOTE_TRANSFER,
   RPC_CHANNELS.sessions.IMPORT_REMOTE_TRANSFER,
+  RPC_CHANNELS.sessions.GET_TEAM_CONTEXT_OVERRIDE,
+  RPC_CHANNELS.sessions.SET_TEAM_CONTEXT_OVERRIDE,
 
   // transfer — chunked large-payload import (sessions, resources)
   RPC_CHANNELS.transfer.START,
@@ -300,6 +302,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.llmConnections.DELETE,
   RPC_CHANNELS.llmConnections.TEST,
   RPC_CHANNELS.llmConnections.SET_DEFAULT,
+  RPC_CHANNELS.llmConnections.SET_ENV_MID_STREAM_BEHAVIOR,
   RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT,
   RPC_CHANNELS.llmConnections.REFRESH_MODELS,
   RPC_CHANNELS.llmConnections.CHANGED,
@@ -328,6 +331,9 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // sources — source config per-workspace
   RPC_CHANNELS.sources.GET,
   RPC_CHANNELS.sources.CREATE,
+  RPC_CHANNELS.sources.UPDATE,
+  RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT,
+  RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES,
   RPC_CHANNELS.sources.DELETE,
   RPC_CHANNELS.sources.START_OAUTH,
   RPC_CHANNELS.sources.SAVE_CREDENTIALS,
@@ -422,6 +428,13 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // resources — workspace resource export/import
   RPC_CHANNELS.resources.EXPORT,
   RPC_CHANNELS.resources.IMPORT,
+
+  // teamKnowledge — workspace-scoped team knowledge cache
+  RPC_CHANNELS.teamKnowledge.GET_CONFIG,
+  RPC_CHANNELS.teamKnowledge.UPDATE_CONFIG,
+  RPC_CHANNELS.teamKnowledge.REFRESH,
+  RPC_CHANNELS.teamKnowledge.CHANGED,
+  RPC_CHANNELS.teamKnowledge.GET_PREVIEW,
 
   // messaging — gateway channels run on workspace server
   RPC_CHANNELS.messaging.WA_REGISTER,

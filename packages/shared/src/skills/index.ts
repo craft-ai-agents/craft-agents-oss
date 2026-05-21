@@ -101,7 +101,6 @@ export {
   COPAW_MARKET_BASE_URL,
   listCopawMarketSkills,
   uploadCopawMarketSkill,
-  installCopawMarketSkill,
   deleteCopawMarketSkill,
   downloadCopawMarketSkillZip,
   generateMarketSkillVersion,
