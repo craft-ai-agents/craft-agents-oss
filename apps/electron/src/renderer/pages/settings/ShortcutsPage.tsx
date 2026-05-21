@@ -61,7 +61,7 @@ function useComponentSpecificSections(): ShortcutSection[] {
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-medium font-sans bg-muted border border-border rounded">
+    <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-[6px] border border-white/[0.08] bg-white/[0.055] px-1.5 font-sans text-[11px] font-medium text-white/68">
       {children}
     </kbd>
   )

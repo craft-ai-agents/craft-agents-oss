@@ -765,19 +765,14 @@ html[data-font="inter"] {
   }
 
   .dialog-styled {
-    background: var(--dialog-background);
-    color: var(--foreground);
-    border-radius: 8px;
-    border: none;
+    background: #09090c;
+    color: rgba(255, 255, 255, 0.88);
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    overflow: hidden;
     box-shadow:
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-      rgba(var(--foreground-rgb), 0.08) 0px 0px 0px 1px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.9)) 0px 1px 1px -0.5px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.9)) 0px 3px 3px 0px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.45)) 0px 6px 6px 0px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.45)) 0px 12px 12px 0px,
-      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.45)) 0px 24px 24px 0px;
+      0 28px 90px rgba(0, 0, 0, 0.62),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
   }
 
   .runneros-glass-shell {
@@ -859,6 +854,117 @@ html[data-font="inter"] {
 
   .runneros-glass-route {
     background: transparent;
+  }
+
+  .runneros-page-wrap {
+    width: 100%;
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 1.75rem;
+  }
+
+  .runneros-page-title {
+    font-size: 28px;
+    line-height: 1.12;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.94);
+    letter-spacing: 0;
+  }
+
+  .runneros-page-subtitle {
+    margin-top: 0.25rem;
+    max-width: 28rem;
+    font-size: 12px;
+    line-height: 18px;
+    color: rgba(255, 255, 255, 0.54);
+  }
+
+  .runneros-card {
+    border-radius: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.035);
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .runneros-card-hover {
+    transition:
+      transform 180ms ease,
+      border-color 180ms ease,
+      background 180ms ease,
+      box-shadow 180ms ease;
+  }
+
+  .runneros-card-hover:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.13);
+    background: rgba(255, 255, 255, 0.055);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+  }
+
+  .runneros-form-input {
+    display: block;
+    width: 100%;
+    border-radius: 9px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 0.48rem 0.65rem;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 13px;
+    outline: none;
+  }
+
+  .runneros-form-input:focus {
+    border-color: rgba(249, 115, 22, 0.46);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+  }
+
+  .runneros-form-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .runneros-soft-button {
+    display: inline-flex;
+    height: 1.75rem;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.045);
+    padding: 0 0.625rem;
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.72);
+    transition:
+      background 160ms ease,
+      color 160ms ease;
+  }
+
+  .runneros-soft-button:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.92);
+  }
+
+  .runneros-primary-button {
+    display: inline-flex;
+    height: 1.75rem;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 8px;
+    border: 1px solid rgba(251, 146, 60, 0.25);
+    background: rgba(249, 115, 22, 0.16);
+    padding: 0 0.625rem;
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.86);
+    box-shadow: 0 0 18px rgba(249, 115, 22, 0.16);
+    transition: background 160ms ease;
+  }
+
+  .runneros-primary-button:hover {
+    background: rgba(249, 115, 22, 0.24);
   }
 
   .runneros-glass-shell::before,

@@ -143,6 +143,10 @@ interface TopBarProps {
   onNewWindow?: () => void
   onOpenSettings: () => void
   onOpenSettingsSubpage: (subpage: SettingsMenuItem['id']) => void
+  onOpenTools: () => void
+  onOpenSkills: () => void
+  onOpenWorkspaceContext: () => void
+  onOpenOutputs: () => void
   onOpenKeyboardShortcuts: () => void
   onOpenStoredUserPreferences: () => void
   onBack: () => void
@@ -164,6 +168,10 @@ export function TopBar({
   onNewWindow,
   onOpenSettings,
   onOpenSettingsSubpage,
+  onOpenTools,
+  onOpenSkills,
+  onOpenWorkspaceContext,
+  onOpenOutputs,
   onOpenKeyboardShortcuts,
   onOpenStoredUserPreferences,
   onBack,
@@ -393,6 +401,35 @@ export function TopBar({
         <div className="min-w-0">
           <BrowserTabStrip activeSessionId={activeSessionId} maxVisibleBadges={maxVisibleBrowserBadges} />
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <TopBarButton aria-label={t("sidebar.library")} className="h-[26px] w-[26px] rounded-lg">
+              <Icons.Wrench className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+            </TopBarButton>
+          </DropdownMenuTrigger>
+          <StyledDropdownMenuContent align="end" minWidth="min-w-44">
+            <StyledDropdownMenuItem onClick={onOpenTools}>
+              <Icons.DatabaseZap className="h-3.5 w-3.5" />
+              {t("sidebar.tools")}
+            </StyledDropdownMenuItem>
+            <StyledDropdownMenuItem onClick={onOpenSkills}>
+              <Icons.Zap className="h-3.5 w-3.5" />
+              {t("sidebar.skills")}
+            </StyledDropdownMenuItem>
+            <StyledDropdownMenuItem onClick={onOpenWorkspaceContext}>
+              <Icons.FileText className="h-3.5 w-3.5" />
+              {t("sidebar.workspaceContext")}
+            </StyledDropdownMenuItem>
+          </StyledDropdownMenuContent>
+        </DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <TopBarButton onClick={onOpenOutputs} aria-label="Outputs" className="h-[26px] w-[26px] rounded-lg">
+              <Icons.PackageOpen className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+            </TopBarButton>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Outputs</TooltipContent>
+        </Tooltip>
         <BellMenu workspaceId={activeWorkspaceId} />
         <Tooltip>
           <TooltipTrigger asChild>

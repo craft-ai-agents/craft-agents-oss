@@ -60,7 +60,7 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
 
   if (!outputId) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      <div className="runneros-glass-route flex h-full items-center justify-center text-sm text-white/48">
         Select an output
       </div>
     )
@@ -68,7 +68,7 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
 
   if (detailError || error) {
     return (
-      <div className="m-5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive flex items-center gap-2">
+      <div className="m-5 flex items-center gap-2 rounded-[14px] border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
         <AlertTriangle className="h-4 w-4" />
         <span>{detailError ?? error}</span>
       </div>
@@ -76,21 +76,21 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
   }
 
   if (!manifest || loading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading output</div>
+    return <div className="runneros-glass-route flex h-full items-center justify-center text-sm text-white/50">Loading output</div>
   }
 
   const primary = manifest.primary ?? manifest.assets.find((asset) => asset.role === 'primary') ?? manifest.assets[0]
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-auto bg-background">
-      <div className="border-b border-border/30 px-5 py-4">
-        <div className="flex items-start justify-between gap-3">
+    <div className="runneros-glass-route h-full overflow-y-auto">
+      <div className="runneros-page-wrap">
+        <div className="mb-6 flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="truncate text-base font-semibold">{manifest.title}</h1>
+              <h1 className="runneros-page-title truncate">{manifest.title}</h1>
               <StatusPill status={manifest.status} />
             </div>
-            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-white/48">
               <span>{formatKind(manifest.kind)}</span>
               <span>{manifest.createdAt}</span>
               <span>{originLabel(manifest)}</span>
@@ -99,11 +99,11 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
           <div className="flex shrink-0 items-center gap-2">
             {primary && (
               <>
-                <Button size="sm" variant="outline" onClick={() => openAsset(workspaceId, manifest, primary)}>
+                <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => openAsset(workspaceId, manifest, primary)}>
                   <FileText className="mr-1.5 h-3.5 w-3.5" />
                   Open
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => showAsset(workspaceId, manifest, primary)}>
+                <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => showAsset(workspaceId, manifest, primary)}>
                   <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
                   Show
                 </Button>
@@ -111,34 +111,33 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
             )}
           </div>
         </div>
-      </div>
 
-      <div className="flex max-w-5xl flex-col gap-5 p-5">
+      <div className="flex max-w-5xl flex-col gap-5">
         <Section title="Preview">
           <OutputPreview manifest={manifest} primary={primary} />
         </Section>
 
         <Section title="Summary">
-          <p className="text-sm leading-6 text-foreground/80">{manifest.summary || 'No summary provided.'}</p>
+          <p className="runneros-card px-3 py-2 text-sm leading-6 text-white/68">{manifest.summary || 'No summary provided.'}</p>
         </Section>
 
         <Section title="Assets">
           {manifest.assets.length === 0 ? (
             <EmptyLine>No assets</EmptyLine>
           ) : (
-            <div className="overflow-hidden rounded-md border border-border/40">
+            <div className="runneros-card overflow-hidden">
               {manifest.assets.map((asset) => (
                 <button
                   key={asset.id}
                   type="button"
                   onClick={() => openAsset(workspaceId, manifest, asset)}
-                  className="flex w-full items-center justify-between gap-3 border-b border-border/30 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-foreground/[0.02]"
+                  className="flex w-full items-center justify-between gap-3 border-b border-white/[0.06] px-3 py-2 text-left text-sm last:border-b-0 hover:bg-white/[0.045]"
                 >
                   <span className="min-w-0">
-                    <span className="block truncate font-medium">{asset.label}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{asset.role} · {asset.mimeType ?? 'file'} · {asset.path}</span>
+                    <span className="block truncate font-medium text-white/78">{asset.label}</span>
+                    <span className="block truncate text-xs text-white/42">{asset.role} · {asset.mimeType ?? 'file'} · {asset.path}</span>
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(asset.sizeBytes)}</span>
+                  <span className="shrink-0 text-xs text-white/42">{formatBytes(asset.sizeBytes)}</span>
                 </button>
               ))}
             </div>
@@ -151,25 +150,25 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
           ) : (
             <div className="grid gap-2">
               {manifest.receipts.map((receipt) => (
-                <div key={receipt.id} className="rounded-md border border-border/40 p-3 text-sm">
+                <div key={receipt.id} className="runneros-card p-3 text-sm">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 font-medium">
-                      <ReceiptText className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex items-center gap-2 font-medium text-white/78">
+                      <ReceiptText className="h-4 w-4 text-white/42" />
                       {receipt.provider} · {receipt.action}
                     </div>
                     <StatusPill status={receipt.status} />
                   </div>
-                  <div className="mt-1 text-xs text-muted-foreground">{receipt.displayText || receipt.externalId || receipt.occurredAt}</div>
+                  <div className="mt-1 text-xs text-white/42">{receipt.displayText || receipt.externalId || receipt.occurredAt}</div>
                   {receipt.url && <ExternalButton url={receipt.url} />}
                 </div>
               ))}
               {manifest.links.map((link) => (
-                <div key={link.id} className="rounded-md border border-border/40 p-3 text-sm">
-                  <div className="flex items-center gap-2 font-medium">
-                    <Link2 className="h-4 w-4 text-muted-foreground" />
+                <div key={link.id} className="runneros-card p-3 text-sm">
+                  <div className="flex items-center gap-2 font-medium text-white/78">
+                    <Link2 className="h-4 w-4 text-white/42" />
                     {link.label}
                   </div>
-                  <div className="mt-1 truncate text-xs text-muted-foreground">{link.url}</div>
+                  <div className="mt-1 truncate text-xs text-white/42">{link.url}</div>
                   <ExternalButton url={link.url} />
                 </div>
               ))}
@@ -178,7 +177,7 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
         </Section>
 
         <Section title="Provenance">
-          <div className="rounded-md border border-border/40 p-3">
+          <div className="runneros-card p-3">
             <KeyValueRows
               rows={[
                 ['Source', manifest.origin.source],
@@ -192,19 +191,20 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
             />
             <div className="mt-3 flex flex-wrap gap-2">
               {manifest.origin.workflowRunId && (
-                <Button size="sm" variant="outline" onClick={() => navigate(routes.view.workflowRun(manifest.origin.workflowRunId!))}>
+                <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => navigate(routes.view.workflowRun(manifest.origin.workflowRunId!))}>
                   <Route className="mr-1.5 h-3.5 w-3.5" />
                   Open run
                 </Button>
               )}
               {manifest.origin.sessionId && (
-                <Button size="sm" variant="outline" onClick={() => navigate(routes.view.allSessions(manifest.origin.sessionId!))}>
+                <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => navigate(routes.view.allSessions(manifest.origin.sessionId!))}>
                   Open session
                 </Button>
               )}
             </div>
           </div>
         </Section>
+      </div>
       </div>
     </div>
   )
@@ -258,16 +258,16 @@ function OutputPreview({ manifest, primary }: { manifest: OutputManifestDTO; pri
 
   if (error) return <EmptyLine>Preview unavailable: {error}</EmptyLine>
   if (mode === 'image' && dataUrl) {
-    return <img src={dataUrl} alt={primary?.label ?? manifest.title} className="max-h-[520px] rounded-md border border-border/40 object-contain" />
+    return <img src={dataUrl} alt={primary?.label ?? manifest.title} className="max-h-[520px] rounded-[13px] border border-white/[0.08] object-contain" />
   }
   if (mode === 'markdown' && content) {
-    return <div className="rounded-md border border-border/40 p-4"><StreamingMarkdown content={content} isStreaming={false} mode="minimal" /></div>
+    return <div className="runneros-card p-4"><StreamingMarkdown content={content} isStreaming={false} mode="minimal" /></div>
   }
   if (mode === 'json' && content) {
-    return <ShikiCodeViewer code={formatJson(content)} language="json" className="max-h-[520px] overflow-auto rounded-md border border-border/40" />
+    return <ShikiCodeViewer code={formatJson(content)} language="json" className="max-h-[520px] overflow-auto rounded-[13px] border border-white/[0.08]" />
   }
   if ((mode === 'text' || mode === 'receipt') && content) {
-    return <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-md border border-border/40 bg-foreground/[0.02] p-3 text-xs">{content}</pre>
+    return <pre className="runneros-card max-h-[520px] overflow-auto whitespace-pre-wrap p-3 text-xs text-white/68">{content}</pre>
   }
   if (mode === 'external-link' && manifest.links[0]) {
     return <ExternalButton url={manifest.links[0].url} />
@@ -278,19 +278,19 @@ function OutputPreview({ manifest, primary }: { manifest: OutputManifestDTO; pri
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="mb-2 text-sm font-semibold">{title}</h2>
+      <h2 className="mb-2 text-sm font-semibold text-white/82">{title}</h2>
       {children}
     </section>
   )
 }
 
 function EmptyLine({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-md border border-border/40 px-3 py-2 text-sm text-muted-foreground">{children}</div>
+  return <div className="runneros-card px-3 py-2 text-sm text-white/45">{children}</div>
 }
 
 function ExternalButton({ url }: { url: string }) {
   return (
-    <Button size="sm" variant="outline" className="mt-2" onClick={() => window.electronAPI.openUrl(url)}>
+    <Button size="sm" variant="outline" className="mt-2 border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => window.electronAPI.openUrl(url)}>
       <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
       Open link
     </Button>
@@ -302,8 +302,8 @@ function KeyValueRows({ rows }: { rows: Array<[string, unknown]> }) {
     <div className="grid gap-1 text-sm">
       {rows.filter(([, value]) => value !== undefined && value !== null && value !== '').map(([label, value]) => (
         <div key={label} className="grid grid-cols-[120px_1fr] gap-3">
-          <div className="text-muted-foreground">{label}</div>
-          <div className="min-w-0 break-words font-mono text-xs">{String(value)}</div>
+          <div className="text-white/42">{label}</div>
+          <div className="min-w-0 break-words font-mono text-xs text-white/68">{String(value)}</div>
         </div>
       ))}
     </div>

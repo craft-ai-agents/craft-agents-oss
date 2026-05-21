@@ -86,23 +86,23 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{t('workflows.run.title', { name: workflow.metadata.name })}</DialogTitle>
-          <DialogDescription>{workflow.metadata.description}</DialogDescription>
+          <DialogTitle className="text-white">{t('workflows.run.title', { name: workflow.metadata.name })}</DialogTitle>
+          <DialogDescription className="text-white/48">{workflow.metadata.description}</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
           {inputs.length === 0 && (
-            <p className="text-xs text-muted-foreground">{t('workflows.run.noInputs')}</p>
+            <p className="runneros-card px-3 py-2 text-xs text-white/48">{t('workflows.run.noInputs')}</p>
           )}
           {inputs.map((i) => (
             <label key={i.name} className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-foreground/80">
+              <span className="text-xs font-medium text-white/72">
                 {i.name}
                 {i.required && <span className="text-destructive ml-0.5">*</span>}
-                <span className="ml-2 text-[11px] text-muted-foreground font-normal">{i.type}</span>
+                <span className="ml-2 text-[11px] font-normal text-white/38">{i.type}</span>
               </span>
               {i.description && (
-                <span className="text-[11px] text-muted-foreground">{i.description}</span>
+                <span className="text-[11px] text-white/42">{i.description}</span>
               )}
               {i.type === 'boolean' ? (
                 <input
@@ -116,13 +116,13 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
                   type="number"
                   value={values[i.name] as number | ''}
                   onChange={(e) => setValues((p) => ({ ...p, [i.name]: e.target.value === '' ? '' : Number(e.target.value) }))}
-                  className="form-input"
+                  className="runneros-form-input"
                 />
               ) : (
                 <textarea
                   value={values[i.name] as string}
                   onChange={(e) => setValues((p) => ({ ...p, [i.name]: e.target.value }))}
-                  className="form-input min-h-[64px] font-mono text-xs"
+                  className="runneros-form-input min-h-[64px] font-mono text-xs"
                   rows={3}
                 />
               )}
@@ -131,28 +131,13 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+          <Button variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => onOpenChange(false)} disabled={submitting}>
             {t('common.cancel')}
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting}>
+          <Button className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={handleSubmit} disabled={submitting}>
             {submitting ? t('workflows.run.starting') : t('workflows.run.run')}
           </Button>
         </DialogFooter>
-
-        <style>{`
-          .form-input {
-            display: block;
-            width: 100%;
-            padding: 0.4rem 0.6rem;
-            font-size: 13px;
-            background: rgba(0,0,0,0);
-            border: 1px solid rgba(125,125,125,0.25);
-            border-radius: 6px;
-            color: inherit;
-            outline: none;
-          }
-          .form-input:focus { border-color: rgba(80,160,250,0.6); }
-        `}</style>
       </DialogContent>
     </Dialog>
   )

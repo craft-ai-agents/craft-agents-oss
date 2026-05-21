@@ -17,7 +17,6 @@ import {
   Search,
   Plus,
   Trash2,
-  DatabaseZap,
   Zap,
   Inbox,
   Globe,
@@ -27,9 +26,6 @@ import {
   ListTodo,
   Bot,
   MessageSquare,
-  BookOpen,
-  FileText,
-  PackageOpen,
   Workflow as WorkflowIcon,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
@@ -2026,23 +2022,16 @@ function AppShellContent({
     // 2. Agents
     result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
 
-    // 3. Workflows (top-level, between Agents and Library)
+    // 3. Workflows
     result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
-    result.push({ id: 'nav:outputs', type: 'nav', action: handleOutputsClick })
 
-    // 4. Library (Tools / Skills / Workspace Context)
-    result.push({ id: 'nav:library', type: 'nav' })
-    result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
-    result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
-    result.push({ id: 'nav:workspace-context', type: 'nav', action: () => navigate(routes.view.workspaceContext()) })
-
-    // 5. Automations and Settings
+    // 4. Automations and Sessions
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
     result.push({ id: 'nav:sessions', type: 'nav', action: handleSessionsNavClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleChatClick, handleAgentsClick, handleSourcesClick, handleSkillsClick, handleOutputsClick, handleAutomationsClick, handleSessionsNavClick, handleSettingsClick])
+  }, [handleChatClick, handleAgentsClick, handleAutomationsClick, handleSessionsNavClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2279,6 +2268,10 @@ function AppShellContent({
           onNewWindow={() => window.electronAPI.menuNewWindow()}
           onOpenSettings={onOpenSettings}
           onOpenSettingsSubpage={handleSettingsClick}
+          onOpenTools={handleSourcesClick}
+          onOpenSkills={handleSkillsClick}
+          onOpenWorkspaceContext={() => navigate(routes.view.workspaceContext())}
+          onOpenOutputs={handleOutputsClick}
           onOpenKeyboardShortcuts={onOpenKeyboardShortcuts}
           onOpenStoredUserPreferences={onOpenStoredUserPreferences}
           onBack={goBack}
@@ -2352,58 +2345,6 @@ function AppShellContent({
                       icon: WorkflowIcon,
                       variant: (isWorkflowsNavigation(navState) || isWorkflowRunNavigation(navState)) ? "default" : "ghost",
                       onClick: () => navigate(routes.view.workflows()),
-                    },
-                    {
-                      id: "nav:outputs",
-                      title: "Outputs",
-                      label: String(outputs.length),
-                      icon: PackageOpen,
-                      variant: isOutputsNavigation(navState) ? "default" : "ghost",
-                      onClick: handleOutputsClick,
-                    },
-                    // --- Library (Tools / Skills / Workspace Context) ---
-                    {
-                      id: "nav:library",
-                      title: t("sidebar.library"),
-                      icon: BookOpen,
-                      variant: "ghost",
-                      expandable: true,
-                      expanded: isExpanded('nav:library'),
-                      onToggle: () => toggleExpanded('nav:library'),
-                      items: [
-                        {
-                          id: "nav:sources",
-                          title: t("sidebar.tools"),
-                          label: String(sources.length),
-                          icon: DatabaseZap,
-                          variant: (isSourcesNavigation(navState) && !sourceFilter) ? "default" : "ghost",
-                          onClick: handleSourcesClick,
-                          dataTutorial: "sources-nav",
-                          contextMenu: {
-                            type: 'sources',
-                            onAddSource: () => openAddSource(),
-                          },
-                        },
-                        {
-                          id: "nav:skills",
-                          title: t("sidebar.skills"),
-                          label: String(skills.length),
-                          icon: Zap,
-                          variant: isSkillsNavigation(navState) ? "default" : "ghost",
-                          onClick: handleSkillsClick,
-                          contextMenu: {
-                            type: 'skills',
-                            onAddSkill: openAddSkill,
-                          },
-                        },
-                        {
-                          id: "nav:workspace-context",
-                          title: t("sidebar.workspaceContext"),
-                          icon: FileText,
-                          variant: isWorkspaceContextNavigation(navState) ? "default" : "ghost",
-                          onClick: () => navigate(routes.view.workspaceContext()),
-                        },
-                      ],
                     },
                     {
                       id: "nav:automations",

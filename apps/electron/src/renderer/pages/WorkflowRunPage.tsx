@@ -119,14 +119,14 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
 
   if (hydrateError) {
     return (
-      <div className="m-5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive flex items-center gap-2">
+      <div className="m-5 flex items-center gap-2 rounded-[14px] border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
         <AlertTriangle className="h-4 w-4" />
         <span>{hydrateError}</span>
       </div>
     )
   }
   if (!run) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t('common.loading')}</div>
+    return <div className="runneros-glass-route flex h-full items-center justify-center text-sm text-white/50">{t('common.loading')}</div>
   }
 
   const startedAtMs = run.createdAt ? Date.parse(run.createdAt) : 0
@@ -145,18 +145,18 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
   const outputRefs = getRunOutputRefs(run)
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-background overflow-auto">
-      <div className="px-5 py-4 border-b border-border/30">
-        <div className="flex items-start justify-between gap-3">
+    <div className="runneros-glass-route h-full overflow-y-auto">
+      <div className="runneros-page-wrap">
+        <div className="mb-6 flex items-start justify-between gap-4">
           <div className="min-w-0">
             <button
               type="button"
               onClick={() => navigate(routes.view.workflow(run.workflowSlug))}
-              className="text-base font-semibold truncate hover:underline"
+              className="runneros-page-title truncate text-left hover:text-white"
             >
               {snapshotName}
             </button>
-            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-3 flex-wrap">
+            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-white/48">
               <span>{t('workflows.run.runIdLabel')} <span className="font-mono">{run.id.slice(0, 8)}</span></span>
               <span>{t('workflows.run.state')}: <RunStateLabel state={run.state} /></span>
               <span>{t('workflows.run.elapsed')}: {elapsedLabel}</span>
@@ -164,7 +164,7 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {run.state === 'running' && (
-              <Button size="sm" variant="outline" onClick={handleCancel}>
+              <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={handleCancel}>
                 <Square className="h-3.5 w-3.5 mr-1.5" />
                 {t('workflows.run.cancel')}
               </Button>
@@ -173,6 +173,7 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
               <Button
                 size="sm"
                 variant="outline"
+                className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white"
                 onClick={() => handleResume()}
                 disabled={!canResumeRun || recoveryPendingStepId !== null}
                 title={canResume ? undefined : 'Workflow recovery is not available on this server yet'}
@@ -181,15 +182,14 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
                 Resume from next incomplete step
               </Button>
             )}
-            <Button size="sm" onClick={() => setRerunOpen(true)} disabled={!workflow}>
+            <Button size="sm" className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={() => setRerunOpen(true)} disabled={!workflow}>
               <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
               {t('workflows.run.rerun')}
             </Button>
           </div>
         </div>
-      </div>
 
-      <div className="p-5 flex flex-col gap-5 max-w-5xl">
+      <div className="flex max-w-5xl flex-col gap-5">
         <RunOutputCard
           runState={run.state}
           outputIds={outputRefs.outputIds}
@@ -198,7 +198,7 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
         />
 
         <Section title="Run snapshot">
-          <div className="rounded-md border border-border/40 bg-foreground/[0.02] px-3 py-3">
+          <div className="runneros-card px-3 py-3">
             <KeyValueGrid
               items={[
                 ['Run ID', run.id],
@@ -255,6 +255,7 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
           initialInputs={run.trigger?.inputs ?? {}}
         />
       )}
+      </div>
     </div>
   )
 }
@@ -374,20 +375,20 @@ function StepCard({
   const isRecoveryPending = recoveryPendingStepId === step.id
 
   return (
-    <div className={`rounded-md border px-3 py-3 ${stepBorder(step.state)}`}>
+    <div className={`rounded-[13px] border px-3 py-3 ${stepBorder(step.state)}`}>
       <div className="flex items-center gap-2 min-w-0">
         <StepIcon state={step.state} />
-        <span className="text-xs text-muted-foreground w-5 shrink-0">{index + 1}.</span>
-        <span className="font-mono text-sm truncate">{step.id}</span>
-        <span className="text-xs text-muted-foreground truncate">
+        <span className="w-5 shrink-0 text-xs text-white/38">{index + 1}.</span>
+        <span className="truncate font-mono text-sm text-white/78">{step.id}</span>
+        <span className="truncate text-xs text-white/42">
           @{agentSlug}{agentName && agentName !== agentSlug ? ` - ${agentName}` : ''}
         </span>
-        <span className="text-[11px] text-muted-foreground capitalize ml-auto">{step.state}</span>
+        <span className="ml-auto text-[11px] capitalize text-white/42">{step.state}</span>
         {canRerunStep && (
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 px-2 text-[11px]"
+            className="h-7 px-2 text-[11px] text-white/58 hover:bg-white/[0.06] hover:text-white"
             onClick={() => onRerunFromStep(step.id)}
             disabled={recoveryPendingStepId !== null}
           >
@@ -416,12 +417,12 @@ function StepCard({
       </div>
 
       {stepDef?.description && (
-        <div className="mt-1.5 ml-7 text-xs text-muted-foreground whitespace-pre-wrap break-words">
+        <div className="mt-1.5 ml-7 whitespace-pre-wrap break-words text-xs text-white/45">
           {stepDef.description}
         </div>
       )}
       {preview && !isDetailOpenByDefault(step.output) && (
-        <div className="mt-1.5 ml-7 text-xs text-muted-foreground whitespace-pre-wrap break-words">
+        <div className="mt-1.5 ml-7 whitespace-pre-wrap break-words text-xs text-white/45">
           {preview}
         </div>
       )}
@@ -462,7 +463,7 @@ function StepCard({
         <button
           type="button"
           onClick={() => onOpenSession(step.sessionId!)}
-          className="mt-2 ml-7 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+          className="mt-2 ml-7 inline-flex items-center gap-1 text-[11px] text-white/42 hover:text-white/78"
         >
           <ExternalLink className="h-3 w-3" />
           {t('workflows.run.viewSession')}
@@ -488,12 +489,12 @@ function RunOutputCard({
 
   return (
     <Section title="Output">
-      <div className="rounded-md border border-border/40 bg-foreground/[0.02] px-3 py-3">
+      <div className="runneros-card px-3 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-2">
-            <PackageOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <PackageOpen className="h-4 w-4 shrink-0 text-white/42" />
             <div className="min-w-0">
-              <div className="text-sm font-medium">
+              <div className="text-sm font-medium text-white/78">
                 {hasOutputs
                   ? `${outputIds.length} output${outputIds.length === 1 ? '' : 's'} published`
                   : runState === 'running'
@@ -501,14 +502,14 @@ function RunOutputCard({
                     : 'No output published'}
               </div>
               {primaryOutputId && (
-                <div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                <div className="mt-0.5 truncate font-mono text-xs text-white/42">
                   {primaryOutputId}
                 </div>
               )}
             </div>
           </div>
           {primaryOutputId && (
-            <Button size="sm" variant="outline" onClick={() => onOpenOutput(primaryOutputId)}>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => onOpenOutput(primaryOutputId)}>
               <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
               Open Output
             </Button>
@@ -549,7 +550,7 @@ function RunStateLabel({ state }: { state: WorkflowRunDTO['state'] }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{title}</h2>
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/45">{title}</h2>
       <div className="flex flex-col gap-3">{children}</div>
     </section>
   )
@@ -572,8 +573,8 @@ function KeyValueGrid({
     <dl className={`grid ${compact ? 'grid-cols-[92px_minmax(0,1fr)]' : 'grid-cols-[130px_minmax(0,1fr)]'} gap-x-3 gap-y-1 text-xs`}>
       {visible.map(([label, value]) => (
         <React.Fragment key={label}>
-          <dt className="text-muted-foreground">{label}</dt>
-          <dd className="min-w-0 break-words font-mono text-foreground/85">{value}</dd>
+          <dt className="text-white/38">{label}</dt>
+          <dd className="min-w-0 break-words font-mono text-white/68">{value}</dd>
         </React.Fragment>
       ))}
     </dl>
@@ -597,11 +598,11 @@ function DetailBlock({
     : text
 
   return (
-    <details className="text-xs text-muted-foreground" open={defaultOpen}>
-      <summary className="cursor-pointer select-none hover:text-foreground">
-        {title} <span className="font-mono text-[11px] text-muted-foreground/80">{text.length} chars</span>
+    <details className="text-xs text-white/45" open={defaultOpen}>
+      <summary className="cursor-pointer select-none hover:text-white/82">
+        {title} <span className="font-mono text-[11px] text-white/34">{text.length} chars</span>
       </summary>
-      <pre className="mt-1.5 max-h-80 overflow-auto rounded-md border border-border/40 bg-background/70 p-2 font-mono text-[11px] leading-relaxed text-foreground/85 whitespace-pre-wrap break-words">
+      <pre className="mt-1.5 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-[10px] border border-white/[0.07] bg-black/25 p-2 font-mono text-[11px] leading-relaxed text-white/68">
         {display}
       </pre>
     </details>
@@ -614,8 +615,8 @@ function stepBorder(state: WorkflowRunStepState): string {
     case 'succeeded': return 'border-emerald-500/30 bg-emerald-500/[0.03]'
     case 'failed': return 'border-red-500/30 bg-red-500/[0.03]'
     case 'interrupted': return 'border-orange-500/30 bg-orange-500/[0.03]'
-    case 'skipped': return 'border-border/40 opacity-70'
-    default: return 'border-border/40'
+    case 'skipped': return 'border-white/[0.07] bg-white/[0.02] opacity-70'
+    default: return 'border-white/[0.07] bg-white/[0.035]'
   }
 }
 

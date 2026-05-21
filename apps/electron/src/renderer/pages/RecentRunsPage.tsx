@@ -27,57 +27,55 @@ export default function RecentRunsPage({ workspaceId }: Props) {
   const top = React.useMemo(() => runs.slice(0, 100), [runs])
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-background">
-      <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border/30">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <History className="h-4 w-4 text-muted-foreground" />
-            <h1 className="text-base font-semibold">{t('sidebar.workflows.recentRuns')}</h1>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">{t('workflows.recentRuns.subtitle')}</p>
-        </div>
-      </div>
-
-      <div className="flex-1 min-h-0 overflow-auto">
-        {loading ? (
-          <div className="h-full flex items-center justify-center text-sm text-muted-foreground">{t('common.loading')}</div>
-        ) : error ? (
-          <div className="m-5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>
-        ) : top.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-sm text-muted-foreground">{t('workflows.recentRuns.empty')}</div>
-        ) : (
-          <div className="p-4">
-            <div className="overflow-hidden rounded-md border border-border/40">
-              <table className="w-full text-sm">
-                <thead className="bg-foreground/[0.03] text-xs text-muted-foreground">
-                  <tr>
-                    <th className="text-left font-medium px-3 py-2">{t('workflows.recentRuns.col.workflow')}</th>
-                    <th className="text-left font-medium px-3 py-2 w-28">{t('workflows.recentRuns.col.runId')}</th>
-                    <th className="text-left font-medium px-3 py-2 w-24">{t('workflows.recentRuns.col.trigger')}</th>
-                    <th className="text-left font-medium px-3 py-2 w-32">{t('workflows.recentRuns.col.state')}</th>
-                    <th className="text-left font-medium px-3 py-2 w-44">{t('workflows.recentRuns.col.started')}</th>
-                    <th className="text-left font-medium px-3 py-2 w-24">{t('workflows.recentRuns.col.duration')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {top.map((r) => {
-                    const startedMs = r.createdAt ? Date.parse(r.createdAt) : 0
-                    const completedMs = r.completedAt ? Date.parse(r.completedAt) : 0
-                    const durationMs = startedMs && completedMs ? Math.max(0, completedMs - startedMs) : 0
-                    return (
-                      <tr key={r.id} className="border-t border-border/30 hover:bg-foreground/[0.02] cursor-pointer" onClick={() => navigate(routes.view.workflowRun(r.id))}>
-                        <td className="px-3 py-2 truncate">{nameBySlug.get(r.workflowSlug) ?? r.workflowSlug}</td>
-                        <td className="px-3 py-2 font-mono text-xs">{r.id.slice(0, 8)}</td>
-                        <td className="px-3 py-2 text-xs">{r.trigger.type}</td>
-                        <td className="px-3 py-2"><RunStateDot state={r.state} /></td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">{r.createdAt}</td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">{durationMs ? `${Math.round(durationMs / 1000)}s` : '—'}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+    <div className="runneros-glass-route h-full overflow-y-auto">
+      <div className="runneros-page-wrap">
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-white/42" />
+              <h1 className="runneros-page-title">{t('sidebar.workflows.recentRuns')}</h1>
             </div>
+            <p className="runneros-page-subtitle">{t('workflows.recentRuns.subtitle')}</p>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex min-h-[360px] items-center justify-center text-sm text-white/50">{t('common.loading')}</div>
+        ) : error ? (
+          <div className="rounded-[14px] border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>
+        ) : top.length === 0 ? (
+          <div className="flex min-h-[360px] items-center justify-center text-sm text-white/48">{t('workflows.recentRuns.empty')}</div>
+        ) : (
+          <div className="grid gap-2">
+            {top.map((r) => {
+              const startedMs = r.createdAt ? Date.parse(r.createdAt) : 0
+              const completedMs = r.completedAt ? Date.parse(r.completedAt) : 0
+              const durationMs = startedMs && completedMs ? Math.max(0, completedMs - startedMs) : 0
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  className="runneros-card runneros-card-hover flex items-center justify-between gap-3 px-3 py-2.5 text-left"
+                  onClick={() => navigate(routes.view.workflowRun(r.id))}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-white">
+                      {nameBySlug.get(r.workflowSlug) ?? r.workflowSlug}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] text-white/42">
+                      {r.trigger.type} · {r.createdAt}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-3">
+                    <span className="font-mono text-[11px] text-white/42">{r.id.slice(0, 8)}</span>
+                    <RunStateDot state={r.state} />
+                    <span className="w-10 text-right text-[11px] text-white/42">
+                      {durationMs ? `${Math.round(durationMs / 1000)}s` : '-'}
+                    </span>
+                  </span>
+                </button>
+              )
+            })}
           </div>
         )}
       </div>

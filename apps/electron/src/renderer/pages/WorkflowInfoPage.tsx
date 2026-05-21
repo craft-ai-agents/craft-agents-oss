@@ -73,8 +73,8 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
 
   if (loadError) {
     return (
-      <div className="flex flex-col h-full min-h-0 bg-background">
-        <div className="m-5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive flex items-center gap-2">
+      <div className="runneros-glass-route h-full">
+        <div className="m-5 flex items-center gap-2 rounded-[14px] border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
           <AlertTriangle className="h-4 w-4" />
           <span>{loadError}</span>
         </div>
@@ -82,72 +82,70 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
     )
   }
   if (!workflow) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t('common.loading')}</div>
+    return <div className="runneros-glass-route flex h-full items-center justify-center text-sm text-white/50">{t('common.loading')}</div>
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-background overflow-auto">
-      <div className="px-5 py-4 border-b border-border/30">
-        <div className="flex items-start justify-between gap-3">
+    <div className="runneros-glass-route h-full overflow-y-auto">
+      <div className="runneros-page-wrap">
+        <div className="mb-6 flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-base">{workflow.metadata.avatar?.trim() || '🪄'}</span>
-              <h1 className="text-base font-semibold truncate">{workflow.metadata.name}</h1>
-              <span className="inline-flex items-center rounded-full bg-foreground/5 px-2 py-0.5 text-[11px] font-medium">
+              <h1 className="runneros-page-title truncate">{workflow.metadata.name}</h1>
+              <span className="inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.045] px-2 py-0.5 text-[11px] font-medium text-white/58">
                 {isActive ? workflow.metadata.trigger.type : 'inactive'}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">{workflow.metadata.description}</p>
+            <p className="runneros-page-subtitle">{workflow.metadata.description}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Button size="sm" variant="outline" onClick={() => navigate(routes.view.workflowEdit(workflow.slug))}>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => navigate(routes.view.workflowEdit(workflow.slug))}>
               <Pencil className="h-3.5 w-3.5 mr-1.5" />
               {t('common.edit')}
             </Button>
             {isActive ? (
               <>
-                <Button size="sm" variant="outline" onClick={() => void handleDeactivate()} disabled={workflowsLoading}>
+                <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void handleDeactivate()} disabled={workflowsLoading}>
                   <CircleMinus className="h-3.5 w-3.5 mr-1.5" />
                   {t('workflows.list.deactivate')}
                 </Button>
-                <Button size="sm" onClick={() => setRunDialogOpen(true)}>
+                <Button size="sm" className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={() => setRunDialogOpen(true)}>
                   <Play className="h-3.5 w-3.5 mr-1.5" />
                   {t('workflows.list.run')}
                 </Button>
               </>
             ) : (
-              <Button size="sm" onClick={() => void handleActivate()} disabled={workflowsLoading}>
+              <Button size="sm" className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={() => void handleActivate()} disabled={workflowsLoading}>
                 <Plus className="h-3.5 w-3.5 mr-1.5" />
                 {t('workflows.list.activate')}
               </Button>
             )}
           </div>
         </div>
-      </div>
 
-      <div className="p-5 flex flex-col gap-5">
+      <div className="flex flex-col gap-5">
         <Section title={t('workflows.info.systemSection')}>
-          <dl className="grid grid-cols-[140px_1fr] gap-y-1 text-xs">
-            <dt className="text-muted-foreground">{t('workflows.info.slug')}</dt>
-            <dd className="font-mono">{workflow.slug}</dd>
-            <dt className="text-muted-foreground">{t('workflows.info.path')}</dt>
-            <dd className="font-mono truncate">{workflow.path}</dd>
-            <dt className="text-muted-foreground">{t('workflows.info.steps')}</dt>
-            <dd>{workflow.metadata.steps.length}</dd>
+          <dl className="runneros-card grid grid-cols-[140px_1fr] gap-y-1 p-3 text-xs">
+            <dt className="text-white/38">{t('workflows.info.slug')}</dt>
+            <dd className="font-mono text-white/68">{workflow.slug}</dd>
+            <dt className="text-white/38">{t('workflows.info.path')}</dt>
+            <dd className="truncate font-mono text-white/68">{workflow.path}</dd>
+            <dt className="text-white/38">{t('workflows.info.steps')}</dt>
+            <dd className="text-white/68">{workflow.metadata.steps.length}</dd>
           </dl>
         </Section>
 
         <Section title={t('workflows.info.stepsSection')}>
           <ol className="flex flex-col gap-2">
             {workflow.metadata.steps.map((step, idx) => (
-              <li key={step.id} className="rounded-md border border-border/40 px-3 py-2 text-sm">
+              <li key={step.id} className="runneros-card px-3 py-2 text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground w-5 shrink-0">{idx + 1}.</span>
-                  <span className="font-mono text-xs">{step.id}</span>
-                  <span className="text-xs text-muted-foreground">@{step.agent}</span>
+                  <span className="w-5 shrink-0 text-xs text-white/38">{idx + 1}.</span>
+                  <span className="font-mono text-xs text-white/72">{step.id}</span>
+                  <span className="text-xs text-white/42">@{step.agent}</span>
                 </div>
                 {step.description && (
-                  <p className="text-xs text-muted-foreground mt-1 ml-7">{step.description}</p>
+                  <p className="ml-7 mt-1 text-xs text-white/45">{step.description}</p>
                 )}
               </li>
             ))}
@@ -156,7 +154,7 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
 
         <Section title={t('workflows.info.recentRunsSection')}>
           {recentRuns.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t('workflows.info.noRuns')}</p>
+            <p className="runneros-card px-3 py-2 text-xs text-white/45">{t('workflows.info.noRuns')}</p>
           ) : (
             <ul className="flex flex-col gap-1">
               {recentRuns.map((r) => (
@@ -164,13 +162,13 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
                   <button
                     type="button"
                     onClick={() => navigate(routes.view.workflowRun(r.id))}
-                    className="w-full flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-foreground/5 text-left"
+                    className="runneros-card runneros-card-hover flex w-full items-center justify-between gap-3 px-2 py-1.5 text-left"
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <RunStateDot state={r.state} />
-                      <span className="font-mono text-xs">{r.id.slice(0, 8)}</span>
+                      <span className="font-mono text-xs text-white/68">{r.id.slice(0, 8)}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">{r.createdAt}</span>
+                    <span className="text-xs text-white/42">{r.createdAt}</span>
                   </button>
                 </li>
               ))}
@@ -188,6 +186,7 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
         />
       )}
       <WorkflowIcon className="hidden" aria-hidden />
+      </div>
     </div>
   )
 }
@@ -195,7 +194,7 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{title}</h2>
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/45">{title}</h2>
       {children}
     </section>
   )
