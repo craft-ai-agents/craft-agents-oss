@@ -131,15 +131,18 @@ function AddForm({ onAdd, submitting }: AddFormProps) {
           <option value="super_admin">super_admin（超级管理员）</option>
         </select>
       </div>
-      <Button
-        size="sm"
-        disabled={submitting || !employeeId.trim()}
-        onClick={handleSubmit}
-        className="h-8"
-      >
-        <Plus className="h-3.5 w-3.5 mr-1" />
-        {submitting ? '提交中...' : '提交'}
-      </Button>
+      <div className="flex flex-col gap-1">
+        <label className="text-xs opacity-0 select-none">提交</label>
+        <Button
+          size="sm"
+          disabled={submitting || !employeeId.trim()}
+          onClick={handleSubmit}
+          className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium"
+        >
+          <Plus className="h-3.5 w-3.5 mr-0.5" />
+          {submitting ? '提交中...' : '提交'}
+        </Button>
+      </div>
     </div>
   )
 }
@@ -161,7 +164,7 @@ function PermissionRow({ record, deleting, onDelete }: PermissionRowProps) {
       </span>
       <span className="text-xs text-foreground/50 flex-1">{record.createTime}</span>
       <span className="text-xs text-foreground/50 flex-1">{record.updateTime}</span>
-      <div className="shrink-0">
+      <div className="w-20 shrink-0">
         {confirming ? (
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-foreground/50">确定删除？</span>
@@ -186,7 +189,7 @@ function PermissionRow({ record, deleting, onDelete }: PermissionRowProps) {
             type="button"
             onClick={() => setConfirming(true)}
             className={cn(
-              'flex items-center gap-1 px-2 py-1 rounded-[6px] text-xs text-destructive',
+              'flex items-center gap-1 -mx-1 px-1 py-1 rounded-[6px] text-xs text-destructive',
               'hover:bg-destructive/10 transition-colors'
             )}
           >
@@ -211,6 +214,8 @@ export default function PermissionAdminPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
   const [permApi, setPermApi] = useState<ReturnType<typeof buildPermissionApi> | null>(null)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 20
   const checkedRef = useRef(false)
 
   useEffect(() => {
@@ -344,7 +349,7 @@ export default function PermissionAdminPage() {
               ) : list.length === 0 ? (
                 <div className="py-8 text-center text-sm text-foreground/40">暂无数据</div>
               ) : (
-                list.map((record) => (
+                list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((record) => (
                   <PermissionRow
                     key={record.employeeId}
                     record={record}
@@ -352,6 +357,31 @@ export default function PermissionAdminPage() {
                     onDelete={handleDelete}
                   />
                 ))
+              )}
+              {/* Pagination footer */}
+              {list.length > 0 && (
+                <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/50 text-xs text-foreground/50">
+                  <span>共 {list.length} 条</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={page <= 1}
+                      onClick={() => setPage(p => p - 1)}
+                      className="px-2 py-0.5 rounded border border-border/50 disabled:opacity-30 hover:bg-foreground/5 transition-colors"
+                    >
+                      上一页
+                    </button>
+                    <span>第 {page} / {Math.ceil(list.length / PAGE_SIZE)} 页</span>
+                    <button
+                      type="button"
+                      disabled={page >= Math.ceil(list.length / PAGE_SIZE)}
+                      onClick={() => setPage(p => p + 1)}
+                      className="px-2 py-0.5 rounded border border-border/50 disabled:opacity-30 hover:bg-foreground/5 transition-colors"
+                    >
+                      下一页
+                    </button>
+                  </div>
+                </div>
               )}
             </SettingsCard>
           </SettingsSection>
