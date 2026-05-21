@@ -15,6 +15,9 @@ import {
   type FeedbackRatingFilter,
 } from './feedback-admin-utils'
 
+const elevatedCardClassName =
+  'border border-violet-200/70 bg-gradient-to-br from-white via-white to-violet-50/70 shadow-[0_18px_45px_rgba(124,58,237,0.12),0_2px_8px_rgba(15,23,42,0.05)] dark:border-violet-400/20 dark:from-card dark:via-card dark:to-violet-950/20'
+
 function RatingMetric({
   active,
   count,
@@ -35,16 +38,23 @@ function RatingMetric({
       type="button"
       onClick={() => onClick(filter)}
       className={cn(
-        'flex min-w-[118px] items-center gap-3 rounded-[8px] border px-4 py-3 text-left transition-colors',
+        'flex min-w-[92px] flex-col items-center justify-center gap-2 rounded-[8px] border bg-violet-50/80 px-4 py-3 text-center shadow-sm transition-colors dark:bg-violet-500/10',
         active
-          ? 'border-accent/40 bg-accent/10 text-accent'
-          : 'border-border bg-background hover:bg-foreground/3'
+          ? 'border-violet-500 text-violet-700 shadow-[0_10px_24px_rgba(124,58,237,0.16)] dark:border-violet-300 dark:text-violet-200'
+          : 'border-violet-300/70 text-foreground hover:border-violet-400/70 dark:border-violet-400/30'
       )}
     >
-      <Icon className={cn('h-4 w-4', active ? 'fill-current' : 'text-foreground/45')} />
-      <span className="flex flex-col">
-        <strong className="text-lg leading-none">{count}</strong>
-        <span className="mt-1 text-xs text-foreground/55">{label}</span>
+      <strong className="block w-full text-center text-lg leading-none">{count}</strong>
+      <span className="flex w-full items-center justify-center gap-1 text-center text-xs text-foreground/65">
+        <Icon
+          className={cn(
+            'h-3.5 w-3.5 stroke-[2.2]',
+            active
+              ? 'fill-violet-500/20 text-violet-600 dark:fill-violet-300/20 dark:text-violet-200'
+              : 'fill-transparent text-foreground/45'
+          )}
+        />
+        <span>{label}</span>
       </span>
     </button>
   )
@@ -81,16 +91,16 @@ function FeedbackRow({
     <button
       type="button"
       onClick={() => onOpen(record)}
-      className="grid w-full grid-cols-1 gap-3 border-b border-border/60 px-4 py-4 text-left text-sm transition-colors last:border-b-0 hover:bg-foreground/[0.025] lg:grid-cols-[150px_190px_110px_180px_minmax(280px,1fr)] lg:gap-4"
+      className="grid w-full grid-cols-1 items-center gap-3 border-b border-violet-100/70 bg-white/70 px-4 py-4 text-left text-sm transition-colors last:border-b-0 hover:bg-violet-50/55 dark:border-border/60 dark:bg-card/70 dark:hover:bg-violet-500/5 lg:grid-cols-[150px_minmax(210px,250px)_110px_180px_minmax(280px,1fr)] lg:gap-4"
     >
       <span className="text-foreground/70">
         <span className="mr-2 text-xs text-foreground/40 lg:hidden">时间</span>
         {formatFeedbackTime(record.time)}
       </span>
-      <code className="w-fit max-w-full truncate rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-300">
+      <code className="inline-flex h-7 w-fit max-w-full items-center truncate rounded-md border border-amber-300/60 bg-amber-50 px-2 text-xs text-amber-700 shadow-sm dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-300">
         {record.id || '-'}
       </code>
-      <code className="w-fit rounded-md border border-border bg-foreground/5 px-2 py-0.5 text-xs text-foreground/70">
+      <code className="inline-flex h-7 w-fit items-center rounded-md border border-violet-200/70 bg-violet-50 px-2 text-xs text-violet-700 shadow-sm dark:border-violet-400/20 dark:bg-violet-500/10 dark:text-violet-200">
         {record.employee_id || '-'}
       </code>
       <span className="line-clamp-2 text-foreground/70">
@@ -125,7 +135,7 @@ export default function FeedbackListPage({
   const filteredRecords = useMemo(() => filterFeedbackRecords(records, filter), [records, filter])
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-gradient-to-b from-violet-50/35 via-background to-background dark:from-violet-950/10">
       <PanelHeader
         title="评价"
         actions={
@@ -136,7 +146,7 @@ export default function FeedbackListPage({
       />
       <ScrollArea className="h-full">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4">
-          <section className="flex flex-wrap items-center justify-between gap-4 rounded-[8px] border border-border bg-card px-5 py-5 shadow-sm">
+          <section className={cn('flex flex-wrap items-center justify-between gap-4 rounded-[8px] px-5 py-5', elevatedCardClassName)}>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <MessageSquareText className="h-5 w-5 text-foreground/55" />
@@ -173,8 +183,8 @@ export default function FeedbackListPage({
             </div>
           )}
 
-          <section className="overflow-hidden rounded-[8px] border border-border bg-card shadow-sm">
-            <div className="hidden grid-cols-[150px_190px_110px_180px_minmax(280px,1fr)] gap-4 border-b border-border/70 bg-foreground/[0.025] px-4 py-2.5 text-xs font-medium text-foreground/55 lg:grid">
+          <section className={cn('overflow-hidden rounded-[8px]', elevatedCardClassName)}>
+            <div className="hidden grid-cols-[150px_minmax(210px,250px)_110px_180px_minmax(280px,1fr)] items-center gap-4 border-b border-violet-100/80 bg-white px-4 py-3 text-xs font-semibold text-foreground dark:border-border/70 dark:bg-card dark:text-foreground lg:grid">
               <span>时间</span>
               <span>评价 ID</span>
               <span>评价人</span>
