@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import { useMemo } from 'react'
 import { ArrowLeft, Bot, Brain, Clock, User, Wrench, type LucideIcon } from 'lucide-react'
 import type {
-  FeedbackContentPart,
   FeedbackRecord,
   FeedbackTurnMessage,
 } from '@craft-agent/shared/feedback'
@@ -14,42 +13,39 @@ import { cn } from '@/lib/utils'
 import {
   buildFeedbackDetailSummary,
   formatFeedbackTime,
-  textFromPart,
+  formatMessageValue,
+  hasToolMetadata,
+  messageText,
 } from './feedback-admin-utils'
 
 function roleLabel(role: string): string {
   if (role === 'user') return '用户'
-  if (role === 'assistant' || role === 'system') return 'Craft Agent'
+  if (role === 'assistant') return 'Craft Agent'
+  if (role === 'system') return '系统'
   if (role === 'tool') return '工具'
+  if (role === 'error') return '错误'
   return role || '未知'
 }
 
-function typeLabel(type: string): string {
-  if (type === 'message') return '消息'
-  if (type === 'reasoning') return 'Thinking'
-  if (type === 'plugin_call') return '工具调用输入'
-  if (type === 'plugin_call_output') return '工具调用输出'
-  return type || '未知类型'
+function messageKindLabel(message: FeedbackTurnMessage): string {
+  if (message.role === 'tool') return message.toolStatus ? `工具调用 · ${message.toolStatus}` : '工具调用'
+  if (message.role === 'error' || message.isError) return '错误'
+  if (message.role === 'assistant' && message.isIntermediate) return '过程消息'
+  if (message.role === 'assistant') return '回答'
+  return '消息'
+}
+
+function toolName(message: FeedbackTurnMessage): string {
+  const displayName = message.toolDisplayMeta?.displayName
+  return message.toolDisplayName || message.toolName || (typeof displayName === 'string' ? displayName : '')
 }
 
 function tagClassForRole(role: string): string {
   if (role === 'user') return 'border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-300'
   if (role === 'assistant' || role === 'system') return 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-  return 'border-purple-500/20 bg-purple-500/10 text-purple-700 dark:text-purple-300'
-}
-
-function tagClassForType(type: string): string {
-  if (type === 'plugin_call') return 'border-cyan-500/20 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300'
-  if (type === 'plugin_call_output') return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-  if (type === 'reasoning') return 'border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300'
+  if (role === 'tool') return 'border-cyan-500/20 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300'
+  if (role === 'error') return 'border-destructive/20 bg-destructive/10 text-destructive'
   return 'border-border bg-foreground/5 text-foreground/70'
-}
-
-function dataValue(part: FeedbackContentPart, key: string): string | null {
-  const value = part.data?.[key]
-  if (typeof value === 'string') return value
-  if (value === undefined || value === null) return null
-  return JSON.stringify(value, null, 2)
 }
 
 function OverviewCard({
@@ -72,48 +68,30 @@ function OverviewCard({
   )
 }
 
-function ContentPartView({ part }: { part: FeedbackContentPart }) {
-  if (part.type === 'file') {
-    return (
-      <div className="rounded-[6px] border border-border bg-foreground/[0.025] px-3 py-2 text-sm">
-        <div className="text-xs text-foreground/45">附件</div>
-        <div className="mt-1 break-all text-foreground/80">{part.filename || part.file_url}</div>
-      </div>
-    )
-  }
+function ToolPayload({
+  label,
+  value,
+}: {
+  label: string
+  value: unknown
+}) {
+  const text = formatMessageValue(value).trim()
+  if (!text) return null
 
-  if (part.type === 'data') {
-    const name = dataValue(part, 'name') ?? 'unknown'
-    const callId = dataValue(part, 'call_id')
-    const argumentsText = dataValue(part, 'arguments')
-    const outputText = dataValue(part, 'output')
-
-    return (
-      <div className="space-y-3 rounded-[6px] border border-border bg-foreground/[0.025] p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary" className="font-mono">{name}</Badge>
-          {callId && <span className="text-xs text-foreground/40">{callId}</span>}
-        </div>
-        {argumentsText && (
-          <div>
-            <div className="mb-1 text-xs text-foreground/45">输入参数</div>
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-[6px] bg-background px-3 py-2 text-xs text-foreground/75">{argumentsText}</pre>
-          </div>
-        )}
-        {outputText && (
-          <div>
-            <div className="mb-1 text-xs text-foreground/45">执行输出</div>
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-[6px] bg-background px-3 py-2 text-xs text-foreground/75">{outputText}</pre>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  return <p className="whitespace-pre-wrap text-sm leading-6 text-foreground/78">{textFromPart(part)}</p>
+  return (
+    <div>
+      <div className="mb-1 text-xs text-foreground/45">{label}</div>
+      <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-[6px] bg-background px-3 py-2 text-xs leading-5 text-foreground/75">
+        {text}
+      </pre>
+    </div>
+  )
 }
 
 function MessageCard({ index, message }: { index: number; message: FeedbackTurnMessage }) {
+  const content = messageText(message)
+  const displayToolName = toolName(message)
+
   return (
     <div className="grid grid-cols-[36px_minmax(0,1fr)] gap-3">
       <div className="flex flex-col items-center">
@@ -128,16 +106,36 @@ function MessageCard({ index, message }: { index: number; message: FeedbackTurnM
             <span className={cn('rounded-md border px-2 py-0.5 text-xs font-medium', tagClassForRole(message.role))}>
               {roleLabel(message.role)}
             </span>
-            <span className={cn('rounded-md border px-2 py-0.5 text-xs font-medium', tagClassForType(message.type))}>
-              {typeLabel(message.type)}
+            <span className="rounded-md border border-border bg-foreground/5 px-2 py-0.5 text-xs font-medium text-foreground/65">
+              {messageKindLabel(message)}
             </span>
+            {displayToolName && (
+              <Badge variant="secondary" className="font-mono">
+                {displayToolName}
+              </Badge>
+            )}
           </div>
           <span className="max-w-[360px] truncate font-mono text-xs text-foreground/35">{message.id}</span>
         </div>
+
         <div className="space-y-3">
-          {message.content.map((part, partIndex) => (
-            <ContentPartView key={`${message.id}-${partIndex}`} part={part} />
-          ))}
+          {content && (
+            <p className={cn(
+              'whitespace-pre-wrap text-sm leading-6',
+              message.role === 'error' ? 'text-destructive' : 'text-foreground/78',
+            )}>
+              {content}
+            </p>
+          )}
+
+          {hasToolMetadata(message) && (
+            <div className="space-y-3 rounded-[6px] border border-border bg-foreground/[0.025] p-3">
+              <ToolPayload label="工具意图" value={message.toolIntent} />
+              <ToolPayload label="输入参数" value={message.toolInput} />
+              <ToolPayload label="执行结果" value={message.toolResult} />
+              <ToolPayload label="调用 ID" value={message.toolUseId} />
+            </div>
+          )}
         </div>
       </article>
     </div>
@@ -218,7 +216,7 @@ export default function FeedbackDetailPage({ record, onBack }: FeedbackDetailPag
               <div className="flex flex-wrap gap-2">
                 <Badge variant="secondary">{summary.displayableCount} 个过程步骤</Badge>
                 <Badge variant="secondary"><Wrench className="mr-1 h-3 w-3" />{summary.toolCallCount} 次工具调用</Badge>
-                <Badge variant="secondary"><Brain className="mr-1 h-3 w-3" />{summary.reasoningCount} 次思考</Badge>
+                <Badge variant="secondary"><Brain className="mr-1 h-3 w-3" />{summary.reasoningCount} 次过程消息</Badge>
               </div>
             </OverviewCard>
           </div>

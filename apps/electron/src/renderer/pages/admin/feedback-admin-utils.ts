@@ -1,5 +1,4 @@
 import type {
-  FeedbackContentPart,
   FeedbackRecord,
   FeedbackTurnMessage,
 } from '@craft-agent/shared/feedback'
@@ -26,50 +25,49 @@ export function filterFeedbackRecords(
   return records.filter(record => filter === 'like' ? record.is_like : !record.is_like)
 }
 
-export function textFromPart(part: FeedbackContentPart): string {
-  if (typeof part.text === 'string') return part.text
-  if (typeof part.file_url === 'string') return part.filename || part.file_url
-
-  const data = part.data
-  if (data?.output && typeof data.output === 'string') return data.output
-  if (data?.arguments && typeof data.arguments === 'string') return data.arguments
-  return ''
+export function formatMessageValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value === undefined || value === null) return ''
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
 }
 
 export function messageText(message: FeedbackTurnMessage): string {
-  return message.content
-    .map(textFromPart)
-    .map(text => text.trim())
-    .filter(Boolean)
-    .join('\n\n')
+  return formatMessageValue(message.content).trim()
 }
 
-export function isDisplayableContentPart(part: FeedbackContentPart): boolean {
-  if (part.type === 'data') {
-    return !!part.data && Object.keys(part.data).length > 0
-  }
-  if (part.type === 'file') {
-    return Boolean(part.filename || part.file_url)
-  }
-  return textFromPart(part).trim().length > 0
+export function hasToolMetadata(message: FeedbackTurnMessage): boolean {
+  return Boolean(
+    message.role === 'tool'
+    || message.toolName
+    || message.toolDisplayName
+    || message.toolUseId
+    || message.toolInput !== undefined
+    || message.toolResult !== undefined
+  )
 }
 
 export function isDisplayableTurnMessage(message: FeedbackTurnMessage): boolean {
-  return message.content.some(isDisplayableContentPart)
+  return messageText(message).length > 0 || hasToolMetadata(message)
 }
 
 export function firstMessageByRole(record: FeedbackRecord, role: string): FeedbackTurnMessage | undefined {
-  return record.turn_messages.find(message => message.role === role)
+  return record.turn_messages.find(message => message.role === role && isDisplayableTurnMessage(message))
 }
 
 export function finalAssistantMessage(record: FeedbackRecord): FeedbackTurnMessage | undefined {
-  return [...record.turn_messages]
+  const assistantMessages = [...record.turn_messages]
     .reverse()
-    .find(message => message.role === 'assistant' && message.type === 'message')
+    .filter(message => message.role === 'assistant' && isDisplayableTurnMessage(message))
+
+  return assistantMessages.find(message => !message.isIntermediate) ?? assistantMessages[0]
 }
 
 export function processCount(record: FeedbackRecord): number {
-  return record.turn_messages.filter(message => message.type === 'plugin_call').length
+  return record.turn_messages.filter(hasToolMetadata).length
 }
 
 export function buildFeedbackDetailSummary(record: FeedbackRecord) {
@@ -84,6 +82,6 @@ export function buildFeedbackDetailSummary(record: FeedbackRecord) {
     displayMessages,
     displayableCount: displayMessages.length,
     toolCallCount: processCount(displayRecord),
-    reasoningCount: displayMessages.filter(message => message.type === 'reasoning').length,
+    reasoningCount: displayMessages.filter(message => message.role === 'assistant' && message.isIntermediate).length,
   }
 }
