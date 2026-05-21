@@ -648,7 +648,7 @@ function mapCopawSkillToListing(
     id: skill.name,
     slug: skill.name,
     ownerId: skill.employeeId,
-    icon: displayName.charAt(0).toUpperCase(),
+    icon: skill.name.charAt(0).toUpperCase(),
     iconBg,
     name: displayName,
     description: skill.description,
@@ -1144,8 +1144,7 @@ ${skill.slug} config export --format json --output ./backup/
 // ============================================================================
 
 function LocalSkillIcon({ skill }: { skill: LoadedSkill }) {
-  const name = skill.metadata?.name ?? skill.slug
-  const label = name.slice(0, 2).toUpperCase()
+  const label = skill.slug.slice(0, 1).toUpperCase()
   const colorClass = skillIconBg(skill.slug)
 
   return (
