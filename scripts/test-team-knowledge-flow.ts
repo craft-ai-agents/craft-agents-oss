@@ -15,6 +15,7 @@
 import { join } from 'path';
 import { homedir } from 'os';
 import { refreshTeamPublicKnowledge, loadTeamPublicKnowledgeCache } from '../packages/shared/src/team-public-knowledge/index.ts';
+import { parseMarkdownEntries } from '../packages/shared/src/markdown-entry-parser/index.ts';
 import {
   formatTeamKnowledgePolicy,
   prefetchTeamKnowledge,
@@ -22,6 +23,18 @@ import {
 } from '../packages/shared/src/agent/core/team-public-knowledge-injector.ts';
 
 const workspaceRoot = process.argv[2] ?? join(homedir(), '.craft-agent', 'workspaces', 'my-workspace');
+const expectedDocumentIds = ['terminology', 'common-knowledge', 'notices', 'constraints'];
+const expectedTerms = ['花豹', '天眼', 'owl', '受托', '乐高'];
+
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function assertIncludes(haystack: string, needle: string, context: string): void {
+  assert(haystack.includes(needle), `${context}: expected to include ${needle}`);
+}
 
 console.log(`Workspace: ${workspaceRoot}\n`);
 
@@ -31,9 +44,8 @@ console.log('=== Step 1: Refresh team knowledge cache ===\n');
 const summary = await refreshTeamPublicKnowledge(workspaceRoot);
 console.log(JSON.stringify(summary, null, 2));
 
-if (summary.added === 0 && summary.updated === 0) {
-  console.log('\n(No new changes — cache already up to date)\n');
-}
+assert(summary.stale === 0, `Refresh should not leave stale documents, got ${summary.stale}`);
+assert(summary.conflicts === 0, `Refresh should not have duplicate document conflicts, got ${summary.conflicts}`);
 
 // ── Step 2: Inspect cache ────────────────────────────────────────
 
@@ -45,6 +57,40 @@ for (const entry of entries) {
   console.log(`  ${entry.id}: "${entry.title}" — ${entry.content.length} chars, hash=${entry.contentHash?.slice(0, 12)}..., stale=${entry.stale}`);
 }
 
+assert(entries.length === 4, `Expected 4 cached documents, got ${entries.length}`);
+assert(
+  JSON.stringify(entries.map(entry => entry.id).sort()) === JSON.stringify([...expectedDocumentIds].sort()),
+  `Expected cached documents ${expectedDocumentIds.join(', ')}, got ${entries.map(entry => entry.id).join(', ')}`,
+);
+
+const entriesById = new Map(entries.map(entry => [entry.id, entry]));
+for (const id of expectedDocumentIds) {
+  const entry = entriesById.get(id);
+  assert(entry, `Missing cached document ${id}`);
+  assert(!entry.stale, `Document ${id} should not be stale`);
+}
+
+const parsed = entries.flatMap(entry => parseMarkdownEntries(entry.content, {
+  sourceDocId: entry.id,
+  sourceTitle: entry.title,
+  priority: entry.priority,
+  updatedAt: entry.updatedAt,
+}));
+const parsedByDoc = new Map(expectedDocumentIds.map(id => [
+  id,
+  parsed.filter(entry => entry.sourceDocId === id),
+]));
+
+assert(parsedByDoc.get('terminology')?.length === 5, 'terminology should contain 5 term entries');
+assert(parsedByDoc.get('terminology')!.every(entry => entry.kind === 'term'), 'terminology entries should all be term kind');
+assert(
+  JSON.stringify(parsedByDoc.get('terminology')!.map(entry => entry.term)) === JSON.stringify(expectedTerms),
+  `terminology terms should be ${expectedTerms.join(', ')}`,
+);
+assert(parsedByDoc.get('common-knowledge')!.every(entry => entry.kind === 'knowledge'), 'common-knowledge entries should all be knowledge kind');
+assert(parsedByDoc.get('notices')!.every(entry => entry.kind === 'notice'), 'notices entries should all be notice kind');
+assert(parsedByDoc.get('constraints')!.every(entry => entry.kind === 'rule'), 'constraints entries should all be rule kind');
+
 // ── Step 3: Trigger terms (policy XML) ────────────────────────────
 
 console.log('\n=== Step 3: Trigger terms (policy injected into every turn) ===\n');
@@ -55,12 +101,20 @@ if (policyXml) {
   console.log('(No policy generated — check enabled flag or cache)');
 }
 
+assert(policyXml, 'Expected team knowledge policy XML');
+for (const term of expectedTerms) {
+  assertIncludes(policyXml, `"${term}" (term)`, 'policy trigger terms');
+}
+for (const nonTrigger of ['灰度时间', '规范着装', '性能问题', '实事求是']) {
+  assert(!policyXml.includes(`"${nonTrigger}"`), `Non-term entry ${nonTrigger} should not appear in trigger terms`);
+}
+
 // ── Step 4: Prefetch (per-message matching) ──────────────────────
 
 const testMessages = [
-  '什么是 Workspace？它和 Session 有什么关系？',
-  '帮我写一个函数，按照编码规范来',
-  '我们团队的 Git 工作流是什么？',
+  '花豹是什么系统？',
+  '今天需要规范着装吗？',
+  '手机银行灰度时间是什么时候？',
   '今天天气不错',
 ];
 
@@ -79,5 +133,17 @@ for (const msg of testMessages) {
     console.log('  (No prefetch block generated — no terms matched)');
   }
 }
+
+const huaBaoResults = prefetchTeamKnowledge(workspaceRoot, '花豹是什么系统？');
+assert(huaBaoResults.some(result => result.kind === 'term' && result.summary.includes('前端性能监控系统')), '花豹 message should prefetch the terminology term entry');
+
+const noticeResults = prefetchTeamKnowledge(workspaceRoot, '今天需要规范着装吗？');
+assert(noticeResults.some(result => result.kind === 'notice' && result.summary.includes('规范着装')), '规范着装 message should prefetch the notice entry');
+
+const knowledgeResults = prefetchTeamKnowledge(workspaceRoot, '手机银行灰度时间是什么时候？');
+assert(knowledgeResults.some(result => result.kind === 'knowledge' && result.summary.includes('手机银行灰度')), '手机银行灰度时间 message should prefetch the knowledge entry');
+
+const emptyResults = prefetchTeamKnowledge(workspaceRoot, '今天天气不错');
+assert(emptyResults.length === 0, 'Unrelated message should not prefetch entries');
 
 console.log('\nDone.');
