@@ -140,6 +140,13 @@ describe('groupConnectionsByProvider', () => {
     expect(result[0][0]).toBe('Anthropic')
   })
 
+  test('"openllm" connections go to "OpenLLM" group', () => {
+    const a = conn('openllm-env', 'openllm')
+    const b = conn('openllm-api', 'openllm')
+    const result = groupConnectionsByProvider([a, b])
+    expect(result).toEqual([['OpenLLM', [a, b]]])
+  })
+
   test('full mixed input — anthropic + local + remote pi_compat + pi', () => {
     const anth = conn('a', 'anthropic')
     const local = conn('ollama', 'pi_compat', { baseUrl: 'http://127.0.0.1:1234' })

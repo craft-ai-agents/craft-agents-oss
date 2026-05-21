@@ -16,6 +16,7 @@ import {
   type Arch,
   downloadBun,
   downloadUv,
+  downloadRtk,
   installDependencies,
   copyRipgrep,
   copyInterceptor,
@@ -77,29 +78,32 @@ async function main(): Promise<void> {
 
   await loadEnvFile(config);
 
-  console.log('\n[1/7] Installing dependencies...');
+  console.log('\n[1/8] Installing dependencies...');
   await installDependencies(config);
 
-  console.log('\n[2/7] Building MCP servers and Pi agent...');
+  console.log('\n[2/8] Building MCP servers and Pi agent...');
   buildMcpServers(config);
 
-  console.log('\n[3/7] Copying subprocess servers into resources...');
+  console.log('\n[3/8] Copying subprocess servers into resources...');
   copySessionServer(config);
   copyBridgeServer(config);
   copyPiAgentServer(config);
   verifyMcpServersExist(config);
 
-  console.log('\n[4/7] Downloading Bun runtime...');
+  console.log('\n[4/8] Downloading Bun runtime...');
   await downloadBun(config);
 
-  console.log('\n[5/7] Downloading uv...');
+  console.log('\n[5/8] Downloading uv...');
   await downloadUv(config);
 
-  console.log('\n[6/7] Staging ripgrep...');
+  console.log('\n[6/8] Downloading RTK...');
+  await downloadRtk(config);
+
+  console.log('\n[7/8] Staging ripgrep...');
   await copyRipgrep(config);
   copyInterceptor(config);
 
-  console.log('\n[7/7] Building and packaging...');
+  console.log('\n[8/8] Building and packaging...');
   await buildElectronAppWindows(config);
   const artifactPath = await packageWindows(config);
 

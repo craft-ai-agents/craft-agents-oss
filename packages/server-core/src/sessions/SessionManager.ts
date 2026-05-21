@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { ENV_CONNECTION_SLUG, ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_HOST_ENV_VAR, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
+import { ENV_CONNECTION_SLUG, ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_BASE_HOST_ENV_VAR, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -135,7 +135,7 @@ export async function buildSsoSubprocessEnvOverrides(
   if (connectionSlug === ENV_CONNECTION_SLUG) {
     baseUrl = (options.env?.LLM_BASE_URL ?? process.env.LLM_BASE_URL)?.trim()
   } else if (connectionSlug === OPENLLM_ENV_CONNECTION_SLUG) {
-    baseUrl = process.env[OPENLLM_HOST_ENV_VAR]?.trim()
+    baseUrl = process.env[OPENLLM_BASE_HOST_ENV_VAR]?.trim()
   } else {
     return {}
   }

@@ -64,6 +64,7 @@ done
 
 # Configuration
 BUN_VERSION="bun-v1.3.9"  # Pinned version for reproducible builds
+RTK_VERSION="v0.40.0"     # Pinned version for reproducible builds
 
 echo "=== Building Craft Agents AppImage (${ARCH}) using electron-builder ==="
 if [ "$UPLOAD" = true ]; then
@@ -113,7 +114,29 @@ unzip -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip" -d "$TEMP_DIR"
 cp "$TEMP_DIR/${BUN_DOWNLOAD}/bun" "$ELECTRON_DIR/vendor/bun/"
 chmod +x "$ELECTRON_DIR/vendor/bun/bun"
 
-# 4. Copy SDK from root node_modules (monorepo hoisting).
+# 4. Download RTK binary with checksum verification
+# Linux ships x64 only; arm64 AppImage is not currently built.
+RTK_TARGET="rtk-x86_64-unknown-linux-musl"
+echo "Downloading RTK ${RTK_VERSION} for linux-x64..."
+mkdir -p "$ELECTRON_DIR/resources/bin/linux-x64"
+RTK_ARCHIVE="${RTK_TARGET}.tar.gz"
+RTK_URL="https://github.com/rtk-ai/rtk/releases/download/${RTK_VERSION}/${RTK_ARCHIVE}"
+
+curl -fSL "$RTK_URL" -o "$TEMP_DIR/${RTK_ARCHIVE}"
+curl -fSL "https://github.com/rtk-ai/rtk/releases/download/${RTK_VERSION}/checksums.txt" -o "$TEMP_DIR/rtk-checksums.txt"
+
+echo "Verifying RTK checksum..."
+cd "$TEMP_DIR"
+grep "${RTK_ARCHIVE}" rtk-checksums.txt | sed 's/^sha256://' | sha256sum -c -
+cd - > /dev/null
+
+tar -xzf "$TEMP_DIR/${RTK_ARCHIVE}" -C "$TEMP_DIR"
+RTK_BIN=$(find "$TEMP_DIR" -name "rtk" -type f | head -1)
+cp "$RTK_BIN" "$ELECTRON_DIR/resources/bin/linux-x64/rtk"
+chmod +x "$ELECTRON_DIR/resources/bin/linux-x64/rtk"
+echo "RTK binary installed: $ELECTRON_DIR/resources/bin/linux-x64/rtk"
+
+# 5. Copy SDK from root node_modules (monorepo hoisting).
 # Since SDK 0.2.113: thin core + per-platform binary package.
 # See apps/electron/scripts/build-dmg.sh for the full rationale.
 SDK_SOURCE="$ROOT_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
