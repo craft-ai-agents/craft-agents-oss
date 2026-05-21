@@ -15,7 +15,7 @@ import {
 } from '../../team-public-knowledge/safety.ts';
 
 const TRIGGER_KINDS: readonly MarkdownEntryKind[] = ['alias', 'slang', 'concept'];
-const MAX_TRIGGER_TERMS = 5;
+const MAX_TRIGGER_TERMS = 30;
 const MAX_PREFETCH = 3;
 
 export interface PrefetchEntry {
