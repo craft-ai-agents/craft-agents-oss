@@ -86,7 +86,7 @@ const DEFAULT_LIMIT = 3;
 const MAX_LIMIT = 5;
 const MIN_RELEVANCE = 0.22;
 const PRIORITY_RELEVANCE_THRESHOLD = 0.32;
-const PRIORITY_KINDS = new Set<MarkdownEntryKind>(['rule', 'warning']);
+const PRIORITY_KINDS = new Set<MarkdownEntryKind>(['rule']);
 
 const STOPWORDS = new Set([
   'a',

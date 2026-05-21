@@ -65,7 +65,7 @@ describe('resolve_team_public_term', () => {
           priority: 1,
           content: `# Conventions
 
-<!-- alias id:py-casing term:py-casing canonical:snake_case -->
+<!-- term id:py-casing term:py-casing canonical:snake_case -->
 Python uses snake_case for variables.`,
           contentHash: 'abc',
           version: 1,
@@ -84,7 +84,7 @@ Python uses snake_case for variables.`,
     expect(parsed.status).toBe('found');
     expect(parsed.match.term).toBe('py-casing');
     expect(parsed.match.canonical).toBe('snake_case');
-    expect(parsed.match.kind).toBe('alias');
+    expect(parsed.match.kind).toBe('term');
     expect(parsed.source).toBe('Engineering Conventions');
     expect(parsed.confidence).toBeGreaterThan(0);
   });
@@ -99,10 +99,10 @@ Python uses snake_case for variables.`,
           priority: 1,
           content: `# Conventions
 
-<!-- alias term:snake_case canonical:snake_case -->
+<!-- term term:snake_case canonical:snake_case -->
 Use snake_case.
 
-<!-- alias term:camelCase canonical:camelCase -->
+<!-- term term:camelCase canonical:camelCase -->
 Use camelCase for JS.`,
           contentHash: 'abc',
           version: 1,
@@ -133,7 +133,7 @@ Use camelCase for JS.`,
           priority: 1,
           content: `# Naming
 
-<!-- concept term:foo -->
+<!-- term term:foo -->
 First definition of foo.
 
 <!-- rule term:foo -->
@@ -167,7 +167,7 @@ Second definition of foo.`,
           priority: 5,
           content: `# Glossary
 
-<!-- alias term:runtime canonical:node summary:Runtime means Node.js -->
+<!-- term term:runtime canonical:node summary:Runtime means Node.js -->
 Use Node.js for runtime references.`,
           contentHash: 'abc',
           version: 1,
@@ -182,7 +182,7 @@ Use Node.js for runtime references.`,
           priority: 5,
           content: `# Glossary
 
-<!-- alias term:runtime canonical:bun summary:Runtime means Bun -->
+<!-- term term:runtime canonical:bun summary:Runtime means Bun -->
 Use Bun for runtime references.`,
           contentHash: 'def',
           version: 1,
@@ -211,7 +211,7 @@ Use Bun for runtime references.`,
           priority: 50,
           content: `# Glossary
 
-<!-- alias term:runtime canonical:node -->
+<!-- term term:runtime canonical:node -->
 Runtime means Node.js.`,
           contentHash: 'abc',
           version: 1,
@@ -226,7 +226,7 @@ Runtime means Node.js.`,
           priority: 10,
           content: `# Glossary
 
-<!-- alias term:runtime canonical:bun -->
+<!-- term term:runtime canonical:bun -->
 Runtime means Bun.`,
           contentHash: 'def',
           version: 1,
@@ -255,7 +255,7 @@ Runtime means Bun.`,
           priority: 10,
           content: `# Glossary
 
-<!-- alias term:runtime canonical:node -->
+<!-- term term:runtime canonical:node -->
 Runtime means Node.js.`,
           contentHash: 'abc',
           version: 1,
@@ -270,7 +270,7 @@ Runtime means Node.js.`,
           priority: 10,
           content: `# Glossary
 
-<!-- alias term:runtime canonical:bun -->
+<!-- term term:runtime canonical:bun -->
 Runtime means Bun.`,
           contentHash: 'def',
           version: 1,
@@ -299,7 +299,7 @@ Runtime means Bun.`,
           priority: 1,
           content: `# Naming
 
-<!-- convention term:foo -->
+<!-- rule term:foo -->
 Use foo.`,
           contentHash: 'abc',
           version: 1,
@@ -316,7 +316,7 @@ Use foo.`,
           priority: 2,
           content: `# Naming
 
-<!-- convention term:bar -->
+<!-- rule term:bar -->
 Use bar.`,
           contentHash: 'def',
           version: 1,
