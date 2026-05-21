@@ -9,6 +9,7 @@ export interface ChatFeedbackStateEntry {
   session_id: string;
   message_id: string;
   isLike: boolean;
+  feedbackId?: string;
 }
 
 export interface ChatFeedbackStateFile {
@@ -39,6 +40,7 @@ function normalizeChatFeedbackState(raw: Partial<ChatFeedbackStateFile> | null |
           session_id: entry.session_id,
           message_id: entry.message_id,
           isLike: entry.isLike,
+          ...(typeof entry.feedbackId === 'string' && entry.feedbackId ? { feedbackId: entry.feedbackId } : {}),
         };
       }
     }
@@ -93,6 +95,7 @@ export function setChatFeedbackState(
     session_id: entry.session_id,
     message_id: entry.message_id,
     isLike: entry.isLike,
+    ...(typeof entry.feedbackId === 'string' && entry.feedbackId ? { feedbackId: entry.feedbackId } : {}),
   };
   saveChatFeedbackState(workspaceRootPath, state);
   return loadChatFeedbackState(workspaceRootPath);
