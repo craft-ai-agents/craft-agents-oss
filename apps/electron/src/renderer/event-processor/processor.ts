@@ -202,16 +202,11 @@ export function processEvent(
       return handleAuthCompleted(state, event)
 
     case 'source_activated':
-      // Source was auto-activated mid-turn, emit effect to auto-retry
-      return {
-        state,
-        effects: [{
-          type: 'auto_retry',
-          sessionId: event.sessionId,
-          originalMessage: event.originalMessage,
-          sourceSlug: event.sourceSlug,
-        }],
-      }
+      // Source was auto-activated mid-turn. Auto-retry is performed
+      // server-side in SessionManager.handleEvent so headless deployments
+      // (WebUI, docker server) also chain source activations correctly.
+      // The renderer just observes the new turn's events as they arrive.
+      return { state, effects: [] }
 
     case 'usage_update':
       return handleUsageUpdate(state, event)

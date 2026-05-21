@@ -7003,16 +7003,48 @@ export class SessionManager implements ISessionManager {
         }, workspaceId)
         break
 
-      case 'source_activated':
-        // A source was auto-activated mid-turn, forward to renderer for auto-retry
-        sessionLog.info(`Source "${event.sourceSlug}" activated, notifying renderer for auto-retry`)
+      case 'source_activated': {
+        // A source was auto-activated mid-turn. The drain controller (#790)
+        // already yielded the sibling tool_results, fired this event, and
+        // aborted the turn cleanly. Now we re-send the user's original
+        // message with a "[<slug> activated]" suffix so the agent continues
+        // with the newly-active source.
+        //
+        // Pre-#XXX the re-send only happened in the Electron renderer
+        // (apps/electron/src/renderer/App.tsx), which left headless
+        // deployments (the WebUI and the docker `craft-agents-server` image)
+        // unable to chain source activations: each `source_test` that
+        // activated a source aborted the turn with no replay, stalling
+        // automation prompts (SEO/GEO orchestrator and similar) after the
+        // first source was activated. Doing the re-send server-side makes
+        // every deployment behave the same.
+        sessionLog.info(`Source "${event.sourceSlug}" activated for session ${sessionId}, scheduling auto-retry`)
         this.sendEvent({
           type: 'source_activated',
           sessionId,
           sourceSlug: event.sourceSlug,
           originalMessage: event.originalMessage,
         }, workspaceId)
+        // 100ms delay matches the prior renderer timing and lets the
+        // in-flight abort propagate before the new turn starts.
+        const messageWithSuffix = `${event.originalMessage}\n\n[${event.sourceSlug} activated]`
+        const messageCountAtSchedule = managed.messages.length
+        setTimeout(() => {
+          const current = this.sessions.get(sessionId)
+          if (!current) return
+          // Skip if another sender (e.g. an older renderer still doing the
+          // legacy client-side retry, or the user typing while we waited)
+          // already queued a new user message for this session.
+          if (current.messages.length > messageCountAtSchedule) {
+            sessionLog.info(`Auto-retry skipped for ${sessionId}: another sender already posted a follow-up message`)
+            return
+          }
+          this.sendMessage(sessionId, messageWithSuffix).catch(err => {
+            sessionLog.error(`Auto-retry sendMessage failed for session ${sessionId}:`, err)
+          })
+        }, 100)
         break
+      }
 
       case 'complete':
         // Complete event from CraftAgent - accumulate usage from this turn
