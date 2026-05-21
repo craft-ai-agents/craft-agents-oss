@@ -270,6 +270,10 @@ export const CHANNEL_MAP = {
   getChatFeedbackState: invoke(RPC_CHANNELS.workspace.GET_CHAT_FEEDBACK_STATE),
   setChatFeedbackState: invoke(RPC_CHANNELS.workspace.SET_CHAT_FEEDBACK_STATE),
   deleteChatFeedbackState: invoke(RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK_STATE),
+  listChatFeedback: invoke(RPC_CHANNELS.workspace.LIST_CHAT_FEEDBACK),
+  addChatFeedback: invoke(RPC_CHANNELS.workspace.ADD_CHAT_FEEDBACK),
+  updateChatFeedback: invoke(RPC_CHANNELS.workspace.UPDATE_CHAT_FEEDBACK),
+  deleteChatFeedback: invoke(RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK),
 
   // Theme
   getAppTheme: invoke(RPC_CHANNELS.theme.GET_APP),

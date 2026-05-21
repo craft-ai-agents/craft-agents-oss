@@ -87,10 +87,12 @@ import { handleErrorMessageAction } from "./error-message-actions"
 import {
   buildFeedbackConversationContext,
   buildFeedbackStateByMessageId,
+  buildFeedbackTurnMessages,
   clampFeedbackComment,
   resolveNextFeedbackValue,
   type FeedbackRating,
 } from "./feedback-context"
+import { ChatFeedbackProvider, useChatFeedbackContext } from "./ChatFeedbackContext"
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -453,7 +455,7 @@ function ScrollOnMount({
  *
  * Shows empty state when no session is selected
  */
-export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>(function ChatDisplay({
+const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>(function ChatDisplayContent({
   session,
   onSendMessage,
   onOpenFile,
@@ -519,6 +521,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Panel focus state (for multi-panel auto-scroll behavior)
   const appShellContext = useAppShellContext()
   const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
+  const { feedbackByMessageId, setFeedbackByMessageId, resetFeedback } = useChatFeedbackContext()
 
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -528,6 +531,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const prevSessionIdRef = React.useRef<string | null>(null)
   const sessionRef = React.useRef<Session | null>(session)
   sessionRef.current = session
+  const pendingFeedbackSaveByMessageIdRef = React.useRef<Record<string, Promise<string>>>({})
   // Reverse pagination: show last N turns initially, load more on scroll up
   const TURNS_PER_PAGE = 20
   const [visibleTurnCount, setVisibleTurnCount] = React.useState(TURNS_PER_PAGE)
@@ -994,7 +998,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
   // Overlay state - controls which overlay is shown (if any)
   const [overlayState, setOverlayState] = useState<OverlayState>(null)
-  const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, FeedbackRating>>({})
   const [dislikeFeedbackDialog, setDislikeFeedbackDialog] = useState<DislikeFeedbackDialogState | null>(null)
 
   // Diff viewer settings - loaded from user preferences on mount, persisted on change
@@ -1038,20 +1041,21 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   }, [])
 
   useEffect(() => {
-    setFeedbackByMessageId({})
+    resetFeedback()
     setDislikeFeedbackDialog(null)
-  }, [session?.id])
+    pendingFeedbackSaveByMessageIdRef.current = {}
+  }, [session?.id, resetFeedback])
 
   useEffect(() => {
     if (!session?.workspaceId || !session.id) {
-      setFeedbackByMessageId({})
+      resetFeedback()
       return
     }
 
     let cancelled = false
     const sessionId = session.id
 
-    setFeedbackByMessageId({})
+    resetFeedback()
     window.electronAPI.getChatFeedbackState(session.workspaceId)
       .then(entries => {
         if (cancelled) return
@@ -1064,7 +1068,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     return () => {
       cancelled = true
     }
-  }, [session?.workspaceId, session?.id])
+  }, [session?.workspaceId, session?.id, resetFeedback, setFeedbackByMessageId])
 
   const logFeedbackToConsole = useCallback((
     turn: AssistantTurn,
@@ -1092,6 +1096,68 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     })
   }, [])
 
+  const buildFeedbackRequestBody = useCallback((
+    turn: AssistantTurn,
+    rating: FeedbackRating,
+    comment: string
+  ) => {
+    const currentSession = sessionRef.current
+    if (!currentSession) return null
+
+    const context = buildFeedbackConversationContext(
+      currentSession.messages,
+      turn.response?.messageId,
+      turn.turnId
+    )
+
+    return {
+      session_id: currentSession.id,
+      employee_id: appShellContext?.ssoUser?.employeeId ?? '',
+      turn_messages: buildFeedbackTurnMessages(context),
+      is_like: rating === 'like',
+      comment,
+    }
+  }, [appShellContext?.ssoUser?.employeeId])
+
+  const persistFeedbackSelection = useCallback((
+    turn: AssistantTurn,
+    messageId: string,
+    rating: FeedbackRating,
+    comment: string,
+    feedbackId?: string
+  ): Promise<string> => {
+    const currentSession = sessionRef.current
+    if (!currentSession?.workspaceId) return Promise.resolve('')
+
+    const body = buildFeedbackRequestBody(turn, rating, comment)
+    if (!body) return Promise.resolve('')
+
+    const save = feedbackId
+      ? window.electronAPI.updateChatFeedback({ ...body, id: feedbackId }).then(() => feedbackId)
+      : window.electronAPI.addChatFeedback(body)
+
+    return save.then(savedFeedbackId => {
+      if (!savedFeedbackId) return ''
+
+      setFeedbackByMessageId(prev => {
+        const current = prev[messageId]
+        if (!current || current.rating !== rating) return prev
+        return {
+          ...prev,
+          [messageId]: { rating, feedbackId: savedFeedbackId },
+        }
+      })
+
+      return window.electronAPI.setChatFeedbackState(
+        currentSession.workspaceId,
+        currentSession.id,
+        messageId,
+        rating === 'like',
+        savedFeedbackId,
+      ).then(() => savedFeedbackId)
+    })
+  }, [buildFeedbackRequestBody, setFeedbackByMessageId])
+
   const handleFeedback = useCallback((
     turn: AssistantTurn,
     messageId: string,
@@ -1100,13 +1166,17 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     const currentSession = sessionRef.current
     if (!currentSession?.workspaceId) return
 
-    const previousRating = feedbackByMessageId[messageId] ?? null
+    const previousFeedback = feedbackByMessageId[messageId]
+    const previousRating = previousFeedback?.rating ?? null
     const nextRating = resolveNextFeedbackValue(previousRating, rating)
 
     setFeedbackByMessageId(prev => {
       const next = { ...prev }
       if (nextRating) {
-        next[messageId] = nextRating
+        next[messageId] = {
+          rating: nextRating,
+          ...(previousFeedback?.feedbackId ? { feedbackId: previousFeedback.feedbackId } : {}),
+        }
       } else {
         delete next[messageId]
       }
@@ -1115,6 +1185,12 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
     if (!nextRating) {
       setDislikeFeedbackDialog(prev => prev?.messageId === messageId ? null : prev)
+      if (previousFeedback?.feedbackId) {
+        window.electronAPI.deleteChatFeedback(previousFeedback.feedbackId)
+          .catch(error => {
+            console.error('[Craft Agent Feedback] Failed to delete remote feedback:', error)
+          })
+      }
       window.electronAPI.deleteChatFeedbackState(currentSession.workspaceId, currentSession.id, messageId)
         .catch(error => {
           console.error('[Craft Agent Feedback] Failed to delete feedback state:', error)
@@ -1126,10 +1202,25 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       currentSession.workspaceId,
       currentSession.id,
       messageId,
-      nextRating === 'like'
+      nextRating === 'like',
+      previousFeedback?.feedbackId,
     ).catch(error => {
       console.error('[Craft Agent Feedback] Failed to save feedback state:', error)
     })
+
+    const savePromise = persistFeedbackSelection(
+      turn,
+      messageId,
+      nextRating,
+      '',
+      previousFeedback?.feedbackId,
+    ).catch(error => {
+      console.error('[Craft Agent Feedback] Failed to save remote feedback:', error)
+      return ''
+    }).finally(() => {
+      delete pendingFeedbackSaveByMessageIdRef.current[messageId]
+    })
+    pendingFeedbackSaveByMessageIdRef.current[messageId] = savePromise
 
     if (nextRating === 'dislike') {
       setDislikeFeedbackDialog({
@@ -1142,7 +1233,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
     setDislikeFeedbackDialog(prev => prev?.messageId === messageId ? null : prev)
     logFeedbackToConsole(turn, nextRating, '')
-  }, [feedbackByMessageId, logFeedbackToConsole])
+  }, [feedbackByMessageId, logFeedbackToConsole, persistFeedbackSelection, setFeedbackByMessageId])
 
   const handleDislikeCommentChange = useCallback((comment: string) => {
     setDislikeFeedbackDialog(prev => prev
@@ -1159,13 +1250,44 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     if (!dislikeFeedbackDialog) return
 
     const comment = clampFeedbackComment(dislikeFeedbackDialog.comment)
+    const currentSession = sessionRef.current
+    const currentFeedback = feedbackByMessageId[dislikeFeedbackDialog.messageId]
     setFeedbackByMessageId(prev => ({
       ...prev,
-      [dislikeFeedbackDialog.messageId]: 'dislike',
+      [dislikeFeedbackDialog.messageId]: {
+        rating: 'dislike',
+        ...(prev[dislikeFeedbackDialog.messageId]?.feedbackId
+          ? { feedbackId: prev[dislikeFeedbackDialog.messageId]!.feedbackId }
+          : {}),
+      },
     }))
+
+    const pendingSave = pendingFeedbackSaveByMessageIdRef.current[dislikeFeedbackDialog.messageId]
+    const feedbackIdPromise = currentFeedback?.feedbackId
+      ? Promise.resolve(currentFeedback.feedbackId)
+      : pendingSave ?? persistFeedbackSelection(dislikeFeedbackDialog.turn, dislikeFeedbackDialog.messageId, 'dislike', '')
+
+    feedbackIdPromise
+      .then(feedbackId => {
+        if (!feedbackId || !currentSession?.workspaceId) return
+        const body = buildFeedbackRequestBody(dislikeFeedbackDialog.turn, 'dislike', comment)
+        if (!body) return
+        return window.electronAPI.updateChatFeedback({ ...body, id: feedbackId })
+          .then(() => window.electronAPI.setChatFeedbackState(
+            currentSession.workspaceId,
+            currentSession.id,
+            dislikeFeedbackDialog.messageId,
+            false,
+            feedbackId,
+          ))
+      })
+      .catch(error => {
+        console.error('[Craft Agent Feedback] Failed to update dislike comment:', error)
+      })
+
     logFeedbackToConsole(dislikeFeedbackDialog.turn, 'dislike', comment)
     setDislikeFeedbackDialog(null)
-  }, [dislikeFeedbackDialog, logFeedbackToConsole])
+  }, [buildFeedbackRequestBody, dislikeFeedbackDialog, feedbackByMessageId, logFeedbackToConsole, persistFeedbackSelection, setFeedbackByMessageId])
 
   // Extract overlay cards for activity-based overlays (Input/Output, future extensible)
   const overlayCards = useMemo(() => {
@@ -1868,7 +1990,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         compactMode={compactMode}
                         sendMessageKey={sendMessageKey}
                         openAnnotationRequest={openAnnotationRequest}
-                        feedbackValue={responseMessageId ? feedbackByMessageId[responseMessageId] ?? null : null}
+                        feedbackValue={responseMessageId ? feedbackByMessageId[responseMessageId]?.rating ?? null : null}
                         onFeedback={responseMessageId ? (rating: FeedbackRating) => handleFeedback(turn, responseMessageId, rating) : undefined}
                         onBranch={session?.supportsBranching ? async (messageId: string, options?: { newPanel?: boolean }) => {
                           if (!session) return
@@ -2289,6 +2411,14 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
         </DialogContent>
       </Dialog>
     </div>
+  )
+})
+
+export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>(function ChatDisplay(props, ref) {
+  return (
+    <ChatFeedbackProvider>
+      <ChatDisplayContent {...props} ref={ref} />
+    </ChatFeedbackProvider>
   )
 })
 
