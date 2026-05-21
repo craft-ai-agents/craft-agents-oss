@@ -3,37 +3,22 @@ import { Check, ChevronDown, Loader2, Upload } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { unzipSync } from 'fflate'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { USE_MOCK_MARKET } from '../mock-data'
 import type { LoadedSkill } from '../../../../../shared/types'
 import type { CopawMarketUploadInput } from '@craft-agent/shared/skills'
 
-export function yamlScalar(v: string): string {
-  return /[:#\[\]{},|>&*!'"?\\]/.test(v) || v.trimStart() !== v || v.trimEnd() !== v
-    ? `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
-    : v
-}
-
-export function buildSkillMd(skill: LoadedSkill): string {
-  const lines = ['---']
-  lines.push(`name: ${yamlScalar(skill.metadata?.name ?? skill.slug)}`)
-  lines.push(`description: ${yamlScalar(skill.metadata?.description ?? '')}`)
-  if (skill.metadata?.author) lines.push(`author: ${yamlScalar(skill.metadata.author)}`)
-  lines.push('---')
-  if (skill.content) { lines.push(''); lines.push(skill.content) }
-  return lines.join('\n')
-}
-
 export function PublishSkillDialog({
   open,
   onClose,
+  workspaceId,
   currentUserId,
   sourceSkill,
   onPublished,
 }: {
   open: boolean
   onClose: () => void
+  workspaceId: string
   currentUserId: string | null
   sourceSkill?: LoadedSkill
   onPublished?: (skillName: string) => void
@@ -109,33 +94,30 @@ export function PublishSkillDialog({
     setUploading(true)
 
     try {
-      // Determine SKILL.md content to upload
-      let skillContent: string
+      // Build upload input — Path A: bundle from local skill; Path B: send raw zip bytes
+      let input: CopawMarketUploadInput
       if (sourceSkill) {
-        skillContent = buildSkillMd(sourceSkill)
+        input = {
+          name: name.trim(),
+          chineseName: chineseName.trim(),
+          description: description.trim(),
+          tag,
+          skillSlug: sourceSkill.slug,
+          workspaceId,
+          skillSource: sourceSkill.source,
+        }
       } else if (file) {
         const buffer = await file.arrayBuffer()
-        const unzipped = unzipSync(new Uint8Array(buffer))
-        const skillMdKey = Object.keys(unzipped).find((k) =>
-          k.toLowerCase() === 'skill.md' || k.toLowerCase().match(/^[^/]+\/skill\.md$/)
-        )
-        if (!skillMdKey) {
-          setErrors({ file: 'zip 中未找到 SKILL.md 文件' })
-          setUploading(false)
-          return
+        input = {
+          name: name.trim(),
+          chineseName: chineseName.trim(),
+          description: description.trim(),
+          tag,
+          zipBytes: new Uint8Array(buffer),
         }
-        skillContent = new TextDecoder().decode(unzipped[skillMdKey])
       } else {
         setUploading(false)
         return
-      }
-
-      const input: CopawMarketUploadInput = {
-        name: name.trim(),
-        chineseName: chineseName.trim(),
-        description: description.trim(),
-        tag,
-        skillContent,
       }
 
       const result: import('@craft-agent/shared/skills').CopawMarketUploadResult = USE_MOCK_MARKET

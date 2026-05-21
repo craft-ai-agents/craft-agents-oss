@@ -113,7 +113,8 @@ export function SkillMarketplacePage({
 
     try {
       const buffer = await file.arrayBuffer()
-      const unzipped = unzipSync(new Uint8Array(buffer))
+      const zipBytes = new Uint8Array(buffer)
+      const unzipped = unzipSync(zipBytes)
 
       // 找 SKILL.md（支持顶层或一级子目录）
       const skillMdKey = Object.keys(unzipped).find((k) =>
@@ -126,7 +127,7 @@ export function SkillMarketplacePage({
 
       const rawContent = new TextDecoder().decode(unzipped[skillMdKey])
 
-      // 简单解析 YAML frontmatter
+      // 只读取 name/display_name/description 用于 UI 显示，不用于写磁盘
       const fmMatch = rawContent.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
       const body = fmMatch ? fmMatch[2].trim() : rawContent
       const yamlStr = fmMatch ? fmMatch[1] : ''
@@ -145,9 +146,8 @@ export function SkillMarketplacePage({
         || 'skill'
       const name = getYamlVal('display_name') ?? getYamlVal('name') ?? slug
       const description = getYamlVal('description') ?? ''
-      const author = getYamlVal('author')
 
-      const parsedMetadata = { name, description, ...(author ? { author } : {}) }
+      const parsedMetadata = { name, description }
       const newSkill: LoadedSkill = {
         slug,
         metadata: parsedMetadata,
@@ -157,10 +157,10 @@ export function SkillMarketplacePage({
         // 无 marketplaceOrigin → 自动归入「本地上传」
       }
 
-      // 写入磁盘（覆盖同名技能）
+      // 写入磁盘：原样解压所有文件，保留 SKILL.md 全部字段（不做 matter.stringify 格式化）
       let diskSaved = true
       try {
-        await window.electronAPI.forceWriteSkill(workspaceId, slug, parsedMetadata, body, 'global')
+        await window.electronAPI.installLocalZip(workspaceId, slug, zipBytes)
       } catch {
         diskSaved = false
       }
@@ -323,8 +323,10 @@ export function SkillMarketplacePage({
         window.electronAPI.deleteSkill(workspaceId, s.slug, s.source, s.path)
           .then(() => {
             removeCopawInstalledSlug(s.slug)
-            // Also clear from installedIds so the market tab shows the skill as not-installed
+            // Clear from installedIds so the market tab shows the skill as not-installed
             setInstalledIds((prev) => { const n = new Set(prev); n.delete(s.slug); return n })
+            // Clear from uploadedSkills so it doesn't resurrect via the de-dup logic in localSkills
+            setUploadedSkills((prev) => prev.filter((u) => u.slug !== s.slug))
             toast.success(`「${name}」已卸载`)
           })
           .catch((err) => {
@@ -383,6 +385,7 @@ export function SkillMarketplacePage({
     <PublishSkillDialog
       open={publishOpen}
       onClose={() => { setPublishOpen(false); setPublishSourceSkill(null) }}
+      workspaceId={workspaceId}
       currentUserId={effectiveCurrentUserId}
       sourceSkill={publishSourceSkill ?? undefined}
       onPublished={handleMarketRefresh}

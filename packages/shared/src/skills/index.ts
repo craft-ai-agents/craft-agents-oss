@@ -42,6 +42,7 @@ export {
   PRODUCT_MARKETPLACE_CATEGORIES,
   createHttpMarketplaceOwnerActionsApi,
   createHttpMarketplacePublishApi,
+  bundleSkillDir,
   publishDirectSkillToMarketplace,
   publishDirectSkillToMarketplaceService,
   publishLocalSkillToMarketplace,

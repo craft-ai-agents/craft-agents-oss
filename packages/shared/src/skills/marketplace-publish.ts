@@ -463,12 +463,17 @@ export function createHttpMarketplaceOwnerActionsApi(baseUrl: string, fetchImpl:
 
 function bundleLocalSkill(workspaceRoot: string, skillSlug: string): Uint8Array {
   const skillDir = join(getWorkspaceSkillsPath(workspaceRoot), skillSlug)
+  return bundleSkillDir(skillDir)
+}
+
+/** Bundle all publishable files from an absolute skill directory path into a zip. */
+export function bundleSkillDir(skillDir: string): Uint8Array {
   const files: Record<string, Uint8Array> = {}
   for (const relativePath of listPublishableSkillFiles(skillDir)) {
     files[relativePath] = readFileSync(join(skillDir, relativePath))
   }
   if (!files['SKILL.md']) {
-    throw new Error('Local Skill bundle must include SKILL.md.')
+    throw new Error('Skill bundle must include SKILL.md.')
   }
   return zipSync(files)
 }

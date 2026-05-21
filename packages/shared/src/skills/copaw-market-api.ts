@@ -41,8 +41,14 @@ export interface CopawMarketUploadInput {
   description: string
   /** A = 公共, B = DevOps */
   tag: 'A' | 'B'
-  /** SKILL.md content — the server will zip this before sending. */
-  skillContent: string
+  /** Raw zip bytes when uploading a zip file directly (Path B). */
+  zipBytes?: Uint8Array
+  /** Skill slug when bundling from an existing local skill (Path A). */
+  skillSlug?: string
+  /** Workspace ID for non-global skills (required when skillSlug is set and source is not global). */
+  workspaceId?: string
+  /** Where the local skill lives — determines which directory to bundle from. */
+  skillSource?: 'global' | 'workspace' | 'project'
 }
 
 /** Internal payload sent as multipart/form-data to the market HTTP service. */
