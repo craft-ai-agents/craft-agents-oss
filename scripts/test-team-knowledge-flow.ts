@@ -36,6 +36,13 @@ function assertIncludes(haystack: string, needle: string, context: string): void
   assert(haystack.includes(needle), `${context}: expected to include ${needle}`);
 }
 
+function assertEqualArray<T>(actual: T[], expected: T[], message: string): void {
+  assert(
+    JSON.stringify(actual) === JSON.stringify(expected),
+    `${message}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+  );
+}
+
 console.log(`Workspace: ${workspaceRoot}\n`);
 
 // ── Step 1: Refresh ──────────────────────────────────────────────
@@ -58,10 +65,7 @@ for (const entry of entries) {
 }
 
 assert(entries.length === 4, `Expected 4 cached documents, got ${entries.length}`);
-assert(
-  JSON.stringify(entries.map(entry => entry.id).sort()) === JSON.stringify([...expectedDocumentIds].sort()),
-  `Expected cached documents ${expectedDocumentIds.join(', ')}, got ${entries.map(entry => entry.id).join(', ')}`,
-);
+assertEqualArray(entries.map(entry => entry.id).sort(), [...expectedDocumentIds].sort(), 'Cached document ids should match');
 
 const entriesById = new Map(entries.map(entry => [entry.id, entry]));
 for (const id of expectedDocumentIds) {
@@ -80,13 +84,11 @@ const parsedByDoc = new Map(expectedDocumentIds.map(id => [
   id,
   parsed.filter(entry => entry.sourceDocId === id),
 ]));
+const terminologyEntries = parsedByDoc.get('terminology')!;
 
-assert(parsedByDoc.get('terminology')?.length === 5, 'terminology should contain 5 term entries');
-assert(parsedByDoc.get('terminology')!.every(entry => entry.kind === 'term'), 'terminology entries should all be term kind');
-assert(
-  JSON.stringify(parsedByDoc.get('terminology')!.map(entry => entry.term)) === JSON.stringify(expectedTerms),
-  `terminology terms should be ${expectedTerms.join(', ')}`,
-);
+assert(terminologyEntries.length === 5, 'terminology should contain 5 term entries');
+assert(terminologyEntries.every(entry => entry.kind === 'term'), 'terminology entries should all be term kind');
+assertEqualArray(terminologyEntries.map(entry => entry.term), expectedTerms, 'terminology terms should match');
 assert(parsedByDoc.get('common-knowledge')!.every(entry => entry.kind === 'knowledge'), 'common-knowledge entries should all be knowledge kind');
 assert(parsedByDoc.get('notices')!.every(entry => entry.kind === 'notice'), 'notices entries should all be notice kind');
 assert(parsedByDoc.get('constraints')!.every(entry => entry.kind === 'rule'), 'constraints entries should all be rule kind');

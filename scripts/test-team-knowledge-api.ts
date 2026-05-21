@@ -11,14 +11,20 @@
  */
 
 export interface TestTeamKnowledgeDocument {
+  /** Stable document identifier used in the mock index and document route. */
   id: string;
+  /** Human-readable title returned by the mock index. */
   title: string;
+  /** Sort priority returned by the mock index. */
   priority: number;
+  /** Markdown body returned by the mock document route. */
   markdown: string;
 }
 
+/** Port used by the team knowledge mock API server. */
 export const TEAM_KNOWLEDGE_API_PORT = 3100;
 
+/** Mock team knowledge documents covering the four supported entry kinds. */
 export const TEAM_KNOWLEDGE_DOCUMENTS: TestTeamKnowledgeDocument[] = [
   {
     id: 'terminology',
@@ -94,6 +100,7 @@ owl 是日志检索与排障平台，排查问题时优先通过 traceId 或关�
 
 const documentsById = new Map(TEAM_KNOWLEDGE_DOCUMENTS.map(document => [document.id, document]));
 
+/** Handles mock team knowledge API requests for the standalone server and tests. */
 export function handleTeamKnowledgeApiRequest(request: Request): Response {
   const url = new URL(request.url);
 
