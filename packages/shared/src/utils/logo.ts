@@ -12,7 +12,7 @@ import { existsSync } from 'fs';
 import { readJsonFileSync } from './files.ts';
 
 // Cache path for persisted provider domains
-const CRAFT_AGENT_DIR = join(homedir(), '.craft-agent');
+const CRAFT_AGENT_DIR = join(homedir(), '.mdp-agent');
 const PROVIDER_DOMAINS_CACHE_PATH = join(CRAFT_AGENT_DIR, 'provider-domains.json');
 
 // Google Favicon V2 API - free, reliable, no API key needed

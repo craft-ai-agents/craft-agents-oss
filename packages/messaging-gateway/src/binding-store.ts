@@ -2,7 +2,7 @@
  * BindingStore — workspace-scoped persistence for channel bindings.
  *
  * Stores bindings in an explicit storage directory (passed by the caller).
- * In Electron this is `~/.craft-agent/workspaces/{wsId}/messaging/`, but tests
+ * In Electron this is `~/.mdp-agent/workspaces/{wsId}/messaging/`, but tests
  * can point it at any directory.
  *
  * One-shot migration: if a legacy path is provided and contains a bindings.json

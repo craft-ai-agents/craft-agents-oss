@@ -256,11 +256,11 @@ export interface ModeConfig {
 /**
  * Minimal fallback configuration for safe mode.
  *
- * The actual patterns are loaded from ~/.craft-agent/permissions/default.json
+ * The actual patterns are loaded from ~/.mdp-agent/permissions/default.json
  * at runtime by PermissionsConfigCache. This fallback ensures the app works
  * even if the JSON file is missing or invalid.
  *
- * To customize allowed commands, edit ~/.craft-agent/permissions/default.json
+ * To customize allowed commands, edit ~/.mdp-agent/permissions/default.json
  */
 export const SAFE_MODE_CONFIG: ModeConfig = {
   // Tools that are always blocked (no read-only variant) - these are hardcoded
