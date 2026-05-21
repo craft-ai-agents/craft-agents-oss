@@ -2773,6 +2773,17 @@ export function setDefaultLlmConnection(slug: string): boolean {
 }
 
 /**
+ * Clear the explicit default LLM connection so the env-var fallback takes over.
+ * Used when the user selects an env-backed (built-in) connection as the global default.
+ */
+export function clearDefaultLlmConnection(): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.defaultLlmConnection = undefined;
+  saveConfig(config);
+}
+
+/**
  * Get the app-level default thinking level for new sessions.
  * Falls back to bundled config-defaults when unset.
  */

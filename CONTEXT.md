@@ -251,7 +251,9 @@ Mid-stream behavior for the Environment Connection is stored as a standalone app
 
 The underlying connection is `providerType: 'pi_compat'`, `authType: 'none'`, `piAuthProvider: 'openai'`. Token injection happens via the network interceptor inside the Pi subprocess, driven by the `CRAFT_LLM_SSO_TOKEN` and `CRAFT_LLM_SSO_BASE_URL` env vars set at subprocess spawn time.
 
-Avoid: env provider, default provider, built-in connection.
+Displayed with a **Built-in** badge in Settings → AI (replaces the Default badge, since env connections are always the system default).
+
+Avoid: env provider, default provider.
 
 ### Custom Provider Connection
 A user-configured LLM connection added through Settings → AI → Add Connection. The only user-editable connection type after the removal of OAuth-based flows. Created via a single-step form: provider preset dropdown (Anthropic, OpenAI, Groq, Bedrock, etc.) + API key field + optional base URL. Backed by `providerType: 'anthropic'` or `providerType: 'pi'` depending on the selected preset.

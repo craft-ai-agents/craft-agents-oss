@@ -2,7 +2,7 @@ import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/proto
 import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, getEnvConnectionMidStreamBehavior, setEnvConnectionMidStreamBehavior, isMidStreamBehavior, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, synthesizeEnvConnection, synthesizeOpenLlmEnvConnection, ENV_CONNECTION_SLUG, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_HOST_ENV_VAR, type EnvConnectionEnv, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { SsoCredentialStore, type SsoSession } from '@craft-agent/shared/auth'
-import { setSetupDeferred } from '@craft-agent/shared/config/storage'
+import { setSetupDeferred, clearDefaultLlmConnection } from '@craft-agent/shared/config/storage'
 import {
   resolveSetupTestConnectionHint,
   testBackendConnection,
@@ -49,14 +49,14 @@ export function isEnvironmentConnectionSlug(slug: string): boolean {
 }
 
 /** Build the UI-facing Environment connection when an active SSO token is available. */
-export function synthesizeEnvConnectionWithStatus(env: EnvConnectionEnv, activeSsoToken: string | undefined): LlmConnectionWithStatus | null {
+export function synthesizeEnvConnectionWithStatus(env: EnvConnectionEnv, activeSsoToken: string | undefined, defaultSlug: string | null): LlmConnectionWithStatus | null {
   const envConnection = activeSsoToken ? synthesizeEnvConnection(env) : null
   if (!envConnection) return null
 
   return {
     ...envConnection,
     isAuthenticated: true,
-    isDefault: true,
+    isDefault: envConnection.slug === defaultSlug,
     isEnvironmentConnection: true,
     midStreamBehavior: getEnvConnectionMidStreamBehavior(),
   }
@@ -478,7 +478,7 @@ export function registerLlmConnectionsHandlersWithRuntime(
     }
 
     const openLlmEnvConnection = synthesizeOpenLlmEnvConnectionWithStatus(process.env, ssoToken, defaultSlug)
-    const envConnection = synthesizeEnvConnectionWithStatus(getCurrentEnvConnectionEnv(), ssoToken)
+    const envConnection = synthesizeEnvConnectionWithStatus(getCurrentEnvConnectionEnv(), ssoToken, defaultSlug)
 
     return [
       ...(openLlmEnvConnection ? [openLlmEnvConnection] : []),
@@ -663,7 +663,11 @@ export function registerLlmConnectionsHandlersWithRuntime(
   server.handle(RPC_CHANNELS.llmConnections.SET_DEFAULT, async (_ctx, slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
       if (isEnvironmentConnectionSlug(slug)) {
-        return rejectEnvironmentConnectionMutation()
+        // Selecting a built-in connection as default means "use the env fallback" —
+        // clear the explicit override so getDefaultLlmConnection() returns the env slug naturally.
+        clearDefaultLlmConnection()
+        await sessionManager.reinitializeAuth()
+        return { success: true }
       }
 
       const success = setDefaultLlmConnection(slug)
