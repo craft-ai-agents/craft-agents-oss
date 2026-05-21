@@ -2,10 +2,10 @@ import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getRemoteResolvePhase } from '../remote-skill-import-state'
-import type { DiscoveredSkill } from '../../../../shared/types'
+import type { DiscoveredSkill } from '../../../../../shared/types'
 
 const appShellSource = readFileSync(
-  join(import.meta.dir, '../AppShell.tsx'),
+  join(import.meta.dir, '../../AppShell.tsx'),
   'utf8',
 )
 
