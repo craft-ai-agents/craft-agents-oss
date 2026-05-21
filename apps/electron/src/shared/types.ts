@@ -499,6 +499,7 @@ export interface ElectronAPI {
   listMarketSkills(): Promise<CopawMarketSkill[]>
   uploadMarketSkill(input: CopawMarketUploadInput): Promise<CopawMarketUploadResult>
   installMarketSkill(workspaceId: string, skillName: string, chineseName: string, description: string, version?: string): Promise<CopawInstallSkillResult>
+  installLocalZip(workspaceId: string, skillName: string, zipBytes: Uint8Array): Promise<{ slug: string }>
   deleteMarketSkill(skillName: string): Promise<{ success: true }>
   fetchMarketSkillContent(skillName: string, version?: string): Promise<{ content: string }>
 
