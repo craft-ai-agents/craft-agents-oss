@@ -85,6 +85,7 @@ if (isClientOnly) {
     webContentsId,
     autoReconnect: true,
     mode: 'remote',
+    requestTimeout: 90_000,
     clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
   })
   wsClient.connect()
@@ -105,6 +106,7 @@ if (isClientOnly) {
     webContentsId,
     autoReconnect: true,
     mode: 'local',
+    requestTimeout: 90_000,
     clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
   })
 
@@ -120,6 +122,7 @@ if (isClientOnly) {
       webContentsId,
       autoReconnect: true,
       mode: 'remote',
+      requestTimeout: 90_000,
       clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
       tlsRejectUnauthorized: false,
     })
@@ -144,6 +147,7 @@ if (isClientOnly) {
       webContentsId,
       autoReconnect: true,
       mode: 'remote',
+      requestTimeout: 90_000,
       clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
       tlsRejectUnauthorized: false,
     })

@@ -2410,7 +2410,12 @@ export function ResponseCard({
 
     return (
       <>
-        <div className="overflow-hidden rounded-[14px] border border-white/[0.07] bg-[#101013]/92 text-white/78 shadow-[0_18px_46px_rgba(0,0,0,0.28)] relative group">
+        <div
+          className={cn(
+            "relative group text-white/78",
+            isPlan && "overflow-hidden rounded-[14px] border border-white/[0.07] bg-[#101013]/92 shadow-[0_18px_46px_rgba(0,0,0,0.28)]"
+          )}
+        >
           {/* Fullscreen button - desktop only; compact mode keeps message chrome minimal */}
           {!compactMode && (
           <button
@@ -2464,7 +2469,8 @@ export function ResponseCard({
           {/* Footer with actions - hidden in compact mode */}
           {!compactMode && (
             <div className={cn(
-              "pl-4 pr-2.5 py-2 border-t border-white/[0.06] flex items-center justify-between bg-white/[0.025]",
+              "pl-4 pr-2.5 flex items-center justify-between",
+              isPlan ? "py-2 border-t border-white/[0.06] bg-white/[0.025]" : "py-1.5 bg-transparent",
               SIZE_CONFIG.fontSize
             )}>
               {/* Left side - Copy, View as Markdown, Annotation hint */}
@@ -2569,7 +2575,7 @@ export function ResponseCard({
   // Streaming response - show throttled content with spinner
   return (
     <>
-      <div className="overflow-hidden rounded-[14px] border border-white/[0.07] bg-[#101013]/92 text-white/78 shadow-[0_18px_46px_rgba(0,0,0,0.28)] group">
+      <div className="text-white/78 group">
         {/* Content area - uses displayedText (throttled) for performance. Outer chat owns scrolling. */}
         <div
           ref={contentRef}
@@ -2592,7 +2598,7 @@ export function ResponseCard({
 
         {/* Footer - hidden in compact mode */}
         {!compactMode && (
-          <div className={cn("px-4 py-2 border-t border-white/[0.06] flex items-center bg-white/[0.025]", SIZE_CONFIG.fontSize)}>
+          <div className={cn("px-4 py-1.5 flex items-center bg-transparent", SIZE_CONFIG.fontSize)}>
             <div className="flex items-center gap-2 text-white/42">
               <Spinner className={SIZE_CONFIG.spinnerSize} />
               <span>Streaming...</span>

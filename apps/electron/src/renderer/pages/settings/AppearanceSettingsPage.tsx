@@ -276,7 +276,6 @@ export default function AppearanceSettingsPage() {
                       onValueChange={setFont}
                       options={[
                         { value: 'inter', label: t("settings.appearance.fontInter") },
-                        { value: 'system', label: t("settings.appearance.fontSystem") },
                       ]}
                     />
                   </SettingsRow>

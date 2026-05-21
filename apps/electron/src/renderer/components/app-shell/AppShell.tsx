@@ -1649,6 +1649,13 @@ function AppShellContent({
   const handleAllSessionsClick = useCallback(() => {
     navigate(routes.view.allSessions())
   }, [])
+  const [sessionsNavExpanded, setSessionsNavExpanded] = React.useState(false)
+  const handleSessionsNavClick = useCallback(() => {
+    setSessionsNavExpanded(prev => !prev)
+    if (!isSessionsNavigation(navState)) {
+      navigate(routes.view.allSessions())
+    }
+  }, [navState])
 
   const handleFlaggedClick = useCallback(() => {
     navigate(routes.view.flagged())
@@ -2025,10 +2032,11 @@ function AppShellContent({
 
     // 5. Automations and Settings
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
+    result.push({ id: 'nav:sessions', type: 'nav', action: handleSessionsNavClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleChatClick, handleAgentsClick, handleSourcesClick, handleSkillsClick, handleOutputsClick, handleAutomationsClick, handleSettingsClick])
+  }, [handleChatClick, handleAgentsClick, handleSourcesClick, handleSkillsClick, handleOutputsClick, handleAutomationsClick, handleSessionsNavClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2410,11 +2418,11 @@ function AppShellContent({
                       label: String(workspaceSessionMetas.length),
                       icon: MessageSquare,
                       variant: isSessionsNavigation(navState) ? "default" : "ghost",
-                      onClick: handleAllSessionsClick,
+                      onClick: handleSessionsNavClick,
                     },
                   ]}
                 />
-                {isSessionsNavigation(navState) && (
+                {sessionsNavExpanded && (
                   <div className="mt-2 space-y-0.5 px-4 pb-5">
                     {(searchActive ? workspaceSessionMetas : filteredSessionMetas).map((item) => {
                       const active = item.id === session.selected

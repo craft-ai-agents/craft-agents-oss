@@ -181,8 +181,8 @@
   --step-content-gap: 1.5rem;
   --step-actions-margin: 2rem;
 
-  /* Fonts - System fonts as default, Inter via data-font="inter" */
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Fonts - Inter as default app face; system only remains as fallback. */
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-default: var(--font-sans);
@@ -400,7 +400,7 @@ html.dark[data-theme="haze"] {
     var(--background-image);
 }
 
-/* Inter Font - Opt-in via data-font="inter" attribute
+/* Inter Font - default app face, with optical settings when data-font is active.
    Loaded from Google Fonts in index.html with optical sizing (opsz) axis */
 html[data-font="inter"] {
   --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -783,9 +783,7 @@ html[data-font="inter"] {
   .runneros-glass-shell {
     position: relative;
     overflow: hidden;
-    background: rgba(32, 32, 32, 0.52);
-    backdrop-filter: blur(30px) saturate(165%);
-    -webkit-backdrop-filter: blur(30px) saturate(165%);
+    background: transparent;
     isolation: isolate;
     transform: translateZ(0);
   }
@@ -793,10 +791,11 @@ html[data-font="inter"] {
   .runneros-app-backdrop {
     position: relative;
     overflow: hidden;
-    background:
-      radial-gradient(circle at 58% 20%, rgba(249, 115, 22, 0.075), transparent 30%),
-      radial-gradient(circle at 46% 32%, rgba(220, 38, 38, 0.055), transparent 36%),
-      linear-gradient(180deg, rgba(28, 28, 31, 0.92), rgba(9, 9, 11, 0.98) 72%, rgba(4, 4, 5, 1));
+    background-image: url("./assets/runnerblue.png");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-color: #08080b; /* Fallback */
   }
 
   .runneros-app-backdrop::before {
@@ -804,9 +803,8 @@ html[data-font="inter"] {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background:
-      linear-gradient(90deg, rgba(255, 255, 255, 0.035), transparent 18%, transparent 82%, rgba(255, 255, 255, 0.025)),
-      radial-gradient(circle at 50% 44%, rgba(255, 255, 255, 0.035), transparent 42%);
+    z-index: 0;
+    background: rgba(0, 0, 0, 0.58);
   }
 
   .runneros-app-backdrop > * {
@@ -848,13 +846,15 @@ html[data-font="inter"] {
     overflow: hidden;
     isolation: isolate;
     transform: translateZ(0);
-    background: transparent;
-    backdrop-filter: blur(24px) saturate(165%);
-    -webkit-backdrop-filter: blur(24px) saturate(165%);
-    border: 1px solid rgba(255, 255, 255, 0.09);
+    background:
+      linear-gradient(180deg, rgba(30, 30, 31, 0.86), rgba(12, 12, 13, 0.9)),
+      rgba(14, 14, 15, 0.84);
+    backdrop-filter: blur(30px) saturate(150%);
+    -webkit-backdrop-filter: blur(30px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.105);
     box-shadow:
-      0 26px 82px rgba(0, 0, 0, 0.44),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      0 32px 90px rgba(0, 0, 0, 0.48),
+      inset 0 1px 0 rgba(255, 255, 255, 0.075);
   }
 
   .runneros-glass-route {

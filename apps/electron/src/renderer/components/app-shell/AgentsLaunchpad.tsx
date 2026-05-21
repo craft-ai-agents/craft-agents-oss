@@ -14,7 +14,7 @@
  */
 
 import * as React from 'react'
-import { BookOpen, ChevronDown, ChevronRight, Cpu, DatabaseZap, MessageSquare, Plus, Settings2, Sparkles, Zap } from 'lucide-react'
+import { BookOpen, Boxes, ChevronDown, ChevronRight, DatabaseZap, Kanban, Lock, MessageSquare, Plus, Settings2, Sparkles, Zap } from 'lucide-react'
 import { useAtomValue } from 'jotai'
 import { toast } from 'sonner'
 import { useAgents } from '@/hooks/useAgents'
@@ -31,6 +31,7 @@ import { skillsAtom } from '@/atoms/skills'
 import { sourcesAtom } from '@/atoms/sources'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { openAgentSessionComposer } from '@/lib/run-agent'
+import { cn } from '@/lib/utils'
 import { getModelsForProviderType } from '@config/llm-connections'
 import { getModelShortName, type ModelDefinition } from '@config/models'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
@@ -109,12 +110,8 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
       <div className="mx-auto max-w-6xl px-7 py-7">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.16em] text-[#fdba74]">
-              <Cpu className="h-2.5 w-2.5" />
-              Agent mesh
-            </div>
-            <h1 className="text-[24px] font-semibold leading-tight text-white">Agents</h1>
-            <p className="mt-1.5 max-w-xl text-xs leading-5 text-white/48">
+            <h1 className="text-[28px] font-semibold leading-tight text-white">Agents</h1>
+            <p className="mt-1 max-w-md text-[12px] leading-[18px] text-white/54">
               Domain-specific operators for creative work, ops, research, tooling, and execution.
             </p>
           </div>
@@ -169,10 +166,11 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
                     <span className="text-[11px] text-white/32">{agents.length}</span>
                   </button>
                   {!collapsed && (
-                    <div className="grid grid-cols-1 gap-2 min-[520px]:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                       {agents.map((agent) => (
                         <AgentCard
                           key={agent.slug}
+                          slug={agent.slug}
                           name={cleanDisplayText(getDisplayName(agent))}
                           description={cleanDisplayText(agent.metadata.description)}
                           isOrchestrator={agent.slug === ORCHESTRATOR_SLUG}
@@ -214,6 +212,7 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
 }
 
 interface AgentCardProps {
+  slug: string
   name: string
   description: string
   isOrchestrator: boolean
@@ -221,7 +220,9 @@ interface AgentCardProps {
   onStartChat: () => void
 }
 
-function AgentCard({ name, description, isOrchestrator, onClick, onStartChat }: AgentCardProps) {
+function AgentCard({ slug, name, description, isOrchestrator, onClick, onStartChat }: AgentCardProps) {
+  const Icon = getAgentCardIcon(slug, name)
+
   return (
     <div
       role="button"
@@ -232,57 +233,53 @@ function AgentCard({ name, description, isOrchestrator, onClick, onStartChat }: 
         event.preventDefault()
         onClick()
       }}
-      className="group relative min-h-[76px] overflow-hidden rounded-[11px] border border-white/[0.075] bg-white/[0.035] p-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#fb923c]/40 hover:bg-white/[0.06] hover:shadow-[0_12px_34px_rgba(0,0,0,0.28),0_0_22px_rgba(249,115,22,0.10)]"
+      className="group relative min-h-[122px] overflow-hidden rounded-[14px] border border-white/10 bg-neutral-900/60 p-3.5 pr-10 text-left shadow-[0_12px_34px_rgba(0,0,0,0.22)] transition-all duration-200 hover:-translate-y-0.5 hover:border-white/16 hover:bg-neutral-900/70 hover:shadow-[0_18px_48px_rgba(0,0,0,0.30),0_0_22px_rgba(255,237,213,0.045)]"
     >
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#fb923c]/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-      <div className="flex items-start gap-1.5">
-        <div
-          className="flex shrink-0 items-center justify-center border border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-          style={{
-            width: 20,
-            height: 20,
-            borderRadius: 6,
-            fontSize: 11,
-            background: isOrchestrator
-              ? 'linear-gradient(135deg, rgba(249,115,22,0.44), rgba(251,146,60,0.16))'
-              : 'linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.035))',
-          }}
-        >
-          <span className="font-mono text-[7px] font-semibold uppercase tracking-[0.06em] text-[#fed7aa]">
-            {name.slice(0, 2)}
-          </span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-[12px] font-semibold text-white">{name}</span>
+      <div className={cn(
+        "pointer-events-none absolute h-24 w-24 rounded-full blur-2xl",
+        isOrchestrator ? "-right-8 -top-8 bg-[#fed7aa]/9" : "-right-8 -top-8 bg-[#fff7ed]/6"
+      )} />
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          onStartChat()
+        }}
+        className="absolute right-3 top-3 inline-flex h-6 w-6 items-center justify-center rounded-[8px] text-white/38 transition-colors hover:bg-white/[0.06] hover:text-white/78"
+        aria-label={`Start chat with ${name}`}
+      >
+        <MessageSquare className="h-3 w-3" />
+      </button>
+      <div className="relative flex items-center gap-2.5">
+        <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-gradient-to-br from-[#fb923c] to-[#f97316] text-neutral-950 shadow-[0_0_14px_rgba(249,115,22,0.12)]">
+          <Icon className="h-[11px] w-[11px]" />
+        </span>
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <h3 className="truncate text-[14px] font-semibold tracking-tight text-white">
+              {name}
+            </h3>
             {isOrchestrator && (
-              <span className="rounded-full border border-[#fb923c]/25 bg-[#f97316]/18 px-1.5 py-0.5 text-[7.5px] font-semibold uppercase tracking-[0.12em] text-[#fed7aa]">
+              <span className="rounded-full border border-white/12 bg-white/[0.055] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-white/62">
                 core
               </span>
             )}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation()
-            onStartChat()
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return
-            event.preventDefault()
-            event.stopPropagation()
-            onStartChat()
-          }}
-          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[7px] text-white/38 opacity-70 transition-colors hover:bg-white/[0.045] hover:text-[#fed7aa] hover:opacity-100"
-          aria-label={`Start chat with ${name}`}
-        >
-          <MessageSquare className="h-2.5 w-2.5" />
-        </button>
       </div>
-      <p className="mt-1.5 line-clamp-2 text-[9.5px] leading-3.5 text-white/44">{description}</p>
+      <p className="relative mt-2 line-clamp-3 text-[11.5px] leading-[18px] text-neutral-300/82">
+        {description}
+      </p>
     </div>
   )
+}
+
+function getAgentCardIcon(slug: string, name: string) {
+  const text = `${slug} ${name}`.toLowerCase()
+  if (text.includes('orchestr') || text.includes('router') || text.includes('hnic')) return Boxes
+  if (text.includes('security') || text.includes('ads') || text.includes('compliance')) return Lock
+  if (text.includes('workflow') || text.includes('project') || text.includes('ops')) return Kanban
+  return Sparkles
 }
 
 interface AgentDetailDialogProps {
@@ -485,7 +482,7 @@ function AgentDetailDialog({ agent, workspaceId, onAgentUpdated, onOpenChange }:
 
 function DetailTile({ label, value, onEdit }: { label: string; value: string; onEdit?: () => void }) {
   return (
-    <div className="rounded-[14px] border border-white/[0.07] bg-white/[0.035] p-3">
+    <div className="rounded-[14px] border border-white/[0.1] bg-white/[0.04] p-3 shadow-[0_4px_12px_rgba(0,0,0,0.1)]">
       <div className="flex items-center justify-between gap-2">
         <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/34">{label}</div>
         {onEdit ? (
@@ -1150,14 +1147,14 @@ interface EmptyStateProps {
 
 function EmptyState({ allAgentsCount, onOpenLibrary }: EmptyStateProps) {
   return (
-    <div className="rounded-[18px] border border-dashed border-white/[0.12] bg-white/[0.03] p-8 text-center">
+    <div className="rounded-[18px] border border-dashed border-white/[0.15] bg-white/[0.02] p-8 text-center">
       <p className="text-sm text-white/70">
         No agents are active in this workspace yet.
       </p>
-      <p className="mt-1 mb-4 text-xs text-white/45">
+      <p className="mt-1 mb-4 text-xs text-white/50">
         {allAgentsCount > 0
-          ? `${allAgentsCount} agents are available in the global library.`
-          : 'The global library is empty. Restart the app to seed the starter set, or create one manually under ~/.agents/agents/.'}
+          ? 'Activate an agent from the library to use it here.'
+          : 'Create a new agent or open the library.'}
       </p>
       {allAgentsCount > 0 && (
         <button

@@ -115,10 +115,10 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_12%_0%,rgba(249,115,22,0.18),transparent_30%),#08080b]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_12%_0%,rgba(249,115,22,0.12),transparent_40%)]">
       <div className="flex items-center justify-between gap-4 border-b border-white/[0.06] px-8 py-7">
         <div className="min-w-0">
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-[#fdba74]">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[#fdba74]">
             <WorkflowIcon className="h-3 w-3" />
             Execution layer
           </div>
@@ -126,7 +126,7 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
             <WorkflowIcon className="h-6 w-6 text-[#fb923c]" />
             <h1 className="text-[28px] font-semibold leading-tight text-white">{t('sidebar.workflows')}</h1>
           </div>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/52">{t('workflows.list.subtitle')}</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">{t('workflows.list.subtitle')}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
@@ -162,7 +162,7 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
           <div className="space-y-8">
             <WorkflowSection title="Active in this workspace" count={activeWorkflows.length}>
               {activeWorkflows.length === 0 ? (
-                <div className="rounded-[16px] border border-white/[0.08] bg-white/[0.03] px-4 py-8 text-center text-sm text-white/45">
+                <div className="rounded-[16px] border border-dashed border-white/[0.15] bg-white/[0.02] px-4 py-8 text-center text-sm text-white/60">
                   No workflows are active in this workspace.
                 </div>
               ) : (
@@ -256,7 +256,7 @@ function WorkflowCard({
   onDeactivate: () => void
 }) {
   return (
-    <div className="group relative overflow-hidden rounded-[14px] border border-white/[0.075] bg-white/[0.035] p-3 pr-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#fb923c]/35 hover:bg-white/[0.06] hover:shadow-[0_14px_42px_rgba(0,0,0,0.30),0_0_28px_rgba(249,115,22,0.10)]">
+    <div className="group relative overflow-hidden rounded-[14px] border border-white/[0.08] bg-white/[0.04] p-3 pr-4 shadow-[0_2px_8px_rgb(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#fb923c]/35 hover:bg-white/[0.06] hover:shadow-[0_8px_24px_rgba(0,0,0,0.25),0_0_16px_rgba(249,115,22,0.1)]">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#fb923c]/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
       <div className="flex items-start gap-2">
         <button
@@ -271,14 +271,14 @@ function WorkflowCard({
           <button type="button" onClick={onOpen} className="block max-w-full truncate text-left text-sm font-semibold text-white hover:text-[#fed7aa]">
             {workflow.metadata.name}
           </button>
-          <div className="mt-1 truncate font-mono text-[11px] text-white/30">{workflow.slug}</div>
+          <div className="mt-1 truncate font-mono text-[11px] text-white/50">{workflow.slug}</div>
         </div>
-        <span className="rounded-full border border-white/[0.07] bg-black/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
+        <span className="rounded-full border border-white/[0.1] bg-black/20 px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
           {active ? workflow.metadata.trigger.type : 'inactive'}
         </span>
       </div>
 
-      <p className="mt-3 line-clamp-2 min-h-10 text-xs leading-5 text-white/50">{workflow.metadata.description}</p>
+      <p className="mt-3 line-clamp-2 min-h-10 text-xs leading-5 text-white/70">{workflow.metadata.description}</p>
 
       <div className="mt-3 flex items-center justify-between gap-3">
         <div>{lastRun ? <RunStateDot state={lastRun.state} /> : <span className="text-xs text-white/30">No runs yet</span>}</div>

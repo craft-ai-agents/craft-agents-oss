@@ -365,7 +365,7 @@ function StateBadge({
               {state.icon}
             </span>
           )}
-          className="pl-2.5"
+          className="!h-7 !pl-2 !pr-1.5 !text-[11px]"
         />
       </PopoverTrigger>
       <PopoverContent
@@ -404,14 +404,15 @@ function FilesPopoverButton({ sessionId, sessionFolderPath }: { sessionId?: stri
         <button
           type="button"
           className={cn(
-            "h-[30px] pl-[12px] pr-[14px] text-xs font-medium rounded-[8px] flex items-center gap-1.5 shrink-0",
+            "h-7 w-7 text-xs font-medium rounded-[8px] flex items-center justify-center shrink-0",
             "outline-none select-none transition-colors",
             "border border-white/[0.08] bg-white/[0.045] text-white/64 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
             "hover:bg-white/[0.08] hover:text-white data-[state=open]:bg-white/[0.08] data-[state=open]:text-white",
           )}
+          aria-label={t("common.info")}
+          title={t("common.info")}
         >
           <Info className="h-3.5 w-3.5 shrink-0" />
-          <span className="whitespace-nowrap">{t("common.info")}</span>
         </button>
       )}
     />
@@ -478,14 +479,14 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
           type="button"
           data-tutorial="permission-mode-dropdown"
           className={cn(
-            "h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px] flex items-center gap-1.5 shadow-tinted outline-none select-none",
+            "h-7 pl-2 pr-1.5 text-[11px] font-medium rounded-[8px] flex items-center gap-1.5 shadow-tinted outline-none select-none",
             currentStyle.className
           )}
           style={{ '--shadow-color': currentStyle.shadowVar } as React.CSSProperties}
         >
-          <PermissionModeIcon mode={optimisticMode} className="h-3.5 w-3.5" />
+          <PermissionModeIcon mode={optimisticMode} className="h-3 w-3" />
           <span>{t(`mode.${optimisticMode}`)}</span>
-          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+          <ChevronDown className="h-3 w-3 opacity-60" />
         </button>
       </PopoverTrigger>
       <PopoverContent

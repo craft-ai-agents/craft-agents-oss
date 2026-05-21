@@ -323,7 +323,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         allowEmptyApiKey,
         model: testModel,
         baseUrl,
-        timeoutMs: 45000,
+        timeoutMs: 75000,
         hostRuntime: buildBackendHostRuntimeContext(deps.platform),
         connection: hint,
       })

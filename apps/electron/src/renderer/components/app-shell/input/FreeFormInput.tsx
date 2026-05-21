@@ -9,11 +9,12 @@ import {
   Square,
   Check,
   DatabaseZap,
+  Folder,
   ChevronDown,
   AlertCircle,
   X,
 } from 'lucide-react'
-import { Icon_Home, Icon_Folder, Spinner } from '@craft-agent/ui'
+import { Icon_Folder, Spinner } from '@craft-agent/ui'
 
 import * as storage from '@/lib/local-storage'
 import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
@@ -54,7 +55,7 @@ import {
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { coerceInputText } from '@/lib/input-text'
-import { isMac, PATH_SEP, getPathBasename } from '@/lib/platform'
+import { PATH_SEP, getPathBasename } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
 import { ImageSupportWarningBanner } from './ImageSupportWarningBanner'
@@ -125,21 +126,6 @@ function formatFollowUpChipText(text: string, fallback: string, maxLength = 50):
     : normalized
 }
 
-
-/** Platform-specific modifier key for keyboard shortcuts */
-const cmdKey = isMac ? '⌘' : 'Ctrl'
-
-/** Default rotating placeholders are now generated inside FreeFormInput via useMemo + t() */
-
-/** Fisher-Yates shuffle — returns a new array in random order */
-function shuffleArray<T>(array: T[]): T[] {
-  const shuffled = [...array]
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
-  }
-  return shuffled
-}
 
 export interface FollowUpInputItem {
   id: string
@@ -309,19 +295,6 @@ export function FreeFormInput({
 }: FreeFormInputProps) {
   const { t } = useTranslation()
 
-  // Default rotating placeholders for onboarding/empty state (i18n-aware)
-  const defaultPlaceholders = React.useMemo(() => [
-    t("chatInput.placeholder.workOn"),
-    t("chatInput.placeholder.shiftTab"),
-    t("chatInput.placeholder.mention"),
-    t("chatInput.placeholder.labels"),
-    t("chatInput.placeholder.newLine"),
-    t("chatInput.placeholder.sidebar", { key: cmdKey }),
-    t("chatInput.placeholder.focusMode", { key: cmdKey }),
-  ], [t])
-
-  const effectivePlaceholderProp = placeholder ?? defaultPlaceholders
-
   // Read connection default model, connections, and workspace info from context.
   // Uses optional variant so playground (no provider) doesn't crash.
   const appShellCtx = useOptionalAppShellContext()
@@ -469,29 +442,7 @@ export function FreeFormInput({
   const appShellContext = useOptionalAppShellContext()
   const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
 
-  // Shuffle placeholder order once per mount so each session feels fresh.
-  // In compact mode, suppress desktop-keyboard guidance that is noisy or misleading
-  // on narrow/mobile-like layouts.
-  const placeholderOptions = React.useMemo(() => {
-    if (!Array.isArray(placeholder)) return placeholder
-    if (!compactMode) return placeholder
-    return placeholder.filter((entry) => {
-      const lower = entry.toLowerCase()
-      return !lower.includes('shift + tab')
-        && !lower.includes('shift + return')
-        && !lower.includes('toggle the sidebar')
-        && !lower.includes('focus mode')
-        && !lower.includes('⌘')
-        && !lower.includes('ctrl')
-    })
-  }, [placeholder, compactMode])
-
-  // Hide placeholder entirely when panel is unfocused in multi-panel layout
-  const shuffledPlaceholder = React.useMemo(
-    () => Array.isArray(effectivePlaceholderProp) ? shuffleArray(effectivePlaceholderProp) : effectivePlaceholderProp,
-    [] // eslint-disable-line react-hooks/exhaustive-deps -- intentionally shuffle only on mount
-  )
-  const effectivePlaceholder = isFocusedPanel ? shuffledPlaceholder : ''
+  const effectivePlaceholder = ''
 
   // Performance optimization: Always use internal state for typing to avoid parent re-renders
   // Sync FROM parent on mount/change (for restoring drafts)
@@ -1910,7 +1861,7 @@ export function FreeFormInput({
               ? t("chat.filesCount", { count: attachments.length })
               : t("chat.attachFiles")
             }
-            isExpanded={isEmptySession}
+            isExpanded={false}
             hasSelection={attachments.length > 0}
             showChevron={false}
             onClick={handleAttachClick}
@@ -1967,9 +1918,9 @@ export function FreeFormInput({
                         return t("chat.sourcesCount", { count: enabledSources.length })
                       })()
                 }
-                isExpanded={isEmptySession}
+                isExpanded={false}
                 hasSelection={optimisticSourceSlugs.length > 0}
-                showChevron={true}
+                showChevron={false}
                 isOpen={sourceDropdownOpen}
                 disabled={disabled}
                 data-tutorial="source-selector-button"
@@ -2453,11 +2404,11 @@ function WorkingDirectoryBadge({
       <PopoverTrigger asChild>
         <span className="shrink min-w-0 overflow-hidden">
           <FreeFormInputContextBadge
-            icon={<Icon_Home className="h-4 w-4" />}
+            icon={<Folder className="h-4 w-4" />}
             label={folderName}
-            isExpanded={isEmptySession}
+            isExpanded={false}
             hasSelection={hasFolder}
-            showChevron={true}
+            showChevron={false}
             isOpen={popoverOpen}
             tooltip={
               hasFolder ? (
