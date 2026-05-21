@@ -479,8 +479,6 @@ async function resolveFeedbackApiContext(): Promise<{ baseUrl: string; token: st
   }
 
   const baseUrl =
-    process.env.FEEDBACK_API_URL ||
-    process.env.PERMISSION_API_URL ||
     process.env.VITE_PERMISSION_API_URL ||
     process.env.MDP_API_URL ||
     ''
