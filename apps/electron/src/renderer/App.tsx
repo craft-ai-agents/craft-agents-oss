@@ -833,16 +833,6 @@ export default function App() {
             })
             break
           }
-          case 'auto_retry': {
-            // A source was auto-activated, automatically re-send the original message
-            // Add suffix to indicate the source was activated
-            const messageWithSuffix = `${effect.originalMessage}\n\n[${effect.sourceSlug} activated]`
-            // Use setTimeout to ensure the previous turn has fully completed
-            setTimeout(() => {
-              window.electronAPI.sendMessage(effect.sessionId, messageWithSuffix)
-            }, 100)
-            break
-          }
           case 'restore_input': {
             // Queued messages were removed from chat on abort — restore their text to the input field.
             // Append to existing draft (user may have started typing) rather than overwrite.
