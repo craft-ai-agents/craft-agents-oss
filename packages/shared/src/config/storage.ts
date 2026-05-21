@@ -42,7 +42,7 @@ import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
 import type { LlmConnection, MidStreamBehavior } from './llm-connections.ts';
-import { ENV_CONNECTION_SLUG, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_HOST_ENV_VAR, defaultMidStreamBehavior, isMidStreamBehavior, isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, registerEnvConnectionMidStreamBehaviorResolver, synthesizeEnvConnection, synthesizeOpenLlmEnvConnection, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
+import { ENV_CONNECTION_SLUG, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_HOST_ENV_VAR, OPENLLM_BASE_HOST_ENV_VAR, defaultMidStreamBehavior, isMidStreamBehavior, isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, registerEnvConnectionMidStreamBehaviorResolver, synthesizeEnvConnection, synthesizeOpenLlmEnvConnection, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
 import {
   getModelProvider,
   getModelById,
@@ -2737,8 +2737,8 @@ export function getDefaultLlmConnection(): string | null {
   // User-set explicit default takes priority over everything
   if (config?.defaultLlmConnection) return config.defaultLlmConnection;
 
-  // OpenLLM env connection takes priority over plain env-provider when OPENLLM_HOST is set.
-  if (process.env[OPENLLM_HOST_ENV_VAR]) return OPENLLM_ENV_CONNECTION_SLUG;
+  // OpenLLM env connection takes priority over plain env-provider when OPENLLM_BASE_HOST is set.
+  if (process.env[OPENLLM_BASE_HOST_ENV_VAR]) return OPENLLM_ENV_CONNECTION_SLUG;
 
   // Env-provider is the implicit default when LLM_BASE_URL is configured —
   // matches the UI contract where it always shows with the "Default" badge.
