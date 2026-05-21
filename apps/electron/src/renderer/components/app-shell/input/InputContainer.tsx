@@ -91,18 +91,41 @@ export function InputContainer({
     }
   }, [contentKey, isTransitioning])
 
-  // Track isProcessing changes in compact mode - animate height collapse/expand
-  const prevIsProcessingRef = React.useRef(isProcessing)
+  // Compact-mode collapse-during-thinking is escapable: the user can hover or
+  // click the collapsed bar to bring the input back without waiting for the
+  // agent to finish. State resets the moment processing ends so the next
+  // thinking cycle starts collapsed again.
+  const [expandedDuringProcessing, setExpandedDuringProcessing] = React.useState(false)
+
   React.useEffect(() => {
-    if (compactMode && prevIsProcessingRef.current !== isProcessing) {
-      prevIsProcessingRef.current = isProcessing
-      setIsAnimating(true)
-      const timer = setTimeout(() => {
-        setIsAnimating(false)
-      }, TRANSITION_DURATION * 1000 + 100)
-      return () => clearTimeout(timer)
+    if (!isProcessing && expandedDuringProcessing) {
+      setExpandedDuringProcessing(false)
     }
-  }, [compactMode, isProcessing])
+  }, [isProcessing, expandedDuringProcessing])
+
+  const handleRequestExpand = React.useCallback(() => {
+    setExpandedDuringProcessing(true)
+  }, [])
+
+  const isCollapsedInCompact = compactMode && isProcessing && !expandedDuringProcessing
+
+  // Animate height when either isProcessing flips OR the user manually expands
+  // / re-collapses the input during a thinking cycle.
+  const prevIsProcessingRef = React.useRef(isProcessing)
+  const prevExpandedRef = React.useRef(expandedDuringProcessing)
+  React.useEffect(() => {
+    if (!compactMode) return
+    const isProcessingChanged = prevIsProcessingRef.current !== isProcessing
+    const expandedChanged = prevExpandedRef.current !== expandedDuringProcessing
+    prevIsProcessingRef.current = isProcessing
+    prevExpandedRef.current = expandedDuringProcessing
+    if (!isProcessingChanged && !expandedChanged) return
+    setIsAnimating(true)
+    const timer = setTimeout(() => {
+      setIsAnimating(false)
+    }, TRANSITION_DURATION * 1000 + 100)
+    return () => clearTimeout(timer)
+  }, [compactMode, isProcessing, expandedDuringProcessing])
 
   // Handle height changes from FreeFormInput (synchronous, no measuring div needed)
   const handleFreeformHeightChange = React.useCallback((height: number) => {
@@ -202,6 +225,8 @@ export function InputContainer({
           {...freeFormProps}
           compactMode={compactMode}
           isProcessing={isProcessing}
+          isCollapsedInCompact={isCollapsedInCompact}
+          onRequestExpand={handleRequestExpand}
           inputRef={forMeasuring ? undefined : textareaRef}
           onHeightChange={forMeasuring ? undefined : handleFreeformHeightChange}
           onFocusChange={forMeasuring ? undefined : handleFocusChange}

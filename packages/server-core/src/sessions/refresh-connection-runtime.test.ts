@@ -3,9 +3,10 @@ import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { resolveBackendContext } from '@craft-agent/shared/agent/backend'
+import type { LlmConnection } from '@craft-agent/shared/config'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import { SessionManager, createManagedSession } from './SessionManager.ts'
-import { buildRestartRequiredSignature } from './runtime-config.ts'
+import { buildRestartRequiredSignature, buildRuntimeConfigUpdate } from './runtime-config.ts'
 
 // Regression coverage for the stale-Pi-subprocess bug where toggling
 // `supportsImages` on a custom-endpoint model wrote to disk but never reached
@@ -197,34 +198,37 @@ describe('refreshConnectionRuntime', () => {
     expect(agent.updateRuntimeConfig).toHaveBeenCalledTimes(1)
   })
 
-  it('records customModels with the per-model supportsImages flag in the IPC payload', async () => {
-    // End-to-end shape check: when the session's connection resolves to a
-    // pi_compat connection with explicit per-model `supportsImages`, the
-    // helper must forward that field on `customModels` so the Pi subprocess
-    // can re-register the model with `input: ['text', 'image']`.
-    const agent = createAgentStub()
-    injectSession(sm, 'shape-check', tmpRoot, 'slug-A', agent)
-
-    await sm.refreshConnectionRuntime('slug-A')
-
-    expect(agent.updateRuntimeConfig).toHaveBeenCalledTimes(1)
-    const payload = agent.updateRuntimeConfig.mock.calls[0]?.[0]
-    expect(payload).toBeDefined()
-    expect(payload).toMatchObject({
-      model: expect.any(String),
-      runtime: expect.any(Object),
+  it('records customModels with the per-model supportsImages flag in the IPC payload', () => {
+    const payload = buildRuntimeConfigUpdate({
+      provider: 'pi',
+      authType: 'api_key_with_endpoint',
+      resolvedModel: 'vision-model',
+      capabilities: { needsHttpPoolServer: false },
+      connection: {
+        slug: 'slug-A',
+        name: 'Custom Endpoint',
+        providerType: 'pi_compat',
+        authType: 'api_key_with_endpoint',
+        baseUrl: 'http://127.0.0.1:11111/v1',
+        piAuthProvider: 'anthropic',
+        customEndpoint: { api: 'anthropic-messages', supportsImages: true },
+        models: [
+          { id: 'vision-model', contextWindow: 262_144, supportsImages: true },
+          { id: 'text-only-model', supportsImages: false },
+          { id: 'plain-model' },
+        ] as unknown as LlmConnection['models'],
+        createdAt: Date.now(),
+      },
     })
+
+    expect(payload.model).toBe('vision-model')
+    expect(payload.runtime).toBeDefined()
     // The runtime envelope mirrors what `pi-agent.ts:requestRuntimeConfigUpdate`
     // unpacks — `customModels` shape preserves `supportsImages` when set.
-    if (payload.runtime?.customModels) {
-      for (const m of payload.runtime.customModels) {
-        if (typeof m === 'object') {
-          expect(typeof m.id).toBe('string')
-          if ('supportsImages' in m) {
-            expect(typeof m.supportsImages).toBe('boolean')
-          }
-        }
-      }
-    }
+    expect(payload.runtime?.customModels).toEqual([
+      { id: 'vision-model', contextWindow: 262_144, supportsImages: true },
+      { id: 'text-only-model', supportsImages: false },
+      'plain-model',
+    ])
   })
 })

@@ -3,6 +3,8 @@ import type { SsoSession } from './mdp-auth-client.ts';
 /** Public renderer-safe view of an authenticated SSO session. */
 export interface AuthenticatedSsoSessionState {
   authenticated: true;
+  employeeId: string;
+  token: string;
   userName?: string;
   department?: string;
   employeeId?: string;
@@ -69,6 +71,8 @@ export async function refreshStoredSsoSession(options: SsoSessionStateOptions): 
 function authenticated(session: SsoSession): AuthenticatedSsoSessionState {
   return {
     authenticated: true,
+    employeeId: session.employeeId,
+    token: session.token,
     userName: session.userName,
     department: session.department,
     employeeId: session.employeeId,

@@ -3,12 +3,16 @@ import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { loadWorkspaceSources } from '@craft-agent/shared/sources'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import type { McpImportCandidate } from '@craft-agent/shared/sources'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.GET,
   RPC_CHANNELS.sources.CREATE,
+  RPC_CHANNELS.sources.UPDATE,
+  RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT,
+  RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES,
   RPC_CHANNELS.sources.DELETE,
   RPC_CHANNELS.sources.START_OAUTH,
   RPC_CHANNELS.sources.SAVE_CREDENTIALS,
@@ -32,11 +36,36 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
   })
 
   // Create a new source
-  server.handle(RPC_CHANNELS.sources.CREATE, async (_ctx, workspaceId: string, config: Partial<import('@craft-agent/shared/sources').CreateSourceInput>) => {
+  server.handle(RPC_CHANNELS.sources.CREATE, async (_ctx, workspaceId: string, config: Partial<import('@craft-agent/shared/sources').CreateSourceInput> & Partial<import('@craft-agent/shared/sources').McpManualSourceInput>) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { createSource } = await import('@craft-agent/shared/sources')
-    return createSource(workspace.rootPath, {
+    const { createMcpSourceFromManualInput, createSource, defaultMcpPostCreateConnectionTester, stdioCommandFingerprint } = await import('@craft-agent/shared/sources')
+    const enableInWorkspace = config.enableInWorkspace ?? true
+    if ((config.type ?? 'mcp') === 'mcp' && config.mcp) {
+      // Auto-confirm stdio commands — user confirmed by submitting the form.
+      let confirmedStdioCommands: Record<string, true> | undefined;
+      if (config.mcp.transport === 'stdio' && config.mcp.command) {
+        const fingerprint = stdioCommandFingerprint(config.mcp.command, config.mcp.args);
+        confirmedStdioCommands = { [fingerprint]: true };
+      }
+      const created = await createMcpSourceFromManualInput(workspace.rootPath, {
+        name: config.name || 'New Source',
+        provider: config.provider || 'custom',
+        enabled: config.enabled ?? true,
+        icon: config.icon,
+        mcp: config.mcp,
+        authCredential: config.authCredential,
+      }, {
+        connectionTester: defaultMcpPostCreateConnectionTester,
+        confirmedStdioCommands,
+      })
+      if (enableInWorkspace) {
+        addSlugToWorkspaceDefaults(workspace.rootPath, created.slug)
+      }
+      pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
+      return created
+    }
+    const created = createSource(workspace.rootPath, {
       name: config.name || 'New Source',
       provider: config.provider || 'custom',
       type: config.type || 'mcp',
@@ -45,6 +74,80 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       api: config.api,
       local: config.local,
     })
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
+    return created
+  })
+
+  // Update an existing source with full overwrite semantics
+  server.handle(RPC_CHANNELS.sources.UPDATE, async (_ctx, workspaceId: string, sourceSlug: string, config: Partial<import('@craft-agent/shared/sources/types').FolderSourceConfig> & { authCredential?: string }) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { loadSourceConfig, saveSourceConfig, loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+
+    const existing = loadSourceConfig(workspace.rootPath, sourceSlug)
+    if (!existing) throw new Error(`Source not found: ${sourceSlug}`)
+
+    // Build updated config preserving identity fields, overwriting editable fields
+    const updated: import('@craft-agent/shared/sources/types').FolderSourceConfig = {
+      ...existing,
+      ...config,
+      slug: existing.slug,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      updatedAt: Date.now(),
+    }
+
+    // Save auth credential if provided
+    if (config.authCredential) {
+      const source = loadSource(workspace.rootPath, sourceSlug)
+      if (source) {
+        const credManager = getSourceCredentialManager()
+        await credManager.save(source, { value: config.authCredential })
+      }
+    }
+
+    saveSourceConfig(workspace.rootPath, updated)
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
+    return updated
+  })
+
+  server.handle(RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT, async (_ctx, workspaceId: string, json: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { detectDuplicateMcpImportCandidates, parseMcpJsonImportCandidates } = await import('@craft-agent/shared/sources')
+    const parsed = parseMcpJsonImportCandidates(json)
+    return {
+      ...parsed,
+      candidates: detectDuplicateMcpImportCandidates(workspace.rootPath, parsed.candidates),
+    }
+  })
+
+  server.handle(RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES, async (_ctx, workspaceId: string, candidates: McpImportCandidate[]) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { createMcpSourcesFromCandidates, defaultMcpPostCreateConnectionTester, stdioCommandFingerprint } = await import('@craft-agent/shared/sources')
+    // Auto-confirm stdio commands — user confirmed by selecting and importing in the preview.
+    const confirmedStdioCommands: Record<string, true> = {};
+    for (const candidate of candidates) {
+      if (candidate.input.mcp?.transport === 'stdio' && candidate.input.mcp.command) {
+        const fingerprint = stdioCommandFingerprint(candidate.input.mcp.command, candidate.input.mcp.args);
+        confirmedStdioCommands[fingerprint] = true;
+      }
+    }
+    const result = await createMcpSourcesFromCandidates(workspace.rootPath, candidates, {
+      connectionTester: defaultMcpPostCreateConnectionTester,
+      confirmedStdioCommands: Object.keys(confirmedStdioCommands).length > 0 ? confirmedStdioCommands : undefined,
+    })
+    // Add successfully created sources with enableInWorkspace to workspace defaults
+    for (const r of result.results) {
+      if (!r.success || 'skipped' in r) continue
+      const candidate = candidates.find((c) => c.key === r.key)
+      if (candidate?.enableInWorkspace ?? true) {
+        addSlugToWorkspaceDefaults(workspace.rootPath, r.sourceSlug)
+      }
+    }
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
+    return result
   })
 
   // Delete a source
@@ -53,6 +156,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
     const { deleteSource } = await import('@craft-agent/shared/sources')
     deleteSource(workspace.rootPath, sourceSlug)
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
 
     // Clean up stale slug from workspace default sources
     const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
@@ -186,7 +290,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
         })
       } else {
         if (!source.config.mcp.url) {
-          return { success: false, error: 'MCP source URL is required for HTTP/SSE transport' }
+          return { success: false, error: 'MCP source URL is required for Streamable HTTP transport' }
         }
 
         let accessToken: string | undefined
@@ -201,7 +305,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
 
         log.info(`Fetching MCP tools from ${source.config.mcp.url}`)
         client = new CraftMcpClient({
-          transport: 'http',
+          transport: 'streamable_http',
           url: source.config.mcp.url,
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
         })
@@ -240,4 +344,16 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       return { success: false, error: errorMessage }
     }
   })
+}
+
+async function addSlugToWorkspaceDefaults(workspaceRootPath: string, slug: string): Promise<void> {
+  const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
+  const wsConfig = loadWorkspaceConfig(workspaceRootPath)
+  if (!wsConfig) return
+  wsConfig.defaults ??= {}
+  wsConfig.defaults.enabledSourceSlugs ??= []
+  if (!wsConfig.defaults.enabledSourceSlugs.includes(slug)) {
+    wsConfig.defaults.enabledSourceSlugs.push(slug)
+    saveWorkspaceConfig(workspaceRootPath, wsConfig)
+  }
 }

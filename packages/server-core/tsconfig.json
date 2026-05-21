@@ -19,6 +19,8 @@
     "noUnusedParameters": false,
     "baseUrl": ".",
     "paths": {
+      "@craft-agent/core": ["../core/src/index.ts"],
+      "@craft-agent/core/*": ["../core/src/*"],
       "@craft-agent/shared": ["../shared/src/index.ts"],
       "@craft-agent/shared/*": ["../shared/src/*"]
     }

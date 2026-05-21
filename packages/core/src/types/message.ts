@@ -253,6 +253,16 @@ export interface Message {
   role: MessageRole;
   content: string;
   timestamp: number;
+  /**
+   * Redacted reference to transient dynamic context sent with this message.
+   * The expanded context block is not persisted.
+   */
+  dynamicContextRef?: {
+    type: 'user_profile' | string;
+    status?: 'fresh' | 'stale' | string;
+    fetchedAt?: number;
+    summary?: string;
+  };
   // Tool-specific fields
   toolName?: string;
   toolUseId?: string;
@@ -340,6 +350,16 @@ export interface StoredMessage {
   type: MessageRole;
   content: string;
   timestamp?: number;
+  /**
+   * Redacted reference to transient dynamic context sent with this message.
+   * The expanded context block is not persisted.
+   */
+  dynamicContextRef?: {
+    type: 'user_profile' | string;
+    status?: 'fresh' | 'stale' | string;
+    fetchedAt?: number;
+    summary?: string;
+  };
   // Tool-specific fields
   toolName?: string;
   toolUseId?: string;
@@ -545,7 +565,8 @@ export type AgentEvent =
   | { type: 'status'; message: string }
   | { type: 'info'; message: string }
   | { type: 'text_delta'; text: string; turnId?: string; parentToolUseId?: string }
-  | { type: 'text_complete'; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string; sdkTurnAnchor?: string }
+  | { type: 'text_complete'; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string; sdkMessageId?: string }
+  | { type: 'pi_turn_anchor'; sdkMessageId: string; sdkTurnAnchor: string }
   | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string; displayName?: string; turnId?: string; parentToolUseId?: string; toolDisplayMeta?: ToolDisplayMeta }
   | { type: 'tool_result'; toolUseId: string; toolName?: string; result: string; isError: boolean; input?: Record<string, unknown>; turnId?: string; parentToolUseId?: string }
   | {

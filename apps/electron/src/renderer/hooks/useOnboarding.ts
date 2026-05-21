@@ -76,6 +76,7 @@ interface UseOnboardingReturn {
 export const BASE_SLUG_FOR_METHOD: Record<ApiSetupMethod, string> = {
   anthropic_api_key: 'anthropic-api',
   pi_api_key: 'pi-api-key',
+  openllm_api_key: 'openllm-api',
 }
 
 /**
@@ -156,6 +157,13 @@ export function apiSetupMethodToConnectionSetup(
         awsRegion: options.awsRegion,
         bedrockAuthMethod: options.bedrockAuthMethod,
       }
+    case 'openllm_api_key':
+      return {
+        slug,
+        credential: options.credential,
+        defaultModel: options.connectionDefaultModel,
+        models: options.models,
+      }
   }
 }
 
@@ -218,9 +226,10 @@ export function useOnboarding({
       iamCredentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
       awsRegion?: string
       bedrockAuthMethod?: 'iam_credentials' | 'environment'
+      setupMethodOverride?: ApiSetupMethod
     },
   ): Promise<boolean> => {
-    const method = state.apiSetupMethod
+    const method = options?.setupMethodOverride ?? state.apiSetupMethod
     if (!method) {
       return false
     }
@@ -327,6 +336,7 @@ export function useOnboarding({
     setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
 
     const isPiApiKeyFlow = state.apiSetupMethod === 'pi_api_key'
+    const isOpenLlmApiKeyFlow = state.apiSetupMethod === 'openllm_api_key' || data.setupMethodOverride === 'openllm_api_key'
 
     try {
       // Bedrock (Pi+amazon-bedrock) — skip API key validation and connection test
@@ -358,6 +368,7 @@ export function useOnboarding({
           piAuthProvider: data.piAuthProvider,
           modelSelectionMode: data.modelSelectionMode,
           customEndpoint: data.customEndpoint,
+          setupMethodOverride: data.setupMethodOverride,
         })
         if (saved) {
           setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
@@ -379,9 +390,23 @@ export function useOnboarding({
         return
       }
 
+      if (isOpenLlmApiKeyFlow) {
+        const saved = await handleSaveConfig(data.apiKey, {
+          connectionDefaultModel: data.connectionDefaultModel,
+          models: data.models,
+          setupMethodOverride: data.setupMethodOverride,
+        })
+        if (saved) {
+          setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
+        } else {
+          setState(s => ({ ...s, credentialStatus: 'error' }))
+        }
+        return
+      }
+
       // Validate connection by spawning a lightweight subprocess test.
       // Custom endpoint protocol routes through PiAgent at runtime, so test with Pi too.
-      const setupTestProvider = data.customEndpoint ? 'pi' : (isPiApiKeyFlow ? 'pi' : 'anthropic')
+      const setupTestProvider = data.customEndpoint || isOpenLlmApiKeyFlow ? 'pi' : (isPiApiKeyFlow ? 'pi' : 'anthropic')
       const testResult = await window.electronAPI.testLlmConnectionSetup({
         provider: setupTestProvider,
         apiKey: data.apiKey,
@@ -389,6 +414,7 @@ export function useOnboarding({
         model: data.models?.[0],
         piAuthProvider: data.piAuthProvider,
         customEndpoint: data.customEndpoint,
+        providerType: isOpenLlmApiKeyFlow ? 'openllm' : undefined,
       })
 
       if (!testResult.success) {
@@ -407,6 +433,7 @@ export function useOnboarding({
         piAuthProvider: data.piAuthProvider,
         modelSelectionMode: data.modelSelectionMode,
         customEndpoint: data.customEndpoint,
+        setupMethodOverride: data.setupMethodOverride,
       })
 
       if (saved) {

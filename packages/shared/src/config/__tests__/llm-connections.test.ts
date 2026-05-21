@@ -3,6 +3,7 @@ import '../../../tests/setup/register-pi-model-resolver.ts'
 import {
   getDefaultModelsForConnection,
   getDefaultModelForConnection,
+  getModelsForProviderType,
   synthesizeEnvConnection,
   isCompatProvider,
   isAnthropicProvider,
@@ -31,7 +32,17 @@ describe('synthesizeEnvConnection', () => {
       models: [],
       defaultModel: undefined,
       createdAt: 0,
+      isEnvironmentConnection: true,
     })
+  })
+
+  it('uses LLM_CONNECTION_NAME as the Environment connection display name when present', () => {
+    const conn = synthesizeEnvConnection({
+      LLM_BASE_URL: 'https://llm.example.test/v1',
+      LLM_CONNECTION_NAME: 'OpenLLM',
+    })
+
+    expect(conn?.name).toBe('OpenLLM')
   })
 
   it('populates models and defaultModel from LLM_MODEL when present', () => {
@@ -125,6 +136,17 @@ describe('getDefaultModelForConnection', () => {
     const defaultModel = getDefaultModelForConnection('pi_compat')
     expect(defaultModel).toBe('')
   })
+
+  it('returns empty string for openllm (user-defined provider)', () => {
+    const defaultModel = getDefaultModelForConnection('openllm')
+    expect(defaultModel).toBe('')
+  })
+})
+
+describe('getModelsForProviderType', () => {
+  it('returns an empty list for openllm', () => {
+    expect(getModelsForProviderType('openllm')).toEqual([])
+  })
 })
 
 // ============================================================
@@ -134,6 +156,10 @@ describe('getDefaultModelForConnection', () => {
 describe('isCompatProvider', () => {
   it('returns true for pi_compat', () => {
     expect(isCompatProvider('pi_compat')).toBe(true)
+  })
+
+  it('returns true for openllm', () => {
+    expect(isCompatProvider('openllm')).toBe(true)
   })
 
   it('returns false for anthropic', () => {
@@ -162,6 +188,10 @@ describe('isPiProvider', () => {
 
   it('returns true for pi_compat', () => {
     expect(isPiProvider('pi_compat')).toBe(true)
+  })
+
+  it('returns true for openllm', () => {
+    expect(isPiProvider('openllm')).toBe(true)
   })
 
   it('returns false for anthropic', () => {

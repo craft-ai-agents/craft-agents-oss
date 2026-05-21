@@ -5,6 +5,7 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, updateWorkspaceRemoteServer } from '@craft-agent/shared/config'
 import { perf } from '@craft-agent/shared/utils'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
+import type { ChatFeedbackAddRequest, ChatFeedbackUpdateRequest } from '@craft-agent/shared/feedback'
 import type { HandlerDeps } from '../handler-deps'
 import { isValidWorkspaceRootPath } from '../../utils/path-validation'
 
@@ -18,6 +19,13 @@ export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.window.SWITCH_WORKSPACE,
   RPC_CHANNELS.workspace.READ_IMAGE,
   RPC_CHANNELS.workspace.WRITE_IMAGE,
+  RPC_CHANNELS.workspace.GET_CHAT_FEEDBACK_STATE,
+  RPC_CHANNELS.workspace.SET_CHAT_FEEDBACK_STATE,
+  RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK_STATE,
+  RPC_CHANNELS.workspace.LIST_CHAT_FEEDBACK,
+  RPC_CHANNELS.workspace.ADD_CHAT_FEEDBACK,
+  RPC_CHANNELS.workspace.UPDATE_CHAT_FEEDBACK,
+  RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK,
   RPC_CHANNELS.theme.GET_APP,
   RPC_CHANNELS.theme.GET_PRESETS,
   RPC_CHANNELS.theme.LOAD_PRESET,
@@ -274,6 +282,63 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   })
 
   // ============================================================
+  // Chat Feedback State
+  // ============================================================
+
+  server.handle(RPC_CHANNELS.workspace.GET_CHAT_FEEDBACK_STATE, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { listChatFeedbackState } = await import('@craft-agent/shared/workspaces')
+    return listChatFeedbackState(workspace.rootPath)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.SET_CHAT_FEEDBACK_STATE, async (_ctx, workspaceId: string, sessionId: string, messageId: string, isLike: boolean, feedbackId?: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { setChatFeedbackState } = await import('@craft-agent/shared/workspaces')
+    setChatFeedbackState(workspace.rootPath, {
+      session_id: sessionId,
+      message_id: messageId,
+      isLike,
+      feedbackId,
+    })
+  })
+
+  server.handle(RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK_STATE, async (_ctx, workspaceId: string, sessionId: string, messageId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { deleteChatFeedbackState } = await import('@craft-agent/shared/workspaces')
+    deleteChatFeedbackState(workspace.rootPath, sessionId, messageId)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.LIST_CHAT_FEEDBACK, async () => {
+    const { baseUrl, token } = await resolveFeedbackApiContext()
+    const { listChatFeedback } = await import('@craft-agent/shared/feedback')
+    return listChatFeedback(baseUrl, token)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.ADD_CHAT_FEEDBACK, async (_ctx, body: ChatFeedbackAddRequest) => {
+    const { baseUrl, token, employeeId } = await resolveFeedbackApiContext()
+    const { addChatFeedback } = await import('@craft-agent/shared/feedback')
+    return addChatFeedback({ ...body, employee_id: body.employee_id || employeeId }, baseUrl, token)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.UPDATE_CHAT_FEEDBACK, async (_ctx, body: ChatFeedbackUpdateRequest) => {
+    const { baseUrl, token, employeeId } = await resolveFeedbackApiContext()
+    const { updateChatFeedback } = await import('@craft-agent/shared/feedback')
+    return updateChatFeedback({ ...body, employee_id: body.employee_id || employeeId }, baseUrl, token)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK, async (_ctx, id: string) => {
+    const { baseUrl, token } = await resolveFeedbackApiContext()
+    const { deleteChatFeedback } = await import('@craft-agent/shared/feedback')
+    return deleteChatFeedback(id, baseUrl, token)
+  })
+
+  // ============================================================
   // Theme (app-level only)
   // ============================================================
 
@@ -404,4 +469,29 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     const result = getLogoUrl(serviceUrl, provider)
     return result
   })
+}
+
+async function resolveFeedbackApiContext(): Promise<{ baseUrl: string; token: string; employeeId: string }> {
+  const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+  const session = await new SsoCredentialStore().load()
+  if (!session) {
+    throw new Error('SSO session is required to submit feedback')
+  }
+
+  const baseUrl =
+    process.env.FEEDBACK_API_URL ||
+    process.env.PERMISSION_API_URL ||
+    process.env.VITE_PERMISSION_API_URL ||
+    process.env.MDP_API_URL ||
+    ''
+
+  if (!baseUrl) {
+    throw new Error('Feedback API base URL is not configured')
+  }
+
+  return {
+    baseUrl,
+    token: session.token,
+    employeeId: session.employeeId,
+  }
 }

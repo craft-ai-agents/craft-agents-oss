@@ -1,7 +1,7 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, synthesizeEnvConnection, ENV_CONNECTION_SLUG, type EnvConnectionEnv, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, getEnvConnectionMidStreamBehavior, setEnvConnectionMidStreamBehavior, isMidStreamBehavior, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, synthesizeEnvConnection, synthesizeOpenLlmEnvConnection, ENV_CONNECTION_SLUG, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_HOST_ENV_VAR, type EnvConnectionEnv, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { SsoCredentialStore } from '@craft-agent/shared/auth'
+import { SsoCredentialStore, type SsoSession } from '@craft-agent/shared/auth'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
 import {
   resolveSetupTestConnectionHint,
@@ -14,7 +14,7 @@ import { getWorkspaceOrThrow, buildBackendHostRuntimeContext } from '@craft-agen
 import { type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
-export { ENV_CONNECTION_SLUG } from '@craft-agent/shared/config'
+export { ENV_CONNECTION_SLUG, OPENLLM_ENV_CONNECTION_SLUG } from '@craft-agent/shared/config'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.LIST,
@@ -25,6 +25,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.DELETE,
   RPC_CHANNELS.llmConnections.TEST,
   RPC_CHANNELS.llmConnections.SET_DEFAULT,
+  RPC_CHANNELS.llmConnections.SET_ENV_MID_STREAM_BEHAVIOR,
   RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT,
   RPC_CHANNELS.llmConnections.REFRESH_MODELS,
   RPC_CHANNELS.settings.SETUP_LLM_CONNECTION,
@@ -42,9 +43,9 @@ export function rejectEnvironmentConnectionMutation(): { success: false; error: 
   }
 }
 
-/** Return true when a connection slug targets the reserved Environment connection. */
+/** Return true when a connection slug targets a reserved synthesized connection (env-provider or openllm-env). */
 export function isEnvironmentConnectionSlug(slug: string): boolean {
-  return slug === ENV_CONNECTION_SLUG
+  return slug === ENV_CONNECTION_SLUG || slug === OPENLLM_ENV_CONNECTION_SLUG
 }
 
 /** Build the UI-facing Environment connection when an active SSO token is available. */
@@ -57,10 +58,55 @@ export function synthesizeEnvConnectionWithStatus(env: EnvConnectionEnv, activeS
     isAuthenticated: true,
     isDefault: true,
     isEnvironmentConnection: true,
+    midStreamBehavior: getEnvConnectionMidStreamBehavior(),
   }
 }
 
+/** Build the UI-facing OpenLLM environment connection when an active SSO token is available. */
+export function synthesizeOpenLlmEnvConnectionWithStatus(
+  env: NodeJS.ProcessEnv,
+  activeSsoToken: string | undefined,
+  defaultSlug: string | null,
+): LlmConnectionWithStatus | null {
+  const conn = activeSsoToken ? synthesizeOpenLlmEnvConnection(env) : null
+  if (!conn) return null
+
+  return {
+    ...conn,
+    isAuthenticated: true,
+    isDefault: conn.slug === defaultSlug,
+    isEnvironmentConnection: true,
+  }
+}
+
+function getCurrentEnvConnectionEnv(): EnvConnectionEnv {
+  return {
+    LLM_BASE_URL: process.env.LLM_BASE_URL,
+    LLM_MODEL: process.env.LLM_MODEL,
+    LLM_CONNECTION_NAME: process.env.LLM_CONNECTION_NAME,
+  }
+}
+
+/** Runtime dependencies used by LLM connection handlers at process boundaries. */
+export interface LlmConnectionsRuntimeDeps {
+  testBackendConnection: typeof testBackendConnection
+  loadSsoSession: () => Promise<Pick<SsoSession, 'token' | 'expiresAt'> | null>
+}
+
+/** Register renderer-facing RPC handlers for LLM connection setup and management. */
 export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerDeps): void {
+  registerLlmConnectionsHandlersWithRuntime(server, deps, {
+    testBackendConnection,
+    loadSsoSession: () => new SsoCredentialStore().load(),
+  })
+}
+
+/** Register LLM connection handlers with explicit runtime dependencies. */
+export function registerLlmConnectionsHandlersWithRuntime(
+  server: RpcServer,
+  deps: HandlerDeps,
+  runtimeDeps: LlmConnectionsRuntimeDeps,
+): void {
   const { sessionManager } = deps
 
   // Unified handler for LLM connection setup
@@ -312,7 +358,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // Unified connection test — uses the agent factory to spawn a real agent subprocess
   // and validate credentials via runMiniCompletion(). Same code path as actual chat.
   server.handle(RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP, async (_ctx, params: import('@craft-agent/shared/protocol').TestLlmConnectionParams): Promise<import('@craft-agent/shared/protocol').TestLlmConnectionResult> => {
-    const { provider, apiKey, baseUrl, model, piAuthProvider, customEndpoint } = params
+    const { provider, apiKey, baseUrl, model, piAuthProvider, customEndpoint, providerType } = params
     const trimmedKey = apiKey?.trim() ?? ''
     const allowEmptyApiKey = !setupTestRequiresApiKey(baseUrl)
 
@@ -325,7 +371,9 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       return { success: false, error: setupValidation.error }
     }
 
-    const hint = resolveSetupTestConnectionHint({ provider, baseUrl, piAuthProvider, customEndpoint })
+    const hint = providerType === 'openllm'
+      ? { providerType: 'openllm' as const }
+      : resolveSetupTestConnectionHint({ provider, baseUrl, piAuthProvider, customEndpoint })
     deps.platform.logger?.info(`[testLlmConnectionSetup] Testing: provider=${provider}${piAuthProvider ? ` piAuth=${piAuthProvider}` : ''}${baseUrl ? ` baseUrl=${baseUrl}` : ''} hasCustomEndpoint=${!!customEndpoint} hintProvider=${hint.providerType}`)
 
     const startedAt = Date.now()
@@ -429,13 +477,14 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       deps.platform.logger?.warn(`Failed to load SSO session for Environment connection: ${error instanceof Error ? error.message : error}`)
     }
 
-    const envConnection = synthesizeEnvConnectionWithStatus({
-      LLM_BASE_URL: process.env.LLM_BASE_URL,
-      LLM_MODEL: process.env.LLM_MODEL,
-    }, ssoToken)
-    if (!envConnection) return persistedConnections
+    const openLlmEnvConnection = synthesizeOpenLlmEnvConnectionWithStatus(process.env, ssoToken, defaultSlug)
+    const envConnection = synthesizeEnvConnectionWithStatus(getCurrentEnvConnectionEnv(), ssoToken)
 
-    return [envConnection, ...persistedConnections]
+    return [
+      ...(openLlmEnvConnection ? [openLlmEnvConnection] : []),
+      ...(envConnection ? [envConnection] : []),
+      ...persistedConnections,
+    ]
   })
 
   // Get a specific LLM connection by slug
@@ -504,6 +553,22 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     }
   })
 
+  server.handle(RPC_CHANNELS.llmConnections.SET_ENV_MID_STREAM_BEHAVIOR, async (_ctx, behavior: unknown): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (!isMidStreamBehavior(behavior)) {
+        return { success: false, error: `Invalid mid-stream behavior: ${behavior}. Valid values: 'steer', 'queue'` }
+      }
+      const success = setEnvConnectionMidStreamBehavior(behavior)
+      if (!success) {
+        return { success: false, error: 'Failed to persist environment mid-stream behavior' }
+      }
+      return { success: true }
+    } catch (error) {
+      deps.platform.logger?.error('Failed to save environment mid-stream behavior:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
   // Delete an LLM connection (at least one connection must remain)
   server.handle(RPC_CHANNELS.llmConnections.DELETE, async (_ctx, slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -535,6 +600,38 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // Test an LLM connection (validate credentials and connectivity with actual API call)
   server.handle(RPC_CHANNELS.llmConnections.TEST, async (_ctx, slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      if (isEnvironmentConnectionSlug(slug)) {
+        const envConnection = slug === OPENLLM_ENV_CONNECTION_SLUG
+          ? synthesizeOpenLlmEnvConnection(process.env)
+          : synthesizeEnvConnection(getCurrentEnvConnectionEnv())
+
+        if (!envConnection) {
+          return { success: false, error: 'Connection not found' }
+        }
+
+        const ssoSession = await runtimeDeps.loadSsoSession()
+        if (!ssoSession?.token || ssoSession.expiresAt <= Date.now()) {
+          return { success: false, error: 'No active SSO session configured' }
+        }
+
+        const result = await runtimeDeps.testBackendConnection({
+          provider: 'pi',
+          apiKey: ssoSession.token,
+          model: envConnection.defaultModel ?? '',
+          baseUrl: envConnection.baseUrl,
+          timeoutMs: 45000,
+          hostRuntime: buildBackendHostRuntimeContext(deps.platform),
+          connection: envConnection,
+        })
+
+        if (!result.success) {
+          return { success: false, error: result.error }
+        }
+
+        deps.platform.logger?.info(`LLM connection validated: ${slug}`)
+        return { success: true }
+      }
+
       const result = await validateStoredBackendConnection({
         slug,
         hostRuntime: buildBackendHostRuntimeContext(deps.platform),

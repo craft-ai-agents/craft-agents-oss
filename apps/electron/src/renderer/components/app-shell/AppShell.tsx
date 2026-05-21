@@ -21,6 +21,7 @@ import {
   Radio,
   Bot,
   Info,
+  ShieldCheck,
 } from "lucide-react"
 import { TopBar } from "./TopBar"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
@@ -81,13 +82,15 @@ import {
   isSkillMarketplaceNavigation,
   isAutomationsNavigation,
   isArchivedNavigation,
+  isAdminNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
-import type { SettingsSubpage } from "../../../shared/types"
+import type { SettingsSubpage, AdminSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { ArchivedSessionsPanel } from "./ArchivedSessionsPanel"
 import { SkillsListPanel } from "./skill/SkillsListPanel"
 import { SkillImportModal } from "./skill/SkillImportModal"
+import { McpSourceFormDialog } from "./McpSourceFormDialog"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { APP_EVENTS, AGENT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
 import { useAutomations } from "@/hooks/useAutomations"
@@ -97,6 +100,7 @@ import { FabNewChat } from "./FabNewChat"
 import { SendToWorkspaceDialog } from "./SendToWorkspaceDialog"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
+import AdminNavigator from "@/pages/admin/AdminNavigator"
 import {
   PANEL_GAP,
   PANEL_EDGE_INSET,
@@ -471,6 +475,22 @@ function AppShellContent({
 
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
+
+  // Admin permission check
+  const [isAdmin, setIsAdmin] = React.useState(false)
+  React.useEffect(() => {
+    const permissionApiBase: string = import.meta.env.VITE_PERMISSION_API_URL ?? ''
+    window.electronAPI.getSsoSession().then((session) => {
+      if (!session.authenticated) return
+      const employeeId = session.employeeId
+      fetch(`${permissionApiBase}/api/mdp/permission/checkAdmin?employeeId=${encodeURIComponent(employeeId)}`, {
+        headers: { authorization: session.token },
+      })
+        .then((res) => res.json())
+        .then((json: { body: boolean }) => { if (json.body) setIsAdmin(true) })
+        .catch(() => {})
+    }).catch(() => {})
+  }, [])
 
   // Enabled permission modes for Shift+Tab cycling (min 2 modes)
   const [enabledModes, setEnabledModes] = React.useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
@@ -1174,6 +1194,11 @@ function AppShellContent({
     navigate(routes.view.settings(subpage))
   }, [])
 
+  // Handler for admin view.
+  const handleAdminClick = useCallback((subpage?: AdminSubpage) => {
+    navigate(routes.view.admin(subpage))
+  }, [])
+
   const handleSessionListNavigateToView = useCallback((view: 'allSessions' | 'flagged') => {
     switch (view) {
       case 'allSessions':
@@ -1363,6 +1388,9 @@ function AppShellContent({
     }
   }, [])
 
+  // Sources state
+  const [editingSource, setEditingSource] = React.useState<LoadedSource | null>(null)
+
   // Delete Source - simplified since agents system is removed
   const handleDeleteSource = useCallback(async (sourceSlug: string) => {
     if (!activeWorkspace) return
@@ -1374,6 +1402,11 @@ function AppShellContent({
       toast.error(t('toast.failedToDeleteSource'))
     }
   }, [activeWorkspace])
+
+  // Edit Source - opens the edit dialog with the selected source pre-filled
+  const handleEditSource = useCallback((source: LoadedSource) => {
+    setEditingSource(source)
+  }, [])
 
   // Delete Skill
   const handleDeleteSkill = useCallback(async (skillSlug: string) => {
@@ -1560,6 +1593,7 @@ function AppShellContent({
 
     // Settings navigator
     if (isSettingsNavigation(navState)) return t("sidebar.settings")
+    if (isAdminNavigation(navState)) return "后台管理"
 
     // Sessions navigator - use sessionFilter
     if (!sessionFilter) return t("sidebar.allSessions")
@@ -1947,6 +1981,14 @@ function AppShellContent({
                     },
                     // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },
+                    // --- Admin (only visible to admins) ---
+                    ...(isAdmin ? [{
+                      id: "nav:admin",
+                      title: "后台管理",
+                      icon: ShieldCheck,
+                      variant: isAdminNavigation(navState) ? "default" : "ghost",
+                      onClick: () => handleAdminClick(),
+                    }] : []),
                     // --- Settings ---
                     {
                       id: "nav:settings",
@@ -2003,19 +2045,32 @@ function AppShellContent({
                 <>
                   {/* Add Source button (only for sources mode) - uses filter-aware edit config */}
                   {isSourcesNavigation(navState) && activeWorkspace && (
-                    <EditPopover
-                      trigger={
-                        <HeaderIconButton
-                          icon={<Plus className="h-4 w-4" />}
-                          tooltip={t("sidebarMenu.addSource")}
-                          data-tutorial="add-source-button"
-                        />
-                      }
-                      {...getEditConfig(
-                        sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
-                        activeWorkspace.rootPath
-                      )}
-                    />
+                    sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'mcp' ? (
+                      <McpSourceFormDialog
+                        workspaceId={activeWorkspace.id}
+                        trigger={
+                          <HeaderIconButton
+                            icon={<Plus className="h-4 w-4" />}
+                            tooltip={t("sidebarMenu.addSource")}
+                            data-tutorial="add-source-button"
+                          />
+                        }
+                      />
+                    ) : (
+                      <EditPopover
+                        trigger={
+                          <HeaderIconButton
+                            icon={<Plus className="h-4 w-4" />}
+                            tooltip={t("sidebarMenu.addSource")}
+                            data-tutorial="add-source-button"
+                          />
+                        }
+                        {...getEditConfig(
+                          sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
+                          activeWorkspace.rootPath
+                        )}
+                      />
+                    )
                   )}
                   {/* Add Skill button (only for skills mode) */}
                   {isLocalSkillsNav && activeWorkspace && (
@@ -2052,16 +2107,27 @@ function AppShellContent({
               />
             )}
             {isSourcesNavigation(navState) && (
-              /* Sources List - filtered by type if sourceFilter is active */
-              <SourcesListPanel
-                sources={sources}
-                sourceFilter={sourceFilter}
-                workspaceRootPath={activeWorkspace?.rootPath}
-                onDeleteSource={handleDeleteSource}
-                onSourceClick={handleSourceSelect}
-                selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
-                localMcpEnabled={localMcpEnabled}
-              />
+              <>
+                {/* Sources List - filtered by type if sourceFilter is active */}
+                <SourcesListPanel
+                  sources={sources}
+                  sourceFilter={sourceFilter}
+                  workspaceRootPath={activeWorkspace?.rootPath}
+                  onDeleteSource={handleDeleteSource}
+                  onEditSource={handleEditSource}
+                  onSourceClick={handleSourceSelect}
+                  selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
+                  localMcpEnabled={localMcpEnabled}
+                />
+                {/* Edit Source dialog */}
+                {editingSource && activeWorkspace && (
+                  <McpSourceFormDialog
+                    workspaceId={activeWorkspace.id}
+                    editSource={editingSource}
+                    onEditComplete={() => setEditingSource(null)}
+                  />
+                )}
+              </>
             )}
             {isLocalSkillsNav && activeWorkspaceId && (
               /* Skills List */
@@ -2095,6 +2161,13 @@ function AppShellContent({
               <SettingsNavigator
                 selectedSubpage={navState.subpage}
                 onSelectSubpage={(subpage) => handleSettingsClick(subpage)}
+              />
+            )}
+            {isAdminNavigation(navState) && (
+              /* Admin Navigator */
+              <AdminNavigator
+                selectedSubpage={navState.subpage}
+                onSelectSubpage={(subpage) => handleAdminClick(subpage)}
               />
             )}
             {/* Mobile/compact-only FAB for starting a new chat — only on the

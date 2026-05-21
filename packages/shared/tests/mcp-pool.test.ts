@@ -33,7 +33,7 @@ function makeMockClient(): PoolClient {
 }
 
 function httpConfig(token: string, url = 'https://mcp.example.com'): SdkMcpServerConfig {
-  return { type: 'http', url, headers: { Authorization: `Bearer ${token}` } };
+  return { type: 'streamable_http', url, headers: { Authorization: `Bearer ${token}` } };
 }
 
 /**
@@ -111,12 +111,12 @@ describe('McpClientPool.sync — config change detection', () => {
     // Only Authorization and URL should trigger reconnect — other header
     // changes (tracing, versioning) should not cause connection churn.
     const config1: SdkMcpServerConfig = {
-      type: 'http',
+      type: 'streamable_http',
       url: 'https://mcp.example.com',
       headers: { Authorization: 'Bearer same', 'X-Request-Id': 'aaa' },
     };
     const config2: SdkMcpServerConfig = {
-      type: 'http',
+      type: 'streamable_http',
       url: 'https://mcp.example.com',
       headers: { Authorization: 'Bearer same', 'X-Request-Id': 'bbb' },
     };

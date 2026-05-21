@@ -127,6 +127,20 @@ describe('createBuiltInConnection seeds midStreamBehavior', () => {
     expect(conn.midStreamBehavior).toBe('steer')
   })
 
+  it("OpenLLM API key → 'steer' with no persisted base URL", () => {
+    const conn = createBuiltInConnection('openllm-api')
+    expect(conn).toMatchObject({
+      slug: 'openllm-api',
+      name: 'OpenLLM',
+      providerType: 'openllm',
+      authType: 'api_key',
+      models: [],
+      defaultModel: '',
+      midStreamBehavior: 'steer',
+    })
+    expect(conn.baseUrl).toBeUndefined()
+  })
+
   it('rejects removed OAuth built-in templates', () => {
     expect(() => createBuiltInConnection('claude-max')).toThrow('Unknown built-in connection slug')
     expect(() => createBuiltInConnection('chatgpt-plus')).toThrow('Unknown built-in connection slug')

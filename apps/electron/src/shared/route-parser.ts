@@ -15,6 +15,7 @@ import type {
   SourceFilter,
   AutomationFilter,
   RightSidebarPanel,
+  AdminSubpage,
 } from './types'
 import { isValidSettingsSubpage, type SettingsSubpage } from './settings-registry'
 
@@ -35,7 +36,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings' | 'archived'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings' | 'archived' | 'admin'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -63,7 +64,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'automations', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'automations', 'settings', 'admin'
 ]
 
 /**
@@ -106,6 +107,19 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     if (!isValidSettingsSubpage(subpage)) return null
     return {
       navigator: 'settings',
+      details: { type: subpage, id: subpage },
+    }
+  }
+
+  // Admin navigator
+  if (first === 'admin') {
+    const subpage = segments[1]
+    if (subpage === undefined) {
+      return { navigator: 'admin', details: null }
+    }
+    if (subpage !== 'permission' && subpage !== 'feedback') return null
+    return {
+      navigator: 'admin',
       details: { type: subpage, id: subpage },
     }
   }
@@ -299,6 +313,11 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   if (parsed.navigator === 'archived') {
     if (!parsed.details) return 'archived'
     return `archived/session/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'admin') {
+    if (!parsed.details) return 'admin'
+    return `admin/${parsed.details.type}`
   }
 
   if (parsed.navigator === 'automations') {
@@ -573,6 +592,14 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  // Admin
+  if (compound.navigator === 'admin') {
+    if (!compound.details) {
+      return { navigator: 'admin', subpage: null }
+    }
+    return { navigator: 'admin', subpage: compound.details.type as AdminSubpage }
+  }
+
   // Archived
   if (compound.navigator === 'archived') {
     return {
@@ -781,6 +808,16 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
     return {
       navigator: 'archived',
       details: state.details ? { type: 'session', id: state.details.sessionId } : null,
+    }
+  }
+
+  if (state.navigator === 'admin') {
+    if (state.subpage === null) {
+      return { navigator: 'admin', details: null }
+    }
+    return {
+      navigator: 'admin',
+      details: { type: state.subpage, id: state.subpage },
     }
   }
 
