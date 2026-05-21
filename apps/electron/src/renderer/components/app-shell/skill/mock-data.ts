@@ -6,7 +6,7 @@ import type { LoadedSkill } from '../../../../shared/types'
 // Mock switch — set to false to use real API
 // ============================================================================
 
-export const USE_MOCK_MARKET = true
+export const USE_MOCK_MARKET = false
 
 export const MOCK_MARKET_SKILLS: CopawMarketSkill[] = [
   {
