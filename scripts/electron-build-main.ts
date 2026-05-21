@@ -57,12 +57,19 @@ function getBuildDefines(): string[] {
     // MDP SSO / deployment config
     "MDP_AUTH_URL",
     "MDP_CLIENT_ID",
+    "MDP_API_URL",
     "MDP_RELAY_URL",
     "MDP_ENABLE_SSO_STATE_CHECK",
-    // Environment LLM connection
+    // Environment LLM connection (generic OpenAI-compatible endpoint)
     "LLM_BASE_URL",
     "LLM_MODEL",
     "LLM_CONNECTION_NAME",
+    // Built-in OpenLLM connection (deployment-owned; baked at build time)
+    "OPENLLM_BASE_HOST",
+    "OPENLLM_BASE_MODELS",
+    "OPENLLM_BASE_CONNECTION_NAME",
+    // Marketplace
+    "COPAW_MARKET_BASE_URL",
   ];
 
   return definedVars.map((varName) => {
