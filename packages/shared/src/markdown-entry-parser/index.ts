@@ -274,8 +274,6 @@ export function parseMarkerLine(line: string): ExplicitMarker | null {
         marker.summary = value;
         break;
       case 'term':
-        marker.term = value;
-        break;
       case 'name':
         marker.term = value;
         break;
