@@ -314,8 +314,8 @@ export const ENV_CONNECTION_SSO_BASE_URL_ENV_VAR = 'CRAFT_LLM_SSO_BASE_URL';
 export function synthesizeEnvConnection(
   env: EnvConnectionEnv,
 ): LlmConnection | null {
-  const baseUrl = env.LLM_BASE_URL;
-  if (baseUrl === undefined) return null;
+  const baseUrl = env.LLM_BASE_URL?.trim();
+  if (!baseUrl) return null;
 
   const model = env.LLM_MODEL;
 
