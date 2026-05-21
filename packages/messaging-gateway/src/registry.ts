@@ -1279,6 +1279,27 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     await state.gateway.start()
   }
 
+  async startWeChatQRLogin(): Promise<{ qrContent: string; qrcode: string }> {
+    const { iLinkClient } = await import('./adapters/wechat/ilink')
+    const client = new iLinkClient(this.log.child({ component: 'wechat-qr' }))
+    const resp = await client.getBotQRCode()
+    return { qrContent: resp.qrcode_img_content, qrcode: resp.qrcode }
+  }
+
+  async pollWeChatQRStatus(
+    workspaceId: string,
+    qrcode: string,
+  ): Promise<{ status: 'waiting' | 'scanned' | 'confirmed' | 'expired' }> {
+    const { iLinkClient } = await import('./adapters/wechat/ilink')
+    const client = new iLinkClient(this.log.child({ component: 'wechat-qr' }))
+    const result = await client.getQRCodeStatus(qrcode)
+    if (result.status === 'confirmed' && result.bot_token) {
+      // QR confirmed — save credentials and start the adapter.
+      await this.saveWeChatCredentials(workspaceId, result.bot_token, true)
+    }
+    return { status: result.status }
+  }
+
   private async tryConnectWeChat(workspaceId: string, state: WorkspaceState): Promise<void> {
     const cred = await this.opts.credentialManager
       .get({ type: 'messaging_bearer', workspaceId, name: 'wechat' })
@@ -1379,7 +1400,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     }
 
     try {
-      await this.opts.sessionManager.sendMessage(userState.activeSessionId, text)
+      await this.opts.sessionManager.sendMessage(userState.activeSessionId!, text)
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error'
       this.log.error('[wechat-global] sendMessage failed', {

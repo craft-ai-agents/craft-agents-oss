@@ -45,6 +45,7 @@ export interface iLinkQRCodeStatus {
   status: 'waiting' | 'scanned' | 'confirmed' | 'expired'
   bot_token?: string
   baseurl?: string
+  ilink_bot_id?: string
 }
 
 export interface iLinkMessage {
@@ -261,10 +262,10 @@ export class iLinkClient {
       throw new Error(`[wechat] getUpdates failed: ${res.status} ${res.statusText}`)
     }
 
-    const data = await res.json()
+    const data = await res.json() as iLinkGetUpdatesResponse
 
     this.log.info('[wechat] getUpdates raw response', {
-      keys: Object.keys(data),
+      keys: Object.keys(data as object),
       ret: data.ret,
       errcode: data.errcode,
       errmsg: data.errmsg,
@@ -273,7 +274,7 @@ export class iLinkClient {
       syncBuf: (data as any).sync_buf?.substring(0, 20),
       updatesBuf: data.get_updates_buf?.substring(0, 20),
     })
-    return data as iLinkGetUpdatesResponse
+    return data
   }
 
   // ---- Sending ----

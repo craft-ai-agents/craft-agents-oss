@@ -669,6 +669,12 @@ export interface ElectronAPI {
   saveTelegramToken(token: string): Promise<void>
   testLarkCredentials(creds: { appId: string; appSecret: string; domain: 'lark' | 'feishu' }): Promise<{ success: boolean; botName?: string; error?: string }>
   saveLarkCredentials(creds: { appId: string; appSecret: string; domain: 'lark' | 'feishu' }): Promise<void>
+  testWeChatCredentials(token: string): Promise<{ success: boolean; botName?: string; error?: string }>
+  saveWeChatCredentials(token: string): Promise<void>
+  /** Request an iLink QR code (step 1). Returns qrContent (URL to encode) and qrcode (poll key). */
+  startWeChatQRLogin(): Promise<{ qrContent: string; qrcode: string }>
+  /** Poll QR scan status; the backend saves credentials automatically on confirmed. */
+  pollWeChatQRStatus(qrcode: string): Promise<{ status: 'waiting' | 'scanned' | 'confirmed' | 'expired' }>
   disconnectMessagingPlatform(platform: string): Promise<void>
   forgetMessagingPlatform(platform: string): Promise<void>
   getMessagingBindings(): Promise<Array<{ id: string; workspaceId: string; sessionId: string; platform: string; channelId: string; threadId?: number; channelName?: string; enabled: boolean; createdAt: number; accessMode?: MessagingBindingAccessMode; allowedSenderIds?: string[] }>>
