@@ -731,6 +731,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 connectionUnavailable={connectionUnavailable}
                 compactMode={!!isCompactMode}
                 readOnly={isArchived}
+                enableCompactModelPicker={!!isCompactMode}
               />
             </div>
           </div>
@@ -811,6 +812,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             connectionUnavailable={connectionUnavailable}
             compactMode={!!isCompactMode}
             readOnly={isArchived}
+            enableCompactModelPicker={!!isCompactMode}
           />
         </div>
       </div>

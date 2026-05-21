@@ -250,6 +250,7 @@ export const CHANNEL_MAP = {
   listMarketSkills: invoke(RPC_CHANNELS.skills.LIST_MARKET),
   uploadMarketSkill: invoke(RPC_CHANNELS.skills.UPLOAD_MARKET),
   installMarketSkill: invoke(RPC_CHANNELS.skills.INSTALL_MARKET),
+  installLocalZip: invoke(RPC_CHANNELS.skills.INSTALL_LOCAL_ZIP),
   deleteMarketSkill: invoke(RPC_CHANNELS.skills.DELETE_MARKET),
   fetchMarketSkillContent: invoke(RPC_CHANNELS.skills.FETCH_MARKET_CONTENT),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
@@ -288,6 +289,10 @@ export const CHANNEL_MAP = {
   getChatFeedbackState: invoke(RPC_CHANNELS.workspace.GET_CHAT_FEEDBACK_STATE),
   setChatFeedbackState: invoke(RPC_CHANNELS.workspace.SET_CHAT_FEEDBACK_STATE),
   deleteChatFeedbackState: invoke(RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK_STATE),
+  listChatFeedback: invoke(RPC_CHANNELS.workspace.LIST_CHAT_FEEDBACK),
+  addChatFeedback: invoke(RPC_CHANNELS.workspace.ADD_CHAT_FEEDBACK),
+  updateChatFeedback: invoke(RPC_CHANNELS.workspace.UPDATE_CHAT_FEEDBACK),
+  deleteChatFeedback: invoke(RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK),
 
   // Theme
   getAppTheme: invoke(RPC_CHANNELS.theme.GET_APP),
@@ -403,6 +408,7 @@ export const CHANNEL_MAP = {
   deleteLlmConnection: invoke(RPC_CHANNELS.llmConnections.DELETE),
   testLlmConnection: invoke(RPC_CHANNELS.llmConnections.TEST),
   setDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_DEFAULT),
+  setEnvConnectionMidStreamBehavior: invoke(RPC_CHANNELS.llmConnections.SET_ENV_MID_STREAM_BEHAVIOR),
   setWorkspaceDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT),
 
   // Automations

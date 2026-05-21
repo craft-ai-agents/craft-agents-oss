@@ -48,6 +48,7 @@ import type {
   BackendModelFetchCredentials,
   BackendProviderOptions,
   BackendResolutionContext,
+  ProviderDriverKey,
   ProviderDriver,
   ResolvedBackendConfig,
   StoredConnectionValidationResult,
@@ -58,14 +59,16 @@ import {
   resolveBackendRuntimePaths,
 } from './internal/runtime-resolver.ts';
 import { anthropicDriver } from './internal/drivers/anthropic.ts';
+import { openllmDriver } from './internal/drivers/openllm.ts';
 import { piDriver } from './internal/drivers/pi.ts';
 
-const DRIVER_REGISTRY: Record<AgentProvider, ProviderDriver> = {
+const DRIVER_REGISTRY: Record<ProviderDriverKey, ProviderDriver> = {
   anthropic: anthropicDriver,
+  openllm: openllmDriver,
   pi: piDriver,
 };
 
-function getProviderDriver(provider: AgentProvider): ProviderDriver {
+function getProviderDriver(provider: ProviderDriverKey): ProviderDriver {
   const driver = DRIVER_REGISTRY[provider];
   if (!driver) {
     throw new Error(`No backend driver registered for provider: ${provider}`);
@@ -74,12 +77,22 @@ function getProviderDriver(provider: AgentProvider): ProviderDriver {
 }
 
 function resolveDriverRuntime(
-  provider: AgentProvider,
+  provider: ProviderDriverKey,
   hostRuntime: BackendHostRuntimeContext,
 ) {
   const driver = getProviderDriver(provider);
   const resolvedPaths = resolveBackendRuntimePaths(hostRuntime);
   return { driver, resolvedPaths };
+}
+
+function getDriverKeyForContext(context: BackendResolutionContext): ProviderDriverKey {
+  return context.connection?.providerType === 'openllm' ? 'openllm' : context.provider;
+}
+
+function getDriverKeyForConnection(connection: Pick<LlmConnection, 'providerType'>): ProviderDriverKey {
+  return connection.providerType === 'openllm'
+    ? 'openllm'
+    : providerTypeToAgentProvider(connection.providerType);
 }
 
 /**
@@ -162,7 +175,7 @@ export function createBackendFromResolvedContext(args: {
   providerOptions?: BackendProviderOptions;
 }): AgentBackend {
   const { context, coreConfig, hostRuntime, providerOptions } = args;
-  const { driver, resolvedPaths } = resolveDriverRuntime(context.provider, hostRuntime);
+  const { driver, resolvedPaths } = resolveDriverRuntime(getDriverKeyForContext(context), hostRuntime);
 
   const buildArgs = {
     context,
@@ -257,6 +270,7 @@ export function providerTypeToAgentProvider(providerType: LlmProviderType): Agen
     // Pi backends (includes former bedrock/vertex/anthropic_compat via migration)
     case 'pi':
     case 'pi_compat':
+    case 'openllm':
       return 'pi';
 
     default:
@@ -362,7 +376,7 @@ export function resolveBackendContext(args: {
 
   const provider = connection
     ? providerTypeToAgentProvider(connection.providerType || 'anthropic')
-    : 'anthropic';
+    : 'pi';
 
   const authType = connection
     ? connectionAuthTypeToBackendAuthType(connection.authType)
@@ -420,7 +434,7 @@ export async function fetchBackendModels(args: {
   timeoutMs?: number;
 }): Promise<ModelFetchResult> {
   const provider = providerTypeToAgentProvider(args.connection.providerType);
-  const { driver, resolvedPaths } = resolveDriverRuntime(provider, args.hostRuntime);
+  const { driver, resolvedPaths } = resolveDriverRuntime(getDriverKeyForConnection(args.connection), args.hostRuntime);
   const timeoutMs = args.timeoutMs ?? 30_000;
 
   driver.initializeHostRuntime?.({
@@ -467,7 +481,7 @@ export async function validateStoredBackendConnection(args: {
     }
 
     const provider = providerTypeToAgentProvider(connection.providerType);
-    const { driver, resolvedPaths } = resolveDriverRuntime(provider, args.hostRuntime);
+    const { driver, resolvedPaths } = resolveDriverRuntime(getDriverKeyForConnection(connection), args.hostRuntime);
 
     driver.initializeHostRuntime?.({
       hostRuntime: args.hostRuntime,
@@ -719,7 +733,10 @@ export async function testBackendConnection(args: {
       capabilities: BACKEND_CAPABILITIES[args.provider],
     };
 
-    const { driver, resolvedPaths } = resolveDriverRuntime(args.provider, args.hostRuntime);
+    const { driver, resolvedPaths } = resolveDriverRuntime(
+      providerType === 'openllm' ? 'openllm' : args.provider,
+      args.hostRuntime,
+    );
     if (driver.testConnection) {
       const driverResult = await driver.testConnection({
         provider: args.provider,

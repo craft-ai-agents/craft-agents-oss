@@ -88,8 +88,8 @@ import {
 import type { SettingsSubpage, AdminSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { ArchivedSessionsPanel } from "./ArchivedSessionsPanel"
-import { SkillsListPanel } from "./SkillsListPanel"
-import { SkillImportModal } from "./SkillImportModal"
+import { SkillsListPanel } from "./skill/SkillsListPanel"
+import { SkillImportModal } from "./skill/SkillImportModal"
 import { McpSourceFormDialog } from "./McpSourceFormDialog"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { APP_EVENTS, AGENT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
@@ -119,7 +119,7 @@ import {
   createSkillsSidebarItems,
   LOCAL_SKILLS_NAV_ID,
   SKILL_MARKETPLACE_NAV_ID,
-} from "./skills-sidebar-items"
+} from "./skill/skills-sidebar-items"
 import {
   loadRightSidebarOpenPreference,
   persistRightSidebarOpenPreference,
@@ -475,6 +475,22 @@ function AppShellContent({
 
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
+
+  // Admin permission check
+  const [isAdmin, setIsAdmin] = React.useState(false)
+  React.useEffect(() => {
+    const permissionApiBase: string = import.meta.env.VITE_PERMISSION_API_URL ?? ''
+    window.electronAPI.getSsoSession().then((session) => {
+      if (!session.authenticated) return
+      const employeeId = session.employeeId
+      fetch(`${permissionApiBase}/api/mdp/permission/checkAdmin?employeeId=${encodeURIComponent(employeeId)}`, {
+        headers: { authorization: session.token },
+      })
+        .then((res) => res.json())
+        .then((json: { body: boolean }) => { if (json.body) setIsAdmin(true) })
+        .catch(() => {})
+    }).catch(() => {})
+  }, [])
 
   // Enabled permission modes for Shift+Tab cycling (min 2 modes)
   const [enabledModes, setEnabledModes] = React.useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
@@ -1965,14 +1981,14 @@ function AppShellContent({
                     },
                     // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },
-                    // --- Admin ---
-                    {
+                    // --- Admin (only visible to admins) ---
+                    ...(isAdmin ? [{
                       id: "nav:admin",
                       title: "后台管理",
                       icon: ShieldCheck,
                       variant: isAdminNavigation(navState) ? "default" : "ghost",
                       onClick: () => handleAdminClick(),
-                    },
+                    }] : []),
                     // --- Settings ---
                     {
                       id: "nav:settings",

@@ -20,6 +20,7 @@ const EXPECTED_CHANNELS: string[] = [
   'LLM_Connection:refreshModels',
   'LLM_Connection:save',
   'LLM_Connection:setDefault',
+  'LLM_Connection:setEnvMidStreamBehavior',
   'LLM_Connection:setWorkspaceDefault',
   'LLM_Connection:test',
   'appearance:getRichToolDescriptions',

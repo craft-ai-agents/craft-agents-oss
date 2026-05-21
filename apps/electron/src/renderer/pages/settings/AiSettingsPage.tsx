@@ -14,10 +14,11 @@ import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
-import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2, MessageSquareMore, Zap, Clock, Check } from 'lucide-react'
-import type { CredentialHealthStatus, CredentialHealthIssue } from '../../../shared/types'
+import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2, MessageSquareMore, Zap, Clock, Check, FolderOpen, RefreshCw } from 'lucide-react'
+import type { CredentialHealthStatus, CredentialHealthIssue, GitBashStatus } from '../../../shared/types'
 import { Spinner, FullscreenOverlayBase } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
@@ -208,11 +209,13 @@ export function sortLlmConnectionsForSettings(connections: LlmConnectionWithStat
   })
 }
 
-/** Render one Settings AI connection row with actions or an env read-only badge. */
+/** Render one Settings AI connection row with context-sensitive actions. */
 export function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
+  const isEnvironmentConnection = connection.isEnvironmentConnection === true
+  const isUserManagedConnection = !isEnvironmentConnection
 
   // Opening dialog/overlay flows directly from a dropdown item can race with
   // menu teardown and leave a transient interaction lock behind on some systems.
@@ -260,6 +263,9 @@ export function ConnectionRow({ connection, isLastConnection, onRenameClick, onD
           ? 'Manifest'
           : 'Craft Agents Backend Compatible')
         break
+      case 'openllm':
+        parts.push('OpenLLM')
+        break
       default: parts.push(provider || 'Unknown')
     }
 
@@ -296,7 +302,11 @@ export function ConnectionRow({ connection, isLastConnection, onRenameClick, onD
         <div className="flex items-center gap-1">
           <ConnectionIcon connection={connection} size={14} />
           <span>{connection.name}</span>
-          {connection.isDefault && (
+          {isEnvironmentConnection ? (
+            <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
+              {t("common.builtIn")}
+            </span>
+          ) : connection.isDefault && (
             <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
               {t("common.default")}
             </span>
@@ -305,77 +315,80 @@ export function ConnectionRow({ connection, isLastConnection, onRenameClick, onD
       )}
       description={getDescription()}
     >
-      {connection.isEnvironmentConnection ? (
-        <span className="inline-flex items-center h-6 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
-          Environment
-        </span>
-      ) : (
-        <DropdownMenu modal={false} onOpenChange={setMenuOpen}>
-          <DropdownMenuTrigger asChild>
-            <button
-              className="p-1.5 rounded-md hover:bg-foreground/[0.05] data-[state=open]:bg-foreground/[0.05] transition-colors"
-              data-state={menuOpen ? 'open' : 'closed'}
-            >
-              <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <StyledDropdownMenuContent align="end">
-            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onRenameClick)}>
-              <Pencil className="h-3.5 w-3.5" />
-              <span>{t("common.rename")}</span>
-            </StyledDropdownMenuItem>
-            {!connection.isDefault && (
-              <StyledDropdownMenuItem onClick={onSetDefault}>
-                <Star className="h-3.5 w-3.5" />
-                <span>{t("settings.ai.setAsDefault")}</span>
+      <DropdownMenu modal={false} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <button
+            className="p-1.5 rounded-md hover:bg-foreground/[0.05] data-[state=open]:bg-foreground/[0.05] transition-colors"
+            data-state={menuOpen ? 'open' : 'closed'}
+            aria-label="Connection actions"
+          >
+            <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </DropdownMenuTrigger>
+        <StyledDropdownMenuContent align="end">
+          {isUserManagedConnection && (
+            <>
+              <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onRenameClick)}>
+                <Pencil className="h-3.5 w-3.5" />
+                <span>{t("common.rename")}</span>
               </StyledDropdownMenuItem>
-            )}
-            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
-              <Settings2 className="h-3.5 w-3.5" />
-              <span>{t("common.edit")}</span>
-            </StyledDropdownMenuItem>
-            <StyledDropdownMenuItem
-              onClick={onValidate}
-              disabled={validationState === 'validating'}
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>{t("settings.ai.validateConnection")}</span>
-            </StyledDropdownMenuItem>
-            {(() => {
-              const currentBehavior = resolveMidStreamBehavior(connection)
-              return (
-                <DropdownMenuSub>
-                  <StyledDropdownMenuSubTrigger>
-                    <MessageSquareMore className="h-3.5 w-3.5" />
-                    <span>{t("settings.ai.midStream.title")}</span>
-                  </StyledDropdownMenuSubTrigger>
-                  <StyledDropdownMenuSubContent>
-                    <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('steer')}>
-                      <Zap className="h-3.5 w-3.5" />
-                      <span className="flex-1">{t("settings.ai.midStream.steer")}</span>
-                      {currentBehavior === 'steer' && <Check className="h-3.5 w-3.5" />}
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('queue')}>
-                      <Clock className="h-3.5 w-3.5" />
-                      <span className="flex-1">{t("settings.ai.midStream.queue")}</span>
-                      {currentBehavior === 'queue' && <Check className="h-3.5 w-3.5" />}
-                    </StyledDropdownMenuItem>
-                  </StyledDropdownMenuSubContent>
-                </DropdownMenuSub>
-              )
-            })()}
-            <StyledDropdownMenuSeparator />
-            <StyledDropdownMenuItem
-              onClick={onDelete}
-              variant="destructive"
-              disabled={isLastConnection}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span>{t("common.delete")}</span>
-            </StyledDropdownMenuItem>
-          </StyledDropdownMenuContent>
-        </DropdownMenu>
-      )}
+              {!connection.isDefault && (
+                <StyledDropdownMenuItem onClick={onSetDefault}>
+                  <Star className="h-3.5 w-3.5" />
+                  <span>{t("settings.ai.setAsDefault")}</span>
+                </StyledDropdownMenuItem>
+              )}
+              <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
+                <Settings2 className="h-3.5 w-3.5" />
+                <span>{t("common.edit")}</span>
+              </StyledDropdownMenuItem>
+            </>
+          )}
+          <StyledDropdownMenuItem
+            onClick={onValidate}
+            disabled={validationState === 'validating'}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span>{t("settings.ai.validateConnection")}</span>
+          </StyledDropdownMenuItem>
+          {(() => {
+            const currentBehavior = resolveMidStreamBehavior(connection)
+            return (
+              <DropdownMenuSub>
+                <StyledDropdownMenuSubTrigger>
+                  <MessageSquareMore className="h-3.5 w-3.5" />
+                  <span>{t("settings.ai.midStream.title")}</span>
+                </StyledDropdownMenuSubTrigger>
+                <StyledDropdownMenuSubContent>
+                  <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('steer')}>
+                    <Zap className="h-3.5 w-3.5" />
+                    <span className="flex-1">{t("settings.ai.midStream.steer")}</span>
+                    {currentBehavior === 'steer' && <Check className="h-3.5 w-3.5" />}
+                  </StyledDropdownMenuItem>
+                  <StyledDropdownMenuItem onClick={() => onSetMidStreamBehavior('queue')}>
+                    <Clock className="h-3.5 w-3.5" />
+                    <span className="flex-1">{t("settings.ai.midStream.queue")}</span>
+                    {currentBehavior === 'queue' && <Check className="h-3.5 w-3.5" />}
+                  </StyledDropdownMenuItem>
+                </StyledDropdownMenuSubContent>
+              </DropdownMenuSub>
+            )
+          })()}
+          {isUserManagedConnection && (
+            <>
+              <StyledDropdownMenuSeparator />
+              <StyledDropdownMenuItem
+                onClick={onDelete}
+                variant="destructive"
+                disabled={isLastConnection}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{t("common.delete")}</span>
+              </StyledDropdownMenuItem>
+            </>
+          )}
+        </StyledDropdownMenuContent>
+      </DropdownMenu>
     </SettingsRow>
   )
 }
@@ -556,6 +569,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
                     label: conn.name,
                     description: conn.providerType === 'anthropic' ? 'Anthropic' :
                                  conn.providerType === 'pi' ? 'MDP Backend' :
+                                 conn.providerType === 'openllm' ? 'OpenLLM' :
                                  conn.providerType || 'Unknown',
                   })),
                 ]}
@@ -601,6 +615,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
 /** Map a connection's provider type to the corresponding API key setup method. */
 function getApiKeyMethodForConnection(conn: LlmConnectionWithStatus): ApiSetupMethod {
   const provider = conn.providerType || conn.type
+  if (provider === 'openllm') return 'openllm_api_key'
   if (provider === 'pi' || provider === 'pi_compat') return 'pi_api_key'
   return 'anthropic_api_key'
 }
@@ -638,6 +653,13 @@ export default function AiSettingsPage() {
   const [rtkRechecking, setRtkRechecking] = useState(false)
   const [rtkGain, setRtkGain] = useState<{ totalCommands: number; totalInput: number; totalOutput: number; totalSaved: number; avgSavingsPct: number; totalTimeMs: number; avgTimeMs: number } | null>(null)
 
+  // Git Bash (Windows only)
+  const [gitBashStatus, setGitBashStatus] = useState<GitBashStatus | null>(null)
+  const [gitBashRechecking, setGitBashRechecking] = useState(false)
+  const [gitBashCustomPath, setGitBashCustomPath] = useState('')
+  const [gitBashShowInput, setGitBashShowInput] = useState(false)
+  const [gitBashError, setGitBashError] = useState<string | undefined>()
+
   // Validation state per connection
   const [validationStates, setValidationStates] = useState<Record<string, {
     state: ValidationState
@@ -674,6 +696,9 @@ export default function AiSettingsPage() {
 
         const status = await window.electronAPI.getRtkStatus()
         setRtkStatus(status)
+
+        const gbStatus = await window.electronAPI.checkGitBash()
+        setGitBashStatus(gbStatus)
 
         // Check credential health for potential issues (corruption, machine migration)
         const health = await window.electronAPI.getCredentialHealth()
@@ -882,7 +907,8 @@ export default function AiSettingsPage() {
   }, [refreshLlmConnections])
 
   // Update a connection's mid-stream send behavior (steer vs queue).
-  // Uses the same saveLlmConnection RPC as other connection edits.
+  // Environment uses a dedicated app-level preference because env-provider
+  // remains protected from the normal SAVE mutation path.
   const handleSetMidStreamBehavior = useCallback(async (
     connection: LlmConnectionWithStatus,
     behavior: MidStreamBehavior,
@@ -890,8 +916,19 @@ export default function AiSettingsPage() {
     if (!window.electronAPI) return
     if (resolveMidStreamBehavior(connection) === behavior) return
     try {
+      if (connection.isEnvironmentConnection) {
+        const result = await window.electronAPI.setEnvConnectionMidStreamBehavior(behavior)
+        if (result.success) {
+          refreshLlmConnections?.()
+        } else {
+          console.error('Failed to update environment mid-stream behavior:', result.error)
+          toast.error(t('settings.ai.midStream.updateFailed'))
+        }
+        return
+      }
+
       const updated = { ...connection, midStreamBehavior: behavior }
-      const { isAuthenticated: _a, authError: _b, isDefault: _c, ...connectionData } = updated
+      const { isAuthenticated: _a, authError: _b, isDefault: _c, isEnvironmentConnection: _d, ...connectionData } = updated
       const result = await window.electronAPI.saveLlmConnection(connectionData as import('../../../shared/types').LlmConnection)
       if (result.success) {
         refreshLlmConnections?.()
@@ -975,6 +1012,42 @@ export default function AiSettingsPage() {
     setRtkGain(gain ?? null)
   }, [])
 
+  // Git Bash handlers (Windows only)
+  const handleRecheckGitBash = useCallback(async () => {
+    setGitBashRechecking(true)
+    try {
+      const status = await window.electronAPI.checkGitBash()
+      setGitBashStatus(status)
+      if (status.found) {
+        setGitBashShowInput(false)
+        setGitBashError(undefined)
+      }
+    } finally {
+      setGitBashRechecking(false)
+    }
+  }, [])
+
+  const handleBrowseGitBash = useCallback(async () => {
+    const path = await window.electronAPI.browseForGitBash()
+    if (path) {
+      setGitBashCustomPath(path)
+      setGitBashShowInput(true)
+    }
+  }, [])
+
+  const handleUseGitBashPath = useCallback(async () => {
+    if (!gitBashCustomPath.trim()) return
+    const result = await window.electronAPI.setGitBashPath(gitBashCustomPath.trim())
+    if (result.success) {
+      const status = await window.electronAPI.checkGitBash()
+      setGitBashStatus(status)
+      setGitBashShowInput(false)
+      setGitBashError(undefined)
+    } else {
+      setGitBashError(result.error || 'Invalid path')
+    }
+  }, [gitBashCustomPath])
+
   // Refresh gain stats whenever rtk transitions to installed-and-enabled
   useEffect(() => {
     if (rtkStatus?.installed && rtkEnabled) {
@@ -1018,6 +1091,7 @@ export default function AiSettingsPage() {
                       description: conn.providerType === 'anthropic' ? 'Anthropic API' :
                                    conn.providerType === 'pi' ? 'Craft Agents Backend' :
                                    conn.providerType === 'pi_compat' ? (conn.baseUrl?.toLowerCase().includes('manifest.build') ? 'Manifest' : 'Craft Agents Backend Compatible') :
+                                   conn.providerType === 'openllm' ? 'OpenLLM' :
                                    conn.providerType || 'Unknown',
                     }))}
                   />
@@ -1173,6 +1247,60 @@ export default function AiSettingsPage() {
                 </SettingsCard>
               </SettingsSection>
 
+              {/* Git Bash */}
+              {gitBashStatus !== null && (
+                <SettingsSection title={t("settings.ai.gitBash.title")} description={t("settings.ai.gitBash.description")}>
+                  <SettingsCard>
+                    <SettingsRow
+                      label={t("settings.ai.gitBash.path")}
+                      description={gitBashStatus.path ?? (gitBashStatus.found ? t("settings.ai.gitBash.auto") : t("settings.ai.gitBash.notFound"))}
+                    >
+                      <Button
+                        size="sm"
+                        onClick={handleRecheckGitBash}
+                        disabled={gitBashRechecking}
+                        className="bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
+                      >
+                        <RefreshCw className={`mr-1.5 size-3.5 ${gitBashRechecking ? 'animate-spin' : ''}`} />
+                        {gitBashRechecking ? t("common.checking") : t("settings.ai.gitBash.recheck")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleBrowseGitBash}
+                        className="bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
+                      >
+                        <FolderOpen className="mr-1.5 size-3.5" />
+                        {t("settings.ai.gitBash.browse")}
+                      </Button>
+                    </SettingsRow>
+                    {gitBashShowInput && (
+                      <div className="px-4 pb-4 space-y-2">
+                        <Input
+                          value={gitBashCustomPath}
+                          onChange={(e) => {
+                            setGitBashCustomPath(e.target.value)
+                            setGitBashError(undefined)
+                          }}
+                          placeholder={t("onboarding.gitBash.pathPlaceholder")}
+                          className="text-xs"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleUseGitBashPath}
+                          disabled={!gitBashCustomPath.trim()}
+                          className="w-full bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
+                        >
+                          {t("settings.ai.gitBash.useThisPath")}
+                        </Button>
+                        {gitBashError && (
+                          <p className="text-xs text-red-500">{gitBashError}</p>
+                        )}
+                      </div>
+                    )}
+                  </SettingsCard>
+                </SettingsSection>
+              )}
+
               {/* API Setup Fullscreen Overlay */}
               <FullscreenOverlayBase
                 isOpen={showApiSetup}
@@ -1185,6 +1313,10 @@ export default function AiSettingsPage() {
                   onBack={handleCloseApiSetup}
                   onSubmitCredential={apiSetupOnboarding.handleSubmitCredential}
                   onFinish={handleApiSetupFinish}
+                  onBrowseGitBash={apiSetupOnboarding.handleBrowseGitBash}
+                  onUseGitBashPath={apiSetupOnboarding.handleUseGitBashPath}
+                  onRecheckGitBash={apiSetupOnboarding.handleRecheckGitBash}
+                  onClearError={apiSetupOnboarding.handleClearError}
                   editInitialValues={editInitialValues}
                   className="h-full"
                 />

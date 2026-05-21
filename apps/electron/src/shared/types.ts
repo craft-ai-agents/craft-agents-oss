@@ -71,8 +71,8 @@ import type { ExportResourcesOptions, ExportResult, ResourceImportMode, Resource
 export type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult };
 
 // LLM connection types
-import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings } from '@craft-agent/shared/config';
-export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings };
+import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, MidStreamBehavior, NetworkProxySettings } from '@craft-agent/shared/config';
+export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, MidStreamBehavior, NetworkProxySettings };
 
 // =============================================================================
 // GUI-only types (not used by server/handler code)
@@ -513,6 +513,7 @@ export interface ElectronAPI {
   listMarketSkills(): Promise<CopawMarketSkill[]>
   uploadMarketSkill(input: CopawMarketUploadInput): Promise<CopawMarketUploadResult>
   installMarketSkill(workspaceId: string, skillName: string, chineseName: string, description: string, version?: string): Promise<CopawInstallSkillResult>
+  installLocalZip(workspaceId: string, skillName: string, zipBytes: Uint8Array): Promise<{ slug: string }>
   deleteMarketSkill(skillName: string): Promise<{ success: true }>
   fetchMarketSkillContent(skillName: string, version?: string): Promise<{ content: string }>
 
@@ -541,8 +542,12 @@ export interface ElectronAPI {
   readWorkspaceImage(workspaceId: string, relativePath: string): Promise<string>
   writeWorkspaceImage(workspaceId: string, relativePath: string, base64: string, mimeType: string): Promise<void>
   getChatFeedbackState(workspaceId: string): Promise<import('@craft-agent/shared/workspaces').ChatFeedbackStateEntry[]>
-  setChatFeedbackState(workspaceId: string, sessionId: string, messageId: string, isLike: boolean): Promise<void>
+  setChatFeedbackState(workspaceId: string, sessionId: string, messageId: string, isLike: boolean, feedbackId?: string): Promise<void>
   deleteChatFeedbackState(workspaceId: string, sessionId: string, messageId: string): Promise<void>
+  listChatFeedback(): Promise<import('@craft-agent/shared/feedback').FeedbackRecord[]>
+  addChatFeedback(body: import('@craft-agent/shared/feedback').ChatFeedbackAddRequest): Promise<string>
+  updateChatFeedback(body: import('@craft-agent/shared/feedback').ChatFeedbackUpdateRequest): Promise<boolean>
+  deleteChatFeedback(id: string): Promise<void>
 
   // Tool icon mappings
   getToolIconMappings(): Promise<ToolIconMapping[]>
@@ -674,6 +679,7 @@ export interface ElectronAPI {
   deleteLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   testLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   setDefaultLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
+  setEnvConnectionMidStreamBehavior(behavior: MidStreamBehavior): Promise<{ success: boolean; error?: string }>
   getDefaultThinkingLevel(): Promise<ThinkingLevel>
   setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>

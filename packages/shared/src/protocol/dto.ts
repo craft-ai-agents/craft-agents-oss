@@ -375,6 +375,7 @@ export interface TestLlmConnectionParams {
   baseUrl?: string
   model?: string
   piAuthProvider?: string
+  providerType?: 'openllm'
   /** Optional custom endpoint protocol hint so setup tests mirror runtime routing */
   customEndpoint?: CustomEndpointConfig
 }

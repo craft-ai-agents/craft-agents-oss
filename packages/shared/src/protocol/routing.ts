@@ -63,6 +63,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.skills.OPEN_EDITOR,
   RPC_CHANNELS.skills.OPEN_FINDER,
   RPC_CHANNELS.skills.EXTRACT_ZIP,
+  RPC_CHANNELS.skills.INSTALL_LOCAL_ZIP,
   // Remote skill resolver runs on the local machine; discovered skills are
   // installed separately via REMOTE_ELIGIBLE createSkill/forceWriteSkill.
   RPC_CHANNELS.skills.RESOLVE_REMOTE,
@@ -302,6 +303,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.llmConnections.DELETE,
   RPC_CHANNELS.llmConnections.TEST,
   RPC_CHANNELS.llmConnections.SET_DEFAULT,
+  RPC_CHANNELS.llmConnections.SET_ENV_MID_STREAM_BEHAVIOR,
   RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT,
   RPC_CHANNELS.llmConnections.REFRESH_MODELS,
   RPC_CHANNELS.llmConnections.CHANGED,
@@ -357,6 +359,10 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workspace.GET_CHAT_FEEDBACK_STATE,
   RPC_CHANNELS.workspace.SET_CHAT_FEEDBACK_STATE,
   RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK_STATE,
+  RPC_CHANNELS.workspace.LIST_CHAT_FEEDBACK,
+  RPC_CHANNELS.workspace.ADD_CHAT_FEEDBACK,
+  RPC_CHANNELS.workspace.UPDATE_CHAT_FEEDBACK,
+  RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK,
   RPC_CHANNELS.workspace.SETTINGS_GET,
   RPC_CHANNELS.workspace.SETTINGS_UPDATE,
 

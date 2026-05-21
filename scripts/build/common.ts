@@ -43,6 +43,13 @@ export const BUN_VERSION = 'bun-v1.3.9';
 export const UV_VERSION = '0.10.6';
 
 /**
+ * RTK version to bundle with the app.
+ * Update this when upgrading RTK. Check latest at: https://github.com/rtk-ai/rtk/releases
+ * Must satisfy REQUIRED_MIN_VERSION in packages/shared/src/agent/core/rtk-detector.ts (>=0.23.0).
+ */
+export const RTK_VERSION = '0.40.0';
+
+/**
  * Get platform key for resources/bin folder naming.
  */
 export function getPlatformKey(platform: Platform, arch: Arch): string {
@@ -87,6 +94,20 @@ export function getUvDownloadName(platform: Platform, arch: Arch): string {
   if (platform === 'win32' && arch === 'x64') return 'uv-x86_64-pc-windows-msvc.zip';
 
   throw new Error(`Unsupported uv target: ${platform}-${arch}`);
+}
+
+/**
+ * Get RTK release artifact filename for a platform/arch combination.
+ */
+export function getRtkDownloadName(platform: Platform, arch: Arch): string {
+  if (platform === 'darwin' && arch === 'arm64') return 'rtk-aarch64-apple-darwin.tar.gz';
+  if (platform === 'darwin' && arch === 'x64') return 'rtk-x86_64-apple-darwin.tar.gz';
+  if (platform === 'linux' && arch === 'arm64') return 'rtk-aarch64-unknown-linux-gnu.tar.gz';
+  if (platform === 'linux' && arch === 'x64') return 'rtk-x86_64-unknown-linux-musl.tar.gz';
+  if (platform === 'win32' && arch === 'x64') return 'rtk-x86_64-pc-windows-msvc.zip';
+  if (platform === 'win32' && arch === 'arm64') return 'rtk-aarch64-pc-windows-msvc.zip';
+
+  throw new Error(`Unsupported RTK target: ${platform}-${arch}`);
 }
 
 /**
@@ -169,6 +190,93 @@ export async function downloadBun(config: BuildConfig): Promise<void> {
     console.log(`  Bun installed to ${destPath} ✓`);
   } finally {
     // Cleanup temp directory
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Download and verify RTK binary, then install it to resources/bin/<platform-arch>/rtk(.exe).
+ * RTK checksums.txt uses the format: `sha256:<hex>  <filename>`
+ */
+export async function downloadRtk(config: BuildConfig): Promise<void> {
+  const { platform, arch, electronDir } = config;
+  const rtkDownload = getRtkDownloadName(platform, arch);
+  const rtkBinaryName = platform === 'win32' ? 'rtk.exe' : 'rtk';
+  const platformKey = getPlatformKey(platform, arch);
+
+  const targetDir = join(electronDir, 'resources', 'bin', platformKey);
+  const targetPath = join(targetDir, rtkBinaryName);
+
+  if (existsSync(targetPath)) {
+    console.log(`rtk already present at ${targetPath}`);
+    return;
+  }
+
+  console.log(`Downloading RTK ${RTK_VERSION} for ${platformKey}...`);
+
+  mkdirSync(targetDir, { recursive: true });
+  const tempDir = join(electronDir, '.rtk-download-temp');
+  rmSync(tempDir, { recursive: true, force: true });
+  mkdirSync(tempDir, { recursive: true });
+
+  try {
+    const assetUrl = `https://github.com/rtk-ai/rtk/releases/download/v${RTK_VERSION}/${rtkDownload}`;
+    const checksumUrl = `https://github.com/rtk-ai/rtk/releases/download/v${RTK_VERSION}/checksums.txt`;
+
+    const assetPath = join(tempDir, rtkDownload);
+    const checksumPath = join(tempDir, 'checksums.txt');
+    const extractDir = join(tempDir, 'extract');
+
+    console.log(`  Downloading ${assetUrl}...`);
+    await $`curl -fsSL --retry 3 --retry-delay 2 -o ${assetPath} ${assetUrl}`;
+
+    console.log('  Downloading checksums...');
+    await $`curl -fsSL --retry 3 --retry-delay 2 -o ${checksumPath} ${checksumUrl}`;
+
+    console.log('  Verifying checksum...');
+    const checksumContent = await Bun.file(checksumPath).text();
+    // RTK checksums.txt format: `sha256:<hex>  <filename>`
+    const expectedHash = checksumContent
+      .split('\n')
+      .find((line) => line.includes(rtkDownload))
+      ?.replace(/^sha256:/, '')
+      .trim()
+      .split(/\s+/)[0];
+
+    if (!expectedHash) {
+      throw new Error(`Checksum not found for ${rtkDownload}`);
+    }
+
+    const isValid = await verifySha256(assetPath, expectedHash);
+    if (!isValid) {
+      throw new Error('RTK checksum verification failed!');
+    }
+    console.log('  Checksum verified ✓');
+
+    mkdirSync(extractDir, { recursive: true });
+
+    if (rtkDownload.endsWith('.zip')) {
+      if (process.platform === 'win32') {
+        await $`powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '${assetPath}' -DestinationPath '${extractDir}' -Force"`;
+      } else {
+        await $`unzip -o ${assetPath} -d ${extractDir}`.quiet();
+      }
+    } else {
+      await $`tar -xzf ${assetPath} -C ${extractDir}`;
+    }
+
+    const extractedRtk = findFileRecursive(extractDir, rtkBinaryName);
+    if (!extractedRtk) {
+      throw new Error(`Unable to locate ${rtkBinaryName} in extracted archive`);
+    }
+
+    copyFileSync(extractedRtk, targetPath);
+    if (platform !== 'win32') {
+      await $`chmod +x ${targetPath}`.quiet();
+    }
+
+    console.log(`  RTK installed to ${targetPath} ✓`);
+  } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
 }

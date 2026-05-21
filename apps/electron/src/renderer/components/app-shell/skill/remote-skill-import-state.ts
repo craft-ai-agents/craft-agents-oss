@@ -1,4 +1,4 @@
-import type { DiscoveredSkill, RemoteResolveResult } from '../../../shared/types'
+import type { DiscoveredSkill, RemoteResolveResult } from '../../../../shared/types'
 
 const REMOTE_EMPTY_DISCOVERY_MESSAGE =
   'The repository was reached, but no supported SKILL.md files were found. Remote discovery supports a top-level SKILL.md or skill directories up to three levels deep; when multiple skills are found, the Skill Picker will let you choose. Open a direct GitHub subpath to a skill, or use the Upload tab to install from a zip file.'

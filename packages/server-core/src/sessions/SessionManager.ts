@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { ENV_CONNECTION_SLUG, ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
+import { ENV_CONNECTION_SLUG, ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_BASE_HOST_ENV_VAR, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -95,7 +95,7 @@ import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels
 import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
-import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
+import { buildBackendRuntimeSignature, buildRestartRequiredSignature, buildRuntimeConfigUpdate, filterAttachmentsForModelInput } from './runtime-config'
 import { UserProfileContextManager, type UserProfileProvider, type UserProfile, type LoadedUserProfileContext } from './user-profile-context'
 import { HttpUserProfileProvider, UserProfileRefreshLoop, readLocalUserProfile } from './user-profile-http'
 
@@ -135,9 +135,16 @@ export async function buildSsoSubprocessEnvOverrides(
   connectionSlug: string | undefined,
   options: SsoSubprocessEnvOptions = {},
 ): Promise<Record<string, string>> {
-  if (connectionSlug !== ENV_CONNECTION_SLUG) return {}
+  let baseUrl: string | undefined
 
-  const baseUrl = (options.env?.LLM_BASE_URL ?? process.env.LLM_BASE_URL)?.trim()
+  if (connectionSlug === ENV_CONNECTION_SLUG) {
+    baseUrl = (options.env?.LLM_BASE_URL ?? process.env.LLM_BASE_URL)?.trim()
+  } else if (connectionSlug === OPENLLM_ENV_CONNECTION_SLUG) {
+    baseUrl = process.env[OPENLLM_BASE_HOST_ENV_VAR]?.trim()
+  } else {
+    return {}
+  }
+
   if (!baseUrl) return {}
 
   try {
@@ -240,7 +247,7 @@ function getPiTurnAnchorsPath(sessionPath: string): string {
   return join(sessionPath, 'meta', PI_TURN_ANCHORS_FILE)
 }
 
-async function loadPiTurnAnchors(sessionPath: string): Promise<PiTurnAnchorsIndex> {
+export async function loadPiTurnAnchors(sessionPath: string): Promise<PiTurnAnchorsIndex> {
   const filePath = getPiTurnAnchorsPath(sessionPath)
   try {
     const raw = await readFile(filePath, 'utf-8')
@@ -270,7 +277,7 @@ async function getPiTurnAnchor(sessionPath: string, messageId: string): Promise<
   return index.anchors[messageId]
 }
 
-async function savePiTurnAnchor(sessionPath: string, messageId: string, anchorId: string): Promise<void> {
+export async function savePiTurnAnchor(sessionPath: string, messageId: string, anchorId: string): Promise<void> {
   if (!messageId || !anchorId) return
 
   const index = await loadPiTurnAnchors(sessionPath)
@@ -281,6 +288,39 @@ async function savePiTurnAnchor(sessionPath: string, messageId: string, anchorId
   const filePath = getPiTurnAnchorsPath(sessionPath)
   await mkdir(join(sessionPath, 'meta'), { recursive: true })
   await writeFile(filePath, JSON.stringify(index), 'utf-8')
+}
+
+/**
+ * Copy Pi turn anchors from the source session into the branch session,
+ * filtered to the messages actually carried into the branch.
+ *
+ * Without this, branching a branch is silently lossy: the source branch's
+ * sidecar contains no anchors for messages copied from its own parent, so a
+ * downstream branch falls back to "full-history fork" — discarding the
+ * branch cutoff and producing a session whose visible history doesn't match
+ * what the LLM sees. See craft-agents-oss#782.
+ */
+export async function copyPiTurnAnchorsForBranch(
+  sourceSessionPath: string,
+  branchSessionPath: string,
+  branchedMessageIds: Iterable<string>,
+): Promise<void> {
+  const index = await loadPiTurnAnchors(sourceSessionPath)
+  if (Object.keys(index.anchors).length === 0) return
+  const idSet = new Set(branchedMessageIds)
+  const filtered: Record<string, string> = {}
+  for (const [messageId, anchor] of Object.entries(index.anchors)) {
+    if (idSet.has(messageId)) {
+      filtered[messageId] = anchor
+    }
+  }
+  if (Object.keys(filtered).length === 0) return
+  await mkdir(join(branchSessionPath, 'meta'), { recursive: true })
+  await writeFile(
+    getPiTurnAnchorsPath(branchSessionPath),
+    JSON.stringify({ version: PI_TURN_ANCHORS_VERSION, anchors: filtered }),
+    'utf-8',
+  )
 }
 
 const CLAUDE_TURN_ANCHORS_VERSION = 1
@@ -916,7 +956,17 @@ interface ManagedSession {
   wasInterrupted?: boolean
   // When true, session-level override disables team context injection for this session.
   teamContextDisabled?: boolean
+  /**
+   * Runtime-only: Pi SDK message id → Craft assistant message id.
+   * Populated when a `text_complete` arrives carrying `sdkMessageId`, and read
+   * when the follow-up `pi_turn_anchor` event arrives (deferred by one microtask
+   * so the SDK's session-manager has updated its leaf — see craft-agents-oss#782).
+   * Capped at PI_SDK_MESSAGE_ID_CACHE_LIMIT to bound memory in long sessions.
+   */
+  piSdkMessageToCraftMessage?: Map<string, string>
 }
+
+const PI_SDK_MESSAGE_ID_CACHE_LIMIT = 256
 
 /**
  * Create a ManagedSession from any session-like source (SessionMetadata, SessionConfig, StoredSession).
@@ -2401,6 +2451,7 @@ export class SessionManager implements ISessionManager {
       branchFromSessionPath?: string
       branchFromSdkCwd?: string
       branchFromSdkTurnId?: string
+      sourceProvider?: 'anthropic' | 'pi'
     } | undefined
 
     if (options?.branchFromSessionId || options?.branchFromMessageId) {
@@ -2564,6 +2615,7 @@ export class SessionManager implements ISessionManager {
         branchFromSessionPath,
         branchFromSdkCwd,
         branchFromSdkTurnId,
+        sourceProvider: sourceBackendContext.provider,
       }
 
       sessionLog.info('Branch validation succeeded', {
@@ -2625,6 +2677,29 @@ export class SessionManager implements ISessionManager {
         delete branchedStored.branchFromSdkTurnId
       }
       await saveStoredSession(branchedStored)
+
+      // Propagate the Pi turn-anchor sidecar into the branch so a downstream
+      // branch can still resolve anchors for messages copied here from the
+      // source. Without this step, branch-of-branch silently falls back to
+      // full-history fork — see craft-agents-oss#782.
+      if (
+        validatedBranch.branchContextStrategy === 'sdk-fork' &&
+        validatedBranch.sourceProvider === 'pi'
+      ) {
+        try {
+          await copyPiTurnAnchorsForBranch(
+            sourceDir,
+            branchDir,
+            branchedStored.messages.map((m) => m.id),
+          )
+        } catch (err) {
+          sessionLog.warn('Failed to copy Pi turn-anchors sidecar to branch', {
+            err,
+            sourceSessionId: validatedBranch.sourceSessionId,
+            branchSessionId: storedSession.id,
+          })
+        }
+      }
     }
 
     // Resolve connection/provider/auth/model using the provider-agnostic backend resolver.
@@ -2868,32 +2943,10 @@ export class SessionManager implements ISessionManager {
       return
     }
 
-    const connection = backendContext.connection
     let refreshed = false
     if (managed.agent?.updateRuntimeConfig) {
       try {
-        refreshed = await managed.agent.updateRuntimeConfig({
-          model: backendContext.resolvedModel,
-          providerType: connection?.providerType,
-          authType: backendContext.authType,
-          runtime: connection ? {
-            baseUrl: connection.baseUrl,
-            piAuthProvider: connection.piAuthProvider,
-            customEndpoint: connection.customEndpoint,
-            customModels: connection.models?.map(model => {
-              if (typeof model === 'string') return model
-              const supportsImages = typeof model.supportsImages === 'boolean' ? model.supportsImages : undefined
-              if (model.contextWindow || supportsImages !== undefined) {
-                return {
-                  id: model.id,
-                  ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
-                  ...(supportsImages !== undefined ? { supportsImages } : {}),
-                }
-              }
-              return model.id
-            }),
-          } : undefined,
-        })
+        refreshed = await managed.agent.updateRuntimeConfig(buildRuntimeConfigUpdate(backendContext))
       } catch (error) {
         sessionLog.warn(`Runtime config in-place refresh failed for ${managed.id}: ${error instanceof Error ? error.message : error}`)
       }
@@ -6635,13 +6688,22 @@ export class SessionManager implements ISessionManager {
             }
           }
 
-          // Pi branch-cutoff support: persist provider-native turn anchor in session sidecar.
-          // Keeps session.jsonl schema unchanged while enabling strict branch cutoffs later.
-          if (event.sdkTurnAnchor) {
-            try {
-              await savePiTurnAnchor(sessionPath, assistantMessage.id, event.sdkTurnAnchor)
-            } catch (error) {
-              sessionLog.warn(`Failed to persist Pi turn anchor for session ${sessionId}:`, error)
+          // Pi branch-cutoff support: remember the SDK message id → Craft
+          // assistant message id mapping. The actual anchor arrives as a
+          // separate `pi_turn_anchor` event one microtask later — the SDK
+          // updates its leaf only AFTER firing message_end (see #782).
+          if (event.sdkMessageId) {
+            let cache = managed.piSdkMessageToCraftMessage
+            if (!cache) {
+              cache = new Map()
+              managed.piSdkMessageToCraftMessage = cache
+            }
+            cache.set(event.sdkMessageId, assistantMessage.id)
+            // Prune oldest entries when over the cap. Map preserves insertion
+            // order, so the first key is the oldest.
+            if (cache.size > PI_SDK_MESSAGE_ID_CACHE_LIMIT) {
+              const oldest = cache.keys().next().value
+              if (oldest !== undefined) cache.delete(oldest)
             }
           }
         }
@@ -6650,6 +6712,27 @@ export class SessionManager implements ISessionManager {
 
         // Persist session after complete message to prevent data loss on quit
         this.persistSession(managed)
+        break
+      }
+
+      case 'pi_turn_anchor': {
+        // Follow-up to a `text_complete` from the Pi backend, carrying the
+        // correct leaf id captured AFTER the SDK appended its assistant entry
+        // (the synchronous `message_end` listener could not see it — #782).
+        // Look up the Craft assistant message id by SDK message id and
+        // persist the anchor to the sidecar.
+        const cache = managed.piSdkMessageToCraftMessage
+        const craftMessageId = cache?.get(event.sdkMessageId)
+        if (!craftMessageId) {
+          sessionLog.debug(`pi_turn_anchor for unknown sdkMessageId=${event.sdkMessageId}; ignoring`)
+          break
+        }
+        const sessionPath = getSessionStoragePath(managed.workspace.rootPath, sessionId)
+        try {
+          await savePiTurnAnchor(sessionPath, craftMessageId, event.sdkTurnAnchor)
+        } catch (error) {
+          sessionLog.warn(`Failed to persist Pi turn anchor for session ${sessionId}:`, error)
+        }
         break
       }
 

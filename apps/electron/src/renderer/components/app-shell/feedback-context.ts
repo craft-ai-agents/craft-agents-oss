@@ -11,6 +11,12 @@ export interface PersistedFeedbackStateEntry {
   session_id: string
   message_id: string
   isLike: boolean
+  feedbackId?: string
+}
+
+export interface FeedbackStateValue {
+  rating: FeedbackRating
+  feedbackId?: string
 }
 
 export function clampFeedbackComment(comment: string): string {
@@ -27,16 +33,32 @@ export function resolveNextFeedbackValue(
 export function buildFeedbackStateByMessageId(
   entries: PersistedFeedbackStateEntry[],
   sessionId: string
-): Record<string, FeedbackRating> {
-  const feedbackByMessageId: Record<string, FeedbackRating> = {}
+): Record<string, FeedbackStateValue> {
+  const feedbackByMessageId: Record<string, FeedbackStateValue> = {}
 
   for (const entry of entries) {
     if (entry.session_id === sessionId) {
-      feedbackByMessageId[entry.message_id] = entry.isLike ? 'like' : 'dislike'
+      feedbackByMessageId[entry.message_id] = {
+        rating: entry.isLike ? 'like' : 'dislike',
+        ...(entry.feedbackId ? { feedbackId: entry.feedbackId } : {}),
+      }
     }
   }
 
   return feedbackByMessageId
+}
+
+export function buildFeedbackTurnMessages(context: FeedbackConversationContext): Message[] {
+  const seen = new Set<string>()
+  const messages: Message[] = []
+
+  for (const message of [...context.conversationMessages, ...context.userBoundaryMessages]) {
+    if (seen.has(message.id)) continue
+    seen.add(message.id)
+    messages.push(message)
+  }
+
+  return messages
 }
 
 export function buildFeedbackConversationContext(

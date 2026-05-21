@@ -49,3 +49,21 @@ export const setMessagingBindingsAtom = atom(
     set(messagingBindingsAtom, bindings.filter((binding) => binding.enabled))
   },
 )
+
+export type MessagingDialogState =
+  | { kind: 'closed' }
+  | {
+      kind: 'pairing'
+      platform: 'telegram' | 'whatsapp' | 'lark'
+      sessionId: string
+      code: string | null
+      expiresAt: number | null
+      botUsername?: string
+      error?: string
+    }
+  | {
+      kind: 'wa_connect'
+      continueToPairingSessionId?: string
+    }
+
+export const messagingDialogAtom = atom<MessagingDialogState>({ kind: 'closed' })

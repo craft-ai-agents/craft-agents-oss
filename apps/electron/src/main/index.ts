@@ -148,6 +148,13 @@ if (isDebugMode) {
     process.env.CRAFT_BUN = bunBinary
   }
 
+  // RTK bundled binary — takes priority over any user-installed rtk on PATH.
+  // rtk-detector.ts reads CRAFT_RTK before falling back to which/where.
+  const rtkBinary = join(uvPlatformDir, process.platform === 'win32' ? 'rtk.exe' : 'rtk')
+  if (existsSync(rtkBinary)) {
+    process.env.CRAFT_RTK = rtkBinary
+  }
+
   process.env.CRAFT_SCRIPTS = scriptsDir
   process.env.CRAFT_COMMANDS_ENTRY = app.isPackaged
     ? join(app.getAppPath(), 'packages', 'craft-agents-commands', 'src', 'main.ts')

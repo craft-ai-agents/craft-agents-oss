@@ -7,6 +7,7 @@ import { MobilePlaygroundProviders } from './MobilePlaygroundProviders'
 import {
   MOCK_MESSAGES,
   MOCK_LABELS,
+  MOCK_LLM_CONNECTIONS,
   MOCK_SESSION_STATUSES,
   MOCK_SOURCES,
   MOCK_SKILLS,
@@ -99,7 +100,7 @@ export function ChatDisplayMobilePreview({
   )
 
   return (
-    <MobilePlaygroundProviders session={session}>
+    <MobilePlaygroundProviders session={session} llmConnections={MOCK_LLM_CONNECTIONS}>
       <MobileWebUIFrame device={device} showBezel={showBezel}>
         <div className="flex flex-col h-full bg-background">
           <ChatDisplay
@@ -121,6 +122,8 @@ export function ChatDisplayMobilePreview({
             sessionStatuses={MOCK_SESSION_STATUSES}
             onSessionStatusChange={log('onSessionStatusChange')}
             workspaceId={MOBILE_WORKSPACE_ID}
+            compactMode={true}
+            enableCompactModelPicker={true}
           />
         </div>
       </MobileWebUIFrame>

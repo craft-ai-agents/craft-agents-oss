@@ -11,7 +11,7 @@ describe('Environment LLM connection helpers', () => {
     const connection = synthesizeEnvConnectionWithStatus({
       LLM_BASE_URL: 'https://env.example.test/v1',
       LLM_MODEL: 'env-model',
-    }, 'sso-token')
+    }, 'sso-token', ENV_CONNECTION_SLUG)
 
     expect(connection).toMatchObject({
       slug: ENV_CONNECTION_SLUG,
@@ -24,11 +24,19 @@ describe('Environment LLM connection helpers', () => {
     })
   })
 
+  it('is not marked as default when a user-managed connection is the explicit default', () => {
+    const connection = synthesizeEnvConnectionWithStatus({
+      LLM_BASE_URL: 'https://env.example.test/v1',
+    }, 'sso-token', 'my-user-connection')
+
+    expect(connection?.isDefault).toBe(false)
+  })
+
   it('does not build the protected status entry without LLM_BASE_URL or an active SSO token', () => {
-    expect(synthesizeEnvConnectionWithStatus({}, 'sso-token')).toBeNull()
+    expect(synthesizeEnvConnectionWithStatus({}, 'sso-token', null)).toBeNull()
     expect(synthesizeEnvConnectionWithStatus({
       LLM_BASE_URL: 'https://env.example.test/v1',
-    }, undefined)).toBeNull()
+    }, undefined, null)).toBeNull()
   })
 
   it('identifies and rejects mutations for the reserved env-provider slug', () => {
