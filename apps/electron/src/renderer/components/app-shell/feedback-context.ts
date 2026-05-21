@@ -49,16 +49,7 @@ export function buildFeedbackStateByMessageId(
 }
 
 export function buildFeedbackTurnMessages(context: FeedbackConversationContext): Message[] {
-  const seen = new Set<string>()
-  const messages: Message[] = []
-
-  for (const message of [...context.conversationMessages, ...context.userBoundaryMessages]) {
-    if (seen.has(message.id)) continue
-    seen.add(message.id)
-    messages.push(message)
-  }
-
-  return messages
+  return [...context.conversationMessages]
 }
 
 export function buildFeedbackConversationContext(
