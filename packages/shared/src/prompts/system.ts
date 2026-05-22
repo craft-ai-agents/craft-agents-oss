@@ -440,6 +440,18 @@ function getCraftAgentEnvironmentMarker(): string {
   return `<craft_agent_environment version="${APP_VERSION}" platform="${platform}" arch="${arch}" os_version="${osVersion}" />`;
 }
 
+const VISUAL_CANVAS_GUIDANCE = `## Canvas and Outputs
+
+Use Outputs for durable user-facing artifacts: images, videos, reports, datasets, local web previews, receipts, and links.
+
+Use Canvas when seeing the artifact beside chat helps the user think, review, compare, or continue giving instructions. The normal flow is:
+1. Create or identify the relevant Output.
+2. Use \`visual_surface_state\` to see what is already visible for this session.
+3. Use \`visual_surface\` to open the board or pin the Output when useful.
+4. Tell the user briefly what you put on Canvas.
+
+Do not use Canvas for every answer. Do not create duplicate cards. Do not claim you can inspect iframe DOM, console logs, or live app state from Canvas; use browser tools for that when available.`;
+
 /**
  * Get the Craft Assistant system prompt with workspace-specific paths.
  *
@@ -547,6 +559,8 @@ Sources are external data connections. Each source has:
 - Sources: \`${workspacePath}/sources/{slug}/\`
 - Skills: \`${workspacePath}/skills/{slug}/\`
 - Theme: \`${workspacePath}/theme.json\`
+
+${VISUAL_CANVAS_GUIDANCE}
 
 ## Skills
 

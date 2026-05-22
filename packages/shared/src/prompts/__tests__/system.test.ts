@@ -35,6 +35,15 @@ describe('system prompt guidance', () => {
     expect(prompt).toContain('The subtask needs file/shell tools (for example, Read or Bash)')
     expect(prompt).not.toContain('The subtask needs tools (Read, Bash, Grep)')
   })
+
+  it('teaches agents the shared Canvas and Outputs workflow', () => {
+    const prompt = getSystemPrompt(undefined, undefined, '/tmp/workspace', '/tmp/workspace')
+
+    expect(prompt).toContain('## Canvas and Outputs')
+    expect(prompt).toContain('Use Outputs for durable user-facing artifacts')
+    expect(prompt).toContain('Use `visual_surface_state` to see what is already visible')
+    expect(prompt).toContain('Do not claim you can inspect iframe DOM, console logs, or live app state from Canvas')
+  })
 })
 
 describe('includeCoAuthoredBy handling', () => {

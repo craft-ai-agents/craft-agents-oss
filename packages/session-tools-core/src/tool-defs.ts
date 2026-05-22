@@ -915,11 +915,15 @@ Use this when you have produced a durable deliverable or external-action receipt
 
 Good outputs include research reports, generated media, exported datasets, code review reports, deployment receipts, published-post receipts, sent-message receipts, and final workflow deliverables.
 
+For visual work, create the image/video/web/report Output first, then use visual_surface_state and visual_surface to pin or open it on Canvas when side-by-side viewing helps.
+
 Do NOT use this for ordinary chat replies, scratch notes, temporary plans, or files that are not intended as final deliverables. Prefer one concise primary output over dumping every intermediate artifact.`,
 
   visual_surface: `Update the current session Canvas through a safe structured operation.
 
 Use this when the user asks you to show work visually, open the Canvas, add a note card, or pin an existing session Output to the Canvas.
+
+Best flow for generated visuals: create_output first, read visual_surface_state, then pin the same-session Output with pin_output/add_image/add_video. Avoid duplicate cards.
 
 Allowed actions:
 - open_board: create/open the Canvas board for this session
