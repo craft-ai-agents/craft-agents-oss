@@ -131,19 +131,21 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
             : 'runneros-glass-panel-strong rounded-[12px] border border-border/70 shadow-modal-small',
         )}
       >
-        <header className={cn(
-          'flex h-12 shrink-0 items-center gap-2 px-3',
-          presentation === 'rollup' ? 'border-b border-border/35' : 'border-b border-border/45',
-        )}>
-          <div className="flex size-7 items-center justify-center rounded-md bg-foreground/6 text-foreground">
-            <Layers className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium leading-5">Canvas</div>
-          </div>
-        </header>
+        {presentation === 'rollup' ? null : (
+          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/45 px-3">
+            <div className="flex size-7 items-center justify-center rounded-md bg-foreground/6 text-foreground">
+              <Layers className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium leading-5">Canvas</div>
+            </div>
+          </header>
+        )}
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+        <div className={cn(
+          'flex min-h-0 flex-1 flex-col overflow-y-auto',
+          presentation === 'rollup' ? 'gap-2 px-0 pb-3 pt-0' : 'gap-3 p-3',
+        )}>
           {sessionOutputs.length > 1 ? (
             <OutputSelector
               outputs={sessionOutputs}
@@ -154,7 +156,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
           <div className={cn(
             'relative min-h-[220px] flex-1 overflow-hidden bg-background/65',
             presentation === 'rollup'
-              ? 'min-h-0 rounded-md border border-border/45'
+              ? 'min-h-0 rounded-t-none rounded-b-md border-x border-b border-border/45'
               : 'rounded-lg border border-border/60',
           )}>
             {renderVisualSurfaceAdapter(adapterContext)}
