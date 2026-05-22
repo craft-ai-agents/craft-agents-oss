@@ -93,16 +93,23 @@ export function SkillMarketplacePage({
 
   const { skills: ctxSkills = [] } = useAppShellContext()
 
-  // On mount, fetch fresh skills to catch manual filesystem changes not reflected in context
-  const [refreshedSkills, setRefreshedSkills] = React.useState<LoadedSkill[] | null>(null)
-  React.useEffect(() => {
+  // Local fetch state: populated by direct getSkills calls, bypasses context/cache
+  const [fetchedSkills, setFetchedSkills] = React.useState<LoadedSkill[] | null>(null)
+
+  const fetchSkills = React.useCallback(() => {
     window.electronAPI?.getSkills(workspaceId).then((loaded) => {
-      if (loaded) setRefreshedSkills(loaded)
+      if (!loaded) return
+      setFetchedSkills(loaded)
+      const loadedSlugs = new Set(loaded.map((s) => s.slug))
+      setUploadedSkills((prev) => prev.filter((s) => loadedSlugs.has(s.slug)))
     }).catch(() => {})
   }, [workspaceId])
 
-  const effectiveCtxSkills = refreshedSkills ?? ctxSkills
-  const baseLocalSkills = USE_MOCK_MARKET ? (effectiveCtxSkills.length > 0 ? effectiveCtxSkills : MOCK_LOCAL_SKILLS) : effectiveCtxSkills
+  // Fetch on mount and when workspaceId changes
+  React.useEffect(() => { fetchSkills() }, [workspaceId])
+
+  const effectiveSkills = fetchedSkills ?? ctxSkills
+  const baseLocalSkills = USE_MOCK_MARKET ? (effectiveSkills.length > 0 ? effectiveSkills : MOCK_LOCAL_SKILLS) : effectiveSkills
   const localSkills = React.useMemo(() => {
     const ctxSlugs = new Set(baseLocalSkills.map((s) => s.slug))
     const uniqueUploaded = uploadedSkills.filter((s) => !ctxSlugs.has(s.slug))
@@ -424,7 +431,7 @@ export function SkillMarketplacePage({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => setTab('market')}
+            onClick={() => { setTab('market'); fetchSkills() }}
             className={cn(
               'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors',
               tab === 'market'
@@ -436,7 +443,7 @@ export function SkillMarketplacePage({
           </button>
           <button
             type="button"
-            onClick={() => setTab('local')}
+            onClick={() => { setTab('local'); fetchSkills() }}
             className={cn(
               'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors',
               tab === 'local'
