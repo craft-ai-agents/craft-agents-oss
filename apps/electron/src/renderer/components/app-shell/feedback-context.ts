@@ -21,6 +21,17 @@ export interface FeedbackStateValue {
 
 export type FeedbackStateByMessageId = Record<string, FeedbackStateValue>
 
+export type FeedbackTargetTurn = {
+  type: string
+  hasResponse?: boolean
+  isComplete?: boolean
+  isStreaming?: boolean
+}
+
+export interface FeedbackTargetOptions {
+  isSessionProcessing?: boolean
+}
+
 export function clampFeedbackComment(comment: string): string {
   return comment.slice(0, 255)
 }
@@ -65,6 +76,27 @@ export function applySavedFeedbackId(
     ...feedbackByMessageId,
     [messageId]: { rating, feedbackId },
   }
+}
+
+export function isFeedbackTargetTurn(
+  turns: FeedbackTargetTurn[],
+  index: number,
+  options: FeedbackTargetOptions = {}
+): boolean {
+  const turn = turns[index]
+  if (turn?.type !== 'assistant' || !turn.hasResponse) {
+    return false
+  }
+  if (turn.isComplete === false || turn.isStreaming) {
+    return false
+  }
+
+  for (const nextTurn of turns.slice(index + 1)) {
+    if (nextTurn.type === 'user') return true
+    if (nextTurn.type === 'assistant' && nextTurn.hasResponse) return false
+  }
+
+  return !options.isSessionProcessing
 }
 
 export function buildFeedbackStateByMessageId(
