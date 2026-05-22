@@ -1,17 +1,21 @@
-export type FeedbackContentPart = {
-  type?: string
-  text?: string
-  file_url?: string
-  filename?: string
-  data?: Record<string, unknown>
-  [key: string]: unknown
-}
-
 export type FeedbackTurnMessage = {
   id: string
-  type: string
   role: string
-  content: FeedbackContentPart[]
+  content: string
+  timestamp?: number
+  attachments?: unknown
+  turnId?: string
+  type?: string
+  isIntermediate?: boolean
+  isError?: boolean
+  toolName?: string
+  toolDisplayName?: string
+  toolUseId?: string
+  toolIntent?: string
+  toolStatus?: string
+  toolInput?: unknown
+  toolResult?: unknown
+  toolDisplayMeta?: Record<string, unknown>
   metadata?: Record<string, unknown>
   [key: string]: unknown
 }
@@ -174,7 +178,7 @@ export async function listChatFeedback(
   const records = await feedbackRequest<RawFeedbackRecord[]>(
     baseUrl,
     token,
-    '/api/mdp/feedback/list',
+    '/api/mdp/new/feedback/list',
     undefined,
     fetchImpl,
   )
@@ -190,7 +194,7 @@ export async function addChatFeedback(
   const result = await feedbackRequest<unknown>(
     baseUrl,
     token,
-    '/api/mdp/feedback/add',
+    '/api/mdp/new/feedback/add',
     {
       method: 'POST',
       body: JSON.stringify(withRequestAliases(body)),
@@ -209,7 +213,7 @@ export function updateChatFeedback(
   return feedbackRequest<boolean>(
     baseUrl,
     token,
-    '/api/mdp/feedback/update',
+    '/api/mdp/new/feedback/update',
     {
       method: 'POST',
       body: JSON.stringify(withRequestAliases(body)),
@@ -227,7 +231,7 @@ export function deleteChatFeedback(
   return feedbackRequest<void>(
     baseUrl,
     token,
-    `/api/mdp/feedback/delete?id=${encodeURIComponent(id)}`,
+    `/api/mdp/new/feedback/delete?id=${encodeURIComponent(id)}`,
     { method: 'POST' },
     fetchImpl,
   )
