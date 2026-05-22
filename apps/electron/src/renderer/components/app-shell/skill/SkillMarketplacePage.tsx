@@ -217,7 +217,7 @@ export function SkillMarketplacePage({
     return marketSkills
       .filter((s) => {
         const matchCat = category === '全部' || s.category === category
-        const matchQ = !q || s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.owner.toLowerCase().includes(q)
+        const matchQ = !q || s.name.toLowerCase().includes(q) || s.slug.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.owner.toLowerCase().includes(q)
         return matchCat && matchQ
       })
       .map((s) => ({
@@ -240,7 +240,8 @@ export function SkillMarketplacePage({
         !q ||
         s.slug.toLowerCase().includes(q) ||
         (s.metadata?.name ?? s.slug).toLowerCase().includes(q) ||
-        (s.metadata?.description ?? '').toLowerCase().includes(q)
+        (s.metadata?.description ?? '').toLowerCase().includes(q) ||
+        (s.metadata?.author ?? '').toLowerCase().includes(q)
       return matchOrigin && matchQ
     })
   }, [localSkills, localSearch, localOriginFilter, copawInstalledSlugs])

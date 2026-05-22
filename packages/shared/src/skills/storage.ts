@@ -91,6 +91,8 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
         alwaysAllow: parsed.data.alwaysAllow as string[] | undefined,
         icon,
         requiredSources: normalizeRequiredSources(parsed.data.requiredSources),
+        author: parsed.data.author as string | undefined,
+        extraMetadata: parsed.data.metadata as Record<string, unknown> | undefined,
       },
       body: parsed.content,
     };
