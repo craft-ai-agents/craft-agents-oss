@@ -1,28 +1,20 @@
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { Image as ImageIcon, Layers, Maximize2, PanelRight } from 'lucide-react'
+import { Layers, Maximize2, PanelRight } from 'lucide-react'
 import { VISUAL_BOARD_TAG } from '@craft-agent/shared/visual-board'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { OutputInlinePreview } from '@/components/outputs/OutputInlinePreview'
-import { VisualBoardSurface } from './VisualBoardSurface'
 import { useOutputs, type OutputManifestDTO, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import {
   focusVisualSidecarAtom,
   openOutputVisualSurfaceAtom,
   visualSidecarAtom,
 } from '@/atoms/visual-surfaces'
+import { renderVisualSurfaceAdapter, type VisualSurfaceAdapterContext } from './VisualSurfaceAdapters'
 
 interface VisualSurfacePanelProps {
   presentation: 'inline' | 'overlay' | 'rollup'
 }
-
-const PREVIEW_NODES = [
-  { label: 'Brief', x: 11, y: 18, tone: 'bg-sky-400/25 border-sky-300/40' },
-  { label: 'Draft', x: 49, y: 30, tone: 'bg-emerald-400/20 border-emerald-300/40' },
-  { label: 'Media', x: 24, y: 62, tone: 'bg-amber-400/20 border-amber-300/40' },
-  { label: 'Review', x: 64, y: 68, tone: 'bg-fuchsia-400/20 border-fuchsia-300/40' },
-]
 
 export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
   const { activeSurface, isCollapsed, focusedAt } = useAtomValue(visualSidecarAtom)
@@ -77,6 +69,18 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
   }, [activeSurface?.sessionId, activeSurface?.workspaceId, openOutputVisualSurface])
 
   if (!activeSurface) return null
+
+  const adapterContext: VisualSurfaceAdapterContext = {
+    workspaceId: activeSurface.workspaceId,
+    sessionId: activeSurface.sessionId,
+    surface: activeSurface,
+    selectedOutputId,
+    selectedManifest,
+    sessionOutputs,
+    boardOutput,
+    manifestError,
+    onOpenOutput: openOutput,
+  }
 
   if (isCollapsed) {
     return (
@@ -153,25 +157,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
               ? 'min-h-0 rounded-md border border-border/45'
               : 'rounded-lg border border-border/60',
           )}>
-            {activeSurface.sessionId && activeSurface.workspaceId && (!selectedOutputId || selectedManifest?.tags?.includes(VISUAL_BOARD_TAG)) ? (
-              <VisualBoardSurface
-                workspaceId={activeSurface.workspaceId}
-                sessionId={activeSurface.sessionId}
-                outputs={sessionOutputs}
-                onOpenOutput={openOutput}
-                refreshKey={boardOutput?.updatedAt}
-              />
-            ) : selectedManifest && activeSurface.workspaceId ? (
-              <OutputInlinePreview
-                workspaceId={activeSurface.workspaceId}
-                manifest={selectedManifest}
-                primary={selectedManifest.primary ?? selectedManifest.assets.find((asset) => asset.role === 'primary') ?? selectedManifest.assets[0]}
-                compact
-                className="flex h-full min-h-0 w-full items-center justify-center overflow-auto p-3 text-white/72"
-              />
-            ) : (
-              <PlaceholderCanvas error={manifestError} />
-            )}
+            {renderVisualSurfaceAdapter(adapterContext)}
           </div>
 
           <div className={cn(
@@ -232,36 +218,5 @@ function OutputSelector({
         </button>
       ))}
     </div>
-  )
-}
-
-function PlaceholderCanvas({ error }: { error: string | null }) {
-  return (
-    <>
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,hsl(var(--foreground)/0.06)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--foreground)/0.06)_1px,transparent_1px)] bg-[size:28px_28px]" />
-      <svg className="absolute inset-0 h-full w-full text-foreground/18" aria-hidden="true">
-        <line x1="24%" y1="28%" x2="53%" y2="38%" stroke="currentColor" strokeWidth="1.4" />
-        <line x1="31%" y1="68%" x2="53%" y2="38%" stroke="currentColor" strokeWidth="1.4" />
-        <line x1="53%" y1="38%" x2="70%" y2="73%" stroke="currentColor" strokeWidth="1.4" />
-      </svg>
-      {PREVIEW_NODES.map((node) => (
-        <div
-          key={node.label}
-          className={cn(
-            'absolute flex h-10 min-w-20 items-center justify-center rounded-md border px-3 text-xs font-medium shadow-xs backdrop-blur',
-            node.tone,
-          )}
-          style={{ left: `${node.x}%`, top: `${node.y}%` }}
-        >
-          {node.label}
-        </div>
-      ))}
-      <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2 rounded-md border border-border/55 bg-background/82 px-2.5 py-2 text-xs text-muted-foreground backdrop-blur">
-        <ImageIcon className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 truncate">
-          {error ?? 'No session output yet. Generated outputs will appear here.'}
-        </span>
-      </div>
-    </>
   )
 }
