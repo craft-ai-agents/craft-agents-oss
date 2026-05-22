@@ -128,7 +128,7 @@ export function ThemeProvider({
   children,
   defaultMode = 'system',
   defaultColorTheme = 'default',
-  defaultFont = 'system',
+  defaultFont = 'inter',
   activeWorkspaceId = null
 }: ThemeProviderProps) {
   const stored = loadStoredTheme()
@@ -142,7 +142,7 @@ export function ThemeProvider({
     }
     return defaultColorTheme // Will be updated by config.json effect
   })
-  const [font, setFontState] = useState<FontFamily>(stored?.font ?? defaultFont)
+  const [font, setFontState] = useState<FontFamily>((stored?.font === 'system' ? 'inter' : stored?.font) ?? defaultFont)
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(getSystemPreference)
   const [previewColorTheme, setPreviewColorTheme] = useState<string | null>(null)
 
@@ -300,11 +300,7 @@ export function ThemeProvider({
     const root = document.documentElement
 
     // Apply font
-    if (font === 'inter') {
-      root.dataset.font = 'inter'
-    } else {
-      delete root.dataset.font
-    }
+    root.dataset.font = 'inter'
 
     // Apply color theme data attribute
     if (effectiveColorTheme && effectiveColorTheme !== 'default') {
@@ -466,12 +462,13 @@ export function ThemeProvider({
   }, [mode, font])
 
   const setFont = useCallback((newFont: FontFamily) => {
-    setFontState(newFont)
+    const normalizedFont = newFont === 'system' ? 'inter' : newFont
+    setFontState(normalizedFont)
     // Preserve existing isUserOverride flag
     const existing = loadStoredTheme()
-    saveTheme({ mode, colorTheme, font: newFont, isUserOverride: existing?.isUserOverride })
+    saveTheme({ mode, colorTheme, font: normalizedFont, isUserOverride: existing?.isUserOverride })
     if (!isExternalUpdate.current && window.electronAPI?.broadcastThemePreferences) {
-      window.electronAPI.broadcastThemePreferences({ mode, colorTheme, font: newFont })
+      window.electronAPI.broadcastThemePreferences({ mode, colorTheme, font: normalizedFont })
     }
   }, [mode, colorTheme])
 

@@ -6,11 +6,6 @@
 
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { PanelHeader } from '@/components/app-shell/PanelHeader'
-import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { HeaderMenu } from '@/components/ui/HeaderMenu'
-import { routes } from '@/lib/navigate'
 import { isMac } from '@/lib/platform'
 import { actionsByCategory, useActionLabel, type ActionId } from '@/actions'
 
@@ -64,7 +59,7 @@ function useComponentSpecificSections(): ShortcutSection[] {
 
 function Kbd({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <kbd className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-medium font-sans bg-muted border border-border rounded ${className || ''}`}>
+    <kbd className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-[6px] border border-white/[0.08] bg-white/[0.055] px-1.5 font-sans text-[11px] font-medium text-white/68 ${className || ''}`}>
       {children}
     </kbd>
   )
@@ -87,11 +82,11 @@ function ActionShortcutRow({ actionId }: { actionId: ActionId }) {
 
   return (
     <div className="group flex items-center justify-between py-1.5">
-      <span className="text-sm">{label}</span>
-      <div className="flex-1 mx-3 h-px bg-[repeating-linear-gradient(90deg,currentColor_0_2px,transparent_2px_8px)] opacity-0 group-hover:opacity-15" />
+      <span className="text-sm text-white/72">{label}</span>
+      <div className="mx-3 h-px flex-1 bg-[repeating-linear-gradient(90deg,currentColor_0_2px,transparent_2px_8px)] text-white opacity-0 group-hover:opacity-15" />
       <div className="flex items-center gap-1">
         {keys.map((key, keyIndex) => (
-          <Kbd key={keyIndex} className="group-hover:bg-foreground/10 group-hover:border-foreground/20">{key}</Kbd>
+          <Kbd key={keyIndex} className="group-hover:border-white/[0.14] group-hover:bg-white/[0.085]">{key}</Kbd>
         ))}
       </div>
     </div>
@@ -103,16 +98,18 @@ export default function ShortcutsPage() {
   const componentSpecificSections = useComponentSpecificSections()
 
   return (
-    <div className="h-full flex flex-col">
-      <PanelHeader title={t("shortcuts.title")} actions={<HeaderMenu route={routes.view.settings('shortcuts')} />} />
-      <Separator />
-      <ScrollArea className="flex-1">
-        <div className="px-5 py-4">
-          <div className="space-y-6">
+    <div className="runneros-glass-route h-full overflow-y-auto">
+      <div className="runneros-page-wrap">
+        <div className="mb-6">
+          <h1 className="runneros-page-title">{t("shortcuts.title")}</h1>
+          <p className="runneros-page-subtitle">Keyboard commands for moving through RunnerOS quickly.</p>
+        </div>
+        <div className="runneros-card p-4">
+          <div className="grid gap-6 lg:grid-cols-2">
             {/* Registry-driven sections */}
             {Object.entries(actionsByCategory).map(([category, actions]) => (
               <div key={category}>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 pb-1.5 border-b border-border/50">
+                <h3 className="mb-2 border-b border-white/[0.07] pb-1.5 text-xs font-semibold uppercase tracking-wide text-white/45">
                   {category}
                 </h3>
                 <div className="space-y-0.5">
@@ -126,7 +123,7 @@ export default function ShortcutsPage() {
             {/* Component-specific sections */}
             {componentSpecificSections.map((section) => (
               <div key={section.title}>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 pb-1.5 border-b border-border/50">
+                <h3 className="mb-2 border-b border-white/[0.07] pb-1.5 text-xs font-semibold uppercase tracking-wide text-white/45">
                   {section.title}
                 </h3>
                 <div className="space-y-0.5">
@@ -135,11 +132,11 @@ export default function ShortcutsPage() {
                       key={index}
                       className="group flex items-center justify-between py-1.5"
                     >
-                      <span className="text-sm">{shortcut.description}</span>
-                      <div className="flex-1 mx-3 h-px bg-[repeating-linear-gradient(90deg,currentColor_0_2px,transparent_2px_8px)] opacity-0 group-hover:opacity-15" />
+                      <span className="text-sm text-white/72">{shortcut.description}</span>
+                      <div className="mx-3 h-px flex-1 bg-[repeating-linear-gradient(90deg,currentColor_0_2px,transparent_2px_8px)] text-white opacity-0 group-hover:opacity-15" />
                       <div className="flex items-center gap-1">
                         {shortcut.keys.map((key, keyIndex) => (
-                          <Kbd key={keyIndex} className="group-hover:bg-foreground/10 group-hover:border-foreground/20">{key}</Kbd>
+                          <Kbd key={keyIndex} className="group-hover:border-white/[0.14] group-hover:bg-white/[0.085]">{key}</Kbd>
                         ))}
                       </div>
                     </div>
@@ -149,7 +146,7 @@ export default function ShortcutsPage() {
             ))}
           </div>
         </div>
-      </ScrollArea>
+      </div>
     </div>
   )
 }

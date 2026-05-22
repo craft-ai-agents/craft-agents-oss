@@ -65,7 +65,7 @@ export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLib
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[86vh] max-w-2xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_28px_90px_rgba(0,0,0,0.62)]">
-        <DialogHeader className="border-b border-white/[0.06] bg-[radial-gradient(circle_at_18%_0%,rgba(94,106,210,0.20),transparent_34%),#0b0b0f] px-6 py-5">
+        <DialogHeader className="border-b border-white/[0.06] bg-[radial-gradient(circle_at_18%_0%,rgba(249,115,22,0.20),transparent_34%),#0b0b0f] px-6 py-5">
           <DialogTitle className="text-[22px] font-semibold leading-tight text-white">Manage agents</DialogTitle>
           <DialogDescription className="max-w-xl text-sm leading-6 text-white/52">
             Choose which agents appear in this workspace.
@@ -80,12 +80,12 @@ export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLib
               placeholder="Search agents"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="h-10 w-full rounded-[12px] border border-white/[0.08] bg-white/[0.035] pl-9 pr-3 text-sm text-white outline-none placeholder:text-white/28 focus:border-[#8b8cff]/40"
+              className="h-10 w-full rounded-[12px] border border-white/[0.08] bg-white/[0.035] pl-9 pr-3 text-sm text-white outline-none placeholder:text-white/28 focus:border-[#fb923c]/40"
             />
             <button
               type="button"
               onClick={() => setCreateOpen(true)}
-              className="absolute right-1.5 top-1/2 inline-flex h-7 -translate-y-1/2 items-center gap-1.5 rounded-[9px] border border-[#8b8cff]/24 bg-[#5e6ad2]/18 px-2.5 text-[11px] font-medium text-[#c3c6ff] transition-colors hover:bg-[#5e6ad2]/28 hover:text-white"
+              className="absolute right-1.5 top-1/2 inline-flex h-7 -translate-y-1/2 items-center gap-1.5 rounded-[9px] border border-[#fb923c]/24 bg-[#f97316]/18 px-2.5 text-[11px] font-medium text-[#fed7aa] transition-colors hover:bg-[#f97316]/28 hover:text-white"
               title="Create a new agent from scratch"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -151,17 +151,17 @@ function AgentRow({ agent, displayName, active, onToggle, onRename }: AgentRowPr
 
   return (
     <div
-      className="group flex min-w-0 cursor-pointer items-center gap-3 rounded-[14px] border border-white/[0.065] bg-white/[0.032] px-3 py-3 transition-colors hover:border-[#8b8cff]/28 hover:bg-white/[0.055]"
+      className="group flex min-w-0 cursor-pointer items-center gap-3 rounded-[14px] border border-white/[0.065] bg-white/[0.032] px-3 py-3 transition-colors hover:border-[#fb923c]/28 hover:bg-white/[0.055]"
       style={{ opacity: active ? 1 : 0.7 }}
     >
       <input
         type="checkbox"
         checked={active}
         onChange={onToggle}
-        className="h-3.5 w-3.5 cursor-pointer accent-[#8b8cff]"
+        className="h-3.5 w-3.5 cursor-pointer accent-[#fb923c]"
       />
       <div
-        className="flex shrink-0 items-center justify-center border border-white/[0.08] bg-white/[0.055] font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#b8bcff]"
+        className="flex shrink-0 items-center justify-center border border-white/[0.08] bg-white/[0.055] font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#fed7aa]"
         style={{
           width: 32,
           height: 32,
@@ -190,12 +190,12 @@ function AgentRow({ agent, displayName, active, onToggle, onRename }: AgentRowPr
                   setEditing(false)
                 }
               }}
-              className="h-7 min-w-0 flex-1 rounded-[8px] border border-[#8b8cff]/28 bg-black/30 px-2 text-sm font-medium text-white outline-none placeholder:text-white/28"
+              className="h-7 min-w-0 flex-1 rounded-[8px] border border-[#fb923c]/28 bg-black/30 px-2 text-sm font-medium text-white outline-none placeholder:text-white/28"
               placeholder={agent.metadata.name}
             />
             <button
               type="submit"
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-[#b8bcff] hover:bg-white/[0.06] hover:text-white"
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-[#fed7aa] hover:bg-white/[0.06] hover:text-white"
               title="Save display name"
             >
               <Check className="h-3.5 w-3.5" />
@@ -218,7 +218,7 @@ function AgentRow({ agent, displayName, active, onToggle, onRename }: AgentRowPr
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] text-white/24 opacity-0 transition-colors hover:bg-white/[0.06] hover:text-[#c3c6ff] group-hover:opacity-100"
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] text-white/24 opacity-0 transition-colors hover:bg-white/[0.06] hover:text-[#fed7aa] group-hover:opacity-100"
               title="Edit display name"
             >
               <Pencil className="h-3 w-3" />

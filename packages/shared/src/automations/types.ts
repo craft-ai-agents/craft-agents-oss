@@ -64,6 +64,10 @@ export const AGENT_EVENTS: AgentEvent[] = [
 export interface PromptAction {
   type: 'prompt';
   prompt: string;
+  /** Optional saved agent slug used for the spawned automation session. */
+  agentSlug?: string;
+  /** Bind the spawned session back to the inbound messaging channel when the trigger is MessageReceive. */
+  bindMessagingChannel?: boolean;
   /** LLM connection slug for the created session (falls back to default if not found) */
   llmConnection?: string;
   /** Model ID for the created session (falls back to provider default if invalid) */
@@ -358,6 +362,14 @@ export interface PendingPrompt {
   mentions: string[];
   /** Labels to apply to the created session */
   labels?: string[];
+  /** Saved agent slug to apply to the created session */
+  agentSlug?: string;
+  /** Messaging channel to bind to the created session after it is spawned */
+  messagingChannel?: {
+    platform: string;
+    channelId: string;
+    channelName?: string | null;
+  };
   /** Permission mode for the created session (from matcher config) */
   permissionMode?: PermissionMode;
   /** LLM connection slug for the created session (falls back to default if not found) */

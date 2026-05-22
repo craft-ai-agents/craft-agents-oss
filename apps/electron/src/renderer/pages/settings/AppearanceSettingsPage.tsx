@@ -246,8 +246,8 @@ export default function AppearanceSettingsPage() {
       />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
-          <div className="px-5 py-7 max-w-3xl mx-auto">
-            <div className="space-y-8">
+          <div className="px-6 pt-24 pb-8 max-w-[760px] mx-auto">
+            <div className="space-y-6">
 
               {/* Default Theme */}
               <SettingsSection title={t("settings.appearance.defaultTheme")}>
@@ -276,7 +276,6 @@ export default function AppearanceSettingsPage() {
                       onValueChange={setFont}
                       options={[
                         { value: 'inter', label: t("settings.appearance.fontInter") },
-                        { value: 'system', label: t("settings.appearance.fontSystem") },
                       ]}
                     />
                   </SettingsRow>

@@ -109,6 +109,7 @@ function AutomationItem({
       onMouseDown={handleClick}
       icon={<AutomationAvatar event={automation.event} size="sm" />}
       title={automation.name}
+      titleClassName="text-white"
       badges={
         <>
           <MicroBadge colorClass="bg-foreground/8 text-foreground/60">

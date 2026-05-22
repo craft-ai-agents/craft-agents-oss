@@ -229,27 +229,35 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-background">
-      <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border/30">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <h1 className="text-base font-semibold">Workspace Context</h1>
-            <TokenBadge tokens={approxTokens} tone={tokenTone} />
+    <div className="runneros-glass-route h-full overflow-y-auto">
+      <div className="mx-auto max-w-6xl px-7 py-7">
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-[28px] font-semibold leading-tight text-white">Workspace Context</h1>
+              <TokenBadge tokens={approxTokens} tone={tokenTone} />
+            </div>
+            <p className="mt-1 max-w-md text-[12px] leading-[18px] text-white/54">
+              Markdown notes injected into agent prompts by routing rules.
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Markdown notes injected into agent prompts by routing rules.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button size="sm" variant="outline" onClick={() => setProfileOpen(true)}>
-            <DatabaseZap className="h-3.5 w-3.5 mr-1.5" />
-            Memory & Profile
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
-            <Upload className="h-3.5 w-3.5 mr-1.5" />
-            Import
-          </Button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setProfileOpen(true)}
+              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] font-medium text-white/72 transition-colors hover:bg-white/[0.08] hover:text-white"
+            >
+              <DatabaseZap className="h-3 w-3" />
+              Memory
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] font-medium text-white/72 transition-colors hover:bg-white/[0.08] hover:text-white"
+            >
+              <Upload className="h-3 w-3" />
+              Import
+            </button>
           <input
             ref={fileInputRef}
             type="file"
@@ -257,27 +265,32 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
             className="hidden"
             onChange={(event) => void handleImportFile(event.target.files?.[0])}
           />
-          <Button size="sm" onClick={handleNew}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            <button
+              type="button"
+              onClick={handleNew}
+              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 shadow-[0_0_18px_rgba(249,115,22,0.16)] transition-colors hover:bg-[#f97316]/24"
+            >
+            <Plus className="h-3 w-3" />
             New
-          </Button>
+            </button>
+          </div>
         </div>
-      </div>
 
-      <div className="flex-1 min-h-0 overflow-auto">
         {loading ? (
-          <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Loading context...</div>
+          <div className="flex min-h-[360px] items-center justify-center text-sm text-white/50">Loading context...</div>
         ) : error ? (
-          <div className="m-5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>
+          <div className="rounded-[14px] border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>
         ) : docs.length === 0 ? (
-          <div className="p-4 flex min-h-full flex-col">
-            <div className="min-h-[360px] flex flex-col items-center justify-center gap-3 text-center text-muted-foreground">
-              <FileText className="h-8 w-8 opacity-50" />
+          <div className="flex min-h-[520px] flex-col">
+            <div className="flex min-h-[360px] flex-col items-center justify-center gap-3 text-center text-white/48">
+              <FileText className="h-9 w-9 opacity-55" />
               <div>
-                <p className="text-sm font-medium text-foreground">No workspace context yet</p>
+                <p className="text-sm font-medium text-white">No workspace context yet</p>
                 <p className="text-xs mt-1">Add project facts, preferences, or operating rules agents should know.</p>
               </div>
-              <Button size="sm" onClick={handleNew}>Create context doc</Button>
+              <button type="button" onClick={handleNew} className="inline-flex h-7 items-center rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 hover:bg-[#f97316]/24">
+                Create context doc
+              </button>
             </div>
             <ConnectedRepoCard
               workingDirectory={workingDirectory}
@@ -288,18 +301,18 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
             />
           </div>
         ) : (
-          <div className="p-4 flex min-h-full flex-col">
-            <div className="mb-3 flex items-center gap-1.5">
+          <div className="flex min-h-[520px] flex-col">
+            <div className="mb-4 flex items-center gap-1.5">
               {(['all', 'goals'] as const).map((kind) => (
                 <button
                   key={kind}
                   type="button"
                   onClick={() => setFilter(kind)}
                   className={cn(
-                    'px-2.5 py-1 text-xs rounded-md border',
+                    'h-7 rounded-[8px] border px-2.5 text-[11px] font-medium transition-colors',
                     filter === kind
-                      ? 'border-foreground/30 bg-foreground/5 text-foreground'
-                      : 'border-border/40 text-foreground/60 hover:bg-foreground/5',
+                      ? 'border-[#fb923c]/25 bg-[#f97316]/16 text-white/86'
+                      : 'border-white/[0.08] bg-white/[0.035] text-white/52 hover:bg-white/[0.07] hover:text-white/78',
                   )}
                 >
                   {kind === 'all'
@@ -308,81 +321,76 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
                 </button>
               ))}
             </div>
-            <div className="overflow-hidden rounded-md border border-border/40">
-              <table className="w-full text-sm">
-                <thead className="bg-foreground/[0.03] text-xs text-muted-foreground">
-                  <tr>
-                    <th className="text-left font-medium px-3 py-2">Name</th>
-                    <th className="text-left font-medium px-3 py-2">Routing</th>
-                    <th className="text-left font-medium px-3 py-2 w-28">Enabled</th>
-                    <th className="text-right font-medium px-3 py-2 w-24">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleDocs.map((doc) => (
-                    <tr key={doc.slug} className="border-t border-border/30">
-                      <td className="px-3 py-2 min-w-0">
-                        <div className="font-medium truncate">{doc.metadata.name}</div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          <span className="font-mono">{doc.slug}</span>
-                          {doc.metadata.description ? ` - ${doc.metadata.description}` : ''}
-                        </div>
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+              {visibleDocs.map((doc) => (
+                <div key={doc.slug} className="group relative overflow-hidden rounded-[13px] border border-white/[0.07] bg-white/[0.035] p-3 text-left shadow-[0_2px_8px_rgb(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.13] hover:bg-white/[0.055] hover:shadow-[0_8px_24px_rgba(0,0,0,0.24)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-white">{doc.metadata.name}</div>
+                      <div className="mt-1 truncate text-[11px] leading-[16px] text-white/45">
+                        {doc.metadata.description || routingSummary(doc)}
+                      </div>
+                    </div>
+                    <label className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 text-[10px] text-white/48">
+                      <input
+                        type="checkbox"
+                        checked={doc.metadata.enabled}
+                        onChange={(event) => {
+                          void upsert({
+                            slug: doc.slug,
+                            metadata: { ...doc.metadata, enabled: event.target.checked },
+                            body: doc.body,
+                          })
+                        }}
+                        className="h-3 w-3 accent-[#fb923c]"
+                        aria-label={`Toggle ${doc.metadata.name}`}
+                      />
+                      Enabled
+                    </label>
+                  </div>
+                  <p className="mt-2 line-clamp-2 min-h-9 text-[11.5px] leading-[18px] text-white/60">
+                    {doc.body || 'Empty context body.'}
+                  </p>
+                  <div className="mt-2.5 flex items-center justify-between gap-3">
+                    <span className="truncate rounded-full border border-white/[0.08] bg-white/[0.035] px-2 py-0.5 text-[10px] text-white/38">
+                      {routingSummary(doc)}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(doc)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-white/[0.07] bg-white/[0.035] text-white/55 transition-colors hover:bg-white/[0.08] hover:text-white"
+                        aria-label={`Edit ${doc.metadata.name}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(doc)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-red-400/15 bg-red-500/8 text-red-200/70 transition-colors hover:bg-red-500/14 hover:text-red-100"
+                        aria-label={`Delete ${doc.metadata.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
                         {filter === 'goals' && doc.metadata.status && (
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-                            <span className="px-1.5 py-0.5 rounded bg-foreground/8 text-foreground/70">
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                            <span className="rounded bg-white/[0.055] px-1.5 py-0.5 text-white/60">
                               {t(`workspaceContextPage.status${capitalize(doc.metadata.status)}`)}
                             </span>
                             {doc.metadata.priority && (
-                              <span className="px-1.5 py-0.5 rounded bg-foreground/8 text-foreground/70">
+                        <span className="rounded bg-white/[0.055] px-1.5 py-0.5 text-white/60">
                                 {t(`workspaceContextPage.priority${capitalize(doc.metadata.priority)}`)}
                               </span>
                             )}
                             {doc.metadata.deadline && (
-                              <span className="text-foreground/50">{doc.metadata.deadline}</span>
+                        <span className="text-white/40">{doc.metadata.deadline}</span>
                             )}
                           </div>
                         )}
-                      </td>
-                      <td className="px-3 py-2 text-muted-foreground">{routingSummary(doc)}</td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={doc.metadata.enabled}
-                          onChange={(event) => {
-                            void upsert({
-                              slug: doc.slug,
-                              metadata: { ...doc.metadata, enabled: event.target.checked },
-                              body: doc.body,
-                            })
-                          }}
-                          className="h-4 w-4"
-                          aria-label={`Toggle ${doc.metadata.name}`}
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(doc)}
-                            className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-foreground/5"
-                            aria-label={`Edit ${doc.metadata.name}`}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void handleDelete(doc)}
-                            className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-foreground/5 text-destructive"
-                            aria-label={`Delete ${doc.metadata.name}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                </div>
+              ))}
             </div>
             <ConnectedRepoCard
               workingDirectory={workingDirectory}
@@ -437,25 +445,25 @@ function ConnectedRepoCard({
 }) {
   const selfEditStatus = getSelfEditStatus(selfEditTarget)
   return (
-    <div className="mt-auto flex items-stretch justify-between gap-3 rounded-md border border-border/40 bg-foreground/[0.02] px-3 py-2.5">
+    <div className="mt-5 flex items-stretch justify-between gap-3 rounded-[13px] border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
       <div className="grid min-w-0 flex-1 gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+            <GitBranch className="h-3.5 w-3.5 text-white/38" />
             Workspace folder
             {gitBranch ? (
-              <span className="rounded bg-foreground/8 px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground">
+              <span className="rounded bg-white/[0.055] px-1.5 py-0.5 text-[11px] font-normal text-white/48">
                 {gitBranch}
               </span>
             ) : null}
           </div>
-          <div className="mt-1 truncate text-xs text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-white/45">
             {workingDirectory || 'No default working folder connected for this workspace.'}
           </div>
         </div>
-        <div className="min-w-0 border-t border-border/30 pt-2">
+        <div className="min-w-0 border-t border-white/[0.06] pt-2">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <DatabaseZap className="h-3.5 w-3.5 text-muted-foreground" />
+            <DatabaseZap className="h-3.5 w-3.5 text-white/38" />
             Self-edit target
             <span className={cn(
               'rounded px-1.5 py-0.5 text-[11px] font-normal',
@@ -464,19 +472,19 @@ function ConnectedRepoCard({
               {selfEditStatus.label}
             </span>
           </div>
-          <div className="mt-1 truncate text-xs text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-white/45">
             {selfEditTarget?.repoPath || 'No RunnerOS self-edit repo configured.'}
           </div>
           {selfEditStatus.detail ? (
-            <div className="mt-0.5 truncate text-[11px] text-muted-foreground/80">{selfEditStatus.detail}</div>
+            <div className="mt-0.5 truncate text-[11px] text-white/35">{selfEditStatus.detail}</div>
           ) : null}
         </div>
       </div>
       <div className="flex shrink-0 items-start gap-2">
         {workingDirectory ? (
-          <Button size="sm" variant="ghost" onClick={onClear}>Clear</Button>
+          <Button size="sm" variant="ghost" className="text-white/58 hover:bg-white/[0.06] hover:text-white" onClick={onClear}>Clear</Button>
         ) : null}
-        <Button size="sm" variant="outline" onClick={onConnect}>
+        <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={onConnect}>
           {workingDirectory ? 'Change' : 'Connect'}
         </Button>
       </div>
@@ -503,9 +511,9 @@ function TokenBadge({ tokens, tone }: { tokens: number; tone: 'neutral' | 'amber
     <span
       className={cn(
         'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
-        tone === 'neutral' && 'bg-foreground/5 text-muted-foreground',
-        tone === 'amber' && 'bg-amber-500/10 text-amber-600',
-        tone === 'red' && 'bg-red-500/10 text-red-600',
+        tone === 'neutral' && 'bg-white/[0.055] text-white/42',
+        tone === 'amber' && 'bg-amber-500/10 text-amber-300/80',
+        tone === 'red' && 'bg-red-500/10 text-red-300/80',
       )}
     >
       ~{tokens.toLocaleString()} tokens
@@ -598,10 +606,10 @@ function WorkspaceContextEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
+      <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit context doc' : 'New context doc'}</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-white">{isEditing ? 'Edit context doc' : 'New context doc'}</DialogTitle>
+          <DialogDescription className="text-white/48">
             Context docs are injected into matching agent prompts at session start.
           </DialogDescription>
         </DialogHeader>
@@ -612,7 +620,7 @@ function WorkspaceContextEditDialog({
               <input
                 value={form.name}
                 onChange={(event) => handleNameChange(event.target.value)}
-                className="form-input"
+                className="runneros-form-input"
                 placeholder="Project brief"
               />
             </Field>
@@ -623,7 +631,7 @@ function WorkspaceContextEditDialog({
                   setSlugDirty(true)
                   setForm((prev) => ({ ...prev, slug: slugify(event.target.value) }))
                 }}
-                className="form-input font-mono"
+                className="runneros-form-input font-mono"
                 placeholder="project-brief"
                 disabled={isEditing}
               />
@@ -634,7 +642,7 @@ function WorkspaceContextEditDialog({
             <input
               value={form.description}
               onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-              className="form-input"
+              className="runneros-form-input"
               placeholder="Short note shown in the list"
             />
           </Field>
@@ -643,14 +651,14 @@ function WorkspaceContextEditDialog({
             <textarea
               value={form.body}
               onChange={(event) => setForm((prev) => ({ ...prev, body: event.target.value }))}
-              className="form-input min-h-[220px] font-mono text-xs resize-y"
+              className="runneros-form-input min-h-[220px] resize-y font-mono text-xs"
               placeholder="Write markdown context here..."
             />
           </Field>
 
           <div className="flex flex-col gap-2">
-            <span className="text-xs font-medium text-foreground/80">Routing</span>
-            <label className="flex items-center gap-2 text-sm">
+            <span className="text-xs font-medium text-white/72">Routing</span>
+            <label className="flex items-center gap-2 text-sm text-white/72">
               <input
                 type="radio"
                 checked={form.routingMode === 'broadcast'}
@@ -658,7 +666,7 @@ function WorkspaceContextEditDialog({
               />
               All agents
             </label>
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-2 text-sm text-white/72">
               <input
                 type="radio"
                 checked={form.routingMode === 'targeted'}
@@ -667,11 +675,11 @@ function WorkspaceContextEditDialog({
               Specific agents
             </label>
             {form.routingMode === 'targeted' && (
-              <div className="max-h-44 overflow-y-auto rounded-md border border-border/30 p-2">
+              <div className="max-h-44 overflow-y-auto rounded-[11px] border border-white/[0.08] bg-white/[0.035] p-2">
                 {activeAgents.length === 0 ? (
-                  <p className="text-xs text-muted-foreground px-1 py-1">No active agents in this workspace.</p>
+                  <p className="px-1 py-1 text-xs text-white/45">No active agents in this workspace.</p>
                 ) : activeAgents.map((agent) => (
-                  <label key={agent.slug} className="flex items-start gap-2 rounded-md px-1.5 py-1 hover:bg-foreground/5">
+                  <label key={agent.slug} className="flex items-start gap-2 rounded-[8px] px-1.5 py-1 text-white/72 hover:bg-white/[0.055]">
                     <input
                       type="checkbox"
                       checked={form.agents.includes(agent.slug)}
@@ -687,7 +695,7 @@ function WorkspaceContextEditDialog({
                     />
                     <span className="min-w-0">
                       <span className="block text-sm">{agent.metadata.name}</span>
-                      <span className="block text-[11px] text-muted-foreground truncate">{agent.slug}</span>
+                      <span className="block truncate text-[11px] text-white/38">{agent.slug}</span>
                     </span>
                   </label>
                 ))}
@@ -695,7 +703,7 @@ function WorkspaceContextEditDialog({
             )}
           </div>
 
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-white/72">
             <input
               type="checkbox"
               checked={form.enabled}
@@ -704,17 +712,17 @@ function WorkspaceContextEditDialog({
             Enabled
           </label>
 
-          <div className="rounded-md border border-border/30">
+          <div className="rounded-[12px] border border-white/[0.08] bg-white/[0.035]">
             <button
               type="button"
               onClick={() => setGoalSectionOpen((v) => !v)}
-              className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-foreground/80 hover:bg-foreground/5"
+              className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-white/72 hover:bg-white/[0.055]"
             >
               <span>{t('workspaceContextPage.goalSection')}</span>
-              <span className="text-foreground/50">{goalSectionOpen ? '−' : '+'}</span>
+              <span className="text-white/42">{goalSectionOpen ? '−' : '+'}</span>
             </button>
             {goalSectionOpen && (
-              <div className="border-t border-border/20 px-3 py-2 flex flex-col gap-2">
+              <div className="flex flex-col gap-2 border-t border-white/[0.06] px-3 py-2">
                 <Field label={t('workspaceContextPage.status')}>
                   <select
                     value={form.goalEnabled ? form.status : ''}
@@ -726,7 +734,7 @@ function WorkspaceContextEditDialog({
                         setForm((prev) => ({ ...prev, goalEnabled: true, status: v as GoalStatus }))
                       }
                     }}
-                    className="form-input"
+                    className="runneros-form-input"
                   >
                     <option value="">{t('workspaceContextPage.statusNone')}</option>
                     <option value="active">{t('workspaceContextPage.statusActive')}</option>
@@ -742,7 +750,7 @@ function WorkspaceContextEditDialog({
                     onChange={(event) =>
                       setForm((prev) => ({ ...prev, priority: event.target.value as GoalPriority | '' }))
                     }
-                    className="form-input"
+                    className="runneros-form-input"
                   >
                     <option value="">{t('workspaceContextPage.statusNone')}</option>
                     <option value="low">{t('workspaceContextPage.priorityLow')}</option>
@@ -758,7 +766,7 @@ function WorkspaceContextEditDialog({
                     onChange={(event) =>
                       setForm((prev) => ({ ...prev, deadline: event.target.value }))
                     }
-                    className="form-input"
+                    className="runneros-form-input"
                   />
                 </Field>
               </div>
@@ -767,30 +775,9 @@ function WorkspaceContextEditDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+          <Button variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
+          <Button className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
         </DialogFooter>
-
-        <style>{`
-          .form-input {
-            display: block;
-            width: 100%;
-            padding: 0.4rem 0.6rem;
-            font-size: 13px;
-            background: rgba(0,0,0,0);
-            border: 1px solid rgba(125,125,125,0.25);
-            border-radius: 6px;
-            color: inherit;
-            outline: none;
-          }
-          .form-input:focus {
-            border-color: rgba(80,160,250,0.6);
-          }
-          .form-input:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-          }
-        `}</style>
       </DialogContent>
     </Dialog>
   )
@@ -859,7 +846,7 @@ function slugify(value: string): string {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-foreground/80">{label}</span>
+      <span className="text-xs font-medium text-white/72">{label}</span>
       {children}
     </label>
   )

@@ -13,7 +13,7 @@
  * 6-Color System:
  * - background: Light/dark surface
  * - foreground: Text and icons
- * - accent: Brand purple (highlights, Auto mode)
+ * - accent: Brand orange (highlights, Auto mode)
  * - info: Amber (warnings, Ask mode)
  * - success: Green (connected, checkmarks)
  * - destructive: Red (errors, failed)
@@ -35,8 +35,8 @@
   --background: oklch(0.98 0.003 265);
   --foreground: oklch(0.185 0.01 270);
   --foreground-rgb: 38, 36, 42;             /* RGB for shadow borders */
-  --accent: oklch(0.58 0.22 293);           /* purple - brand, Auto mode */
-  --accent-rgb: 104, 78, 133;               /* darkened RGB for shadow-tinted (70% of accent) */
+  --accent: oklch(0.70 0.18 55);           /* orange - brand, Auto mode */
+  --accent-rgb: 210, 105, 30;               /* darkened RGB for shadow-tinted (70% of accent) */
   --info: oklch(0.75 0.16 70);              /* amber - warnings, Ask mode */
   --success: oklch(0.55 0.17 145);          /* green - connected, checkmarks */
   --destructive: oklch(0.58 0.24 28);       /* red - errors, failed */
@@ -153,8 +153,8 @@
   --background: oklch(0.2 0.005 270);
   --foreground: oklch(0.92 0.005 270);
   --foreground-rgb: 227, 226, 229;           /* RGB for shadow borders */
-  --accent: oklch(0.65 0.20 293);            /* brighter purple in dark */
-  --accent-rgb: 118, 92, 147;                /* darkened RGB for shadow-tinted (70% of accent) */
+  --accent: oklch(0.74 0.19 55);            /* brighter orange in dark */
+  --accent-rgb: 235, 125, 35;                /* darkened RGB for shadow-tinted (70% of accent) */
   --info: oklch(0.70 0.16 70);               /* amber */
   --success: oklch(0.60 0.17 145);           /* green */
   --destructive: oklch(0.70 0.19 22);        /* brighter red in dark */

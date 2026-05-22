@@ -77,7 +77,7 @@ export function SettingsInput({
     <div
       className={cn(
         'space-y-2',
-        inCard && 'px-4 py-3.5',
+        inCard && 'px-4 py-3',
         className
       )}
     >
@@ -93,7 +93,7 @@ export function SettingsInput({
       )}
       <div className="flex gap-2">
         <div className={cn(
-          'relative flex-1 rounded-md shadow-minimal has-[:focus-visible]:bg-background',
+          'relative flex-1 rounded-[10px] border border-white/[0.06] bg-white/[0.035] shadow-minimal has-[:focus-visible]:border-white/[0.14] has-[:focus-visible]:bg-white/[0.055]',
           error && 'ring-1 ring-destructive'
         )}>
           <Input
@@ -106,7 +106,7 @@ export function SettingsInput({
             onBlur={onBlur}
             onKeyDown={onKeyDown}
             className={cn(
-              'bg-muted/50 border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent',
+              'h-9 bg-transparent border-0 text-[12.5px] text-white/78 placeholder:text-white/24 shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent',
               isPassword && 'pr-10'
             )}
           />
@@ -114,7 +114,7 @@ export function SettingsInput({
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/38 hover:text-white/78 transition-colors"
               tabIndex={-1}
             >
               {showPassword ? (
@@ -127,7 +127,7 @@ export function SettingsInput({
         </div>
         {action}
       </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-[12px] text-destructive">{error}</p>}
     </div>
   )
 }
@@ -179,7 +179,7 @@ export function SettingsInputRow({
       data-layout="settings-row"
       className={cn(
         'flex items-center justify-between',
-        inCard ? 'px-4 py-3.5' : 'py-3',
+        inCard ? 'px-4 py-3' : 'py-2.5',
         className
       )}
     >
@@ -190,10 +190,10 @@ export function SettingsInputRow({
         {description && (
           <p className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>{description}</p>
         )}
-        {error && <p className={cn('text-sm text-destructive', settingsUI.labelDescriptionGap)}>{error}</p>}
+        {error && <p className={cn('text-[12px] text-destructive', settingsUI.labelDescriptionGap)}>{error}</p>}
       </div>
       <div data-layout="settings-control" className={cn(
-        'ml-4 shrink-0 rounded-md shadow-minimal has-[:focus-visible]:bg-background',
+        'ml-4 shrink-0 rounded-[10px] border border-white/[0.06] bg-white/[0.035] shadow-minimal has-[:focus-visible]:border-white/[0.14] has-[:focus-visible]:bg-white/[0.055]',
         error && 'ring-1 ring-destructive'
       )}>
         <Input
@@ -203,7 +203,7 @@ export function SettingsInputRow({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           disabled={disabled}
-          className="w-[200px] bg-muted/50 border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent"
+          className="h-9 w-[200px] bg-transparent border-0 text-[12.5px] text-white/78 placeholder:text-white/24 shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent"
         />
       </div>
     </div>
@@ -257,7 +257,7 @@ export function SettingsSecretInput({
     <div
       className={cn(
         'space-y-2',
-        inCard && 'px-4 py-3.5',
+        inCard && 'px-4 py-3',
         className
       )}
     >
@@ -272,7 +272,7 @@ export function SettingsSecretInput({
         </div>
       )}
       <div className={cn(
-        'relative rounded-md shadow-minimal bg-muted/50 has-[:focus-visible]:bg-background',
+        'relative rounded-[10px] border border-white/[0.06] bg-white/[0.035] shadow-minimal has-[:focus-visible]:border-white/[0.14] has-[:focus-visible]:bg-white/[0.055]',
         error && 'ring-1 ring-destructive'
       )}>
         <Input
@@ -283,12 +283,12 @@ export function SettingsSecretInput({
           placeholder={placeholder}
           disabled={disabled}
           onBlur={onBlur}
-          className="pr-10 bg-transparent border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none"
+          className="h-9 pr-10 bg-transparent border-0 text-[12.5px] text-white/78 placeholder:text-white/24 shadow-none focus-visible:ring-0 focus-visible:outline-none"
         />
         <button
           type="button"
           onClick={() => setShowValue(!showValue)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-white/38 hover:text-white/78 transition-colors"
           tabIndex={-1}
         >
           {showValue ? (
@@ -298,7 +298,7 @@ export function SettingsSecretInput({
           )}
         </button>
       </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-[12px] text-destructive">{error}</p>}
     </div>
   )
 }

@@ -13,6 +13,8 @@ export type CreateAutomationEventName =
 export interface CreateAutomationPromptAction {
   type: 'prompt';
   prompt: string;
+  agentSlug?: string;
+  bindMessagingChannel?: boolean;
   llmConnection?: string;
   model?: string;
   thinkingLevel?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -147,6 +149,11 @@ export async function handleCreateAutomation(
       if (action.thinkingLevel !== undefined && !THINKING_LEVELS.has(action.thinkingLevel)) {
         return errorResponse(
           `Invalid thinkingLevel "${action.thinkingLevel}". Use one of: off, low, medium, high, xhigh, max.`,
+        );
+      }
+      if (action.agentSlug !== undefined && !SLUG_RE.test(action.agentSlug)) {
+        return errorResponse(
+          `Invalid agentSlug "${action.agentSlug}". Use lowercase letters, digits, hyphens (1-64 chars, no leading/trailing hyphen).`,
         );
       }
     } else if (action.type === 'webhook') {

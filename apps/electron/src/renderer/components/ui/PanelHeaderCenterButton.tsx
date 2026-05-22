@@ -20,9 +20,9 @@ export const PanelHeaderCenterButton = forwardRef<HTMLButtonElement, PanelHeader
         className={cn(
           "panel-header-btn inline-flex items-center justify-center",
           "p-1.5 shrink-0 rounded-[6px] titlebar-no-drag",
-          "bg-background shadow-minimal",
-          "opacity-70 hover:opacity-100",
-          "transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          "border border-white/[0.08] bg-white/[0.055] text-white/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.045)]",
+          "hover:bg-white/[0.10] hover:text-white/84",
+          "transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           "disabled:pointer-events-none disabled:opacity-50",
           className
         )}

@@ -67,10 +67,10 @@ export function MemoryEditDialog({ open, onOpenChange, entry, scopeLabel, onSave
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
+      <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit memory' : 'New memory'}</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-white">{isEditing ? 'Edit memory' : 'New memory'}</DialogTitle>
+          <DialogDescription className="text-white/48">
             Saved in {scopeLabel} and injected into matching agent sessions.
           </DialogDescription>
         </DialogHeader>
@@ -81,7 +81,7 @@ export function MemoryEditDialog({ open, onOpenChange, entry, scopeLabel, onSave
               <input
                 value={form.name}
                 onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                className="memory-input"
+                className="runneros-form-input"
                 placeholder="Preferred writing style"
                 disabled={isEditing}
               />
@@ -90,7 +90,7 @@ export function MemoryEditDialog({ open, onOpenChange, entry, scopeLabel, onSave
               <select
                 value={form.type}
                 onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value as MemoryEntryType }))}
-                className="memory-input"
+                className="runneros-form-input"
                 disabled={isEditing}
               >
                 {MEMORY_TYPES.map((type) => (
@@ -104,7 +104,7 @@ export function MemoryEditDialog({ open, onOpenChange, entry, scopeLabel, onSave
             <input
               value={form.expires}
               onChange={(event) => setForm((prev) => ({ ...prev, expires: event.target.value }))}
-              className="memory-input"
+              className="runneros-form-input"
               placeholder="Optional ISO date"
             />
           </Field>
@@ -113,33 +113,16 @@ export function MemoryEditDialog({ open, onOpenChange, entry, scopeLabel, onSave
             <textarea
               value={form.body}
               onChange={(event) => setForm((prev) => ({ ...prev, body: event.target.value }))}
-              className="memory-input min-h-[220px] resize-y font-mono text-xs"
+              className="runneros-form-input min-h-[220px] resize-y font-mono text-xs"
               placeholder="Write the durable memory here..."
             />
           </Field>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+          <Button variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
+          <Button className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
         </DialogFooter>
-
-        <style>{`
-          .memory-input {
-            display: block;
-            width: 100%;
-            padding: 0.4rem 0.6rem;
-            font-size: 13px;
-            background: rgba(0,0,0,0);
-            border: 1px solid rgba(125,125,125,0.25);
-            border-radius: 6px;
-            color: inherit;
-            outline: none;
-          }
-          .memory-input:focus {
-            border-color: rgba(80,160,250,0.6);
-          }
-        `}</style>
       </DialogContent>
     </Dialog>
   )
@@ -157,7 +140,7 @@ function buildInitialState(entry: MemoryEntry | null): FormState {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-foreground/80">{label}</span>
+      <span className="text-xs font-medium text-white/72">{label}</span>
       {children}
     </label>
   )

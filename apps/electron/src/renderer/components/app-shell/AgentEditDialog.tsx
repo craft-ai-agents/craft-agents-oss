@@ -117,7 +117,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
       slug: s.slug,
       label: s.metadata.name,
       description: s.metadata.description,
-      category: inferSkillCategory(s.slug, s.metadata.name, s.metadata.description),
+      category: inferSkillCategory(s.slug, s.metadata.name, s.metadata.description, s.metadata.category),
     }))),
     [skills],
   )
@@ -162,6 +162,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
     if (open) {
       setForm(initial)
       setSlugDirty(isEditing) // edits never touch the slug; treat as user-controlled
+      setPromptEditorOpen(false)
     }
   }, [open, initial, isEditing])
 
@@ -257,7 +258,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] max-w-3xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_28px_90px_rgba(0,0,0,0.62)]">
-        <DialogHeader className="border-b border-white/[0.06] bg-[radial-gradient(circle_at_18%_0%,rgba(94,106,210,0.20),transparent_34%),#0b0b0f] px-5 pb-3 pt-4">
+        <DialogHeader className="border-b border-white/[0.06] bg-[radial-gradient(circle_at_18%_0%,rgba(249,115,22,0.20),transparent_34%),#0b0b0f] px-5 pb-3 pt-4">
           <DialogTitle className="text-[20px] font-semibold leading-tight text-white">
             {isEditing ? `Edit ${agent!.metadata.name}` : 'New agent'}
           </DialogTitle>
@@ -295,9 +296,11 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
 
           {/* Behavior — system prompt + greeting */}
           <FormSection title="Behavior">
-            <PromptSummaryButton
+            <PromptEditorPanel
               value={form.systemPrompt}
-              onClick={() => setPromptEditorOpen(true)}
+              open={promptEditorOpen}
+              onOpenChange={setPromptEditorOpen}
+              onChange={(value) => setForm((p) => ({ ...p, systemPrompt: value }))}
             />
           </FormSection>
 
@@ -406,11 +409,11 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
           </CollapsibleSection>
         </div>
 
-        <DialogFooter className="border-t border-white/[0.06] px-5 py-4">
+        <DialogFooter className="sticky bottom-0 z-10 border-t border-white/[0.06] bg-[#09090c]/95 px-5 py-2.5 backdrop-blur">
           <Button
             type="button"
             variant="outline"
-            className="h-8 rounded-[9px] border-white/[0.10] bg-transparent px-3 text-xs text-white/70 hover:bg-white/[0.06]"
+            className="h-7 rounded-[8px] border-white/[0.10] bg-transparent px-2.5 text-[11px] text-white/70 hover:bg-white/[0.06]"
             onClick={() => onOpenChange(false)}
             disabled={saving}
           >
@@ -418,7 +421,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
           </Button>
           <Button
             type="button"
-            className="h-8 rounded-[9px] bg-[#5e6ad2] px-3 text-xs text-white hover:bg-[#6d76df]"
+            className="h-7 rounded-[8px] bg-[#f97316] px-2.5 text-[11px] text-white hover:bg-[#fb923c]"
             onClick={handleSave}
             disabled={saving}
           >
@@ -438,13 +441,6 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
           }}
         />
 
-        <PromptEditorDialog
-          open={promptEditorOpen}
-          value={form.systemPrompt}
-          onChange={(value) => setForm((p) => ({ ...p, systemPrompt: value }))}
-          onOpenChange={setPromptEditorOpen}
-        />
-
         <style>{`
           .form-input {
             display: block;
@@ -459,7 +455,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
             outline: none;
           }
           .form-input:focus {
-            border-color: rgba(139,140,255,0.55);
+            border-color: rgba(251,146,60,0.55);
           }
           .form-input:disabled {
             opacity: 0.5;
@@ -550,7 +546,7 @@ function CollapsibleSection({ title, hint, children }: CollapsibleSectionProps) 
         onClick={() => setOpen((o) => !o)}
         className="flex items-start gap-2 text-left transition-colors hover:text-white"
       >
-        {open ? <ChevronDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#9da4ff]" /> : <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#9da4ff]" />}
+        {open ? <ChevronDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#fdba74]" /> : <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#fdba74]" />}
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/42">{title}</h3>
           {hint && <p className="mt-0.5 text-[11px] text-white/34">{hint}</p>}
@@ -592,7 +588,7 @@ function BundleSummaryButton({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center justify-between gap-3 rounded-[13px] border border-white/[0.065] bg-black/20 px-3 py-3 text-left transition-colors hover:border-[#8b8cff]/30 hover:bg-white/[0.045]"
+      className="flex items-center justify-between gap-3 rounded-[13px] border border-white/[0.065] bg-black/20 px-3 py-3 text-left transition-colors hover:border-[#fb923c]/30 hover:bg-white/[0.045]"
     >
       <div>
         <div className="text-sm font-medium text-white/82">{title}</div>
@@ -607,71 +603,47 @@ function BundleSummaryButton({
   )
 }
 
-function PromptSummaryButton({
+function PromptEditorPanel({
   value,
-  onClick,
+  open,
+  onOpenChange,
+  onChange,
 }: {
   value: string
-  onClick: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onChange: (value: string) => void
 }) {
   const cleaned = cleanDisplayText(value)
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex min-h-[74px] items-center justify-between gap-4 rounded-[13px] border border-white/[0.065] bg-black/20 px-3 py-3 text-left transition-colors hover:border-[#8b8cff]/30 hover:bg-white/[0.045]"
-    >
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium text-white/82">System prompt</div>
-        <div className="mt-1 line-clamp-2 text-xs leading-5 text-white/38">
-          {cleaned || 'Empty'}
+    <div className="overflow-hidden rounded-[13px] border border-white/[0.065] bg-black/20">
+      <button
+        type="button"
+        onClick={() => onOpenChange(!open)}
+        className="flex w-full items-center justify-between gap-4 px-3 py-3 text-left transition-colors hover:bg-white/[0.035]"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium text-white/82">System prompt</div>
+          {!open && (
+            <div className="mt-1 line-clamp-2 text-xs leading-5 text-white/38">
+              {cleaned || 'Empty'}
+            </div>
+          )}
         </div>
-      </div>
-      <div className="shrink-0 rounded-full border border-white/[0.08] bg-white/[0.045] px-2 py-1 text-[11px] text-white/54">
-        Open
-      </div>
-    </button>
-  )
-}
-
-function PromptEditorDialog({
-  open,
-  value,
-  onChange,
-  onOpenChange,
-}: {
-  open: boolean
-  value: string
-  onChange: (value: string) => void
-  onOpenChange: (open: boolean) => void
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[84vh] max-w-4xl overflow-hidden !rounded-[16px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_24px_80px_rgba(0,0,0,0.62)]">
-        <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
-          <DialogTitle className="text-lg font-semibold text-white">System prompt</DialogTitle>
-        </DialogHeader>
-
-        <div className="px-5 py-4">
+        <ChevronDown className={`h-4 w-4 shrink-0 text-[#fdba74] transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="border-t border-white/[0.06] p-3">
           <textarea
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            className="h-[52vh] w-full resize-none rounded-[14px] border border-white/[0.09] bg-black/30 p-4 font-mono text-sm leading-6 text-white/84 outline-none transition-colors focus:border-[#8b8cff]/55"
+            placeholder="Write the agent system prompt..."
+            className="h-[min(34vh,360px)] min-h-[220px] w-full resize-y rounded-[12px] border border-white/[0.09] bg-black/30 p-3 font-mono text-[13px] leading-6 text-white/84 outline-none transition-colors placeholder:text-white/24 focus:border-[#fb923c]/55"
             autoFocus
           />
         </div>
-
-        <DialogFooter className="border-t border-white/[0.06] px-5 py-4">
-          <Button
-            type="button"
-            className="h-8 rounded-[9px] bg-[#5e6ad2] px-3 text-xs text-white hover:bg-[#6d76df]"
-            onClick={() => onOpenChange(false)}
-          >
-            Done
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      )}
+    </div>
   )
 }
 
@@ -716,7 +688,7 @@ function BundlePickerDialog({
         <DialogFooter className="border-t border-white/[0.06] px-5 py-4">
           <Button
             type="button"
-            className="h-8 rounded-[9px] bg-[#5e6ad2] px-3 text-xs text-white hover:bg-[#6d76df]"
+            className="h-8 rounded-[9px] bg-[#f97316] px-3 text-xs text-white hover:bg-[#fb923c]"
             onClick={() => onOpenChange(false)}
           >
             Done
@@ -801,7 +773,7 @@ function CategorizedCheckboxList({ title, empty, groups, selected, onToggle, ful
                           type="checkbox"
                           checked={selectedSet.has(item.slug)}
                           onChange={() => onToggle(item.slug)}
-                          className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-[#8b8cff]"
+                          className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-[#fb923c]"
                         />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-medium text-white">{cleanDisplayText(item.label)}</div>
@@ -841,6 +813,7 @@ function groupBundleOptions(options: CheckboxListItem[]): BundleGroup[] {
 function bundleCategoryRank(category: string) {
   const order = [
     'Core operations',
+    'Founder',
     'Research & analysis',
     'Content & marketing',
     'Creative production',
@@ -854,12 +827,15 @@ function bundleCategoryRank(category: string) {
   return index === -1 ? order.length : index
 }
 
-function inferSkillCategory(slug: string, name: string, description?: string) {
+function inferSkillCategory(slug: string, name: string, description?: string, category?: string) {
+  if (category === 'founder') return 'Founder'
+  if (category === 'content-generation' || category === 'marketing') return 'Content & marketing'
   const text = `${slug} ${name} ${description ?? ''}`.toLowerCase()
-  if (matchesAny(text, ['creative', 'video', 'image', '3d', 'design', 'brand', 'visual', 'hyperframes'])) return 'Creative production'
+  if (matchesAny(text, ['100m-', 'blue-ocean-strategy', 'crossing-the-chasm', 'four-steps', 'lean-startup', 'mom-test', 'monetizing-innovation', 'obviously-awesome', 'spin-selling', 'storybrand', 'traction'])) return 'Founder'
   if (matchesAny(text, ['research', 'competitor', 'customer', 'profile', 'analyze', 'analysis', 'audit', 'spy', 'perspective'])) return 'Research & analysis'
   if (matchesAny(text, ['meta ads', 'meta-ads', 'facebook ads'])) return 'Content & marketing'
   if (matchesAny(text, ['marketing', 'content', 'copy', 'ads', 'seo', 'viral', 'twitter', 'tweet', 'x-', 'pricing', 'lead'])) return 'Content & marketing'
+  if (matchesAny(text, ['creative', 'video', 'image', '3d', 'design', 'brand', 'visual', 'hyperframes'])) return 'Creative production'
   if (matchesAny(text, ['code', 'api', 'database', 'dev', 'react', 'typescript', 'debug', 'test', 'deploy', 'github'])) return 'Development'
   if (matchesAny(text, ['runneros', 'workflow', 'automation', 'source', 'orchestration', 'routing'])) return 'Core operations'
   return 'Other'

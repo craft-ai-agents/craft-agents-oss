@@ -94,6 +94,14 @@ export type { WorkflowDTO, WorkflowMetadataDTO, WorkflowRunDTO, WorkflowRunState
 // Outputs — DTOs match shared output manifests/summaries.
 import type { OutputManifest as OutputManifestDTO, OutputSummary as OutputSummaryDTO } from '@craft-agent/shared/outputs';
 export type { OutputManifestDTO, OutputSummaryDTO };
+import type { VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
+export type { VisualBoardSnapshot };
+import type {
+  ApplyVisualSurfaceEventResult,
+  VisualSurfaceEventInput,
+  VisualSurfaceEventRecord,
+} from '@craft-agent/shared/visual-surface-events';
+export type { ApplyVisualSurfaceEventResult, VisualSurfaceEventInput, VisualSurfaceEventRecord };
 
 // Notifications — bell entries persisted per-workspace.
 import type { NotificationEntry } from '@craft-agent/shared/notifications/types';
@@ -798,8 +806,22 @@ export interface ElectronAPI {
   listOutputs(workspaceId: string): Promise<OutputSummaryDTO[]>
   getOutput(workspaceId: string, outputId: string): Promise<OutputManifestDTO | null>
   deleteOutput(workspaceId: string, outputId: string): Promise<boolean>
+  getVisualBoard(workspaceId: string, sessionId: string): Promise<{ output: OutputManifestDTO; board: VisualBoardSnapshot }>
+  saveVisualBoard(
+    workspaceId: string,
+    sessionId: string,
+    snapshot: VisualBoardSnapshot,
+  ): Promise<{ output: OutputManifestDTO; board: VisualBoardSnapshot }>
+  applyVisualSurfaceEvent(
+    workspaceId: string,
+    sessionId: string,
+    input: VisualSurfaceEventInput,
+  ): Promise<ApplyVisualSurfaceEventResult>
+  listVisualSurfaceEvents(workspaceId: string, sessionId: string): Promise<VisualSurfaceEventRecord[]>
   openOutputFile(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
   showOutputInFolder(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
+  readOutputAssetText(workspaceId: string, outputId: string, assetId?: string): Promise<string>
+  readOutputAssetDataUrl(workspaceId: string, outputId: string, assetId?: string): Promise<string>
   onOutputsUpdated(callback: (workspaceId: string) => void): () => void
 
   // Notifications (bell entries from pulses + future system sources)

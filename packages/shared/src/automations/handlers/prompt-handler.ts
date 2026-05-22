@@ -15,6 +15,19 @@ import { deriveAutomationName } from '../name-utils.ts';
 
 const log = createLogger('prompt-handler');
 
+function getMessagingChannelFromPayload(payload: BaseEventPayload): PendingPrompt['messagingChannel'] | undefined {
+  const record = payload as unknown as Record<string, unknown>;
+  const platform = record.platform;
+  const channelId = record.channelId;
+  if (typeof platform !== 'string' || typeof channelId !== 'string') return undefined;
+  const senderName = record.senderName;
+  return {
+    platform,
+    channelId,
+    channelName: typeof senderName === 'string' ? senderName : null,
+  };
+}
+
 // ============================================================================
 // PromptHandler Implementation
 // ============================================================================
@@ -102,6 +115,10 @@ export class PromptHandler implements AutomationHandler {
           prompt: expandedPrompt,
           mentions: references.mentions,
           labels: expandedLabels,
+          agentSlug: prompt.agentSlug,
+          messagingChannel: prompt.bindMessagingChannel
+            ? getMessagingChannelFromPayload(payload)
+            : undefined,
           permissionMode,
           llmConnection: prompt.llmConnection,
           model: prompt.model,

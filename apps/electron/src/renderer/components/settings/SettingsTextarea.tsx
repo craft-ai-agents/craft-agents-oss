@@ -69,7 +69,7 @@ export function SettingsTextarea({
     <div
       className={cn(
         'space-y-2',
-        inCard && 'px-4 py-3.5',
+        inCard && 'px-4 py-3',
         className
       )}
     >
@@ -84,7 +84,7 @@ export function SettingsTextarea({
         </div>
       )}
       <div className={cn(
-        'relative rounded-md shadow-minimal has-[:focus-visible]:bg-background',
+        'relative rounded-[10px] border border-white/[0.06] bg-white/[0.035] shadow-minimal has-[:focus-visible]:border-white/[0.14] has-[:focus-visible]:bg-white/[0.055]',
         error && 'ring-1 ring-destructive',
         isOverLimit && 'ring-1 ring-destructive'
       )}>
@@ -96,22 +96,22 @@ export function SettingsTextarea({
           rows={rows}
           disabled={disabled}
           className={cn(
-            'bg-muted/50 border-0 shadow-none resize-y min-h-[120px] focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent',
+            'bg-transparent border-0 text-[12.5px] leading-5 text-white/78 placeholder:text-white/24 shadow-none resize-y min-h-[112px] focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent',
             maxLength && 'pb-6'
           )}
         />
         {maxLength !== undefined && (
           <div
             className={cn(
-              'absolute bottom-2 right-3 text-xs',
-              isOverLimit ? 'text-destructive' : 'text-muted-foreground'
+              'absolute bottom-2 right-3 text-[11px]',
+              isOverLimit ? 'text-destructive' : 'text-white/34'
             )}
           >
             {charCount}/{maxLength}
           </div>
         )}
       </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-[12px] text-destructive">{error}</p>}
     </div>
   )
 }

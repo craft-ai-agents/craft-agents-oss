@@ -32,14 +32,14 @@ export function SettingsCard({ children, className, divided = true }: SettingsCa
   return (
     <div
       className={cn(
-        'rounded-xl bg-background shadow-minimal overflow-hidden',
+        'overflow-hidden rounded-[14px] border border-white/[0.075] bg-[#0b0b0d]/95 shadow-[0_22px_55px_rgba(0,0,0,0.26)]',
         className
       )}
     >
       {divided && childArray.length > 1
         ? childArray.map((child, index) => (
             <React.Fragment key={index}>
-              {index > 0 && <div className="h-px bg-border/50 mx-4" />}
+              {index > 0 && <div className="h-px bg-white/[0.055] mx-4" />}
               {child}
             </React.Fragment>
           ))
@@ -60,7 +60,7 @@ export function SettingsCardContent({
   children: React.ReactNode
   className?: string
 }) {
-  return <div className={cn('px-4 py-3.5', className)}>{children}</div>
+  return <div className={cn('px-4 py-3', className)}>{children}</div>
 }
 
 /**
@@ -76,7 +76,7 @@ export function SettingsCardFooter({
   return (
     <div
       className={cn(
-        'px-4 py-3 border-t border-border/50 bg-muted/30 flex items-center justify-end gap-2',
+        'px-4 py-3 border-t border-white/[0.06] bg-white/[0.025] flex items-center justify-end gap-2',
         className
       )}
     >

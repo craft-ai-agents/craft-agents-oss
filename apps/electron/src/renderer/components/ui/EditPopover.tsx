@@ -1073,7 +1073,7 @@ export function EditPopover({
               {/* Content area - always uses compact ChatDisplay */}
               <div
                 className={cn(
-                  "min-h-0 flex-1 bg-[radial-gradient(circle_at_50%_0%,rgba(139,140,255,0.08),transparent_34%),#08080a]",
+                  "min-h-0 flex-1 bg-[radial-gradient(circle_at_50%_0%,rgba(251,146,60,0.08),transparent_34%),#08080a]",
                   "[&_textarea]:text-white [&_textarea::placeholder]:text-white/34",
                   "[&_[contenteditable='true']]:text-white [&_[contenteditable='true']:empty:before]:text-white/34"
                 )}

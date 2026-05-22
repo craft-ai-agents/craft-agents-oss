@@ -3,6 +3,7 @@
  */
 
 export const SKILL_CATEGORIES = [
+  { id: 'founder', label: 'Founder' },
   { id: 'developer', label: 'Developer' },
   { id: 'research-analysis', label: 'Research & Analysis' },
   { id: 'content-generation', label: 'Content Generation' },
@@ -49,9 +50,33 @@ const CATEGORY_ALIASES: ReadonlyMap<string, SkillCategoryId> = new Map([
   ['media', 'media-design'],
   ['design', 'media-design'],
   ['ops', 'operations'],
+  ['startup', 'founder'],
+  ['founders', 'founder'],
+  ['business', 'founder'],
+  ['gtm', 'founder'],
 ]);
 
 const CATEGORY_KEYWORDS: Record<SkillCategoryId, readonly string[]> = {
+  founder: [
+    '100m',
+    'business',
+    'customer development',
+    'founder',
+    'founders',
+    'growth',
+    'lean startup',
+    'market',
+    'monetizing',
+    'offer',
+    'positioning',
+    'pricing',
+    'product market fit',
+    'sales',
+    'startup',
+    'startups',
+    'traction',
+    'validation',
+  ],
   developer: [
     'api',
     'build',

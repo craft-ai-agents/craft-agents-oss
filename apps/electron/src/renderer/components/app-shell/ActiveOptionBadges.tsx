@@ -74,6 +74,8 @@ export interface ActiveOptionBadgesProps {
   currentSessionStatus?: string
   /** Callback when state changes */
   onSessionStatusChange?: (stateId: string) => void
+  /** Optional control shown directly after the session state badge. */
+  afterStateSlot?: React.ReactNode
   /** Additional CSS classes */
   className?: string
 }
@@ -102,6 +104,7 @@ export function ActiveOptionBadges({
   sessionStatuses = [],
   currentSessionStatus,
   onSessionStatusChange,
+  afterStateSlot,
   className,
 }: ActiveOptionBadgesProps) {
   // Resolve session label entries to their config objects + parsed values.
@@ -169,6 +172,8 @@ export function ActiveOptionBadges({
             />
           </div>
         )}
+
+        {afterStateSlot ? <div className="shrink-0">{afterStateSlot}</div> : null}
 
         {/* Stacking container for label badges (left side).
          * useDynamicStack sets per-child marginLeft directly via ResizeObserver.
@@ -365,7 +370,7 @@ function StateBadge({
               {state.icon}
             </span>
           )}
-          className="pl-2.5"
+          className="!h-7 !pl-2 !pr-1.5 !text-[11px]"
         />
       </PopoverTrigger>
       <PopoverContent
@@ -404,15 +409,15 @@ function FilesPopoverButton({ sessionId, sessionFolderPath }: { sessionId?: stri
         <button
           type="button"
           className={cn(
-            "h-[30px] pl-[12px] pr-[14px] text-xs font-medium rounded-[8px] flex items-center gap-1.5 shrink-0",
-            "outline-none select-none transition-colors shadow-minimal",
-            "hover:bg-foreground/5 data-[state=open]:bg-foreground/5",
-            "bg-[color-mix(in_srgb,var(--background)_97%,var(--foreground)_3%)]",
-            "text-foreground/80",
+            "h-7 w-7 text-xs font-medium rounded-[8px] flex items-center justify-center shrink-0",
+            "outline-none select-none transition-colors",
+            "border border-white/[0.08] bg-white/[0.045] text-white/64 shadow-xs",
+            "hover:bg-white/[0.08] hover:text-white data-[state=open]:bg-white/[0.08] data-[state=open]:text-white",
           )}
+          aria-label={t("common.info")}
+          title={t("common.info")}
         >
           <Info className="h-3.5 w-3.5 shrink-0" />
-          <span className="whitespace-nowrap">{t("common.info")}</span>
         </button>
       )}
     />
@@ -455,18 +460,18 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
   // Mode-specific styling using CSS variables (theme-aware)
   // - safe (Explore): foreground at 60% opacity - subtle, read-only feel
   // - ask (Ask to Edit): info color - amber, prompts for edits
-  // - allow-all (Auto): accent color - purple, full autonomy
+  // - allow-all (Auto): accent color - orange, full autonomy
   const modeStyles: Record<PermissionMode, { className: string; shadowVar: string }> = {
     'safe': {
-      className: 'bg-foreground/5 text-foreground/60',
+      className: 'border border-white/[0.08] bg-white/[0.045] text-white/64 hover:bg-white/[0.08] hover:text-white',
       shadowVar: 'var(--foreground-rgb)',
     },
     'ask': {
-      className: 'bg-info/10 text-info',
+      className: 'border border-[#fb923c]/25 bg-[#fb923c]/12 text-[#fed7aa] hover:bg-[#fb923c]/18 hover:text-white',
       shadowVar: 'var(--info-rgb)',
     },
     'allow-all': {
-      className: 'bg-accent/5 text-accent',
+      className: 'border border-[#fb923c]/28 bg-[#fb923c]/14 text-[#fed7aa] hover:bg-[#fb923c]/20 hover:text-white',
       shadowVar: 'var(--accent-rgb)',
     },
   }
@@ -479,14 +484,14 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
           type="button"
           data-tutorial="permission-mode-dropdown"
           className={cn(
-            "h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px] flex items-center gap-1.5 shadow-tinted outline-none select-none",
+            "h-7 pl-2 pr-1.5 text-[11px] font-medium rounded-[8px] flex items-center gap-1.5 shadow-tinted outline-none select-none",
             currentStyle.className
           )}
           style={{ '--shadow-color': currentStyle.shadowVar } as React.CSSProperties}
         >
-          <PermissionModeIcon mode={optimisticMode} className="h-3.5 w-3.5" />
+          <PermissionModeIcon mode={optimisticMode} className="h-3 w-3" />
           <span>{t(`mode.${optimisticMode}`)}</span>
-          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+          <ChevronDown className="h-3 w-3 opacity-60" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -515,4 +520,3 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
     </Popover>
   )
 }
-

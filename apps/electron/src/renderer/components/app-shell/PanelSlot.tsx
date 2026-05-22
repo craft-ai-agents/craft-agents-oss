@@ -113,7 +113,7 @@ export function PanelSlot({
         className={cn(
           'h-full overflow-hidden relative @container/panel',
           !isOnly && isFocusedPanel ? 'shadow-panel-focused z-[1]' : 'shadow-middle z-0',
-          'border border-white/[0.07] bg-[#101011]/88 shadow-[0_30px_90px_rgba(0,0,0,0.46),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl',
+          'runneros-glass-panel-strong',
         )}
         style={{
           // In multi-panel, unfocused panels override --background so all
@@ -135,9 +135,9 @@ export function PanelSlot({
             ? {
                 flexGrow: 0,
                 flexShrink: 1,
-                flexBasis: 'min(62vw, 980px)',
-                width: 'min(62vw, 980px)',
-                minWidth: 'min(680px, 100%)',
+                flexBasis: 'min(58vw, 920px)',
+                width: 'min(58vw, 920px)',
+                minWidth: 'min(640px, 100%)',
               }
             : isOnly
             ? { flexGrow: 1, minWidth: 0 }

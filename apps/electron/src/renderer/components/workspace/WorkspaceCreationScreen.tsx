@@ -21,6 +21,7 @@ interface WorkspaceCreationScreenProps {
   /** Callback when the screen is dismissed */
   onClose: () => void
   className?: string
+  initialStep?: Extract<CreationStep, 'choice' | 'create' | 'open'>
   /** When set, skip choice step and open ConnectRemote in reconnect mode */
   reconnectWorkspace?: Workspace
   /** Reconnect an existing remote workspace and resolve only on real success. */
@@ -39,12 +40,13 @@ export function WorkspaceCreationScreen({
   onWorkspaceCreated,
   onClose,
   className,
+  initialStep = 'choice',
   reconnectWorkspace,
   onReconnectWorkspace,
 }: WorkspaceCreationScreenProps) {
   const { t } = useTranslation()
   // Start at 'remote' step directly when reconnecting
-  const [step, setStep] = useState<CreationStep>(reconnectWorkspace ? 'remote' : 'choice')
+  const [step, setStep] = useState<CreationStep>(reconnectWorkspace ? 'remote' : initialStep)
   const [isCreating, setIsCreating] = useState(false)
   const [dimensions, setDimensions] = useState({ width: 1920, height: 1080 })
 

@@ -118,11 +118,11 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
   }
 
   if (loading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t('common.loading')}</div>
+    return <div className="runneros-glass-route flex h-full items-center justify-center text-sm text-white/50">{t('common.loading')}</div>
   }
   if (loadError) {
     return (
-      <div className="m-5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive flex items-center gap-2">
+      <div className="m-5 flex items-center gap-2 rounded-[14px] border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
         <AlertTriangle className="h-4 w-4" />
         <span>{loadError}</span>
       </div>
@@ -130,33 +130,34 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-background">
-      <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border/30">
-        <div className="min-w-0">
-          <h1 className="text-base font-semibold truncate">{t('workflows.editor.title')}</h1>
-          <p className="text-xs text-muted-foreground mt-1 font-mono truncate">{originalSlug}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => navigate(routes.view.workflow(originalSlug))} disabled={saving}>
+    <div className="runneros-glass-route h-full overflow-y-auto">
+      <div className="runneros-page-wrap">
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="runneros-page-title">{t('workflows.editor.title')}</h1>
+            <p className="runneros-page-subtitle font-mono">{originalSlug}</p>
+          </div>
+          <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => navigate(routes.view.workflow(originalSlug))} disabled={saving}>
             <X className="h-3.5 w-3.5 mr-1.5" />
             {t('common.cancel')}
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving || !!parseError}>
+          <Button size="sm" className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={handleSave} disabled={saving || !!parseError}>
             <Save className="h-3.5 w-3.5 mr-1.5" />
             {saving ? t('workflows.editor.saving') : t('common.save')}
           </Button>
+          </div>
         </div>
-      </div>
 
-      <div className="flex-1 min-h-0 overflow-auto p-4 flex flex-col gap-3">
+      <div className="flex min-h-0 flex-col gap-3">
         {parseError && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-[12px] border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300">
             <AlertTriangle className="h-3.5 w-3.5" />
             <span>{parseError}</span>
           </div>
         )}
         {stepAgentIssues.length > 0 && (
-          <div className="rounded-md border border-border/40 bg-foreground/[0.03] p-2 text-xs text-foreground flex flex-col gap-1.5">
+          <div className="runneros-card flex flex-col gap-1.5 p-2 text-xs text-white/72">
             {stepAgentIssues.map((issue) => (
               <div key={`${issue.stepId}:${issue.agentSlug}`} className="flex items-center gap-2">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -165,12 +166,12 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
             ))}
           </div>
         )}
-        <div className="grid flex-1 min-h-[400px] gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             spellCheck={false}
-            className="w-full min-h-[400px] resize-none font-mono text-xs rounded-md border border-border/40 bg-background p-3 outline-none focus:border-primary/40"
+            className="runneros-form-input min-h-[480px] resize-none font-mono text-xs leading-relaxed"
           />
           <WorkflowAgentCapabilitiesPanel
             parsed={parsed}
@@ -181,16 +182,17 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
           />
         </div>
 
-        <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer select-none hover:text-foreground">
+        <details className="runneros-card p-3 text-xs text-white/50">
+          <summary className="cursor-pointer select-none hover:text-white/82">
             {t('workflows.editor.templatingHelpTitle')}
           </summary>
-          <div className="mt-2 rounded-md border border-border/40 bg-foreground/[0.02] p-3 font-mono text-[11px] leading-relaxed">
+          <div className="mt-2 rounded-[10px] border border-white/[0.07] bg-black/20 p-3 font-mono text-[11px] leading-relaxed text-white/62">
             <p className="mb-1">{t('workflows.editor.templatingHelpBody')}</p>
             <pre className="whitespace-pre-wrap">{`{{trigger.<input-name>}}     # any declared trigger input
 {{steps.<step-id>.output}}    # output of an earlier step (string)`}</pre>
           </div>
         </details>
+      </div>
       </div>
     </div>
   )
@@ -216,30 +218,30 @@ function WorkflowAgentCapabilitiesPanel({
   const steps = parsed?.metadata.steps ?? []
 
   return (
-    <aside className="rounded-md border border-border/40 bg-foreground/[0.02] p-3 text-xs">
+    <aside className="runneros-card p-3 text-xs">
       <div className="mb-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-white/45">
           Agent capabilities
         </h2>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+        <p className="mt-1 text-[11px] leading-relaxed text-white/42">
           Read-only hints from saved agents used by this workflow.
         </p>
       </div>
 
       {loading && (
-        <p className="text-muted-foreground">Loading agents...</p>
+        <p className="text-white/45">Loading agents...</p>
       )}
       {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-destructive flex items-center gap-2">
+        <div className="flex items-center gap-2 rounded-[10px] border border-red-500/30 bg-red-500/10 p-2 text-red-300">
           <AlertTriangle className="h-3.5 w-3.5" />
           <span>{error}</span>
         </div>
       )}
       {!loading && !error && !parsed && (
-        <p className="text-muted-foreground">Fix the workflow syntax to preview step agents.</p>
+        <p className="text-white/45">Fix the workflow syntax to preview step agents.</p>
       )}
       {!loading && !error && parsed && steps.length === 0 && (
-        <p className="text-muted-foreground">No steps declared.</p>
+        <p className="text-white/45">No steps declared.</p>
       )}
       {!loading && !error && parsed && steps.length > 0 && (
         <ol className="flex flex-col gap-2">
@@ -247,20 +249,20 @@ function WorkflowAgentCapabilitiesPanel({
             const agent = agentBySlug.get(step.agent)
             const isActive = activeAgentSlugs.has(step.agent)
             return (
-              <li key={step.id} className="rounded-md border border-border/40 bg-background/70 p-2.5">
+              <li key={step.id} className="rounded-[11px] border border-white/[0.07] bg-white/[0.035] p-2.5">
                 <div className="flex items-start gap-2">
-                  <span className="mt-0.5 w-5 shrink-0 text-muted-foreground">{index + 1}.</span>
+                  <span className="mt-0.5 w-5 shrink-0 text-white/38">{index + 1}.</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <code className="font-mono text-[11px] text-foreground">{step.id}</code>
-                      <code className="font-mono text-[11px] text-muted-foreground">@{step.agent}</code>
+                      <code className="font-mono text-[11px] text-white/72">{step.id}</code>
+                      <code className="font-mono text-[11px] text-white/42">@{step.agent}</code>
                       {!agent && <Info_Badge color="destructive">missing</Info_Badge>}
                       {agent && !isActive && <Info_Badge color="warning">inactive</Info_Badge>}
                     </div>
                     {agent ? (
                       <AgentCapabilitySummary agent={agent} />
                     ) : (
-                      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                      <p className="mt-2 text-[11px] leading-relaxed text-white/45">
                         Add this agent to the global library, or change the step to an existing active agent.
                       </p>
                     )}
@@ -285,12 +287,12 @@ function AgentCapabilitySummary({ agent }: { agent: AgentDefinitionDTO }) {
   return (
     <div className="mt-2 flex flex-col gap-2">
       <div className="min-w-0">
-        <div className="truncate text-sm font-medium">
+        <div className="truncate text-sm font-medium text-white/84">
           {agent.metadata.avatar?.trim() && <span className="mr-1.5">{agent.metadata.avatar.trim()}</span>}
           {agent.metadata.name}
         </div>
         {agent.metadata.description && (
-          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="mt-0.5 text-[11px] leading-relaxed text-white/45">
             {agent.metadata.description}
           </p>
         )}
@@ -300,19 +302,19 @@ function AgentCapabilitySummary({ agent }: { agent: AgentDefinitionDTO }) {
         <dl className="grid grid-cols-[52px_1fr] gap-x-2 gap-y-1.5 text-[11px] leading-relaxed">
           {agent.metadata.inputs && (
             <>
-              <dt className="text-muted-foreground">Takes</dt>
+              <dt className="text-white/38">Takes</dt>
               <dd>{agent.metadata.inputs}</dd>
             </>
           )}
           {agent.metadata.outputs && (
             <>
-              <dt className="text-muted-foreground">Makes</dt>
+              <dt className="text-white/38">Makes</dt>
               <dd>{agent.metadata.outputs}</dd>
             </>
           )}
           {agent.metadata.tags && agent.metadata.tags.length > 0 && (
             <>
-              <dt className="text-muted-foreground">Tags</dt>
+              <dt className="text-white/38">Tags</dt>
               <dd className="flex flex-wrap gap-1">
                 {agent.metadata.tags.map((tag) => (
                   <Info_Badge key={tag} color="muted" className="px-2 py-0.5 text-[11px]">
@@ -324,7 +326,7 @@ function AgentCapabilitySummary({ agent }: { agent: AgentDefinitionDTO }) {
           )}
         </dl>
       ) : (
-        <p className="text-[11px] text-muted-foreground">No capabilities declared for this agent.</p>
+        <p className="text-[11px] text-white/45">No capabilities declared for this agent.</p>
       )}
     </div>
   )

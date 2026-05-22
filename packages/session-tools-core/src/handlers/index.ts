@@ -148,3 +148,10 @@ export type {
   CreateOutputLinkInput,
   CreateOutputReceiptInput,
 } from './outputs.ts';
+
+// Visual surface
+export { handleVisualSurface } from './visual-surface.ts';
+export type {
+  VisualSurfaceToolInput,
+  VisualSurfaceToolResult,
+} from './visual-surface.ts';

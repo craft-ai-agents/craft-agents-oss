@@ -74,16 +74,16 @@ export const FreeFormInputContextBadge = React.forwardRef<HTMLButtonElement, Fre
         data-tutorial={dataTutorial}
         className={cn(
           // Base styles - shrink + min-w-0 allows badge to compress in tight layouts
-          "input-toolbar-btn inline-flex items-center gap-1.5 h-7 rounded-[6px] text-[13px] text-foreground transition-colors select-none shrink min-w-0",
+          "input-toolbar-btn inline-flex items-center gap-1.5 h-7 rounded-[6px] text-[13px] text-white/64 transition-colors select-none shrink min-w-0",
           "disabled:opacity-50 disabled:pointer-events-none",
           // Padding: more padding when showing label
           showLabel ? "px-2" : "px-1.5",
           // Collapsed with selection: visible background + thin 1px border + margin
-          !isExpanded && hasSelection && "bg-background border border-foreground/5 mx-0.5",
+          !isExpanded && hasSelection && "border border-white/[0.08] bg-white/[0.055] text-white/78 shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] mx-0.5",
           // Hover state (when not already showing background from selection)
-          !(!isExpanded && hasSelection) && "hover:bg-foreground/5",
+          !(!isExpanded && hasSelection) && "hover:bg-white/[0.07] hover:text-white/84",
           // Open state (dropdown shown)
-          isOpen && "bg-foreground/5",
+          isOpen && "bg-white/[0.08] text-white/84",
           className
         )}
       >

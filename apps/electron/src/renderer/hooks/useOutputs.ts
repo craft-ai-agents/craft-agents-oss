@@ -24,7 +24,7 @@ export type OutputKind =
   | 'other'
 
 export type OutputStatus = 'draft' | 'published' | 'failed' | 'cancelled'
-export type OutputPreviewMode = 'markdown' | 'text' | 'json' | 'image' | 'video' | 'audio' | 'table' | 'receipt' | 'external-link'
+export type OutputPreviewMode = 'markdown' | 'text' | 'json' | 'image' | 'video' | 'audio' | 'table' | 'receipt' | 'external-link' | 'web'
 
 export interface OutputAssetDTO {
   id: string
@@ -78,6 +78,11 @@ export interface OutputSummaryDTO {
   completedAt?: string
   origin?: OutputOriginDTO
   primary?: OutputAssetDTO
+  primaryAssetId?: string
+  previewMode?: OutputPreviewMode
+  assetCount?: number
+  receiptCount?: number
+  linkCount?: number
   preview?: {
     mode: OutputPreviewMode
     assetId?: string

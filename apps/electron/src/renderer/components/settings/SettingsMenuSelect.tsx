@@ -113,23 +113,23 @@ export function SettingsMenuSelect({
         <button
           type="button"
           className={cn(
-            'inline-flex items-center h-8 px-3 gap-1 text-sm rounded-lg',
-            'bg-background shadow-minimal',
-            'hover:bg-foreground/[0.02] transition-colors',
+            'inline-flex items-center h-8 px-3 gap-1 text-[12px] rounded-[10px]',
+            'border border-white/[0.07] bg-white/[0.035] text-white/72 shadow-minimal',
+            'hover:bg-white/[0.055] transition-colors',
             'disabled:cursor-not-allowed disabled:opacity-50',
-            isOpen && 'bg-foreground/[0.02]',
+            isOpen && 'bg-white/[0.06] border-white/[0.12]',
             className
           )}
         >
           <span className="truncate">{selectedOption?.label || placeholder}</span>
-          <ChevronDown className="opacity-50 shrink-0 size-3.5" />
+          <ChevronDown className="opacity-55 shrink-0 size-3.5" />
         </button>
       </PopoverTrigger>
       <PopoverContent
         align="end"
         sideOffset={4}
         collisionPadding={8}
-        className="p-1.5"
+        className="border-white/[0.08] bg-[#0b0b0d]/95 p-1.5 shadow-[0_24px_70px_rgba(0,0,0,0.5)]"
         style={{ width: menuWidth }}
         onMouseLeave={() => onHover?.(null)}
       >
@@ -143,17 +143,17 @@ export function SettingsMenuSelect({
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={effectiveSearchPlaceholder}
               className={cn(
-                'w-full h-8 pl-8 pr-3 text-sm rounded-md',
-                'bg-foreground/5 border-0',
-                'placeholder:text-muted-foreground/50',
-                'focus:outline-none focus:ring-1 focus:ring-foreground/20'
+                'w-full h-8 pl-8 pr-3 text-[12px] rounded-[10px]',
+                'bg-white/[0.045] border border-white/[0.06]',
+                'placeholder:text-white/28 text-white/76',
+                'focus:outline-none focus:ring-1 focus:ring-white/16'
               )}
             />
           </div>
         )}
         <div className="space-y-0.5 max-h-64 overflow-auto">
           {filteredOptions.length === 0 ? (
-            <div className="px-2.5 py-3 text-sm text-muted-foreground text-center">
+            <div className="px-2.5 py-3 text-[12px] text-white/38 text-center">
               No results found
             </div>
           ) : (
@@ -167,8 +167,8 @@ export function SettingsMenuSelect({
                   onMouseEnter={() => onHover?.(option.value)}
                   className={cn(
                     'w-full flex items-center justify-between px-2.5 py-2 rounded-lg',
-                    'hover:bg-foreground/5 transition-colors text-left',
-                    isSelected && 'bg-foreground/3'
+                    'hover:bg-white/[0.045] transition-colors text-left',
+                    isSelected && 'bg-white/[0.06]'
                   )}
                 >
                   <div className="flex-1 min-w-0">
@@ -180,7 +180,7 @@ export function SettingsMenuSelect({
                     )}
                   </div>
                   {isSelected && (
-                    <Check className="size-4 text-foreground shrink-0 ml-3" />
+                    <Check className="size-4 text-[#fb923c] shrink-0 ml-3" />
                   )}
                 </button>
               )
@@ -244,7 +244,7 @@ export function SettingsMenuSelectRow({
       data-layout="settings-row"
       className={cn(
         'flex items-center justify-between',
-        inCard ? 'px-4 py-3.5' : 'py-3',
+        inCard ? 'px-4 py-3' : 'py-2.5',
         className
       )}
     >

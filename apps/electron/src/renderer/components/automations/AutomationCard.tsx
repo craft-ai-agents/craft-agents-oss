@@ -36,7 +36,7 @@ export function AutomationCard({
   return (
     <div
       className={cn(
-        'rounded-[8px] bg-background shadow-minimal overflow-hidden transition-all',
+        'runneros-card overflow-hidden rounded-[13px] transition-all',
         !automation.enabled && 'opacity-50',
         className
       )}
@@ -48,9 +48,9 @@ export function AutomationCard({
       >
         {/* Expand chevron */}
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <ChevronDown className="h-3.5 w-3.5 text-white/42 shrink-0" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <ChevronRight className="h-3.5 w-3.5 text-white/42 shrink-0" />
         )}
 
         {/* Avatar */}
@@ -58,8 +58,8 @@ export function AutomationCard({
 
         {/* Name + summary */}
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium truncate">{automation.name}</div>
-          <div className="text-xs text-foreground/50 truncate">{automation.summary}</div>
+          <div className="truncate text-sm font-medium text-white">{automation.name}</div>
+          <div className="truncate text-xs text-white/45">{automation.summary}</div>
         </div>
 
         {/* Enable toggle */}
@@ -73,20 +73,20 @@ export function AutomationCard({
 
       {/* Expanded content */}
       {expanded && (
-        <div className="border-t border-border/30 px-4 py-3 space-y-3">
+        <div className="space-y-3 border-t border-white/[0.06] px-4 py-3">
           {/* Trigger info */}
           <div className="space-y-1">
-            <h5 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{t('automations.sectionWhen')}</h5>
-            <div className="text-xs text-foreground/70">
+            <h5 className="text-[10px] font-medium uppercase tracking-wider text-white/45">{t('automations.sectionWhen')}</h5>
+            <div className="text-xs text-white/62">
               <span className="font-medium">{getEventDisplayName(automation.event)}</span>
               {automation.matcher && (
                 <span className="ml-2">
-                  {t('automations.matching')} <code className="font-mono bg-foreground/5 px-1 rounded">{automation.matcher}</code>
+                  {t('automations.matching')} <code className="rounded bg-white/[0.055] px-1 font-mono">{automation.matcher}</code>
                 </span>
               )}
               {automation.cron && (
                 <span className="ml-2">
-                  {t('automations.at')} <code className="font-mono bg-foreground/5 px-1 rounded">{automation.cron}</code>
+                  {t('automations.at')} <code className="rounded bg-white/[0.055] px-1 font-mono">{automation.cron}</code>
                 </span>
               )}
             </div>
@@ -94,7 +94,7 @@ export function AutomationCard({
 
           {/* Actions */}
           <div className="space-y-1">
-            <h5 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{t('automations.sectionThen')}</h5>
+            <h5 className="text-[10px] font-medium uppercase tracking-wider text-white/45">{t('automations.sectionThen')}</h5>
             <AutomationActionPreview actions={automation.actions} />
           </div>
 
@@ -103,7 +103,7 @@ export function AutomationCard({
             {onTest && (
               <button
                 onClick={onTest}
-                className="px-2.5 py-1 text-xs font-medium rounded-md bg-foreground/[0.03] shadow-minimal hover:bg-foreground/[0.06] transition-colors"
+                className="rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 py-1 text-xs font-medium text-white/72 transition-colors hover:bg-white/[0.08] hover:text-white"
               >
                 {t('automations.runTest')}
               </button>

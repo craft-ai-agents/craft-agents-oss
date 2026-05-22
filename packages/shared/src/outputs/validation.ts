@@ -47,6 +47,7 @@ const PREVIEW_MODES: ReadonlySet<OutputPreviewMode> = new Set([
   'table',
   'receipt',
   'external-link',
+  'web',
 ]);
 
 export function isValidOutputId(outputId: string): boolean {

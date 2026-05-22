@@ -61,7 +61,7 @@ function useComponentSpecificSections(): ShortcutSection[] {
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-medium font-sans bg-muted border border-border rounded">
+    <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-[6px] border border-white/[0.08] bg-white/[0.055] px-1.5 font-sans text-[11px] font-medium text-white/68">
       {children}
     </kbd>
   )
@@ -132,7 +132,7 @@ export default function ShortcutsPage() {
       <PanelHeader title={t("settings.shortcuts.title")} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
-          <div className="px-5 py-7 max-w-3xl mx-auto space-y-8">
+          <div className="px-6 pt-24 pb-8 max-w-[760px] mx-auto space-y-6">
             {/* Registry-driven sections */}
             {Object.entries(actionsByCategory).map(([category, actions]) => (
               <SettingsSection key={category} title={t(`shortcuts.category.${category.toLowerCase()}`)}>

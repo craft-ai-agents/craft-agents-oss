@@ -14,8 +14,10 @@ import {
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
 import { toast } from "sonner"
+import { useAtomValue } from "jotai"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Markdown, CollapsibleMarkdownProvider, StreamingMarkdown, type RenderMode } from "@/components/markdown"
 import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
@@ -77,6 +79,12 @@ import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } fro
 import { resolveBranchNewPanelOption } from "./branching"
 import { handleErrorMessageAction } from "./error-message-actions"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
+import { useOutputs } from "@/hooks/useOutputs"
+import {
+  visualSidecarAtom,
+} from "@/atoms/visual-surfaces"
+import { VisualSurfacePanel } from "@/components/visual-surfaces/VisualSurfacePanel"
+import { VisualSurfaceToggle } from "@/components/visual-surfaces/VisualSurfaceToggle"
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -494,6 +502,18 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     || session?.launchReceipt?.origin === 'concierge'
     || session?.launchReceipt?.agent?.slug === CONCIERGE_SLUG
   const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
+  const visualSidecar = useAtomValue(visualSidecarAtom)
+  const currentWorkspaceId = workspaceId ?? session?.workspaceId
+  const { outputs } = useOutputs(currentWorkspaceId)
+  const activeSessionVisualSurface =
+    visualSidecar.activeSurface?.sessionId === session?.id ? visualSidecar.activeSurface : null
+  const showRollupVisualSurface =
+    !!activeSessionVisualSurface && visualSidecar.resolvedPresentation === 'rollup'
+  const sessionVisualOutputs = useMemo(
+    () => session?.id ? outputs.filter((output) => output.origin?.sessionId === session.id) : [],
+    [outputs, session?.id],
+  )
+  const latestSessionVisualOutput = sessionVisualOutputs[0]
 
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -1479,9 +1499,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       {session ? (
         <div className="flex flex-1 flex-col min-h-0 min-w-0 relative">
           {/* Content layer */}
-          <div className="flex flex-1 flex-col min-h-0 min-w-0 relative z-10">
+          <div className="flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden relative z-10">
           {/* === MESSAGES AREA: Scrollable list of message bubbles === */}
-          <div className="relative flex-1 min-h-0">
+          <div className={cn("relative flex-1 min-h-0", showRollupVisualSurface && "hidden")}>
             {/* Mask wrapper - fades content at top and bottom over transparent/image backgrounds */}
             <div
               className="h-full"
@@ -1890,7 +1910,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           </div>
 
           {/* === INPUT CONTAINER: FreeForm or Structured Input === */}
+          {showRollupVisualSurface ? <VisualSurfacePanel presentation="rollup" /> : null}
           <ChatInputZone
+            className="shrink-0"
             compactMode={compactMode}
             permissionMode={permissionMode}
             onPermissionModeChange={onPermissionModeChange}
@@ -1905,6 +1927,13 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             sessionStatuses={sessionStatuses}
             currentSessionStatus={session.sessionStatus || 'todo'}
             onSessionStatusChange={onSessionStatusChange}
+            afterStateSlot={
+              <VisualSurfaceToggle
+                workspaceId={currentWorkspaceId}
+                sessionId={session.id}
+                latestOutput={latestSessionVisualOutput}
+              />
+            }
             inputProps={{
               placeholder,
               disabled: isInputDisabled,
@@ -2222,19 +2251,19 @@ function MessageBubble({
     )
   }
 
-  // === ASSISTANT MESSAGE: Left-aligned gray bubble with markdown rendering ===
+  // === ASSISTANT MESSAGE: Left-aligned markdown, no response shell ===
   if (message.role === 'assistant') {
     return (
       <div className="flex justify-start group">
-        <div className="relative max-w-[90%] bg-background shadow-minimal rounded-[8px] pl-6 pr-4 py-3 break-words min-w-0 select-text">
+        <div className="runner-chat-response relative max-w-[90%] pl-6 pr-4 py-3 text-white/78 break-words min-w-0 select-text">
           {/* Pop-out button - visible on hover */}
           {onPopOut && !message.isStreaming && (
             <button
               onClick={() => onPopOut(message)}
-              className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-foreground/5"
+              className="absolute top-2 right-2 rounded-[8px] border border-white/[0.08] bg-white/[0.055] p-1.5 opacity-0 transition-opacity hover:bg-white/[0.10] group-hover:opacity-100"
               title={t("sidebarMenu.openInNewWindow")}
             >
-              <ExternalLink className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+              <ExternalLink className="w-4 h-4 text-white/42 hover:text-white/84" />
             </button>
           )}
           {/* Use StreamingMarkdown for block-level memoization during streaming */}
@@ -2253,7 +2282,7 @@ function MessageBubble({
                 onUrlClick={onOpenUrl}
                 onFileClick={onOpenFile}
                 id={message.id}
-                className="text-sm"
+                className="text-sm text-white/78"
                 collapsible
               >
                 {message.content}

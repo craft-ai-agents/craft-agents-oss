@@ -44,6 +44,9 @@ export const KEYS = {
   // TurnCard expansion state (persisted across session switches)
   turnCardExpansion: 'turncard-expansion',
 
+  // Visual surfaces
+  visualSurfacePresentationMode: 'visual-surface-presentation-mode',
+
   // Last selected session (workspace-scoped via suffix)
   lastSelectedSessionId: 'last-selected-session-id',
 

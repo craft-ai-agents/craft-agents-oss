@@ -96,7 +96,7 @@ interface CronFieldProps {
 function CronField({ field, value, onChange }: CronFieldProps) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+      <label className="text-[10px] font-medium uppercase tracking-wider text-white/45">
         {field.label}
       </label>
       <input
@@ -104,8 +104,8 @@ function CronField({ field, value, onChange }: CronFieldProps) {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={cn(
-          'w-full px-2 py-1.5 text-xs font-mono text-center rounded-md border border-border/50',
-          'bg-background focus:outline-none focus:ring-1 focus:ring-accent/50',
+          'w-full rounded-[8px] border border-white/[0.08] bg-white/[0.04] px-2 py-1.5 text-center font-mono text-xs text-white/74',
+          'focus:outline-none focus:ring-1 focus:ring-[#f97316]/40',
         )}
         placeholder="*"
       />
@@ -177,7 +177,7 @@ export function CronBuilder({
     <div className={cn('space-y-5', className)}>
       {/* Layer 1: Common Schedules */}
       <div className="space-y-2">
-        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider pl-1">
+        <h4 className="pl-1 text-xs font-medium uppercase tracking-wider text-white/45">
           Common Schedules
         </h4>
         <div className="flex flex-wrap gap-1.5">
@@ -188,8 +188,8 @@ export function CronBuilder({
               className={cn(
                 'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
                 rawInput === preset.cron
-                  ? 'bg-foreground/10 text-foreground ring-1 ring-border/50'
-                  : 'bg-foreground/[0.03] text-foreground/70 hover:bg-foreground/[0.06] shadow-minimal'
+                  ? 'bg-[#f97316]/16 text-white/86 ring-1 ring-[#fb923c]/25'
+                  : 'bg-white/[0.04] text-white/62 hover:bg-white/[0.07] shadow-minimal'
               )}
             >
               {preset.label}
@@ -200,7 +200,7 @@ export function CronBuilder({
 
       {/* Layer 2: Custom Schedule */}
       <div className="space-y-2">
-        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider pl-1">
+        <h4 className="pl-1 text-xs font-medium uppercase tracking-wider text-white/45">
           Custom Schedule
         </h4>
         <div className="grid grid-cols-5 gap-2">
@@ -217,7 +217,7 @@ export function CronBuilder({
 
       {/* Layer 3: Advanced */}
       <div className="space-y-2">
-        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider pl-1">
+        <h4 className="pl-1 text-xs font-medium uppercase tracking-wider text-white/45">
           Advanced
         </h4>
         <input
@@ -225,11 +225,11 @@ export function CronBuilder({
           value={rawInput}
           onChange={(e) => handleRawChange(e.target.value)}
           className={cn(
-            'w-full px-3 py-2 text-sm font-mono rounded-md border',
-            'bg-background focus:outline-none focus:ring-1',
+            'w-full rounded-[9px] border bg-white/[0.04] px-3 py-2 font-mono text-sm text-white/74',
+            'focus:outline-none focus:ring-1',
             validationError
               ? 'border-destructive/50 focus:ring-destructive/30'
-              : 'border-border/50 focus:ring-accent/50'
+              : 'border-white/[0.08] focus:ring-[#f97316]/40'
           )}
           placeholder="* * * * *"
         />
@@ -242,22 +242,22 @@ export function CronBuilder({
       </div>
 
       {/* Summary */}
-      <div className="bg-background shadow-minimal rounded-[8px] p-4 space-y-3">
+      <div className="runneros-card space-y-3 p-4">
         {/* Human-readable description */}
         <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{description}</span>
+          <Clock className="h-4 w-4 text-white/42" />
+          <span className="text-sm font-medium text-white/78">{description}</span>
         </div>
 
         {/* Next runs */}
         {nextRuns.length > 0 && !validationError && (
           <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Next runs:</span>
+            <span className="text-xs text-white/42">Next runs:</span>
             <div className="flex flex-col gap-0.5">
               {(() => {
                 const spansYears = nextRuns.length > 1 && nextRuns[0].getFullYear() !== nextRuns[nextRuns.length - 1].getFullYear()
                 return nextRuns.map((date, i) => (
-                  <span key={i} className="text-xs text-foreground/70 tabular-nums">
+                  <span key={i} className="text-xs tabular-nums text-white/62">
                     {date.toLocaleDateString('en-US', {
                       weekday: 'short',
                       month: 'short',
@@ -276,9 +276,9 @@ export function CronBuilder({
         )}
 
         {/* Timezone */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-white/42">
           <span>{t('automations.labelTimezone')}:</span>
-          <span className="font-medium text-foreground/70">{timezone || t('automations.systemDefault')}</span>
+          <span className="font-medium text-white/62">{timezone || t('automations.systemDefault')}</span>
         </div>
       </div>
     </div>

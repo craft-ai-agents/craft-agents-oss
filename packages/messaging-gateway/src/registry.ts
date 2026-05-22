@@ -326,6 +326,22 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     if (removed > 0) this.emitBindingChanged(workspaceId)
   }
 
+  bindSession(
+    workspaceId: string,
+    sessionId: string,
+    platform: string,
+    channelId: string,
+    channelName?: string | null,
+  ): void {
+    const state = this.workspaces.get(workspaceId)
+    if (!state) return
+    if (!isKnownPlatform(platform)) return
+    state.gateway
+      .getBindingStore()
+      .bind(workspaceId, sessionId, platform, channelId, channelName ?? undefined)
+    this.emitBindingChanged(workspaceId)
+  }
+
   unbindBinding(workspaceId: string, bindingId: string): boolean {
     const state = this.workspaces.get(workspaceId)
     if (!state) return false

@@ -251,7 +251,7 @@ export function SendToWorkspaceDialog({
   )
 }
 
-/** Send button with purple LED border that traces around it during transfer */
+/** Send button with orange LED border that traces around it during transfer */
 function TransferButton({ onClick, disabled, isTransferring, progress }: {
   onClick: () => void
   disabled: boolean

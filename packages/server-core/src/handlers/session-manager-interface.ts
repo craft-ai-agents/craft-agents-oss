@@ -240,6 +240,12 @@ export interface ExecutePromptAutomationInput {
   labels?: string[]
   permissionMode?: PermissionMode
   mentions?: string[]
+  agentSlug?: string
+  messagingChannel?: {
+    platform: string
+    channelId: string
+    channelName?: string | null
+  }
   llmConnection?: string
   model?: string
   /** Override the workspace default thinking level for the spawned session. */
