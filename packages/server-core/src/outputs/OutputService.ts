@@ -97,6 +97,7 @@ export class OutputService {
 
   saveVisualBoard(workspaceId: string, sessionId: string, snapshot: VisualBoardSnapshot): { output: OutputManifest; board: VisualBoardSnapshot } {
     assertVisualBoardSnapshot(snapshot, { workspaceId, sessionId });
+    this.assertVisualBoardOutputCards(workspaceId, sessionId, snapshot);
     const existing = this.findVisualBoardManifest(workspaceId, sessionId)
       ?? this.getOrCreateVisualBoard(workspaceId, sessionId).output;
     const saved = this.writeVisualBoardToOutput(workspaceId, existing, {
@@ -146,6 +147,26 @@ export class OutputService {
       mimeType: 'application/json',
       ...meta,
     };
+  }
+
+  private assertVisualBoardOutputCards(workspaceId: string, sessionId: string, board: VisualBoardSnapshot): void {
+    const outputCards = board.cards.filter((card) => card.type === 'output');
+    if (outputCards.length === 0) return;
+
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
+    const validOutputIds = new Set(
+      listOutputManifests(root)
+        .filter((manifest) =>
+          manifest.origin.sessionId === sessionId && !manifest.tags?.includes(VISUAL_BOARD_TAG),
+        )
+        .map((manifest) => manifest.id),
+    );
+
+    for (const card of outputCards) {
+      if (!validOutputIds.has(card.outputId)) {
+        throw new Error(`Invalid visual board output card reference: ${card.outputId}`);
+      }
+    }
   }
 
   private writeVisualBoardToOutput(

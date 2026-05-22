@@ -68,7 +68,6 @@ export function useVisualBoard(
     }
     const result = await electronAPI.saveVisualBoard(workspaceId, sessionId, snapshot)
     setOutput(result.output)
-    setBoard(result.board)
     return result
   }, [electronAPI, sessionId, workspaceId])
 
@@ -82,4 +81,3 @@ export function useVisualBoard(
     saveBoard,
   }
 }
-

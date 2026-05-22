@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  VISUAL_BOARD_MAX_BODY_LENGTH,
   createEmptyVisualBoardSnapshot,
   isVisualBoardSnapshot,
   parseVisualBoardSnapshot,
@@ -46,5 +47,26 @@ describe('visual board snapshots', () => {
     expect(parsed?.cards.length).toBe(2);
     expect(summarizeVisualBoard(board)).toBe('2 cards: 1 note, 1 output');
   });
-});
 
+  test('rejects note cards over the body limit', () => {
+    const now = '2026-05-22T00:00:00.000Z';
+    const board: VisualBoardSnapshot = {
+      schemaVersion: 1,
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      title: 'Session board',
+      createdAt: now,
+      updatedAt: now,
+      cards: [{
+        id: 'note-1',
+        type: 'note',
+        title: 'Too long',
+        body: 'x'.repeat(VISUAL_BOARD_MAX_BODY_LENGTH + 1),
+        createdAt: now,
+        updatedAt: now,
+      }],
+    };
+
+    expect(isVisualBoardSnapshot(board, { workspaceId: 'ws', sessionId: 'session-1' })).toBe(false);
+  });
+});

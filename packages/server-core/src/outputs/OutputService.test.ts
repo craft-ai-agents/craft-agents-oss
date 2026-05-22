@@ -119,4 +119,68 @@ describe('OutputService visual boards', () => {
     expect(repaired.board.cards).toEqual([]);
     expect(repaired.output.summary).toBe('Empty visual board');
   });
+
+  it('only saves output cards that reference outputs from the same session', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-board-output-card-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+
+    const validOutput = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Valid output',
+        kind: 'report',
+        summary: 'Session output',
+        content: '# valid',
+        contentMimeType: 'text/markdown',
+      },
+    });
+    const otherSessionOutput = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-2',
+      output: {
+        title: 'Wrong session',
+        kind: 'report',
+        summary: 'Wrong session output',
+        content: '# invalid',
+        contentMimeType: 'text/markdown',
+      },
+    });
+    expect(validOutput.ok).toBe(true);
+    expect(otherSessionOutput.ok).toBe(true);
+
+    const first = service.getOrCreateVisualBoard('ws', 'session-1');
+    const now = new Date().toISOString();
+    const validBoard: VisualBoardSnapshot = {
+      ...first.board,
+      cards: [{
+        id: 'out-1',
+        type: 'output',
+        outputId: validOutput.outputId!,
+        title: 'Valid output',
+        kind: 'report',
+        createdAt: now,
+        updatedAt: now,
+      }],
+      updatedAt: now,
+    };
+    expect(service.saveVisualBoard('ws', 'session-1', validBoard).board.cards[0]?.type).toBe('output');
+
+    const invalidBoard: VisualBoardSnapshot = {
+      ...validBoard,
+      cards: [{
+        id: 'out-2',
+        type: 'output',
+        outputId: otherSessionOutput.outputId!,
+        title: 'Wrong session',
+        kind: 'report',
+        createdAt: now,
+        updatedAt: now,
+      }],
+    };
+    expect(() => service.saveVisualBoard('ws', 'session-1', invalidBoard)).toThrow('Invalid visual board output card reference');
+  });
 });

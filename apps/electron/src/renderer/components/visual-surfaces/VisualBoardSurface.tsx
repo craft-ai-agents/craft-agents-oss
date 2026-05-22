@@ -1,6 +1,8 @@
 import * as React from 'react'
 import { FilePlus2, FileText, Plus, Save, Trash2 } from 'lucide-react'
 import {
+  VISUAL_BOARD_MAX_BODY_LENGTH,
+  VISUAL_BOARD_MAX_TITLE_LENGTH,
   VISUAL_BOARD_TAG,
   type VisualBoardCard,
   type VisualBoardOutputCard,
@@ -242,6 +244,7 @@ function BoardCard({
       <div className="mb-2 flex items-center gap-2">
         <input
           value={card.title}
+          maxLength={VISUAL_BOARD_MAX_TITLE_LENGTH}
           className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground"
           placeholder="Note title"
           onChange={(event) => onChange({ ...card, title: event.target.value, updatedAt: new Date().toISOString() })}
@@ -250,6 +253,7 @@ function BoardCard({
       </div>
       <textarea
         value={card.body}
+        maxLength={VISUAL_BOARD_MAX_BODY_LENGTH}
         className="min-h-28 w-full resize-none rounded-md border border-border/45 bg-foreground/[0.025] px-2.5 py-2 text-xs leading-5 outline-none placeholder:text-muted-foreground focus:border-sky-300/35"
         placeholder="Write a note..."
         onChange={(event) => onChange({ ...card, body: event.target.value, updatedAt: new Date().toISOString() })}
@@ -289,4 +293,3 @@ function saveLabel(state: SaveState): string {
   if (state === 'error') return 'Save failed'
   return 'Ready'
 }
-

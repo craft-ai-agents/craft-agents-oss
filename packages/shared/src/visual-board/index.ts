@@ -34,9 +34,9 @@ export interface VisualBoardSnapshot {
   updatedAt: string;
 }
 
-const MAX_CARDS = 100;
-const MAX_TITLE_LENGTH = 120;
-const MAX_BODY_LENGTH = 4000;
+export const VISUAL_BOARD_MAX_CARDS = 100;
+export const VISUAL_BOARD_MAX_TITLE_LENGTH = 120;
+export const VISUAL_BOARD_MAX_BODY_LENGTH = 4000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -61,7 +61,7 @@ export function createEmptyVisualBoardSnapshot(input: {
     schemaVersion: 1,
     workspaceId: input.workspaceId,
     sessionId: input.sessionId,
-    title: trimLimit(input.title ?? 'Session board', MAX_TITLE_LENGTH) || 'Session board',
+    title: trimLimit(input.title ?? 'Session board', VISUAL_BOARD_MAX_TITLE_LENGTH) || 'Session board',
     cards: [],
     createdAt: now,
     updatedAt: now,
@@ -78,9 +78,9 @@ export function isVisualBoardSnapshot(
   if (typeof value.sessionId !== 'string' || !value.sessionId) return false;
   if (expected?.workspaceId && value.workspaceId !== expected.workspaceId) return false;
   if (expected?.sessionId && value.sessionId !== expected.sessionId) return false;
-  if (typeof value.title !== 'string' || !value.title || value.title.length > MAX_TITLE_LENGTH) return false;
+  if (typeof value.title !== 'string' || !value.title || value.title.length > VISUAL_BOARD_MAX_TITLE_LENGTH) return false;
   if (!isIsoDateString(value.createdAt) || !isIsoDateString(value.updatedAt)) return false;
-  if (!Array.isArray(value.cards) || value.cards.length > MAX_CARDS) return false;
+  if (!Array.isArray(value.cards) || value.cards.length > VISUAL_BOARD_MAX_CARDS) return false;
   return value.cards.every(isVisualBoardCard);
 }
 
@@ -115,10 +115,10 @@ export function summarizeVisualBoard(snapshot: VisualBoardSnapshot): string {
 function isVisualBoardCard(value: unknown): value is VisualBoardCard {
   if (!isRecord(value)) return false;
   if (typeof value.id !== 'string' || !value.id || value.id.length > 80) return false;
-  if (typeof value.title !== 'string' || value.title.length > MAX_TITLE_LENGTH) return false;
+  if (typeof value.title !== 'string' || value.title.length > VISUAL_BOARD_MAX_TITLE_LENGTH) return false;
   if (!isIsoDateString(value.createdAt) || !isIsoDateString(value.updatedAt)) return false;
   if (value.type === 'note') {
-    return typeof value.body === 'string' && value.body.length <= MAX_BODY_LENGTH;
+    return typeof value.body === 'string' && value.body.length <= VISUAL_BOARD_MAX_BODY_LENGTH;
   }
   if (value.type === 'output') {
     if (typeof value.outputId !== 'string' || !value.outputId) return false;
@@ -127,4 +127,3 @@ function isVisualBoardCard(value: unknown): value is VisualBoardCard {
   }
   return false;
 }
-
