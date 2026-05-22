@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
@@ -14,6 +15,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.outputs.DELETE,
   RPC_CHANNELS.outputs.OPEN_FILE,
   RPC_CHANNELS.outputs.SHOW_IN_FOLDER,
+  RPC_CHANNELS.outputs.READ_ASSET_TEXT,
+  RPC_CHANNELS.outputs.READ_ASSET_DATA_URL,
 ] as const;
 
 function resolveRootPath(workspaceId: string): string {
@@ -63,6 +66,36 @@ async function resolveSafeOutputAssetPath(
   return validateFilePath(absolutePath, getWorkspaceAllowedDirs(workspaceId));
 }
 
+function mimeTypeForPath(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase() ?? '';
+  const mimeMap: Record<string, string> = {
+    avif: 'image/avif',
+    bmp: 'image/bmp',
+    gif: 'image/gif',
+    ico: 'image/x-icon',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    svg: 'image/svg+xml',
+    webp: 'image/webp',
+    m4v: 'video/mp4',
+    mov: 'video/quicktime',
+    mp4: 'video/mp4',
+    webm: 'video/webm',
+    aac: 'audio/aac',
+    flac: 'audio/flac',
+    m4a: 'audio/mp4',
+    mp3: 'audio/mpeg',
+    ogg: 'audio/ogg',
+    wav: 'audio/wav',
+    json: 'application/json',
+    md: 'text/markdown',
+    markdown: 'text/markdown',
+    txt: 'text/plain',
+  };
+  return mimeMap[ext] ?? 'application/octet-stream';
+}
+
 export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): void {
   server.handle(
     RPC_CHANNELS.outputs.LIST,
@@ -101,6 +134,25 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
       assertLocalWorkspace(workspaceId, 'Show output in folder');
       const safePath = await resolveSafeOutputAssetPath(workspaceId, outputId, assetIdOrPath, serviceFor(server));
       await requestClientShowInFolder(server, ctx.clientId, safePath);
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.READ_ASSET_TEXT,
+    async (_ctx, workspaceId: string, outputId: string, assetId?: string): Promise<string> => {
+      assertLocalWorkspace(workspaceId, 'Read output asset');
+      const safePath = await resolveSafeOutputAssetPath(workspaceId, outputId, assetId, serviceFor(server));
+      return readFile(safePath, 'utf-8');
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.READ_ASSET_DATA_URL,
+    async (_ctx, workspaceId: string, outputId: string, assetId?: string): Promise<string> => {
+      assertLocalWorkspace(workspaceId, 'Read output asset');
+      const safePath = await resolveSafeOutputAssetPath(workspaceId, outputId, assetId, serviceFor(server));
+      const buffer = await readFile(safePath);
+      return `data:${mimeTypeForPath(safePath)};base64,${buffer.toString('base64')}`;
     },
   );
 }

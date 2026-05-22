@@ -800,6 +800,8 @@ export interface ElectronAPI {
   deleteOutput(workspaceId: string, outputId: string): Promise<boolean>
   openOutputFile(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
   showOutputInFolder(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
+  readOutputAssetText(workspaceId: string, outputId: string, assetId?: string): Promise<string>
+  readOutputAssetDataUrl(workspaceId: string, outputId: string, assetId?: string): Promise<string>
   onOutputsUpdated(callback: (workspaceId: string) => void): () => void
 
   // Notifications (bell entries from pulses + future system sources)

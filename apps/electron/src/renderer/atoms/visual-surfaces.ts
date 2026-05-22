@@ -1,6 +1,7 @@
 import { atom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
 import { getKeyString, KEYS } from '@/lib/local-storage'
+import type { OutputKind } from '@craft-agent/shared/outputs'
 import type { VisualSurface, VisualSurfaceKind } from '@craft-agent/shared/visual-surfaces'
 
 export type VisualSurfacePresentationMode = 'auto' | 'sidecar' | 'rollup'
@@ -32,8 +33,48 @@ function createDemoSurface({
     kind,
     title: 'Visual Workbench',
     status: 'active',
+    source: 'demo',
     createdAt: now,
     updatedAt: now,
+  }
+}
+
+function outputKindToVisualKind(kind: OutputKind): VisualSurfaceKind {
+  if (kind === 'image' || kind === 'video' || kind === 'audio') return kind
+  if (kind === 'document' || kind === 'report' || kind === 'code' || kind === 'dataset') return 'document'
+  return 'output'
+}
+
+function createOutputSurface({
+  workspaceId,
+  sessionId,
+  outputId,
+  title,
+  kind,
+  status = 'active',
+  createdAt,
+  updatedAt,
+}: {
+  workspaceId: string
+  sessionId: string
+  outputId: string
+  title: string
+  kind: OutputKind
+  status?: VisualSurface['status']
+  createdAt: string
+  updatedAt?: string
+}): VisualSurface {
+  return {
+    id: outputId,
+    workspaceId,
+    sessionId,
+    kind: outputKindToVisualKind(kind),
+    title,
+    status,
+    source: 'output',
+    outputId,
+    createdAt,
+    updatedAt: updatedAt ?? createdAt,
   }
 }
 
@@ -56,6 +97,26 @@ export const openDemoVisualSurfaceAtom = atom(
   (_get, set, input: { workspaceId: string; sessionId: string; kind?: VisualSurfaceKind }) => {
     set(visualSidecarAtom, {
       activeSurface: createDemoSurface(input),
+      isCollapsed: false,
+      focusedAt: Date.now(),
+      resolvedPresentation: null,
+    })
+  },
+)
+
+export const openOutputVisualSurfaceAtom = atom(
+  null,
+  (_get, set, input: {
+    workspaceId: string
+    sessionId: string
+    outputId: string
+    title: string
+    kind: OutputKind
+    createdAt: string
+    updatedAt?: string
+  }) => {
+    set(visualSidecarAtom, {
+      activeSurface: createOutputSurface(input),
       isCollapsed: false,
       focusedAt: Date.now(),
       resolvedPresentation: null,
@@ -106,6 +167,47 @@ export const toggleDemoVisualSurfaceAtom = atom(
     }
 
     set(openDemoVisualSurfaceAtom, input)
+  },
+)
+
+export const toggleVisualSurfaceAtom = atom(
+  null,
+  (get, set, input: {
+    workspaceId: string
+    sessionId: string
+    fallbackKind?: VisualSurfaceKind
+    output?: {
+      id: string
+      title: string
+      kind: OutputKind
+      createdAt: string
+      updatedAt?: string
+    }
+  }) => {
+    const current = get(visualSidecarAtom)
+    if (current.activeSurface?.sessionId === input.sessionId) {
+      set(closeVisualSidecarAtom)
+      return
+    }
+
+    if (input.output) {
+      set(openOutputVisualSurfaceAtom, {
+        workspaceId: input.workspaceId,
+        sessionId: input.sessionId,
+        outputId: input.output.id,
+        title: input.output.title,
+        kind: input.output.kind,
+        createdAt: input.output.createdAt,
+        updatedAt: input.output.updatedAt,
+      })
+      return
+    }
+
+    set(openDemoVisualSurfaceAtom, {
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      kind: input.fallbackKind,
+    })
   },
 )
 

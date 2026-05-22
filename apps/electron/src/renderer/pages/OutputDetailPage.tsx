@@ -2,12 +2,11 @@ import * as React from 'react'
 import { AlertTriangle, ExternalLink, FileText, FolderOpen, Link2, ReceiptText, Route } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { StreamingMarkdown } from '@/components/markdown'
-import { ShikiCodeViewer } from '@/components/shiki/ShikiCodeViewer'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
 import { StatusPill } from '@/components/outputs/OutputsListPanel'
-import { useOutputs, type OutputAssetDTO, type OutputManifestDTO, type OutputPreviewMode } from '@/hooks/useOutputs'
+import { OutputInlinePreview } from '@/components/outputs/OutputInlinePreview'
+import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
 
 interface Props {
   workspaceId: string
@@ -114,7 +113,11 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
 
       <div className="flex max-w-5xl flex-col gap-5">
         <Section title="Preview">
-          <OutputPreview manifest={manifest} primary={primary} />
+          <OutputInlinePreview
+            workspaceId={workspaceId}
+            manifest={manifest}
+            primary={primary}
+          />
         </Section>
 
         <Section title="Summary">
@@ -210,71 +213,6 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
   )
 }
 
-function OutputPreview({ manifest, primary }: { manifest: OutputManifestDTO; primary?: OutputAssetDTO }) {
-  const mode = manifest.preview?.mode ?? inferPreviewMode(primary)
-  const inlineText = manifest.preview?.inlineText ?? null
-  const [content, setContent] = React.useState<string | null>(inlineText)
-  const [dataUrl, setDataUrl] = React.useState<string | null>(null)
-  const [error, setError] = React.useState<string | null>(null)
-  const assetPath = primary ? resolveAssetPath(manifest, primary) : null
-
-  React.useEffect(() => {
-    setContent(inlineText)
-    setDataUrl(null)
-    setError(null)
-  }, [manifest.id, assetPath, inlineText, mode])
-
-  // Image-mode effect: load the asset as a data URL.
-  React.useEffect(() => {
-    if (inlineText || !assetPath || mode !== 'image') return
-    let mounted = true
-    setError(null)
-    setDataUrl(null)
-    window.electronAPI.readFileDataUrl(assetPath).then((url) => {
-      if (mounted) setDataUrl(url)
-    }).catch((err) => {
-      if (mounted) setError(err instanceof Error ? err.message : String(err))
-    })
-    return () => { mounted = false }
-  }, [assetPath, inlineText, mode])
-
-  // Text-based modes (markdown / text / json / receipt): read the file as text.
-  React.useEffect(() => {
-    if (inlineText) {
-      setContent(inlineText)
-      return
-    }
-    if (!assetPath) return
-    if (mode !== 'markdown' && mode !== 'text' && mode !== 'json' && mode !== 'receipt') return
-    let mounted = true
-    setError(null)
-    window.electronAPI.readFile(assetPath).then((text) => {
-      if (mounted) setContent(text)
-    }).catch((err) => {
-      if (mounted) setError(err instanceof Error ? err.message : String(err))
-    })
-    return () => { mounted = false }
-  }, [assetPath, inlineText, mode])
-
-  if (error) return <EmptyLine>Preview unavailable: {error}</EmptyLine>
-  if (mode === 'image' && dataUrl) {
-    return <img src={dataUrl} alt={primary?.label ?? manifest.title} className="max-h-[520px] rounded-[13px] border border-white/[0.08] object-contain" />
-  }
-  if (mode === 'markdown' && content) {
-    return <div className="runneros-card p-4"><StreamingMarkdown content={content} isStreaming={false} mode="minimal" /></div>
-  }
-  if (mode === 'json' && content) {
-    return <ShikiCodeViewer code={formatJson(content)} language="json" className="max-h-[520px] overflow-auto rounded-[13px] border border-white/[0.08]" />
-  }
-  if ((mode === 'text' || mode === 'receipt') && content) {
-    return <pre className="runneros-card max-h-[520px] overflow-auto whitespace-pre-wrap p-3 text-xs text-white/68">{content}</pre>
-  }
-  if (mode === 'external-link' && manifest.links[0]) {
-    return <ExternalButton url={manifest.links[0].url} />
-  }
-  return <EmptyLine>No preview available</EmptyLine>
-}
-
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
@@ -330,37 +268,6 @@ function showAsset(workspaceId: string, manifest: OutputManifestDTO, asset: Outp
 
 function reportActionError(err: unknown) {
   toast.error(err instanceof Error ? err.message : String(err))
-}
-
-/**
- * Resolves a bundle-relative asset path for renderer-side reads (preview only).
- * Returns null when the path is relative and we don't have a manifest base —
- * in that case the bridge methods (`openOutputFile` / `showOutputInFolder`)
- * are the only safe path. Absolute paths are returned as-is.
- */
-function resolveAssetPath(manifest: OutputManifestDTO, asset: OutputAssetDTO): string | null {
-  if (!asset.path) return null
-  if (asset.path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(asset.path)) return asset.path
-  const base = manifest.bundlePath ?? manifest.directoryPath
-  if (!base) return null
-  return `${base.replace(/[\\/]$/, '')}/${asset.path}`
-}
-
-function inferPreviewMode(asset?: OutputAssetDTO): OutputPreviewMode {
-  const mime = asset?.mimeType ?? ''
-  const path = asset?.path ?? ''
-  if (mime.includes('markdown') || path.endsWith('.md')) return 'markdown'
-  if (mime.includes('json') || path.endsWith('.json')) return 'json'
-  if (mime.startsWith('image/')) return 'image'
-  return 'text'
-}
-
-function formatJson(content: string): string {
-  try {
-    return JSON.stringify(JSON.parse(content), null, 2)
-  } catch {
-    return content
-  }
 }
 
 function formatKind(kind: string): string {

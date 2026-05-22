@@ -4,8 +4,9 @@ import { Check, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import type { OutputSummaryDTO } from '@/hooks/useOutputs'
 import {
-  toggleDemoVisualSurfaceAtom,
+  toggleVisualSurfaceAtom,
   visualSidecarAtom,
   visualSurfacePresentationModeAtom,
   type VisualSurfacePresentationMode,
@@ -14,6 +15,7 @@ import {
 interface VisualSurfaceToggleProps {
   workspaceId?: string
   sessionId?: string
+  latestOutput?: OutputSummaryDTO
 }
 
 const MODE_LABELS: Record<VisualSurfacePresentationMode, string> = {
@@ -30,10 +32,10 @@ const MODE_DESCRIPTIONS: Record<VisualSurfacePresentationMode, string> = {
 
 const MODES: VisualSurfacePresentationMode[] = ['auto', 'sidecar', 'rollup']
 
-export function VisualSurfaceToggle({ workspaceId, sessionId }: VisualSurfaceToggleProps) {
+export function VisualSurfaceToggle({ workspaceId, sessionId, latestOutput }: VisualSurfaceToggleProps) {
   const visualSidecar = useAtomValue(visualSidecarAtom)
   const [mode, setMode] = useAtom(visualSurfacePresentationModeAtom)
-  const toggleVisualSurface = useSetAtom(toggleDemoVisualSurfaceAtom)
+  const toggleVisualSurface = useSetAtom(toggleVisualSurfaceAtom)
   const [menuOpen, setMenuOpen] = React.useState(false)
 
   const isOpen = !!sessionId && visualSidecar.activeSurface?.sessionId === sessionId
@@ -42,8 +44,20 @@ export function VisualSurfaceToggle({ workspaceId, sessionId }: VisualSurfaceTog
 
   const handleToggle = React.useCallback(() => {
     if (!workspaceId || !sessionId) return
-    toggleVisualSurface({ workspaceId, sessionId })
-  }, [sessionId, toggleVisualSurface, workspaceId])
+    toggleVisualSurface({
+      workspaceId,
+      sessionId,
+      output: latestOutput
+        ? {
+            id: latestOutput.id,
+            title: latestOutput.title,
+            kind: latestOutput.kind,
+            createdAt: latestOutput.createdAt,
+            updatedAt: latestOutput.updatedAt,
+          }
+        : undefined,
+    })
+  }, [latestOutput, sessionId, toggleVisualSurface, workspaceId])
 
   const handleContextMenu = React.useCallback((event: React.MouseEvent) => {
     event.preventDefault()

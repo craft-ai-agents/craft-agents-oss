@@ -195,6 +195,8 @@ const EXPECTED_CHANNELS: string[] = [
   "outputs:get",
   "outputs:list",
   "outputs:openFile",
+  "outputs:readAssetDataUrl",
+  "outputs:readAssetText",
   "outputs:showInFolder",
   "outputs:updated",
   "permissions:defaultsChanged",

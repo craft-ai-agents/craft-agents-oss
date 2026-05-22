@@ -467,6 +467,8 @@ export const RPC_CHANNELS = {
     DELETE: 'outputs:delete',
     OPEN_FILE: 'outputs:openFile',
     SHOW_IN_FOLDER: 'outputs:showInFolder',
+    READ_ASSET_TEXT: 'outputs:readAssetText',
+    READ_ASSET_DATA_URL: 'outputs:readAssetDataUrl',
     UPDATED: 'outputs:updated',
   },
   resources: {

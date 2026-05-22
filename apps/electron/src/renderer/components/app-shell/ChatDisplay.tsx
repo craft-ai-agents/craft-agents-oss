@@ -79,6 +79,7 @@ import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } fro
 import { resolveBranchNewPanelOption } from "./branching"
 import { handleErrorMessageAction } from "./error-message-actions"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
+import { useOutputs } from "@/hooks/useOutputs"
 import {
   visualSidecarAtom,
 } from "@/atoms/visual-surfaces"
@@ -503,10 +504,16 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
   const visualSidecar = useAtomValue(visualSidecarAtom)
   const currentWorkspaceId = workspaceId ?? session?.workspaceId
+  const { outputs } = useOutputs(currentWorkspaceId)
   const activeSessionVisualSurface =
     visualSidecar.activeSurface?.sessionId === session?.id ? visualSidecar.activeSurface : null
   const showRollupVisualSurface =
     !!activeSessionVisualSurface && visualSidecar.resolvedPresentation === 'rollup'
+  const sessionVisualOutputs = useMemo(
+    () => session?.id ? outputs.filter((output) => output.origin?.sessionId === session.id) : [],
+    [outputs, session?.id],
+  )
+  const latestSessionVisualOutput = sessionVisualOutputs[0]
 
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -1924,6 +1931,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               <VisualSurfaceToggle
                 workspaceId={currentWorkspaceId}
                 sessionId={session.id}
+                latestOutput={latestSessionVisualOutput}
               />
             }
             inputProps={{

@@ -1,10 +1,13 @@
 export type VisualSurfaceKind =
   | 'canvas'
+  | 'document'
   | 'image'
   | 'video'
+  | 'audio'
   | 'chart'
   | 'browser'
   | 'workflow'
+  | 'output'
 
 export type VisualSurfaceStatus = 'active' | 'archived' | 'failed'
 
@@ -15,6 +18,8 @@ export interface VisualSurface {
   kind: VisualSurfaceKind
   title: string
   status: VisualSurfaceStatus
+  source?: 'demo' | 'output'
+  outputId?: string
   createdAt: string
   updatedAt: string
 }
