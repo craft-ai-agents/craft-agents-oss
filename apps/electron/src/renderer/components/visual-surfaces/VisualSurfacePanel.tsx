@@ -67,12 +67,22 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
         presentation === 'inline'
           ? 'w-[clamp(420px,30vw,560px)]'
           : presentation === 'rollup'
-            ? 'relative h-[min(58vh,520px)] w-full px-3 @xs/panel:px-4 pb-2'
+            ? 'relative h-[min(64vh,560px)] w-full'
           : 'absolute bottom-[150px] right-2 top-[56px] h-auto w-[min(430px,calc(100%_-_16px))]',
       )}
     >
-      <div className="runneros-glass-panel-strong flex h-full min-h-0 w-full flex-col overflow-hidden rounded-[12px] border border-border/70 shadow-modal-small">
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/45 px-3">
+      <div
+        className={cn(
+          'flex h-full min-h-0 w-full flex-col overflow-hidden',
+          presentation === 'rollup'
+            ? 'bg-transparent'
+            : 'runneros-glass-panel-strong rounded-[12px] border border-border/70 shadow-modal-small',
+        )}
+      >
+        <header className={cn(
+          'flex h-12 shrink-0 items-center gap-2 px-3',
+          presentation === 'rollup' ? 'border-b border-border/35' : 'border-b border-border/45',
+        )}>
           <div className="flex size-7 items-center justify-center rounded-md bg-foreground/6 text-foreground">
             <Layers className="h-4 w-4" />
           </div>
@@ -107,7 +117,12 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
-          <div className="relative min-h-[220px] flex-1 overflow-hidden rounded-lg border border-border/60 bg-background/65">
+          <div className={cn(
+            'relative min-h-[220px] flex-1 overflow-hidden bg-background/65',
+            presentation === 'rollup'
+              ? 'rounded-md border border-border/45'
+              : 'rounded-lg border border-border/60',
+          )}>
             <div className="absolute inset-0 bg-[linear-gradient(to_right,hsl(var(--foreground)/0.06)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--foreground)/0.06)_1px,transparent_1px)] bg-[size:28px_28px]" />
             <svg className="absolute inset-0 h-full w-full text-foreground/18" aria-hidden="true">
               <line x1="24%" y1="28%" x2="53%" y2="38%" stroke="currentColor" strokeWidth="1.4" />
@@ -132,7 +147,10 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
             </div>
           </div>
 
-          <div className="grid shrink-0 grid-cols-3 gap-2">
+          <div className={cn(
+            'grid shrink-0 grid-cols-3 gap-2',
+            presentation === 'rollup' && 'hidden @md/panel:grid',
+          )}>
             {['Artifacts', 'Canvas', 'Media'].map((label) => (
               <div key={label} className="rounded-md border border-border/55 bg-foreground/[0.025] px-2.5 py-2">
                 <div className="text-[11px] text-muted-foreground">{label}</div>
@@ -141,16 +159,18 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
             ))}
           </div>
 
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="h-8 shrink-0 justify-center"
-            onClick={focusSidecar}
-          >
-            <Maximize2 className="h-3.5 w-3.5" />
-            Focus visual
-          </Button>
+          {presentation === 'rollup' ? null : (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-8 shrink-0 justify-center"
+              onClick={focusSidecar}
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+              Focus visual
+            </Button>
+          )}
         </div>
       </div>
     </aside>
