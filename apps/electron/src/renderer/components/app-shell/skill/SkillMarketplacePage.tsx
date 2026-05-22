@@ -92,7 +92,17 @@ export function SkillMarketplacePage({
   const effectiveCurrentUserId = USE_MOCK_MARKET ? 'MOCK_CURRENT_USER' : currentUserId
 
   const { skills: ctxSkills = [] } = useAppShellContext()
-  const baseLocalSkills = USE_MOCK_MARKET ? (ctxSkills.length > 0 ? ctxSkills : MOCK_LOCAL_SKILLS) : ctxSkills
+
+  // On mount, fetch fresh skills to catch manual filesystem changes not reflected in context
+  const [refreshedSkills, setRefreshedSkills] = React.useState<LoadedSkill[] | null>(null)
+  React.useEffect(() => {
+    window.electronAPI?.getSkills(workspaceId).then((loaded) => {
+      if (loaded) setRefreshedSkills(loaded)
+    }).catch(() => {})
+  }, [workspaceId])
+
+  const effectiveCtxSkills = refreshedSkills ?? ctxSkills
+  const baseLocalSkills = USE_MOCK_MARKET ? (effectiveCtxSkills.length > 0 ? effectiveCtxSkills : MOCK_LOCAL_SKILLS) : effectiveCtxSkills
   const localSkills = React.useMemo(() => {
     const ctxSlugs = new Set(baseLocalSkills.map((s) => s.slug))
     const uniqueUploaded = uploadedSkills.filter((s) => !ctxSlugs.has(s.slug))
