@@ -18,6 +18,7 @@ Define the first shippable version of visual agent work inside RunnerOS: chat st
 - [06 Research Notes](./06-research-notes.md)
 - [07 Build Readiness](./07-build-readiness.md)
 - [08 Phase 2 Execution Spec](./08-phase-2-execution-spec.md)
+- [09 Phase 2B Web Preview Adapter Spec](./09-phase-2b-web-preview-adapter-spec.md)
 
 ## Core Decision
 
