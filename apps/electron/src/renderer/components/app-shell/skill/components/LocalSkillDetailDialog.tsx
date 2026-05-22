@@ -50,7 +50,7 @@ export function LocalSkillMoreMenu({ slug, workspaceId }: { slug: string; worksp
   )
 }
 
-function ExpandableDescription({ text }: { text: string }) {
+export function ExpandableDescription({ text }: { text: string }) {
   const [expanded, setExpanded] = React.useState(false)
   const [overflows, setOverflows] = React.useState(false)
   const ref = React.useRef<HTMLParagraphElement>(null)

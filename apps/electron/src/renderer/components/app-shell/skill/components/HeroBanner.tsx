@@ -20,13 +20,26 @@ export function HeroBanner({
 }) {
   const slides = React.useMemo(() => {
     if (listings.length === 0) return []
+    // Top-20 by installCount as candidate pool
     const pool = [...listings]
-    // Fisher-Yates shuffle, take first HERO_BANNER_COUNT
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]]
+      .sort((a, b) => b.installCount - a.installCount)
+      .slice(0, 20)
+    // Weighted random sampling without replacement: higher installCount = higher probability
+    const result: typeof pool = []
+    const remaining = [...pool]
+    const count = Math.min(HERO_BANNER_COUNT, remaining.length)
+    for (let i = 0; i < count; i++) {
+      const totalWeight = remaining.reduce((sum, s) => sum + s.installCount + 1, 0)
+      let r = Math.random() * totalWeight
+      let picked = remaining.length - 1
+      for (let j = 0; j < remaining.length; j++) {
+        r -= remaining[j].installCount + 1
+        if (r <= 0) { picked = j; break }
+      }
+      result.push(remaining[picked])
+      remaining.splice(picked, 1)
     }
-    return pool.slice(0, HERO_BANNER_COUNT)
+    return result
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listings.length === 0])  // only re-pick when list goes from empty→populated
 

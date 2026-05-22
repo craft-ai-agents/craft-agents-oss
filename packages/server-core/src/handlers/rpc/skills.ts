@@ -388,6 +388,18 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       writeFileSync(destPath, data)
     }
 
+    // Sync display_name with chineseName from marketplace database
+    const { readFileSync: readFS, existsSync: existsFS } = await import('fs')
+    const skillMdPath = join(skillDir, 'SKILL.md')
+    if (existsFS(skillMdPath) && chineseName) {
+      const { default: matter } = await import('gray-matter')
+      const parsed = matter(readFS(skillMdPath, 'utf-8'))
+      if (parsed.data.display_name !== chineseName) {
+        parsed.data.display_name = chineseName
+        writeFileSync(skillMdPath, matter.stringify(parsed.content, parsed.data))
+      }
+    }
+
     invalidateSkillsCache()
     await pushSkillsChanged(workspace.id, workspace.rootPath)
 
@@ -414,7 +426,15 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     )
     if (!skillMdKey) throw new Error('zip 中未找到 SKILL.md 文件')
 
-    return { content: new TextDecoder().decode(unzipped[skillMdKey]) }
+    const raw = new TextDecoder().decode(unzipped[skillMdKey])
+    try {
+      const { default: matter } = await import('gray-matter')
+      const parsed = matter(raw)
+      const extraMetadata = parsed.data.metadata as Record<string, unknown> | undefined
+      return { content: parsed.content, extraMetadata }
+    } catch {
+      return { content: raw }
+    }
   })
 
   /**
