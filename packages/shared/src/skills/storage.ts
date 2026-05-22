@@ -91,12 +91,17 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
         alwaysAllow: parsed.data.alwaysAllow as string[] | undefined,
         icon,
         requiredSources: normalizeRequiredSources(parsed.data.requiredSources),
+        metadata: isRecord(parsed.data.metadata) ? parsed.data.metadata : undefined,
       },
       body: parsed.content,
     };
   } catch {
     return null;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function readMarketplaceOriginSidecar(skillDir: string): LoadedSkill['marketplaceOrigin'] {

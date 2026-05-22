@@ -16,12 +16,17 @@ function parseSkillMd(raw: string): { metadata: SkillMetadata; body: string } | 
         globs: parsed.data.globs as string[] | undefined,
         alwaysAllow: parsed.data.alwaysAllow as string[] | undefined,
         icon: parsed.data.icon as string | undefined,
+        metadata: isRecord(parsed.data.metadata) ? parsed.data.metadata : undefined,
       },
       body: parsed.content,
     }
   } catch {
     return null
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /**
@@ -35,7 +40,22 @@ function parseSkillMd(raw: string): { metadata: SkillMetadata; body: string } | 
  */
 export function extractSkillsFromZip(zipPath: string): DiscoveredSkill[] {
   const buf = readFileSync(zipPath)
-  const unzipped = unzipSync(new Uint8Array(buf))
+  return extractSkillsFromZipBytes(new Uint8Array(buf), {
+    sourcePath: zipPath,
+    rootSlug: deriveSkillSlug(basename(zipPath, extname(zipPath))),
+  })
+}
+
+/**
+ * Extract DiscoveredSkill entries from zip bytes.
+ */
+export function extractSkillsFromZipBytes(
+  zipBytes: Uint8Array,
+  options: { sourcePath?: string; rootSlug?: string } = {},
+): DiscoveredSkill[] {
+  const unzipped = unzipSync(zipBytes)
+  const sourcePath = options.sourcePath ?? '<zip>'
+  const rootSlug = options.rootSlug ?? 'skill'
 
   // Normalise paths and drop macOS metadata entries
   const files = new Map<string, Uint8Array>()
@@ -51,10 +71,10 @@ export function extractSkillsFromZip(zipPath: string): DiscoveredSkill[] {
     const parsed = parseSkillMd(strFromU8(rootData))
     if (parsed) {
       return [{
-        slug: deriveSkillSlug(basename(zipPath, extname(zipPath))),
+        slug: rootSlug,
         metadata: parsed.metadata,
         content: parsed.body,
-        sourcePath: zipPath,
+        sourcePath,
       }]
     }
   }
@@ -78,7 +98,7 @@ export function extractSkillsFromZip(zipPath: string): DiscoveredSkill[] {
       slug: deriveSkillSlug(dirName),
       metadata: parsed.metadata,
       content: parsed.body,
-      sourcePath: `${zipPath}/${dirPath}`,
+      sourcePath: `${sourcePath}/${dirPath}`,
     })
   }
 

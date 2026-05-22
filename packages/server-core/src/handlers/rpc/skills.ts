@@ -3,6 +3,8 @@ import { existsSync, readdirSync, statSync } from 'fs'
 import { RPC_CHANNELS, type SkillFile } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import type { SkillMetadata } from '@craft-agent/shared/skills'
+import { loadWorkspaceSources } from '@craft-agent/shared/sources'
+import { loadWorkspaceConfig, saveWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
@@ -33,6 +35,43 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const { loadAllSkills } = await import('@craft-agent/shared/skills')
     const skills = loadAllSkills(workspaceRoot)
     pushTyped(server, RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
+  }
+
+  async function installSkillMcpSources(workspaceId: string, workspaceRoot: string, metadata: SkillMetadata): Promise<void> {
+    const {
+      createMcpSourcesFromCandidates,
+      defaultMcpPostCreateConnectionTester,
+      stdioCommandFingerprint,
+    } = await import('@craft-agent/shared/sources')
+    const { extractMcpSourceCandidatesFromSkillMetadata } = await import('@craft-agent/shared/skills')
+
+    const candidates = extractMcpSourceCandidatesFromSkillMetadata(metadata, workspaceRoot)
+    if (candidates.length === 0) return
+
+    const confirmedStdioCommands: Record<string, true> = {}
+    const importCandidates = candidates.map((candidate) => {
+      if (candidate.duplicate?.sourceSlug) {
+        addSlugToWorkspaceDefaults(workspaceRoot, candidate.duplicate.sourceSlug)
+        return { ...candidate, action: { type: 'skip' as const } }
+      }
+      if (candidate.input.mcp?.transport === 'stdio' && candidate.input.mcp.command) {
+        const fingerprint = stdioCommandFingerprint(candidate.input.mcp.command, candidate.input.mcp.args)
+        confirmedStdioCommands[fingerprint] = true
+      }
+      return candidate
+    })
+
+    const result = await createMcpSourcesFromCandidates(workspaceRoot, importCandidates, {
+      connectionTester: defaultMcpPostCreateConnectionTester,
+      confirmedStdioCommands: Object.keys(confirmedStdioCommands).length > 0 ? confirmedStdioCommands : undefined,
+    })
+
+    for (const created of result.results) {
+      if (!created.success || 'skipped' in created) continue
+      addSlugToWorkspaceDefaults(workspaceRoot, created.sourceSlug)
+    }
+
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspaceRoot))
   }
 
   // Get all skills for a workspace (and optionally project-level skills from workingDirectory)
@@ -114,6 +153,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       const rootPath = scope === 'global' ? join(GLOBAL_AGENT_SKILLS_DIR, '..') : workspace.rootPath
       const result = createSkill(rootPath, slug, metadata, content)
       if ('created' in result) {
+        await installSkillMcpSources(workspace.id, workspace.rootPath, metadata)
         await pushSkillsChanged(workspace.id, workspace.rootPath)
       }
       return result
@@ -130,6 +170,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       const { forceWriteSkill, GLOBAL_AGENT_SKILLS_DIR } = await import('@craft-agent/shared/skills')
       const rootPath = scope === 'global' ? join(GLOBAL_AGENT_SKILLS_DIR, '..') : workspace.rootPath
       const result = forceWriteSkill(rootPath, slug, metadata, content)
+      await installSkillMcpSources(workspace.id, workspace.rootPath, metadata)
       await pushSkillsChanged(workspace.id, workspace.rootPath)
       return result
     }
@@ -210,9 +251,13 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { installMarketplaceSkillFromIntent } = await import('@craft-agent/shared/skills')
+    const { installMarketplaceSkillFromIntent, loadSkill } = await import('@craft-agent/shared/skills')
     const result = await installMarketplaceSkillFromIntent(workspace.rootPath, input)
     if (result.status === 'installed' || result.status === 'install-complete-failed') {
+      const skill = loadSkill(workspace.rootPath, result.slug)
+      if (skill) {
+        await installSkillMcpSources(workspace.id, workspace.rootPath, skill.metadata)
+      }
       await pushSkillsChanged(workspace.id, workspace.rootPath)
     }
     return result
@@ -222,9 +267,13 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { applyMarketplaceSkillUpdateFromIntent } = await import('@craft-agent/shared/skills')
+    const { applyMarketplaceSkillUpdateFromIntent, loadSkill } = await import('@craft-agent/shared/skills')
     const result = await applyMarketplaceSkillUpdateFromIntent(workspace.rootPath, input)
     if (result.status === 'installed' || result.status === 'install-complete-failed') {
+      const skill = loadSkill(workspace.rootPath, result.slug)
+      if (skill) {
+        await installSkillMcpSources(workspace.id, workspace.rootPath, skill.metadata)
+      }
       await pushSkillsChanged(workspace.id, workspace.rootPath)
     }
     return result
@@ -341,7 +390,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (!workspace) throw new Error('Workspace not found')
 
     const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
-    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL, GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache } = await import('@craft-agent/shared/skills')
+    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL, GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache, extractSkillsFromZipBytes } = await import('@craft-agent/shared/skills')
     const { unzipSync } = await import('fflate')
     const { join, dirname, isAbsolute } = await import('path')
     const { mkdirSync, writeFileSync } = await import('fs')
@@ -388,7 +437,16 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       writeFileSync(destPath, data)
     }
 
+    const discoveredSkills = extractSkillsFromZipBytes(zipBytes, {
+      sourcePath: `${skillName}.zip`,
+      rootSlug: skillName,
+    })
+    const discoveredSkill = discoveredSkills.find((skill) => skill.slug === skillName) ?? discoveredSkills[0]
+
     invalidateSkillsCache()
+    if (discoveredSkill) {
+      await installSkillMcpSources(workspace.id, workspace.rootPath, discoveredSkill.metadata)
+    }
     await pushSkillsChanged(workspace.id, workspace.rootPath)
 
     return { imported: [skillName], count: 1, conflicts: [] }
@@ -432,7 +490,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache } = await import('@craft-agent/shared/skills')
+    const { GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache, extractSkillsFromZipBytes } = await import('@craft-agent/shared/skills')
     const { unzipSync } = await import('fflate')
     const { join, dirname, isAbsolute } = await import('path')
     const { mkdirSync, writeFileSync } = await import('fs')
@@ -474,7 +532,16 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       writeFileSync(destPath, data)
     }
 
+    const discoveredSkills = extractSkillsFromZipBytes(zipBytes, {
+      sourcePath: `${skillName}.zip`,
+      rootSlug: skillName,
+    })
+    const discoveredSkill = discoveredSkills.find((skill) => skill.slug === skillName) ?? discoveredSkills[0]
+
     invalidateSkillsCache()
+    if (discoveredSkill) {
+      await installSkillMcpSources(workspace.id, workspace.rootPath, discoveredSkill.metadata)
+    }
     await pushSkillsChanged(workspace.id, workspace.rootPath)
 
     return { slug: skillName }
@@ -491,4 +558,15 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     await deleteCopawMarketSkill(skillName, COPAW_MARKET_BASE_URL, session.token)
     return { success: true }
   })
+}
+
+function addSlugToWorkspaceDefaults(workspaceRootPath: string, slug: string): void {
+  const wsConfig = loadWorkspaceConfig(workspaceRootPath)
+  if (!wsConfig) return
+  wsConfig.defaults ??= {}
+  wsConfig.defaults.enabledSourceSlugs ??= []
+  if (!wsConfig.defaults.enabledSourceSlugs.includes(slug)) {
+    wsConfig.defaults.enabledSourceSlugs.push(slug)
+    saveWorkspaceConfig(workspaceRootPath, wsConfig)
+  }
 }

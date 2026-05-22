@@ -59,6 +59,11 @@ Marketplace-installed Local Skills can be edited locally; local edits keep marke
 
 Updating a modified marketplace-installed Local Skill warns the user that local changes will be overwritten.
 
+### Skill-provided MCP Source
+An MCP Source declared by a skill's frontmatter metadata. When the skill is added or updated, the declared source becomes available in the workspace without requiring the user to add the same MCP server manually.
+
+A Skill-provided MCP Source is still a normal Source after it is added; duplicate declarations reuse the existing workspace Source.
+
 ### Skill Marketplace
 A product-provided catalog where users can publish, browse, fetch, and install shared skills into local skill storage.
 

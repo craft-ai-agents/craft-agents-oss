@@ -25,8 +25,9 @@ export {
 
 export type { CreateSkillResult } from './storage.ts';
 
-export { extractSkillsFromZip } from './zip-extractor.ts';
+export { extractSkillsFromZip, extractSkillsFromZipBytes } from './zip-extractor.ts';
 export { resolveRemoteSkills, parseRemoteInput } from './remote-resolver.ts';
+export { extractMcpSourceCandidatesFromSkillMetadata } from './mcp-sources.ts';
 export type { RemoteResolveResult } from './remote-resolver.ts';
 export {
   MARKETPLACE_ORIGIN_METADATA_FILE,

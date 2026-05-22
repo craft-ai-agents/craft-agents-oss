@@ -28,6 +28,8 @@ export interface SkillMetadata {
   icon?: string;
   /** Optional source slugs to auto-enable when this skill is invoked */
   requiredSources?: string[];
+  /** Optional vendor/product metadata block from SKILL.md frontmatter */
+  metadata?: Record<string, unknown>;
   /** Optional author display name */
   author?: string;
 }
