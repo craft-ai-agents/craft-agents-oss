@@ -94,7 +94,7 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
       <div className="runneros-page-wrap">
-        <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="runneros-page-title truncate">{manifest.title}</h1>
@@ -106,7 +106,7 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
               <span>{originLabel(manifest)}</span>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {sessionId && (
               <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => focusOutputSurface(workspaceId, manifest, sessionId, openOutputVisualSurface)}>
                 <Eye className="mr-1.5 h-3.5 w-3.5" />

@@ -393,6 +393,10 @@ describe('OutputService visual boards', () => {
       action: 'add_image',
       outputId: image.outputId!,
     }, 'agent');
+    const duplicateWrongKind = service.applyVisualSurfaceEvent('ws', 'session-1', {
+      action: 'add_video',
+      outputId: image.outputId!,
+    }, 'agent');
 
     expect(imageResult.ok).toBe(true);
     expect(imageResult.receipt).toContain('Added image');
@@ -405,5 +409,7 @@ describe('OutputService visual boards', () => {
     expect(duplicateImage.ok).toBe(true);
     expect(duplicateImage.receipt).toContain('already on Canvas');
     expect(duplicateImage.board?.cards.filter((card) => card.type === 'output')).toHaveLength(2);
+    expect(duplicateWrongKind.ok).toBe(false);
+    expect(duplicateWrongKind.error).toContain('requires a video output');
   });
 });

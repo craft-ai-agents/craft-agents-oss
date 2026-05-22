@@ -244,13 +244,13 @@ export class OutputService {
     if (event.action === 'pin_output' || event.action === 'add_image' || event.action === 'add_video') {
       if (!('outputId' in event.payload)) throw new Error(`Invalid ${event.action} event payload.`);
       const { outputId } = event.payload;
+      const output = this.findPinnableSessionOutput(workspaceId, sessionId, outputId);
+      if (!output) throw new Error(`Output is not pinnable in this session: ${outputId}`);
+      this.assertVisualSurfaceOutputKind(event.action, output);
       if (board.cards.some((card) => card.type === 'output' && card.outputId === outputId)) {
         return { board: { ...board, updatedAt: now }, applied: false };
       }
       if (board.cards.length >= VISUAL_BOARD_MAX_CARDS) throw new Error(`Visual board already has the maximum ${VISUAL_BOARD_MAX_CARDS} cards.`);
-      const output = this.findPinnableSessionOutput(workspaceId, sessionId, outputId);
-      if (!output) throw new Error(`Output is not pinnable in this session: ${outputId}`);
-      this.assertVisualSurfaceOutputKind(event.action, output);
       return {
         board: {
           ...board,

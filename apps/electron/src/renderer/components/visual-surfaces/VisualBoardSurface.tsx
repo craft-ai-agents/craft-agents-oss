@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, FilePlus2, FileText, Plus, Save, Trash2 } from 'lucide-react'
+import { AlertTriangle, FilePlus2, FileText, Play, Plus, Save, Trash2 } from 'lucide-react'
 import {
   VISUAL_BOARD_MAX_BODY_LENGTH,
   VISUAL_BOARD_MAX_TITLE_LENGTH,
@@ -286,8 +286,34 @@ function OutputCardMediaPreview({
   const assetId = output.preview?.assetId ?? output.primaryAssetId
   const mode = output.preview?.mode ?? (output.kind === 'video' ? 'video' : output.kind === 'image' ? 'image' : null)
   const canPreview = !!assetId && (mode === 'image' || mode === 'video')
+  const shouldAutoLoad = mode === 'image'
+  const containerRef = React.useRef<HTMLDivElement | null>(null)
+  const [requested, setRequested] = React.useState(false)
   const [dataUrl, setDataUrl] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    setRequested(false)
+    setDataUrl(null)
+    setError(null)
+  }, [assetId, mode])
+
+  React.useEffect(() => {
+    if (!canPreview || !shouldAutoLoad) return
+    const node = containerRef.current
+    if (!node || typeof IntersectionObserver !== 'function') {
+      setRequested(true)
+      return
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setRequested(true)
+        observer.disconnect()
+      }
+    }, { rootMargin: '120px' })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [canPreview, shouldAutoLoad])
 
   React.useEffect(() => {
     if (!canPreview) {
@@ -295,6 +321,7 @@ function OutputCardMediaPreview({
       setError(null)
       return
     }
+    if (!requested) return
     const readOutputAssetDataUrl = (window.electronAPI as typeof window.electronAPI & {
       readOutputAssetDataUrl?: (workspaceId: string, outputId: string, assetId?: string) => Promise<string>
     }).readOutputAssetDataUrl
@@ -311,20 +338,35 @@ function OutputCardMediaPreview({
       if (mounted) setError(err instanceof Error ? err.message : String(err))
     })
     return () => { mounted = false }
-  }, [assetId, canPreview, output.id, workspaceId])
+  }, [assetId, canPreview, output.id, requested, workspaceId])
 
   if (!canPreview) return null
 
+  if (!requested) {
+    return (
+      <div ref={containerRef} className="mb-3 flex aspect-video items-center justify-center rounded-md border border-border/45 bg-foreground/[0.025] px-3 text-xs text-muted-foreground">
+        {mode === 'video' ? (
+          <Button type="button" size="sm" variant="secondary" className="h-7" onClick={() => setRequested(true)}>
+            <Play className="mr-1.5 h-3.5 w-3.5" />
+            Load video
+          </Button>
+        ) : (
+          'Loading preview...'
+        )}
+      </div>
+    )
+  }
+
   if (error) {
     return (
-      <div className="mb-3 flex aspect-video items-center justify-center gap-2 rounded-md border border-border/45 bg-foreground/[0.025] px-2 text-xs text-muted-foreground">
+      <div ref={containerRef} className="mb-3 flex aspect-video items-center justify-center gap-2 rounded-md border border-border/45 bg-foreground/[0.025] px-2 text-xs text-muted-foreground">
         <AlertTriangle className="h-3.5 w-3.5" />
         Preview unavailable
       </div>
     )
   }
 
-  if (!dataUrl) return <div className="mb-3 aspect-video animate-pulse rounded-md bg-foreground/[0.045]" />
+  if (!dataUrl) return <div ref={containerRef} className="mb-3 aspect-video animate-pulse rounded-md bg-foreground/[0.045]" />
 
   if (mode === 'video') {
     return <video src={dataUrl} controls className="mb-3 aspect-video w-full rounded-md bg-black object-contain" />
