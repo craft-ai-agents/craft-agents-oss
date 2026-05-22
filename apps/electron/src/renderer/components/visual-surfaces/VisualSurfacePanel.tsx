@@ -154,7 +154,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
             />
           ) : null}
           <div className={cn(
-            'relative min-h-[220px] flex-1 overflow-hidden bg-background/65',
+            'relative min-h-[220px] flex-1 overflow-hidden bg-[#050505]',
             presentation === 'rollup'
               ? 'min-h-0 rounded-t-none rounded-b-md border-x border-b border-border/45'
               : 'rounded-lg border border-border/60',

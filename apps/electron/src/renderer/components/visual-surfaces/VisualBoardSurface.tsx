@@ -141,8 +141,8 @@ export function VisualBoardSurface({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background/45">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/45 px-3 py-2">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#050505]">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 bg-[#050505] px-3 py-2">
         <Button type="button" size="sm" variant="secondary" className="h-8" onClick={addNote}>
           <Plus className="h-3.5 w-3.5" />
           Note
@@ -169,11 +169,9 @@ export function VisualBoardSurface({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-3">
+      <div className="min-h-0 flex-1 overflow-auto bg-[#050505] p-3">
         {draft.cards.length === 0 ? (
-          <div className="flex h-full min-h-[220px] items-center justify-center rounded-md border border-dashed border-border/55 bg-foreground/[0.025] p-6 text-center text-sm text-muted-foreground">
-            Add a note or pin an output to build this session board.
-          </div>
+          <div className="h-full min-h-[220px] rounded-md bg-[#050505]" />
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-2.5">
             {draft.cards.map((card) => (
