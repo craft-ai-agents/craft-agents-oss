@@ -59,12 +59,12 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
       data-visual-sidecar="open"
       data-visual-sidecar-mode={presentation}
       className={cn(
-        'z-[7] flex h-full min-h-0 shrink-0 animate-in fade-in-0 duration-150',
+        'z-[7] flex min-h-0 animate-in fade-in-0 duration-150',
         presentation === 'inline'
-          ? 'w-[clamp(420px,30vw,560px)]'
+          ? 'h-full w-[clamp(420px,30vw,560px)] shrink-0'
           : presentation === 'rollup'
-            ? 'relative h-[min(64vh,560px)] w-full'
-          : 'absolute bottom-[150px] right-2 top-[56px] h-auto w-[min(430px,calc(100%_-_16px))]',
+            ? 'relative max-h-[480px] min-h-[180px] w-full basis-[min(48vh,480px)] shrink overflow-hidden'
+          : 'absolute bottom-[150px] right-2 top-[56px] h-auto w-[min(430px,calc(100%_-_16px))] shrink-0',
       )}
     >
       <div
