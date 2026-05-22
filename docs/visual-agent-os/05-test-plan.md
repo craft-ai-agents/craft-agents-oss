@@ -73,6 +73,10 @@ Target:
 - visual event bridge
 - chat receipt rendering
 
+Status: the current Phase 3 implementation is specified in
+`docs/visual-agent-os/11-phase-3-agent-surface-events-spec.md`. It uses the
+single `visual_surface` tool with `open_board`, `add_note`, and `pin_output`.
+
 Cases:
 
 - applying `visual_surface.open` creates surface metadata

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -237,6 +237,7 @@ describe('OutputService visual boards', () => {
       outputId: output.outputId!,
     }, 'agent');
     expect(duplicate.ok).toBe(true);
+    expect(duplicate.receipt).toContain('already pinned');
     expect(duplicate.board?.cards.filter((card) => card.type === 'output')).toHaveLength(1);
 
     const boardOutputId = pinned.outputId!;
@@ -276,6 +277,39 @@ describe('OutputService visual boards', () => {
       title: 'Recovered',
       body: 'From event history.',
     });
+  });
+
+  it('rolls back board changes when appending event history fails', () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-visual-append-fail-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+
+    const first = service.applyVisualSurfaceEvent('ws', 'session-1', {
+      action: 'add_note',
+      title: 'Kept',
+      body: 'This survives.',
+    }, 'agent');
+    expect(first.ok).toBe(true);
+    const boardOutputId = first.outputId!;
+    const historyPath = join(root, 'outputs', boardOutputId, VISUAL_SURFACE_EVENTS_ASSET_PATH);
+    chmodSync(historyPath, 0o444);
+
+    try {
+      const failed = service.applyVisualSurfaceEvent('ws', 'session-1', {
+        action: 'add_note',
+        title: 'Rolled back',
+        body: 'This should not persist.',
+      }, 'agent');
+      expect(failed.ok).toBe(false);
+
+      const loaded = service.getOrCreateVisualBoard('ws', 'session-1');
+      expect(loaded.board.cards).toHaveLength(1);
+      expect(loaded.board.cards[0]).toMatchObject({ type: 'note', title: 'Kept' });
+    } finally {
+      chmodSync(historyPath, 0o644);
+    }
   });
 
   it('rejects visual surface pins outside the current session', async () => {

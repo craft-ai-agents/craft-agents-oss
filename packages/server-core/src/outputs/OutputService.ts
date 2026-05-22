@@ -142,18 +142,24 @@ export class OutputService {
         createdAt: now,
       };
 
-      const board = this.applyVisualEventToBoard(workspaceId, sessionId, current.board, event, now);
+      const applied = this.applyVisualEventToBoard(workspaceId, sessionId, current.board, event, now);
+      const board = applied.board;
       assertVisualBoardSnapshot(board, { workspaceId, sessionId });
       this.assertVisualBoardOutputCards(workspaceId, sessionId, board);
       const saved = this.writeVisualBoardToOutput(workspaceId, current.output, board);
-      this.appendVisualSurfaceEvent(workspaceId, saved.output, event);
+      try {
+        this.appendVisualSurfaceEvent(workspaceId, saved.output, event);
+      } catch (err) {
+        this.writeVisualBoardToOutput(workspaceId, saved.output, current.board);
+        throw err;
+      }
       this.emitUpdated(workspaceId);
       return {
         ok: true,
         eventId: event.id,
         outputId: saved.output.id,
         board: saved.board,
-        receipt: this.visualEventReceipt(event, saved.board),
+        receipt: this.visualEventReceipt(event, saved.board, applied.applied),
       };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -204,29 +210,34 @@ export class OutputService {
     board: VisualBoardSnapshot,
     event: VisualSurfaceEventRecord,
     now: string,
-  ): VisualBoardSnapshot {
+  ): { board: VisualBoardSnapshot; applied: boolean } {
     if (event.action === 'open_board') {
       const title = event.payload.action === 'open_board' ? event.payload.title : undefined;
-      return title ? { ...board, title, updatedAt: now } : board;
+      return title
+        ? { board: { ...board, title, updatedAt: now }, applied: true }
+        : { board, applied: false };
     }
 
     if (event.action === 'add_note') {
       if (event.payload.action !== 'add_note') throw new Error('Invalid add_note event payload.');
       if (board.cards.length >= VISUAL_BOARD_MAX_CARDS) throw new Error(`Visual board already has the maximum ${VISUAL_BOARD_MAX_CARDS} cards.`);
       return {
-        ...board,
-        cards: [
-          {
-            id: `note-${event.id}`,
-            type: 'note',
-            title: event.payload.title,
-            body: event.payload.body ?? '',
-            createdAt: now,
-            updatedAt: now,
-          },
-          ...board.cards,
-        ],
-        updatedAt: now,
+        board: {
+          ...board,
+          cards: [
+            {
+              id: `note-${event.id}`,
+              type: 'note',
+              title: event.payload.title,
+              body: event.payload.body ?? '',
+              createdAt: now,
+              updatedAt: now,
+            },
+            ...board.cards,
+          ],
+          updatedAt: now,
+        },
+        applied: true,
       };
     }
 
@@ -234,27 +245,30 @@ export class OutputService {
       if (event.payload.action !== 'pin_output') throw new Error('Invalid pin_output event payload.');
       const { outputId } = event.payload;
       if (board.cards.some((card) => card.type === 'output' && card.outputId === outputId)) {
-        return { ...board, updatedAt: now };
+        return { board: { ...board, updatedAt: now }, applied: false };
       }
       if (board.cards.length >= VISUAL_BOARD_MAX_CARDS) throw new Error(`Visual board already has the maximum ${VISUAL_BOARD_MAX_CARDS} cards.`);
       const output = this.findPinnableSessionOutput(workspaceId, sessionId, outputId);
       if (!output) throw new Error(`Output is not pinnable in this session: ${outputId}`);
       return {
-        ...board,
-        cards: [
-          {
-            id: `output-${event.id}`,
-            type: 'output',
-            outputId: output.id,
-            title: output.title,
-            kind: output.kind,
-            summary: output.summary,
-            createdAt: now,
-            updatedAt: now,
-          },
-          ...board.cards,
-        ],
-        updatedAt: now,
+        board: {
+          ...board,
+          cards: [
+            {
+              id: `output-${event.id}`,
+              type: 'output',
+              outputId: output.id,
+              title: output.title,
+              kind: output.kind,
+              summary: output.summary,
+              createdAt: now,
+              updatedAt: now,
+            },
+            ...board.cards,
+          ],
+          updatedAt: now,
+        },
+        applied: true,
       };
     }
 
@@ -288,7 +302,7 @@ export class OutputService {
     let applied = 0;
     for (const event of events) {
       try {
-        board = this.applyVisualEventToBoard(workspaceId, sessionId, board, event, event.createdAt);
+        board = this.applyVisualEventToBoard(workspaceId, sessionId, board, event, event.createdAt).board;
         applied += 1;
       } catch {
         // Keep replay best-effort: one stale pin should not erase valid notes.
@@ -340,12 +354,12 @@ export class OutputService {
     };
   }
 
-  private visualEventReceipt(event: VisualSurfaceEventRecord, board: VisualBoardSnapshot): string {
+  private visualEventReceipt(event: VisualSurfaceEventRecord, board: VisualBoardSnapshot, applied: boolean): string {
     if (event.action === 'open_board') return `Opened Canvas board with ${board.cards.length} card${board.cards.length === 1 ? '' : 's'}.`;
     if (event.action === 'add_note' && event.payload.action === 'add_note') return `Added note "${event.payload.title}" to Canvas.`;
     if (event.action === 'pin_output' && event.payload.action === 'pin_output') {
       const { outputId } = event.payload;
-      return board.cards.some((card) => card.type === 'output' && card.outputId === outputId)
+      return applied
         ? `Pinned output ${outputId} to Canvas.`
         : `Output ${outputId} was already pinned to Canvas.`;
     }
