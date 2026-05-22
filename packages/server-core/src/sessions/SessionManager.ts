@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { ENV_CONNECTION_SLUG, ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_HOST_ENV_VAR, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
+import { ENV_CONNECTION_SLUG, ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_BASE_HOST_ENV_VAR, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -135,7 +135,7 @@ export async function buildSsoSubprocessEnvOverrides(
   if (connectionSlug === ENV_CONNECTION_SLUG) {
     baseUrl = (options.env?.LLM_BASE_URL ?? process.env.LLM_BASE_URL)?.trim()
   } else if (connectionSlug === OPENLLM_ENV_CONNECTION_SLUG) {
-    baseUrl = process.env[OPENLLM_HOST_ENV_VAR]?.trim()
+    baseUrl = process.env[OPENLLM_BASE_HOST_ENV_VAR]?.trim()
   } else {
     return {}
   }
@@ -575,7 +575,7 @@ async function getBrowserToolIconDataUrl(): Promise<string | undefined> {
   try {
     const iconCandidates = [
       join(getToolIconsDir(), BROWSER_TOOL_ICON_FILENAME),
-      // Dev fallback (before sync to ~/.craft-agent/tool-icons)
+      // Dev fallback (before sync to ~/.mdp-agent/tool-icons)
       join(process.cwd(), 'apps', 'electron', 'resources', 'tool-icons', BROWSER_TOOL_ICON_FILENAME),
       // Packaged fallback (app resources)
       join(process.resourcesPath, 'tool-icons', BROWSER_TOOL_ICON_FILENAME),
@@ -709,7 +709,7 @@ async function resolveToolDisplayMeta(
 
   // CLI tool icon resolution for Bash commands
   // Parses the command string to detect known tools (git, npm, docker, etc.)
-  // and resolves their brand icon from ~/.craft-agent/tool-icons/
+  // and resolves their brand icon from ~/.mdp-agent/tool-icons/
   if (toolName === 'Bash' && toolInput?.command) {
     try {
       const toolIconsDir = getToolIconsDir()

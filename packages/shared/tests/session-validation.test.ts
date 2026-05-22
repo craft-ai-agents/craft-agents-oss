@@ -163,7 +163,7 @@ describe('isValidSessionId', () => {
 // ============================================================
 
 describe('getSessionPath - defense in depth', () => {
-  const workspaceRoot = '/Users/test/.craft-agent/workspaces/test-workspace';
+  const workspaceRoot = '/Users/test/.mdp-agent/workspaces/test-workspace';
   const expectedSessionsDir = `${workspaceRoot}/sessions`;
 
   it('returns correct path for valid session IDs', () => {
@@ -204,7 +204,7 @@ describe('getSessionPath - defense in depth', () => {
 });
 
 describe('getSessionAttachmentsPath - defense in depth', () => {
-  const workspaceRoot = '/Users/test/.craft-agent/workspaces/test-workspace';
+  const workspaceRoot = '/Users/test/.mdp-agent/workspaces/test-workspace';
   const expectedSessionsDir = `${workspaceRoot}/sessions`;
 
   it('returns correct path for valid session IDs', () => {
@@ -234,7 +234,7 @@ describe('getSessionAttachmentsPath - defense in depth', () => {
 });
 
 describe('getSessionPlansPath - defense in depth', () => {
-  const workspaceRoot = '/Users/test/.craft-agent/workspaces/test-workspace';
+  const workspaceRoot = '/Users/test/.mdp-agent/workspaces/test-workspace';
   const expectedSessionsDir = `${workspaceRoot}/sessions`;
 
   it('sanitizes path traversal attempts', () => {
@@ -245,7 +245,7 @@ describe('getSessionPlansPath - defense in depth', () => {
 });
 
 describe('getSessionDownloadsPath - defense in depth', () => {
-  const workspaceRoot = '/Users/test/.craft-agent/workspaces/test-workspace';
+  const workspaceRoot = '/Users/test/.mdp-agent/workspaces/test-workspace';
   const expectedSessionsDir = `${workspaceRoot}/sessions`;
 
   it('sanitizes path traversal attempts', () => {
@@ -260,7 +260,7 @@ describe('getSessionDownloadsPath - defense in depth', () => {
 // ============================================================
 
 describe('path normalization safety', () => {
-  const workspaceRoot = '/Users/test/.craft-agent/workspaces/test-workspace';
+  const workspaceRoot = '/Users/test/.mdp-agent/workspaces/test-workspace';
 
   it('normalized path still stays within workspace', () => {
     const result = getSessionPath(workspaceRoot, '../../../tmp');

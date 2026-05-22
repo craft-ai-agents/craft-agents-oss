@@ -5,7 +5,7 @@ import { getHeaderMetadataSignature, mergeHeaderWithExternalMetadata } from '../
 function makeHeader(overrides: Partial<SessionHeader> = {}): SessionHeader {
   return {
     id: 's1',
-    workspaceRootPath: '~/.craft-agent/workspaces/ws',
+    workspaceRootPath: '~/.mdp-agent/workspaces/ws',
     createdAt: 1,
     lastUsedAt: 2,
     messageCount: 0,

@@ -14,10 +14,11 @@ import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
-import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2, MessageSquareMore, Zap, Clock, Check } from 'lucide-react'
-import type { CredentialHealthStatus, CredentialHealthIssue } from '../../../shared/types'
+import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2, MessageSquareMore, Zap, Clock, Check, FolderOpen, RefreshCw } from 'lucide-react'
+import type { CredentialHealthStatus, CredentialHealthIssue, GitBashStatus } from '../../../shared/types'
 import { Spinner, FullscreenOverlayBase } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
@@ -301,7 +302,11 @@ export function ConnectionRow({ connection, isLastConnection, onRenameClick, onD
         <div className="flex items-center gap-1">
           <ConnectionIcon connection={connection} size={14} />
           <span>{connection.name}</span>
-          {connection.isDefault && (
+          {isEnvironmentConnection ? (
+            <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
+              {t("common.builtIn")}
+            </span>
+          ) : connection.isDefault && (
             <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
               {t("common.default")}
             </span>
@@ -648,6 +653,13 @@ export default function AiSettingsPage() {
   const [rtkRechecking, setRtkRechecking] = useState(false)
   const [rtkGain, setRtkGain] = useState<{ totalCommands: number; totalInput: number; totalOutput: number; totalSaved: number; avgSavingsPct: number; totalTimeMs: number; avgTimeMs: number } | null>(null)
 
+  // Git Bash (Windows only)
+  const [gitBashStatus, setGitBashStatus] = useState<GitBashStatus | null>(null)
+  const [gitBashRechecking, setGitBashRechecking] = useState(false)
+  const [gitBashCustomPath, setGitBashCustomPath] = useState('')
+  const [gitBashShowInput, setGitBashShowInput] = useState(false)
+  const [gitBashError, setGitBashError] = useState<string | undefined>()
+
   // Validation state per connection
   const [validationStates, setValidationStates] = useState<Record<string, {
     state: ValidationState
@@ -684,6 +696,9 @@ export default function AiSettingsPage() {
 
         const status = await window.electronAPI.getRtkStatus()
         setRtkStatus(status)
+
+        const gbStatus = await window.electronAPI.checkGitBash()
+        setGitBashStatus(gbStatus)
 
         // Check credential health for potential issues (corruption, machine migration)
         const health = await window.electronAPI.getCredentialHealth()
@@ -997,6 +1012,42 @@ export default function AiSettingsPage() {
     setRtkGain(gain ?? null)
   }, [])
 
+  // Git Bash handlers (Windows only)
+  const handleRecheckGitBash = useCallback(async () => {
+    setGitBashRechecking(true)
+    try {
+      const status = await window.electronAPI.checkGitBash()
+      setGitBashStatus(status)
+      if (status.found) {
+        setGitBashShowInput(false)
+        setGitBashError(undefined)
+      }
+    } finally {
+      setGitBashRechecking(false)
+    }
+  }, [])
+
+  const handleBrowseGitBash = useCallback(async () => {
+    const path = await window.electronAPI.browseForGitBash()
+    if (path) {
+      setGitBashCustomPath(path)
+      setGitBashShowInput(true)
+    }
+  }, [])
+
+  const handleUseGitBashPath = useCallback(async () => {
+    if (!gitBashCustomPath.trim()) return
+    const result = await window.electronAPI.setGitBashPath(gitBashCustomPath.trim())
+    if (result.success) {
+      const status = await window.electronAPI.checkGitBash()
+      setGitBashStatus(status)
+      setGitBashShowInput(false)
+      setGitBashError(undefined)
+    } else {
+      setGitBashError(result.error || 'Invalid path')
+    }
+  }, [gitBashCustomPath])
+
   // Refresh gain stats whenever rtk transitions to installed-and-enabled
   useEffect(() => {
     if (rtkStatus?.installed && rtkEnabled) {
@@ -1196,6 +1247,60 @@ export default function AiSettingsPage() {
                 </SettingsCard>
               </SettingsSection>
 
+              {/* Git Bash */}
+              {gitBashStatus !== null && (
+                <SettingsSection title={t("settings.ai.gitBash.title")} description={t("settings.ai.gitBash.description")}>
+                  <SettingsCard>
+                    <SettingsRow
+                      label={t("settings.ai.gitBash.path")}
+                      description={gitBashStatus.path ?? (gitBashStatus.found ? t("settings.ai.gitBash.auto") : t("settings.ai.gitBash.notFound"))}
+                    >
+                      <Button
+                        size="sm"
+                        onClick={handleRecheckGitBash}
+                        disabled={gitBashRechecking}
+                        className="bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
+                      >
+                        <RefreshCw className={`mr-1.5 size-3.5 ${gitBashRechecking ? 'animate-spin' : ''}`} />
+                        {gitBashRechecking ? t("common.checking") : t("settings.ai.gitBash.recheck")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleBrowseGitBash}
+                        className="bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
+                      >
+                        <FolderOpen className="mr-1.5 size-3.5" />
+                        {t("settings.ai.gitBash.browse")}
+                      </Button>
+                    </SettingsRow>
+                    {gitBashShowInput && (
+                      <div className="px-4 pb-4 space-y-2">
+                        <Input
+                          value={gitBashCustomPath}
+                          onChange={(e) => {
+                            setGitBashCustomPath(e.target.value)
+                            setGitBashError(undefined)
+                          }}
+                          placeholder={t("onboarding.gitBash.pathPlaceholder")}
+                          className="text-xs"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleUseGitBashPath}
+                          disabled={!gitBashCustomPath.trim()}
+                          className="w-full bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
+                        >
+                          {t("settings.ai.gitBash.useThisPath")}
+                        </Button>
+                        {gitBashError && (
+                          <p className="text-xs text-red-500">{gitBashError}</p>
+                        )}
+                      </div>
+                    )}
+                  </SettingsCard>
+                </SettingsSection>
+              )}
+
               {/* API Setup Fullscreen Overlay */}
               <FullscreenOverlayBase
                 isOpen={showApiSetup}
@@ -1208,6 +1313,10 @@ export default function AiSettingsPage() {
                   onBack={handleCloseApiSetup}
                   onSubmitCredential={apiSetupOnboarding.handleSubmitCredential}
                   onFinish={handleApiSetupFinish}
+                  onBrowseGitBash={apiSetupOnboarding.handleBrowseGitBash}
+                  onUseGitBashPath={apiSetupOnboarding.handleUseGitBashPath}
+                  onRecheckGitBash={apiSetupOnboarding.handleRecheckGitBash}
+                  onClearError={apiSetupOnboarding.handleClearError}
                   editInitialValues={editInitialValues}
                   className="h-full"
                 />

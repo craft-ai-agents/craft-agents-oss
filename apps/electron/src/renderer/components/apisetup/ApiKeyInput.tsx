@@ -93,39 +93,10 @@ interface Preset {
   placeholder?: string
 }
 
-// Anthropic provider presets - for Claude Code backend
-// Also used by Pi API key flow (same providers, routed via Pi SDK)
 const ANTHROPIC_PRESETS: Preset[] = [
-  { key: 'anthropic', label: 'Anthropic', url: 'https://api.anthropic.com', placeholder: 'sk-ant-...' },
-  { key: 'openai', label: 'OpenAI', url: 'https://api.openai.com/v1', placeholder: 'sk-...' },
-  { key: 'openai-eu', label: 'OpenAI EU', url: 'https://eu.api.openai.com/v1', placeholder: 'sk-...' },
-  { key: 'openai-us', label: 'OpenAI US', url: 'https://us.api.openai.com/v1', placeholder: 'sk-...' },
-  { key: 'google', label: 'Google AI Studio', url: 'https://generativelanguage.googleapis.com/v1beta', placeholder: 'AIza...' },
-  { key: 'openrouter', label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', placeholder: 'sk-or-...' },
-  { key: 'azure-openai-responses', label: 'Azure OpenAI', url: '', placeholder: 'Paste your key here...' },
-  { key: 'amazon-bedrock', label: 'Amazon Bedrock', url: 'https://bedrock-runtime.us-east-1.amazonaws.com', placeholder: 'AKIA...' },
-  { key: 'groq', label: 'Groq', url: 'https://api.groq.com/openai/v1', placeholder: 'gsk_...' },
-  { key: 'mistral', label: 'Mistral', url: 'https://api.mistral.ai/v1', placeholder: 'Paste your key here...' },
-  { key: 'deepseek', label: 'DeepSeek', url: 'https://api.deepseek.com', placeholder: 'sk-...' },
-  { key: 'xai', label: 'xAI (Grok)', url: 'https://api.x.ai/v1', placeholder: 'xai-...' },
-  { key: 'cerebras', label: 'Cerebras', url: 'https://api.cerebras.ai/v1', placeholder: 'csk-...' },
-  { key: 'zai', label: 'z.ai (GLM)', url: 'https://api.z.ai/api/coding/paas/v4', placeholder: 'Paste your key here...' },
-  { key: 'huggingface', label: 'Hugging Face', url: 'https://router.huggingface.co/v1', placeholder: 'hf_...' },
-  { key: 'minimax-global', label: 'Minimax Global', url: 'https://api.minimax.io/anthropic', placeholder: 'Paste your key here...' },
-  { key: 'minimax-cn', label: 'Minimax CN', url: 'https://api.minimaxi.com/anthropic', placeholder: 'Paste your key here...' },
-  { key: 'kimi-coding', label: 'Kimi (Coding)', url: 'https://api.kimi.com/coding', placeholder: 'sk-kimi-...' },
-  { key: 'vercel-ai-gateway', label: 'Vercel AI Gateway', url: 'https://ai-gateway.vercel.sh', placeholder: 'Paste your key here...' },
-  { key: 'manifest', label: 'Manifest', url: 'https://app.manifest.build/v1', placeholder: 'mnfst_...' },
   { key: 'openllm', label: 'OpenLLM', url: '', placeholder: 'Paste your key here...' },
   { key: 'custom', label: 'Custom', url: '', placeholder: 'Paste your key here...' },
 ]
-
-/**
- * Presets without a Pi SDK provider entry that nonetheless expose a known
- * OpenAI-compatible protocol. They behave like 'custom' on submit (customEndpoint
- * gets pinned to openai-completions) but stay branded in the dropdown.
- */
-const OPENAI_COMPAT_CUSTOM_URL_PRESETS: ReadonlySet<string> = new Set(['manifest'])
 
 // OpenAI provider presets - for Codex backend
 // Only direct OpenAI is supported; 3PP providers (OpenRouter, Vercel, Ollama) should be
@@ -150,13 +121,7 @@ const OPENLLM_PRESETS: Preset[] = [
   { key: 'openllm', label: 'OpenLLM', url: '', placeholder: 'Paste your key here...' },
 ]
 
-/** Presets that require the Pi SDK for authentication — hidden in Anthropic API Key mode */
-const PI_ONLY_PRESET_KEYS: ReadonlySet<string> = new Set(['minimax-global', 'minimax-cn'])
-
 const COMPAT_ANTHROPIC_DEFAULTS = 'claude-opus-4-7, claude-sonnet-4-6, claude-haiku-4-5'
-const COMPAT_OPENAI_DEFAULTS = 'openai/gpt-5.2-codex, openai/gpt-5.1-codex-mini'
-const COMPAT_MINIMAX_DEFAULTS = 'MiniMax-M2.5, MiniMax-M2.5-highspeed'
-const COMPAT_KIMI_DEFAULTS = 'k2p5, kimi-k2-thinking'
 
 function getPresetsForProvider(providerType: 'anthropic' | 'openai' | 'pi' | 'google' | 'pi_api_key' | 'openllm'): Preset[] {
   if (providerType === 'openllm') return OPENLLM_PRESETS
@@ -164,8 +129,7 @@ function getPresetsForProvider(providerType: 'anthropic' | 'openai' | 'pi' | 'go
   if (providerType === 'google') return GOOGLE_PRESETS
   if (providerType === 'pi') return PI_PRESETS
   if (providerType === 'openai') return OPENAI_PRESETS
-  // Anthropic mode: exclude presets that only work via Pi SDK
-  return ANTHROPIC_PRESETS.filter(p => !PI_ONLY_PRESET_KEYS.has(p.key))
+  return ANTHROPIC_PRESETS
 }
 
 function getPresetForUrl(url: string, presets: Preset[]): PresetKey {
@@ -197,9 +161,11 @@ export function ApiKeyInput({
   const presets = getPresetsForProvider(providerType)
   const defaultPreset = presets[0]
 
-  // Compute initial preset: explicit (Pi piAuthProvider), derived from URL, or default
-  const initialPreset = initialValues?.activePreset
+  // Compute initial preset: explicit (Pi piAuthProvider), derived from URL, or default.
+  // Fall back to the list's default when the stored preset is no longer in the list.
+  const computedPreset = initialValues?.activePreset
     ?? (initialValues?.baseUrl ? getPresetForUrl(initialValues.baseUrl, presets) : defaultPreset.key)
+  const initialPreset = presets.some(p => p.key === computedPreset) ? computedPreset : defaultPreset.key
 
   const { t } = useTranslation()
   const [apiKey, setApiKey] = useState(initialValues?.apiKey ?? '')
@@ -252,7 +218,7 @@ export function ApiKeyInput({
   // Fetch Pi SDK models when a provider is selected in pi_api_key flow.
   // Returns all models sorted by cost (expensive-first) for the searchable tier dropdowns.
   const loadPiModels = useCallback(async (provider: string) => {
-    if (!isPiApiKeyFlow || !provider || provider === 'custom' || provider === 'openllm' || DEFAULT_ENDPOINT_PROVIDERS.has(provider) || OPENAI_COMPAT_CUSTOM_URL_PRESETS.has(provider)) {
+    if (!isPiApiKeyFlow || !provider || provider === 'custom' || provider === 'openllm' || DEFAULT_ENDPOINT_PROVIDERS.has(provider)) {
       setPiModels([])
       return
     }
@@ -294,20 +260,8 @@ export function ApiKeyInput({
       setBaseUrl(preset.url)
     }
     setModelError(null)
-    // Pre-fill recommended model for Ollama; clear for all others
-    // (Default provider presets hide the field entirely, others default to provider model IDs when empty)
-    if (preset.key === 'ollama') {
-      setConnectionDefaultModel('qwen3-coder')
-    } else if (preset.key === 'openrouter' || preset.key === 'vercel-ai-gateway') {
-      setConnectionDefaultModel(providerType === 'openai' ? COMPAT_OPENAI_DEFAULTS : COMPAT_ANTHROPIC_DEFAULTS)
-    } else if (preset.key === 'minimax-global' || preset.key === 'minimax-cn') {
-      setConnectionDefaultModel(COMPAT_MINIMAX_DEFAULTS)
-    } else if (preset.key === 'kimi-coding') {
-      setConnectionDefaultModel(COMPAT_KIMI_DEFAULTS)
-    } else if (preset.key === 'manifest') {
-      setConnectionDefaultModel('auto')
-    } else if (preset.key === 'custom' || OPENAI_COMPAT_CUSTOM_URL_PRESETS.has(preset.key)) {
-      setConnectionDefaultModel(providerType === 'openai' ? COMPAT_OPENAI_DEFAULTS : COMPAT_ANTHROPIC_DEFAULTS)
+    if (preset.key === 'custom') {
+      setConnectionDefaultModel(COMPAT_ANTHROPIC_DEFAULTS)
     } else {
       setConnectionDefaultModel('')
     }
@@ -326,18 +280,8 @@ export function ApiKeyInput({
     setActivePreset(nextPresetState.activePreset)
     setLastNonCustomPreset(nextPresetState.lastNonCustomPreset)
     setModelError(null)
-    if (!connectionDefaultModel.trim()) {
-      if (presetKey === 'ollama') {
-        setConnectionDefaultModel('qwen3-coder')
-      } else if (presetKey === 'manifest') {
-        setConnectionDefaultModel('auto')
-      } else if (presetKey === 'minimax-global' || presetKey === 'minimax-cn') {
-        setConnectionDefaultModel(COMPAT_MINIMAX_DEFAULTS)
-      } else if (presetKey === 'kimi-coding') {
-        setConnectionDefaultModel(COMPAT_KIMI_DEFAULTS)
-      } else if (presetKey === 'openrouter' || presetKey === 'vercel-ai-gateway' || presetKey === 'custom') {
-        setConnectionDefaultModel(providerType === 'openai' ? COMPAT_OPENAI_DEFAULTS : COMPAT_ANTHROPIC_DEFAULTS)
-      }
+    if (!connectionDefaultModel.trim() && presetKey === 'custom') {
+      setConnectionDefaultModel(COMPAT_ANTHROPIC_DEFAULTS)
     }
   }
 
@@ -428,7 +372,7 @@ export function ApiKeyInput({
       activePreset,
       baseUrl: effectiveBaseUrl,
       customApi,
-      brandedOpenAiCompatPresets: OPENAI_COMPAT_CUSTOM_URL_PRESETS,
+      brandedOpenAiCompatPresets: new Set(),
       fallbackPiAuthProvider: effectivePiAuthProvider,
     })
 

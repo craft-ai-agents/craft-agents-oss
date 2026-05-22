@@ -28,7 +28,7 @@ export type CredentialType =
   // Workspace credentials
   | 'workspace_oauth'    // Workspace MCP OAuth token
   | 'mdp_sso'            // MDP SSO session tokens
-  // Source credentials (stored at ~/.craft-agent/workspaces/{ws}/sources/{slug}/)
+  // Source credentials (stored at ~/.mdp-agent/workspaces/{ws}/sources/{slug}/)
   | 'source_oauth'       // OAuth tokens for MCP/API sources
   | 'source_bearer'      // Bearer tokens
   | 'source_apikey'      // API keys
