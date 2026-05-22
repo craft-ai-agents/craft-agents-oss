@@ -4417,6 +4417,17 @@ user a clickable link to where the thing now lives.`
             'agent',
           )
         },
+        getVisualSurfaceStateFn: async () => {
+          const outputService = new OutputService({
+            getWorkspaceRootPath: (workspaceId) => {
+              if (workspaceId !== managed.workspace.id) {
+                throw new Error(`Workspace not available for this session: ${workspaceId}`)
+              }
+              return managed.workspace.rootPath
+            },
+          })
+          return outputService.getVisualSurfaceState(managed.workspace.id, managed.id)
+        },
         listSessionsFn: (options) => {
           const DEFAULT_LIMIT = 20
           const MAX_LIMIT = 100

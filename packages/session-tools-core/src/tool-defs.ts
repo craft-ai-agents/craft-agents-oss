@@ -53,6 +53,7 @@ import {
 } from './handlers/memory.ts';
 import { handleCreateOutput } from './handlers/outputs.ts';
 import { handleVisualSurface } from './handlers/visual-surface.ts';
+import { handleVisualSurfaceState } from './handlers/visual-surface-state.ts';
 import {
   handleListWorkflows,
   handleGetWorkflow,
@@ -473,6 +474,8 @@ export const VisualSurfaceSchema = z.object({
   body: z.string().max(4000).optional().describe('Note body for add_note.'),
   outputId: z.string().optional().describe('Existing same-session Output ID for pin_output, add_image, or add_video.'),
 });
+
+export const VisualSurfaceStateSchema = z.object({});
 
 // ============================================================
 // Canonical Tool Descriptions (base — no DOC_REFS)
@@ -926,6 +929,12 @@ Allowed actions:
 - add_video: add an existing same-session video Output to Canvas by outputId
 
 Do NOT pass workspaceId or sessionId. Do NOT use this for arbitrary React, drawing code, or cross-session content.`,
+
+  visual_surface_state: `Read the current session visual surface state.
+
+Use this before deciding what to show on Canvas. It reports the current session Canvas board, pinnable visual Outputs, and local web preview Outputs.
+
+This is read-only. It does not open Canvas, inspect webpage DOM, read console logs, or mutate Outputs. Use visual_surface for mutations after reading this state.`,
 } as const;
 
 // ============================================================
@@ -1017,6 +1026,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'update_memory', description: TOOL_DESCRIPTIONS.update_memory, inputSchema: UpdateMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateMemory },
   { name: 'forget_memory', description: TOOL_DESCRIPTIONS.forget_memory, inputSchema: ForgetMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleForgetMemory },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
+  { name: 'visual_surface_state', description: TOOL_DESCRIPTIONS.visual_surface_state, inputSchema: VisualSurfaceStateSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVisualSurfaceState },
   { name: 'visual_surface', description: TOOL_DESCRIPTIONS.visual_surface, inputSchema: VisualSurfaceSchema, executionMode: 'registry', safeMode: 'block', handler: handleVisualSurface },
 ];
 

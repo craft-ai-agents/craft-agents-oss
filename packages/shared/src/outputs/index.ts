@@ -22,6 +22,17 @@ export {
 } from './preview.ts';
 
 export {
+  isLocalWebPreviewUrl,
+  normalizeLocalWebHostname,
+  resolveLocalWebPreviewTarget,
+} from './web-preview.ts';
+
+export type {
+  LocalWebPreviewTarget,
+  WebPreviewPolicyOptions,
+} from './web-preview.ts';
+
+export {
   assertOutputManifest,
   isOutputManifest,
   isSafeRelativeAssetPath,

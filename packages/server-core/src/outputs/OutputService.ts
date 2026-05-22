@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, readFileSync, renameSync, rmSync, statSync,
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { RpcServer } from '@craft-agent/server-core/transport';
-import type { CreateOutputToolInput, CreateOutputResult } from '@craft-agent/session-tools-core';
+import type { CreateOutputToolInput, CreateOutputResult, VisualSurfaceStateToolResult } from '@craft-agent/session-tools-core';
 import {
   createOutputBundle,
   deleteOutput,
@@ -11,6 +11,7 @@ import {
   listOutputManifests,
   listOutputs,
   readOutput,
+  resolveLocalWebPreviewTarget,
   summarizeOutputContent,
   writeOutputManifest,
   type OutputAsset,
@@ -68,6 +69,47 @@ export class OutputService {
 
   get(workspaceId: string, outputId: string): OutputManifest | null {
     return readOutput(this.deps.getWorkspaceRootPath(workspaceId), outputId);
+  }
+
+  getVisualSurfaceState(workspaceId: string, sessionId: string): VisualSurfaceStateToolResult {
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
+    const manifests = listOutputManifests(root).filter((manifest) => manifest.origin.sessionId === sessionId);
+    const boardOutput = manifests.find((manifest) => manifest.tags?.includes(VISUAL_BOARD_TAG));
+    const board = boardOutput ? this.readVisualBoardSnapshot(workspaceId, sessionId, boardOutput) : null;
+    const outputs = manifests
+      .filter((manifest) => !manifest.tags?.includes(VISUAL_BOARD_TAG))
+      .map((manifest) => {
+        const localWebPreview = resolveLocalWebPreviewTarget(manifest);
+        return {
+          id: manifest.id,
+          title: manifest.title,
+          kind: manifest.kind,
+          status: manifest.status,
+          summary: manifest.summary,
+          previewMode: manifest.preview?.mode,
+          pinnable: manifest.status !== 'failed' && manifest.status !== 'cancelled',
+          ...(localWebPreview ? { localWebPreview } : {}),
+        };
+      });
+
+    return {
+      canvas: {
+        exists: Boolean(boardOutput),
+        outputId: boardOutput?.id,
+        title: board?.title ?? boardOutput?.title,
+        cardCount: board?.cards.length ?? 0,
+        noteCount: board?.cards.filter((card) => card.type === 'note').length ?? 0,
+        outputCardCount: board?.cards.filter((card) => card.type === 'output').length ?? 0,
+        updatedAt: board?.updatedAt ?? boardOutput?.updatedAt,
+      },
+      outputs,
+      webPreviews: outputs.filter((output) => Boolean(output.localWebPreview)),
+      capabilities: {
+        canOpenCanvas: true,
+        canPinOutputs: outputs.some((output) => output.pinnable),
+        canInspectWebConsole: false,
+      },
+    };
   }
 
   getOrCreateVisualBoard(workspaceId: string, sessionId: string): { output: OutputManifest; board: VisualBoardSnapshot } {
@@ -202,6 +244,15 @@ export class OutputService {
     return listOutputManifests(root).find((manifest) =>
       manifest.origin.sessionId === sessionId && manifest.tags?.includes(VISUAL_BOARD_TAG),
     ) ?? null;
+  }
+
+  private readVisualBoardSnapshot(workspaceId: string, sessionId: string, output: OutputManifest): VisualBoardSnapshot | null {
+    try {
+      const content = readOutputAssetText(this.resolveAssetPath(workspaceId, output.id, VISUAL_BOARD_ASSET_PATH));
+      return parseVisualBoardSnapshot(content, { workspaceId, sessionId });
+    } catch {
+      return null;
+    }
   }
 
   private applyVisualEventToBoard(

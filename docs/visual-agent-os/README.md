@@ -23,6 +23,7 @@ Define the first shippable version of visual agent work inside RunnerOS: chat st
 - [11 Phase 3 Agent Surface Events Spec](./11-phase-3-agent-surface-events-spec.md)
 - [12 Phase 4 Media Outputs Spec](./12-phase-4-media-outputs-spec.md)
 - [13 Phase 5A Adapter Registry Spec](./13-phase-5a-adapter-registry-spec.md)
+- [14 Phase 5B Web Agent Awareness Spec](./14-phase-5b-web-agent-awareness-spec.md)
 
 ## Core Decision
 

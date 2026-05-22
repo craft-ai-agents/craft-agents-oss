@@ -125,6 +125,8 @@ export interface SessionScopedToolCallbacks {
   applyVisualSurfaceEventFn?: (
     input: import('@craft-agent/session-tools-core').VisualSurfaceToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').VisualSurfaceToolResult>;
+  /** Read current session Canvas and visual Output state. */
+  getVisualSurfaceStateFn?: () => Promise<import('@craft-agent/session-tools-core').VisualSurfaceStateToolResult>;
 }
 
 // Registry of callbacks keyed by sessionId

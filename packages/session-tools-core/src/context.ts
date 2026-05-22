@@ -406,6 +406,12 @@ export interface SessionToolContext {
    */
   applyVisualSurfaceEvent?(input: import('./handlers/visual-surface.ts').VisualSurfaceToolInput): Promise<import('./handlers/visual-surface.ts').VisualSurfaceToolResult>;
 
+  /**
+   * Read current session Canvas and visual Output state.
+   * Backend owns workspace/session resolution; callers cannot supply those IDs.
+   */
+  getVisualSurfaceState?(): Promise<import('./handlers/visual-surface-state.ts').VisualSurfaceStateToolResult>;
+
   // ============================================================
   // Inter-Session Messaging
   // ============================================================

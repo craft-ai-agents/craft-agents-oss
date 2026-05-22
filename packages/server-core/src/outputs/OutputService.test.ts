@@ -68,6 +68,63 @@ describe('OutputService run mutex', () => {
 });
 
 describe('OutputService visual boards', () => {
+  it('reports visual surface state with local web previews', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-visual-state-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+
+    const empty = service.getVisualSurfaceState('ws', 'session-1');
+    expect(empty.canvas.exists).toBe(false);
+    expect(empty.outputs).toEqual([]);
+    expect(empty.capabilities.canInspectWebConsole).toBe(false);
+
+    service.applyVisualSurfaceEvent('ws', 'session-1', {
+      action: 'add_note',
+      title: 'Direction',
+      body: 'Show local web preview.',
+    }, 'agent');
+
+    const local = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Local app',
+        kind: 'other',
+        summary: 'Loopback preview',
+        links: [{ label: 'Preview', url: 'http://localhost:4187/report.html', role: 'primary' }],
+      },
+    });
+    const remote = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Remote app',
+        kind: 'other',
+        summary: 'Remote preview',
+        links: [{ label: 'Remote', url: 'https://example.com/report.html', role: 'primary' }],
+      },
+    });
+
+    expect(local.ok).toBe(true);
+    expect(remote.ok).toBe(true);
+    const state = service.getVisualSurfaceState('ws', 'session-1');
+    expect(state.canvas.exists).toBe(true);
+    expect(state.canvas.cardCount).toBe(1);
+    expect(state.canvas.noteCount).toBe(1);
+    expect(state.outputs.map((output) => output.id)).toContain(local.outputId!);
+    expect(state.outputs.map((output) => output.id)).toContain(remote.outputId!);
+    expect(state.webPreviews).toHaveLength(1);
+    expect(state.webPreviews[0]).toMatchObject({
+      id: local.outputId!,
+      localWebPreview: {
+        url: 'http://localhost:4187/report.html',
+        displayHost: 'localhost:4187',
+      },
+    });
+  });
+
   it('creates, reads, and saves one output-backed board per session', () => {
     const root = mkdtempSync(join(tmpdir(), 'osvc-board-'));
     mkdirSync(join(root, 'outputs'), { recursive: true });
