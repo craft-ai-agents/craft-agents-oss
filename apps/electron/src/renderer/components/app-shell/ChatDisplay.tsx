@@ -2496,7 +2496,8 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             <Textarea
               value={dislikeFeedbackDialog?.comment ?? ''}
               maxLength={255}
-              rows={5}
+              rows={6}
+              className="min-h-30"
               placeholder="请输入评价，感谢您的建议"
               onChange={(event) => handleDislikeCommentChange(event.target.value)}
             />
