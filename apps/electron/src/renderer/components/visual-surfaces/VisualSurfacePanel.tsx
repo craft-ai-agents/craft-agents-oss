@@ -63,7 +63,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
         presentation === 'inline'
           ? 'h-full w-[clamp(420px,30vw,560px)] shrink-0'
           : presentation === 'rollup'
-            ? 'relative max-h-[480px] min-h-[180px] w-full basis-[min(48vh,480px)] shrink overflow-hidden'
+            ? 'relative min-h-0 w-full flex-1 shrink overflow-hidden'
           : 'absolute bottom-[150px] right-2 top-[56px] h-auto w-[min(430px,calc(100%_-_16px))] shrink-0',
       )}
     >
@@ -91,7 +91,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
           <div className={cn(
             'relative min-h-[220px] flex-1 overflow-hidden bg-background/65',
             presentation === 'rollup'
-              ? 'rounded-md border border-border/45'
+              ? 'min-h-0 rounded-md border border-border/45'
               : 'rounded-lg border border-border/60',
           )}>
             <div className="absolute inset-0 bg-[linear-gradient(to_right,hsl(var(--foreground)/0.06)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--foreground)/0.06)_1px,transparent_1px)] bg-[size:28px_28px]" />

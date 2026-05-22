@@ -1494,7 +1494,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           {/* Content layer */}
           <div className="flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden relative z-10">
           {/* === MESSAGES AREA: Scrollable list of message bubbles === */}
-          <div className="relative flex-1 min-h-0">
+          <div className={cn("relative flex-1 min-h-0", showRollupVisualSurface && "hidden")}>
             {/* Mask wrapper - fades content at top and bottom over transparent/image backgrounds */}
             <div
               className="h-full"
