@@ -10,14 +10,11 @@ import {
   CircleAlert,
   ExternalLink,
   Info,
-  Maximize2,
-  Minimize2,
-  PanelRight,
   X,
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
 import { toast } from "sonner"
-import { useAtomValue, useSetAtom } from "jotai"
+import { useAtomValue } from "jotai"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
@@ -83,11 +80,10 @@ import { resolveBranchNewPanelOption } from "./branching"
 import { handleErrorMessageAction } from "./error-message-actions"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 import {
-  collapseVisualSidecarAtom,
-  focusVisualSidecarAtom,
-  openDemoVisualSurfaceAtom,
   visualSidecarAtom,
 } from "@/atoms/visual-surfaces"
+import { VisualSurfacePanel } from "@/components/visual-surfaces/VisualSurfacePanel"
+import { VisualSurfaceToggle } from "@/components/visual-surfaces/VisualSurfaceToggle"
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -129,8 +125,6 @@ type OverlayState =
   | MultiDiffOverlayState
   | MarkdownOverlayState
   | null
-
-const VISUAL_SURFACE_DEMO_ENTRY_ENABLED = import.meta.env.DEV
 
 function isStackedActivityTool(activity: ActivityItem): boolean {
   const toolName = activity.toolName?.toLowerCase() || ''
@@ -508,24 +502,11 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     || session?.launchReceipt?.agent?.slug === CONCIERGE_SLUG
   const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
   const visualSidecar = useAtomValue(visualSidecarAtom)
-  const openDemoVisualSurface = useSetAtom(openDemoVisualSurfaceAtom)
-  const focusVisualSidecar = useSetAtom(focusVisualSidecarAtom)
-  const collapseVisualSidecar = useSetAtom(collapseVisualSidecarAtom)
   const currentWorkspaceId = workspaceId ?? session?.workspaceId
   const activeSessionVisualSurface =
     visualSidecar.activeSurface?.sessionId === session?.id ? visualSidecar.activeSurface : null
-  const canShowVisualSurfaceReceipt =
-    !!session?.id &&
-    !!currentWorkspaceId &&
-    (!!activeSessionVisualSurface || VISUAL_SURFACE_DEMO_ENTRY_ENABLED)
-
-  const handleOpenVisualSurface = useCallback(() => {
-    if (!session?.id || !currentWorkspaceId) return
-    openDemoVisualSurface({
-      workspaceId: currentWorkspaceId,
-      sessionId: session.id,
-    })
-  }, [currentWorkspaceId, openDemoVisualSurface, session?.id])
+  const showRollupVisualSurface =
+    !!activeSessionVisualSurface && visualSidecar.resolvedPresentation === 'rollup'
 
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -1903,62 +1884,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     </AnimatePresence>
                   </motion.div>
                 </AnimatePresence>
-                {!compactMode && canShowVisualSurfaceReceipt && (
-                  <div className="flex justify-center pt-1">
-                    <div className="flex max-w-full items-center gap-2 rounded-lg border border-border/55 bg-background/78 px-2.5 py-2 text-xs text-muted-foreground shadow-xs backdrop-blur">
-                      <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-foreground/6 text-foreground">
-                        <PanelRight className="h-3.5 w-3.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="truncate font-medium text-foreground">
-                          {activeSessionVisualSurface ? activeSessionVisualSurface.title : 'Visual sidecar'}
-                        </div>
-                        <div className="truncate">
-                          {activeSessionVisualSurface
-                            ? `${activeSessionVisualSurface.kind} surface is open`
-                            : 'No visual surface open'}
-                        </div>
-                      </div>
-                      {activeSessionVisualSurface ? (
-                        <>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            className="h-7 shrink-0 px-2 text-[11px]"
-                            onClick={focusVisualSidecar}
-                          >
-                            <Maximize2 className="h-3 w-3" />
-                            Focus
-                          </Button>
-                          {!visualSidecar.isCollapsed && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 shrink-0 px-2 text-[11px]"
-                              onClick={collapseVisualSidecar}
-                            >
-                              <Minimize2 className="h-3 w-3" />
-                              Collapse
-                            </Button>
-                          )}
-                        </>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          className="h-7 shrink-0 px-2 text-[11px]"
-                          onClick={handleOpenVisualSurface}
-                        >
-                          <PanelRight className="h-3 w-3" />
-                          Open
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
                 {/* Processing Indicator - always visible while processing */}
                 {session.isProcessing && (() => {
                   // Find the last user message timestamp for accurate elapsed time
@@ -1978,6 +1903,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           </div>
 
           {/* === INPUT CONTAINER: FreeForm or Structured Input === */}
+          {showRollupVisualSurface ? <VisualSurfacePanel presentation="rollup" /> : null}
           <ChatInputZone
             compactMode={compactMode}
             permissionMode={permissionMode}
@@ -1993,6 +1919,12 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             sessionStatuses={sessionStatuses}
             currentSessionStatus={session.sessionStatus || 'todo'}
             onSessionStatusChange={onSessionStatusChange}
+            afterStateSlot={
+              <VisualSurfaceToggle
+                workspaceId={currentWorkspaceId}
+                sessionId={session.id}
+              />
+            }
             inputProps={{
               placeholder,
               disabled: isInputDisabled,

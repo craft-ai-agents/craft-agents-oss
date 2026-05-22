@@ -152,8 +152,7 @@ Use app/container width, not fixed split.
 ```ts
 if (width >= 1600) mode = 'sidecar-no-chat-compression'
 else if (width >= 1150) mode = 'split'
-else if (width >= 800) mode = 'overlay'
-else mode = 'tabs'
+else mode = 'rollup'
 ```
 
 ## Persistence

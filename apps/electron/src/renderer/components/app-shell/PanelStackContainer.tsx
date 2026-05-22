@@ -17,11 +17,15 @@
  */
 
 import { useRef, useEffect } from 'react'
-import { useAtomValue } from 'jotai'
+import { useAtomValue, useSetAtom } from 'jotai'
 import { motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { panelStackAtom, focusedPanelIdAtom, focusedSessionIdAtom } from '@/atoms/panel-stack'
-import { activeVisualSurfaceAtom } from '@/atoms/visual-surfaces'
+import {
+  activeVisualSurfaceAtom,
+  resolveVisualSurfacePresentationAtom,
+  visualSurfacePresentationModeAtom,
+} from '@/atoms/visual-surfaces'
 import { useContainerWidth } from '@/hooks/useContainerWidth'
 import { VisualSurfacePanel } from '@/components/visual-surfaces/VisualSurfacePanel'
 import { PanelSlot } from './PanelSlot'
@@ -63,6 +67,8 @@ export function PanelStackContainer({
   const focusedPanelId = useAtomValue(focusedPanelIdAtom)
   const focusedSessionId = useAtomValue(focusedSessionIdAtom)
   const activeVisualSurface = useAtomValue(activeVisualSurfaceAtom)
+  const visualPresentationMode = useAtomValue(visualSurfacePresentationModeAtom)
+  const resolveVisualPresentation = useSetAtom(resolveVisualSurfacePresentationAtom)
 
   const contentPanels = panelStack
 
@@ -108,7 +114,22 @@ export function PanelStackContainer({
   }, [contentPanels.length, isCompact])
 
   const transition = (isResizing || isCompact) ? { duration: 0 } : PANEL_SPRING
-  const showInlineVisualSidecar = !!visibleVisualSurface && !isCompact && !isMultiPanel && containerWidth >= 1280
+  const canUseSidecar =
+    !!visibleVisualSurface &&
+    !isCompact &&
+    !isMultiPanel &&
+    containerWidth >= 1280 &&
+    visualPresentationMode !== 'rollup'
+  const showInlineVisualSidecar = canUseSidecar
+  const resolvedVisualPresentation = visibleVisualSurface
+    ? showInlineVisualSidecar
+      ? 'sidecar'
+      : 'rollup'
+    : null
+
+  useEffect(() => {
+    resolveVisualPresentation(resolvedVisualPresentation)
+  }, [resolveVisualPresentation, resolvedVisualPresentation])
 
   return (
     <div
@@ -216,9 +237,6 @@ export function PanelStackContainer({
         )}
         {showInlineVisualSidecar ? <VisualSurfacePanel presentation="inline" /> : null}
       </motion.div>
-      {!!visibleVisualSurface && !showInlineVisualSidecar ? (
-        <VisualSurfacePanel presentation="overlay" />
-      ) : null}
     </div>
   )
 }

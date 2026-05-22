@@ -50,20 +50,11 @@ Suggested default:
 - Chat: 55-60%
 - Visual: 40-45%
 
-### Medium
+### Medium / Small
 
-Visual panel slides over from the right. Chat remains mostly intact.
+Visual panel rolls up inside the chat view, above the composer. The composer stays visible so the user can keep replying while inspecting the visual.
 
-Overlay must be dismissible by collapse button and Escape when focus is inside the sidecar.
-
-### Small
-
-Switch to tabs:
-
-- Chat
-- Visual
-
-The active tab should follow user intent:
+The active view should follow user intent:
 
 - agent opens visual -> switch to Visual once, with a clear return to Chat
 - user sends a message -> Chat becomes active

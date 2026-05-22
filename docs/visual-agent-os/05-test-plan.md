@@ -61,8 +61,8 @@ Cases:
 - collapse hides panel without clearing surface
 - focus from receipt reopens panel
 - ultra-wide mode preserves chat max width
-- medium mode uses overlay
-- small mode uses tabs
+- medium mode uses roll-up above composer
+- small mode keeps composer visible
 - missing media renders error state
 
 ## Integration Tests

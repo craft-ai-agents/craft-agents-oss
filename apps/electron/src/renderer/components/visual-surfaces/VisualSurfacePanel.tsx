@@ -11,7 +11,7 @@ import {
 } from '@/atoms/visual-surfaces'
 
 interface VisualSurfacePanelProps {
-  presentation: 'inline' | 'overlay'
+  presentation: 'inline' | 'overlay' | 'rollup'
 }
 
 const PREVIEW_NODES = [
@@ -38,6 +38,8 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
           'z-[8] shrink-0',
           presentation === 'inline'
             ? 'flex h-full w-11 items-center justify-center'
+            : presentation === 'rollup'
+              ? 'relative z-[1] flex h-11 w-full items-center justify-center'
             : 'absolute right-2 top-[22px] flex h-11 w-11 items-center justify-center',
         )}
       >
@@ -64,6 +66,8 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
         'z-[7] flex h-full min-h-0 shrink-0 animate-in fade-in-0 duration-150',
         presentation === 'inline'
           ? 'w-[clamp(420px,30vw,560px)]'
+          : presentation === 'rollup'
+            ? 'relative h-[min(58vh,520px)] w-full px-3 @xs/panel:px-4 pb-2'
           : 'absolute bottom-[150px] right-2 top-[56px] h-auto w-[min(430px,calc(100%_-_16px))]',
       )}
     >

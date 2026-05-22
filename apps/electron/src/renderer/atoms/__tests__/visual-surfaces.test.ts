@@ -6,6 +6,9 @@ import {
   collapseVisualSidecarAtom,
   focusVisualSidecarAtom,
   openDemoVisualSurfaceAtom,
+  resolveVisualSurfacePresentationAtom,
+  toggleDemoVisualSurfaceAtom,
+  visualSurfacePresentationModeAtom,
   visualSidecarAtom,
 } from '../visual-surfaces'
 
@@ -34,5 +37,39 @@ describe('visual sidecar atoms', () => {
 
     store.set(closeVisualSidecarAtom)
     expect(store.get(activeVisualSurfaceAtom)).toBeNull()
+  })
+
+  it('toggles the active session visual surface from the toolbar control', () => {
+    const store = createStore()
+
+    store.set(toggleDemoVisualSurfaceAtom, {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+    })
+    expect(store.get(activeVisualSurfaceAtom)?.sessionId).toBe('session-1')
+
+    store.set(toggleDemoVisualSurfaceAtom, {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+    })
+    expect(store.get(activeVisualSurfaceAtom)).toBeNull()
+  })
+
+  it('stores user display mode and tracks resolved presentation separately', () => {
+    const store = createStore()
+
+    expect(store.get(visualSurfacePresentationModeAtom)).toBe('auto')
+    store.set(visualSurfacePresentationModeAtom, 'rollup')
+    expect(store.get(visualSurfacePresentationModeAtom)).toBe('rollup')
+
+    store.set(openDemoVisualSurfaceAtom, {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+    })
+    store.set(resolveVisualSurfacePresentationAtom, 'rollup')
+    expect(store.get(visualSidecarAtom).resolvedPresentation).toBe('rollup')
+
+    store.set(closeVisualSidecarAtom)
+    expect(store.get(visualSidecarAtom).resolvedPresentation).toBeNull()
   })
 })
