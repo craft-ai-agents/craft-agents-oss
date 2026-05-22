@@ -136,6 +136,8 @@ Verification:
 
 Goal: extend the protocol without changing chat.
 
+Detailed first execution spec: [13 Phase 5A Adapter Registry Spec](./13-phase-5a-adapter-registry-spec.md).
+
 Candidates:
 
 - charts
