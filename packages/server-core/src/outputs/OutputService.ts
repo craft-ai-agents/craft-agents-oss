@@ -1,19 +1,35 @@
-import { readFileSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import type { RpcServer } from '@craft-agent/server-core/transport';
 import type { CreateOutputToolInput, CreateOutputResult } from '@craft-agent/session-tools-core';
 import {
   createOutputBundle,
   deleteOutput,
   assertOutputAssetPath,
+  getOutputDir,
+  listOutputManifests,
   listOutputs,
   readOutput,
   summarizeOutputContent,
+  writeOutputManifest,
+  type OutputAsset,
   type OutputKind,
   type OutputManifest,
   type OutputSummary,
   type OutputOrigin,
 } from '@craft-agent/shared/outputs';
+import {
+  VISUAL_BOARD_ASSET_ID,
+  VISUAL_BOARD_ASSET_PATH,
+  VISUAL_BOARD_SESSION_TAG,
+  VISUAL_BOARD_TAG,
+  assertVisualBoardSnapshot,
+  createEmptyVisualBoardSnapshot,
+  parseVisualBoardSnapshot,
+  summarizeVisualBoard,
+  type VisualBoardSnapshot,
+} from '@craft-agent/shared/visual-board';
 import { readRun, writeRun, type WorkflowRunSnapshot, type WorkflowRunStep } from '@craft-agent/shared/workflows';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 
@@ -42,6 +58,55 @@ export class OutputService {
     return readOutput(this.deps.getWorkspaceRootPath(workspaceId), outputId);
   }
 
+  getOrCreateVisualBoard(workspaceId: string, sessionId: string): { output: OutputManifest; board: VisualBoardSnapshot } {
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
+    const existing = this.findVisualBoardManifest(workspaceId, sessionId);
+    if (existing) {
+      try {
+        const content = readOutputAssetText(this.resolveAssetPath(workspaceId, existing.id, VISUAL_BOARD_ASSET_PATH));
+        const board = parseVisualBoardSnapshot(content, { workspaceId, sessionId });
+        if (board) return { output: existing, board };
+      } catch {
+        // Fall through and repair the existing board output below.
+      }
+      const repaired = this.writeVisualBoardToOutput(
+        workspaceId,
+        existing,
+        createEmptyVisualBoardSnapshot({ workspaceId, sessionId }),
+      );
+      this.emitUpdated(workspaceId);
+      return repaired;
+    }
+
+    const board = createEmptyVisualBoardSnapshot({ workspaceId, sessionId });
+    const output = createOutputBundle(root, {
+      workspaceId,
+      title: 'Session board',
+      kind: 'other',
+      status: 'published',
+      summary: summarizeVisualBoard(board),
+      origin: { source: 'session', sessionId },
+      assets: [this.boardAsset()],
+      tags: [VISUAL_BOARD_TAG, VISUAL_BOARD_SESSION_TAG],
+      completedAt: board.createdAt,
+    });
+    const created = this.writeVisualBoardToOutput(workspaceId, output, board);
+    this.emitUpdated(workspaceId);
+    return created;
+  }
+
+  saveVisualBoard(workspaceId: string, sessionId: string, snapshot: VisualBoardSnapshot): { output: OutputManifest; board: VisualBoardSnapshot } {
+    assertVisualBoardSnapshot(snapshot, { workspaceId, sessionId });
+    const existing = this.findVisualBoardManifest(workspaceId, sessionId)
+      ?? this.getOrCreateVisualBoard(workspaceId, sessionId).output;
+    const saved = this.writeVisualBoardToOutput(workspaceId, existing, {
+      ...snapshot,
+      updatedAt: new Date().toISOString(),
+    });
+    this.emitUpdated(workspaceId);
+    return saved;
+  }
+
   async delete(workspaceId: string, outputId: string): Promise<boolean> {
     const root = this.deps.getWorkspaceRootPath(workspaceId);
     const manifest = readOutput(root, outputId);
@@ -63,6 +128,72 @@ export class OutputService {
 
   resolveAssetPath(workspaceId: string, outputId: string, assetPath: string): string {
     return assertOutputAssetPath(this.deps.getWorkspaceRootPath(workspaceId), outputId, assetPath);
+  }
+
+  private findVisualBoardManifest(workspaceId: string, sessionId: string): OutputManifest | null {
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
+    return listOutputManifests(root).find((manifest) =>
+      manifest.origin.sessionId === sessionId && manifest.tags?.includes(VISUAL_BOARD_TAG),
+    ) ?? null;
+  }
+
+  private boardAsset(meta?: { sizeBytes: number; sha256: string }): OutputAsset {
+    return {
+      id: VISUAL_BOARD_ASSET_ID,
+      label: 'Board',
+      role: 'primary',
+      path: VISUAL_BOARD_ASSET_PATH,
+      mimeType: 'application/json',
+      ...meta,
+    };
+  }
+
+  private writeVisualBoardToOutput(
+    workspaceId: string,
+    output: OutputManifest,
+    board: VisualBoardSnapshot,
+  ): { output: OutputManifest; board: VisualBoardSnapshot } {
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
+    const outputDir = getOutputDir(root, output.id);
+    const file = join(outputDir, VISUAL_BOARD_ASSET_PATH);
+    const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(tmp, JSON.stringify(board, null, 2) + '\n', 'utf-8');
+      renameSync(tmp, file);
+    } catch (err) {
+      try { rmSync(tmp, { force: true }); } catch { /* ignore */ }
+      throw err;
+    }
+
+    const meta = {
+      sizeBytes: statSync(file).size,
+      sha256: createHash('sha256').update(readFileSync(file)).digest('hex'),
+    };
+    const boardAsset = this.boardAsset(meta);
+    const assets = [
+      boardAsset,
+      ...output.assets.filter((asset) => asset.id !== VISUAL_BOARD_ASSET_ID),
+    ];
+    const now = board.updatedAt;
+    const nextOutput: OutputManifest = {
+      ...output,
+      title: output.title || 'Session board',
+      kind: 'other',
+      summary: summarizeVisualBoard(board),
+      updatedAt: now,
+      completedAt: output.completedAt ?? now,
+      origin: { ...output.origin, source: 'session', sessionId: board.sessionId },
+      assets,
+      primary: boardAsset,
+      preview: {
+        mode: 'json',
+        assetId: VISUAL_BOARD_ASSET_ID,
+        inlineText: summarizeVisualBoard(board),
+      },
+      tags: [...new Set([...(output.tags ?? []), VISUAL_BOARD_TAG, VISUAL_BOARD_SESSION_TAG])],
+    };
+    writeOutputManifest(root, nextOutput);
+    return { output: nextOutput, board };
   }
 
   async createFromSessionTool(input: {

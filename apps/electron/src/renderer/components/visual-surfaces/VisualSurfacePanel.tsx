@@ -1,9 +1,11 @@
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { Image as ImageIcon, Layers, Maximize2, PanelRight } from 'lucide-react'
+import { VISUAL_BOARD_TAG } from '@craft-agent/shared/visual-board'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { OutputInlinePreview } from '@/components/outputs/OutputInlinePreview'
+import { VisualBoardSurface } from './VisualBoardSurface'
 import { useOutputs, type OutputManifestDTO, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import {
   focusVisualSidecarAtom,
@@ -34,7 +36,11 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
       : [],
     [activeSurface?.sessionId, outputs],
   )
-  const selectedOutputId = activeSurface?.outputId ?? sessionOutputs[0]?.id
+  const boardOutput = React.useMemo(
+    () => sessionOutputs.find((output) => output.tags?.includes(VISUAL_BOARD_TAG)),
+    [sessionOutputs],
+  )
+  const selectedOutputId = activeSurface?.outputId ?? boardOutput?.id
   const [selectedManifest, setSelectedManifest] = React.useState<OutputManifestDTO | null>(null)
   const [manifestError, setManifestError] = React.useState<string | null>(null)
 
@@ -56,6 +62,19 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     })
     return () => { mounted = false }
   }, [getOutput, selectedOutputId])
+
+  const openOutput = React.useCallback((output: OutputSummaryDTO) => {
+    if (!activeSurface?.sessionId) return
+    openOutputVisualSurface({
+      workspaceId: activeSurface.workspaceId,
+      sessionId: activeSurface.sessionId,
+      outputId: output.id,
+      title: output.title,
+      kind: output.kind,
+      createdAt: output.createdAt,
+      updatedAt: output.updatedAt,
+    })
+  }, [activeSurface?.sessionId, activeSurface?.workspaceId, openOutputVisualSurface])
 
   if (!activeSurface) return null
 
@@ -125,18 +144,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
             <OutputSelector
               outputs={sessionOutputs}
               selectedOutputId={selectedOutputId}
-              onSelect={(output) => {
-                if (!activeSurface.sessionId) return
-                openOutputVisualSurface({
-                  workspaceId: activeSurface.workspaceId,
-                  sessionId: activeSurface.sessionId,
-                  outputId: output.id,
-                  title: output.title,
-                  kind: output.kind,
-                  createdAt: output.createdAt,
-                  updatedAt: output.updatedAt,
-                })
-              }}
+              onSelect={openOutput}
             />
           ) : null}
           <div className={cn(
@@ -145,7 +153,14 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
               ? 'min-h-0 rounded-md border border-border/45'
               : 'rounded-lg border border-border/60',
           )}>
-            {selectedManifest && activeSurface.workspaceId ? (
+            {activeSurface.sessionId && activeSurface.workspaceId && (!selectedOutputId || selectedManifest?.tags?.includes(VISUAL_BOARD_TAG)) ? (
+              <VisualBoardSurface
+                workspaceId={activeSurface.workspaceId}
+                sessionId={activeSurface.sessionId}
+                outputs={sessionOutputs}
+                onOpenOutput={openOutput}
+              />
+            ) : selectedManifest && activeSurface.workspaceId ? (
               <OutputInlinePreview
                 workspaceId={activeSurface.workspaceId}
                 manifest={selectedManifest}

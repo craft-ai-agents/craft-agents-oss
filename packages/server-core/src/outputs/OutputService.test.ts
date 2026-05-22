@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'bun:test';
-import { mkdtempSync, mkdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { OutputService } from './OutputService';
 import { writeRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows';
+import { VISUAL_BOARD_ASSET_PATH, type VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
 
 function makeRunSnapshot(runId: string, workspaceId: string): WorkflowRunSnapshot {
   const now = new Date().toISOString();
@@ -62,5 +63,60 @@ describe('OutputService run mutex', () => {
     expect(ids).toContain(a.outputId!);
     expect(ids).toContain(b.outputId!);
     expect(ids.length).toBe(2);
+  });
+});
+
+describe('OutputService visual boards', () => {
+  it('creates, reads, and saves one output-backed board per session', () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-board-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const emitted: string[] = [];
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+      emitOutputsUpdated: (workspaceId) => emitted.push(workspaceId),
+    });
+
+    const first = service.getOrCreateVisualBoard('ws', 'session-1');
+    expect(first.board.cards).toEqual([]);
+    expect(first.output.tags).toContain('visual-board');
+    expect(first.output.primary?.path).toBe(VISUAL_BOARD_ASSET_PATH);
+
+    const now = new Date().toISOString();
+    const nextBoard: VisualBoardSnapshot = {
+      ...first.board,
+      cards: [{
+        id: 'note-1',
+        type: 'note',
+        title: 'Decision',
+        body: 'Use structured board cards.',
+        createdAt: now,
+        updatedAt: now,
+      }],
+      updatedAt: now,
+    };
+    const saved = service.saveVisualBoard('ws', 'session-1', nextBoard);
+    expect(saved.output.id).toBe(first.output.id);
+    expect(saved.output.summary).toBe('1 card: 1 note, 0 outputs');
+
+    const loaded = service.getOrCreateVisualBoard('ws', 'session-1');
+    expect(loaded.output.id).toBe(first.output.id);
+    expect(loaded.board.cards[0]?.title).toBe('Decision');
+    expect(emitted).toContain('ws');
+  });
+
+  it('repairs a corrupt board asset without creating a duplicate board output', () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-board-repair-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+
+    const first = service.getOrCreateVisualBoard('ws', 'session-1');
+    writeFileSync(join(root, 'outputs', first.output.id, VISUAL_BOARD_ASSET_PATH), '{not json', 'utf-8');
+
+    const repaired = service.getOrCreateVisualBoard('ws', 'session-1');
+    expect(repaired.output.id).toBe(first.output.id);
+    expect(repaired.board.cards).toEqual([]);
+    expect(repaired.output.summary).toBe('Empty visual board');
   });
 });

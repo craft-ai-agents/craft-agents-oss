@@ -57,6 +57,7 @@
     "./views": "./src/views/index.ts",
     "./views/storage": "./src/views/storage.ts",
     "./visual-surfaces": "./src/visual-surfaces/index.ts",
+    "./visual-board": "./src/visual-board/index.ts",
     "./validation": "./src/validation/index.ts",
     "./version": "./src/version/index.ts",
     "./branding": "./src/branding.ts",

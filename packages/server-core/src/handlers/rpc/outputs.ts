@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
 import type { OutputManifest, OutputSummary } from '@craft-agent/shared/outputs';
+import type { VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
 import type { RpcServer } from '@craft-agent/server-core/transport';
 import { requestClientOpenPath, requestClientShowInFolder } from '@craft-agent/server-core/transport';
 import { getWorkspaceAllowedDirs, validateFilePath } from '@craft-agent/server-core/handlers';
@@ -13,6 +14,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.outputs.LIST,
   RPC_CHANNELS.outputs.GET,
   RPC_CHANNELS.outputs.DELETE,
+  RPC_CHANNELS.outputs.GET_VISUAL_BOARD,
+  RPC_CHANNELS.outputs.SAVE_VISUAL_BOARD,
   RPC_CHANNELS.outputs.OPEN_FILE,
   RPC_CHANNELS.outputs.SHOW_IN_FOLDER,
   RPC_CHANNELS.outputs.READ_ASSET_TEXT,
@@ -115,6 +118,27 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
     RPC_CHANNELS.outputs.DELETE,
     async (_ctx, workspaceId: string, outputId: string): Promise<boolean> => {
       return serviceFor(server).delete(workspaceId, outputId);
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.GET_VISUAL_BOARD,
+    async (_ctx, workspaceId: string, sessionId: string): Promise<{ output: OutputManifest; board: VisualBoardSnapshot }> => {
+      assertLocalWorkspace(workspaceId, 'Get visual board');
+      return serviceFor(server).getOrCreateVisualBoard(workspaceId, sessionId);
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.SAVE_VISUAL_BOARD,
+    async (
+      _ctx,
+      workspaceId: string,
+      sessionId: string,
+      snapshot: VisualBoardSnapshot,
+    ): Promise<{ output: OutputManifest; board: VisualBoardSnapshot }> => {
+      assertLocalWorkspace(workspaceId, 'Save visual board');
+      return serviceFor(server).saveVisualBoard(workspaceId, sessionId, snapshot);
     },
   );
 

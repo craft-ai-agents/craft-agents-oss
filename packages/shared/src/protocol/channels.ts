@@ -465,6 +465,8 @@ export const RPC_CHANNELS = {
     LIST: 'outputs:list',
     GET: 'outputs:get',
     DELETE: 'outputs:delete',
+    GET_VISUAL_BOARD: 'outputs:getVisualBoard',
+    SAVE_VISUAL_BOARD: 'outputs:saveVisualBoard',
     OPEN_FILE: 'outputs:openFile',
     SHOW_IN_FOLDER: 'outputs:showInFolder',
     READ_ASSET_TEXT: 'outputs:readAssetText',

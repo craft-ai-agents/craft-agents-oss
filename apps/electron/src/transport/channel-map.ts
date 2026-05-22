@@ -449,6 +449,8 @@ export const CHANNEL_MAP = {
   listOutputs: invoke(RPC_CHANNELS.outputs.LIST),
   getOutput: invoke(RPC_CHANNELS.outputs.GET),
   deleteOutput: invoke(RPC_CHANNELS.outputs.DELETE),
+  getVisualBoard: invoke(RPC_CHANNELS.outputs.GET_VISUAL_BOARD),
+  saveVisualBoard: invoke(RPC_CHANNELS.outputs.SAVE_VISUAL_BOARD),
   openOutputFile: invoke(RPC_CHANNELS.outputs.OPEN_FILE),
   showOutputInFolder: invoke(RPC_CHANNELS.outputs.SHOW_IN_FOLDER),
   readOutputAssetText: invoke(RPC_CHANNELS.outputs.READ_ASSET_TEXT),
