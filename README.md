@@ -7,6 +7,13 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
+## Quick Start
+
+1. **Install**: `curl -fsSL https://agents.craft.do/install-app.sh | bash`
+2. **Launch** the app and choose your API connection (Anthropic, Google AI Studio, ChatGPT Plus, or GitHub Copilot)
+3. **Create a workspace** to organize your sessions
+4. **Start chatting** — the agent handles the rest
+
 ## How it Works (Video)
 To understand what Craft Agents does and how it works watch this video.
 
