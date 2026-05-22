@@ -42,10 +42,12 @@ export const visualSurfaceAdapterDescriptors: VisualSurfaceAdapterDescriptor[] =
       canInspect: false,
       agentControllable: true,
     },
-    canRender: (context) =>
-      context.surface.kind === 'canvas'
-      && !!context.sessionId
-      && (!context.selectedOutputId || context.selectedManifest?.tags?.includes(VISUAL_BOARD_TAG) === true),
+    canRender: (context) => {
+      const selectedBoard = context.selectedManifest?.tags?.includes(VISUAL_BOARD_TAG) === true
+      return !!context.sessionId
+        && (context.surface.kind === 'canvas' || selectedBoard)
+        && (!context.selectedOutputId || selectedBoard)
+    },
   },
   {
     id: 'output-preview',

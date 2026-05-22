@@ -81,4 +81,18 @@ describe('visual surface adapters', () => {
 
     expect(adapter.id).toBe('canvas-board')
   })
+
+  it('returns to canvas when a visual-board output is selected from an output surface', () => {
+    const adapter = selectVisualSurfaceAdapter(context({
+      surface: {
+        ...surface('output'),
+        source: 'output',
+        outputId: 'visual-board',
+      },
+      selectedOutputId: 'visual-board',
+      selectedManifest: manifest('other', ['visual-board']),
+    }))
+
+    expect(adapter.id).toBe('canvas-board')
+  })
 })
