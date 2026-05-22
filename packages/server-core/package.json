@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./transport": "./src/transport/index.ts",
+    "./outputs": "./src/outputs/OutputService.ts",
     "./runtime": "./src/runtime/index.ts",
     "./handlers": "./src/handlers/index.ts",
     "./bootstrap": "./src/bootstrap/index.ts",

@@ -290,6 +290,7 @@ export abstract class BaseAgent implements AgentBackend {
   onUsageUpdate: ((update: UsageUpdate) => void) | null = null;
   onBackendAuthRequired: ((reason: string) => void) | null = null;
   onSpawnSession: ((request: SpawnSessionRequest) => Promise<SpawnSessionResult>) | null = null;
+  onOutputsUpdated: ((workspaceId: string) => void) | null = null;
 
   // ============================================================
   // Constructor
@@ -469,6 +470,12 @@ export abstract class BaseAgent implements AgentBackend {
     if (toolName === 'SubmitPlan' && args.planPath) {
       this.debug(`SubmitPlan completed: ${args.planPath}`);
       this.onPlanSubmitted?.(args.planPath as string);
+      return;
+    }
+
+    if (toolName === 'create_output' || toolName === 'visual_surface') {
+      this.debug(`Output-affecting session tool completed: ${toolName}`);
+      this.onOutputsUpdated?.(this.config.workspace.id);
       return;
     }
 

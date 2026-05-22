@@ -310,6 +310,7 @@
         "session-mcp-server": "./dist/index.js",
       },
       "dependencies": {
+        "@craft-agent/server-core": "workspace:*",
         "@craft-agent/session-tools-core": "workspace:*",
         "@craft-agent/shared": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.29.0",

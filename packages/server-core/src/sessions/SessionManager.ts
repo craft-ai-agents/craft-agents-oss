@@ -4125,6 +4125,10 @@ user a clickable link to where the thing now lives.`
         }, managed.workspace.id)
       }
 
+      managed.agent.onOutputsUpdated = (workspaceId) => {
+        this.eventSink?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId)
+      }
+
       // Wire up onPlanSubmitted to add plan message to conversation
       managed.agent.onPlanSubmitted = async (planPath) => {
         sessionLog.info(`Plan submitted for session ${managed.id}:`, planPath)
