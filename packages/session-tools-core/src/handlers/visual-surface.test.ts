@@ -49,9 +49,11 @@ describe('visual_surface handler', () => {
 
     const missingTitle = await handleVisualSurface(ctx, { action: 'add_note', title: '' });
     const missingOutput = await handleVisualSurface(ctx, { action: 'pin_output', outputId: '' });
+    const missingImage = await handleVisualSurface(ctx, { action: 'add_image', outputId: '' });
 
     expect(missingTitle.isError).toBe(true);
     expect(missingOutput.isError).toBe(true);
+    expect(missingImage.isError).toBe(true);
     expect(called).toBe(false);
   });
 

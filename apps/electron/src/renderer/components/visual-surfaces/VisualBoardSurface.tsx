@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { FilePlus2, FileText, Plus, Save, Trash2 } from 'lucide-react'
+import { AlertTriangle, FilePlus2, FileText, Plus, Save, Trash2 } from 'lucide-react'
 import {
   VISUAL_BOARD_MAX_BODY_LENGTH,
   VISUAL_BOARD_MAX_TITLE_LENGTH,
@@ -179,6 +179,7 @@ export function VisualBoardSurface({
             {draft.cards.map((card) => (
               <BoardCard
                 key={card.id}
+                workspaceId={workspaceId}
                 card={card}
                 outputs={outputs}
                 onOpenOutput={onOpenOutput}
@@ -207,12 +208,14 @@ export function VisualBoardSurface({
 }
 
 function BoardCard({
+  workspaceId,
   card,
   outputs,
   onChange,
   onDelete,
   onOpenOutput,
 }: {
+  workspaceId: string
   card: VisualBoardCard
   outputs: OutputSummaryDTO[]
   onChange: (card: VisualBoardCard) => void
@@ -221,8 +224,10 @@ function BoardCard({
 }) {
   if (card.type === 'output') {
     const output = outputs.find((entry) => entry.id === card.outputId)
+    const isMedia = card.kind === 'image' || card.kind === 'video'
     return (
       <article className="rounded-md border border-border/60 bg-background/78 p-3 shadow-xs">
+        {isMedia && output ? <OutputCardMediaPreview workspaceId={workspaceId} output={output} /> : null}
         <div className="flex items-start gap-2">
           <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-sky-400/12 text-sky-200">
             <FileText className="h-3.5 w-3.5" />
@@ -269,6 +274,63 @@ function BoardCard({
       />
     </article>
   )
+}
+
+function OutputCardMediaPreview({
+  workspaceId,
+  output,
+}: {
+  workspaceId: string
+  output: OutputSummaryDTO
+}) {
+  const assetId = output.preview?.assetId ?? output.primaryAssetId
+  const mode = output.preview?.mode ?? (output.kind === 'video' ? 'video' : output.kind === 'image' ? 'image' : null)
+  const canPreview = !!assetId && (mode === 'image' || mode === 'video')
+  const [dataUrl, setDataUrl] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (!canPreview) {
+      setDataUrl(null)
+      setError(null)
+      return
+    }
+    const readOutputAssetDataUrl = (window.electronAPI as typeof window.electronAPI & {
+      readOutputAssetDataUrl?: (workspaceId: string, outputId: string, assetId?: string) => Promise<string>
+    }).readOutputAssetDataUrl
+    if (typeof readOutputAssetDataUrl !== 'function') {
+      setError('Output asset reader is unavailable.')
+      return
+    }
+    let mounted = true
+    setDataUrl(null)
+    setError(null)
+    readOutputAssetDataUrl(workspaceId, output.id, assetId).then((url) => {
+      if (mounted) setDataUrl(url)
+    }).catch((err) => {
+      if (mounted) setError(err instanceof Error ? err.message : String(err))
+    })
+    return () => { mounted = false }
+  }, [assetId, canPreview, output.id, workspaceId])
+
+  if (!canPreview) return null
+
+  if (error) {
+    return (
+      <div className="mb-3 flex aspect-video items-center justify-center gap-2 rounded-md border border-border/45 bg-foreground/[0.025] px-2 text-xs text-muted-foreground">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        Preview unavailable
+      </div>
+    )
+  }
+
+  if (!dataUrl) return <div className="mb-3 aspect-video animate-pulse rounded-md bg-foreground/[0.045]" />
+
+  if (mode === 'video') {
+    return <video src={dataUrl} controls className="mb-3 aspect-video w-full rounded-md bg-black object-contain" />
+  }
+
+  return <img src={dataUrl} alt={output.title} className="mb-3 aspect-video w-full rounded-md bg-black object-contain" />
 }
 
 function DeleteButton({ onDelete }: { onDelete: () => void }) {

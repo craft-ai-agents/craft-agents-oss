@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { AlertTriangle, ExternalLink, FileText, FolderOpen, Link2, ReceiptText, Route } from 'lucide-react'
+import { AlertTriangle, ExternalLink, Eye, FileText, FolderOpen, Link2, PanelTopOpen, ReceiptText, Route } from 'lucide-react'
+import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useNavigation } from '@/contexts/NavigationContext'
@@ -7,6 +8,7 @@ import { routes } from '../../shared/routes'
 import { StatusPill } from '@/components/outputs/OutputsListPanel'
 import { OutputInlinePreview } from '@/components/outputs/OutputInlinePreview'
 import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
+import { openDemoVisualSurfaceAtom, openOutputVisualSurfaceAtom } from '@/atoms/visual-surfaces'
 
 interface Props {
   workspaceId: string
@@ -16,11 +18,18 @@ interface Props {
 type OutputsElectronAPI = typeof window.electronAPI & {
   openOutputFile?: (workspaceId: string, outputId: string, assetId?: string) => Promise<void>
   showOutputInFolder?: (workspaceId: string, outputId: string, assetId?: string) => Promise<void>
+  applyVisualSurfaceEvent?: (
+    workspaceId: string,
+    sessionId: string,
+    input: { action: 'add_image' | 'add_video'; outputId: string },
+  ) => Promise<{ ok: boolean; receipt?: string; error?: string }>
 }
 
 export default function OutputDetailPage({ workspaceId, outputId }: Props) {
   const { navigate } = useNavigation()
   const { getOutput, outputs, loading, error } = useOutputs(workspaceId)
+  const openOutputVisualSurface = useSetAtom(openOutputVisualSurfaceAtom)
+  const openDemoVisualSurface = useSetAtom(openDemoVisualSurfaceAtom)
   const [manifest, setManifest] = React.useState<OutputManifestDTO | null>(null)
   const [detailError, setDetailError] = React.useState<string | null>(null)
 
@@ -79,6 +88,8 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
   }
 
   const primary = manifest.primary ?? manifest.assets.find((asset) => asset.role === 'primary') ?? manifest.assets[0]
+  const sessionId = manifest.origin.sessionId
+  const isMediaOutput = manifest.kind === 'image' || manifest.kind === 'video'
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
@@ -96,6 +107,18 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {sessionId && (
+              <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => focusOutputSurface(workspaceId, manifest, sessionId, openOutputVisualSurface)}>
+                <Eye className="mr-1.5 h-3.5 w-3.5" />
+                Focus
+              </Button>
+            )}
+            {sessionId && isMediaOutput && (
+              <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => sendMediaToCanvas(workspaceId, manifest, sessionId, openDemoVisualSurface)}>
+                <PanelTopOpen className="mr-1.5 h-3.5 w-3.5" />
+                Canvas
+              </Button>
+            )}
             {primary && (
               <>
                 <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => openAsset(workspaceId, manifest, primary)}>
@@ -211,6 +234,56 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
       </div>
     </div>
   )
+}
+
+function focusOutputSurface(
+  workspaceId: string,
+  manifest: OutputManifestDTO,
+  sessionId: string,
+  openOutputVisualSurface: (input: {
+    workspaceId: string
+    sessionId: string
+    outputId: string
+    title: string
+    kind: OutputManifestDTO['kind']
+    createdAt: string
+    updatedAt?: string
+  }) => void,
+) {
+  openOutputVisualSurface({
+    workspaceId,
+    sessionId,
+    outputId: manifest.id,
+    title: manifest.title,
+    kind: manifest.kind,
+    createdAt: manifest.createdAt,
+    updatedAt: manifest.updatedAt,
+  })
+}
+
+async function sendMediaToCanvas(
+  workspaceId: string,
+  manifest: OutputManifestDTO,
+  sessionId: string,
+  openDemoVisualSurface: (input: { workspaceId: string; sessionId: string }) => void,
+) {
+  const action = manifest.kind === 'video' ? 'add_video' : 'add_image'
+  const api = window.electronAPI as OutputsElectronAPI
+  if (typeof api.applyVisualSurfaceEvent !== 'function') {
+    toast.error('Canvas action is unavailable in this window.')
+    return
+  }
+  try {
+    const result = await api.applyVisualSurfaceEvent(workspaceId, sessionId, { action, outputId: manifest.id })
+    if (!result.ok) {
+      toast.error(result.error ?? 'Could not send output to Canvas.')
+      return
+    }
+    openDemoVisualSurface({ workspaceId, sessionId })
+    toast.success(result.receipt ?? 'Sent output to Canvas.')
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err))
+  }
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

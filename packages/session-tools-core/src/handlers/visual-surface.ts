@@ -5,7 +5,9 @@ import type { ToolResult } from '../types.ts';
 export type VisualSurfaceToolInput =
   | { action: 'open_board'; title?: string }
   | { action: 'add_note'; title: string; body?: string }
-  | { action: 'pin_output'; outputId: string };
+  | { action: 'pin_output'; outputId: string }
+  | { action: 'add_image'; outputId: string }
+  | { action: 'add_video'; outputId: string };
 
 export interface VisualSurfaceToolResult {
   ok: boolean;
@@ -66,11 +68,11 @@ function normalizeVisualSurfaceToolInput(input: unknown): VisualSurfaceToolInput
     const body = input.body === undefined ? '' : normalizeOptionalString(input.body, 'body', 4000) ?? '';
     return { action: 'add_note', title, body };
   }
-  if (input.action === 'pin_output') {
+  if (input.action === 'pin_output' || input.action === 'add_image' || input.action === 'add_video') {
     const outputId = normalizeRequiredString(input.outputId, 'outputId', 160);
-    return { action: 'pin_output', outputId };
+    return { action: input.action, outputId };
   }
-  throw new Error('action must be one of: open_board, add_note, pin_output.');
+  throw new Error('action must be one of: open_board, add_note, pin_output, add_image, add_video.');
 }
 
 function normalizeRequiredString(value: unknown, field: string, maxLength: number): string {

@@ -20,6 +20,14 @@ describe('visual surface events', () => {
       action: 'pin_output',
       outputId: 'out-1',
     });
+    expect(normalizeVisualSurfaceEventInput({ action: 'add_image', outputId: ' image-1 ' })).toEqual({
+      action: 'add_image',
+      outputId: 'image-1',
+    });
+    expect(normalizeVisualSurfaceEventInput({ action: 'add_video', outputId: ' video-1 ' })).toEqual({
+      action: 'add_video',
+      outputId: 'video-1',
+    });
   });
 
   test('rejects malformed inputs', () => {

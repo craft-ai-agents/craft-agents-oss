@@ -78,6 +78,11 @@ export interface OutputSummaryDTO {
   completedAt?: string
   origin?: OutputOriginDTO
   primary?: OutputAssetDTO
+  primaryAssetId?: string
+  previewMode?: OutputPreviewMode
+  assetCount?: number
+  receiptCount?: number
+  linkCount?: number
   preview?: {
     mode: OutputPreviewMode
     assetId?: string

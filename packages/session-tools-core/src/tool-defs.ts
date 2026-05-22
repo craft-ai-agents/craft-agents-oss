@@ -468,10 +468,10 @@ export const CreateOutputSchema = z.object({
 });
 
 export const VisualSurfaceSchema = z.object({
-  action: z.enum(['open_board', 'add_note', 'pin_output']).describe('Canvas operation to apply.'),
+  action: z.enum(['open_board', 'add_note', 'pin_output', 'add_image', 'add_video']).describe('Canvas operation to apply.'),
   title: z.string().max(120).optional().describe('Board title for open_board or note title for add_note.'),
   body: z.string().max(4000).optional().describe('Note body for add_note.'),
-  outputId: z.string().optional().describe('Existing same-session Output ID for pin_output.'),
+  outputId: z.string().optional().describe('Existing same-session Output ID for pin_output, add_image, or add_video.'),
 });
 
 // ============================================================
@@ -922,6 +922,8 @@ Allowed actions:
 - open_board: create/open the Canvas board for this session
 - add_note: add a note card with title/body
 - pin_output: pin an existing Output from this same session by outputId
+- add_image: add an existing same-session image Output to Canvas by outputId
+- add_video: add an existing same-session video Output to Canvas by outputId
 
 Do NOT pass workspaceId or sessionId. Do NOT use this for arbitrary React, drawing code, or cross-session content.`,
 } as const;

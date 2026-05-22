@@ -337,4 +337,73 @@ describe('OutputService visual boards', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain('not pinnable');
   });
+
+  it('adds only matching image and video outputs through media actions', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-visual-media-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+
+    const image = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Generated image',
+        kind: 'image',
+        summary: 'Image output',
+      },
+    });
+    const video = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Generated video',
+        kind: 'video',
+        summary: 'Video output',
+      },
+    });
+    const report = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Report',
+        kind: 'report',
+        summary: 'Not media',
+      },
+    });
+
+    const imageResult = service.applyVisualSurfaceEvent('ws', 'session-1', {
+      action: 'add_image',
+      outputId: image.outputId!,
+    }, 'agent');
+    const videoResult = service.applyVisualSurfaceEvent('ws', 'session-1', {
+      action: 'add_video',
+      outputId: video.outputId!,
+    }, 'agent');
+    const wrongKind = service.applyVisualSurfaceEvent('ws', 'session-1', {
+      action: 'add_image',
+      outputId: report.outputId!,
+    }, 'agent');
+    const wrongVideoKind = service.applyVisualSurfaceEvent('ws', 'session-1', {
+      action: 'add_video',
+      outputId: report.outputId!,
+    }, 'agent');
+    const duplicateImage = service.applyVisualSurfaceEvent('ws', 'session-1', {
+      action: 'add_image',
+      outputId: image.outputId!,
+    }, 'agent');
+
+    expect(imageResult.ok).toBe(true);
+    expect(imageResult.receipt).toContain('Added image');
+    expect(videoResult.ok).toBe(true);
+    expect(videoResult.receipt).toContain('Added video');
+    expect(wrongKind.ok).toBe(false);
+    expect(wrongKind.error).toContain('requires an image output');
+    expect(wrongVideoKind.ok).toBe(false);
+    expect(wrongVideoKind.error).toContain('requires a video output');
+    expect(duplicateImage.ok).toBe(true);
+    expect(duplicateImage.receipt).toContain('already on Canvas');
+    expect(duplicateImage.board?.cards.filter((card) => card.type === 'output')).toHaveLength(2);
+  });
 });

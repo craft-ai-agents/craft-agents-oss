@@ -241,8 +241,8 @@ export class OutputService {
       };
     }
 
-    if (event.action === 'pin_output') {
-      if (event.payload.action !== 'pin_output') throw new Error('Invalid pin_output event payload.');
+    if (event.action === 'pin_output' || event.action === 'add_image' || event.action === 'add_video') {
+      if (!('outputId' in event.payload)) throw new Error(`Invalid ${event.action} event payload.`);
       const { outputId } = event.payload;
       if (board.cards.some((card) => card.type === 'output' && card.outputId === outputId)) {
         return { board: { ...board, updatedAt: now }, applied: false };
@@ -250,6 +250,7 @@ export class OutputService {
       if (board.cards.length >= VISUAL_BOARD_MAX_CARDS) throw new Error(`Visual board already has the maximum ${VISUAL_BOARD_MAX_CARDS} cards.`);
       const output = this.findPinnableSessionOutput(workspaceId, sessionId, outputId);
       if (!output) throw new Error(`Output is not pinnable in this session: ${outputId}`);
+      this.assertVisualSurfaceOutputKind(event.action, output);
       return {
         board: {
           ...board,
@@ -282,6 +283,15 @@ export class OutputService {
     if (output.origin.sessionId !== sessionId) return null;
     if (output.tags?.includes(VISUAL_BOARD_TAG)) return null;
     return output;
+  }
+
+  private assertVisualSurfaceOutputKind(action: VisualSurfaceEventRecord['action'], output: OutputManifest): void {
+    if (action === 'add_image' && output.kind !== 'image') {
+      throw new Error(`add_image requires an image output. Output ${output.id} is ${output.kind}.`);
+    }
+    if (action === 'add_video' && output.kind !== 'video') {
+      throw new Error(`add_video requires a video output. Output ${output.id} is ${output.kind}.`);
+    }
   }
 
   private replayVisualSurfaceEventsToBoard(
@@ -357,8 +367,10 @@ export class OutputService {
   private visualEventReceipt(event: VisualSurfaceEventRecord, board: VisualBoardSnapshot, applied: boolean): string {
     if (event.action === 'open_board') return `Opened Canvas board with ${board.cards.length} card${board.cards.length === 1 ? '' : 's'}.`;
     if (event.action === 'add_note' && event.payload.action === 'add_note') return `Added note "${event.payload.title}" to Canvas.`;
-    if (event.action === 'pin_output' && event.payload.action === 'pin_output') {
+    if ((event.action === 'pin_output' || event.action === 'add_image' || event.action === 'add_video') && 'outputId' in event.payload) {
       const { outputId } = event.payload;
+      if (event.action === 'add_image') return applied ? `Added image output ${outputId} to Canvas.` : `Output ${outputId} was already on Canvas.`;
+      if (event.action === 'add_video') return applied ? `Added video output ${outputId} to Canvas.` : `Output ${outputId} was already on Canvas.`;
       return applied
         ? `Pinned output ${outputId} to Canvas.`
         : `Output ${outputId} was already pinned to Canvas.`;

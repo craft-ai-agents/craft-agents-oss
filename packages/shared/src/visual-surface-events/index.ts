@@ -8,7 +8,7 @@ export const VISUAL_SURFACE_EVENTS_ASSET_ID = 'visual-events';
 export const VISUAL_SURFACE_EVENTS_ASSET_PATH = 'visual-events.jsonl';
 export const VISUAL_SURFACE_EVENTS_MIME_TYPE = 'application/x-ndjson';
 
-export type VisualSurfaceEventAction = 'open_board' | 'add_note' | 'pin_output';
+export type VisualSurfaceEventAction = 'open_board' | 'add_note' | 'pin_output' | 'add_image' | 'add_video';
 export type VisualSurfaceEventSource = 'agent' | 'user' | 'system';
 
 export interface VisualSurfaceOpenBoardInput {
@@ -27,10 +27,22 @@ export interface VisualSurfacePinOutputInput {
   outputId: string;
 }
 
+export interface VisualSurfaceAddImageInput {
+  action: 'add_image';
+  outputId: string;
+}
+
+export interface VisualSurfaceAddVideoInput {
+  action: 'add_video';
+  outputId: string;
+}
+
 export type VisualSurfaceEventInput =
   | VisualSurfaceOpenBoardInput
   | VisualSurfaceAddNoteInput
-  | VisualSurfacePinOutputInput;
+  | VisualSurfacePinOutputInput
+  | VisualSurfaceAddImageInput
+  | VisualSurfaceAddVideoInput;
 
 export interface VisualSurfaceEventRecord {
   schemaVersion: 1;
@@ -63,11 +75,11 @@ export function normalizeVisualSurfaceEventInput(input: unknown): VisualSurfaceE
     const body = input.body === undefined ? '' : normalizeOptionalString(input.body, 'body', VISUAL_BOARD_MAX_BODY_LENGTH) ?? '';
     return { action: 'add_note', title, body };
   }
-  if (input.action === 'pin_output') {
+  if (input.action === 'pin_output' || input.action === 'add_image' || input.action === 'add_video') {
     const outputId = normalizeRequiredString(input.outputId, 'outputId', 160);
-    return { action: 'pin_output', outputId };
+    return { action: input.action, outputId };
   }
-  throw new Error('action must be one of: open_board, add_note, pin_output.');
+  throw new Error('action must be one of: open_board, add_note, pin_output, add_image, add_video.');
 }
 
 export function isVisualSurfaceEventRecord(value: unknown, expected?: { workspaceId?: string; sessionId?: string }): value is VisualSurfaceEventRecord {
@@ -78,7 +90,7 @@ export function isVisualSurfaceEventRecord(value: unknown, expected?: { workspac
   if (typeof value.sessionId !== 'string' || !value.sessionId) return false;
   if (expected?.workspaceId && value.workspaceId !== expected.workspaceId) return false;
   if (expected?.sessionId && value.sessionId !== expected.sessionId) return false;
-  if (!['open_board', 'add_note', 'pin_output'].includes(String(value.action))) return false;
+  if (!['open_board', 'add_note', 'pin_output', 'add_image', 'add_video'].includes(String(value.action))) return false;
   if (!['agent', 'user', 'system'].includes(String(value.source))) return false;
   if (typeof value.createdAt !== 'string' || !Number.isFinite(Date.parse(value.createdAt))) return false;
   try {
