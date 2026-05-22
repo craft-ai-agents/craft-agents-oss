@@ -24,7 +24,7 @@ export type OutputKind =
   | 'other'
 
 export type OutputStatus = 'draft' | 'published' | 'failed' | 'cancelled'
-export type OutputPreviewMode = 'markdown' | 'text' | 'json' | 'image' | 'video' | 'audio' | 'table' | 'receipt' | 'external-link'
+export type OutputPreviewMode = 'markdown' | 'text' | 'json' | 'image' | 'video' | 'audio' | 'table' | 'receipt' | 'external-link' | 'web'
 
 export interface OutputAssetDTO {
   id: string

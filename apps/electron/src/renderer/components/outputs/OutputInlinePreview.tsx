@@ -3,6 +3,8 @@ import { AlertTriangle, ExternalLink, FileText, Link2, ReceiptText } from 'lucid
 import { Button } from '@/components/ui/button'
 import { StreamingMarkdown } from '@/components/markdown'
 import { ShikiCodeViewer } from '@/components/shiki/ShikiCodeViewer'
+import { OutputWebPreview } from './OutputWebPreview'
+import { resolveWebPreviewTarget } from './web-preview'
 import type { OutputAssetDTO, OutputManifestDTO, OutputPreviewMode } from '@/hooks/useOutputs'
 
 interface OutputInlinePreviewProps {
@@ -27,6 +29,7 @@ export function OutputInlinePreview({
 }: OutputInlinePreviewProps) {
   const previewAsset = resolvePreviewAsset(manifest, primary)
   const mode = manifest.preview?.mode ?? inferPreviewMode(previewAsset)
+  const webPreviewTarget = resolveWebPreviewTarget(manifest)
   const inlineText = manifest.preview?.inlineText ?? null
   const assetId = manifest.preview?.assetId ?? previewAsset?.id
   const shouldReadAssetData = Boolean(assetId && (mode === 'image' || mode === 'video' || mode === 'audio'))
@@ -81,6 +84,14 @@ export function OutputInlinePreview({
         <AlertTriangle className="h-4 w-4" />
         <span>Preview unavailable: {error}</span>
       </EmptyPreview>
+    )
+  }
+
+  if (webPreviewTarget) {
+    return (
+      <div className="h-full min-h-0 w-full overflow-hidden">
+        <OutputWebPreview target={webPreviewTarget} className="h-full min-h-0" />
+      </div>
     )
   }
 
@@ -156,7 +167,7 @@ export function OutputInlinePreview({
     )
   }
 
-  if ((mode === 'external-link' || manifest.links.length > 0) && manifest.links[0]) {
+  if ((mode === 'external-link' || mode === 'web' || manifest.links.length > 0) && manifest.links[0]) {
     return (
       <div className={className ?? 'rounded-md border border-white/[0.08] bg-white/[0.035] p-3'}>
         <div className="mb-2 flex items-center gap-2 text-sm font-medium text-white/78">

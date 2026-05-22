@@ -91,6 +91,16 @@ describe('output manifest validation', () => {
     expect(isOutputManifest(full, OUTPUT_OLD_ID)).toBe(true);
   });
 
+  test('accepts web preview mode for local output links', () => {
+    const web = manifest(OUTPUT_OLD_ID, {
+      kind: 'external-action',
+      links: [{ id: 'link-1', label: 'Local preview', url: 'http://localhost:4187', role: 'primary' }],
+      preview: { mode: 'web' },
+    });
+
+    expect(isOutputManifest(web, OUTPUT_OLD_ID)).toBe(true);
+  });
+
   test('rejects malformed manifests before saving', () => {
     expect(isOutputManifest({ ...manifest(OUTPUT_OLD_ID), kind: 'nope' }, OUTPUT_OLD_ID)).toBe(false);
     expect(isOutputManifest({ ...manifest(OUTPUT_OLD_ID), id: OUTPUT_NEW_ID }, OUTPUT_OLD_ID)).toBe(false);

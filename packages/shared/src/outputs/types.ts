@@ -24,7 +24,8 @@ export type OutputPreviewMode =
   | 'audio'
   | 'table'
   | 'receipt'
-  | 'external-link';
+  | 'external-link'
+  | 'web';
 
 export interface OutputAsset {
   id: string;
