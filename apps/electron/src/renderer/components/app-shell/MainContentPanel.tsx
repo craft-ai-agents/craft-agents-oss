@@ -803,7 +803,7 @@ function ResourceRows({
                         <div className="mb-0.5 font-mono text-[8.5px] font-semibold uppercase tracking-[0.14em] text-white/26">
                           {row.kicker}
                         </div>
-                        <div className="truncate text-[12.5px] font-medium text-white/88">{row.title}</div>
+                        <div className="truncate text-[12.5px] font-medium text-white">{row.title}</div>
                         <p className="mt-0.5 line-clamp-1 text-[10px] leading-3.5 text-white/40">{row.summary}</p>
                       </div>
                       {row.actions.length > 0 && (

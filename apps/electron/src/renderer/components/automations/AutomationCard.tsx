@@ -58,7 +58,7 @@ export function AutomationCard({
 
         {/* Name + summary */}
         <div className="flex-1 min-w-0">
-          <div className="truncate text-sm font-medium text-white/82">{automation.name}</div>
+          <div className="truncate text-sm font-medium text-white">{automation.name}</div>
           <div className="truncate text-xs text-white/45">{automation.summary}</div>
         </div>
 

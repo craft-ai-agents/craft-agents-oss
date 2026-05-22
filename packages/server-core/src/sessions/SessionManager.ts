@@ -960,6 +960,14 @@ async function resolveToolDisplayMeta(
 /** Agent type - unified backend interface for all providers */
 type AgentInstance = AgentBackend
 
+function mergeUniqueStrings(
+  left: string[] | undefined,
+  right: string[] | undefined,
+): string[] | undefined {
+  const merged = Array.from(new Set([...(left ?? []), ...(right ?? [])]))
+  return merged.length > 0 ? merged : undefined
+}
+
 interface ManagedSession {
   id: string
   workspace: Workspace
@@ -1250,6 +1258,13 @@ interface PendingDelta {
 
 export class SessionManager implements ISessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
+  private automationMessagingBinder?: (input: {
+    workspaceId: string
+    sessionId: string
+    platform: string
+    channelId: string
+    channelName?: string | null
+  }) => void
   // Delta batching for performance - reduces IPC events from 50+/sec to ~20/sec
   private pendingDeltas: Map<string, PendingDelta> = new Map()
   private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
@@ -1285,6 +1300,18 @@ export class SessionManager implements ISessionManager {
   private initGate = new InitGate()
   // O(1) index: taskId → sessionId for background task output lookup (avoids O(n) session scan)
   private taskOutputIndex: Map<string, string> = new Map()
+
+  setAutomationMessagingBinder(
+    binder: (input: {
+      workspaceId: string
+      sessionId: string
+      platform: string
+      channelId: string
+      channelName?: string | null
+    }) => void,
+  ): void {
+    this.automationMessagingBinder = binder
+  }
   /** Monotonic clock to ensure strictly increasing message timestamps */
   private lastTimestamp = 0
   /** Workflow runner — bootstrapped during `initialize()`. */
@@ -1612,6 +1639,8 @@ export class SessionManager implements ISessionManager {
                 labels: pending.labels,
                 permissionMode: pending.permissionMode,
                 mentions: pending.mentions,
+                agentSlug: pending.agentSlug,
+                messagingChannel: pending.messagingChannel,
                 llmConnection: pending.llmConnection,
                 model: pending.model,
                 thinkingLevel: pending.thinkingLevel,
@@ -8134,6 +8163,8 @@ user a clickable link to where the thing now lives.`
       labels,
       permissionMode,
       mentions,
+      agentSlug,
+      messagingChannel,
       llmConnection,
       model,
       thinkingLevel,
@@ -8150,6 +8181,9 @@ user a clickable link to where the thing now lives.`
 
     // Resolve @mentions to source/skill slugs
     const resolved = mentions ? this.resolveAutomationMentions(workspaceRootPath, mentions) : undefined
+    const agentOptions = agentSlug
+      ? await this.resolveAgentSessionOptions(workspaceId, agentSlug)
+      : undefined
 
     // Ensure labels exist in workspace config before assigning to session
     const resolvedLabels = labels?.length
@@ -8159,17 +8193,28 @@ user a clickable link to where the thing now lives.`
     // Use automation name if provided, otherwise fall back to prompt snippet
     const fallback = `Automation: ${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}`
     const sessionName = automationName || fallback
+    const enabledSourceSlugs = mergeUniqueStrings(
+      agentOptions?.enabledSourceSlugs,
+      resolved?.sourceSlugs,
+    )
+    const agentSkillSlugs = mergeUniqueStrings(
+      agentOptions?.agentSkillSlugs,
+      resolved?.skillSlugs,
+    )
 
     // Create a new session for this automation
     const session = await this.createSession(workspaceId, {
+      ...agentOptions,
       name: sessionName,
       labels: resolvedLabels,
-      permissionMode: permissionMode || 'safe',
-      enabledSourceSlugs: resolved?.sourceSlugs,
-      llmConnection,
-      model,
-      thinkingLevel,
+      permissionMode: permissionMode || agentOptions?.permissionMode || 'safe',
+      enabledSourceSlugs,
+      agentSkillSlugs,
+      llmConnection: llmConnection ?? agentOptions?.llmConnection,
+      model: model ?? agentOptions?.model,
+      thinkingLevel: thinkingLevel ?? agentOptions?.thinkingLevel,
       launchReceipt: {
+        ...(agentOptions?.launchReceipt ?? {}),
         createdAt: Date.now(),
         origin: 'automation',
         summary: sessionName,
@@ -8197,6 +8242,16 @@ user a clickable link to where the thing now lives.`
     // before streaming events arrive. Without this, the renderer may create
     // a synthetic empty session and temporarily show "New chat".
     this.sendEvent({ type: 'session_created', sessionId: session.id }, workspaceId)
+
+    if (messagingChannel && this.automationMessagingBinder) {
+      this.automationMessagingBinder({
+        workspaceId,
+        sessionId: session.id,
+        platform: messagingChannel.platform,
+        channelId: messagingChannel.channelId,
+        channelName: messagingChannel.channelName,
+      })
+    }
 
     // Send the prompt
     await this.sendMessage(session.id, prompt, undefined, undefined, {

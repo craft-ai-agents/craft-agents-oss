@@ -48,6 +48,9 @@ export interface IMessagingGatewayRegistry {
   /** Unbind all bindings for a session, optionally limited to one platform. */
   unbindSession(workspaceId: string, sessionId: string, platform?: string): void
 
+  /** Bind one messaging channel to a session. */
+  bindSession(workspaceId: string, sessionId: string, platform: string, channelId: string, channelName?: string | null): void
+
   /** Unbind one specific binding row by ID. */
   unbindBinding(workspaceId: string, bindingId: string): boolean
 

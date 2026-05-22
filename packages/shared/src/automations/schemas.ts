@@ -24,6 +24,8 @@ const ThinkingLevelInputSchema = z
 export const PromptActionSchema = z.object({
   type: z.literal('prompt'),
   prompt: z.string().min(1, 'Prompt cannot be empty'),
+  agentSlug: z.string().min(1).optional(),
+  bindMessagingChannel: z.boolean().optional(),
   llmConnection: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
   thinkingLevel: ThinkingLevelInputSchema,

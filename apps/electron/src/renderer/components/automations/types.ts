@@ -74,6 +74,10 @@ export const AGENT_EVENTS: AgentEvent[] = [
 export interface PromptAction {
   type: 'prompt'
   prompt: string
+  /** Optional saved agent slug used for the spawned session */
+  agentSlug?: string
+  /** Bind the spawned session back to the inbound messaging channel */
+  bindMessagingChannel?: boolean
   /** LLM connection slug override for the spawned session */
   llmConnection?: string
   /** Model ID override for the spawned session */

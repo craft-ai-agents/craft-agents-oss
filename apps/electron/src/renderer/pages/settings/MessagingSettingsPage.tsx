@@ -18,13 +18,17 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
   ArrowUpRight,
+  CheckCircle2,
+  Loader2,
   MoreHorizontal,
   Plus,
   PowerOff,
   RefreshCcw,
+  Route,
   Settings2,
   Trash2,
 } from 'lucide-react'
+import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
@@ -50,6 +54,7 @@ import {
 } from '@/atoms/messaging'
 import { sessionMetaMapAtom } from '@/atoms/sessions'
 import { getSessionTitle } from '@/utils/session'
+import { parseAutomationsConfig } from '@/components/automations/types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { MessagingPlatformRuntimeInfo } from '../../../shared/types'
 
@@ -113,6 +118,7 @@ export default function MessagingSettingsPage() {
 // ---------------------------------------------------------------------------
 
 type Platform = 'telegram' | 'whatsapp'
+const WHATSAPP_HNIC_AUTOMATION_NAME = 'WhatsApp → HNIC intake'
 
 const PLATFORM_LABEL_KEYS: Record<Platform, string> = {
   telegram: 'settings.messaging.telegram.title',
@@ -135,6 +141,8 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
   const [connectOpen, setConnectOpen] = React.useState(false)
   const [reconfigure, setReconfigure] = React.useState(false)
   const [menuOpen, setMenuOpen] = React.useState(false)
+  const [hnicRouteEnabled, setHnicRouteEnabled] = React.useState(false)
+  const [hnicRoutePending, setHnicRoutePending] = React.useState(false)
 
   const platformBindings = React.useMemo(
     () =>
@@ -155,6 +163,31 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
       if (wsId !== workspaceId || p !== platform) return
       setRuntime(status)
     })
+    return () => {
+      cancelled = true
+      off()
+    }
+  }, [platform, workspaceId])
+
+  React.useEffect(() => {
+    if (platform !== 'whatsapp') return
+    let cancelled = false
+    const load = async () => {
+      try {
+        const json = await window.electronAPI.getAutomations(workspaceId)
+        const automations = parseAutomationsConfig(json)
+        const enabled = automations.some((automation) =>
+          automation.event === 'MessageReceive' &&
+          automation.enabled &&
+          automation.name === WHATSAPP_HNIC_AUTOMATION_NAME
+        )
+        if (!cancelled) setHnicRouteEnabled(enabled)
+      } catch {
+        if (!cancelled) setHnicRouteEnabled(false)
+      }
+    }
+    void load()
+    const off = window.electronAPI.onAutomationsChanged(() => void load())
     return () => {
       cancelled = true
       off()
@@ -209,6 +242,48 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
       await window.electronAPI.unbindMessagingBinding(binding.id)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('common.error'))
+    }
+  }
+
+  const handleEnableHnicRoute = async () => {
+    setHnicRoutePending(true)
+    try {
+      await window.electronAPI.createAutomationFromTemplate(
+        workspaceId,
+        'MessageReceive',
+        {
+          name: WHATSAPP_HNIC_AUTOMATION_NAME,
+          enabled: true,
+          permissionMode: 'safe',
+          labels: ['whatsapp', 'hnic-intake'],
+          conditions: [
+            { condition: 'state', field: 'platform', value: 'whatsapp' },
+            { condition: 'state', field: 'bound', value: false },
+          ],
+          actions: [
+            {
+              type: 'prompt',
+              agentSlug: CONCIERGE_SLUG,
+              bindMessagingChannel: true,
+              prompt:
+                'Inbound WhatsApp message needs intake.\n\n' +
+                'Sender: $CRAFT_SENDER_NAME\n' +
+                'Sender ID: $CRAFT_SENDER_ID\n' +
+                'Channel: $CRAFT_CHANNEL_ID\n' +
+                'Text:\n$CRAFT_TEXT\n\n' +
+                'Act as HNIC. Triage the request, decide whether to answer directly, hand off to the best agent, launch a workflow, or create a follow-up. Keep the response concise and ask for confirmation before risky actions.',
+            },
+          ],
+        },
+      )
+      setHnicRouteEnabled(true)
+      toast.success('WhatsApp now routes new messages to HNIC')
+    } catch (err) {
+      toast.error('Failed to enable HNIC routing', {
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setHnicRoutePending(false)
     }
   }
 
@@ -320,6 +395,43 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
                   </div>
                 )
               })}
+            </div>
+          </>
+        )}
+
+        {platform === 'whatsapp' && (
+          <>
+            <div className="mx-4 h-px bg-border/50" />
+            <div className="flex items-center justify-between gap-4 px-4 py-3.5 pl-[52px]">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm font-medium text-white">
+                  <Route className="h-3.5 w-3.5 text-accent" />
+                  HNIC intake
+                </div>
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                  New unbound WhatsApp messages become HNIC triage sessions.
+                </div>
+              </div>
+              {hnicRouteEnabled ? (
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-300">
+                  <CheckCircle2 className="h-3 w-3" />
+                  On
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleEnableHnicRoute}
+                  disabled={hnicRoutePending}
+                >
+                  {hnicRoutePending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5" />
+                  )}
+                  Enable
+                </Button>
+              )}
             </div>
           </>
         )}

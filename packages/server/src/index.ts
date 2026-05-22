@@ -245,6 +245,9 @@ const instance = await (async () => {
             pairingMode: 'qr',
           },
         })
+        sessionManager.setAutomationMessagingBinder(({ workspaceId, sessionId, platform, channelId, channelName }) => {
+          messagingHandle?.registry.bindSession(workspaceId, sessionId, platform, channelId, channelName)
+        })
         return {
           sessionManager,
           platform,
