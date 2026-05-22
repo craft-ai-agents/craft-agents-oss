@@ -25,13 +25,13 @@ function roleLabel(role: string): string {
   if (role === 'user') return '用户'
   if (role === 'assistant') return 'MDP'
   if (role === 'system') return '系统'
-  if (role === 'tool') return '工具'
+  if (role === 'tool') return '工具调用'
   if (role === 'error') return '错误'
   return role || '未知'
 }
 
 function messageKindLabel(message: FeedbackTurnMessage): string {
-  if (message.role === 'tool') return message.toolStatus ? `工具调用 · ${message.toolStatus}` : '工具调用'
+  if (message.role === 'tool') return message.toolStatus ? `${message.toolStatus}` : '状态'
   if (message.role === 'error' || message.isError) return '错误'
   if (message.role === 'assistant' && message.isIntermediate) return '过程消息'
   if (message.role === 'assistant') return '回答'
@@ -41,6 +41,22 @@ function messageKindLabel(message: FeedbackTurnMessage): string {
 function toolName(message: FeedbackTurnMessage): string {
   const displayName = message.toolDisplayMeta?.displayName
   return message.toolDisplayName || message.toolName || (typeof displayName === 'string' ? displayName : '')
+}
+
+function messageKindClassName(message: FeedbackTurnMessage): string {
+  if (message.role !== 'tool') {
+    return 'border-border bg-foreground/5 text-foreground/65'
+  }
+
+  if (message.toolStatus === 'completed') {
+    return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+  }
+
+  if (message.toolStatus === 'error') {
+    return 'border-destructive/25 bg-destructive/10 text-destructive'
+  }
+
+  return 'border-border bg-foreground/5 text-foreground/65'
 }
 
 function tagClassForRole(role: string): string {
@@ -109,7 +125,7 @@ function MessageCard({ index, message }: { index: number; message: FeedbackTurnM
             <span className={cn('rounded-md border px-2 py-0.5 text-xs font-medium', tagClassForRole(message.role))}>
               {roleLabel(message.role)}
             </span>
-            <span className="rounded-md border border-border bg-foreground/5 px-2 py-0.5 text-xs font-medium text-foreground/65">
+            <span className={cn('rounded-md border px-2 py-0.5 text-xs font-medium', messageKindClassName(message))}>
               {messageKindLabel(message)}
             </span>
             {displayToolName && (
@@ -128,7 +144,7 @@ function MessageCard({ index, message }: { index: number; message: FeedbackTurnM
               message.role === 'error' ? 'text-destructive' : 'text-foreground/78',
             )}>
               {content}
-            </p>
+            </p >
           )}
 
           {hasToolMetadata(message) && (
@@ -154,7 +170,7 @@ export default function FeedbackDetailPage({ record, onBack }: FeedbackDetailPag
   const summary = useMemo(() => buildFeedbackDetailSummary(record), [record])
   const ratingLabel = record.is_like ? '点赞' : '点踩'
   const ratingClassName = record.is_like
-    ? 'border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-300'
+    ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
     : 'border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-300'
 
   return (
@@ -198,7 +214,7 @@ export default function FeedbackDetailPage({ record, onBack }: FeedbackDetailPag
               {!record.is_like && (
                 <div className="min-h-[72px] w-full max-w-md rounded-[8px] border border-violet-200/80 bg-violet-50/80 p-3 shadow-inner dark:border-violet-400/20 dark:bg-violet-500/10">
                   <div className="mb-1 text-xs font-medium text-foreground/45">用户评论</div>
-                  <p className="whitespace-pre-wrap text-sm leading-6 text-foreground/75">{record.comment || '-'}</p>
+                  <p className="whitespace-pre-wrap text-sm leading-6 text-foreground/75">{record.comment || '-'}</p >
                 </div>
               )}
             </div>
@@ -208,18 +224,17 @@ export default function FeedbackDetailPage({ record, onBack }: FeedbackDetailPag
             <OverviewCard icon={User} title="用户问题">
               <p className="line-clamp-5 whitespace-pre-wrap text-sm leading-6 text-foreground/80">
                 {summary.userQuestion || '-'}
-              </p>
+              </p >
             </OverviewCard>
             <OverviewCard icon={Bot} title="最终回答">
               <p className="line-clamp-5 whitespace-pre-wrap text-sm leading-6 text-foreground/80">
                 {summary.finalAnswer || '暂无最终回答'}
-              </p>
+              </p >
             </OverviewCard>
             <OverviewCard icon={Brain} title="过程概览">
               <div className="flex flex-wrap gap-2">
                 <Badge variant="secondary" className="border border-blue-200/80 bg-blue-50 text-blue-700 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-200">{summary.displayableCount} 个过程步骤</Badge>
-                <Badge variant="secondary" className="border border-amber-200/80 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200"><Wrench className="mr-1 h-3 w-3" />{summary.toolCallCount} 次工具调用</Badge>
-                <Badge variant="secondary" className="border border-violet-200/80 bg-violet-50 text-violet-700 dark:border-violet-400/20 dark:bg-violet-500/10 dark:text-violet-200"><Brain className="mr-1 h-3 w-3" />{summary.reasoningCount} 次过程消息</Badge>
+                <Badge variant="secondary" className="border border-amber-200/80 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200">{summary.toolCallCount} 次工具调用</Badge>
               </div>
             </OverviewCard>
           </div>

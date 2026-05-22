@@ -19,6 +19,19 @@ export interface FeedbackStateValue {
   feedbackId?: string
 }
 
+export type FeedbackStateByMessageId = Record<string, FeedbackStateValue>
+
+export type FeedbackTargetTurn = {
+  type: string
+  hasResponse?: boolean
+  isComplete?: boolean
+  isStreaming?: boolean
+}
+
+export interface FeedbackTargetOptions {
+  isSessionProcessing?: boolean
+}
+
 export function clampFeedbackComment(comment: string): string {
   return comment.slice(0, 255)
 }
@@ -30,11 +43,67 @@ export function resolveNextFeedbackValue(
   return currentValue === selectedValue ? null : selectedValue
 }
 
+export function resolveFeedbackIdForDelete(
+  previousFeedback: FeedbackStateValue | undefined,
+  pendingSave: Promise<string> | undefined
+): Promise<string> | null {
+  if (previousFeedback?.feedbackId) {
+    return Promise.resolve(previousFeedback.feedbackId)
+  }
+
+  return pendingSave ?? null
+}
+
+export function shouldApplySavedFeedbackId(
+  currentFeedback: FeedbackStateValue | undefined,
+  savedRating: FeedbackRating
+): boolean {
+  return currentFeedback?.rating === savedRating
+}
+
+export function applySavedFeedbackId(
+  feedbackByMessageId: FeedbackStateByMessageId,
+  messageId: string,
+  rating: FeedbackRating,
+  feedbackId: string
+): FeedbackStateByMessageId {
+  const currentFeedback = feedbackByMessageId[messageId]
+  if (!shouldApplySavedFeedbackId(currentFeedback, rating)) {
+    return feedbackByMessageId
+  }
+
+  return {
+    ...feedbackByMessageId,
+    [messageId]: { rating, feedbackId },
+  }
+}
+
+export function isFeedbackTargetTurn(
+  turns: FeedbackTargetTurn[],
+  index: number,
+  options: FeedbackTargetOptions = {}
+): boolean {
+  const turn = turns[index]
+  if (turn?.type !== 'assistant' || !turn.hasResponse) {
+    return false
+  }
+  if (turn.isComplete === false || turn.isStreaming) {
+    return false
+  }
+
+  for (const nextTurn of turns.slice(index + 1)) {
+    if (nextTurn.type === 'user') return true
+    if (nextTurn.type === 'assistant' && nextTurn.hasResponse) return false
+  }
+
+  return !options.isSessionProcessing
+}
+
 export function buildFeedbackStateByMessageId(
   entries: PersistedFeedbackStateEntry[],
   sessionId: string
-): Record<string, FeedbackStateValue> {
-  const feedbackByMessageId: Record<string, FeedbackStateValue> = {}
+): FeedbackStateByMessageId {
+  const feedbackByMessageId: FeedbackStateByMessageId = {}
 
   for (const entry of entries) {
     if (entry.session_id === sessionId) {
