@@ -40,7 +40,7 @@ function normalizeCustomModels(connection: LlmConnection): Array<Record<string, 
 export function buildRuntimeConfigUpdate(backendContext: ResolvedBackendContext): BackendRuntimeUpdate {
   const connection = backendContext.connection
   const baseUrl = connection?.providerType === 'openllm'
-    ? buildOpenLlmBaseUrl(backendContext.resolvedModel)
+    ? buildOpenLlmBaseUrl(backendContext.resolvedModel, process.env, connection?.isEnvironmentConnection === true)
     : connection?.baseUrl
 
   return {

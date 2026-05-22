@@ -9,6 +9,7 @@ $RootDir = Split-Path -Parent (Split-Path -Parent $ElectronDir)
 
 # Configuration
 $BunVersion = "bun-v1.3.9"  # Pinned version for reproducible builds
+$RtkVersion = "v0.40.0"     # Pinned version for reproducible builds
 
 Write-Host "=== Building Craft Agents Windows Installer using electron-builder ===" -ForegroundColor Cyan
 
@@ -154,7 +155,39 @@ try {
     Remove-Item -Recurse -Force $TempDir -ErrorAction SilentlyContinue
 }
 
-# 4. Copy SDK from root node_modules (monorepo hoisting).
+# 4. Download RTK binary with checksum verification
+Write-Host "Downloading RTK $RtkVersion for Windows x64..."
+New-Item -ItemType Directory -Force -Path "$ElectronDir\resources\bin\win32-x64" | Out-Null
+
+$RtkArchive = "rtk-x86_64-pc-windows-msvc.zip"
+$RtkUrl = "https://github.com/rtk-ai/rtk/releases/download/$RtkVersion/$RtkArchive"
+$ChecksumsUrl = "https://github.com/rtk-ai/rtk/releases/download/$RtkVersion/checksums.txt"
+$RtkTempDir = Join-Path $env:TEMP "rtk-download-$(Get-Random)"
+New-Item -ItemType Directory -Force -Path $RtkTempDir | Out-Null
+
+try {
+    Invoke-WebRequest -Uri $RtkUrl -OutFile "$RtkTempDir\$RtkArchive"
+    Invoke-WebRequest -Uri $ChecksumsUrl -OutFile "$RtkTempDir\checksums.txt"
+
+    Write-Host "Verifying RTK checksum..."
+    $ExpectedLine = (Get-Content "$RtkTempDir\checksums.txt" | Select-String $RtkArchive).ToString()
+    $ExpectedHash = $ExpectedLine -replace '^sha256:', '' -split '\s+' | Select-Object -First 1
+    $ActualHash = (Get-FileHash "$RtkTempDir\$RtkArchive" -Algorithm SHA256).Hash.ToLower()
+    if ($ActualHash -ne $ExpectedHash.ToLower()) {
+        throw "RTK checksum verification failed! Expected: $ExpectedHash, Got: $ActualHash"
+    }
+    Write-Host "RTK checksum verified" -ForegroundColor Green
+
+    Expand-Archive -Path "$RtkTempDir\$RtkArchive" -DestinationPath $RtkTempDir -Force
+    $RtkExe = Get-ChildItem -Path $RtkTempDir -Filter "rtk.exe" -Recurse | Select-Object -First 1
+    Unblock-File -Path $RtkExe.FullName -ErrorAction SilentlyContinue
+    Copy-Item $RtkExe.FullName "$ElectronDir\resources\bin\win32-x64\rtk.exe"
+    Write-Host "RTK binary installed: $ElectronDir\resources\bin\win32-x64\rtk.exe" -ForegroundColor Green
+} finally {
+    Remove-Item -Recurse -Force $RtkTempDir -ErrorAction SilentlyContinue
+}
+
+# 5. Copy SDK from root node_modules (monorepo hoisting).
 # Since SDK 0.2.113: thin core + per-platform binary package.
 # See apps/electron/scripts/build-dmg.sh for the full rationale.
 $SdkSource = "$RootDir\node_modules\@anthropic-ai\claude-agent-sdk"

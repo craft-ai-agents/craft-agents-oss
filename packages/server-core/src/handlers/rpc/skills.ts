@@ -25,6 +25,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.INSTALL_MARKET,
   RPC_CHANNELS.skills.DELETE_MARKET,
   RPC_CHANNELS.skills.FETCH_MARKET_CONTENT,
+  RPC_CHANNELS.skills.INSTALL_LOCAL_ZIP,
 ] as const
 
 export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -275,14 +276,37 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       uploadCopawMarketSkill,
       generateMarketSkillVersion,
       COPAW_MARKET_BASE_URL,
+      bundleSkillDir,
+      GLOBAL_AGENT_SKILLS_DIR,
     } = await import('@craft-agent/shared/skills')
-    const { strToU8, zipSync } = await import('fflate')
 
     const session = await new SsoCredentialStore().load()
     if (!session) throw new Error('未登录，无法发布技能')
 
     const version = generateMarketSkillVersion()
-    const zipBytes = zipSync({ 'SKILL.md': strToU8(input.skillContent) })
+
+    let zipBytes: Uint8Array
+    if (input.zipBytes && input.zipBytes.length > 0) {
+      // Path B: user uploaded a zip file directly
+      zipBytes = input.zipBytes
+    } else if (input.skillSlug) {
+      // Path A: bundle from an existing local skill directory
+      const { join } = await import('path')
+      let skillDir: string
+      if (input.skillSource === 'global') {
+        skillDir = join(GLOBAL_AGENT_SKILLS_DIR, input.skillSlug)
+      } else if (input.workspaceId) {
+        const workspace = getWorkspaceByNameOrId(input.workspaceId)
+        if (!workspace) throw new Error('Workspace not found')
+        const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
+        skillDir = join(getWorkspaceSkillsPath(workspace.rootPath), input.skillSlug)
+      } else {
+        throw new Error('workspaceId is required for non-global skills')
+      }
+      zipBytes = bundleSkillDir(skillDir)
+    } else {
+      throw new Error('zipBytes 或 skillSlug 必须提供其中一个')
+    }
 
     return uploadCopawMarketSkill(
       {
@@ -302,8 +326,8 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
 
   /**
    * Install a market skill locally.
-   * Downloads the zip, extracts SKILL.md body, injects market chineseName/description
-   * as frontmatter, and writes to the global skills directory.
+   * Downloads the zip and extracts all files as-is into the global skills directory,
+   * preserving the original SKILL.md content and all other files without modification.
    */
   server.handle(RPC_CHANNELS.skills.INSTALL_MARKET, async (
     _ctx,
@@ -317,39 +341,53 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (!workspace) throw new Error('Workspace not found')
 
     const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
-    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL, GLOBAL_AGENT_SKILLS_DIR, forceWriteSkill } = await import('@craft-agent/shared/skills')
-    const { unzipSync } = await import('fflate')
-    const { join } = await import('path')
+    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL, GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache, unzipSyncEncoding } = await import('@craft-agent/shared/skills')
+    const { join, dirname, isAbsolute } = await import('path')
+    const { mkdirSync, writeFileSync } = await import('fs')
 
     const session = await new SsoCredentialStore().load()
     if (!session) throw new Error('未登录，无法安装技能')
 
     // Download zip from market
     const zipBytes = await downloadCopawMarketSkillZip(skillName, COPAW_MARKET_BASE_URL, session.token, version)
-    const unzipped = unzipSync(zipBytes)
+    const unzipped = unzipSyncEncoding(zipBytes)
 
-    // Find SKILL.md in zip
-    const skillMdKey = Object.keys(unzipped).find((k) =>
-      k.toLowerCase() === 'skill.md' || k.toLowerCase().match(/^[^/]+\/skill\.md$/)
-    )
-
-    // Extract body content (strip existing frontmatter if any)
-    let body = ''
-    if (skillMdKey) {
-      const raw = new TextDecoder().decode(unzipped[skillMdKey]).trimStart()
-      if (raw.startsWith('---')) {
-        const end = raw.indexOf('\n---', 3)
-        body = end !== -1 ? raw.slice(end + 4).trim() : raw
-      } else {
-        body = raw.trim()
-      }
+    // Collect valid entries (filter __MACOSX and path traversal)
+    const entries: Array<{ relPath: string; data: Uint8Array }> = []
+    for (const [filePath, data] of Object.entries(unzipped)) {
+      const normalized = filePath.replace(/\\/g, '/')
+      if (normalized.startsWith('__MACOSX/') || normalized.includes('/__MACOSX/')) continue
+      if (isAbsolute(normalized) || normalized.split('/').some((p) => p === '..')) continue
+      if (normalized.endsWith('/')) continue
+      entries.push({ relPath: normalized, data })
     }
 
-    // Write to global skills directory with injected metadata
-    const metadata = { name: chineseName, description }
-    const rootPath = join(GLOBAL_AGENT_SKILLS_DIR, '..')
-    forceWriteSkill(rootPath, skillName, metadata, body)
+    // Strip subdirectory wrapper if SKILL.md is not at root (e.g. zip has A/SKILL.md instead of SKILL.md)
+    let stripPrefix = ''
+    const hasRootSkillMd = entries.some((e) => e.relPath.toLowerCase() === 'skill.md')
+    if (!hasRootSkillMd) {
+      const wrapped = entries.find((e) => /^[^/]+\/skill\.md$/i.test(e.relPath))
+      if (wrapped) stripPrefix = wrapped.relPath.slice(0, wrapped.relPath.lastIndexOf('/') + 1)
+    }
 
+    // Write all files to skill directory
+    const skillDir = join(GLOBAL_AGENT_SKILLS_DIR, skillName)
+    mkdirSync(skillDir, { recursive: true })
+
+    for (const { relPath, data } of entries) {
+      let destRelPath = relPath
+      if (stripPrefix) {
+        if (!relPath.startsWith(stripPrefix)) continue
+        destRelPath = relPath.slice(stripPrefix.length)
+      }
+      if (!destRelPath) continue
+
+      const destPath = join(skillDir, destRelPath)
+      mkdirSync(dirname(destPath), { recursive: true })
+      writeFileSync(destPath, data)
+    }
+
+    invalidateSkillsCache()
     await pushSkillsChanged(workspace.id, workspace.rootPath)
 
     return { imported: [skillName], count: 1, conflicts: [] }
@@ -362,14 +400,13 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
    */
   server.handle(RPC_CHANNELS.skills.FETCH_MARKET_CONTENT, async (_ctx, skillName: string, version?: string) => {
     const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
-    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL } = await import('@craft-agent/shared/skills')
-    const { unzipSync } = await import('fflate')
+    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL, unzipSyncEncoding } = await import('@craft-agent/shared/skills')
 
     const session = await new SsoCredentialStore().load()
     if (!session) throw new Error('未登录，无法获取技能内容')
 
     const zipBytes = await downloadCopawMarketSkillZip(skillName, COPAW_MARKET_BASE_URL, session.token, version)
-    const unzipped = unzipSync(zipBytes)
+    const unzipped = unzipSyncEncoding(zipBytes)
 
     const skillMdKey = Object.keys(unzipped).find((k) =>
       k.toLowerCase() === 'skill.md' || k.toLowerCase().match(/^[^/]+\/skill\.md$/)
@@ -377,6 +414,67 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (!skillMdKey) throw new Error('zip 中未找到 SKILL.md 文件')
 
     return { content: new TextDecoder().decode(unzipped[skillMdKey]) }
+  })
+
+  /**
+   * Install a skill from raw zip bytes into the global skills directory.
+   * Writes all zip entries as-is — no SKILL.md parsing or matter.stringify.
+   * Used by the local skill upload flow to preserve all SKILL.md frontmatter fields.
+   */
+  server.handle(RPC_CHANNELS.skills.INSTALL_LOCAL_ZIP, async (
+    _ctx,
+    workspaceId: string,
+    skillName: string,
+    zipBytes: Uint8Array,
+  ) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache, unzipSyncEncoding } = await import('@craft-agent/shared/skills')
+    const { join, dirname, isAbsolute } = await import('path')
+    const { mkdirSync, writeFileSync } = await import('fs')
+
+    const unzipped = unzipSyncEncoding(zipBytes)
+
+    // Collect valid entries (filter __MACOSX and path traversal)
+    const entries: Array<{ relPath: string; data: Uint8Array }> = []
+    for (const [filePath, data] of Object.entries(unzipped)) {
+      const normalized = filePath.replace(/\\/g, '/')
+      if (normalized.startsWith('__MACOSX/') || normalized.includes('/__MACOSX/')) continue
+      if (isAbsolute(normalized) || normalized.split('/').some((p) => p === '..')) continue
+      if (normalized.endsWith('/')) continue
+      entries.push({ relPath: normalized, data })
+    }
+
+    // Strip subdirectory wrapper if SKILL.md is not at root (e.g. zip has slug/SKILL.md)
+    let stripPrefix = ''
+    const hasRootSkillMd = entries.some((e) => e.relPath.toLowerCase() === 'skill.md')
+    if (!hasRootSkillMd) {
+      const wrapped = entries.find((e) => /^[^/]+\/skill\.md$/i.test(e.relPath))
+      if (wrapped) stripPrefix = wrapped.relPath.slice(0, wrapped.relPath.lastIndexOf('/') + 1)
+    }
+
+    // Write all files to skill directory preserving original bytes
+    const skillDir = join(GLOBAL_AGENT_SKILLS_DIR, skillName)
+    mkdirSync(skillDir, { recursive: true })
+
+    for (const { relPath, data } of entries) {
+      let destRelPath = relPath
+      if (stripPrefix) {
+        if (!relPath.startsWith(stripPrefix)) continue
+        destRelPath = relPath.slice(stripPrefix.length)
+      }
+      if (!destRelPath) continue
+
+      const destPath = join(skillDir, destRelPath)
+      mkdirSync(dirname(destPath), { recursive: true })
+      writeFileSync(destPath, data)
+    }
+
+    invalidateSkillsCache()
+    await pushSkillsChanged(workspace.id, workspace.rootPath)
+
+    return { slug: skillName }
   })
 
   /** Delete a skill from the CoPaw market service. */

@@ -7,7 +7,7 @@ import { spawn, type Subprocess } from "bun";
 import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "fs";
 import { join, basename } from "path";
 import * as esbuild from "esbuild";
-import { downloadUv, type Platform, type Arch } from "./build/common";
+import { downloadUv, downloadRtk, type Platform, type Arch } from "./build/common";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
@@ -74,6 +74,30 @@ async function ensureBundledUvForCurrentPlatform(): Promise<void> {
   });
 }
 
+async function ensureBundledRtkForCurrentPlatform(): Promise<void> {
+  const platform = resolveBuildPlatform();
+  const arch = resolveBuildArch();
+  const platformKey = `${platform}-${arch}`;
+  const rtkBinary = platform === "win32" ? "rtk.exe" : "rtk";
+  const rtkPath = join(ELECTRON_DIR, "resources", "bin", platformKey, rtkBinary);
+
+  if (existsSync(rtkPath)) {
+    console.log(`✅ Bundled rtk present: ${rtkPath}`);
+    return;
+  }
+
+  console.log(`⬇️  Bundled rtk missing, bootstrapping ${platformKey}...`);
+  await downloadRtk({
+    platform,
+    arch,
+    upload: false,
+    uploadLatest: false,
+    uploadScript: false,
+    rootDir: ROOT_DIR,
+    electronDir: ELECTRON_DIR,
+  });
+}
+
 // Multi-instance detection (matches detect-instance.sh logic)
 // Detects instance number from folder name suffix (e.g., craft-agents-1 → instance 1)
 function detectInstance(): void {
@@ -88,7 +112,7 @@ function detectInstance(): void {
     process.env.CRAFT_INSTANCE_NUMBER = instanceNum;
     process.env.CRAFT_VITE_PORT = `${instanceNum}173`;
     process.env.CRAFT_APP_NAME = `MDP [${instanceNum}]`;
-    process.env.CRAFT_CONFIG_DIR = join(process.env.HOME || "", `.craft-agent-${instanceNum}`);
+    process.env.CRAFT_CONFIG_DIR = join(process.env.HOME || "", `.mdp-agent-${instanceNum}`);
     process.env.CRAFT_DEEPLINK_SCHEME = `mdp${instanceNum}`;
     console.log(`🔢 Instance ${instanceNum} detected: port=${process.env.CRAFT_VITE_PORT}, config=${process.env.CRAFT_CONFIG_DIR}`);
   }
@@ -484,6 +508,7 @@ async function main(): Promise<void> {
   }
 
   await ensureBundledUvForCurrentPlatform();
+  await ensureBundledRtkForCurrentPlatform();
 
   copyResources();
 

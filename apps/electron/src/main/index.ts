@@ -148,6 +148,13 @@ if (isDebugMode) {
     process.env.CRAFT_BUN = bunBinary
   }
 
+  // RTK bundled binary — takes priority over any user-installed rtk on PATH.
+  // rtk-detector.ts reads CRAFT_RTK before falling back to which/where.
+  const rtkBinary = join(uvPlatformDir, process.platform === 'win32' ? 'rtk.exe' : 'rtk')
+  if (existsSync(rtkBinary)) {
+    process.env.CRAFT_RTK = rtkBinary
+  }
+
   process.env.CRAFT_SCRIPTS = scriptsDir
   process.env.CRAFT_COMMANDS_ENTRY = app.isPackaged
     ? join(app.getAppPath(), 'packages', 'craft-agents-commands', 'src', 'main.ts')
@@ -402,10 +409,10 @@ app.whenReady().then(async () => {
   // Ensure default permissions file exists (copies bundled default.json on first run)
   ensureDefaultPermissions()
 
-  // Seed tool icons to ~/.craft-agent/tool-icons/ (copies bundled SVGs on first run)
+  // Seed tool icons to ~/.mdp-agent/tool-icons/ (copies bundled SVGs on first run)
   ensureToolIcons()
 
-  // Seed preset themes to ~/.craft-agent/themes/ (copies bundled theme JSONs on first run)
+  // Seed preset themes to ~/.mdp-agent/themes/ (copies bundled theme JSONs on first run)
   ensurePresetThemes()
 
   // Register thumbnail:// protocol handler (scheme was registered earlier, before app.whenReady)
@@ -657,13 +664,13 @@ app.whenReady().then(async () => {
             sessionManager: sm,
             credentialManager: getCredentialManager(),
             getMessagingDir: (wsId: string) =>
-              join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+              join(homedir(), '.mdp-agent', 'workspaces', wsId, 'messaging'),
             getLegacyMessagingDir: (wsId: string) => {
               const ws = getWorkspaces().find((w) => w.id === wsId)
               return ws ? join(ws.rootPath, 'messaging') : undefined
             },
             // Route messaging diagnostics through the dedicated messaging log
-            // at ~/.craft-agent/logs/messaging-gateway.log.
+            // at ~/.mdp-agent/logs/messaging-gateway.log.
             logger: messagingGatewayLog,
           })
           return {

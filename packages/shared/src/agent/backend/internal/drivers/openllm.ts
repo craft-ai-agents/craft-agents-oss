@@ -10,7 +10,7 @@ export const openllmDriver: ProviderDriver = {
       node: args.resolvedPaths.nodeRuntimePath,
     },
     piAuthProvider: OPENLLM_PI_AUTH_PROVIDER,
-    baseUrl: buildOpenLlmBaseUrl(args.context.resolvedModel),
+    baseUrl: buildOpenLlmBaseUrl(args.context.resolvedModel, process.env, args.context.connection?.isEnvironmentConnection === true),
     customEndpoint: OPENLLM_CUSTOM_ENDPOINT,
     customModels: buildRuntimeCustomModels(args.context.connection?.models),
   }),

@@ -75,7 +75,6 @@ function authenticated(session: SsoSession): AuthenticatedSsoSessionState {
     token: session.token,
     userName: session.userName,
     department: session.department,
-    employeeId: session.employeeId,
   };
 }
 

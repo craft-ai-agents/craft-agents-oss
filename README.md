@@ -227,7 +227,7 @@ docker run -d \
   -p 9100:9100 \
   -e CRAFT_SERVER_TOKEN=<token> \
   -e CRAFT_RPC_HOST=0.0.0.0 \
-  -v craft-data:/root/.craft-agent \
+  -v craft-data:/root/.mdp-agent \
   craft-agents-server
 ```
 
@@ -241,7 +241,7 @@ docker run -d \
   -e CRAFT_RPC_TLS_CERT=/certs/cert.pem \
   -e CRAFT_RPC_TLS_KEY=/certs/key.pem \
   -v ./certs:/certs:ro \
-  -v craft-data:/root/.craft-agent \
+  -v craft-data:/root/.mdp-agent \
   craft-agents-server
 ```
 
@@ -489,10 +489,10 @@ MDP uses two agent backends:
 
 ## Configuration
 
-Configuration is stored at `~/.craft-agent/`:
+Configuration is stored at `~/.mdp-agent/`:
 
 ```
-~/.craft-agent/
+~/.mdp-agent/
 ├── config.json              # Main config (workspaces, LLM connections)
 ├── credentials.enc          # Encrypted credentials (AES-256-GCM)
 ├── preferences.json         # User preferences
@@ -518,7 +518,7 @@ Automations let you automate workflows by triggering actions when events happen 
 - "Track permission mode changes and summarise them"
 - "Every Friday at 5pm, summarise this week's completed tasks"
 
-Or configure manually in `~/.craft-agent/workspaces/{id}/automations.json`:
+Or configure manually in `~/.mdp-agent/workspaces/{id}/automations.json`:
 
 ```json
 {

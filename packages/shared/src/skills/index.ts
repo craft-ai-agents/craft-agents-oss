@@ -26,6 +26,7 @@ export {
 export type { CreateSkillResult } from './storage.ts';
 
 export { extractSkillsFromZip } from './zip-extractor.ts';
+export { unzipSyncEncoding } from './zip-encoding.ts';
 export { resolveRemoteSkills, parseRemoteInput } from './remote-resolver.ts';
 export type { RemoteResolveResult } from './remote-resolver.ts';
 export {
@@ -42,6 +43,7 @@ export {
   PRODUCT_MARKETPLACE_CATEGORIES,
   createHttpMarketplaceOwnerActionsApi,
   createHttpMarketplacePublishApi,
+  bundleSkillDir,
   publishDirectSkillToMarketplace,
   publishDirectSkillToMarketplaceService,
   publishLocalSkillToMarketplace,

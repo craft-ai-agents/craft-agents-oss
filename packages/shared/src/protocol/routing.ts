@@ -63,6 +63,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.skills.OPEN_EDITOR,
   RPC_CHANNELS.skills.OPEN_FINDER,
   RPC_CHANNELS.skills.EXTRACT_ZIP,
+  RPC_CHANNELS.skills.INSTALL_LOCAL_ZIP,
   // Remote skill resolver runs on the local machine; discovered skills are
   // installed separately via REMOTE_ELIGIBLE createSkill/forceWriteSkill.
   RPC_CHANNELS.skills.RESOLVE_REMOTE,

@@ -251,7 +251,9 @@ Mid-stream behavior for the Environment Connection is stored as a standalone app
 
 The underlying connection is `providerType: 'pi_compat'`, `authType: 'none'`, `piAuthProvider: 'openai'`. Token injection happens via the network interceptor inside the Pi subprocess, driven by the `CRAFT_LLM_SSO_TOKEN` and `CRAFT_LLM_SSO_BASE_URL` env vars set at subprocess spawn time.
 
-Avoid: env provider, default provider, built-in connection.
+Displayed with a **Built-in** badge in Settings → AI (replaces the Default badge, since env connections are always the system default).
+
+Avoid: env provider, default provider.
 
 ### Custom Provider Connection
 A user-configured LLM connection added through Settings → AI → Add Connection. The only user-editable connection type after the removal of OAuth-based flows. Created via a single-step form: provider preset dropdown (Anthropic, OpenAI, Groq, Bedrock, etc.) + API key field + optional base URL. Backed by `providerType: 'anthropic'` or `providerType: 'pi'` depending on the selected preset.
@@ -259,13 +261,15 @@ A user-configured LLM connection added through Settings → AI → Add Connectio
 Avoid: API key connection, manual connection.
 
 ### OpenLLM Connection
-A user-configured LLM connection that routes to a self-hosted OpenLLM server. User provides an API key and model list; the deployment provides the host via the `OPENLLM_HOST` environment variable. The host is never stored in the connection record — it is read from `OPENLLM_HOST` at call time. The endpoint URL is constructed per-model as `{OPENLLM_HOST}/llm/{model_name}/v1`, so switching models changes the URL. Backed by `providerType: 'openllm'` (routed through the Pi subprocess) using the **OpenAI Chat Completions** protocol (`piAuthProvider: 'openai'`, `customEndpoint.api: 'openai-completions'`). Mid-stream behavior defaults to `'steer'`.
+A user-configured LLM connection that routes to a self-hosted OpenLLM server. User provides an API key and model list; the user provides the host via the `OPENLLM_HOST` environment variable set in their own environment. The host is never stored in the connection record — it is read from `OPENLLM_HOST` at call time. The endpoint URL is constructed per-model as `{OPENLLM_HOST}/llm/{model_name}/v1`, so switching models changes the URL. Backed by `providerType: 'openllm'` (routed through the Pi subprocess) using the **OpenAI Chat Completions** protocol (`piAuthProvider: 'openai'`, `customEndpoint.api: 'openai-completions'`). Mid-stream behavior defaults to `'steer'`.
 
 Avoid: OpenLLM provider, OpenLLM endpoint.
 
 ### OpenLLM Environment Connection
-A virtual LLM connection auto-synthesized from environment variables, analogous to the Environment Connection but for OpenLLM routing. Not persisted to `config.json`; re-derived on every launch. Becomes the implicit default connection when `OPENLLM_HOST` is set and no explicit user default is configured — takes priority over the Environment Connection in `getDefaultLlmConnection`.
+A virtual LLM connection auto-synthesized from environment variables, analogous to the Environment Connection but for OpenLLM routing. Not persisted to `config.json`; re-derived on every launch. Becomes the implicit default connection when `OPENLLM_BASE_HOST` is set and no explicit user default is configured — takes priority over the Environment Connection in `getDefaultLlmConnection`.
 
-Required env var: `OPENLLM_HOST` (base host for the OpenLLM server). Optional: `OPENLLM_MODELS` (comma-separated model IDs; first entry is the default model), `OPENLLM_CONNECTION_NAME` (display name; falls back to `"OpenLLM"`). Requires an active SSO Session; the Session Token is injected as the bare `Authorization` header via the network interceptor, driven by `CRAFT_LLM_SSO_TOKEN` and `CRAFT_LLM_SSO_BASE_URL` (set to `OPENLLM_HOST`) at subprocess spawn time. Uses slug `'openllm-env'` and `providerType: 'openllm'` with OpenAI Chat Completions protocol.
+Required env var: `OPENLLM_BASE_HOST` (deployment-owned base host for the OpenLLM server). Optional: `OPENLLM_BASE_MODELS` (comma-separated model IDs; first entry is the default model), `OPENLLM_BASE_CONNECTION_NAME` (display name; falls back to `"OpenLLM"`). Requires an active SSO Session; the Session Token is injected as the bare `Authorization` header via the network interceptor, driven by `CRAFT_LLM_SSO_TOKEN` and `CRAFT_LLM_SSO_BASE_URL` (set to `OPENLLM_BASE_HOST`) at subprocess spawn time. Uses slug `'openllm-env'` and `providerType: 'openllm'` with OpenAI Chat Completions protocol.
+
+Distinct from `OPENLLM_HOST`: `OPENLLM_BASE_HOST` is deployment-owned and triggers the built-in virtual connection; `OPENLLM_HOST` is user-owned and powers user-configured OpenLLM Connections. Neither falls back to the other.
 
 Avoid: OpenLLM env provider, synthesized OpenLLM connection.
