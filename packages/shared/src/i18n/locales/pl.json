@@ -654,6 +654,7 @@
   "preview.htmlPreview": "Podgląd HTML",
   "preview.loadingImage": "Ładowanie obrazu...",
   "preview.loadingPdf": "Ładowanie PDF...",
+  "preview.markdownPreview": "Podgląd Markdown",
   "preview.parseError": "Błąd analizy",
   "preview.pdfPreview": "Podgląd PDF",
   "sendToWorkspace.description_few": "Wyślij {{count}} sesje do zdalnego Workspace.",

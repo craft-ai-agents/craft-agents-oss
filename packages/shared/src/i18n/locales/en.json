@@ -654,6 +654,7 @@
   "preview.htmlPreview": "HTML Preview",
   "preview.loadingImage": "Loading image...",
   "preview.loadingPdf": "Loading PDF...",
+  "preview.markdownPreview": "Markdown Preview",
   "preview.parseError": "Parse Error",
   "preview.pdfPreview": "PDF Preview",
   "sendToWorkspace.description_few": "Send {{count}} sessions to a remote workspace.",

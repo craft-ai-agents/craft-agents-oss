@@ -654,6 +654,7 @@
   "preview.htmlPreview": "HTML 预览",
   "preview.loadingImage": "正在加载图片...",
   "preview.loadingPdf": "正在加载PDF...",
+  "preview.markdownPreview": "Markdown 预览",
   "preview.parseError": "解析错误",
   "preview.pdfPreview": "PDF 预览",
   "sendToWorkspace.description_few": "将 {{count}} 个会话发送到远程 Workspace。",

@@ -654,6 +654,7 @@
   "preview.htmlPreview": "HTMLプレビュー",
   "preview.loadingImage": "画像を読み込み中...",
   "preview.loadingPdf": "PDFを読み込み中...",
+  "preview.markdownPreview": "Markdownプレビュー",
   "preview.parseError": "解析エラー",
   "preview.pdfPreview": "PDFプレビュー",
   "sendToWorkspace.description_few": "{{count}}件のセッションをリモートWorkspaceに送信します。",
