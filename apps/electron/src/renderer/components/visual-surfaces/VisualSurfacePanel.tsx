@@ -1,11 +1,9 @@
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { Image as ImageIcon, Layers, Maximize2, Minimize2, PanelRight, X } from 'lucide-react'
+import { Image as ImageIcon, Layers, Maximize2, PanelRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
-  collapseVisualSidecarAtom,
-  closeVisualSidecarAtom,
   focusVisualSidecarAtom,
   visualSidecarAtom,
 } from '@/atoms/visual-surfaces'
@@ -24,8 +22,6 @@ const PREVIEW_NODES = [
 export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
   const { activeSurface, isCollapsed, focusedAt } = useAtomValue(visualSidecarAtom)
   const focusSidecar = useSetAtom(focusVisualSidecarAtom)
-  const collapseSidecar = useSetAtom(collapseVisualSidecarAtom)
-  const closeSidecar = useSetAtom(closeVisualSidecarAtom)
   const focusPulseKey = focusedAt ?? 0
 
   if (!activeSurface) return null
@@ -87,33 +83,8 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
             <Layers className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium leading-5">{activeSurface.title}</div>
-            <div className="flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
-              <span className="capitalize">{activeSurface.kind}</span>
-              <span className="size-1 rounded-full bg-muted-foreground/40" />
-              <span className="capitalize">{activeSurface.status}</span>
-            </div>
+            <div className="truncate text-sm font-medium leading-5">Canvas</div>
           </div>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            aria-label="Collapse visual sidecar"
-            className="size-8"
-            onClick={collapseSidecar}
-          >
-            <Minimize2 className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            aria-label="Close visual sidecar"
-            className="size-8"
-            onClick={closeSidecar}
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">

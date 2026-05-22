@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { Check, PanelRight } from 'lucide-react'
+import { Check, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
@@ -69,7 +69,7 @@ export function VisualSurfaceToggle({ workspaceId, sessionId }: VisualSurfaceTog
           aria-label={title}
           title={title}
           className={cn(
-            'h-7 shrink-0 rounded-[8px] px-2 text-[11px]',
+            'h-7 w-7 shrink-0 rounded-[8px] p-0',
             isOpen
               ? 'border border-sky-300/25 bg-sky-400/14 text-sky-100 hover:bg-sky-400/20'
               : 'border border-white/[0.08] bg-white/[0.045] text-white/64 hover:bg-white/[0.08] hover:text-white',
@@ -78,8 +78,7 @@ export function VisualSurfaceToggle({ workspaceId, sessionId }: VisualSurfaceTog
           onContextMenu={handleContextMenu}
           onKeyDown={handleKeyDown}
         >
-          <PanelRight className="h-3.5 w-3.5" />
-          Canvas
+          <Eye className="h-3.5 w-3.5" />
         </Button>
       </PopoverAnchor>
       <PopoverContent
