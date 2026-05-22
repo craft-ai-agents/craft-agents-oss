@@ -3,7 +3,7 @@ import {
   isLocalWebPreviewUrl as isSharedLocalWebPreviewUrl,
   resolveLocalWebPreviewTarget,
   type WebPreviewPolicyOptions,
-} from '@craft-agent/shared/outputs'
+} from '@craft-agent/shared/outputs/web-preview'
 
 export interface WebPreviewTarget {
   url: string
