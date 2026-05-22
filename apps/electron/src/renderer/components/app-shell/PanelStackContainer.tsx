@@ -21,6 +21,9 @@ import { useAtomValue } from 'jotai'
 import { motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { panelStackAtom, focusedPanelIdAtom, focusedSessionIdAtom } from '@/atoms/panel-stack'
+import { activeVisualSurfaceAtom } from '@/atoms/visual-surfaces'
+import { useContainerWidth } from '@/hooks/useContainerWidth'
+import { VisualSurfacePanel } from '@/components/visual-surfaces/VisualSurfacePanel'
 import { PanelSlot } from './PanelSlot'
 import { PanelResizeSash } from './PanelResizeSash'
 import {
@@ -59,6 +62,7 @@ export function PanelStackContainer({
   const panelStack = useAtomValue(panelStackAtom)
   const focusedPanelId = useAtomValue(focusedPanelIdAtom)
   const focusedSessionId = useAtomValue(focusedSessionIdAtom)
+  const activeVisualSurface = useAtomValue(activeVisualSurfaceAtom)
 
   const contentPanels = panelStack
 
@@ -73,12 +77,17 @@ export function PanelStackContainer({
     : contentPanels
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const containerWidth = useContainerWidth(scrollRef)
   const prevCountRef = useRef(contentPanels.length)
 
   const hasSidebar = sidebarWidth > 0
   // In compact mode, hide navigator when content is selected (show list OR content, not both)
   const hasNavigator = isCompact ? (navigatorWidth > 0 && !hasSelectedContent) : navigatorWidth > 0
   const isMultiPanel = visiblePanels.length > 1
+  const visibleVisualSurface =
+    activeVisualSurface && (!activeVisualSurface.sessionId || activeVisualSurface.sessionId === focusedSessionId)
+      ? activeVisualSurface
+      : null
   const isLeftEdge = !hasSidebar && !hasNavigator
   const shouldCenterSinglePanel = !isCompact && visiblePanels.length === 1 && !hasNavigator && !hasSidebar
   const stackGap = hasSidebar && !hasNavigator ? 56 : PANEL_GAP
@@ -99,6 +108,7 @@ export function PanelStackContainer({
   }, [contentPanels.length, isCompact])
 
   const transition = (isResizing || isCompact) ? { duration: 0 } : PANEL_SPRING
+  const showInlineVisualSidecar = !!visibleVisualSurface && !isCompact && !isMultiPanel && containerWidth >= 1280
 
   return (
     <div
@@ -192,7 +202,7 @@ export function PanelStackContainer({
               isFocusedPanel={isMultiPanel ? entry.id === focusedPanelId : true}
               isSidebarAndNavigatorHidden={isSidebarAndNavigatorHidden}
               isAtLeftEdge={index === 0 && isLeftEdge}
-              isAtRightEdge={index === visiblePanels.length - 1 && !isRightSidebarVisible}
+              isAtRightEdge={index === visiblePanels.length - 1 && !isRightSidebarVisible && !showInlineVisualSidecar}
               proportion={entry.proportion}
               isCompact={isCompact}
               sash={index > 0 ? (
@@ -204,7 +214,11 @@ export function PanelStackContainer({
             />
           ))
         )}
+        {showInlineVisualSidecar ? <VisualSurfacePanel presentation="inline" /> : null}
       </motion.div>
+      {!!visibleVisualSurface && !showInlineVisualSidecar ? (
+        <VisualSurfacePanel presentation="overlay" />
+      ) : null}
     </div>
   )
 }
