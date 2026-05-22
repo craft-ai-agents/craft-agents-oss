@@ -102,6 +102,8 @@ export function SkillMarketplacePage({
       setFetchedSkills(loaded)
       const loadedSlugs = new Set(loaded.map((s) => s.slug))
       setUploadedSkills((prev) => prev.filter((s) => loadedSlugs.has(s.slug)))
+      // installedIds uses id === slug, clean up entries no longer on disk
+      setInstalledIds((prev) => new Set([...prev].filter((id) => loadedSlugs.has(id))))
     }).catch(() => {})
   }, [workspaceId])
 

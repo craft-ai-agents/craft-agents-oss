@@ -5,6 +5,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { USE_MOCK_MARKET } from '../mock-data'
 import type { MarketplaceSkillListing } from '../types'
+import { ExpandableDescription } from './LocalSkillDetailDialog'
 
 export function SkillDetailDialog({
   skill,
@@ -22,6 +23,7 @@ export function SkillDetailDialog({
   isInstalling?: boolean
 }) {
   const [skillContent, setSkillContent] = React.useState<string | null>(null)
+  const [skillExtraMetadata, setSkillExtraMetadata] = React.useState<Record<string, unknown> | null>(null)
   const [showSpinner, setShowSpinner] = React.useState(false)
 
   React.useEffect(() => {
@@ -39,8 +41,13 @@ export function SkillDetailDialog({
     }
 
     window.electronAPI.fetchMarketSkillContent(skill.slug, skill.latestVersion)
-      .then(({ content }) => { if (active) setSkillContent(content) })
-      .catch(() => { if (active) setSkillContent(null) })
+      .then(({ content, extraMetadata }) => {
+        if (active) {
+          setSkillContent(content)
+          setSkillExtraMetadata(extraMetadata ?? null)
+        }
+      })
+      .catch(() => { if (active) { setSkillContent(null); setSkillExtraMetadata(null) } })
       .finally(() => { if (active) { setShowSpinner(false); clearTimeout(spinnerTimer) } })
     return () => { active = false; clearTimeout(spinnerTimer) }
   }, [skill?.slug])
@@ -219,7 +226,7 @@ ${skill.slug} config export --format json --output ./backup/
                 <h2 className="text-[18px] font-bold text-foreground">{skill.name}</h2>
                 <span className="text-[13px] font-normal text-muted-foreground">Skill</span>
               </div>
-              <p className="mt-0.5 text-[13px] text-muted-foreground">{skill.description}</p>
+              {skill.description ? <ExpandableDescription text={skill.description} /> : null}
             </div>
           </div>
         </div>
@@ -235,6 +242,15 @@ ${skill.slug} config export --format json --output ./backup/
 
         {/* Markdown 内容区 */}
         <div className="relative mx-7 mb-5 min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/20 px-6 py-5 text-[13px] leading-relaxed">
+          {skillExtraMetadata && (
+            <div className="mb-4">
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">Metadata</p>
+              <pre className="overflow-x-auto rounded-lg bg-muted/40 px-4 py-3 text-[12px] leading-relaxed text-foreground/80">
+                {JSON.stringify(skillExtraMetadata, null, 2)}
+              </pre>
+              <div className="my-4 border-t border-border" />
+            </div>
+          )}
           <Markdown>{skillContent ?? mockMarkdown}</Markdown>
           {showSpinner && (
             <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-muted/60 backdrop-blur-[2px]">
