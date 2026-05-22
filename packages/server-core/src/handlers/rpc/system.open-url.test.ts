@@ -117,14 +117,24 @@ describe('registerSystemCoreHandlers OPEN_URL', () => {
     })
   })
 
-  it('rejects unsupported protocols', async () => {
+  it('rejects unsupported protocols with a per-scheme reason', async () => {
     const { openUrl, ctx } = createTestHarness()
 
     // OPEN_URL uses a blocklist (url-safety.ts) and rejects known-dangerous
     // schemes by name. file: is one of them — and the most important on
-    // Windows where it's an RCE vector.
+    // Windows where it's an RCE vector. The thrown error includes the
+    // scheme in parens and a human-readable reason so the renderer can
+    // show a useful toast instead of a generic "Invalid URL".
     await expect(openUrl(ctx, 'file:///tmp/test.txt')).rejects.toThrow(
-      'Failed to open URL: Refused to open URL with blocked scheme: file:'
+      /^Failed to open URL: URL blocked \(file:\)\. file: URLs are blocked /,
+    )
+  })
+
+  it('rejects javascript: URLs with the JavaScript-specific reason', async () => {
+    const { openUrl, ctx } = createTestHarness()
+
+    await expect(openUrl(ctx, 'javascript:alert(1)')).rejects.toThrow(
+      /^Failed to open URL: URL blocked \(javascript:\)\. JavaScript URLs /,
     )
   })
 })

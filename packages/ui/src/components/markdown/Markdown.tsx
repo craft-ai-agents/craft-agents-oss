@@ -1,5 +1,5 @@
 import * as React from 'react'
-import ReactMarkdown, { type Components } from 'react-markdown'
+import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
@@ -183,8 +183,25 @@ function createComponents(
       // Regular div
       return <div {...props}>{children}</div>
     },
-    // Links: Make clickable with callbacks
+    // Links: Make clickable with callbacks.
+    //
+    // We sanitize the DOM `href` separately from the click-dispatch target:
+    // - `safeHref` is what React puts on the `<a>` element. We pass `href`
+    //   through `defaultUrlTransform`; any dangerous scheme
+    //   (javascript:/data:/vbscript:/file:) is stripped to empty, in which case
+    //   we omit the attribute entirely. That blocks middle-click and
+    //   cmd-click escape routes (Electron's `setWindowOpenHandler` /
+    //   `will-navigate` would otherwise bypass our React `onClick` and call
+    //   `shell.openExternal` directly).
+    // - The click handler still receives the ORIGINAL `href` and routes it
+    //   through `resolveMarkdownLinkTarget` so file URLs land in `onFileClick`
+    //   and blocked URLs surface a meaningful error via `onUrlClick` →
+    //   `classifyExternalUrl`.
     a: ({ href, children }) => {
+      const trimmedHref = href?.trim() ?? ''
+      const sanitized = trimmedHref ? defaultUrlTransform(trimmedHref) : ''
+      const safeHref = sanitized ? sanitized : undefined
+
       const handleClick = (e: React.MouseEvent) => {
         e.preventDefault()
 
@@ -195,7 +212,7 @@ function createComponents(
           .join('')
           .trim()
 
-        const target = (href?.trim() || fallbackText)
+        const target = trimmedHref || fallbackText
         if (!target) return
 
         const resolvedTarget = resolveMarkdownLinkTarget(target)
@@ -208,7 +225,7 @@ function createComponents(
 
       return (
         <a
-          href={href}
+          href={safeHref}
           onClick={handleClick}
           className="text-accent hover:underline cursor-pointer"
         >

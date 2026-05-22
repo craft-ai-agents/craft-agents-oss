@@ -1615,8 +1615,14 @@ export default function App() {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
         console.error('Failed to open URL:', error)
+        // The blocked-URL classifier already explains WHY and (for file:)
+        // points the user at preview blocks. Don't append the generic
+        // "use Open File instead" hint when the message already carries
+        // that guidance.
+        const hasRichGuidance = /URL blocked/.test(message)
+        const tail = hasRichGuidance ? '' : '. If this is a local path, use Open File instead.'
         toast.error(t('toast.failedToOpenLink'), {
-          description: `${message}. If this is a local path, use Open File instead.`,
+          description: `${message}${tail}`,
         })
       }
     },
