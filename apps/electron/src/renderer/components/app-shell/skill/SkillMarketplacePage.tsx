@@ -231,9 +231,11 @@ export function SkillMarketplacePage({
     }
   }, [localSlugs])
 
+  const [sortOrder, setSortOrder] = React.useState<'hot' | 'new'>('hot')
+
   const filtered = React.useMemo(() => {
     const q = marketSearch.trim().toLowerCase()
-    return marketSkills
+    const results = marketSkills
       .filter((s) => {
         const matchCat = category === '全部' || s.category === category
         const matchQ = !q || s.name.toLowerCase().includes(q) || s.slug.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.owner.toLowerCase().includes(q)
@@ -243,8 +245,15 @@ export function SkillMarketplacePage({
         ...s,
         installState: (installedIds.has(s.id) ? 'installed' : s.installState) as MarketplaceInstallState,
       }))
-      .sort((a, b) => b.installCount - a.installCount)
-  }, [marketSkills, category, marketSearch, installedIds])
+    if (sortOrder === 'new') {
+      return results.sort((a, b) => {
+        const da = a.publishedAt ? new Date(a.publishedAt).getTime() : 0
+        const db = b.publishedAt ? new Date(b.publishedAt).getTime() : 0
+        return db - da
+      })
+    }
+    return results.sort((a, b) => b.installCount - a.installCount)
+  }, [marketSkills, category, marketSearch, installedIds, sortOrder])
 
   const filteredLocal = React.useMemo(() => {
     const q = localSearch.trim().toLowerCase()
@@ -567,7 +576,7 @@ export function SkillMarketplacePage({
           让 MDP 按你的方式工作
         </h1>
 
-        {/* 搜索 + 类别筛选 */}
+        {/* 搜索 + 排序 + 类别筛选 */}
         <div className="mb-5 flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -579,18 +588,43 @@ export function SkillMarketplacePage({
               className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
+          <div className="flex h-9 items-center rounded-lg border border-border bg-background p-0.5">
+            <button
+              type="button"
+              onClick={() => setSortOrder('hot')}
+              className={cn(
+                'rounded-md px-3 py-1 text-[12px] font-medium transition-colors',
+                sortOrder === 'hot' ? 'bg-foreground/[0.08] text-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              最热
+            </button>
+            <button
+              type="button"
+              onClick={() => setSortOrder('new')}
+              className={cn(
+                'rounded-md px-3 py-1 text-[12px] font-medium transition-colors',
+                sortOrder === 'new' ? 'bg-foreground/[0.08] text-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              最新
+            </button>
+          </div>
           <CategoryDropdown value={category} onChange={setCategory} />
         </div>
 
-        {/* Hero */}
-        <div className="mb-8">
-          <HeroBanner
-            listings={marketSkills}
-            installedIds={installedIds}
-            installingIds={installingIds}
-            onInstall={handleInstall}
-          />
-        </div>
+        {/* 精选推荐 Banner（搜索时隐藏） */}
+        {!marketSearch.trim() && (
+          <div className="mb-8">
+            <h2 className="mb-3 text-[15px] font-semibold text-foreground">精选推荐</h2>
+            <HeroBanner
+              listings={marketSkills}
+              installedIds={installedIds}
+              installingIds={installingIds}
+              onInstall={handleInstall}
+            />
+          </div>
+        )}
 
         {/* 技能列表 */}
         {filtered.length === 0 ? (

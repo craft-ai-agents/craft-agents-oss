@@ -34,6 +34,9 @@ export function SkillRow({
 }) {
   const installed = skill.installState === 'installed'
   const isOwner = Boolean(currentUserId && skill.ownerId === currentUserId)
+  const isNew = skill.publishedAt
+    ? Date.now() - new Date(skill.publishedAt).getTime() < 7 * 24 * 60 * 60 * 1000
+    : false
 
   return (
     <button
@@ -44,7 +47,12 @@ export function SkillRow({
       <SkillIcon icon={skill.icon} iconBg={skill.iconBg} />
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-semibold text-foreground">{skill.name}</p>
+        <p className="flex items-center gap-1.5 truncate text-[13px] font-semibold text-foreground">
+          <span className="truncate">{skill.name}</span>
+          {isNew && (
+            <span className="flex-shrink-0 rounded px-1 py-0.5 text-[10px] font-medium leading-none bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">NEW</span>
+          )}
+        </p>
         {skill.description.length > 20 ? (
           <Tooltip>
             <TooltipTrigger asChild>
