@@ -48,7 +48,8 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const effectiveWorkingDir = workingDirectory && existsSync(workingDirectory)
       ? workingDirectory
       : undefined
-    const { loadAllSkills } = await import('@craft-agent/shared/skills')
+    const { loadAllSkills, invalidateSkillsCache } = await import('@craft-agent/shared/skills')
+    invalidateSkillsCache()
     const skills = loadAllSkills(workspace.rootPath, effectiveWorkingDir)
     deps.platform.logger?.info(`SKILLS_GET: Loaded ${skills.length} skills from ${workspace.rootPath}`)
     return skills
