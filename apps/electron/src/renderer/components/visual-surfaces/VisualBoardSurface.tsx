@@ -38,7 +38,7 @@ export function VisualBoardSurface({
 
   React.useEffect(() => {
     if (!board) return
-    setDraft(board)
+    setDraft(removePlaceholderNotes(board))
     setDirty(false)
     setSaveState('saved')
     versionRef.current += 1
@@ -57,9 +57,9 @@ export function VisualBoardSurface({
     const version = versionRef.current
     const timeout = window.setTimeout(() => {
       setSaveState('saving')
-      saveBoard(draft).then((result) => {
+      saveBoard(removePlaceholderNotes(draft)).then((result) => {
         if (versionRef.current !== version) return
-        setDraft(result.board)
+        setDraft(removePlaceholderNotes(result.board))
         setDirty(false)
         setSaveState('saved')
       }).catch(() => {
@@ -393,6 +393,15 @@ function BoardShell({ message }: { message: string }) {
 
 function createCardId(prefix: string): string {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`
+}
+
+function removePlaceholderNotes(board: VisualBoardSnapshot): VisualBoardSnapshot {
+  const cards = board.cards.filter((card) => {
+    if (card.type !== 'note') return true
+    const title = card.title.trim().toLowerCase()
+    return card.body.trim().length > 0 || title !== 'open note'
+  })
+  return cards.length === board.cards.length ? board : { ...board, cards }
 }
 
 function isVisualBoardOutput(output: OutputSummaryDTO): boolean {
