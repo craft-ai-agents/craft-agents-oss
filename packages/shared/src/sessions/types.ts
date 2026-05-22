@@ -221,7 +221,7 @@ export interface SessionHeader {
   id: string;
   /** SDK session ID (captured after first message) */
   sdkSessionId?: string;
-  /** Workspace root path (stored as portable path, e.g., ~/.craft-agent/...) */
+  /** Workspace root path (stored as portable path, e.g., ~/.mdp-agent/...) */
   workspaceRootPath: string;
   /** Optional user-defined name */
   name?: string;

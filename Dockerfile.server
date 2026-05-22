@@ -19,7 +19,7 @@
 #     -e CRAFT_RPC_TLS_CERT=/certs/cert.pem \
 #     -e CRAFT_RPC_TLS_KEY=/certs/key.pem \
 #     -v /path/to/certs:/certs:ro \
-#     -v ~/.craft-agent:/home/craftagents/.craft-agent \
+#     -v ~/.mdp-agent:/home/craftagents/.mdp-agent \
 #     craft-agent-server
 # =============================================================================
 
@@ -86,10 +86,10 @@ RUN bun build packages/session-mcp-server/src/index.ts \
 # so low-RAM build hosts (e.g. 4GB VPS) can complete the build.
 RUN NODE_OPTIONS="--max-old-space-size=4096" bunx vite build --config apps/webui/vite.config.ts
 
-# Pre-create .craft-agent so Docker named volumes inherit the correct permissions.
-RUN mkdir -p /home/craftagents/.craft-agent
+# Pre-create .mdp-agent so Docker named volumes inherit the correct permissions.
+RUN mkdir -p /home/craftagents/.mdp-agent
 
-# Make app world-readable so any --user can run it. Home dir is writable for .craft-agent.
+# Make app world-readable so any --user can run it. Home dir is writable for .mdp-agent.
 # Use find to only touch files/dirs missing the read bit — much faster than chmod -R on the
 # entire tree (node_modules alone has hundreds of thousands of entries).
 RUN find /app -not -perm -o=r -exec chmod o+r {} + && \

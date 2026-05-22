@@ -34,7 +34,7 @@ module.exports = {
     },
     messages: {
       noLocalStorage:
-        "Avoid localStorage in Craft Agent. Store settings in ~/.craft-agent/preferences.json using window.electronAPI.readPreferences/writePreferences. See packages/shared/src/config/preferences.ts for the preferences API.",
+        "Avoid localStorage in Craft Agent. Store settings in ~/.mdp-agent/preferences.json using window.electronAPI.readPreferences/writePreferences. See packages/shared/src/config/preferences.ts for the preferences API.",
     },
     schema: [],
   },
