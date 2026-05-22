@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { WebPreviewTarget } from './web-preview'
 
+const WEB_PREVIEW_LOAD_TIMEOUT_MS = 8000
+
 interface OutputWebPreviewProps {
   target: WebPreviewTarget
   className?: string
@@ -12,15 +14,27 @@ interface OutputWebPreviewProps {
 export function OutputWebPreview({ target, className }: OutputWebPreviewProps) {
   const [frameKey, setFrameKey] = React.useState(0)
   const [isLoading, setIsLoading] = React.useState(true)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     setFrameKey((key) => key + 1)
     setIsLoading(true)
+    setLoadError(null)
   }, [target.url])
+
+  React.useEffect(() => {
+    if (!isLoading) return
+    const timeout = window.setTimeout(() => {
+      setIsLoading(false)
+      setLoadError('Preview did not finish loading.')
+    }, WEB_PREVIEW_LOAD_TIMEOUT_MS)
+    return () => window.clearTimeout(timeout)
+  }, [frameKey, isLoading])
 
   const reload = React.useCallback(() => {
     setFrameKey((key) => key + 1)
     setIsLoading(true)
+    setLoadError(null)
   }, [])
 
   const copyUrl = React.useCallback(() => {
@@ -48,9 +62,27 @@ export function OutputWebPreview({ target, className }: OutputWebPreviewProps) {
         </Button>
       </div>
       <div className="relative min-h-0 flex-1 bg-white">
-        {isLoading ? (
-          <div className="absolute inset-x-0 top-0 z-[1] bg-background/85 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur">
+        {isLoading && !loadError ? (
+          <div className="absolute inset-x-0 top-0 z-[2] bg-background/85 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur">
             Loading preview...
+          </div>
+        ) : null}
+        {loadError ? (
+          <div className="absolute inset-0 z-[2] flex items-center justify-center bg-background/92 p-4 text-center backdrop-blur">
+            <div className="max-w-sm rounded-md border border-border/60 bg-background p-4 shadow-modal-small">
+              <div className="text-sm font-medium text-foreground">Preview unavailable</div>
+              <div className="mt-1 text-xs text-muted-foreground">{loadError}</div>
+              <div className="mt-3 flex justify-center gap-2">
+                <Button type="button" size="sm" variant="secondary" onClick={reload}>
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Retry
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => window.electronAPI.openUrl(target.url)}>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open external
+                </Button>
+              </div>
+            </div>
           </div>
         ) : null}
         <iframe
@@ -60,7 +92,14 @@ export function OutputWebPreview({ target, className }: OutputWebPreviewProps) {
           sandbox="allow-scripts allow-forms allow-same-origin"
           referrerPolicy="no-referrer"
           className="h-full w-full border-0 bg-white"
-          onLoad={() => setIsLoading(false)}
+          onLoad={() => {
+            setIsLoading(false)
+            setLoadError(null)
+          }}
+          onError={() => {
+            setIsLoading(false)
+            setLoadError('Preview failed to load.')
+          }}
         />
       </div>
     </div>

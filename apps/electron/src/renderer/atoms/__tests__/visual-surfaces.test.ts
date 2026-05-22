@@ -95,6 +95,33 @@ describe('visual sidecar atoms', () => {
     expect(store.get(activeVisualSurfaceAtom)).toBeNull()
   })
 
+  it('reopens the last selected output for a session after close', () => {
+    const store = createStore()
+
+    store.set(openOutputVisualSurfaceAtom, {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      outputId: 'output-older',
+      title: 'Older selected output',
+      kind: 'report',
+      createdAt: '2026-05-22T00:00:00.000Z',
+    })
+    store.set(closeVisualSidecarAtom)
+
+    store.set(toggleVisualSurfaceAtom, {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      output: {
+        id: 'output-latest',
+        title: 'Latest output',
+        kind: 'image',
+        createdAt: '2026-05-22T00:01:00.000Z',
+      },
+    })
+
+    expect(store.get(activeVisualSurfaceAtom)?.outputId).toBe('output-older')
+  })
+
   it('stores user display mode and tracks resolved presentation separately', () => {
     const store = createStore()
 

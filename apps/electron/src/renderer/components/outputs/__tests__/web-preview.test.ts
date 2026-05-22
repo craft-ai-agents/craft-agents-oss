@@ -38,6 +38,18 @@ describe('web preview URL policy', () => {
     expect(isLocalWebPreviewUrl('http://user:pass@localhost:3000')).toBe(false)
     expect(isLocalWebPreviewUrl('not a url')).toBe(false)
   })
+
+  test('blocks the current app origin when provided', () => {
+    expect(isLocalWebPreviewUrl('http://localhost:5173/preview', {
+      blockedOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    })).toBe(false)
+    expect(isLocalWebPreviewUrl('http://127.0.0.1:5173/preview', {
+      blockedOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    })).toBe(false)
+    expect(isLocalWebPreviewUrl('http://localhost:4187/preview', {
+      blockedOrigins: ['http://localhost:5173'],
+    })).toBe(true)
+  })
 })
 
 describe('web preview target resolution', () => {
@@ -83,6 +95,12 @@ describe('web preview target resolution', () => {
         path: 'content.md',
         mimeType: 'text/markdown',
       }],
+    })).toBeNull()
+  })
+
+  test('does not resolve the blocked app origin to an iframe target', () => {
+    expect(resolveWebPreviewTarget(manifest('http://localhost:5173/'), {
+      blockedOrigins: ['http://localhost:5173'],
     })).toBeNull()
   })
 })

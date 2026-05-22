@@ -8,17 +8,22 @@ export interface WebPreviewTarget {
   displayHost: string
 }
 
-export function isLocalWebPreviewUrl(value: string | undefined): boolean {
+interface WebPreviewPolicyOptions {
+  blockedOrigins?: string[]
+}
+
+export function isLocalWebPreviewUrl(value: string | undefined, options: WebPreviewPolicyOptions = {}): boolean {
   const parsed = parseUrl(value)
   if (!parsed) return false
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
   if (parsed.username || parsed.password) return false
+  if (options.blockedOrigins?.some((origin) => origin === parsed.origin)) return false
   return LOCAL_WEB_HOSTS.has(normalizeHostname(parsed.hostname))
 }
 
-export function resolveWebPreviewTarget(manifest: OutputManifestDTO): WebPreviewTarget | null {
-  const candidate = selectPreviewLink(manifest)
-  if (!candidate || !isLocalWebPreviewUrl(candidate.url)) return null
+export function resolveWebPreviewTarget(manifest: OutputManifestDTO, options: WebPreviewPolicyOptions = {}): WebPreviewTarget | null {
+  const candidate = selectPreviewLink(manifest, options)
+  if (!candidate || !isLocalWebPreviewUrl(candidate.url, options)) return null
   const parsed = parseUrl(candidate.url)
   if (!parsed) return null
   const frameUrl = normalizeFrameUrl(parsed)
@@ -41,7 +46,7 @@ function normalizeFrameUrl(url: URL): URL {
   return normalized
 }
 
-function selectPreviewLink(manifest: OutputManifestDTO): OutputLinkDTO | null {
+function selectPreviewLink(manifest: OutputManifestDTO, options: WebPreviewPolicyOptions): OutputLinkDTO | null {
   if (manifest.preview?.mode === 'web' || manifest.preview?.mode === 'external-link') {
     const primary = manifest.links.find((link) => link.role === 'primary')
     if (primary) return primary
@@ -50,8 +55,8 @@ function selectPreviewLink(manifest: OutputManifestDTO): OutputLinkDTO | null {
 
   if (manifest.assets.length > 0) return null
 
-  return manifest.links.find((link) => link.role === 'primary' && isLocalWebPreviewUrl(link.url))
-    ?? manifest.links.find((link) => isLocalWebPreviewUrl(link.url))
+  return manifest.links.find((link) => link.role === 'primary' && isLocalWebPreviewUrl(link.url, options))
+    ?? manifest.links.find((link) => isLocalWebPreviewUrl(link.url, options))
     ?? null
 }
 

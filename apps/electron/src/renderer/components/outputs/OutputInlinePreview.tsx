@@ -29,7 +29,8 @@ export function OutputInlinePreview({
 }: OutputInlinePreviewProps) {
   const previewAsset = resolvePreviewAsset(manifest, primary)
   const mode = manifest.preview?.mode ?? inferPreviewMode(previewAsset)
-  const webPreviewTarget = resolveWebPreviewTarget(manifest)
+  const blockedWebPreviewOrigins = React.useMemo(() => getBlockedWebPreviewOrigins(), [])
+  const webPreviewTarget = resolveWebPreviewTarget(manifest, { blockedOrigins: blockedWebPreviewOrigins })
   const inlineText = manifest.preview?.inlineText ?? null
   const assetId = manifest.preview?.assetId ?? previewAsset?.id
   const shouldReadAssetData = Boolean(assetId && (mode === 'image' || mode === 'video' || mode === 'audio'))
@@ -222,4 +223,18 @@ function EmptyPreview({ children, className }: { children: React.ReactNode; clas
       {children}
     </div>
   )
+}
+
+function getBlockedWebPreviewOrigins(): string[] {
+  if (typeof window === 'undefined') return []
+  const { hostname, origin, port, protocol } = window.location
+  if (protocol !== 'http:' && protocol !== 'https:') return []
+  const origins = new Set([origin])
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1') {
+    const suffix = port ? `:${port}` : ''
+    origins.add(`${protocol}//localhost${suffix}`)
+    origins.add(`${protocol}//127.0.0.1${suffix}`)
+    origins.add(`${protocol}//[::1]${suffix}`)
+  }
+  return [...origins]
 }

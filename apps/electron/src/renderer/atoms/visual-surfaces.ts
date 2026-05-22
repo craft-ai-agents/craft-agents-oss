@@ -12,6 +12,7 @@ export interface VisualSidecarState {
   isCollapsed: boolean
   focusedAt: number | null
   resolvedPresentation: ResolvedVisualSurfacePresentation
+  rememberedSurfacesBySession: Record<string, VisualSurface>
 }
 
 const nowIso = () => new Date().toISOString()
@@ -83,6 +84,7 @@ export const visualSidecarAtom = atom<VisualSidecarState>({
   isCollapsed: false,
   focusedAt: null,
   resolvedPresentation: null,
+  rememberedSurfacesBySession: {},
 })
 
 export const visualSurfacePresentationModeAtom = atomWithStorage<VisualSurfacePresentationMode>(
@@ -94,19 +96,23 @@ export const activeVisualSurfaceAtom = atom((get) => get(visualSidecarAtom).acti
 
 export const openDemoVisualSurfaceAtom = atom(
   null,
-  (_get, set, input: { workspaceId: string; sessionId: string; kind?: VisualSurfaceKind }) => {
+  (get, set, input: { workspaceId: string; sessionId: string; kind?: VisualSurfaceKind }) => {
+    const current = get(visualSidecarAtom)
+    const surface = createDemoSurface(input)
     set(visualSidecarAtom, {
-      activeSurface: createDemoSurface(input),
+      ...current,
+      activeSurface: surface,
       isCollapsed: false,
       focusedAt: Date.now(),
       resolvedPresentation: null,
+      rememberedSurfacesBySession: rememberSurface(current.rememberedSurfacesBySession, surface),
     })
   },
 )
 
 export const openOutputVisualSurfaceAtom = atom(
   null,
-  (_get, set, input: {
+  (get, set, input: {
     workspaceId: string
     sessionId: string
     outputId: string
@@ -115,11 +121,15 @@ export const openOutputVisualSurfaceAtom = atom(
     createdAt: string
     updatedAt?: string
   }) => {
+    const current = get(visualSidecarAtom)
+    const surface = createOutputSurface(input)
     set(visualSidecarAtom, {
-      activeSurface: createOutputSurface(input),
+      ...current,
+      activeSurface: surface,
       isCollapsed: false,
       focusedAt: Date.now(),
       resolvedPresentation: null,
+      rememberedSurfacesBySession: rememberSurface(current.rememberedSurfacesBySession, surface),
     })
   },
 )
@@ -147,12 +157,17 @@ export const collapseVisualSidecarAtom = atom(
 
 export const closeVisualSidecarAtom = atom(
   null,
-  (_get, set) => {
+  (get, set) => {
+    const current = get(visualSidecarAtom)
     set(visualSidecarAtom, {
+      ...current,
       activeSurface: null,
       isCollapsed: false,
       focusedAt: null,
       resolvedPresentation: null,
+      rememberedSurfacesBySession: current.activeSurface
+        ? rememberSurface(current.rememberedSurfacesBySession, current.activeSurface)
+        : current.rememberedSurfacesBySession,
     })
   },
 )
@@ -190,6 +205,18 @@ export const toggleVisualSurfaceAtom = atom(
       return
     }
 
+    const remembered = current.rememberedSurfacesBySession[input.sessionId]
+    if (remembered?.workspaceId === input.workspaceId && (remembered.source === 'output' || !input.output)) {
+      set(visualSidecarAtom, {
+        ...current,
+        activeSurface: remembered,
+        isCollapsed: false,
+        focusedAt: Date.now(),
+        resolvedPresentation: null,
+      })
+      return
+    }
+
     if (input.output) {
       set(openOutputVisualSurfaceAtom, {
         workspaceId: input.workspaceId,
@@ -219,3 +246,14 @@ export const resolveVisualSurfacePresentationAtom = atom(
     set(visualSidecarAtom, { ...current, resolvedPresentation })
   },
 )
+
+function rememberSurface(
+  rememberedSurfacesBySession: Record<string, VisualSurface>,
+  surface: VisualSurface,
+): Record<string, VisualSurface> {
+  if (!surface.sessionId) return rememberedSurfacesBySession
+  return {
+    ...rememberedSurfacesBySession,
+    [surface.sessionId]: surface,
+  }
+}
