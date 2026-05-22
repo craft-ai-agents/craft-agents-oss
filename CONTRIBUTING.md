@@ -67,12 +67,27 @@ Before submitting a PR, ensure all type checks pass:
 bun run typecheck:all
 ```
 
+### Testing
+
+Run the test suite:
+
+```bash
+bun test
+```
+
+Run tests in watch mode during development:
+
+```bash
+bun test:watch
+```
+
 ## Pull Request Process
 
-1. **Title**: Use a clear, descriptive title
+1. **Title**: Use a clear, descriptive title prefixed with type (e.g., `feat:`, `fix:`, `docs:`)
 2. **Description**: Explain what the PR does and why
 3. **Testing**: Describe how you tested the changes
 4. **Screenshots**: Include screenshots for UI changes
+5. **Linked Issues**: Reference any related issues
 
 ### PR Template
 
@@ -110,6 +125,18 @@ craft-agents/
 - **MCP Integration**: `packages/shared/src/mcp/`
 - **UI Components**: `packages/ui/src/`
 - **Electron App**: `apps/electron/`
+
+## Code of Conduct
+
+Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md) to keep our community welcoming and respectful.
+
+## Reporting Bugs
+
+When reporting bugs, please include:
+- A clear description of the issue
+- Steps to reproduce
+- Expected vs actual behavior
+- Environment details (OS, Bun version, etc.)
 
 ## Questions?
 
