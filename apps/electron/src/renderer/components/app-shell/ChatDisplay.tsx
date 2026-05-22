@@ -1069,7 +1069,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
         setFeedbackByMessageId(buildFeedbackStateByMessageId(entries, sessionId))
       })
       .catch(error => {
-        console.error('[Craft Agent Feedback] Failed to load feedback state:', error)
+        console.error('[MDP Agent Feedback] Failed to load feedback state:', error)
       })
 
     return () => {
@@ -1091,7 +1091,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       turn.turnId
     )
 
-    console.log('[Craft Agent Feedback]', {
+    console.log('[MDP Agent Feedback]', {
       time: new Date().toISOString(),
       action: rating === 'like' ? '点赞' : '点踩',
       sessionId: currentSession.id,
@@ -1195,12 +1195,12 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       if (previousFeedback?.feedbackId) {
         window.electronAPI.deleteChatFeedback(previousFeedback.feedbackId)
           .catch(error => {
-            console.error('[Craft Agent Feedback] Failed to delete remote feedback:', error)
+            console.error('[MDP Agent Feedback] Failed to delete remote feedback:', error)
           })
       }
       window.electronAPI.deleteChatFeedbackState(currentSession.workspaceId, currentSession.id, messageId)
         .catch(error => {
-          console.error('[Craft Agent Feedback] Failed to delete feedback state:', error)
+          console.error('[MDP Agent Feedback] Failed to delete feedback state:', error)
         })
       return
     }
@@ -1212,7 +1212,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       nextRating === 'like',
       previousFeedback?.feedbackId,
     ).catch(error => {
-      console.error('[Craft Agent Feedback] Failed to save feedback state:', error)
+      console.error('[MDP Agent Feedback] Failed to save feedback state:', error)
     })
 
     const savePromise = persistFeedbackSelection(
@@ -1222,7 +1222,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       '',
       previousFeedback?.feedbackId,
     ).catch(error => {
-      console.error('[Craft Agent Feedback] Failed to save remote feedback:', error)
+      console.error('[MDP Agent Feedback] Failed to save remote feedback:', error)
       return ''
     }).finally(() => {
       delete pendingFeedbackSaveByMessageIdRef.current[messageId]
@@ -1289,7 +1289,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           ))
       })
       .catch(error => {
-        console.error('[Craft Agent Feedback] Failed to update dislike comment:', error)
+        console.error('[MDP Agent Feedback] Failed to update dislike comment:', error)
       })
 
     logFeedbackToConsole(dislikeFeedbackDialog.turn, 'dislike', comment)

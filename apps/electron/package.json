@@ -1,7 +1,7 @@
 {
   "name": "@craft-agent/electron",
   "version": "0.9.5",
-  "description": "Electron desktop app for Craft Agents",
+  "description": "Electron desktop app for MDP Agent",
   "main": "dist/main.cjs",
   "private": true,
   "author": {

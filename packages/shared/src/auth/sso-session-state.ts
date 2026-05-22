@@ -7,7 +7,6 @@ export interface AuthenticatedSsoSessionState {
   token: string;
   userName?: string;
   department?: string;
-  employeeId?: string;
 }
 
 /** Public renderer-safe view used when no valid SSO session exists. */
@@ -75,7 +74,6 @@ function authenticated(session: SsoSession): AuthenticatedSsoSessionState {
     token: session.token,
     userName: session.userName,
     department: session.department,
-    employeeId: session.employeeId,
   };
 }
 
