@@ -1,4 +1,4 @@
-import { readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { RpcServer } from '@craft-agent/server-core/transport';
@@ -22,6 +22,7 @@ import {
 import {
   VISUAL_BOARD_ASSET_ID,
   VISUAL_BOARD_ASSET_PATH,
+  VISUAL_BOARD_MAX_CARDS,
   VISUAL_BOARD_SESSION_TAG,
   VISUAL_BOARD_TAG,
   assertVisualBoardSnapshot,
@@ -30,6 +31,17 @@ import {
   summarizeVisualBoard,
   type VisualBoardSnapshot,
 } from '@craft-agent/shared/visual-board';
+import {
+  VISUAL_SURFACE_EVENTS_ASSET_ID,
+  VISUAL_SURFACE_EVENTS_ASSET_PATH,
+  VISUAL_SURFACE_EVENTS_MIME_TYPE,
+  normalizeVisualSurfaceEventInput,
+  parseVisualSurfaceEventLines,
+  type ApplyVisualSurfaceEventResult,
+  type VisualSurfaceEventInput,
+  type VisualSurfaceEventRecord,
+  type VisualSurfaceEventSource,
+} from '@craft-agent/shared/visual-surface-events';
 import { readRun, writeRun, type WorkflowRunSnapshot, type WorkflowRunStep } from '@craft-agent/shared/workflows';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 
@@ -69,10 +81,11 @@ export class OutputService {
       } catch {
         // Fall through and repair the existing board output below.
       }
+      const replayed = this.replayVisualSurfaceEventsToBoard(workspaceId, sessionId, existing);
       const repaired = this.writeVisualBoardToOutput(
         workspaceId,
         existing,
-        createEmptyVisualBoardSnapshot({ workspaceId, sessionId }),
+        replayed ?? createEmptyVisualBoardSnapshot({ workspaceId, sessionId }),
       );
       this.emitUpdated(workspaceId);
       return repaired;
@@ -108,6 +121,53 @@ export class OutputService {
     return saved;
   }
 
+  applyVisualSurfaceEvent(
+    workspaceId: string,
+    sessionId: string,
+    input: VisualSurfaceEventInput,
+    source: VisualSurfaceEventSource = 'agent',
+  ): ApplyVisualSurfaceEventResult {
+    try {
+      const payload = normalizeVisualSurfaceEventInput(input);
+      const current = this.getOrCreateVisualBoard(workspaceId, sessionId);
+      const now = new Date().toISOString();
+      const event: VisualSurfaceEventRecord = {
+        schemaVersion: 1,
+        id: randomUUID(),
+        workspaceId,
+        sessionId,
+        action: payload.action,
+        payload,
+        source,
+        createdAt: now,
+      };
+
+      const board = this.applyVisualEventToBoard(workspaceId, sessionId, current.board, event, now);
+      assertVisualBoardSnapshot(board, { workspaceId, sessionId });
+      this.assertVisualBoardOutputCards(workspaceId, sessionId, board);
+      const saved = this.writeVisualBoardToOutput(workspaceId, current.output, board);
+      this.appendVisualSurfaceEvent(workspaceId, saved.output, event);
+      this.emitUpdated(workspaceId);
+      return {
+        ok: true,
+        eventId: event.id,
+        outputId: saved.output.id,
+        board: saved.board,
+        receipt: this.visualEventReceipt(event, saved.board),
+      };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  listVisualSurfaceEvents(workspaceId: string, sessionId: string): VisualSurfaceEventRecord[] {
+    const manifest = this.findVisualBoardManifest(workspaceId, sessionId);
+    if (!manifest) return [];
+    const path = this.resolveAssetPath(workspaceId, manifest.id, VISUAL_SURFACE_EVENTS_ASSET_PATH);
+    if (!existsSync(path)) return [];
+    return parseVisualSurfaceEventLines(readFileSync(path, 'utf-8'), { workspaceId, sessionId });
+  }
+
   async delete(workspaceId: string, outputId: string): Promise<boolean> {
     const root = this.deps.getWorkspaceRootPath(workspaceId);
     const manifest = readOutput(root, outputId);
@@ -138,6 +198,126 @@ export class OutputService {
     ) ?? null;
   }
 
+  private applyVisualEventToBoard(
+    workspaceId: string,
+    sessionId: string,
+    board: VisualBoardSnapshot,
+    event: VisualSurfaceEventRecord,
+    now: string,
+  ): VisualBoardSnapshot {
+    if (event.action === 'open_board') {
+      const title = event.payload.action === 'open_board' ? event.payload.title : undefined;
+      return title ? { ...board, title, updatedAt: now } : board;
+    }
+
+    if (event.action === 'add_note') {
+      if (event.payload.action !== 'add_note') throw new Error('Invalid add_note event payload.');
+      if (board.cards.length >= VISUAL_BOARD_MAX_CARDS) throw new Error(`Visual board already has the maximum ${VISUAL_BOARD_MAX_CARDS} cards.`);
+      return {
+        ...board,
+        cards: [
+          {
+            id: `note-${event.id}`,
+            type: 'note',
+            title: event.payload.title,
+            body: event.payload.body ?? '',
+            createdAt: now,
+            updatedAt: now,
+          },
+          ...board.cards,
+        ],
+        updatedAt: now,
+      };
+    }
+
+    if (event.action === 'pin_output') {
+      if (event.payload.action !== 'pin_output') throw new Error('Invalid pin_output event payload.');
+      const { outputId } = event.payload;
+      if (board.cards.some((card) => card.type === 'output' && card.outputId === outputId)) {
+        return { ...board, updatedAt: now };
+      }
+      if (board.cards.length >= VISUAL_BOARD_MAX_CARDS) throw new Error(`Visual board already has the maximum ${VISUAL_BOARD_MAX_CARDS} cards.`);
+      const output = this.findPinnableSessionOutput(workspaceId, sessionId, outputId);
+      if (!output) throw new Error(`Output is not pinnable in this session: ${outputId}`);
+      return {
+        ...board,
+        cards: [
+          {
+            id: `output-${event.id}`,
+            type: 'output',
+            outputId: output.id,
+            title: output.title,
+            kind: output.kind,
+            summary: output.summary,
+            createdAt: now,
+            updatedAt: now,
+          },
+          ...board.cards,
+        ],
+        updatedAt: now,
+      };
+    }
+
+    throw new Error(`Unsupported visual surface action: ${event.action}`);
+  }
+
+  private findPinnableSessionOutput(workspaceId: string, sessionId: string, outputId: string): OutputManifest | null {
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
+    const output = readOutput(root, outputId);
+    if (!output) return null;
+    if (output.origin.sessionId !== sessionId) return null;
+    if (output.tags?.includes(VISUAL_BOARD_TAG)) return null;
+    return output;
+  }
+
+  private replayVisualSurfaceEventsToBoard(
+    workspaceId: string,
+    sessionId: string,
+    output: OutputManifest,
+  ): VisualBoardSnapshot | null {
+    const path = this.resolveAssetPath(workspaceId, output.id, VISUAL_SURFACE_EVENTS_ASSET_PATH);
+    if (!existsSync(path)) return null;
+    const events = parseVisualSurfaceEventLines(readFileSync(path, 'utf-8'), { workspaceId, sessionId });
+    if (events.length === 0) return null;
+
+    let board = createEmptyVisualBoardSnapshot({
+      workspaceId,
+      sessionId,
+      now: events[0]?.createdAt,
+    });
+    let applied = 0;
+    for (const event of events) {
+      try {
+        board = this.applyVisualEventToBoard(workspaceId, sessionId, board, event, event.createdAt);
+        applied += 1;
+      } catch {
+        // Keep replay best-effort: one stale pin should not erase valid notes.
+      }
+    }
+    return applied > 0 ? board : null;
+  }
+
+  private appendVisualSurfaceEvent(workspaceId: string, output: OutputManifest, event: VisualSurfaceEventRecord): OutputManifest {
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
+    const outputDir = getOutputDir(root, output.id);
+    const file = join(outputDir, VISUAL_SURFACE_EVENTS_ASSET_PATH);
+    appendFileSync(file, JSON.stringify(event) + '\n', 'utf-8');
+    const meta = {
+      sizeBytes: statSync(file).size,
+      sha256: createHash('sha256').update(readFileSync(file)).digest('hex'),
+    };
+    const eventAsset = this.visualSurfaceEventsAsset(meta);
+    const nextOutput: OutputManifest = {
+      ...output,
+      assets: [
+        ...output.assets.filter((asset) => asset.id !== VISUAL_SURFACE_EVENTS_ASSET_ID),
+        eventAsset,
+      ],
+    };
+    writeOutputManifest(root, nextOutput);
+    return nextOutput;
+  }
+
   private boardAsset(meta?: { sizeBytes: number; sha256: string }): OutputAsset {
     return {
       id: VISUAL_BOARD_ASSET_ID,
@@ -147,6 +327,29 @@ export class OutputService {
       mimeType: 'application/json',
       ...meta,
     };
+  }
+
+  private visualSurfaceEventsAsset(meta?: { sizeBytes: number; sha256: string }): OutputAsset {
+    return {
+      id: VISUAL_SURFACE_EVENTS_ASSET_ID,
+      label: 'Visual surface events',
+      role: 'supporting',
+      path: VISUAL_SURFACE_EVENTS_ASSET_PATH,
+      mimeType: VISUAL_SURFACE_EVENTS_MIME_TYPE,
+      ...meta,
+    };
+  }
+
+  private visualEventReceipt(event: VisualSurfaceEventRecord, board: VisualBoardSnapshot): string {
+    if (event.action === 'open_board') return `Opened Canvas board with ${board.cards.length} card${board.cards.length === 1 ? '' : 's'}.`;
+    if (event.action === 'add_note' && event.payload.action === 'add_note') return `Added note "${event.payload.title}" to Canvas.`;
+    if (event.action === 'pin_output' && event.payload.action === 'pin_output') {
+      const { outputId } = event.payload;
+      return board.cards.some((card) => card.type === 'output' && card.outputId === outputId)
+        ? `Pinned output ${outputId} to Canvas.`
+        : `Output ${outputId} was already pinned to Canvas.`;
+    }
+    return 'Updated Canvas.';
   }
 
   private assertVisualBoardOutputCards(workspaceId: string, sessionId: string, board: VisualBoardSnapshot): void {

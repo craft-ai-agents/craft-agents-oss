@@ -159,6 +159,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
                 sessionId={activeSurface.sessionId}
                 outputs={sessionOutputs}
                 onOpenOutput={openOutput}
+                refreshKey={boardOutput?.updatedAt}
               />
             ) : selectedManifest && activeSurface.workspaceId ? (
               <OutputInlinePreview

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { OutputService } from './OutputService';
 import { writeRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows';
 import { VISUAL_BOARD_ASSET_PATH, type VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
+import { VISUAL_SURFACE_EVENTS_ASSET_PATH } from '@craft-agent/shared/visual-surface-events';
 
 function makeRunSnapshot(runId: string, workspaceId: string): WorkflowRunSnapshot {
   const now = new Date().toISOString();
@@ -182,5 +183,124 @@ describe('OutputService visual boards', () => {
       }],
     };
     expect(() => service.saveVisualBoard('ws', 'session-1', invalidBoard)).toThrow('Invalid visual board output card reference');
+  });
+
+  it('applies visual surface events and persists append-only history', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-visual-events-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const emitted: string[] = [];
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+      emitOutputsUpdated: (workspaceId) => emitted.push(workspaceId),
+    });
+
+    const opened = service.applyVisualSurfaceEvent('ws', 'session-1', { action: 'open_board' }, 'agent');
+    expect(opened.ok).toBe(true);
+    expect(opened.board?.cards).toEqual([]);
+
+    const noted = service.applyVisualSurfaceEvent('ws', 'session-1', {
+      action: 'add_note',
+      title: 'Decision',
+      body: 'Use event-backed cards.',
+    }, 'agent');
+    expect(noted.ok).toBe(true);
+    expect(noted.board?.cards[0]).toMatchObject({
+      type: 'note',
+      title: 'Decision',
+      body: 'Use event-backed cards.',
+    });
+
+    const output = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Preview',
+        kind: 'report',
+        summary: 'Pinned output',
+        content: '# preview',
+        contentMimeType: 'text/markdown',
+      },
+    });
+    const pinned = service.applyVisualSurfaceEvent('ws', 'session-1', {
+      action: 'pin_output',
+      outputId: output.outputId!,
+    }, 'agent');
+    expect(pinned.ok).toBe(true);
+    expect(pinned.board?.cards[0]).toMatchObject({
+      type: 'output',
+      outputId: output.outputId,
+      title: 'Preview',
+    });
+
+    const duplicate = service.applyVisualSurfaceEvent('ws', 'session-1', {
+      action: 'pin_output',
+      outputId: output.outputId!,
+    }, 'agent');
+    expect(duplicate.ok).toBe(true);
+    expect(duplicate.board?.cards.filter((card) => card.type === 'output')).toHaveLength(1);
+
+    const boardOutputId = pinned.outputId!;
+    const historyPath = join(root, 'outputs', boardOutputId, VISUAL_SURFACE_EVENTS_ASSET_PATH);
+    expect(existsSync(historyPath)).toBe(true);
+    expect(service.listVisualSurfaceEvents('ws', 'session-1').map((event) => event.action)).toEqual([
+      'open_board',
+      'add_note',
+      'pin_output',
+      'pin_output',
+    ]);
+    expect(readFileSync(historyPath, 'utf-8').trim().split('\n')).toHaveLength(4);
+    expect(emitted).toContain('ws');
+  });
+
+  it('replays visual surface events to repair a corrupt board asset', () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-visual-replay-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+
+    const noted = service.applyVisualSurfaceEvent('ws', 'session-1', {
+      action: 'add_note',
+      title: 'Recovered',
+      body: 'From event history.',
+    }, 'agent');
+    expect(noted.ok).toBe(true);
+    const boardOutputId = noted.outputId!;
+
+    writeFileSync(join(root, 'outputs', boardOutputId, VISUAL_BOARD_ASSET_PATH), '{broken', 'utf-8');
+
+    const repaired = service.getOrCreateVisualBoard('ws', 'session-1');
+    expect(repaired.output.id).toBe(boardOutputId);
+    expect(repaired.board.cards[0]).toMatchObject({
+      type: 'note',
+      title: 'Recovered',
+      body: 'From event history.',
+    });
+  });
+
+  it('rejects visual surface pins outside the current session', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-visual-pin-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+
+    const other = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-2',
+      output: {
+        title: 'Wrong session',
+        kind: 'report',
+        summary: 'Nope',
+        content: '# nope',
+        contentMimeType: 'text/markdown',
+      },
+    });
+    const result = service.applyVisualSurfaceEvent('ws', 'session-1', {
+      action: 'pin_output',
+      outputId: other.outputId!,
+    }, 'agent');
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('not pinnable');
   });
 });

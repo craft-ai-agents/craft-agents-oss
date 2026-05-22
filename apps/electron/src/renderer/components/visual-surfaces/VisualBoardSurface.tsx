@@ -18,6 +18,7 @@ interface VisualBoardSurfaceProps {
   sessionId: string
   outputs: OutputSummaryDTO[]
   onOpenOutput: (output: OutputSummaryDTO) => void
+  refreshKey?: string
 }
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
@@ -27,8 +28,9 @@ export function VisualBoardSurface({
   sessionId,
   outputs,
   onOpenOutput,
+  refreshKey,
 }: VisualBoardSurfaceProps) {
-  const { board, loading, error, saveBoard } = useVisualBoard(workspaceId, sessionId)
+  const { board, loading, error, refresh, saveBoard } = useVisualBoard(workspaceId, sessionId)
   const [draft, setDraft] = React.useState<VisualBoardSnapshot | null>(null)
   const [dirty, setDirty] = React.useState(false)
   const [saveState, setSaveState] = React.useState<SaveState>('idle')
@@ -41,6 +43,13 @@ export function VisualBoardSurface({
     setSaveState('saved')
     versionRef.current += 1
   }, [board])
+
+  React.useEffect(() => {
+    if (!refreshKey || dirty) return
+    refresh().catch(() => {
+      // The hook owns visible error state.
+    })
+  }, [dirty, refresh, refreshKey])
 
   React.useEffect(() => {
     if (!draft || !dirty) return

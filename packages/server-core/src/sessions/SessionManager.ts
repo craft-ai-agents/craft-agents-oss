@@ -4398,6 +4398,25 @@ user a clickable link to where the thing now lives.`
             output: input,
           })
         },
+        applyVisualSurfaceEventFn: async (input) => {
+          const outputService = new OutputService({
+            getWorkspaceRootPath: (workspaceId) => {
+              if (workspaceId !== managed.workspace.id) {
+                throw new Error(`Workspace not available for this session: ${workspaceId}`)
+              }
+              return managed.workspace.rootPath
+            },
+            emitOutputsUpdated: (workspaceId) => {
+              this.eventSink?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId)
+            },
+          })
+          return outputService.applyVisualSurfaceEvent(
+            managed.workspace.id,
+            managed.id,
+            input,
+            'agent',
+          )
+        },
         listSessionsFn: (options) => {
           const DEFAULT_LIMIT = 20
           const MAX_LIMIT = 100

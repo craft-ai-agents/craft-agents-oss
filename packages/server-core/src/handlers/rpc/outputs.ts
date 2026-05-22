@@ -4,6 +4,7 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
 import type { OutputManifest, OutputSummary } from '@craft-agent/shared/outputs';
 import type { VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
+import type { ApplyVisualSurfaceEventResult, VisualSurfaceEventInput, VisualSurfaceEventRecord } from '@craft-agent/shared/visual-surface-events';
 import type { RpcServer } from '@craft-agent/server-core/transport';
 import { requestClientOpenPath, requestClientShowInFolder } from '@craft-agent/server-core/transport';
 import { getWorkspaceAllowedDirs, validateFilePath } from '@craft-agent/server-core/handlers';
@@ -16,6 +17,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.outputs.DELETE,
   RPC_CHANNELS.outputs.GET_VISUAL_BOARD,
   RPC_CHANNELS.outputs.SAVE_VISUAL_BOARD,
+  RPC_CHANNELS.outputs.APPLY_VISUAL_SURFACE_EVENT,
+  RPC_CHANNELS.outputs.LIST_VISUAL_SURFACE_EVENTS,
   RPC_CHANNELS.outputs.OPEN_FILE,
   RPC_CHANNELS.outputs.SHOW_IN_FOLDER,
   RPC_CHANNELS.outputs.READ_ASSET_TEXT,
@@ -139,6 +142,27 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
     ): Promise<{ output: OutputManifest; board: VisualBoardSnapshot }> => {
       assertLocalWorkspace(workspaceId, 'Save visual board');
       return serviceFor(server).saveVisualBoard(workspaceId, sessionId, snapshot);
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.APPLY_VISUAL_SURFACE_EVENT,
+    async (
+      _ctx,
+      workspaceId: string,
+      sessionId: string,
+      input: VisualSurfaceEventInput,
+    ): Promise<ApplyVisualSurfaceEventResult> => {
+      assertLocalWorkspace(workspaceId, 'Apply visual surface event');
+      return serviceFor(server).applyVisualSurfaceEvent(workspaceId, sessionId, input, 'user');
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.LIST_VISUAL_SURFACE_EVENTS,
+    async (_ctx, workspaceId: string, sessionId: string): Promise<VisualSurfaceEventRecord[]> => {
+      assertLocalWorkspace(workspaceId, 'List visual surface events');
+      return serviceFor(server).listVisualSurfaceEvents(workspaceId, sessionId);
     },
   );
 

@@ -400,6 +400,12 @@ export interface SessionToolContext {
    */
   createOutput?(input: import('./handlers/outputs.ts').CreateOutputToolInput): Promise<import('./handlers/outputs.ts').CreateOutputResult>;
 
+  /**
+   * Apply a validated visual surface operation to the current session Canvas.
+   * Backend owns workspace/session resolution; callers cannot supply those IDs.
+   */
+  applyVisualSurfaceEvent?(input: import('./handlers/visual-surface.ts').VisualSurfaceToolInput): Promise<import('./handlers/visual-surface.ts').VisualSurfaceToolResult>;
+
   // ============================================================
   // Inter-Session Messaging
   // ============================================================
