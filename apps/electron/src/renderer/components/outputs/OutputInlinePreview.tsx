@@ -29,20 +29,21 @@ export function OutputInlinePreview({
   const mode = manifest.preview?.mode ?? inferPreviewMode(previewAsset)
   const inlineText = manifest.preview?.inlineText ?? null
   const assetId = manifest.preview?.assetId ?? previewAsset?.id
-  const [content, setContent] = React.useState<string | null>(inlineText)
+  const shouldReadAssetData = Boolean(assetId && (mode === 'image' || mode === 'video' || mode === 'audio'))
+  const shouldReadAssetText = Boolean(assetId && (mode === 'markdown' || mode === 'text' || mode === 'json' || mode === 'receipt'))
+  const [content, setContent] = React.useState<string | null>(shouldReadAssetText ? null : inlineText)
   const [dataUrl, setDataUrl] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const electronAPI = window.electronAPI as OutputsElectronAPI
 
   React.useEffect(() => {
-    setContent(inlineText)
+    setContent(shouldReadAssetText ? null : inlineText)
     setDataUrl(null)
     setError(null)
-  }, [assetId, inlineText, manifest.id, mode])
+  }, [assetId, inlineText, manifest.id, mode, shouldReadAssetText])
 
   React.useEffect(() => {
-    if (inlineText || !assetId) return
-    if (mode !== 'image' && mode !== 'video' && mode !== 'audio') return
+    if (!assetId || !shouldReadAssetData) return
     if (typeof electronAPI.readOutputAssetDataUrl !== 'function') {
       setError('Output asset preview is unavailable in this window.')
       return
@@ -56,11 +57,10 @@ export function OutputInlinePreview({
       if (mounted) setError(err instanceof Error ? err.message : String(err))
     })
     return () => { mounted = false }
-  }, [assetId, electronAPI, inlineText, manifest.id, mode, workspaceId])
+  }, [assetId, electronAPI, manifest.id, shouldReadAssetData, workspaceId])
 
   React.useEffect(() => {
-    if (inlineText || !assetId) return
-    if (mode !== 'markdown' && mode !== 'text' && mode !== 'json' && mode !== 'receipt') return
+    if (!assetId || !shouldReadAssetText) return
     if (typeof electronAPI.readOutputAssetText !== 'function') {
       setError('Output text preview is unavailable in this window.')
       return
@@ -73,7 +73,7 @@ export function OutputInlinePreview({
       if (mounted) setError(err instanceof Error ? err.message : String(err))
     })
     return () => { mounted = false }
-  }, [assetId, electronAPI, inlineText, manifest.id, mode, workspaceId])
+  }, [assetId, electronAPI, manifest.id, shouldReadAssetText, workspaceId])
 
   if (error) {
     return (
