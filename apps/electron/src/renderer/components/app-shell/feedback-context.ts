@@ -19,6 +19,8 @@ export interface FeedbackStateValue {
   feedbackId?: string
 }
 
+export type FeedbackStateByMessageId = Record<string, FeedbackStateValue>
+
 export function clampFeedbackComment(comment: string): string {
   return comment.slice(0, 255)
 }
@@ -30,11 +32,46 @@ export function resolveNextFeedbackValue(
   return currentValue === selectedValue ? null : selectedValue
 }
 
+export function resolveFeedbackIdForDelete(
+  previousFeedback: FeedbackStateValue | undefined,
+  pendingSave: Promise<string> | undefined
+): Promise<string> | null {
+  if (previousFeedback?.feedbackId) {
+    return Promise.resolve(previousFeedback.feedbackId)
+  }
+
+  return pendingSave ?? null
+}
+
+export function shouldApplySavedFeedbackId(
+  currentFeedback: FeedbackStateValue | undefined,
+  savedRating: FeedbackRating
+): boolean {
+  return currentFeedback?.rating === savedRating
+}
+
+export function applySavedFeedbackId(
+  feedbackByMessageId: FeedbackStateByMessageId,
+  messageId: string,
+  rating: FeedbackRating,
+  feedbackId: string
+): FeedbackStateByMessageId {
+  const currentFeedback = feedbackByMessageId[messageId]
+  if (!shouldApplySavedFeedbackId(currentFeedback, rating)) {
+    return feedbackByMessageId
+  }
+
+  return {
+    ...feedbackByMessageId,
+    [messageId]: { rating, feedbackId },
+  }
+}
+
 export function buildFeedbackStateByMessageId(
   entries: PersistedFeedbackStateEntry[],
   sessionId: string
-): Record<string, FeedbackStateValue> {
-  const feedbackByMessageId: Record<string, FeedbackStateValue> = {}
+): FeedbackStateByMessageId {
+  const feedbackByMessageId: FeedbackStateByMessageId = {}
 
   for (const entry of entries) {
     if (entry.session_id === sessionId) {
