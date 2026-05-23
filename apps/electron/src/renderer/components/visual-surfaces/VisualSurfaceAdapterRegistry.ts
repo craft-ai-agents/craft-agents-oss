@@ -21,6 +21,7 @@ export interface VisualSurfaceAdapterContext {
   boardOutput?: OutputSummaryDTO
   manifestError: string | null
   onOpenOutput: (output: OutputSummaryDTO) => void
+  onPreviewSettled?: (status: 'ready' | 'error') => void
 }
 
 export interface VisualSurfaceAdapterDescriptor {

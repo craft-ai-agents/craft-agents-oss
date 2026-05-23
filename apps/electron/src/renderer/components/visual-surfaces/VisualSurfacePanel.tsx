@@ -49,6 +49,14 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     ?? (activeSurface?.kind === 'canvas' ? latestDisplayOutput?.id ?? boardOutput?.id : undefined)
   const [selectedManifest, setSelectedManifest] = React.useState<OutputManifestDTO | null>(null)
   const [manifestError, setManifestError] = React.useState<string | null>(null)
+  const selectedCaptureVersion = React.useMemo(
+    () => selectedManifest ? visualCaptureVersion(selectedManifest) : null,
+    [selectedManifest],
+  )
+  const selectedCaptureKey = activeSurface?.workspaceId && activeSurface.sessionId && selectedManifest && selectedCaptureVersion
+    ? `${activeSurface.workspaceId}:${activeSurface.sessionId}:${selectedManifest.id}:${selectedCaptureVersion}`
+    : null
+  const [previewSettledKey, setPreviewSettledKey] = React.useState<string | null>(null)
   const visualCaptureRef = React.useRef<HTMLDivElement | null>(null)
   const capturedVersionsRef = React.useRef(new Set<string>())
 
@@ -70,6 +78,10 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     })
     return () => { mounted = false }
   }, [getOutput, selectedOutputId])
+
+  React.useEffect(() => {
+    setPreviewSettledKey(null)
+  }, [selectedCaptureKey])
 
   const openOutput = React.useCallback((output: OutputSummaryDTO) => {
     if (!activeSurface?.sessionId) return
@@ -111,6 +123,10 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     }
   }, [activeSurface?.sessionId, activeSurface?.workspaceId, openDemoVisualSurface, selectedManifest])
 
+  const handlePreviewSettled = React.useCallback(() => {
+    if (selectedCaptureKey) setPreviewSettledKey(selectedCaptureKey)
+  }, [selectedCaptureKey])
+
   React.useEffect(() => {
     if (!activeSurface?.workspaceId || !activeSurface.sessionId || !selectedManifest) return
     if (selectedManifest.tags?.includes(VISUAL_BOARD_TAG)) return
@@ -119,8 +135,10 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
 
     const workspaceId = activeSurface.workspaceId
     const sessionId = activeSurface.sessionId
-    const captureVersion = visualCaptureVersion(selectedManifest)
-    const captureKey = `${workspaceId}:${sessionId}:${selectedManifest.id}:${captureVersion}`
+    if (!selectedCaptureVersion || !selectedCaptureKey) return
+    if (previewSettledKey !== selectedCaptureKey) return
+    const captureVersion = selectedCaptureVersion
+    const captureKey = selectedCaptureKey
     if (capturedVersionsRef.current.has(captureKey)) return
 
     let cancelled = false
@@ -161,7 +179,15 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
       cancelled = true
       window.clearTimeout(timeout)
     }
-  }, [activeSurface?.sessionId, activeSurface?.workspaceId, isCollapsed, selectedManifest])
+  }, [
+    activeSurface?.sessionId,
+    activeSurface?.workspaceId,
+    isCollapsed,
+    previewSettledKey,
+    selectedCaptureKey,
+    selectedCaptureVersion,
+    selectedManifest,
+  ])
 
   if (!activeSurface) return null
 
@@ -175,6 +201,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     boardOutput,
     manifestError,
     onOpenOutput: openOutput,
+    onPreviewSettled: handlePreviewSettled,
   }
   const selectedIsBoard = selectedManifest?.tags?.includes(VISUAL_BOARD_TAG) === true
   const canSendSelectedOutputToCanvas = !!activeSurface.sessionId

@@ -43,6 +43,7 @@ export function renderVisualSurfaceAdapter(context: VisualSurfaceAdapterContext)
         primary={manifest.primary ?? manifest.assets.find((asset) => asset.role === 'primary') ?? manifest.assets[0]}
         compact
         className="flex h-full min-h-0 w-full items-center justify-center overflow-auto p-3 text-white/72"
+        onPreviewSettled={context.onPreviewSettled}
       />
     )
   }

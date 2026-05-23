@@ -10,9 +10,10 @@ const WEB_PREVIEW_LOAD_TIMEOUT_MS = 8000
 interface OutputWebPreviewProps {
   target: WebPreviewTarget
   className?: string
+  onPreviewSettled?: (status: 'ready' | 'error') => void
 }
 
-export function OutputWebPreview({ target, className }: OutputWebPreviewProps) {
+export function OutputWebPreview({ target, className, onPreviewSettled }: OutputWebPreviewProps) {
   const [frameKey, setFrameKey] = React.useState(0)
   const [isLoading, setIsLoading] = React.useState(true)
   const [loadError, setLoadError] = React.useState<string | null>(null)
@@ -28,9 +29,10 @@ export function OutputWebPreview({ target, className }: OutputWebPreviewProps) {
     const timeout = window.setTimeout(() => {
       setIsLoading(false)
       setLoadError('Preview did not finish loading.')
+      onPreviewSettled?.('error')
     }, WEB_PREVIEW_LOAD_TIMEOUT_MS)
     return () => window.clearTimeout(timeout)
-  }, [frameKey, isLoading])
+  }, [frameKey, isLoading, onPreviewSettled])
 
   const reload = React.useCallback(() => {
     setFrameKey((key) => key + 1)
@@ -136,10 +138,12 @@ export function OutputWebPreview({ target, className }: OutputWebPreviewProps) {
           onLoad={() => {
             setIsLoading(false)
             setLoadError(null)
+            onPreviewSettled?.('ready')
           }}
           onError={() => {
             setIsLoading(false)
             setLoadError('Preview failed to load.')
+            onPreviewSettled?.('error')
           }}
         />
       </div>

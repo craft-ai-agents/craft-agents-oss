@@ -13,6 +13,7 @@ interface OutputInlinePreviewProps {
   primary?: OutputAssetDTO
   className?: string
   compact?: boolean
+  onPreviewSettled?: (status: 'ready' | 'error') => void
 }
 
 type OutputsElectronAPI = typeof window.electronAPI & {
@@ -26,6 +27,7 @@ export function OutputInlinePreview({
   primary,
   className,
   compact = false,
+  onPreviewSettled,
 }: OutputInlinePreviewProps) {
   const previewAsset = resolvePreviewAsset(manifest, primary)
   const mode = manifest.preview?.mode ?? inferPreviewMode(previewAsset)
@@ -39,6 +41,12 @@ export function OutputInlinePreview({
   const [dataUrl, setDataUrl] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const electronAPI = window.electronAPI as OutputsElectronAPI
+  const hasStaticPreview = Boolean(
+    (mode === 'image' || mode === 'video' || mode === 'audio') && dataUrl
+    || (mode === 'markdown' || mode === 'json' || mode === 'text' || mode === 'receipt') && content !== null
+    || mode === 'receipt' && manifest.receipts.length > 0
+    || (mode === 'external-link' || mode === 'web' || manifest.links.length > 0) && manifest.links[0],
+  )
 
   React.useEffect(() => {
     setContent(shouldReadAssetText ? null : inlineText)
@@ -79,6 +87,17 @@ export function OutputInlinePreview({
     return () => { mounted = false }
   }, [assetId, electronAPI, manifest.id, shouldReadAssetText, workspaceId])
 
+  React.useEffect(() => {
+    if (webPreviewTarget) return
+    if (error) {
+      onPreviewSettled?.('error')
+      return
+    }
+    if (hasStaticPreview || (!assetId && !shouldReadAssetData && !shouldReadAssetText)) {
+      onPreviewSettled?.('ready')
+    }
+  }, [assetId, error, hasStaticPreview, onPreviewSettled, shouldReadAssetData, shouldReadAssetText, webPreviewTarget])
+
   if (error) {
     return (
       <EmptyPreview className={className}>
@@ -91,7 +110,7 @@ export function OutputInlinePreview({
   if (webPreviewTarget) {
     return (
       <div className="h-full min-h-0 w-full overflow-hidden">
-        <OutputWebPreview target={webPreviewTarget} className="h-full min-h-0" />
+        <OutputWebPreview target={webPreviewTarget} className="h-full min-h-0" onPreviewSettled={onPreviewSettled} />
       </div>
     )
   }
