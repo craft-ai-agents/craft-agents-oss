@@ -409,6 +409,7 @@ export const CHANNEL_MAP = {
   // Memory (global USER.md + per-agent MEMORY.md)
   listAgentMemory: invoke(RPC_CHANNELS.memory.LIST_AGENT),
   listUserMemory: invoke(RPC_CHANNELS.memory.LIST_USER),
+  listMemoryEvents: invoke(RPC_CHANNELS.memory.LIST_EVENTS),
   upsertMemory: invoke(RPC_CHANNELS.memory.UPSERT),
   saveMemory: invoke(RPC_CHANNELS.memory.SAVE),
   updateMemory: invoke(RPC_CHANNELS.memory.UPDATE),

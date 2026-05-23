@@ -5,6 +5,7 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
   deleteMemoryEntry,
+  listMemoryEvents,
   listAgentMemoryEntries,
   listUserMemoryEntries,
   loadAgentMemory,
@@ -14,6 +15,7 @@ import {
   type DeleteMemoryInput,
   type LoadedMemoryFile,
   type MemoryEntry,
+  type MemoryEvent,
   type MemoryEntryType,
   type MemoryMutationEventMetadata,
   type MemoryScope,
@@ -26,6 +28,7 @@ import type { HandlerDeps } from '../handler-deps'
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.memory.LIST_AGENT,
   RPC_CHANNELS.memory.LIST_USER,
+  RPC_CHANNELS.memory.LIST_EVENTS,
   RPC_CHANNELS.memory.UPSERT,
   RPC_CHANNELS.memory.SAVE,
   RPC_CHANNELS.memory.UPDATE,
@@ -42,6 +45,11 @@ export interface MemoryMutationPayload {
   metadata?: Record<string, unknown>
   expires?: string | null
   force?: boolean
+}
+
+export interface ListMemoryEventsPayload {
+  scope: MemoryScope
+  agentSlug?: string | null
 }
 
 function broadcastChanged(server: RpcServer, scope: MemoryScope, agentSlug: string | null): void {
@@ -152,6 +160,11 @@ export function registerMemoryHandlers(server: RpcServer, deps: HandlerDeps): vo
     const loaded = loadUserMemory()
     if (!loaded) throw new Error('USER.md is invalid or unreadable')
     return loaded
+  })
+
+  server.handle(RPC_CHANNELS.memory.LIST_EVENTS, async (_ctx, payload: ListMemoryEventsPayload): Promise<MemoryEvent[]> => {
+    const agentSlug = requireAgentSlug(payload.scope, payload.agentSlug)
+    return listMemoryEvents(payload.scope, agentSlug)
   })
 
   server.handle(RPC_CHANNELS.memory.UPSERT, async (_ctx, payload: MemoryMutationPayload): Promise<unknown> => {

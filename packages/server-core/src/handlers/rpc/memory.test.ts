@@ -16,6 +16,14 @@ const updateMemoryEntry = mock(async (input: any) => ({
   body: input.body ?? 'Body.',
 }))
 const deleteMemoryEntry = mock(async () => true)
+const listMemoryEvents = mock(() => [{
+  id: 'evt_1',
+  action: 'save',
+  scope: 'user',
+  entryName: 'Preferred writing style',
+  source: 'rpc',
+  createdAt: '2026-05-01T00:00:00.000Z',
+}])
 const listUserMemoryEntries = mock(() => [])
 const listAgentMemoryEntries = mock(() => [])
 const loadUserMemory = mock(() => ({
@@ -34,6 +42,7 @@ const loadAgentMemory = mock((agentSlug: string) => ({
 
 mock.module('@craft-agent/shared/memory', () => ({
   deleteMemoryEntry,
+  listMemoryEvents,
   listAgentMemoryEntries,
   listUserMemoryEntries,
   loadAgentMemory,
@@ -90,6 +99,7 @@ beforeEach(() => {
   saveMemoryEntry.mockClear()
   updateMemoryEntry.mockClear()
   deleteMemoryEntry.mockClear()
+  listMemoryEvents.mockClear()
   listUserMemoryEntries.mockClear()
   listAgentMemoryEntries.mockClear()
   loadUserMemory.mockClear()
@@ -158,5 +168,23 @@ describe('memory RPC handlers', () => {
       name: 'Preferred writing style',
       force: true,
     }))
+  })
+
+  it('lists memory audit events for a scope', async () => {
+    const { handlers, server } = createHarness()
+    const { registerMemoryHandlers } = await import('./memory')
+    registerMemoryHandlers(server, deps)
+
+    const listEvents = handlers.get(RPC_CHANNELS.memory.LIST_EVENTS)
+    if (!listEvents) throw new Error('memory list events handler not registered')
+
+    const result = await listEvents(ctx(), { scope: 'agent', agentSlug: 'helper' })
+
+    expect(listMemoryEvents).toHaveBeenCalledWith('agent', 'helper')
+    expect(result).toEqual([expect.objectContaining({
+      id: 'evt_1',
+      action: 'save',
+      entryName: 'Preferred writing style',
+    })])
   })
 })
