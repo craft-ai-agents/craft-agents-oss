@@ -32,7 +32,12 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     () => sessionOutputs.find((output) => output.tags?.includes(VISUAL_BOARD_TAG)),
     [sessionOutputs],
   )
-  const selectedOutputId = activeSurface?.outputId ?? (activeSurface?.kind === 'canvas' ? boardOutput?.id : undefined)
+  const latestDisplayOutput = React.useMemo(
+    () => sessionOutputs.find((output) => !output.tags?.includes(VISUAL_BOARD_TAG)),
+    [sessionOutputs],
+  )
+  const selectedOutputId = activeSurface?.outputId
+    ?? (activeSurface?.kind === 'canvas' ? latestDisplayOutput?.id ?? boardOutput?.id : undefined)
   const [selectedManifest, setSelectedManifest] = React.useState<OutputManifestDTO | null>(null)
   const [manifestError, setManifestError] = React.useState<string | null>(null)
 

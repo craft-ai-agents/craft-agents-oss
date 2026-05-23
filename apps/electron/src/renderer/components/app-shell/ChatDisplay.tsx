@@ -79,6 +79,7 @@ import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } fro
 import { resolveBranchNewPanelOption } from "./branching"
 import { handleErrorMessageAction } from "./error-message-actions"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
+import { VISUAL_BOARD_TAG } from "@craft-agent/shared/visual-board"
 import { useOutputs } from "@/hooks/useOutputs"
 import {
   visualSidecarAtom,
@@ -513,7 +514,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     () => session?.id ? outputs.filter((output) => output.origin?.sessionId === session.id) : [],
     [outputs, session?.id],
   )
-  const latestSessionVisualOutput = sessionVisualOutputs[0]
+  const latestSessionVisualOutput = sessionVisualOutputs.find((output) => !output.tags?.includes(VISUAL_BOARD_TAG))
 
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
