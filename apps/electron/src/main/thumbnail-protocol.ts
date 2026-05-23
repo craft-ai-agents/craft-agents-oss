@@ -126,7 +126,7 @@ export function registerThumbnailScheme(): void {
         standard: true,
         secure: true,
         supportFetchAPI: true,
-        corsEnabled: false,
+        corsEnabled: true,
         stream: true,
       },
     },
