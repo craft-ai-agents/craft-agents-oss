@@ -59,6 +59,7 @@ export interface RecordVisualCaptureInput {
   sessionId: string;
   outputId: string;
   captureVersion: string;
+  reviewTriggerId?: string;
   source: 'canvas';
   dataUrl: string;
   width: number;
@@ -71,6 +72,8 @@ export interface RecordVisualCaptureResult {
   assetId: string;
   path: string;
   capturedAt: string;
+  reviewQueued?: boolean;
+  reviewTriggerId?: string;
   skipped?: boolean;
 }
 
@@ -180,12 +183,20 @@ export class OutputService {
     const absolutePath = this.resolveAssetPath(input.workspaceId, input.outputId, assetPath);
     const existing = output.assets.find((asset) => asset.id === assetId && asset.path === assetPath);
     if (existing && existsSync(absolutePath)) {
+      const reviewQueued = this.recordVisualReviewQueued(root, output, input.reviewTriggerId, {
+        assetId,
+        assetPath,
+        captureVersion: input.captureVersion,
+      });
+      if (reviewQueued) this.emitUpdated(input.workspaceId);
       return {
         ok: true,
         outputId: output.id,
         assetId,
         path: assetPath,
         capturedAt: captureTimestampFromLabel(existing.label) ?? capturedAt,
+        ...(input.reviewTriggerId ? { reviewTriggerId: input.reviewTriggerId } : {}),
+        ...(reviewQueued ? { reviewQueued } : {}),
         skipped: true,
       };
     }
@@ -202,16 +213,74 @@ export class OutputService {
       sizeBytes: buffer.length,
       sha256,
     };
-    const nextOutput: OutputManifest = {
+    const baseOutput: OutputManifest = {
       ...output,
       assets: [
         ...output.assets.filter((entry) => entry.id !== assetId),
         asset,
       ],
     };
+    const reviewQueued = this.appendVisualReviewReceipt(baseOutput, input.reviewTriggerId, {
+      assetId,
+      assetPath,
+      captureVersion: input.captureVersion,
+    });
+    const nextOutput = reviewQueued.output;
     writeOutputManifest(root, nextOutput);
     this.emitUpdated(input.workspaceId);
-    return { ok: true, outputId: output.id, assetId, path: assetPath, capturedAt };
+    return {
+      ok: true,
+      outputId: output.id,
+      assetId,
+      path: assetPath,
+      capturedAt,
+      ...(input.reviewTriggerId ? { reviewTriggerId: input.reviewTriggerId } : {}),
+      ...(reviewQueued.queued ? { reviewQueued: true } : {}),
+    };
+  }
+
+  private recordVisualReviewQueued(
+    root: string,
+    output: OutputManifest,
+    reviewTriggerId: string | undefined,
+    details: { assetId: string; assetPath: string; captureVersion: string },
+  ): boolean {
+    const result = this.appendVisualReviewReceipt(output, reviewTriggerId, details);
+    if (!result.queued) return false;
+    writeOutputManifest(root, result.output);
+    return true;
+  }
+
+  private appendVisualReviewReceipt(
+    output: OutputManifest,
+    reviewTriggerId: string | undefined,
+    details: { assetId: string; assetPath: string; captureVersion: string },
+  ): { output: OutputManifest; queued: boolean } {
+    if (!reviewTriggerId) return { output, queued: false };
+    const externalId = `canvas-review:${reviewTriggerId}`;
+    if (output.receipts.some((receipt) => receipt.provider === 'runner-canvas' && receipt.action === 'visual-review' && receipt.externalId === externalId)) {
+      return { output, queued: false };
+    }
+    const receiptId = `visual-review-${createHash('sha256').update(reviewTriggerId).digest('hex').slice(0, 16)}`;
+    return {
+      output: {
+        ...output,
+        receipts: [
+          ...output.receipts,
+          {
+            id: receiptId,
+            provider: 'runner-canvas',
+            action: 'visual-review',
+            status: 'pending',
+            occurredAt: new Date().toISOString(),
+            externalId,
+            displayText: 'Queued Canvas capture for agent visual review.',
+            metadata: details,
+          },
+        ],
+      },
+      queued: true,
+    };
   }
 
   getOrCreateVisualBoard(workspaceId: string, sessionId: string): { output: OutputManifest; board: VisualBoardSnapshot } {

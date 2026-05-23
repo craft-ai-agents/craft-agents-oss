@@ -57,6 +57,8 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     ? `${activeSurface.workspaceId}:${activeSurface.sessionId}:${selectedManifest.id}:${selectedCaptureVersion}`
     : null
   const [previewSettledKey, setPreviewSettledKey] = React.useState<string | null>(null)
+  const [visualReviewTriggerId, setVisualReviewTriggerId] = React.useState<string | null>(null)
+  const visualReviewCounterRef = React.useRef(0)
   const visualCaptureRef = React.useRef<HTMLDivElement | null>(null)
   const capturedVersionsRef = React.useRef(new Set<string>())
 
@@ -82,6 +84,21 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
   React.useEffect(() => {
     setPreviewSettledKey(null)
   }, [selectedCaptureKey])
+
+  React.useEffect(() => {
+    if (!activeSurface?.workspaceId || !activeSurface.sessionId || !selectedOutputId || isCollapsed) {
+      setVisualReviewTriggerId(null)
+      return
+    }
+    visualReviewCounterRef.current += 1
+    setVisualReviewTriggerId([
+      activeSurface.workspaceId,
+      activeSurface.sessionId,
+      selectedOutputId,
+      Date.now(),
+      visualReviewCounterRef.current,
+    ].join(':'))
+  }, [activeSurface?.sessionId, activeSurface?.workspaceId, isCollapsed, selectedOutputId])
 
   const openOutput = React.useCallback((output: OutputSummaryDTO) => {
     if (!activeSurface?.sessionId) return
@@ -138,7 +155,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     if (!selectedCaptureVersion || !selectedCaptureKey) return
     if (previewSettledKey !== selectedCaptureKey) return
     const captureVersion = selectedCaptureVersion
-    const captureKey = selectedCaptureKey
+    const captureKey = visualReviewTriggerId ? `${selectedCaptureKey}:${visualReviewTriggerId}` : selectedCaptureKey
     if (capturedVersionsRef.current.has(captureKey)) return
 
     let cancelled = false
@@ -147,6 +164,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
       const node = visualCaptureRef.current
       const captureVisualElement = window.electronAPI.captureVisualElement
       const recordVisualCapture = window.electronAPI.recordVisualCapture
+      const queueCanvasVisualReview = window.electronAPI.queueCanvasVisualReview
       if (!node || typeof captureVisualElement !== 'function' || typeof recordVisualCapture !== 'function') return
       const rect = node.getBoundingClientRect()
       if (rect.width < 80 || rect.height < 80) return
@@ -159,16 +177,31 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
           height: rect.height,
         })
         if (cancelled) return
-        await recordVisualCapture({
+        const result = await recordVisualCapture({
           workspaceId,
           sessionId,
           outputId: selectedManifest.id,
           source: 'canvas',
           captureVersion,
+          ...(visualReviewTriggerId ? { reviewTriggerId: visualReviewTriggerId } : {}),
           dataUrl: capture.dataUrl,
           width: capture.width,
           height: capture.height,
         })
+        if (!cancelled && result.reviewQueued && result.reviewTriggerId && typeof queueCanvasVisualReview === 'function') {
+          void queueCanvasVisualReview({
+            workspaceId,
+            sessionId,
+            outputId: selectedManifest.id,
+            outputTitle: selectedManifest.title,
+            captureAssetId: result.assetId,
+            capturePath: result.path,
+            captureVersion,
+            reviewTriggerId: result.reviewTriggerId,
+          }).catch((err) => {
+            console.warn('[VisualSurfacePanel] canvas visual review queue failed:', err)
+          })
+        }
         capturedVersionsRef.current.add(captureKey)
       } catch (err) {
         console.warn('[VisualSurfacePanel] visual capture failed:', err)
@@ -187,6 +220,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     selectedCaptureKey,
     selectedCaptureVersion,
     selectedManifest,
+    visualReviewTriggerId,
   ])
 
   if (!activeSurface) return null

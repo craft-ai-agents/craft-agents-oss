@@ -233,6 +233,7 @@ describe('OutputService visual boards', () => {
       outputId: output.outputId!,
       source: 'canvas',
       captureVersion: 'version-1',
+      reviewTriggerId: 'open-1',
       dataUrl,
       width: 640,
       height: 360,
@@ -243,24 +244,54 @@ describe('OutputService visual boards', () => {
       outputId: output.outputId!,
       source: 'canvas',
       captureVersion: 'version-1',
+      reviewTriggerId: 'open-1',
+      dataUrl,
+      width: 640,
+      height: 360,
+    });
+    const editedSameOpen = service.recordVisualCapture({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      outputId: output.outputId!,
+      source: 'canvas',
+      captureVersion: 'version-2',
+      reviewTriggerId: 'open-1',
+      dataUrl,
+      width: 640,
+      height: 360,
+    });
+    const reopened = service.recordVisualCapture({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      outputId: output.outputId!,
+      source: 'canvas',
+      captureVersion: 'version-2',
+      reviewTriggerId: 'open-2',
       dataUrl,
       width: 640,
       height: 360,
     });
 
     expect(first.ok).toBe(true);
+    expect(first.reviewQueued).toBe(true);
     expect(second.skipped).toBe(true);
+    expect(second.reviewQueued).toBeUndefined();
+    expect(editedSameOpen.skipped).toBeUndefined();
+    expect(editedSameOpen.reviewQueued).toBeUndefined();
+    expect(reopened.skipped).toBe(true);
+    expect(reopened.reviewQueued).toBe(true);
     expect(existsSync(join(root, 'outputs', output.outputId!, first.path))).toBe(true);
     const manifest = service.get('ws', output.outputId!);
     expect(manifest?.assets.filter((asset) => asset.id === 'visual-capture-canvas')).toHaveLength(1);
+    expect(manifest?.receipts.filter((receipt) => receipt.provider === 'runner-canvas' && receipt.action === 'visual-review')).toHaveLength(2);
     const state = service.getVisualSurfaceState('ws', 'session-1');
     expect(state.outputs.find((entry) => entry.id === output.outputId)).toMatchObject({
       visualCapture: {
         assetId: 'visual-capture-canvas',
-        path: first.path,
+        path: editedSameOpen.path,
       },
     });
-    expect(emitted).toEqual(['ws', 'ws']);
+    expect(emitted).toEqual(['ws', 'ws', 'ws', 'ws']);
   });
 
   it('records size and hash metadata for file-backed outputs', async () => {

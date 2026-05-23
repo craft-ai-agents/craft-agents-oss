@@ -88,6 +88,7 @@ import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlA
 import { loadAllSkills, loadGlobalSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
+import { assertOutputAssetPath, readOutput } from '@craft-agent/shared/outputs'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -6176,6 +6177,60 @@ user a clickable link to where the thing now lives.`
 
     // Clean up attachments directory (handled by deleteStoredSession for workspace-scoped storage)
     sessionLog.info(`Deleted session ${sessionId}`)
+  }
+
+  async queueCanvasVisualReview(input: {
+    workspaceId: string
+    sessionId: string
+    outputId: string
+    outputTitle?: string
+    captureAssetId: string
+    capturePath: string
+    captureVersion: string
+    reviewTriggerId: string
+  }): Promise<{ accepted: boolean; reason?: string }> {
+    const managed = this.sessions.get(input.sessionId)
+    if (!managed) throw new Error(`Session ${input.sessionId} not found`)
+    if (managed.workspace.id !== input.workspaceId) {
+      throw new Error(`Session "${input.sessionId}" is not in workspace "${input.workspaceId}".`)
+    }
+
+    const output = readOutput(managed.workspace.rootPath, input.outputId)
+    if (!output) throw new Error(`Output not found: ${input.outputId}`)
+    if (output.workspaceId !== input.workspaceId) {
+      throw new Error(`Output "${input.outputId}" is not in workspace "${input.workspaceId}".`)
+    }
+    if (output.origin.sessionId !== input.sessionId) {
+      throw new Error(`Output "${input.outputId}" is not from session "${input.sessionId}".`)
+    }
+
+    const captureAsset = output.assets.find((asset) => asset.id === input.captureAssetId && asset.path === input.capturePath)
+    if (!captureAsset || captureAsset.mimeType !== 'image/png') {
+      return { accepted: false, reason: 'visual capture asset missing' }
+    }
+
+    const absoluteCapturePath = assertOutputAssetPath(managed.workspace.rootPath, input.outputId, captureAsset.path)
+    if (!existsSync(absoluteCapturePath)) {
+      return { accepted: false, reason: 'visual capture file missing' }
+    }
+
+    const attachment = readFileAttachment(absoluteCapturePath)
+    if (!attachment) return { accepted: false, reason: 'visual capture attachment unreadable' }
+    attachment.name = `${output.slug || input.outputId}-canvas-preview.png`
+
+    const title = input.outputTitle ?? output.title
+    const message = [
+      '<system-reminder>',
+      `Canvas just captured a preview screenshot for "${title}".`,
+      'Inspect the attached image for obvious visual or render defects in that artifact only.',
+      'If something is clearly broken and you can fix it with one focused edit, do that once.',
+      'If it looks acceptable or the issue is uncertain, do not make changes just to change it.',
+      'Do not start another Canvas visual review unless the user reopens Canvas or clicks another board/output tab.',
+      '</system-reminder>',
+    ].join('\n')
+
+    await this.sendMessage(input.sessionId, message, [attachment])
+    return { accepted: true }
   }
 
   async sendMessage(
