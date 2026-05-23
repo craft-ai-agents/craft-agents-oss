@@ -263,6 +263,37 @@ describe('OutputService visual boards', () => {
     expect(emitted).toEqual(['ws', 'ws']);
   });
 
+  it('records size and hash metadata for file-backed outputs', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-file-output-meta-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const dataDir = join(root, 'sessions', 'session-1', 'data');
+    mkdirSync(dataDir, { recursive: true });
+    const filePath = join(dataDir, 'preview.html');
+    writeFileSync(filePath, '<!doctype html><h1>Preview</h1>', 'utf-8');
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+
+    const output = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Preview HTML',
+        kind: 'code',
+        summary: 'HTML preview',
+        files: [{ path: filePath, role: 'primary' }],
+      },
+    });
+
+    expect(output.ok).toBe(true);
+    const manifest = service.get('ws', output.outputId!);
+    expect(manifest?.primary).toMatchObject({
+      mimeType: 'text/html',
+      sizeBytes: Buffer.byteLength('<!doctype html><h1>Preview</h1>'),
+    });
+    expect(manifest?.primary?.sha256).toBeDefined();
+  });
+
   it('creates, reads, and saves one output-backed board per session', () => {
     const root = mkdtempSync(join(tmpdir(), 'osvc-board-'));
     mkdirSync(join(root, 'outputs'), { recursive: true });

@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { dirname, join } from 'node:path';
+import { dirname, extname, isAbsolute, join } from 'node:path';
 import type { RpcServer } from '@craft-agent/server-core/transport';
 import type { CreateOutputToolInput, CreateOutputResult, VisualSurfaceStateCapture, VisualSurfaceStateToolResult } from '@craft-agent/session-tools-core';
 import {
@@ -646,6 +646,7 @@ export class OutputService {
         label: file.label?.trim() || file.path.split(/[\\/]/).pop() || `File ${index + 1}`,
         role: file.role ?? (index === 0 && !input.output.content ? 'primary' : 'attachment'),
         path: file.path,
+        ...fileAssetMetadata(file.path),
       })),
       links: (input.output.links ?? []).map((link, index) => ({
         id: `link-${index + 1}`,
@@ -849,6 +850,38 @@ function latestVisualCapture(output: OutputManifest): VisualSurfaceStateCapture 
     path: asset.path,
     capturedAt: captureTimestampFromLabel(asset.label) ?? undefined,
   };
+}
+
+function fileAssetMetadata(path: string): Pick<OutputAsset, 'mimeType' | 'sizeBytes' | 'sha256'> {
+  if (!isAbsolute(path) || !existsSync(path)) return {};
+  const stat = statSync(path);
+  if (!stat.isFile()) return {};
+  const data = readFileSync(path);
+  return {
+    mimeType: mimeTypeForAssetPath(path),
+    sizeBytes: stat.size,
+    sha256: createHash('sha256').update(data).digest('hex'),
+  };
+}
+
+function mimeTypeForAssetPath(path: string): string | undefined {
+  const ext = extname(path).toLowerCase();
+  if (ext === '.html' || ext === '.htm') return 'text/html';
+  if (ext === '.md' || ext === '.markdown') return 'text/markdown';
+  if (ext === '.txt') return 'text/plain';
+  if (ext === '.json') return 'application/json';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.gif') return 'image/gif';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.svg') return 'image/svg+xml';
+  if (ext === '.mp4' || ext === '.m4v') return 'video/mp4';
+  if (ext === '.mov') return 'video/quicktime';
+  if (ext === '.webm') return 'video/webm';
+  if (ext === '.mp3') return 'audio/mpeg';
+  if (ext === '.wav') return 'audio/wav';
+  if (ext === '.m4a') return 'audio/mp4';
+  return undefined;
 }
 
 function decodePngDataUrl(dataUrl: string): { buffer: Buffer; mimeType: 'image/png' } {
