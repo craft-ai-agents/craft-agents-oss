@@ -65,6 +65,7 @@ This is the auto-memory pattern Claude Code itself uses. Battle-tested at scale.
 | [`03-ux.md`](./03-ux.md) | UI: Memory tab on agent detail, USER.md editor, optional Concierge "review my memory" affordance. |
 | [`04-implementation-plan.md`](./04-implementation-plan.md) | Phased build plan. Phase 1 ships in ~1 week. |
 | [`05-sessions-log.md`](./05-sessions-log.md) | Cross-session summary log — the sibling feature that lets agents recall "what did we work on yesterday?" |
+| [`06-memory-os-spec.md`](./06-memory-os-spec.md) | North-star Memory OS spec: auto-memory sidecar, local recall index, Obsidian vault, relationship graph, consolidation, and comparisons to Agno/Hermes/OpenHuman/Karpathy-style systems. |
 
 ## North-star demo
 
