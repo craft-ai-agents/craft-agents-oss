@@ -20,6 +20,7 @@ import {
   type OutputSummary,
   type OutputOrigin,
 } from '@craft-agent/shared/outputs';
+import { OUTPUT_SHOW_IN_CANVAS_TAG } from '@craft-agent/shared/outputs/constants';
 import {
   VISUAL_BOARD_ASSET_ID,
   VISUAL_BOARD_ASSET_PATH,
@@ -527,6 +528,10 @@ export class OutputService {
           agentName: input.agentName,
         };
 
+    const tags = input.output.showInCanvas
+      ? [...new Set([...(input.output.tags ?? []), OUTPUT_SHOW_IN_CANVAS_TAG])]
+      : input.output.tags;
+
     const manifest = createOutputBundle(this.deps.getWorkspaceRootPath(input.workspaceId), {
       workspaceId: input.workspaceId,
       title: input.output.title,
@@ -558,12 +563,29 @@ export class OutputService {
         displayText: receipt.displayText,
         metadata: receipt.metadata,
       })),
-      tags: input.output.tags,
+      tags,
       completedAt: now,
     });
 
     if (input.workflowRunId) {
       await this.attachOutputToWorkflowRun(input.workspaceId, input.workflowRunId, manifest.id);
+    }
+    let shownInCanvas = false;
+    let canvasReceipt: string | undefined;
+    if (input.output.showInCanvas) {
+      const action = manifest.kind === 'image'
+        ? 'add_image'
+        : manifest.kind === 'video'
+          ? 'add_video'
+          : 'pin_output';
+      const visualResult = this.applyVisualSurfaceEvent(
+        input.workspaceId,
+        input.sessionId,
+        { action, outputId: manifest.id },
+        'agent',
+      );
+      shownInCanvas = visualResult.ok;
+      canvasReceipt = visualResult.receipt ?? visualResult.error;
     }
     this.emitUpdated(input.workspaceId);
     return {
@@ -571,6 +593,8 @@ export class OutputService {
       outputId: manifest.id,
       route: `/outputs/${manifest.id}`,
       file: `${manifest.id}/output.json`,
+      shownInCanvas,
+      canvasReceipt,
     };
   }
 

@@ -466,6 +466,8 @@ export const CreateOutputSchema = z.object({
     metadata: z.record(z.string(), z.unknown()).optional(),
   })).optional(),
   tags: z.array(z.string()).optional(),
+  showInCanvas: z.boolean().optional().describe('Set true when the user should see this Output in Canvas immediately. The backend marks and pins the same-session Output when Canvas is available.'),
+  show_in_canvas: z.boolean().optional().describe('Alias for showInCanvas. Prefer showInCanvas in new calls.'),
 });
 
 export const VisualSurfaceSchema = z.object({
@@ -915,7 +917,7 @@ Use this when you have produced a durable deliverable or external-action receipt
 
 Good outputs include research reports, generated media, exported datasets, code review reports, deployment receipts, published-post receipts, sent-message receipts, and final workflow deliverables.
 
-For visual work, create the image/video/web/report Output first, then use visual_surface_state and visual_surface to pin or open it on Canvas when side-by-side viewing helps.
+For visual work, create the image/video/web/report Output first. Set \`showInCanvas: true\` when the user should see it immediately beside chat. Otherwise use visual_surface_state and visual_surface to pin or open it on Canvas when side-by-side viewing helps.
 
 Use Browser Pane or browser tools, not Canvas, when the user wants to test, debug, inspect, click through, check console logs, verify layout, capture screenshots, or interact with live web behavior.
 

@@ -55,6 +55,13 @@ export interface CreateOutputToolInput {
   links?: CreateOutputLinkInput[];
   receipts?: CreateOutputReceiptInput[];
   tags?: string[];
+  /**
+   * When true, the backend should mark this Output as intended for Canvas and
+   * pin/open it through the current session visual surface when available.
+   */
+  showInCanvas?: boolean;
+  /** Back-compat/LLM-friendly alias for showInCanvas. */
+  show_in_canvas?: boolean;
 }
 
 export interface CreateOutputResult {
@@ -62,6 +69,8 @@ export interface CreateOutputResult {
   outputId?: string;
   route?: string;
   file?: string;
+  shownInCanvas?: boolean;
+  canvasReceipt?: string;
   error?: string;
 }
 
@@ -220,6 +229,12 @@ function validateOutputInput(args: CreateOutputToolInput): string | null {
   if (args.tags !== undefined && (!Array.isArray(args.tags) || args.tags.some((tag) => typeof tag !== 'string'))) {
     return 'tags must be an array of strings when provided.';
   }
+  if (args.showInCanvas !== undefined && typeof args.showInCanvas !== 'boolean') {
+    return 'showInCanvas must be a boolean when provided.';
+  }
+  if (args.show_in_canvas !== undefined && typeof args.show_in_canvas !== 'boolean') {
+    return 'show_in_canvas must be a boolean when provided.';
+  }
   return null;
 }
 
@@ -238,7 +253,9 @@ export async function handleCreateOutput(
     ...args,
     title: args.title.trim(),
     summary: args.summary.trim(),
+    showInCanvas: args.showInCanvas ?? args.show_in_canvas,
   };
+  delete input.show_in_canvas;
 
   try {
     const result = await ctx.createOutput(input);
@@ -255,6 +272,8 @@ export async function handleCreateOutput(
         outputId,
         route,
         file: result.file,
+        shownInCanvas: result.shownInCanvas,
+        canvasReceipt: result.canvasReceipt,
       },
       isError: false,
     };

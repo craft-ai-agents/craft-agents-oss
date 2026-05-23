@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { OutputService } from './OutputService';
 import { writeRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows';
+import { OUTPUT_SHOW_IN_CANVAS_TAG } from '@craft-agent/shared/outputs/constants';
 import { VISUAL_BOARD_ASSET_PATH, type VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
 import { VISUAL_SURFACE_EVENTS_ASSET_PATH } from '@craft-agent/shared/visual-surface-events';
 
@@ -68,6 +69,39 @@ describe('OutputService run mutex', () => {
 });
 
 describe('OutputService visual boards', () => {
+  it('marks and pins showInCanvas session outputs', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-show-canvas-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+
+    const result = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Canvas brief',
+        kind: 'report',
+        summary: 'Show this beside chat.',
+        content: '# Canvas brief',
+        contentMimeType: 'text/markdown',
+        showInCanvas: true,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.shownInCanvas).toBe(true);
+    expect(result.canvasReceipt).toContain('Pinned output');
+
+    const output = service.get('ws', result.outputId!);
+    expect(output?.tags).toContain(OUTPUT_SHOW_IN_CANVAS_TAG);
+
+    const state = service.getVisualSurfaceState('ws', 'session-1');
+    expect(state.canvas.exists).toBe(true);
+    expect(state.canvas.outputCardCount).toBe(1);
+    expect(state.canvas.cardCount).toBe(1);
+  });
+
   it('reports visual surface state with local web previews', async () => {
     const root = mkdtempSync(join(tmpdir(), 'osvc-visual-state-'));
     mkdirSync(join(root, 'outputs'), { recursive: true });

@@ -25,6 +25,7 @@ Define the first shippable version of visual agent work inside RunnerOS: chat st
 - [13 Phase 5A Adapter Registry Spec](./13-phase-5a-adapter-registry-spec.md)
 - [14 Phase 5B Web Agent Awareness Spec](./14-phase-5b-web-agent-awareness-spec.md)
 - [15 Phase 5C Agent Canvas Guidance Spec](./15-phase-5c-agent-canvas-guidance-spec.md)
+- [16 Canvas Agent Smoke Prompts](./16-canvas-agent-smoke-prompts.md)
 
 ## Core Decision
 

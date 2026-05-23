@@ -14,6 +14,10 @@ export type {
 } from './types.ts';
 
 export {
+  OUTPUT_SHOW_IN_CANVAS_TAG,
+} from './constants.ts';
+
+export {
   summarizeOutputContent,
   deriveOutputSummaryFallback,
   inferPreviewMode,

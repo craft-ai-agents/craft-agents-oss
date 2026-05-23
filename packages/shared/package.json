@@ -30,6 +30,7 @@
     "./memory/render": "./src/memory/render.ts",
     "./memory/types": "./src/memory/types.ts",
     "./outputs": "./src/outputs/index.ts",
+    "./outputs/constants": "./src/outputs/constants.ts",
     "./outputs/web-preview": "./src/outputs/web-preview.ts",
     "./notifications/types": "./src/notifications/types.ts",
     "./pulses": "./src/pulses/index.ts",

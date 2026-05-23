@@ -95,7 +95,7 @@ describe('visual sidecar atoms', () => {
     expect(store.get(activeVisualSurfaceAtom)).toBeNull()
   })
 
-  it('reopens the last selected output for a session after close', () => {
+  it('opens the provided newest output instead of restoring an older remembered output', () => {
     const store = createStore()
 
     store.set(openOutputVisualSurfaceAtom, {
@@ -119,7 +119,7 @@ describe('visual sidecar atoms', () => {
       },
     })
 
-    expect(store.get(activeVisualSurfaceAtom)?.outputId).toBe('output-older')
+    expect(store.get(activeVisualSurfaceAtom)?.outputId).toBe('output-latest')
   })
 
   it('stores user display mode and tracks resolved presentation separately', () => {

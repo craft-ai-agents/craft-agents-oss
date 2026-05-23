@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
 import { toast } from "sonner"
-import { useAtomValue } from "jotai"
+import { useAtomValue, useSetAtom } from "jotai"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
@@ -80,8 +80,10 @@ import { resolveBranchNewPanelOption } from "./branching"
 import { handleErrorMessageAction } from "./error-message-actions"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 import { VISUAL_BOARD_TAG } from "@craft-agent/shared/visual-board"
+import { OUTPUT_SHOW_IN_CANVAS_TAG } from "@craft-agent/shared/outputs/constants"
 import { useOutputs } from "@/hooks/useOutputs"
 import {
+  openOutputVisualSurfaceAtom,
   visualSidecarAtom,
 } from "@/atoms/visual-surfaces"
 import { VisualSurfacePanel } from "@/components/visual-surfaces/VisualSurfacePanel"
@@ -504,8 +506,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     || session?.launchReceipt?.agent?.slug === CONCIERGE_SLUG
   const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
   const visualSidecar = useAtomValue(visualSidecarAtom)
+  const openOutputVisualSurface = useSetAtom(openOutputVisualSurfaceAtom)
   const currentWorkspaceId = workspaceId ?? session?.workspaceId
-  const { outputs } = useOutputs(currentWorkspaceId)
+  const { outputs, loading: outputsLoading } = useOutputs(currentWorkspaceId)
   const activeSessionVisualSurface =
     visualSidecar.activeSurface?.sessionId === session?.id ? visualSidecar.activeSurface : null
   const showRollupVisualSurface =
@@ -515,6 +518,34 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     [outputs, session?.id],
   )
   const latestSessionVisualOutput = sessionVisualOutputs.find((output) => !output.tags?.includes(VISUAL_BOARD_TAG))
+  const seenCanvasIntentOutputIdsRef = React.useRef<Record<string, Set<string>>>({})
+
+  useEffect(() => {
+    if (!session?.id || !currentWorkspaceId || outputsLoading) return
+    const seen = seenCanvasIntentOutputIdsRef.current[session.id]
+    if (!seen) {
+      seenCanvasIntentOutputIdsRef.current[session.id] = new Set(sessionVisualOutputs.map((output) => output.id))
+      return
+    }
+
+    const nextCanvasOutput = sessionVisualOutputs.find((output) =>
+      !seen.has(output.id)
+      && !output.tags?.includes(VISUAL_BOARD_TAG)
+      && output.tags?.includes(OUTPUT_SHOW_IN_CANVAS_TAG)
+    )
+    for (const output of sessionVisualOutputs) seen.add(output.id)
+    if (!nextCanvasOutput) return
+
+    openOutputVisualSurface({
+      workspaceId: currentWorkspaceId,
+      sessionId: session.id,
+      outputId: nextCanvasOutput.id,
+      title: nextCanvasOutput.title,
+      kind: nextCanvasOutput.kind,
+      createdAt: nextCanvasOutput.createdAt,
+      updatedAt: nextCanvasOutput.updatedAt,
+    })
+  }, [currentWorkspaceId, openOutputVisualSurface, outputsLoading, session?.id, sessionVisualOutputs])
 
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
