@@ -34,7 +34,7 @@ export function renderVisualSurfaceAdapter(context: VisualSurfaceAdapterContext)
     )
   }
 
-  if (adapter.id === 'output-preview' && context.selectedManifest) {
+  if ((adapter.id === 'output-preview' || adapter.id === 'browser-preview') && context.selectedManifest) {
     const manifest = context.selectedManifest
     return (
       <OutputInlinePreview

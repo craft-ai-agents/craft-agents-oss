@@ -50,8 +50,8 @@ The MVP is complete when a normal RunnerOS chat session can:
 - Phase 2C visual board: implemented.
 - Phase 3 agent surface events: implemented through `visual_surface`.
 - Phase 4 media outputs: implemented, including media Canvas cards and sidecar add-to-board.
-- Phase 5A adapter registry: implemented.
+- Phase 5A adapter registry: implemented, including a local-web browser preview adapter.
 - Phase 5B web agent awareness: implemented through `visual_surface_state`.
 - Phase 5C agent guidance: implemented in the central system prompt and tool descriptions.
 
-Next intelligent slice: browser-surface adapter backed by real browser-pane/webview inspection, not iframe guessing.
+Next intelligent slice: generated HTML asset serving through a safe local protocol, or deeper browser-pane state reporting if agent inspection needs it.

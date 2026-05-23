@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Copy, ExternalLink, Globe2, RefreshCw } from 'lucide-react'
+import { Copy, ExternalLink, Globe2, PanelRightOpen, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { WebPreviewTarget } from './web-preview'
@@ -41,6 +41,22 @@ export function OutputWebPreview({ target, className }: OutputWebPreviewProps) {
     navigator.clipboard?.writeText(target.url).catch(() => {})
   }, [target.url])
 
+  const openInBrowserPane = React.useCallback(async () => {
+    const browserPane = window.electronAPI?.browserPane
+    if (!browserPane) {
+      window.electronAPI.openUrl(target.url)
+      return
+    }
+    try {
+      const instanceId = await browserPane.create({ show: true })
+      await browserPane.navigate(instanceId, target.url)
+      await browserPane.focus(instanceId)
+    } catch (error) {
+      console.error('[OutputWebPreview] Failed to open preview in browser pane:', error)
+      window.electronAPI.openUrl(target.url)
+    }
+  }, [target.url])
+
   return (
     <div className={cn('flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md border border-border/55 bg-background/80', className)}>
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/45 px-2">
@@ -56,6 +72,9 @@ export function OutputWebPreview({ target, className }: OutputWebPreviewProps) {
         </Button>
         <Button type="button" size="icon" variant="ghost" className="h-7 w-7" aria-label="Copy preview URL" onClick={copyUrl}>
           <Copy className="h-3.5 w-3.5" />
+        </Button>
+        <Button type="button" size="icon" variant="ghost" className="h-7 w-7" aria-label="Open preview in browser pane" onClick={() => { void openInBrowserPane() }}>
+          <PanelRightOpen className="h-3.5 w-3.5" />
         </Button>
         <Button type="button" size="icon" variant="ghost" className="h-7 w-7" aria-label="Open preview externally" onClick={() => window.electronAPI.openUrl(target.url)}>
           <ExternalLink className="h-3.5 w-3.5" />

@@ -34,6 +34,20 @@ function manifest(kind: OutputManifestDTO['kind'], tags?: string[]): OutputManif
   }
 }
 
+function localWebManifest(): OutputManifestDTO {
+  return {
+    ...manifest('other'),
+    id: 'output-web',
+    title: 'Local web preview',
+    preview: { mode: 'web' },
+    links: [{
+      id: 'preview',
+      label: 'Preview',
+      url: 'http://localhost:4173',
+    }],
+  }
+}
+
 function context(overrides: Partial<VisualSurfaceAdapterContext> = {}): VisualSurfaceAdapterContext {
   return {
     workspaceId: 'workspace-1',
@@ -65,6 +79,17 @@ describe('visual surface adapters', () => {
       selectedOutputId: 'output-report',
       selectedManifest: manifest('report'),
     })).id).toBe('output-preview')
+  })
+
+  it('resolves local web outputs to the browser preview adapter', () => {
+    const adapter = selectVisualSurfaceAdapter(context({
+      surface: surface('browser'),
+      selectedOutputId: 'output-web',
+      selectedManifest: localWebManifest(),
+    }))
+
+    expect(adapter.id).toBe('browser-preview')
+    expect(adapter.capabilities.canInspect).toBe(true)
   })
 
   it('resolves future surface kinds to unsupported until adapters exist', () => {
