@@ -9,6 +9,7 @@
 export const MEMORY_FILE = 'MEMORY.md';
 export const USER_MEMORY_FILE = 'USER.md';
 export const DELETED_MEMORIES_FILE = '.deleted-memories.json';
+export const MEMORY_EVENTS_FILE = '.memory-events.jsonl';
 export const MEMORY_SCHEMA_VERSION = 1;
 
 export type MemoryScope = 'user' | 'agent';
@@ -71,6 +72,7 @@ export interface SaveMemoryInput {
    * subsequent saves of the same name behave normally.
    */
   force?: boolean;
+  event?: MemoryMutationEventMetadata;
 }
 
 /**
@@ -93,12 +95,45 @@ export interface UpdateMemoryInput {
   name: string;
   body?: string;
   expires?: string | null;
+  event?: MemoryMutationEventMetadata;
 }
 
 export interface DeleteMemoryInput {
   scope: MemoryScope;
   agentSlug?: string;
   name: string;
+  event?: MemoryMutationEventMetadata;
+}
+
+export type MemoryEventAction = 'save' | 'update' | 'forget' | 'recall' | 'consolidate';
+
+export type MemoryEventSource =
+  | 'user'
+  | 'agent_tool'
+  | 'sidecar'
+  | 'import'
+  | 'consolidation'
+  | 'rpc'
+  | 'system';
+
+export interface MemoryMutationEventMetadata {
+  source?: MemoryEventSource;
+  runId?: string;
+  evidence?: string;
+  actor?: string;
+}
+
+export interface MemoryEvent {
+  id: string;
+  action: MemoryEventAction;
+  scope: MemoryScope;
+  agentSlug?: string;
+  entryName?: string;
+  source: MemoryEventSource;
+  runId?: string;
+  evidence?: string;
+  actor?: string;
+  createdAt: string;
 }
 
 export type MemoryParseWarningCode =
