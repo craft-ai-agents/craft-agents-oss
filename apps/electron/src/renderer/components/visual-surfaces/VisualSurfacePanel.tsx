@@ -36,6 +36,12 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     () => sessionOutputs.find((output) => !output.tags?.includes(VISUAL_BOARD_TAG)),
     [sessionOutputs],
   )
+  const tabOutputs = React.useMemo(() => {
+    const displayOutputs = sessionOutputs
+      .filter((output) => !output.tags?.includes(VISUAL_BOARD_TAG))
+      .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''))
+    return boardOutput ? [boardOutput, ...displayOutputs] : displayOutputs
+  }, [boardOutput, sessionOutputs])
   const selectedOutputId = activeSurface?.outputId
     ?? (activeSurface?.kind === 'canvas' ? latestDisplayOutput?.id ?? boardOutput?.id : undefined)
   const [selectedManifest, setSelectedManifest] = React.useState<OutputManifestDTO | null>(null)
@@ -151,13 +157,6 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
           'flex min-h-0 flex-1 flex-col overflow-y-auto',
           presentation === 'rollup' ? 'gap-2 px-0 pb-3 pt-0' : 'gap-3 p-3',
         )}>
-          {sessionOutputs.length > 1 ? (
-            <OutputSelector
-              outputs={sessionOutputs}
-              selectedOutputId={selectedOutputId}
-              onSelect={openOutput}
-            />
-          ) : null}
           <div className={cn(
             'relative min-h-[220px] flex-1 overflow-hidden bg-[#050505]',
             presentation === 'rollup'
@@ -167,17 +166,13 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
             {renderVisualSurfaceAdapter(adapterContext)}
           </div>
 
-          <div className={cn(
-            'grid shrink-0 grid-cols-3 gap-2',
-            presentation === 'rollup' && 'hidden @md/panel:grid',
-          )}>
-            {['Artifacts', 'Canvas', 'Media'].map((label) => (
-              <div key={label} className="rounded-md border border-border/55 bg-foreground/[0.025] px-2.5 py-2">
-                <div className="text-[11px] text-muted-foreground">{label}</div>
-                <div className="mt-0.5 text-sm font-medium">0</div>
-              </div>
-            ))}
-          </div>
+          {tabOutputs.length > 1 ? (
+            <OutputSelector
+              outputs={tabOutputs}
+              selectedOutputId={selectedOutputId}
+              onSelect={openOutput}
+            />
+          ) : null}
 
           {presentation === 'rollup' ? null : (
             <Button
@@ -206,24 +201,41 @@ function OutputSelector({
   selectedOutputId?: string
   onSelect: (output: OutputSummaryDTO) => void
 }) {
+  const activeTabRef = React.useRef<HTMLButtonElement | null>(null)
+
+  React.useEffect(() => {
+    activeTabRef.current?.scrollIntoView({
+      block: 'nearest',
+      inline: 'nearest',
+      behavior: 'smooth',
+    })
+  }, [selectedOutputId, outputs.length])
+
   return (
-    <div className="flex shrink-0 gap-1 overflow-x-auto pb-0.5">
-      {outputs.map((output) => (
-        <button
-          key={output.id}
-          type="button"
-          className={cn(
-            'min-w-0 shrink-0 rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors',
-            output.id === selectedOutputId
-              ? 'border-sky-300/30 bg-sky-400/12 text-sky-100'
-              : 'border-border/45 bg-foreground/[0.025] text-muted-foreground hover:bg-foreground/[0.055] hover:text-foreground',
-          )}
-          onClick={() => onSelect(output)}
-        >
-          <span className="block max-w-40 truncate font-medium">{output.title}</span>
-          <span className="block truncate text-[10px] capitalize opacity-70">{output.kind}</span>
-        </button>
-      ))}
+    <div className="shrink-0 overflow-hidden border-t border-border/45 bg-[#050505]">
+      <div className="flex gap-1 overflow-x-auto px-1.5 py-1.5">
+        {outputs.map((output) => {
+          const isBoard = output.tags?.includes(VISUAL_BOARD_TAG) ?? false
+          const isSelected = output.id === selectedOutputId
+          return (
+            <button
+              key={output.id}
+              ref={isSelected ? activeTabRef : undefined}
+              type="button"
+              className={cn(
+                'min-w-0 shrink-0 rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors',
+                isSelected
+                  ? 'border-sky-300/30 bg-sky-400/12 text-sky-100'
+                  : 'border-border/45 bg-foreground/[0.025] text-muted-foreground hover:bg-foreground/[0.055] hover:text-foreground',
+              )}
+              onClick={() => onSelect(output)}
+            >
+              <span className="block max-w-40 truncate font-medium">{isBoard ? 'Board' : output.title}</span>
+              <span className="block truncate text-[10px] capitalize opacity-70">{isBoard ? 'Canvas' : output.kind}</span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
