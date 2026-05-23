@@ -3,6 +3,7 @@ import {
   resolveSlugForMethod,
   apiSetupMethodToConnectionSetup,
   BASE_SLUG_FOR_METHOD,
+  shouldSetConnectionAsDefaultOnSave,
 } from '../useOnboarding'
 import type { ApiSetupMethod } from '@/components/onboarding'
 
@@ -40,6 +41,17 @@ describe('resolveSlugForMethod', () => {
       const slug = resolveSlugForMethod(method, null, new Set())
       expect(slug).toBe(BASE_SLUG_FOR_METHOD[method])
     }
+  })
+})
+
+describe('shouldSetConnectionAsDefaultOnSave', () => {
+  it('defaults newly created connections so relaunch uses the provider just connected', () => {
+    expect(shouldSetConnectionAsDefaultOnSave(null, false)).toBe(true)
+  })
+
+  it('does not steal default during edit or reauth flows', () => {
+    expect(shouldSetConnectionAsDefaultOnSave('existing-connection', false)).toBe(false)
+    expect(shouldSetConnectionAsDefaultOnSave(null, true)).toBe(false)
   })
 })
 

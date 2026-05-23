@@ -243,7 +243,7 @@ export function ApiKeyInput({
       setPiModels(result.models)
 
       if (hydratedTierProviderRef.current !== provider) {
-        const tiers = resolveTierModels(result.models, provider === initialPreset ? initialValues?.models : undefined)
+        const tiers = resolveTierModels(result.models, provider === initialPreset ? initialValues?.models : undefined, provider)
         setBestModel(tiers.best)
         setDefaultModel(tiers.default_)
         setCheapModel(tiers.cheap)

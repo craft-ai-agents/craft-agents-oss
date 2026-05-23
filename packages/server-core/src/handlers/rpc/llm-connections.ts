@@ -256,8 +256,9 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         deps.platform.logger?.info('Saved IAM credentials to LLM connection')
       }
 
-      // Set as default only if no default exists yet (first connection)
-      if (!getDefaultLlmConnection()) {
+      // New setup flows can explicitly make the just-saved provider the default.
+      // First connection still becomes default automatically.
+      if (setup.setAsDefault || !getDefaultLlmConnection()) {
         setDefaultLlmConnection(setup.slug)
         deps.platform.logger?.info(`Set default LLM connection: ${setup.slug}`)
       }
