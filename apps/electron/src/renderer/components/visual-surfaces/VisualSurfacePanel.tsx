@@ -1,16 +1,18 @@
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { Layers, Maximize2, PanelRight } from 'lucide-react'
+import { Layers, Maximize2, PanelRight, PanelTopOpen } from 'lucide-react'
 import { VISUAL_BOARD_TAG } from '@craft-agent/shared/visual-board'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useOutputs, type OutputManifestDTO, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import {
   focusVisualSidecarAtom,
+  openDemoVisualSurfaceAtom,
   openOutputVisualSurfaceAtom,
   visualSidecarAtom,
 } from '@/atoms/visual-surfaces'
 import { renderVisualSurfaceAdapter, type VisualSurfaceAdapterContext } from './VisualSurfaceAdapters'
+import { toast } from 'sonner'
 
 interface VisualSurfacePanelProps {
   presentation: 'inline' | 'overlay' | 'rollup'
@@ -20,6 +22,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
   const { activeSurface, isCollapsed, focusedAt } = useAtomValue(visualSidecarAtom)
   const focusSidecar = useSetAtom(focusVisualSidecarAtom)
   const openOutputVisualSurface = useSetAtom(openOutputVisualSurfaceAtom)
+  const openDemoVisualSurface = useSetAtom(openDemoVisualSurfaceAtom)
   const focusPulseKey = focusedAt ?? 0
   const { outputs, getOutput } = useOutputs(activeSurface?.workspaceId)
   const sessionOutputs = React.useMemo(
@@ -79,6 +82,33 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     })
   }, [activeSurface?.sessionId, activeSurface?.workspaceId, openOutputVisualSurface])
 
+  const sendSelectedOutputToCanvas = React.useCallback(async () => {
+    if (!activeSurface?.workspaceId || !activeSurface.sessionId || !selectedManifest) return
+    if (selectedManifest.tags?.includes(VISUAL_BOARD_TAG)) return
+
+    const action = selectedManifest.kind === 'image'
+      ? 'add_image'
+      : selectedManifest.kind === 'video'
+        ? 'add_video'
+        : 'pin_output'
+
+    try {
+      const result = await window.electronAPI.applyVisualSurfaceEvent(
+        activeSurface.workspaceId,
+        activeSurface.sessionId,
+        { action, outputId: selectedManifest.id },
+      )
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not add output to Canvas.')
+        return
+      }
+      openDemoVisualSurface({ workspaceId: activeSurface.workspaceId, sessionId: activeSurface.sessionId })
+      toast.success(result.receipt ?? 'Added output to Canvas.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }, [activeSurface?.sessionId, activeSurface?.workspaceId, openDemoVisualSurface, selectedManifest])
+
   if (!activeSurface) return null
 
   const adapterContext: VisualSurfaceAdapterContext = {
@@ -92,6 +122,11 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     manifestError,
     onOpenOutput: openOutput,
   }
+  const selectedIsBoard = selectedManifest?.tags?.includes(VISUAL_BOARD_TAG) === true
+  const canSendSelectedOutputToCanvas = !!activeSurface.sessionId
+    && !!selectedManifest
+    && !selectedIsBoard
+    && selectedManifest.origin?.sessionId === activeSurface.sessionId
 
   if (isCollapsed) {
     return (
@@ -175,16 +210,30 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
           ) : null}
 
           {presentation === 'rollup' ? null : (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="h-8 shrink-0 justify-center"
-              onClick={focusSidecar}
-            >
-              <Maximize2 className="h-3.5 w-3.5" />
-              Focus visual
-            </Button>
+            <div className="flex shrink-0 gap-2">
+              {canSendSelectedOutputToCanvas ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 flex-1 justify-center"
+                  onClick={sendSelectedOutputToCanvas}
+                >
+                  <PanelTopOpen className="h-3.5 w-3.5" />
+                  Add to board
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-8 flex-1 justify-center"
+                onClick={focusSidecar}
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+                Focus visual
+              </Button>
+            </div>
           )}
         </div>
       </div>
