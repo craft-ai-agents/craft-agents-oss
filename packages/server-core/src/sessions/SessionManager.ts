@@ -118,6 +118,7 @@ import {
   type SaveMemoryInput,
   type UpdateMemoryInput,
 } from '@craft-agent/shared/memory'
+import { buildCanvasGuidanceSection } from '@craft-agent/shared/agent-definitions/canvas-guidance'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
@@ -284,7 +285,7 @@ function formatWorkflowBundleBullet(slug: string, name: string | undefined, desc
 }
 
 function buildWorkflowAgentPrompt(
-  agent: { systemPrompt: string; metadata: { skills?: string[]; sources?: string[] } },
+  agent: { systemPrompt: string; metadata: { skills?: string[]; sources?: string[]; visualAgent?: boolean } },
   skills: LoadedSkill[],
   sources: LoadedSource[],
   contextDocs: Array<{ slug: string; metadata: { name: string; enabled?: boolean }; body: string }>,
@@ -314,6 +315,7 @@ function buildWorkflowAgentPrompt(
   if (contextSection) parts.push(contextSection)
   const memorySection = buildWorkflowMemoryText(memory)
   if (memorySection) parts.push(memorySection)
+  parts.push(buildCanvasGuidanceSection(agent))
   if (footerParts.length > 0) parts.push(footerParts.join('\n\n'))
   return parts.join(SECTION_DELIMITER)
 }

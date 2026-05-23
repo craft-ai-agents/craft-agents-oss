@@ -79,16 +79,21 @@ function makeMemory(name: string, body: string, type: MemoryEntry['type'] = 'ref
 // ----------------------------------------------------------------------------
 
 describe('composeAgentSystemPrompt', () => {
-  test('returns body unchanged when agent has no bundled skills or sources', () => {
+  test('appends base Canvas guidance when agent has no bundled skills or sources', () => {
     const agent = makeAgent()
     const result = composeAgentSystemPrompt(agent, [], [])
-    expect(result).toBe('You are a test agent.')
+    expect(result).toContain('You are a test agent.')
+    expect(result).toContain('Canvas guidance')
+    expect(result).toContain('create or reuse a durable Output and pin/display it in Canvas')
+    expect(result).not.toContain('Visual agent mode:')
   })
 
-  test('returns body unchanged when bundles list is set but empty', () => {
+  test('still appends base Canvas guidance when bundles list is set but empty', () => {
     const agent = makeAgent({ metadata: { name: 'X', description: 'Y', skills: [], sources: [] } })
     const result = composeAgentSystemPrompt(agent, [], [])
-    expect(result).toBe('You are a test agent.')
+    expect(result).toContain('You are a test agent.')
+    expect(result).toContain('Canvas guidance')
+    expect(result).not.toContain('You have these skills bundled')
   })
 
   test('appends a skills-only footer when only skills are bundled', () => {
@@ -192,13 +197,28 @@ describe('composeAgentSystemPrompt', () => {
     expect(footerStart).toBeGreaterThan(delim)
   })
 
-  test('returns body untouched (no delimiter) when bundles are present but none resolve', () => {
+  test('keeps Canvas guidance when bundles are present but none resolve', () => {
     const agent = makeAgent({
       metadata: { name: 'X', description: 'Y', skills: ['ghost'], sources: ['phantom'] },
     })
     const result = composeAgentSystemPrompt(agent, [], [])
-    expect(result).toBe('You are a test agent.')
-    expect(result).not.toContain('---')
+    expect(result).toContain('You are a test agent.')
+    expect(result).toContain('Canvas guidance')
+    expect(result).not.toContain('@ghost')
+    expect(result).not.toContain('@phantom')
+  })
+
+  test('adds proactive Canvas guidance only for visual agents', () => {
+    const normal = composeAgentSystemPrompt(makeAgent(), [], [])
+    const visual = composeAgentSystemPrompt(makeAgent({
+      metadata: { name: 'Visual', description: 'Visual work.', visualAgent: true },
+    }), [], [])
+
+    expect(normal).toContain('Canvas guidance')
+    expect(normal).not.toContain('Visual agent mode:')
+    expect(visual).toContain('Visual agent mode:')
+    expect(visual).toContain('Proactively create durable Outputs')
+    expect(visual).toContain('make one focused fix')
   })
 
   test('appends an agent catalog section for Concierge routing', () => {
@@ -210,6 +230,7 @@ describe('composeAgentSystemPrompt', () => {
         description: 'Finds cited answers.',
         inputs: 'A topic.',
         outputs: 'A cited brief.',
+        visualAgent: true,
         tags: ['research', 'cite'],
       },
     ])
@@ -219,6 +240,7 @@ describe('composeAgentSystemPrompt', () => {
     expect(result).toContain('"slug": "researcher"')
     expect(result).toContain('"inputs": "A topic."')
     expect(result).toContain('"outputs": "A cited brief."')
+    expect(result).toContain('"visualAgent": true')
     expect(result).toContain('"tags": [')
     expect(result).toContain('"research"')
     expect(result).toContain('"cite"')
@@ -312,7 +334,8 @@ describe('composeAgentSystemPrompt with context docs', () => {
     const agent = makeAgent()
     const docs = [makeDoc('blank', 'Blank', '   ')]
     const result = composeAgentSystemPrompt(agent, [], [], docs)
-    expect(result).toBe('You are a test agent.')
+    expect(result).toContain('You are a test agent.')
+    expect(result).toContain('Canvas guidance')
     expect(result).not.toContain('Workspace context')
   })
 
@@ -332,7 +355,8 @@ describe('composeAgentSystemPrompt with context docs', () => {
   test('omits the section entirely when no docs supplied', () => {
     const agent = makeAgent()
     const result = composeAgentSystemPrompt(agent, [], [], [])
-    expect(result).toBe('You are a test agent.')
+    expect(result).toContain('You are a test agent.')
+    expect(result).toContain('Canvas guidance')
     expect(result).not.toContain('Workspace context')
   })
 

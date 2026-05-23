@@ -2,7 +2,7 @@
 
 Status: implemented
 Owner: RunnerOS
-Last updated: 2026-05-22
+Last updated: 2026-05-23
 
 ## Goal
 
@@ -40,6 +40,66 @@ If the user's intent is ambiguous, agents should default to Canvas for viewing a
 - Add shared Canvas guidance to the central system prompt.
 - Tighten `create_output` and `visual_surface` descriptions so agents understand the order of operations.
 - Keep specialist agents free to add stronger visual habits later, but the base behavior lives in platform guidance.
+
+## Phase 5C.2: Shared Agent Integration
+
+### Goal
+
+Make Canvas behavior available to every agent without hand-editing every agent file, while giving intentionally visual agents a stronger default.
+
+### Product Shape
+
+All spawned agents are Canvas-aware:
+
+- They know Canvas is the in-chat viewer for durable Outputs.
+- When the user asks to show, preview, view, compare, or present an artifact, they should create or reuse an Output and pin/display it in Canvas.
+- They should not use Canvas as a substitute for chat.
+- They should avoid duplicate Canvas cards when an Output is already visible.
+
+Agents marked `visualAgent: true` are Canvas-proactive:
+
+- They should create durable Outputs for visual/web/media/document deliverables without needing a second user prompt.
+- They should pin/display the primary artifact in Canvas.
+- They should treat Canvas screenshot feedback as visual QA and make at most one focused fix per artifact version/open.
+- They should still ask before risky external launches or broad rewrites.
+
+### UX
+
+Agent create/edit gets one plain toggle:
+
+`Visual agent`
+
+Helper copy:
+
+`Automatically uses Canvas for visual, web, media, and document outputs.`
+
+The toggle writes `visualAgent: true` into `AGENT.md` frontmatter only when enabled. Disabled/blank omits the field.
+
+### Technical Contract
+
+- Add `visualAgent?: boolean` to `AgentMetadata`.
+- Parse boolean frontmatter from `AGENT.md`.
+- Serialize `visualAgent: true` only when enabled.
+- Add a reusable Canvas guidance section in the runtime prompt composer.
+- Always inject lightweight Canvas-aware guidance for spawned agents.
+- Add the stronger proactive paragraph only when `metadata.visualAgent === true`.
+- Include `visualAgent` in HNIC/agent catalog metadata so routing can prefer visual agents when relevant.
+
+### Non-Goals
+
+- No custom Canvas `SKILL.md` per agent.
+- No automatic Canvas use for every text answer.
+- No special integrations for Canva, Excalidraw, TradingView, or other tool-specific adapters in this slice.
+- No automatic external browser launch.
+
+### Acceptance Tests
+
+1. Agent metadata parser preserves `visualAgent: true`.
+2. Serializer emits `visualAgent: true` when enabled and omits it when disabled.
+3. Runtime prompt composer always includes the base Canvas-aware guidance.
+4. Runtime prompt composer includes proactive Canvas guidance only for `visualAgent: true`.
+5. Agent create/edit UI can save and reload the toggle.
+6. Typecheck/build remains green.
 
 ## Verification
 

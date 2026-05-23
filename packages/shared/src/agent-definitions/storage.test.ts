@@ -65,6 +65,7 @@ skills:
   - cite-sources
 sources:
   - tavily
+visualAgent: true
 greeting: Give me a question, I'll dig.
 ---
 You are a research specialist.
@@ -80,6 +81,7 @@ Always cite your sources.
     expect(parsed!.metadata.thinkingLevel).toBe('high')
     expect(parsed!.metadata.skills).toEqual(['web-research', 'cite-sources'])
     expect(parsed!.metadata.sources).toEqual(['tavily'])
+    expect(parsed!.metadata.visualAgent).toBe(true)
     expect(parsed!.metadata.greeting).toBe(`Give me a question, I'll dig.`)
     expect(parsed!.systemPrompt).toContain('research specialist')
     expect(parsed!.systemPrompt).toContain('cite your sources')
@@ -262,6 +264,7 @@ describe('serializeAgent', () => {
         permissionMode: 'safe',
         skills: ['a', 'b'],
         sources: ['s1'],
+        visualAgent: true,
         inputs: 'A topic.',
         outputs: 'A summary.',
         tags: ['research', 'summarize'],
@@ -275,6 +278,7 @@ describe('serializeAgent', () => {
     expect(parsed!.metadata.permissionMode).toBe('safe')
     expect(parsed!.metadata.skills).toEqual(['a', 'b'])
     expect(parsed!.metadata.sources).toEqual(['s1'])
+    expect(parsed!.metadata.visualAgent).toBe(true)
     expect(parsed!.metadata.inputs).toBe('A topic.')
     expect(parsed!.metadata.outputs).toBe('A summary.')
     expect(parsed!.metadata.tags).toEqual(['research', 'summarize'])
@@ -289,6 +293,7 @@ describe('serializeAgent', () => {
     // No empty `skills: []` or `sources: []` in the YAML.
     expect(out).not.toContain('skills:')
     expect(out).not.toContain('sources:')
+    expect(out).not.toContain('visualAgent:')
     expect(out).not.toContain('avatar:')
   })
 })

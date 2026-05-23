@@ -22,6 +22,7 @@
 
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 import { buildMemorySectionsText } from '@craft-agent/shared/memory/render'
+import { buildCanvasGuidanceSection } from '@craft-agent/shared/agent-definitions/canvas-guidance'
 import type { AgentDefinitionDTO, ContextDocDTO, LoadedSkill, LoadedSource } from '../../shared/types'
 
 const SECTION_DELIMITER = '\n\n---\n\n'
@@ -47,6 +48,7 @@ export interface AgentCatalogEntry {
   description?: string
   inputs?: string
   outputs?: string
+  visualAgent?: boolean
   tags?: string[]
 }
 
@@ -76,12 +78,14 @@ export function composeAgentSystemPrompt(
   const contextSection = buildWorkspaceContextSection(contextDocs)
   const memorySection = buildMemorySection(memory.userMemoryEntries ?? [], memory.agentMemoryEntries ?? [])
   const agentCatalogSection = buildAgentCatalogSection(agentCatalog)
+  const canvasGuidanceSection = buildCanvasGuidanceSection(agent)
   const footer = buildAgentBundleFooter(agent, skills, sources)
 
   const parts: string[] = [body]
   if (contextSection) parts.push(contextSection)
   if (memorySection) parts.push(memorySection)
   if (agentCatalogSection) parts.push(agentCatalogSection)
+  if (canvasGuidanceSection) parts.push(canvasGuidanceSection)
   if (footer) parts.push(footer)
   return parts.join(SECTION_DELIMITER)
 }
@@ -148,6 +152,7 @@ export function buildAgentCatalogSection(agents: AgentCatalogEntry[]): string {
       ...(agent.outputs?.trim()
         ? { outputs: normalizeCatalogText(agent.outputs, CATALOG_TEXT_LIMITS.io) }
         : {}),
+      ...(agent.visualAgent ? { visualAgent: true } : {}),
       ...(tags.length > 0 ? { tags } : {}),
     }
   })

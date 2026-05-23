@@ -46,3 +46,4 @@ export {
 } from './storage.ts';
 
 export { STARTER_AGENTS } from './starter-templates.ts';
+export { CANVAS_GUIDANCE_HEADER, buildCanvasGuidanceSection } from './canvas-guidance.ts';

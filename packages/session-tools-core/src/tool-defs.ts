@@ -337,6 +337,7 @@ export const CreateAgentSchema = z.object({
     thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional().describe('Reasoning depth. Default to "medium" for most agents.'),
     skills: z.array(z.string()).optional().describe('Skill slugs to bundle.'),
     sources: z.array(z.string()).optional().describe('Source slugs to bundle.'),
+    visualAgent: z.boolean().optional().describe('Set true for agents that should proactively create/pin visual, web, media, or document Outputs in Canvas.'),
     inputs: z.string().optional().describe('One sentence describing expected inputs.'),
     outputs: z.string().optional().describe('One sentence describing produced outputs.'),
     tags: z.array(z.string()).optional().describe('1-8 lowercase capability tags.'),
@@ -794,7 +795,7 @@ Use this only after walking the user through the agent-creator interview and get
 
 **Inputs:**
 - \`slug\`: kebab-case (1-64 chars). If unsure, derive from the agent name.
-- \`metadata\`: name + description are required; the rest are strongly preferred (avatar, permissionMode, thinkingLevel, inputs, outputs, tags) and free for you to infer sensibly.
+- \`metadata\`: name + description are required; the rest are strongly preferred (avatar, permissionMode, thinkingLevel, visualAgent, inputs, outputs, tags) and free for you to infer sensibly. Set \`visualAgent: true\` only for agents that should proactively use Canvas for visual/web/media/document artifacts.
 - \`systemPrompt\`: the agent's identity + operating instructions. Required, non-empty.
 - \`activateInWorkspace\` (default true): activate in this workspace immediately so the user sees it.
 - \`overwrite\` (default false): only set true if the user explicitly asked to replace an existing agent.

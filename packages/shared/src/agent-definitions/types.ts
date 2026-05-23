@@ -44,6 +44,8 @@ export interface AgentMetadata {
   skills?: string[];
   /** Source slugs auto-activated when this agent runs. Validated at run time. */
   sources?: string[];
+  /** When true, runtime prompts encourage proactive Canvas use for visual artifacts. */
+  visualAgent?: boolean;
   /**
    * Optional opening line shown in the composer when this agent is summoned.
    * Pure UX hint — does not affect the model's behavior.

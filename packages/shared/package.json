@@ -75,6 +75,7 @@
     "./automations": "./src/automations/index.ts",
     "./automations/resolve-config-path": "./src/automations/resolve-config-path.ts",
     "./agent-definitions": "./src/agent-definitions/index.ts",
+    "./agent-definitions/canvas-guidance": "./src/agent-definitions/canvas-guidance.ts",
     "./agent-definitions/types": "./src/agent-definitions/types.ts",
     "./workflows": "./src/workflows/index.ts",
     "./workflows/parser": "./src/workflows/parser.ts",
