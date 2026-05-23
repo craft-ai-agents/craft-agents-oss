@@ -34,6 +34,13 @@ describe('visual_surface_state handler', () => {
         cardCount: 1,
         noteCount: 1,
         outputCardCount: 0,
+        cards: [{
+          id: 'note-1',
+          type: 'note',
+          title: 'Decision',
+          createdAt: '2026-05-22T00:00:00.000Z',
+          updatedAt: '2026-05-22T00:00:00.000Z',
+        }],
         updatedAt: '2026-05-22T00:00:00.000Z',
       },
       outputs: [{
@@ -44,6 +51,14 @@ describe('visual_surface_state handler', () => {
         summary: 'Preview',
         previewMode: 'web',
         pinnable: true,
+        canOpenInCanvas: true,
+        canInspectInBrowserPane: true,
+        previewSurface: 'browser-pane',
+        webPreview: {
+          url: 'http://localhost:4187/',
+          displayHost: 'localhost:4187',
+          kind: 'local-web',
+        },
         localWebPreview: {
           url: 'http://localhost:4187/',
           displayHost: 'localhost:4187',
@@ -57,6 +72,14 @@ describe('visual_surface_state handler', () => {
         summary: 'Preview',
         previewMode: 'web',
         pinnable: true,
+        canOpenInCanvas: true,
+        canInspectInBrowserPane: true,
+        previewSurface: 'browser-pane',
+        webPreview: {
+          url: 'http://localhost:4187/',
+          displayHost: 'localhost:4187',
+          kind: 'local-web',
+        },
         localWebPreview: {
           url: 'http://localhost:4187/',
           displayHost: 'localhost:4187',
@@ -66,12 +89,14 @@ describe('visual_surface_state handler', () => {
         canOpenCanvas: true,
         canPinOutputs: true,
         canInspectWebConsole: false,
+        canInspectWebPreviewsInBrowserPane: true,
       },
     };
 
     const result = await handleVisualSurfaceState(makeCtx(async () => state));
     expect(result.isError).toBe(false);
     expect(result.content[0]?.text).toContain('Canvas has 1 card');
+    expect(result.content[0]?.text).toContain('Browser Pane inspection');
     expect(result.structuredContent).toEqual({ ...state });
   });
 });

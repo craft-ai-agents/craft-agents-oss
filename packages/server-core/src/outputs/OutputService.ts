@@ -11,6 +11,7 @@ import {
   listOutputManifests,
   listOutputs,
   readOutput,
+  resolveGeneratedHtmlPreviewTarget,
   resolveLocalWebPreviewTarget,
   summarizeOutputContent,
   writeOutputManifest,
@@ -81,6 +82,14 @@ export class OutputService {
       .filter((manifest) => !manifest.tags?.includes(VISUAL_BOARD_TAG))
       .map((manifest) => {
         const localWebPreview = resolveLocalWebPreviewTarget(manifest);
+        const generatedHtmlPreview = resolveGeneratedHtmlPreviewTarget(manifest);
+        const webPreviewTarget = localWebPreview ?? generatedHtmlPreview;
+        const canOpenInCanvas = manifest.status !== 'failed' && manifest.status !== 'cancelled';
+        const webPreview = webPreviewTarget ? {
+          url: webPreviewTarget.url,
+          displayHost: webPreviewTarget.displayHost,
+          kind: localWebPreview ? 'local-web' as const : 'generated-html' as const,
+        } : null;
         return {
           id: manifest.id,
           title: manifest.title,
@@ -88,7 +97,11 @@ export class OutputService {
           status: manifest.status,
           summary: manifest.summary,
           previewMode: manifest.preview?.mode,
-          pinnable: manifest.status !== 'failed' && manifest.status !== 'cancelled',
+          pinnable: canOpenInCanvas,
+          canOpenInCanvas,
+          canInspectInBrowserPane: Boolean(webPreview),
+          previewSurface: webPreview ? 'browser-pane' as const : canOpenInCanvas ? 'canvas' as const : 'none' as const,
+          ...(webPreview ? { webPreview } : {}),
           ...(localWebPreview ? { localWebPreview } : {}),
         };
       });
@@ -101,14 +114,27 @@ export class OutputService {
         cardCount: board?.cards.length ?? 0,
         noteCount: board?.cards.filter((card) => card.type === 'note').length ?? 0,
         outputCardCount: board?.cards.filter((card) => card.type === 'output').length ?? 0,
+        cards: board?.cards.map((card) => ({
+          id: card.id,
+          type: card.type,
+          title: card.title,
+          ...(card.type === 'output' ? {
+            outputId: card.outputId,
+            kind: card.kind,
+            ...(card.summary ? { summary: card.summary } : {}),
+          } : {}),
+          createdAt: card.createdAt,
+          updatedAt: card.updatedAt,
+        })) ?? [],
         updatedAt: board?.updatedAt ?? boardOutput?.updatedAt,
       },
       outputs,
-      webPreviews: outputs.filter((output) => Boolean(output.localWebPreview)),
+      webPreviews: outputs.filter((output) => Boolean(output.webPreview)),
       capabilities: {
         canOpenCanvas: true,
         canPinOutputs: outputs.some((output) => output.pinnable),
         canInspectWebConsole: false,
+        canInspectWebPreviewsInBrowserPane: outputs.some((output) => output.canInspectInBrowserPane),
       },
     };
   }

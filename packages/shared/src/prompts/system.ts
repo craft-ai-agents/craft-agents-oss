@@ -453,6 +453,8 @@ Use Canvas when seeing the artifact beside chat helps the user think, review, co
 
 Use Browser Pane or browser tools when the user asks to test, debug, inspect, click through, check console logs, verify layout, capture screenshots, or interact with live web behavior. If the user's intent is ambiguous, show the artifact in Canvas first and ask before launching Browser Pane.
 
+When \`visual_surface_state\` marks an Output as inspectable in Browser Pane, use that route for console/DOM/click inspection. Canvas is only the review surface.
+
 Do not use Canvas for every answer. Do not create duplicate cards. Do not claim you can inspect iframe DOM, console logs, or live app state from Canvas; use browser tools for that when available.`;
 
 /**

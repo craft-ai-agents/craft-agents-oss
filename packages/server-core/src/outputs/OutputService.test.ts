@@ -100,9 +100,15 @@ describe('OutputService visual boards', () => {
     expect(state.canvas.exists).toBe(true);
     expect(state.canvas.outputCardCount).toBe(1);
     expect(state.canvas.cardCount).toBe(1);
+    expect(state.canvas.cards[0]).toMatchObject({
+      type: 'output',
+      outputId: result.outputId,
+      title: 'Canvas brief',
+      kind: 'report',
+    });
   });
 
-  it('reports visual surface state with local web previews', async () => {
+  it('reports visual surface state with board cards and Browser Pane preview candidates', async () => {
     const root = mkdtempSync(join(tmpdir(), 'osvc-visual-state-'));
     mkdirSync(join(root, 'outputs'), { recursive: true });
     const service = new OutputService({
@@ -113,6 +119,7 @@ describe('OutputService visual boards', () => {
     expect(empty.canvas.exists).toBe(false);
     expect(empty.outputs).toEqual([]);
     expect(empty.capabilities.canInspectWebConsole).toBe(false);
+    expect(empty.capabilities.canInspectWebPreviewsInBrowserPane).toBe(false);
 
     service.applyVisualSurfaceEvent('ws', 'session-1', {
       action: 'add_note',
@@ -130,6 +137,16 @@ describe('OutputService visual boards', () => {
         links: [{ label: 'Preview', url: 'http://localhost:4187/report.html', role: 'primary' }],
       },
     });
+    const generated = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Generated HTML',
+        kind: 'code',
+        summary: 'Generated web artifact',
+        files: [{ label: 'index.html', path: 'index.html', role: 'primary' }],
+      },
+    });
     const remote = await service.createFromSessionTool({
       workspaceId: 'ws',
       sessionId: 'session-1',
@@ -142,20 +159,48 @@ describe('OutputService visual boards', () => {
     });
 
     expect(local.ok).toBe(true);
+    expect(generated.ok).toBe(true);
     expect(remote.ok).toBe(true);
     const state = service.getVisualSurfaceState('ws', 'session-1');
     expect(state.canvas.exists).toBe(true);
     expect(state.canvas.cardCount).toBe(1);
     expect(state.canvas.noteCount).toBe(1);
+    expect(state.canvas.cards[0]).toMatchObject({
+      type: 'note',
+      title: 'Direction',
+    });
     expect(state.outputs.map((output) => output.id)).toContain(local.outputId!);
+    expect(state.outputs.map((output) => output.id)).toContain(generated.outputId!);
     expect(state.outputs.map((output) => output.id)).toContain(remote.outputId!);
-    expect(state.webPreviews).toHaveLength(1);
-    expect(state.webPreviews[0]).toMatchObject({
+    expect(state.webPreviews).toHaveLength(2);
+    expect(state.capabilities.canInspectWebPreviewsInBrowserPane).toBe(true);
+    expect(state.webPreviews.find((output) => output.id === local.outputId)).toMatchObject({
       id: local.outputId!,
+      canInspectInBrowserPane: true,
+      previewSurface: 'browser-pane',
+      webPreview: {
+        url: 'http://localhost:4187/report.html',
+        displayHost: 'localhost:4187',
+        kind: 'local-web',
+      },
       localWebPreview: {
         url: 'http://localhost:4187/report.html',
         displayHost: 'localhost:4187',
       },
+    });
+    expect(state.webPreviews.find((output) => output.id === generated.outputId)).toMatchObject({
+      id: generated.outputId!,
+      canInspectInBrowserPane: true,
+      previewSurface: 'browser-pane',
+      webPreview: {
+        url: `runner-output://asset/ws/${generated.outputId}/index.html`,
+        displayHost: 'generated output',
+        kind: 'generated-html',
+      },
+    });
+    expect(state.outputs.find((output) => output.id === remote.outputId)).toMatchObject({
+      canInspectInBrowserPane: false,
+      previewSurface: 'canvas',
     });
   });
 

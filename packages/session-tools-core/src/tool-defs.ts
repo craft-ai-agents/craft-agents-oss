@@ -942,9 +942,9 @@ Do NOT pass workspaceId or sessionId. Do NOT use this for arbitrary React, drawi
 
   visual_surface_state: `Read the current session visual surface state.
 
-Use this before deciding what to show on Canvas. It reports the current session Canvas board, pinnable visual Outputs, and local web preview Outputs.
+Use this before deciding what to show on Canvas. It reports the current session Canvas board cards, pinnable visual Outputs, and web/HTML Outputs that should be opened in Browser Pane for inspection.
 
-This is read-only. It does not open Canvas, inspect webpage DOM, read console logs, or mutate Outputs. Use visual_surface for mutations after reading this state.`,
+This is read-only. It does not open Canvas, inspect webpage DOM, read console logs, or mutate Outputs. Use visual_surface for Canvas mutations after reading this state; use Browser Pane/browser tools for DOM, console, screenshots, and interaction.`,
 } as const;
 
 // ============================================================

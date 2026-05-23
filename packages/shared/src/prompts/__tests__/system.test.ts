@@ -44,6 +44,7 @@ describe('system prompt guidance', () => {
     expect(prompt).toContain('Set `showInCanvas: true` on `create_output`')
     expect(prompt).toContain('Use `visual_surface_state` to see what is already visible')
     expect(prompt).toContain('Use Browser Pane or browser tools when the user asks to test, debug, inspect')
+    expect(prompt).toContain('When `visual_surface_state` marks an Output as inspectable in Browser Pane')
     expect(prompt).toContain('show the artifact in Canvas first and ask before launching Browser Pane')
     expect(prompt).toContain('Do not claim you can inspect iframe DOM, console logs, or live app state from Canvas')
   })

@@ -2,6 +2,23 @@ import type { SessionToolContext } from '../context.ts';
 import { errorResponse } from '../response.ts';
 import type { ToolResult } from '../types.ts';
 
+export interface VisualSurfaceStateCanvasCard {
+  id: string;
+  type: 'note' | 'output';
+  title: string;
+  outputId?: string;
+  kind?: string;
+  summary?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VisualSurfaceStateWebPreview {
+  url: string;
+  displayHost: string;
+  kind: 'local-web' | 'generated-html';
+}
+
 export interface VisualSurfaceStateOutput {
   id: string;
   title: string;
@@ -10,6 +27,10 @@ export interface VisualSurfaceStateOutput {
   summary: string;
   previewMode?: string;
   pinnable: boolean;
+  canOpenInCanvas: boolean;
+  canInspectInBrowserPane: boolean;
+  previewSurface: 'canvas' | 'browser-pane' | 'none';
+  webPreview?: VisualSurfaceStateWebPreview;
   localWebPreview?: {
     url: string;
     displayHost: string;
@@ -24,6 +45,7 @@ export interface VisualSurfaceStateToolResult {
     cardCount: number;
     noteCount: number;
     outputCardCount: number;
+    cards: VisualSurfaceStateCanvasCard[];
     updatedAt?: string;
   };
   outputs: VisualSurfaceStateOutput[];
@@ -32,6 +54,7 @@ export interface VisualSurfaceStateToolResult {
     canOpenCanvas: boolean;
     canPinOutputs: boolean;
     canInspectWebConsole: boolean;
+    canInspectWebPreviewsInBrowserPane: boolean;
   };
 }
 
@@ -59,8 +82,8 @@ function summarizeVisualSurfaceState(state: VisualSurfaceStateToolResult): strin
     ? `Canvas has ${state.canvas.cardCount} card${state.canvas.cardCount === 1 ? '' : 's'}.`
     : 'Canvas has not been created yet.';
   const web = state.webPreviews.length === 0
-    ? 'No local web previews are available.'
-    : `${state.webPreviews.length} local web preview${state.webPreviews.length === 1 ? '' : 's'} available.`;
+    ? 'No web previews are available.'
+    : `${state.webPreviews.length} web preview${state.webPreviews.length === 1 ? '' : 's'} available for Browser Pane inspection.`;
   const outputs = `${state.outputs.length} visual output${state.outputs.length === 1 ? '' : 's'} available.`;
   return `${canvas} ${outputs} ${web}`;
 }

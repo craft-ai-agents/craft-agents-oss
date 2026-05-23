@@ -75,7 +75,7 @@ export function OutputWebPreview({ target, className }: OutputWebPreviewProps) {
         <Button type="button" size="icon" variant="ghost" className="h-7 w-7" aria-label="Copy preview URL" onClick={copyUrl}>
           <Copy className="h-3.5 w-3.5" />
         </Button>
-        <Button type="button" size="icon" variant="ghost" className="h-7 w-7" aria-label="Open preview in browser pane" onClick={() => { void openInBrowserPane() }}>
+        <Button type="button" size="icon" variant="ghost" className="h-7 w-7" aria-label="Inspect preview in Browser Pane" title="Inspect in Browser Pane" onClick={() => { void openInBrowserPane() }}>
           <PanelRightOpen className="h-3.5 w-3.5" />
         </Button>
         <Button
@@ -83,7 +83,8 @@ export function OutputWebPreview({ target, className }: OutputWebPreviewProps) {
           size="icon"
           variant="ghost"
           className="h-7 w-7"
-          aria-label={isGeneratedOutputUrl ? 'Open preview in browser pane' : 'Open preview externally'}
+          aria-label={isGeneratedOutputUrl ? 'Inspect preview in Browser Pane' : 'Open preview externally'}
+          title={isGeneratedOutputUrl ? 'Inspect in Browser Pane' : 'Open externally'}
           onClick={() => {
             if (isGeneratedOutputUrl) {
               void openInBrowserPane()
