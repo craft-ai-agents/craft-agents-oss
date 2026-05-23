@@ -509,7 +509,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const activeSessionVisualSurface =
     visualSidecar.activeSurface?.sessionId === session?.id ? visualSidecar.activeSurface : null
   const showRollupVisualSurface =
-    !!activeSessionVisualSurface && visualSidecar.resolvedPresentation === 'rollup'
+    !messagesLoading && !!activeSessionVisualSurface && visualSidecar.resolvedPresentation === 'rollup'
   const sessionVisualOutputs = useMemo(
     () => session?.id ? outputs.filter((output) => output.origin?.sessionId === session.id) : [],
     [outputs, session?.id],

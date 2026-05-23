@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readSessionHeader, readSessionJsonl } from '../jsonl.ts';
+import { readSessionHeader, readSessionHeaderAsync, readSessionJsonl } from '../jsonl.ts';
 
 const tempDirs: string[] = [];
 
@@ -80,5 +80,37 @@ describe('session jsonl: permission mode normalization', () => {
     const loaded = readSessionJsonl(sessionFile);
     expect(loaded?.permissionMode).toBe('safe');
     expect(loaded?.previousPermissionMode).toBe('allow-all');
+  });
+
+  it('reads session headers larger than the first read chunk', async () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), 'session-large-header-'));
+    tempDirs.push(sessionDir);
+
+    const sessionFile = join(sessionDir, 'session.jsonl');
+    const header = {
+      id: 's-large',
+      workspaceRootPath: '/tmp/ws',
+      createdAt: Date.now(),
+      lastUsedAt: Date.now(),
+      messageCount: 0,
+      tokenUsage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        contextTokens: 0,
+        costUsd: 0,
+      },
+      customSystemPrompt: 'x'.repeat(10000),
+    };
+
+    writeFileSync(sessionFile, `${JSON.stringify(header)}\n`, 'utf-8');
+
+    const loadedHeader = readSessionHeader(sessionFile);
+    expect(loadedHeader?.id).toBe('s-large');
+    expect(loadedHeader?.customSystemPrompt).toHaveLength(10000);
+
+    const loadedHeaderAsync = await readSessionHeaderAsync(sessionFile);
+    expect(loadedHeaderAsync?.id).toBe('s-large');
+    expect(loadedHeaderAsync?.customSystemPrompt).toHaveLength(10000);
   });
 });
