@@ -6230,7 +6230,7 @@ user a clickable link to where the thing now lives.`
       '</system-reminder>',
     ].join('\n')
 
-    await this.sendMessage(input.sessionId, message, [attachment])
+    await this.sendMessage(input.sessionId, message, [attachment], undefined, { displayIntent: 'canvas-visual-review' })
     return { accepted: true }
   }
 
@@ -6286,6 +6286,7 @@ user a clickable link to where the thing now lives.`
         timestamp: this.monotonic(),
         attachments: storedAttachments,
         badges: options?.badges,
+        displayIntent: options?.displayIntent,
       }
       managed.messages.push(userMessage)
 
@@ -6332,6 +6333,7 @@ user a clickable link to where the thing now lives.`
         timestamp: this.monotonic(),
         attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
         badges: options?.badges,  // Include content badges (sources, skills with embedded icons)
+        displayIntent: options?.displayIntent,
       }
       managed.messages.push(userMessage)
 

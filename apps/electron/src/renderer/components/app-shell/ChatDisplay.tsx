@@ -2402,7 +2402,8 @@ function MessageBubble({
 }
 
 function isCanvasVisualReviewMessage(message: Message): boolean {
-  return message.content.startsWith('<system-reminder>\nCanvas just captured a preview screenshot')
+  return message.displayIntent === 'canvas-visual-review'
+    || message.content.startsWith('<system-reminder>\nCanvas just captured a preview screenshot')
 }
 
 function CanvasVisualReviewNotice() {
