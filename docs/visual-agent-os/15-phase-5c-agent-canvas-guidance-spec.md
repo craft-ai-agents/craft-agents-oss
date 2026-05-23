@@ -16,6 +16,10 @@ Canvas is a presentation and review surface, not a replacement for chat.
 
 Agents should use Canvas when the user benefits from seeing an artifact beside the conversation: generated images, videos, local web previews, reports, JSON/data previews, receipts, links, or comparison boards.
 
+Browser Pane is the inspection surface. Agents should use Browser Pane or browser tools when the user asks to test, debug, inspect, click through, check console logs, verify layout, capture screenshots, or interact with live web behavior.
+
+If the user's intent is ambiguous, agents should default to Canvas for viewing and ask before launching Browser Pane.
+
 ## Agent Workflow
 
 1. Create or identify the durable Output.
@@ -29,6 +33,7 @@ Agents should use Canvas when the user benefits from seeing an artifact beside t
 - No tool-specific Canva/Excalidraw/TradingView contracts yet.
 - No claim that Canvas iframe previews expose DOM, console logs, or live app state.
 - No automatic Canvas card for every chat answer.
+- No automatic Browser Pane launch for simple "show me" viewing requests.
 
 ## Implementation
 
