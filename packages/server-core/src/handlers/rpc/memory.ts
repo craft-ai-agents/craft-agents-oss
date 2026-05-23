@@ -15,6 +15,7 @@ import {
   type LoadedMemoryFile,
   type MemoryEntry,
   type MemoryEntryType,
+  type MemoryMutationEventMetadata,
   type MemoryScope,
   type SaveMemoryInput,
   type UpdateMemoryInput,
@@ -71,6 +72,16 @@ function requireBody(payload: MemoryMutationPayload): string {
   return body
 }
 
+function rpcMemoryEvent(payload: MemoryMutationPayload): MemoryMutationEventMetadata {
+  const metadata = payload.metadata ?? {}
+  return {
+    source: 'rpc',
+    runId: typeof metadata.runId === 'string' ? metadata.runId : undefined,
+    evidence: typeof metadata.evidence === 'string' ? metadata.evidence : undefined,
+    actor: typeof metadata.actor === 'string' ? metadata.actor : undefined,
+  }
+}
+
 async function saveMemory(payload: MemoryMutationPayload): Promise<MemoryEntry> {
   const agentSlug = requireAgentSlug(payload.scope, payload.agentSlug)
   const input: SaveMemoryInput = {
@@ -81,6 +92,7 @@ async function saveMemory(payload: MemoryMutationPayload): Promise<MemoryEntry> 
     body: requireBody(payload),
     expires: typeof payload.expires === 'string' ? payload.expires : undefined,
     force: payload.force === true,
+    event: rpcMemoryEvent(payload),
   }
   return saveMemoryEntry(input)
 }
@@ -111,6 +123,7 @@ async function updateMemory(payload: MemoryMutationPayload): Promise<MemoryEntry
     name: requireName(payload),
     body: payload.body ?? payload.content,
     expires: payload.expires,
+    event: rpcMemoryEvent(payload),
   }
   return updateMemoryEntry(input)
 }
@@ -121,6 +134,7 @@ async function deleteMemory(payload: MemoryMutationPayload): Promise<boolean> {
     scope: payload.scope,
     agentSlug,
     name: requireName(payload),
+    event: rpcMemoryEvent(payload),
   }
   return deleteMemoryEntry(input)
 }

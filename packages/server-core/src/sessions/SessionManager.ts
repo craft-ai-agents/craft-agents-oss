@@ -116,6 +116,7 @@ import {
   type DeleteMemoryInput,
   type MemoryEntry as StoredMemoryEntry,
   type MemoryEntryType,
+  type MemoryMutationEventMetadata,
   type MemoryScope,
   type SaveMemoryInput,
   type UpdateMemoryInput,
@@ -225,6 +226,7 @@ async function mutateMemory(
   scope: MemoryScope,
   input: Record<string, unknown>,
   agentSlug?: string,
+  event?: MemoryMutationEventMetadata,
 ): Promise<MemoryMutationResult> {
   if (scope === 'agent' && !agentSlug) throw new Error('agentSlug is required for agent memory')
   const name = typeof input.name === 'string' ? input.name.trim() : ''
@@ -241,6 +243,7 @@ async function mutateMemory(
       type,
       body,
       expires: typeof input.expires === 'string' ? input.expires : undefined,
+      event,
     } satisfies SaveMemoryInput)
     return { ok: true, scope, name: saved.name, file: undefined }
   }
@@ -251,10 +254,11 @@ async function mutateMemory(
       name,
       body: typeof input.content === 'string' ? input.content : undefined,
       expires: input.expires === null || typeof input.expires === 'string' ? input.expires : undefined,
+      event,
     } satisfies UpdateMemoryInput)
     return updated ? { ok: true, scope, name: updated.name } : { ok: false, scope, name, error: `Memory not found: ${name}` }
   }
-  const deleted = await deleteMemoryEntry({ scope, agentSlug, name } satisfies DeleteMemoryInput)
+  const deleted = await deleteMemoryEntry({ scope, agentSlug, name, event } satisfies DeleteMemoryInput)
   return deleted ? { ok: true, scope, name } : { ok: false, scope, name, error: `Memory not found: ${name}` }
 }
 
@@ -4451,21 +4455,33 @@ user a clickable link to where the thing now lives.`
         saveMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
-          const result = await mutateMemory('save', scope, { ...input }, agentSlug)
+          const result = await mutateMemory('save', scope, { ...input }, agentSlug, {
+            source: 'agent_tool',
+            runId: managed.id,
+            actor: managed.spawnedFromAgent?.agentSlug ?? 'session',
+          })
           this.broadcastMemoryChanged(scope, scope === 'agent' ? agentSlug ?? null : null)
           return result
         },
         updateMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
-          const result = await mutateMemory('update', scope, { ...input }, agentSlug)
+          const result = await mutateMemory('update', scope, { ...input }, agentSlug, {
+            source: 'agent_tool',
+            runId: managed.id,
+            actor: managed.spawnedFromAgent?.agentSlug ?? 'session',
+          })
           this.broadcastMemoryChanged(scope, scope === 'agent' ? agentSlug ?? null : null)
           return result
         },
         forgetMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
-          const result = await mutateMemory('delete', scope, { ...input }, agentSlug)
+          const result = await mutateMemory('delete', scope, { ...input }, agentSlug, {
+            source: 'agent_tool',
+            runId: managed.id,
+            actor: managed.spawnedFromAgent?.agentSlug ?? 'session',
+          })
           this.broadcastMemoryChanged(scope, scope === 'agent' ? agentSlug ?? null : null)
           return result
         },

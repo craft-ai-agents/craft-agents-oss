@@ -121,6 +121,12 @@ describe('memory RPC handlers', () => {
       body: 'Use direct language.',
       expires: undefined,
       force: true,
+      event: {
+        source: 'rpc',
+        runId: undefined,
+        evidence: undefined,
+        actor: undefined,
+      },
     })
     expect(pushCalls).toEqual([{
       channel: RPC_CHANNELS.memory.CHANGED,
