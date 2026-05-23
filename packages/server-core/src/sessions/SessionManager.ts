@@ -6222,9 +6222,10 @@ user a clickable link to where the thing now lives.`
     const message = [
       '<system-reminder>',
       `Canvas just captured a preview screenshot for "${title}".`,
-      'Inspect the attached image for obvious visual or render defects in that artifact only.',
-      'If something is clearly broken and you can fix it with one focused edit, do that once.',
-      'If it looks acceptable or the issue is uncertain, do not make changes just to change it.',
+      'Inspect and review the image in the context of what you and the user are working on.',
+      'Look for anything obviously off, broken, ugly, misaligned, out of whack, or missing from what the user specifically asked for or would reasonably expect to see.',
+      'If something is clearly wrong, briefly mention it to the user and state your concrete idea for fixing it before making one focused edit.',
+      'If it looks right to you, do not give a sterile pass/fail verdict. Ask the user for their take on what they see.',
       'Do not start another Canvas visual review unless the user reopens Canvas or clicks another board/output tab.',
       '</system-reminder>',
     ].join('\n')
