@@ -453,6 +453,7 @@ export const CHANNEL_MAP = {
   saveVisualBoard: invoke(RPC_CHANNELS.outputs.SAVE_VISUAL_BOARD),
   applyVisualSurfaceEvent: invoke(RPC_CHANNELS.outputs.APPLY_VISUAL_SURFACE_EVENT),
   listVisualSurfaceEvents: invoke(RPC_CHANNELS.outputs.LIST_VISUAL_SURFACE_EVENTS),
+  recordVisualCapture: invoke(RPC_CHANNELS.outputs.RECORD_VISUAL_CAPTURE),
   openOutputFile: invoke(RPC_CHANNELS.outputs.OPEN_FILE),
   showOutputInFolder: invoke(RPC_CHANNELS.outputs.SHOW_IN_FOLDER),
   readOutputAssetText: invoke(RPC_CHANNELS.outputs.READ_ASSET_TEXT),

@@ -204,6 +204,65 @@ describe('OutputService visual boards', () => {
     });
   });
 
+  it('records one visual capture asset per output version and reports it in visual state', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-visual-capture-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const emitted: string[] = [];
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+      emitOutputsUpdated: (workspaceId) => emitted.push(workspaceId),
+    });
+
+    const output = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Capture me',
+        kind: 'report',
+        summary: 'Visible artifact',
+        content: '# capture me',
+        contentMimeType: 'text/markdown',
+      },
+    });
+    expect(output.ok).toBe(true);
+
+    const dataUrl = `data:image/png;base64,${Buffer.from('png-data').toString('base64')}`;
+    const first = service.recordVisualCapture({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      outputId: output.outputId!,
+      source: 'canvas',
+      captureVersion: 'version-1',
+      dataUrl,
+      width: 640,
+      height: 360,
+    });
+    const second = service.recordVisualCapture({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      outputId: output.outputId!,
+      source: 'canvas',
+      captureVersion: 'version-1',
+      dataUrl,
+      width: 640,
+      height: 360,
+    });
+
+    expect(first.ok).toBe(true);
+    expect(second.skipped).toBe(true);
+    expect(existsSync(join(root, 'outputs', output.outputId!, first.path))).toBe(true);
+    const manifest = service.get('ws', output.outputId!);
+    expect(manifest?.assets.filter((asset) => asset.id === 'visual-capture-canvas')).toHaveLength(1);
+    const state = service.getVisualSurfaceState('ws', 'session-1');
+    expect(state.outputs.find((entry) => entry.id === output.outputId)).toMatchObject({
+      visualCapture: {
+        assetId: 'visual-capture-canvas',
+        path: first.path,
+      },
+    });
+    expect(emitted).toEqual(['ws', 'ws']);
+  });
+
   it('creates, reads, and saves one output-backed board per session', () => {
     const root = mkdtempSync(join(tmpdir(), 'osvc-board-'));
     mkdirSync(join(root, 'outputs'), { recursive: true });

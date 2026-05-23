@@ -49,6 +49,8 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     ?? (activeSurface?.kind === 'canvas' ? latestDisplayOutput?.id ?? boardOutput?.id : undefined)
   const [selectedManifest, setSelectedManifest] = React.useState<OutputManifestDTO | null>(null)
   const [manifestError, setManifestError] = React.useState<string | null>(null)
+  const visualCaptureRef = React.useRef<HTMLDivElement | null>(null)
+  const capturedVersionsRef = React.useRef(new Set<string>())
 
   React.useEffect(() => {
     if (!selectedOutputId) {
@@ -108,6 +110,58 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
   }, [activeSurface?.sessionId, activeSurface?.workspaceId, openDemoVisualSurface, selectedManifest])
+
+  React.useEffect(() => {
+    if (!activeSurface?.workspaceId || !activeSurface.sessionId || !selectedManifest) return
+    if (selectedManifest.tags?.includes(VISUAL_BOARD_TAG)) return
+    if (selectedManifest.origin?.sessionId !== activeSurface.sessionId) return
+    if (isCollapsed) return
+
+    const workspaceId = activeSurface.workspaceId
+    const sessionId = activeSurface.sessionId
+    const captureVersion = visualCaptureVersion(selectedManifest)
+    const captureKey = `${workspaceId}:${sessionId}:${selectedManifest.id}:${captureVersion}`
+    if (capturedVersionsRef.current.has(captureKey)) return
+
+    let cancelled = false
+    const timeout = window.setTimeout(async () => {
+      if (cancelled) return
+      const node = visualCaptureRef.current
+      const captureVisualElement = window.electronAPI.captureVisualElement
+      const recordVisualCapture = window.electronAPI.recordVisualCapture
+      if (!node || typeof captureVisualElement !== 'function' || typeof recordVisualCapture !== 'function') return
+      const rect = node.getBoundingClientRect()
+      if (rect.width < 80 || rect.height < 80) return
+
+      try {
+        const capture = await captureVisualElement({
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+        })
+        if (cancelled) return
+        await recordVisualCapture({
+          workspaceId,
+          sessionId,
+          outputId: selectedManifest.id,
+          source: 'canvas',
+          captureVersion,
+          dataUrl: capture.dataUrl,
+          width: capture.width,
+          height: capture.height,
+        })
+        capturedVersionsRef.current.add(captureKey)
+      } catch (err) {
+        console.warn('[VisualSurfacePanel] visual capture failed:', err)
+      }
+    }, 1600)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+    }
+  }, [activeSurface?.sessionId, activeSurface?.workspaceId, isCollapsed, selectedManifest])
 
   if (!activeSurface) return null
 
@@ -197,7 +251,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
             presentation === 'rollup'
               ? 'min-h-0 rounded-t-none rounded-b-md border-x border-b border-border/45'
               : 'rounded-lg border border-border/60',
-          )}>
+          )} ref={visualCaptureRef}>
             {renderVisualSurfaceAdapter(adapterContext)}
           </div>
 
@@ -239,6 +293,32 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
       </div>
     </aside>
   )
+}
+
+function visualCaptureVersion(manifest: OutputManifestDTO): string {
+  const assets = manifest.assets
+    .filter((asset) => asset.id !== 'visual-capture-canvas' && !asset.path.startsWith('visual-captures/'))
+    .map((asset) => ({
+      id: asset.id,
+      path: asset.path,
+      sizeBytes: asset.sizeBytes,
+      sha256: asset.sha256,
+      mimeType: asset.mimeType,
+    }))
+  const links = manifest.links.map((link) => ({ label: link.label, url: link.url, role: link.role }))
+  return JSON.stringify({
+    id: manifest.id,
+    title: manifest.title,
+    kind: manifest.kind,
+    summary: manifest.summary,
+    status: manifest.status,
+    createdAt: manifest.createdAt,
+    completedAt: manifest.completedAt,
+    primary: manifest.primary?.id,
+    preview: manifest.preview,
+    assets,
+    links,
+  })
 }
 
 function OutputSelector({

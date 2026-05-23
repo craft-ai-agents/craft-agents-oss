@@ -533,6 +533,20 @@ app.whenReady().then(async () => {
       const result = await dialog.showOpenDialog(win, spec)
       return { canceled: result.canceled, filePaths: result.filePaths }
     })
+    ipcMain.handle('__visual:capture-element', async (event, rect: { x?: number; y?: number; width?: number; height?: number }) => {
+      const x = Math.max(0, Math.floor(Number(rect?.x) || 0))
+      const y = Math.max(0, Math.floor(Number(rect?.y) || 0))
+      const width = Math.min(2400, Math.max(1, Math.floor(Number(rect?.width) || 0)))
+      const height = Math.min(1800, Math.max(1, Math.floor(Number(rect?.height) || 0)))
+      if (width < 8 || height < 8) throw new Error('Visual capture target is too small.')
+      const image = await event.sender.capturePage({ x, y, width, height })
+      if (image.isEmpty()) throw new Error('Visual capture returned an empty image.')
+      return {
+        dataUrl: image.toDataURL(),
+        width: image.getSize().width,
+        height: image.getSize().height,
+      }
+    })
 
     if (!isClientOnly) {
       // Restore persisted Git Bash path on Windows (must happen before any SDK subprocess spawn)

@@ -1,8 +1,8 @@
-import { appendFileSync, existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { RpcServer } from '@craft-agent/server-core/transport';
-import type { CreateOutputToolInput, CreateOutputResult, VisualSurfaceStateToolResult } from '@craft-agent/session-tools-core';
+import type { CreateOutputToolInput, CreateOutputResult, VisualSurfaceStateCapture, VisualSurfaceStateToolResult } from '@craft-agent/session-tools-core';
 import {
   createOutputBundle,
   deleteOutput,
@@ -54,6 +54,26 @@ export interface OutputServiceDeps {
   emitWorkflowRunUpdated?: (run: WorkflowRunSnapshot) => void;
 }
 
+export interface RecordVisualCaptureInput {
+  workspaceId: string;
+  sessionId: string;
+  outputId: string;
+  captureVersion: string;
+  source: 'canvas';
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
+export interface RecordVisualCaptureResult {
+  ok: boolean;
+  outputId: string;
+  assetId: string;
+  path: string;
+  capturedAt: string;
+  skipped?: boolean;
+}
+
 export class OutputService {
   // Per-run mutex serializing read-modify-write of run.json from this service.
   // IMPORTANT: this is intra-service only. The WorkflowRunner writes run.json
@@ -85,6 +105,7 @@ export class OutputService {
         const generatedHtmlPreview = resolveGeneratedHtmlPreviewTarget(manifest);
         const webPreviewTarget = localWebPreview ?? generatedHtmlPreview;
         const canOpenInCanvas = manifest.status !== 'failed' && manifest.status !== 'cancelled';
+        const visualCapture = latestVisualCapture(manifest);
         const webPreview = webPreviewTarget ? {
           url: webPreviewTarget.url,
           displayHost: webPreviewTarget.displayHost,
@@ -102,6 +123,7 @@ export class OutputService {
           canInspectInBrowserPane: Boolean(webPreview),
           previewSurface: webPreview ? 'browser-pane' as const : canOpenInCanvas ? 'canvas' as const : 'none' as const,
           ...(webPreview ? { webPreview } : {}),
+          ...(visualCapture ? { visualCapture } : {}),
           ...(localWebPreview ? { localWebPreview } : {}),
         };
       });
@@ -137,6 +159,59 @@ export class OutputService {
         canInspectWebPreviewsInBrowserPane: outputs.some((output) => output.canInspectInBrowserPane),
       },
     };
+  }
+
+  recordVisualCapture(input: RecordVisualCaptureInput): RecordVisualCaptureResult {
+    const root = this.deps.getWorkspaceRootPath(input.workspaceId);
+    const output = readOutput(root, input.outputId);
+    if (!output) throw new Error(`Output not found: ${input.outputId}`);
+    if (output.workspaceId !== input.workspaceId) throw new Error(`Output "${input.outputId}" is not in workspace "${input.workspaceId}".`);
+    if (output.origin.sessionId !== input.sessionId) throw new Error(`Output "${input.outputId}" is not from session "${input.sessionId}".`);
+    if (output.tags?.includes(VISUAL_BOARD_TAG)) throw new Error('Visual board outputs cannot receive visual captures.');
+
+    const { buffer, mimeType } = decodePngDataUrl(input.dataUrl);
+    if (buffer.length === 0) throw new Error('Visual capture is empty.');
+    if (buffer.length > 8 * 1024 * 1024) throw new Error('Visual capture is too large.');
+
+    const capturedAt = new Date().toISOString();
+    const assetId = `visual-capture-${input.source}`;
+    const version = slugifyCaptureVersion(input.captureVersion);
+    const assetPath = `visual-captures/${input.source}-${version}.png`;
+    const absolutePath = this.resolveAssetPath(input.workspaceId, input.outputId, assetPath);
+    const existing = output.assets.find((asset) => asset.id === assetId && asset.path === assetPath);
+    if (existing && existsSync(absolutePath)) {
+      return {
+        ok: true,
+        outputId: output.id,
+        assetId,
+        path: assetPath,
+        capturedAt: captureTimestampFromLabel(existing.label) ?? capturedAt,
+        skipped: true,
+      };
+    }
+
+    mkdirSync(dirname(absolutePath), { recursive: true });
+    writeFileSync(absolutePath, buffer);
+    const sha256 = createHash('sha256').update(buffer).digest('hex');
+    const asset: OutputAsset = {
+      id: assetId,
+      label: `Canvas capture ${capturedAt}`,
+      role: 'thumbnail',
+      path: assetPath,
+      mimeType,
+      sizeBytes: buffer.length,
+      sha256,
+    };
+    const nextOutput: OutputManifest = {
+      ...output,
+      assets: [
+        ...output.assets.filter((entry) => entry.id !== assetId),
+        asset,
+      ],
+    };
+    writeOutputManifest(root, nextOutput);
+    this.emitUpdated(input.workspaceId);
+    return { ok: true, outputId: output.id, assetId, path: assetPath, capturedAt };
   }
 
   getOrCreateVisualBoard(workspaceId: string, sessionId: string): { output: OutputManifest; board: VisualBoardSnapshot } {
@@ -763,6 +838,35 @@ export class OutputService {
 
 export function readOutputAssetText(path: string): string {
   return readFileSync(path, 'utf-8');
+}
+
+function latestVisualCapture(output: OutputManifest): VisualSurfaceStateCapture | null {
+  const asset = [...output.assets].reverse().find((entry) => entry.id === 'visual-capture-canvas' && entry.mimeType === 'image/png')
+    ?? [...output.assets].reverse().find((entry) => entry.role === 'thumbnail' && entry.path.startsWith('visual-captures/') && entry.mimeType === 'image/png');
+  if (!asset) return null;
+  return {
+    assetId: asset.id,
+    path: asset.path,
+    capturedAt: captureTimestampFromLabel(asset.label) ?? undefined,
+  };
+}
+
+function decodePngDataUrl(dataUrl: string): { buffer: Buffer; mimeType: 'image/png' } {
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl.trim());
+  if (!match) throw new Error('Visual capture must be a PNG data URL.');
+  return { buffer: Buffer.from(match[1], 'base64'), mimeType: 'image/png' };
+}
+
+function slugifyCaptureVersion(value: string): string {
+  const trimmed = value.trim();
+  const hash = createHash('sha256').update(trimmed || 'default').digest('hex').slice(0, 16);
+  const label = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  return label ? `${label}-${hash}` : hash;
+}
+
+function captureTimestampFromLabel(label: string): string | null {
+  const match = /^Canvas capture (.+)$/.exec(label);
+  return match?.[1] ?? null;
 }
 
 export function pushOutputsUpdated(server: RpcServer, workspaceId: string): void {

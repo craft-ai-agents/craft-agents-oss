@@ -157,6 +157,7 @@ export type {
 } from './visual-surface.ts';
 export { handleVisualSurfaceState } from './visual-surface-state.ts';
 export type {
+  VisualSurfaceStateCapture,
   VisualSurfaceStateOutput,
   VisualSurfaceStateToolResult,
 } from './visual-surface-state.ts';

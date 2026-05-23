@@ -273,6 +273,7 @@ export type {
   CreateOutputReceiptInput,
   VisualSurfaceToolInput,
   VisualSurfaceToolResult,
+  VisualSurfaceStateCapture,
   VisualSurfaceStateOutput,
   VisualSurfaceStateToolResult,
 } from './handlers/index.ts';

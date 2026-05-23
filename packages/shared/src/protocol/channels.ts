@@ -469,6 +469,7 @@ export const RPC_CHANNELS = {
     SAVE_VISUAL_BOARD: 'outputs:saveVisualBoard',
     APPLY_VISUAL_SURFACE_EVENT: 'outputs:applyVisualSurfaceEvent',
     LIST_VISUAL_SURFACE_EVENTS: 'outputs:listVisualSurfaceEvents',
+    RECORD_VISUAL_CAPTURE: 'outputs:recordVisualCapture',
     OPEN_FILE: 'outputs:openFile',
     SHOW_IN_FOLDER: 'outputs:showInFolder',
     READ_ASSET_TEXT: 'outputs:readAssetText',

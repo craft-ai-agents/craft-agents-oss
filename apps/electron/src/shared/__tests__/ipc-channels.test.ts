@@ -200,6 +200,7 @@ const EXPECTED_CHANNELS: string[] = [
   "outputs:openFile",
   "outputs:readAssetDataUrl",
   "outputs:readAssetText",
+  "outputs:recordVisualCapture",
   "outputs:saveVisualBoard",
   "outputs:showInFolder",
   "outputs:updated",

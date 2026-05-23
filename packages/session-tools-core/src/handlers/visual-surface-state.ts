@@ -19,6 +19,14 @@ export interface VisualSurfaceStateWebPreview {
   kind: 'local-web' | 'generated-html';
 }
 
+export interface VisualSurfaceStateCapture {
+  assetId: string;
+  path: string;
+  width?: number;
+  height?: number;
+  capturedAt?: string;
+}
+
 export interface VisualSurfaceStateOutput {
   id: string;
   title: string;
@@ -31,6 +39,7 @@ export interface VisualSurfaceStateOutput {
   canInspectInBrowserPane: boolean;
   previewSurface: 'canvas' | 'browser-pane' | 'none';
   webPreview?: VisualSurfaceStateWebPreview;
+  visualCapture?: VisualSurfaceStateCapture;
   localWebPreview?: {
     url: string;
     displayHost: string;
