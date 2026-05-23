@@ -1,8 +1,8 @@
 # Visual Agent OS
 
-Status: draft
+Status: implemented through Phase 5C
 Owner: RunnerOS
-Last updated: 2026-05-22
+Last updated: 2026-05-23
 
 ## Purpose
 
@@ -42,3 +42,16 @@ The MVP is complete when a normal RunnerOS chat session can:
 4. Show generated image/video outputs in the sidecar.
 5. Reopen the same surface after restart.
 6. Preserve chat usability across wide, medium, and narrow app widths.
+
+## Current Build Status
+
+- Phase 2 output-backed Canvas: implemented.
+- Phase 2B local web preview adapter: implemented through Output preview policy.
+- Phase 2C visual board: implemented.
+- Phase 3 agent surface events: implemented through `visual_surface`.
+- Phase 4 media outputs: implemented, including media Canvas cards and sidecar add-to-board.
+- Phase 5A adapter registry: implemented.
+- Phase 5B web agent awareness: implemented through `visual_surface_state`.
+- Phase 5C agent guidance: implemented in the central system prompt and tool descriptions.
+
+Next intelligent slice: browser-surface adapter backed by real browser-pane/webview inspection, not iframe guessing.

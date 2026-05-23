@@ -1,5 +1,8 @@
 # Phase 5B: Web Surface Agent Awareness
 
+Status: implemented
+Last verified: 2026-05-23
+
 ## Goal
 
 Make local web previews useful to agents without adding provider-specific tool integrations yet.

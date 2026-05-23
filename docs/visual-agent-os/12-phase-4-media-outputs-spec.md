@@ -1,5 +1,8 @@
 # Phase 4: Media Outputs
 
+Status: implemented
+Last verified: 2026-05-23
+
 ## Goal
 
 Make generated image and video Outputs feel native in the visual workflow: preview in the sidecar, send to Canvas, and let agents place media on the Canvas through the validated `visual_surface` tool.
@@ -14,11 +17,12 @@ Already present:
 - `OutputInlinePreview` can render image/video assets from safe Output asset RPCs.
 - Canvas already persists output-backed cards through the visual-board Output.
 
-Missing:
+Implemented in current branch:
 
 - Agent-facing media-specific Canvas actions.
 - UI action to send a media Output to Canvas from Output detail.
-- Media cards on Canvas still look like generic text output cards.
+- Sidecar action to add the selected Output to the Canvas board.
+- Media cards on Canvas show inline image/video previews.
 - Tests for media-only validation.
 
 ## User Outcome
