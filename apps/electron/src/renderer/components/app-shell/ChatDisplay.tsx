@@ -9,6 +9,7 @@ import {
   ChevronUp,
   CircleAlert,
   ExternalLink,
+  Image as ImageIcon,
   Info,
   X,
 } from "lucide-react"
@@ -2269,6 +2270,10 @@ function MessageBubble({
 
   // === USER MESSAGE: Right-aligned bubble with attachments above ===
   if (message.role === 'user') {
+    if (isCanvasVisualReviewMessage(message)) {
+      return <CanvasVisualReviewNotice />
+    }
+
     return (
       <UserMessageBubble
         content={message.content}
@@ -2394,6 +2399,24 @@ function MessageBubble({
   }
 
   return null
+}
+
+function isCanvasVisualReviewMessage(message: Message): boolean {
+  return message.content.startsWith('<system-reminder>\nCanvas just captured a preview screenshot')
+}
+
+function CanvasVisualReviewNotice() {
+  return (
+    <div className="flex justify-end">
+      <div className="flex max-w-[90%] items-center gap-2 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-3 py-2 text-[13px] text-white/62">
+        <ImageIcon className="h-3.5 w-3.5 text-cyan-300/75" />
+        <div className="flex min-w-0 flex-col">
+          <span className="font-medium text-white/72">Canvas review sent to agent</span>
+          <span className="text-[12px] text-white/42">Preview screenshot attached</span>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 /**
