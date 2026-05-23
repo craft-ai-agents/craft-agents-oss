@@ -33,7 +33,15 @@ export function OutputModelPreview({
     scene.background = new THREE.Color(0x050505)
 
     const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 10000)
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    let renderer: THREE.WebGLRenderer
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    } catch (error) {
+      setState('error')
+      setMessage(error instanceof Error ? error.message : 'WebGL is unavailable for this model preview.')
+      onPreviewSettled?.('error')
+      return () => { disposed = true }
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -82,26 +90,32 @@ export function OutputModelPreview({
     const loader = new GLTFLoader()
     setState('loading')
     setMessage('Loading model...')
-    loader.load(
-      url,
-      (gltf) => {
-        if (disposed) return
-        const object = gltf.scene
-        scene.add(object)
-        frameObject(object, camera, controls, grid)
-        resetRef.current = () => frameObject(object, camera, controls, grid)
-        setState('ready')
-        setMessage('')
-        onPreviewSettled?.('ready')
-      },
-      undefined,
-      (error) => {
-        if (disposed) return
-        setState('error')
-        setMessage(error instanceof Error ? error.message : 'Model failed to load.')
-        onPreviewSettled?.('error')
-      },
-    )
+    try {
+      loader.load(
+        url,
+        (gltf) => {
+          if (disposed) return
+          const object = gltf.scene
+          scene.add(object)
+          frameObject(object, camera, controls, grid)
+          resetRef.current = () => frameObject(object, camera, controls, grid)
+          setState('ready')
+          setMessage('')
+          onPreviewSettled?.('ready')
+        },
+        undefined,
+        (error) => {
+          if (disposed) return
+          setState('error')
+          setMessage(error instanceof Error ? error.message : 'Model failed to load.')
+          onPreviewSettled?.('error')
+        },
+      )
+    } catch (error) {
+      setState('error')
+      setMessage(error instanceof Error ? error.message : 'Model failed to load.')
+      onPreviewSettled?.('error')
+    }
 
     return () => {
       disposed = true

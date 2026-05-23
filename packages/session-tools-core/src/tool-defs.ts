@@ -449,7 +449,7 @@ export const CreateOutputSchema = z.object({
   content: z.string().optional().describe('Inline output content to persist as the primary asset.'),
   contentMimeType: z.enum(['text/markdown', 'text/plain', 'application/json']).optional().describe('MIME type for inline content. Defaults backend-side when omitted.'),
   files: z.array(z.object({
-    path: z.string().min(1).describe('Path to a file that should be attached to this output.'),
+    path: z.string().min(1).describe('Path to a file that should be attached to this output. Use an absolute path inside the active workspace. Files outside the workspace must be copied into the workspace before calling this tool.'),
     label: z.string().optional(),
     role: OutputAssetRoleSchema.optional(),
   })).optional(),

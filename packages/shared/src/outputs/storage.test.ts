@@ -101,6 +101,31 @@ describe('output manifest validation', () => {
     expect(isOutputManifest(web, OUTPUT_OLD_ID)).toBe(true);
   });
 
+  test('accepts model outputs with glTF preview assets', () => {
+    const model = manifest(OUTPUT_OLD_ID, {
+      kind: 'model',
+      primary: {
+        id: 'asset-1',
+        label: 'Model',
+        role: 'primary',
+        path: 'model.glb',
+        mimeType: 'model/gltf-binary',
+      },
+      assets: [
+        {
+          id: 'asset-1',
+          label: 'Model',
+          role: 'primary',
+          path: 'model.glb',
+          mimeType: 'model/gltf-binary',
+        },
+      ],
+      preview: { mode: 'model', assetId: 'asset-1' },
+    });
+
+    expect(isOutputManifest(model, OUTPUT_OLD_ID)).toBe(true);
+  });
+
   test('rejects malformed manifests before saving', () => {
     expect(isOutputManifest({ ...manifest(OUTPUT_OLD_ID), kind: 'nope' }, OUTPUT_OLD_ID)).toBe(false);
     expect(isOutputManifest({ ...manifest(OUTPUT_OLD_ID), id: OUTPUT_NEW_ID }, OUTPUT_OLD_ID)).toBe(false);
