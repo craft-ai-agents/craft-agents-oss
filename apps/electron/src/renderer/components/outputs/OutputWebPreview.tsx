@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Copy, ExternalLink, Globe2, PanelRightOpen, RefreshCw } from 'lucide-react'
-import { RUNNER_OUTPUT_SCHEME } from '@craft-agent/shared/outputs'
+import { RUNNER_OUTPUT_SCHEME } from '@craft-agent/shared/outputs/web-preview'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { WebPreviewTarget } from './web-preview'
