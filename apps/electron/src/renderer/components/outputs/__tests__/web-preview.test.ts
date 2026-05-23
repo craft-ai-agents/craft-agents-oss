@@ -145,7 +145,17 @@ describe('web preview target resolution', () => {
     })
   })
 
-  test('does not resolve generated HTML assets without explicit web preview mode', () => {
+  test('resolves generated HTML assets without explicit web preview mode', () => {
+    expect(resolveWebPreviewTarget(htmlAssetManifest({
+      preview: undefined,
+    }))).toEqual({
+      url: 'runner-output://asset/workspace-1/output-html/site/index.html',
+      label: 'index.html',
+      displayHost: 'generated output',
+    })
+  })
+
+  test('does not override generated HTML assets with a non-web explicit preview mode', () => {
     expect(resolveWebPreviewTarget(htmlAssetManifest({
       preview: { mode: 'markdown', assetId: 'index' },
     }))).toBeNull()
@@ -179,6 +189,16 @@ describe('runner-output URL helpers', () => {
       workspaceId: 'workspace 1',
       outputId: 'output-1',
       assetPath: 'site/my page.html',
+    })
+  })
+
+  test('round trips absolute workspace output asset URLs for legacy session outputs', () => {
+    const url = buildRunnerOutputAssetUrl('workspace-1', 'output-1', '/Users/michael/workspace/sessions/session-1/data/index.html')
+    expect(url).toBe('runner-output://asset/workspace-1/output-1/%2FUsers%2Fmichael%2Fworkspace%2Fsessions%2Fsession-1%2Fdata%2Findex.html')
+    expect(parseRunnerOutputAssetUrl(url)).toEqual({
+      workspaceId: 'workspace-1',
+      outputId: 'output-1',
+      assetPath: '/Users/michael/workspace/sessions/session-1/data/index.html',
     })
   })
 

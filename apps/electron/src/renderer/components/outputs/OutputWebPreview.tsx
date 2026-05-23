@@ -111,9 +111,15 @@ export function OutputWebPreview({ target, className }: OutputWebPreviewProps) {
                   <RefreshCw className="h-3.5 w-3.5" />
                   Retry
                 </Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => window.electronAPI.openUrl(target.url)}>
+                <Button type="button" size="sm" variant="outline" onClick={() => {
+                  if (isGeneratedOutputUrl) {
+                    void openInBrowserPane()
+                  } else {
+                    window.electronAPI.openUrl(target.url)
+                  }
+                }}>
                   <ExternalLink className="h-3.5 w-3.5" />
-                  Open external
+                  {isGeneratedOutputUrl ? 'Open in Browser Pane' : 'Open external'}
                 </Button>
               </div>
             </div>

@@ -65,7 +65,7 @@ export function resolveLocalWebPreviewTarget(
 }
 
 export function resolveGeneratedHtmlPreviewTarget(output: WebPreviewOutputLike): LocalWebPreviewTarget | null {
-  if (output.preview?.mode !== 'web') return null;
+  if (output.preview?.mode && output.preview.mode !== 'web') return null;
   if (!output.workspaceId || !output.id) return null;
 
   const asset = selectHtmlPreviewAsset(output);
@@ -79,7 +79,9 @@ export function resolveGeneratedHtmlPreviewTarget(output: WebPreviewOutputLike):
 }
 
 export function buildRunnerOutputAssetUrl(workspaceId: string, outputId: string, assetPath: string): string {
-  const segments = assetPath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  const segments = isAbsoluteLikeAssetPath(assetPath)
+    ? encodeURIComponent(assetPath)
+    : assetPath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
   return `${RUNNER_OUTPUT_SCHEME}://asset/${encodeURIComponent(workspaceId)}/${encodeURIComponent(outputId)}/${segments}`;
 }
 
@@ -140,9 +142,16 @@ function isHtmlAsset(asset: WebPreviewAssetLike): boolean {
 }
 
 function isSafeProtocolAssetPath(assetPath: string): boolean {
-  if (!assetPath || assetPath.includes('\0') || assetPath.startsWith('/') || /^[a-z]:[\\/]/i.test(assetPath)) return false;
+  if (!assetPath || assetPath.includes('\0')) return false;
   const segments = assetPath.split('/');
-  return segments.every((segment) => segment && segment !== '.' && segment !== '..' && !segment.includes('\\'));
+  return segments.every((segment, index) => {
+    if (index === 0 && segment === '' && isAbsoluteLikeAssetPath(assetPath)) return true;
+    return segment && segment !== '.' && segment !== '..' && !segment.includes('\\');
+  });
+}
+
+function isAbsoluteLikeAssetPath(assetPath: string): boolean {
+  return assetPath.startsWith('/') || /^[a-z]:[\\/]/i.test(assetPath);
 }
 
 function parseUrl(value: string | undefined): URL | null {
