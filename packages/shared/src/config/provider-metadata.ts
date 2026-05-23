@@ -80,7 +80,7 @@ export function getProviderMetadata(
   providerType: string,
   piAuthProvider?: string,
 ): ProviderMetadata | undefined {
-  if (providerType === 'anthropic') {
+  if (providerType === 'anthropic' || providerType === 'anthropic_compat') {
     return PROVIDER_METADATA.anthropic
   }
   if (piAuthProvider) {

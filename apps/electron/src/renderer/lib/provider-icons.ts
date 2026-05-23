@@ -149,7 +149,8 @@ const PI_AUTH_PROVIDER_DOMAINS: Record<string, string> = {
 
 /**
  * Get provider icon URL for a given provider type and optional base URL.
- * Base URL detection takes precedence for compatible providers (openai_compat, pi_compat).
+ * Base URL detection takes precedence for compatible providers
+ * (openai_compat, pi_compat, anthropic_compat).
  * For Pi connections, resolves to the upstream provider's icon via piAuthProvider.
  *
  * @param providerType - The LLM provider type
@@ -163,7 +164,7 @@ export function getProviderIcon(
   piAuthProvider?: string | null
 ): string | null {
   // For compatible providers, try to detect from URL first
-  if (baseUrl && (providerType === 'openai_compat' || providerType === 'pi_compat')) {
+  if (baseUrl && (providerType === 'openai_compat' || providerType === 'pi_compat' || providerType === 'anthropic_compat')) {
     const detectedProvider = detectProviderFromUrl(baseUrl)
     if (detectedProvider) {
       return providerIcons[detectedProvider]
@@ -177,6 +178,7 @@ export function getProviderIcon(
   // Map provider type to icon
   switch (providerType) {
     case 'anthropic':
+    case 'anthropic_compat':
       return providerIcons.anthropic
     case 'openai':
     case 'openai_compat':

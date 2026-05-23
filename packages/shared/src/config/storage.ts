@@ -1983,14 +1983,14 @@ function migrateWorkspaceOpus45ToOpus46(config: StoredConfig): void {
 }
 
 /**
- * Migrate legacy provider types to the active set (anthropic, pi, pi_compat).
+ * Migrate legacy provider types to the active set (anthropic, anthropic_compat, pi, pi_compat).
  *
  * 1. providerType==='bedrock' → 'pi' with piAuthProvider='amazon-bedrock'.
  *    Model IDs are normalized to Bedrock-native (pi-prefixed) for Pi SDK resolution.
  *
  * 2. providerType==='vertex' → 'pi' with piAuthProvider='google-vertex'.
  *
- * 3. providerType==='anthropic_compat' → 'pi_compat' with customEndpoint.api='anthropic-messages'.
+ * 3. providerType==='anthropic_compat' → 'anthropic_compat' with customEndpoint.api='anthropic-messages'.
  *    Preserves baseUrl and models; authType 'api_key_with_endpoint' stays the same.
  *
  * Also normalizes Pi+Bedrock connections that already have correct providerType.
@@ -2034,11 +2034,23 @@ function migrateLegacyProviderTypes(config: StoredConfig): boolean {
       continue;
     }
 
-    // --- anthropic_compat → pi_compat + customEndpoint ---
+    // --- anthropic_compat → anthropic_compat + customEndpoint ---
     if (providerStr === 'anthropic_compat') {
-      (connection as { providerType: LlmProviderType }).providerType = 'pi_compat';
+      (connection as { providerType: LlmProviderType }).providerType = 'anthropic_compat';
       connection.customEndpoint = { api: 'anthropic-messages' };
       // authType 'api_key_with_endpoint' stays; baseUrl and models are preserved
+      changed = true;
+      continue;
+    }
+
+    // Forward migration from the temporary shared compat bucket used for
+    // Anthropic-compatible endpoints.
+    if (
+      connection.providerType === 'pi_compat'
+      && connection.customEndpoint?.api === 'anthropic-messages'
+    ) {
+      connection.providerType = 'anthropic_compat';
+      delete connection.piAuthProvider;
       changed = true;
       continue;
     }
@@ -2256,7 +2268,7 @@ export function migrateLegacyLlmConnectionsConfig(): void {
     if (restoreOpus46ToAnthropicConnections(config)) {
       needsSave = true;
     }
-    // Phase 1j: Migrate legacy provider types (bedrock/vertex/anthropic_compat → pi/pi_compat)
+    // Phase 1j: Migrate legacy provider types (bedrock/vertex/anthropic_compat → active provider set)
     if (migrateLegacyProviderTypes(config)) {
       needsSave = true;
     }
@@ -2316,16 +2328,16 @@ export function migrateLegacyLlmConnectionsConfig(): void {
         createdAt: Date.now(),
       };
     } else if (legacyAuthType === 'api_key') {
-      // Anthropic API Key - check if custom endpoint (compat mode → pi_compat)
+      // Anthropic API Key - check if custom endpoint (compat mode → anthropic_compat)
       const hasCustomEndpoint = !!legacyBaseUrl;
       if (hasCustomEndpoint) {
         migrated = {
           slug: 'anthropic-api',
           name: 'Custom Anthropic-Compatible',
-          providerType: 'pi_compat',
+          providerType: 'anthropic_compat',
           authType: 'api_key_with_endpoint',
           customEndpoint: { api: 'anthropic-messages' },
-          models: getDefaultModelsForConnection('pi_compat'),
+          models: getDefaultModelsForConnection('anthropic_compat'),
           createdAt: Date.now(),
         };
       } else {

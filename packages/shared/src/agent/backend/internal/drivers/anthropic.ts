@@ -15,8 +15,8 @@ export const anthropicDriver: ProviderDriver = {
   },
   buildRuntime: () => ({}),
   fetchModels: async ({ connection, credentials }) => {
-    // After legacy migration, only direct 'anthropic' connections reach this driver.
-    // iam_credentials and service_account_file are no longer valid auth types for anthropic.
+    // Direct Anthropic and Anthropic-compatible custom endpoints reach this driver.
+    // iam_credentials and service_account_file are not valid auth types here.
 
     const apiKey = credentials.apiKey;
     const oauthAccessToken = credentials.oauthAccessToken;
@@ -95,7 +95,7 @@ export const anthropicDriver: ProviderDriver = {
     return { models };
   },
   validateStoredConnection: async ({ slug, connection, credentialManager }) => {
-    // After legacy migration, only direct 'anthropic' connections reach this driver.
+    // Direct Anthropic and Anthropic-compatible custom endpoints reach this driver.
 
     if (connection.providerType === 'anthropic' && connection.authType === 'oauth') {
       const { getValidClaudeOAuthToken } = await import('../../../../auth/state.ts');

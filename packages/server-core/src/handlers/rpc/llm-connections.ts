@@ -1,5 +1,5 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, resolveMidStreamBehavior, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
 import {
@@ -77,14 +77,16 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         // Only mutate providerType for API key connections (not OAuth connections)
         if (isAnthropicProvider(connection.providerType) && connection.authType !== 'oauth') {
           if (hasConfiguredBaseUrl) {
-            updates.providerType = 'pi_compat'
+            updates.providerType = 'anthropic_compat'
             updates.authType = 'api_key_with_endpoint'
             updates.customEndpoint = { api: 'anthropic-messages' }
+            updates.piAuthProvider = undefined
           } else {
             updates.providerType = 'anthropic'
             updates.authType = 'api_key'
             updates.models = getDefaultModelsForConnection('anthropic')
             updates.defaultModel = getDefaultModelForConnection('anthropic')
+            updates.piAuthProvider = undefined
           }
         }
 
@@ -107,7 +109,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       const isCustomEndpointCompat = !!customEndpoint
       if (customEndpoint) {
         updates.customEndpoint = customEndpoint
-        updates.providerType = 'pi_compat'
+        updates.providerType = customEndpoint.api === 'anthropic-messages' ? 'anthropic_compat' : 'pi_compat'
         const branch = resolveCustomEndpointSetup({
           baseUrl: setup.baseUrl ?? undefined,
           credential: setup.credential ?? undefined,
@@ -115,7 +117,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         })
         updates.authType = branch.authType
         if (branch.name !== undefined) updates.name = branch.name
-        if (branch.piAuthProvider !== undefined) updates.piAuthProvider = branch.piAuthProvider
+        updates.piAuthProvider = branch.piAuthProvider
 
         // Brand-name override on first setup only (user-renamed connections aren't clobbered on re-save).
         if (isNewConnection && !updates.name && setup.baseUrl?.toLowerCase().includes('manifest.build')) {
@@ -129,6 +131,9 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         updates.customEndpoint = undefined
         if (connection.providerType === 'pi_compat' && connection.authType !== 'oauth' && !isNewConnection) {
           updates.providerType = 'pi'
+          updates.authType = 'api_key'
+        } else if (connection.providerType === 'anthropic_compat' && connection.authType !== 'oauth' && !isNewConnection) {
+          updates.providerType = 'anthropic'
           updates.authType = 'api_key'
         }
       }
@@ -179,6 +184,19 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       const pendingConnection: LlmConnection = {
         ...connection,
         ...updates,
+      }
+
+      const implicitPreviousBehavior = resolveMidStreamBehavior({
+        ...connection,
+        midStreamBehavior: undefined,
+      })
+      if (
+        connection.midStreamBehavior === undefined
+        || connection.midStreamBehavior === implicitPreviousBehavior
+      ) {
+        const nextBehavior = resolveMidStreamBehavior(pendingConnection)
+        pendingConnection.midStreamBehavior = nextBehavior
+        updates.midStreamBehavior = nextBehavior
       }
 
       if (pendingConnection.providerType === 'pi') {

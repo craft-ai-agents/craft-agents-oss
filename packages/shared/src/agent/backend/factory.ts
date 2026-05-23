@@ -250,11 +250,12 @@ export function isProviderAvailable(provider: AgentProvider): boolean {
  */
 export function providerTypeToAgentProvider(providerType: LlmProviderType): AgentProvider {
   switch (providerType) {
-    // Anthropic SDK backend (direct API only)
+    // Anthropic SDK backends
     case 'anthropic':
+    case 'anthropic_compat':
       return 'anthropic';
 
-    // Pi backends (includes former bedrock/vertex/anthropic_compat via migration)
+    // Pi backends
     case 'pi':
     case 'pi_compat':
       return 'pi';
@@ -264,6 +265,12 @@ export function providerTypeToAgentProvider(providerType: LlmProviderType): Agen
       const _exhaustive: never = providerType;
       return 'anthropic';
   }
+}
+
+export function connectionToAgentProvider(
+  connection: Pick<LlmConnection, 'providerType'>
+): AgentProvider {
+  return providerTypeToAgentProvider(connection.providerType);
 }
 
 /**
@@ -361,7 +368,7 @@ export function resolveBackendContext(args: {
   );
 
   const provider = connection
-    ? providerTypeToAgentProvider(connection.providerType || 'anthropic')
+    ? connectionToAgentProvider(connection)
     : 'anthropic';
 
   const authType = connection
@@ -392,8 +399,8 @@ export function resolveSetupTestConnectionHint(args: {
   if (args.provider === 'pi') {
     if (args.customEndpoint && args.baseUrl?.trim()) {
       return {
-        providerType: 'pi_compat',
-        piAuthProvider: args.customEndpoint.api === 'anthropic-messages' ? 'anthropic' : 'openai',
+        providerType: args.customEndpoint.api === 'anthropic-messages' ? 'anthropic_compat' : 'pi_compat',
+        piAuthProvider: args.customEndpoint.api === 'openai-completions' ? 'openai' : undefined,
         customEndpoint: args.customEndpoint,
       };
     }
@@ -405,7 +412,7 @@ export function resolveSetupTestConnectionHint(args: {
   }
 
   return {
-    providerType: args.baseUrl ? 'pi_compat' : 'anthropic',
+    providerType: args.baseUrl ? 'anthropic_compat' : 'anthropic',
   };
 }
 
@@ -419,7 +426,7 @@ export async function fetchBackendModels(args: {
   hostRuntime: BackendHostRuntimeContext;
   timeoutMs?: number;
 }): Promise<ModelFetchResult> {
-  const provider = providerTypeToAgentProvider(args.connection.providerType);
+  const provider = connectionToAgentProvider(args.connection);
   const { driver, resolvedPaths } = resolveDriverRuntime(provider, args.hostRuntime);
   const timeoutMs = args.timeoutMs ?? 30_000;
 
@@ -466,7 +473,7 @@ export async function validateStoredBackendConnection(args: {
       return { success: false, error: 'No credentials configured' };
     }
 
-    const provider = providerTypeToAgentProvider(connection.providerType);
+    const provider = connectionToAgentProvider(connection);
     const { driver, resolvedPaths } = resolveDriverRuntime(provider, args.hostRuntime);
 
     driver.initializeHostRuntime?.({
@@ -504,7 +511,7 @@ export function createConfigFromConnection(
 ): BackendConfig {
   // Use new providerType if available, fall back to legacy type
   const providerType = connection.providerType || (connection.type ? connectionTypeToProvider(connection.type) as unknown as LlmProviderType : 'anthropic');
-  const provider = providerTypeToAgentProvider(providerType);
+  const provider = connectionToAgentProvider(connection);
 
   return {
     ...baseConfig,
@@ -548,14 +555,14 @@ export function createBackendFromConnection(
 
   const context: ResolvedBackendContext = {
     connection,
-    provider: providerTypeToAgentProvider(connection.providerType || 'anthropic'),
+    provider: connectionToAgentProvider(connection),
     authType: connectionAuthTypeToBackendAuthType(connection.authType),
     resolvedModel: resolveModelForProvider(
-      providerTypeToAgentProvider(connection.providerType || 'anthropic'),
+      connectionToAgentProvider(connection),
       baseConfig.model,
       connection
     ),
-    capabilities: BACKEND_CAPABILITIES[providerTypeToAgentProvider(connection.providerType || 'anthropic')],
+    capabilities: BACKEND_CAPABILITIES[connectionToAgentProvider(connection)],
   };
 
   if (hostRuntime) {
@@ -692,9 +699,14 @@ export async function testBackendConnection(args: {
   try {
     const testModel = args.model;
     const providerType = args.connection?.providerType ?? getDefaultProviderType(args.provider);
+    const effectiveProvider = args.connection
+      ? connectionToAgentProvider({
+        providerType,
+      })
+      : providerTypeToAgentProvider(providerType);
     const now = Date.now();
     const authType: LlmAuthType = (
-      providerType === 'pi_compat'
+      providerType === 'pi_compat' || providerType === 'anthropic_compat'
     )
       ? 'api_key_with_endpoint'
       : 'api_key';
@@ -713,16 +725,16 @@ export async function testBackendConnection(args: {
 
     const context: ResolvedBackendContext = {
       connection: syntheticConnection,
-      provider: args.provider,
+      provider: effectiveProvider,
       authType,
       resolvedModel: testModel,
-      capabilities: BACKEND_CAPABILITIES[args.provider],
+      capabilities: BACKEND_CAPABILITIES[effectiveProvider],
     };
 
-    const { driver, resolvedPaths } = resolveDriverRuntime(args.provider, args.hostRuntime);
+    const { driver, resolvedPaths } = resolveDriverRuntime(effectiveProvider, args.hostRuntime);
     if (driver.testConnection) {
       const driverResult = await driver.testConnection({
-        provider: args.provider,
+        provider: effectiveProvider,
         apiKey: trimmedKey,
         model: testModel,
         baseUrl: args.baseUrl,
@@ -743,7 +755,7 @@ export async function testBackendConnection(args: {
         session: { id: `test-${now}`, workspaceRootPath: cwd, createdAt: 0, lastUsedAt: 0 },
         isHeadless: true,
         miniModel: testModel,
-        envOverrides: args.provider === 'anthropic'
+        envOverrides: effectiveProvider === 'anthropic'
           ? {
             ANTHROPIC_API_KEY: trimmedKey,
             ...(args.baseUrl?.trim() ? { ANTHROPIC_BASE_URL: args.baseUrl.trim() } : {}),
@@ -818,7 +830,7 @@ export async function validateConnection(
   connection: LlmConnection,
   credentials: { apiKey?: string; oauthToken?: string },
 ): Promise<LlmValidationResult> {
-  const provider = providerTypeToAgentProvider(connection.providerType);
+  const provider = connectionToAgentProvider(connection);
 
   switch (provider) {
     case 'anthropic': {

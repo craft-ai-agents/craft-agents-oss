@@ -20,7 +20,9 @@ import {
   connectionTypeToProvider,
   connectionAuthTypeToBackendAuthType,
   providerTypeToAgentProvider,
+  connectionToAgentProvider,
   resolveSetupTestConnectionHint,
+  createConfigFromConnection,
   createBackendFromConnection,
   testBackendConnection,
   validateStoredBackendConnection,
@@ -178,6 +180,10 @@ describe('providerTypeToAgentProvider', () => {
     it('should map anthropic to anthropic', () => {
       expect(providerTypeToAgentProvider('anthropic')).toBe('anthropic');
     });
+
+    it('should map anthropic_compat to anthropic', () => {
+      expect(providerTypeToAgentProvider('anthropic_compat')).toBe('anthropic');
+    });
   });
 
   describe('Pi SDK providers', () => {
@@ -188,6 +194,20 @@ describe('providerTypeToAgentProvider', () => {
     it('should map pi_compat to pi', () => {
       expect(providerTypeToAgentProvider('pi_compat')).toBe('pi');
     });
+  });
+});
+
+describe('connectionToAgentProvider', () => {
+  it('routes generic pi_compat connections to pi', () => {
+    expect(connectionToAgentProvider({
+      providerType: 'pi_compat',
+    })).toBe('pi');
+  });
+
+  it('routes anthropic_compat connections to anthropic', () => {
+    expect(connectionToAgentProvider({
+      providerType: 'anthropic_compat',
+    })).toBe('anthropic');
   });
 });
 
@@ -238,6 +258,16 @@ describe('isValidProviderAuthCombination', () => {
     });
   });
 
+  describe('Anthropic compat provider', () => {
+    it('should accept api_key_with_endpoint auth', () => {
+      expect(isValidProviderAuthCombination('anthropic_compat', 'api_key_with_endpoint')).toBe(true);
+    });
+
+    it('should accept none auth', () => {
+      expect(isValidProviderAuthCombination('anthropic_compat', 'none')).toBe(true);
+    });
+  });
+
 });
 
 describe('phase4 backend abstraction APIs', () => {
@@ -265,7 +295,7 @@ describe('phase4 backend abstraction APIs', () => {
     expect(resolveSetupTestConnectionHint({
       provider: 'anthropic',
       baseUrl: 'https://api.example.com',
-    })).toEqual({ providerType: 'pi_compat' });
+    })).toEqual({ providerType: 'anthropic_compat' });
 
     expect(resolveSetupTestConnectionHint({
       provider: 'anthropic',
@@ -287,7 +317,37 @@ describe('phase4 backend abstraction APIs', () => {
       provider: 'pi',
       baseUrl: 'https://my-anthropic-proxy.internal/v1',
       customEndpoint: { api: 'anthropic-messages' },
-    })).toEqual({ providerType: 'pi_compat', piAuthProvider: 'anthropic', customEndpoint: { api: 'anthropic-messages' } });
+    })).toEqual({ providerType: 'anthropic_compat', customEndpoint: { api: 'anthropic-messages' } });
+  });
+
+  it('createConfigFromConnection resolves anthropic-compatible compat endpoints to ClaudeAgent', () => {
+    const config = createConfigFromConnection({
+      slug: 'anthropic-compat',
+      name: 'Anthropic Compat',
+      providerType: 'anthropic_compat',
+      authType: 'api_key_with_endpoint',
+      customEndpoint: { api: 'anthropic-messages' },
+      baseUrl: 'https://proxy.example.com',
+      createdAt: Date.now(),
+    }, createTestConfig());
+
+    expect(config.provider).toBe('anthropic');
+    expect(config.providerType).toBe('anthropic_compat');
+  });
+
+  it('createConfigFromConnection keeps openai-compatible compat endpoints on PiAgent', () => {
+    const config = createConfigFromConnection({
+      slug: 'openai-compat',
+      name: 'OpenAI Compat',
+      providerType: 'pi_compat',
+      authType: 'api_key_with_endpoint',
+      customEndpoint: { api: 'openai-completions' },
+      baseUrl: 'https://gateway.example.com/v1',
+      createdAt: Date.now(),
+    }, createTestConfig());
+
+    expect(config.provider).toBe('pi');
+    expect(config.providerType).toBe('pi_compat');
   });
 
   it('fetchBackendModels dispatches for pi provider', async () => {

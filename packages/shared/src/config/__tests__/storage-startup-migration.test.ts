@@ -88,6 +88,59 @@ function getModelIds(connection: any): string[] {
 }
 
 describe('startup migration (integration)', () => {
+  it('migrates legacy anthropic_compat connections into anthropic_compat with endpoint metadata', () => {
+    const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
+
+    writeRootConfig(configPath, workspaceRoot, [
+      {
+        slug: 'anthropic-proxy',
+        name: 'Anthropic Proxy',
+        providerType: 'anthropic_compat',
+        authType: 'api_key_with_endpoint',
+        baseUrl: 'https://proxy.example.com',
+        createdAt: Date.now(),
+        models: ['claude-sonnet-proxy'],
+        defaultModel: 'claude-sonnet-proxy',
+      },
+    ])
+
+    runMigration(configDir)
+
+    const connection = findConnection(configPath, 'anthropic-proxy')
+    expect(connection).toBeDefined()
+    expect(connection.providerType).toBe('anthropic_compat')
+    expect(connection.customEndpoint).toEqual({ api: 'anthropic-messages' })
+    expect(connection.baseUrl).toBe('https://proxy.example.com')
+    expect(connection.defaultModel).toBe('claude-sonnet-proxy')
+  })
+
+  it('upgrades temporary pi_compat anthropic-messages connections into anthropic_compat', () => {
+    const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
+
+    writeRootConfig(configPath, workspaceRoot, [
+      {
+        slug: 'anthropic-proxy',
+        name: 'Anthropic Proxy',
+        providerType: 'pi_compat',
+        authType: 'api_key_with_endpoint',
+        customEndpoint: { api: 'anthropic-messages' },
+        piAuthProvider: 'anthropic',
+        baseUrl: 'https://proxy.example.com',
+        createdAt: Date.now(),
+        models: ['claude-sonnet-proxy'],
+        defaultModel: 'claude-sonnet-proxy',
+      },
+    ])
+
+    runMigration(configDir)
+
+    const connection = findConnection(configPath, 'anthropic-proxy')
+    expect(connection).toBeDefined()
+    expect(connection.providerType).toBe('anthropic_compat')
+    expect(connection.customEndpoint).toEqual({ api: 'anthropic-messages' })
+    expect(connection.piAuthProvider).toBeUndefined()
+  })
+
   it('repairs broken pi-api-key openai-codex provider on startup migration', () => {
     const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
 
