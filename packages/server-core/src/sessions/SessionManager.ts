@@ -815,8 +815,8 @@ async function resolveToolDisplayMeta(
           'send_developer_feedback': 'Send Feedback',
           'browser_tool': 'Browser',
         },
-        'craft-agents-docs': {
-          'SearchCraftAgents': 'Search Docs',
+        'runner-docs': {
+          'SearchDocs': 'Search Docs',
         },
       }
 
@@ -2093,7 +2093,7 @@ export class SessionManager implements ISessionManager {
     const workspaceRootPath = managed.workspace.rootPath
     sessionLog.info(`Reloading sources for session ${managed.id}`)
 
-    // Reload all sources from disk (craft-agents-docs is always available as MCP server)
+    // Reload all sources from disk (runner-docs is always available as MCP server)
     const allSources = loadAllSources(workspaceRootPath)
     managed.agent.setAllSources(allSources)
 
@@ -2123,7 +2123,7 @@ export class SessionManager implements ISessionManager {
    * Bun's automatic .env loading is disabled in the subprocess (--env-file=/dev/null)
    * to prevent a user's project .env from injecting ANTHROPIC_API_KEY and overriding
    * OAuth auth — Claude Code prioritizes API key over OAuth token when both are set.
-   * See: https://github.com/lukilabs/craft-agents-oss/issues/39
+   * See: upstream OAuth environment issue notes
    */
   /**
    * Reinitialize authentication environment variables.

@@ -182,8 +182,8 @@ export function validateSelfEditRepo(repoPath: string | undefined): SelfEditRepo
   if (existsSync(gitConfigPath)) {
     try {
       const gitConfig = readFileSync(gitConfigPath, 'utf-8').toLowerCase();
-      if (!gitConfig.includes('runneros') && !gitConfig.includes('craft-agents')) {
-        warnings.push('No obvious RunnerOS/Craft Agents git remote found.');
+      if (!gitConfig.includes('runneros')) {
+        warnings.push('No obvious RunnerOS git remote found.');
       }
     } catch {
       warnings.push('Could not read git remote configuration.');

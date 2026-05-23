@@ -2,7 +2,7 @@
  * Pi SDK Event Adapter
  *
  * Maps Pi Agent Core events (AgentEvent / AgentSessionEvent) to
- * Craft Agent's AgentEvent format for UI compatibility.
+ * Runner's AgentEvent format for UI compatibility.
  *
  * Pi emits fine-grained lifecycle events. We translate them into
  * the same event vocabulary the renderer already understands from
@@ -29,7 +29,7 @@ import { parseError } from '../../errors.ts';
 type PiEvent = PiAgentEvent | AgentSessionEvent;
 
 /**
- * Maps Pi SDK events to Craft AgentEvents for UI compatibility.
+ * Maps Pi SDK events to RunnerEvents for UI compatibility.
  *
  * Event mapping:
  * - message_update (text_delta in assistantMessageEvent) → text_delta
@@ -108,7 +108,7 @@ export class PiEventAdapter extends BaseEventAdapter {
   }
 
   /**
-   * Adapt a Pi SDK event to zero or more Craft AgentEvents.
+   * Adapt a Pi SDK event to zero or more RunnerEvents.
    */
   *adaptEvent(event: PiEvent): Generator<CraftAgentEvent> {
     switch (event.type) {

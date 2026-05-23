@@ -77,7 +77,7 @@ const SOURCE_RECIPE_SKILL_SLUG = 'source-recipe';
 
 export function isRunnerOsSelfEditIntent(message: string): boolean {
   const text = message.toLowerCase();
-  const hasRunnerOsTarget = /\b(runneros|runner os|craft agents?|concierge|orchestrator)\b/.test(text);
+  const hasRunnerOsTarget = /\b(runneros|runner os|runner(os)?|concierge|orchestrator)\b/.test(text);
   const hasEditIntent = /\b(edit|change|modify|fix|debug|inspect|review|update|add|remove|implement|wire|test|typecheck|lint|theme|ui|setting|settings)\b/.test(text);
   const hasSelfEditPhrase = /\b(self-edit|self edit|edit itself|change itself|fix itself|this app itself|the app itself)\b/.test(text);
   return hasSelfEditPhrase || (hasRunnerOsTarget && hasEditIntent);

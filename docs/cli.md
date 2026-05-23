@@ -1,19 +1,19 @@
 # craft-cli — CLI Reference
 
-Terminal client for Craft Agent server. Connects over WebSocket (`ws://` or `wss://`) to a running headless server.
+Terminal client for Runner server. Connects over WebSocket (`ws://` or `wss://`) to a running headless server.
 
 ## Prerequisites
 
 - [Bun](https://bun.sh/) runtime installed
 - For `run` and `--validate-server`: an API key via `--api-key`, `$LLM_API_KEY`, or a provider-specific env var (e.g., `$ANTHROPIC_API_KEY`)
-- For all other commands: a running Craft Agent headless server with URL and token
+- For all other commands: a running Runner headless server with URL and token
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/anthropics/craft-agents.git
-cd craft-agents
+git clone https://github.com/findmikeymike/RunnerOS.git
+cd RunnerOS
 
 # Install dependencies
 bun install

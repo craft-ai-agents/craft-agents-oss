@@ -1,7 +1,7 @@
 /**
  * Tests for PiEventAdapter
  *
- * Tests the Pi SDK AgentEvent / AgentSessionEvent → Craft AgentEvent conversion.
+ * Tests the Pi SDK AgentEvent / AgentSessionEvent → RunnerEvent conversion.
  * Each test provides mock Pi SDK event objects and verifies the AgentEvents produced.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';

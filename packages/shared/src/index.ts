@@ -1,11 +1,11 @@
 /**
  * @craft-agent/shared
  *
- * Shared business logic for Craft Agent.
+ * Shared business logic for Runner.
  * Used by the Electron app.
  *
  * Import specific modules via subpath exports:
- *   import { CraftAgent } from '@craft-agent/shared/agent';
+ *   import { RunnerAgent } from '@craft-agent/shared/agent';
  *   import { loadStoredConfig } from '@craft-agent/shared/config';
  *   import { getCredentialManager } from '@craft-agent/shared/credentials';
  *   import { CraftMcpClient } from '@craft-agent/shared/mcp';

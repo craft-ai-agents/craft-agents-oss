@@ -1,7 +1,7 @@
 /**
  * Config Validate Handler
  *
- * Validates Craft Agent configuration files.
+ * Validates Runner configuration files.
  * Uses full validators if available (Claude), otherwise basic validation (Codex).
  */
 

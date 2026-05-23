@@ -6,10 +6,10 @@
   "main": "dist/main.cjs",
   "private": true,
   "author": {
-    "name": "Craft Docs Ltd.",
-    "email": "support@craft.do"
+    "name": "RunnerOS",
+    "email": "support@runneros.local"
   },
-  "homepage": "https://agents.craft.do",
+  "homepage": "https://github.com/findmikeymike/RunnerOS",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {

@@ -83,9 +83,9 @@ describe('PrerequisiteManager', () => {
       expect(result.allowed).toBe(true);
     });
 
-    it('exempts craft-agents-docs MCP tools', () => {
-      mockExistsPaths.add(guidePath('craft-agents-docs'));
-      const result = manager.checkPrerequisites('mcp__craft-agents-docs__search');
+    it('exempts runner-docs MCP tools', () => {
+      mockExistsPaths.add(guidePath('runner-docs'));
+      const result = manager.checkPrerequisites('mcp__runner-docs__search');
       expect(result.allowed).toBe(true);
     });
 
