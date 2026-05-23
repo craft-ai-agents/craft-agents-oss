@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { OutputManifestDTO } from '@/hooks/useOutputs'
 import { isLocalWebPreviewUrl, resolveWebPreviewTarget } from '../web-preview'
+import { buildRunnerOutputAssetUrl, parseRunnerOutputAssetUrl } from '@craft-agent/shared/outputs'
 
 function manifest(url: string, mode: 'external-link' | 'web' = 'external-link'): OutputManifestDTO {
   return {
@@ -17,6 +18,38 @@ function manifest(url: string, mode: 'external-link' | 'web' = 'external-link'):
     receipts: [],
     links: [{ id: 'link-1', label: 'Local preview', url, role: 'primary' }],
     preview: { mode },
+  }
+}
+
+function htmlAssetManifest(overrides: Partial<OutputManifestDTO> = {}): OutputManifestDTO {
+  return {
+    id: 'output-html',
+    workspaceId: 'workspace-1',
+    title: 'Generated page',
+    kind: 'code',
+    status: 'published',
+    summary: 'HTML preview',
+    createdAt: '2026-05-22T00:00:00.000Z',
+    updatedAt: '2026-05-22T00:00:00.000Z',
+    origin: { source: 'session', sessionId: 'session-1' },
+    primary: {
+      id: 'index',
+      label: 'index.html',
+      role: 'primary',
+      path: 'site/index.html',
+      mimeType: 'text/html',
+    },
+    assets: [{
+      id: 'index',
+      label: 'index.html',
+      role: 'primary',
+      path: 'site/index.html',
+      mimeType: 'text/html',
+    }],
+    receipts: [],
+    links: [],
+    preview: { mode: 'web', assetId: 'index' },
+    ...overrides,
   }
 }
 
@@ -102,5 +135,54 @@ describe('web preview target resolution', () => {
     expect(resolveWebPreviewTarget(manifest('http://localhost:5173/'), {
       blockedOrigins: ['http://localhost:5173'],
     })).toBeNull()
+  })
+
+  test('resolves generated HTML assets to runner-output protocol previews', () => {
+    expect(resolveWebPreviewTarget(htmlAssetManifest())).toEqual({
+      url: 'runner-output://asset/workspace-1/output-html/site/index.html',
+      label: 'index.html',
+      displayHost: 'generated output',
+    })
+  })
+
+  test('does not resolve generated HTML assets without explicit web preview mode', () => {
+    expect(resolveWebPreviewTarget(htmlAssetManifest({
+      preview: { mode: 'markdown', assetId: 'index' },
+    }))).toBeNull()
+  })
+
+  test('blocks unsafe generated HTML asset paths', () => {
+    expect(resolveWebPreviewTarget(htmlAssetManifest({
+      primary: {
+        id: 'index',
+        label: 'index.html',
+        role: 'primary',
+        path: '../index.html',
+        mimeType: 'text/html',
+      },
+      assets: [{
+        id: 'index',
+        label: 'index.html',
+        role: 'primary',
+        path: '../index.html',
+        mimeType: 'text/html',
+      }],
+    }))).toBeNull()
+  })
+})
+
+describe('runner-output URL helpers', () => {
+  test('round trips safe output asset URLs', () => {
+    const url = buildRunnerOutputAssetUrl('workspace 1', 'output-1', 'site/my page.html')
+    expect(url).toBe('runner-output://asset/workspace%201/output-1/site/my%20page.html')
+    expect(parseRunnerOutputAssetUrl(url)).toEqual({
+      workspaceId: 'workspace 1',
+      outputId: 'output-1',
+      assetPath: 'site/my page.html',
+    })
+  })
+
+  test('rejects traversal output asset URLs', () => {
+    expect(parseRunnerOutputAssetUrl('runner-output://asset/workspace-1/output-1/%2E%2E/secret.html')).toBeNull()
   })
 })

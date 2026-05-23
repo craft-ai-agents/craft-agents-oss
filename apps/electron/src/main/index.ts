@@ -97,6 +97,7 @@ import { handleDeepLink } from './deep-link'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
+import { registerOutputAssetHandler } from './output-asset-protocol'
 import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
@@ -264,7 +265,7 @@ if (process.env.CRAFT_SERVER_URL) {
   }
 }
 
-// Register thumbnail:// custom protocol for file preview thumbnails in the sidebar.
+// Register privileged custom protocols.
 // Must happen before app.whenReady() — Electron requires early scheme registration.
 registerThumbnailScheme()
 
@@ -400,6 +401,7 @@ app.whenReady().then(async () => {
 
   // Register thumbnail:// protocol handler (scheme was registered earlier, before app.whenReady)
   registerThumbnailHandler()
+  registerOutputAssetHandler()
 
   // Re-apply proxy settings now that Electron sessions are available
   // (first call before app.whenReady only configured Node-level proxy)

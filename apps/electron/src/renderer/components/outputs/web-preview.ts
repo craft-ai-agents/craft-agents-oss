@@ -1,6 +1,7 @@
 import type { OutputManifestDTO } from '@/hooks/useOutputs'
 import {
   isLocalWebPreviewUrl as isSharedLocalWebPreviewUrl,
+  resolveGeneratedHtmlPreviewTarget,
   resolveLocalWebPreviewTarget,
   type WebPreviewPolicyOptions,
 } from '@craft-agent/shared/outputs/web-preview'
@@ -16,5 +17,5 @@ export function isLocalWebPreviewUrl(value: string | undefined, options: WebPrev
 }
 
 export function resolveWebPreviewTarget(manifest: OutputManifestDTO, options: WebPreviewPolicyOptions = {}): WebPreviewTarget | null {
-  return resolveLocalWebPreviewTarget(manifest, options)
+  return resolveLocalWebPreviewTarget(manifest, options) ?? resolveGeneratedHtmlPreviewTarget(manifest)
 }

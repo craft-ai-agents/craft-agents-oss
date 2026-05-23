@@ -260,30 +260,31 @@ When selected output has links:
 
 When selected output has an HTML asset:
 
-- First Phase 2B slice may show it as unsupported/file fallback.
-- Generated HTML asset embedding is Phase 2B.2 because it needs safe custom protocol serving.
+- If `manifest.preview.mode === 'web'`, the primary/selected HTML asset is served through `runner-output://` and iframe rendered.
+- HTML assets without explicit web preview mode keep the existing file/text fallback.
 
 ## Phase 2B.2 Generated HTML Assets
 
-After local HTTP URL preview is stable, support generated HTML files inside Output bundles.
+Status: implemented on 2026-05-23.
 
-Recommended design:
+Generated HTML files inside Output bundles are served through a safe Electron protocol instead of raw `file://` paths.
 
-1. Add safe asset URL IPC:
-   - `outputs:getAssetPreviewUrl(workspaceId, outputId, assetId)`
+Implemented design:
+
+1. Renderer resolves explicit web-mode HTML assets to:
+   - `runner-output://asset/<workspaceId>/<outputId>/<relative-asset-path>`
 2. Main process validates:
-   - output exists
-   - asset belongs to output
-   - resolved asset path stays inside allowed workspace/output directory
-   - asset MIME is `text/html`
-3. Return a custom protocol URL:
-   - `runner-output://<workspaceId>/<outputId>/<assetId>`
-4. Register protocol handler with Electron `protocol.handle`.
-5. Serve only validated output assets.
+   - workspace exists and is local
+   - requested path is a safe relative Output asset path
+   - resolved path stays inside the Output bundle
+   - requested path is an actual file
+3. Protocol responses use restrictive headers:
+   - `Content-Security-Policy`
+   - `X-Content-Type-Options: nosniff`
+   - `Cache-Control: no-store`
+4. Relative HTML subresources work when they stay inside the same Output bundle.
 
 Do not iframe raw `file://` paths.
-
-Stop and ask before Phase 2B.2 if custom protocol setup conflicts with existing window sessions/partitions.
 
 ## Test Plan
 
@@ -371,4 +372,3 @@ Phase 4:
   - TradingView chart screenshot/live adapter.
   - Canva link/thumbnail/export adapter.
   - Browser automation preview adapter.
-

@@ -46,7 +46,7 @@ The MVP is complete when a normal RunnerOS chat session can:
 ## Current Build Status
 
 - Phase 2 output-backed Canvas: implemented.
-- Phase 2B local web preview adapter: implemented through Output preview policy.
+- Phase 2B local web preview adapter: implemented through Output preview policy and safe `runner-output://` HTML asset serving.
 - Phase 2C visual board: implemented.
 - Phase 3 agent surface events: implemented through `visual_surface`.
 - Phase 4 media outputs: implemented, including media Canvas cards and sidecar add-to-board.
@@ -54,4 +54,4 @@ The MVP is complete when a normal RunnerOS chat session can:
 - Phase 5B web agent awareness: implemented through `visual_surface_state`.
 - Phase 5C agent guidance: implemented in the central system prompt and tool descriptions.
 
-Next intelligent slice: generated HTML asset serving through a safe local protocol, or deeper browser-pane state reporting if agent inspection needs it.
+Next intelligent slice: deeper browser-pane state reporting if agent inspection needs it, or chart/static visualization adapters.

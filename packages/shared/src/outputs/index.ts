@@ -22,12 +22,17 @@ export {
 } from './preview.ts';
 
 export {
+  RUNNER_OUTPUT_SCHEME,
+  buildRunnerOutputAssetUrl,
   isLocalWebPreviewUrl,
   normalizeLocalWebHostname,
+  parseRunnerOutputAssetUrl,
+  resolveGeneratedHtmlPreviewTarget,
   resolveLocalWebPreviewTarget,
 } from './web-preview.ts';
 
 export type {
+  WebPreviewAssetLike,
   LocalWebPreviewTarget,
   WebPreviewPolicyOptions,
 } from './web-preview.ts';

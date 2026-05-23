@@ -4,11 +4,24 @@ export interface WebPreviewLinkLike {
   role?: 'primary' | 'source' | 'related' | 'external';
 }
 
+export interface WebPreviewAssetLike {
+  id: string;
+  label?: string;
+  role?: string;
+  path: string;
+  mimeType?: string;
+}
+
 export interface WebPreviewOutputLike {
+  id?: string;
+  workspaceId?: string;
+  title?: string;
   preview?: {
     mode?: string;
+    assetId?: string;
   };
-  assets: unknown[];
+  primary?: WebPreviewAssetLike;
+  assets: WebPreviewAssetLike[];
   links: WebPreviewLinkLike[];
 }
 
@@ -23,6 +36,7 @@ export interface WebPreviewPolicyOptions {
 }
 
 const LOCAL_WEB_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+export const RUNNER_OUTPUT_SCHEME = 'runner-output';
 
 export function isLocalWebPreviewUrl(value: string | undefined, options: WebPreviewPolicyOptions = {}): boolean {
   const parsed = parseUrl(value);
@@ -50,6 +64,41 @@ export function resolveLocalWebPreviewTarget(
   };
 }
 
+export function resolveGeneratedHtmlPreviewTarget(output: WebPreviewOutputLike): LocalWebPreviewTarget | null {
+  if (output.preview?.mode !== 'web') return null;
+  if (!output.workspaceId || !output.id) return null;
+
+  const asset = selectHtmlPreviewAsset(output);
+  if (!asset || !isSafeProtocolAssetPath(asset.path)) return null;
+
+  return {
+    url: buildRunnerOutputAssetUrl(output.workspaceId, output.id, asset.path),
+    label: asset.label || output.title || 'HTML preview',
+    displayHost: 'generated output',
+  };
+}
+
+export function buildRunnerOutputAssetUrl(workspaceId: string, outputId: string, assetPath: string): string {
+  const segments = assetPath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  return `${RUNNER_OUTPUT_SCHEME}://asset/${encodeURIComponent(workspaceId)}/${encodeURIComponent(outputId)}/${segments}`;
+}
+
+export function parseRunnerOutputAssetUrl(value: string): { workspaceId: string; outputId: string; assetPath: string } | null {
+  const parsed = parseUrl(value);
+  if (!parsed || parsed.protocol !== `${RUNNER_OUTPUT_SCHEME}:` || parsed.hostname !== 'asset') return null;
+  const segments = parsed.pathname.split('/').filter(Boolean).map((segment) => {
+    try {
+      return decodeURIComponent(segment);
+    } catch {
+      return '';
+    }
+  });
+  const [workspaceId, outputId, ...assetSegments] = segments;
+  const assetPath = assetSegments.join('/');
+  if (!workspaceId || !outputId || !isSafeProtocolAssetPath(assetPath)) return null;
+  return { workspaceId, outputId, assetPath };
+}
+
 export function normalizeLocalWebHostname(hostname: string): string {
   return hostname.replace(/^\[(.*)\]$/, '$1');
 }
@@ -72,6 +121,28 @@ function selectPreviewLink(output: WebPreviewOutputLike, options: WebPreviewPoli
   return output.links.find((link) => link.role === 'primary' && isLocalWebPreviewUrl(link.url, options))
     ?? output.links.find((link) => isLocalWebPreviewUrl(link.url, options))
     ?? null;
+}
+
+function selectHtmlPreviewAsset(output: WebPreviewOutputLike): WebPreviewAssetLike | null {
+  if (output.preview?.assetId) {
+    return output.assets.find((asset) => asset.id === output.preview?.assetId && isHtmlAsset(asset)) ?? null;
+  }
+  if (output.primary && isHtmlAsset(output.primary)) return output.primary;
+  return output.assets.find((asset) => asset.role === 'primary' && isHtmlAsset(asset))
+    ?? output.assets.find(isHtmlAsset)
+    ?? null;
+}
+
+function isHtmlAsset(asset: WebPreviewAssetLike): boolean {
+  const mime = asset.mimeType?.toLowerCase() ?? '';
+  const path = asset.path.toLowerCase();
+  return mime === 'text/html' || path.endsWith('.html') || path.endsWith('.htm');
+}
+
+function isSafeProtocolAssetPath(assetPath: string): boolean {
+  if (!assetPath || assetPath.includes('\0') || assetPath.startsWith('/') || /^[a-z]:[\\/]/i.test(assetPath)) return false;
+  const segments = assetPath.split('/');
+  return segments.every((segment) => segment && segment !== '.' && segment !== '..' && !segment.includes('\\'));
 }
 
 function parseUrl(value: string | undefined): URL | null {
