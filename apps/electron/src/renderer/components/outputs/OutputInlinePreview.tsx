@@ -5,7 +5,10 @@ import { StreamingMarkdown } from '@/components/markdown'
 import { ShikiCodeViewer } from '@/components/shiki/ShikiCodeViewer'
 import { OutputWebPreview } from './OutputWebPreview'
 import { resolveWebPreviewTarget } from './web-preview'
+import { buildRunnerOutputAssetUrl } from '@craft-agent/shared/outputs/web-preview'
 import type { OutputAssetDTO, OutputManifestDTO, OutputPreviewMode } from '@/hooks/useOutputs'
+
+const OutputModelPreview = React.lazy(() => import('./OutputModelPreview').then((module) => ({ default: module.OutputModelPreview })))
 
 interface OutputInlinePreviewProps {
   workspaceId: string
@@ -143,6 +146,19 @@ export function OutputInlinePreview({
     )
   }
 
+  if (mode === 'model' && previewAsset) {
+    return (
+      <React.Suspense fallback={<EmptyPreview className={className}><span>Loading model viewer...</span></EmptyPreview>}>
+        <OutputModelPreview
+          url={buildRunnerOutputAssetUrl(workspaceId, manifest.id, previewAsset.path)}
+          label={previewAsset.label ?? manifest.title}
+          className={className}
+          onPreviewSettled={onPreviewSettled}
+        />
+      </React.Suspense>
+    )
+  }
+
   if (mode === 'markdown' && content) {
     return (
       <div className={className}>
@@ -225,6 +241,7 @@ function inferPreviewMode(asset?: OutputAssetDTO): OutputPreviewMode {
   if (mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|avif|svg)$/.test(path)) return 'image'
   if (mime.startsWith('video/') || /\.(mp4|mov|webm|m4v)$/.test(path)) return 'video'
   if (mime.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)$/.test(path)) return 'audio'
+  if (mime === 'model/gltf-binary' || mime === 'model/gltf+json' || /\.(glb|gltf)$/.test(path)) return 'model'
   return 'text'
 }
 

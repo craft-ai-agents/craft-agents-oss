@@ -431,6 +431,7 @@ describe('parseWorkflowFile', () => {
       'audio',
       'dataset',
       'code',
+      'model',
       'receipt',
       'external-action',
       'collection',

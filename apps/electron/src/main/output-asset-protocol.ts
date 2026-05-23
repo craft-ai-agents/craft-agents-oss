@@ -67,6 +67,8 @@ function mimeTypeForPath(path: string): string {
     avif: 'image/avif',
     mp4: 'video/mp4',
     webm: 'video/webm',
+    glb: 'model/gltf-binary',
+    gltf: 'model/gltf+json',
     mp3: 'audio/mpeg',
     wav: 'audio/wav',
     woff: 'font/woff',

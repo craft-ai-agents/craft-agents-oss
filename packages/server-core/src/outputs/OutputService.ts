@@ -947,6 +947,8 @@ function mimeTypeForAssetPath(path: string): string | undefined {
   if (ext === '.mp4' || ext === '.m4v') return 'video/mp4';
   if (ext === '.mov') return 'video/quicktime';
   if (ext === '.webm') return 'video/webm';
+  if (ext === '.glb') return 'model/gltf-binary';
+  if (ext === '.gltf') return 'model/gltf+json';
   if (ext === '.mp3') return 'audio/mpeg';
   if (ext === '.wav') return 'audio/wav';
   if (ext === '.m4a') return 'audio/mp4';

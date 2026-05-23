@@ -433,6 +433,7 @@ const OutputKindSchema = z.enum([
   'audio',
   'dataset',
   'code',
+  'model',
   'receipt',
   'external-action',
   'collection',

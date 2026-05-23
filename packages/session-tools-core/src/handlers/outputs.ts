@@ -10,6 +10,7 @@ export type OutputKind =
   | 'audio'
   | 'dataset'
   | 'code'
+  | 'model'
   | 'receipt'
   | 'external-action'
   | 'collection'
@@ -82,6 +83,7 @@ const OUTPUT_KINDS: ReadonlySet<string> = new Set([
   'audio',
   'dataset',
   'code',
+  'model',
   'receipt',
   'external-action',
   'collection',

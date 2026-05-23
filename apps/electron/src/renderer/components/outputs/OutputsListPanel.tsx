@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { FileText, Image, Link2, ReceiptText, Search } from 'lucide-react'
+import { Box, FileText, Image, Link2, ReceiptText, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { EntityRow } from '@/components/ui/entity-row'
 import { Input } from '@/components/ui/input'
@@ -110,6 +110,7 @@ export function StatusPill({ status }: { status: string }) {
 function OutputKindIcon({ kind }: { kind: OutputKind }) {
   const className = 'h-3.5 w-3.5 text-muted-foreground'
   if (kind === 'image' || kind === 'video' || kind === 'audio') return <Image className={className} />
+  if (kind === 'model') return <Box className={className} />
   if (kind === 'receipt' || kind === 'external-action') return <ReceiptText className={className} />
   if (kind === 'other' || kind === 'collection') return <Link2 className={className} />
   return <FileText className={className} />
