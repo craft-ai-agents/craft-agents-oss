@@ -268,7 +268,7 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
             <button
               type="button"
               onClick={handleNew}
-              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 shadow-[0_0_18px_rgba(249,115,22,0.16)] transition-colors hover:bg-[#f97316]/24"
+              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 shadow-middle transition-colors hover:bg-[#f97316]/24"
             >
             <Plus className="h-3 w-3" />
             New
@@ -323,7 +323,7 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
             </div>
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
               {visibleDocs.map((doc) => (
-                <div key={doc.slug} className="group relative overflow-hidden rounded-[13px] border border-white/[0.07] bg-white/[0.035] p-3 text-left shadow-[0_2px_8px_rgb(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.13] hover:bg-white/[0.055] hover:shadow-[0_8px_24px_rgba(0,0,0,0.24)]">
+                <div key={doc.slug} className="group relative overflow-hidden rounded-[13px] border border-white/[0.07] bg-white/[0.035] p-3 text-left shadow-middle transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.13] hover:bg-white/[0.055] hover:shadow-middle">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-white">{doc.metadata.name}</div>
@@ -445,7 +445,7 @@ function ConnectedRepoCard({
 }) {
   const selfEditStatus = getSelfEditStatus(selfEditTarget)
   return (
-    <div className="mt-5 flex items-stretch justify-between gap-3 rounded-[13px] border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+    <div className="mt-5 flex items-stretch justify-between gap-3 rounded-[13px] border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 shadow-middle">
       <div className="grid min-w-0 flex-1 gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">

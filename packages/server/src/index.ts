@@ -232,6 +232,7 @@ const instance = await (async () => {
               bound: event.bound,
               wasBound: event.wasBound,
               boundAfterRoute: event.boundAfterRoute,
+              handledByGateway: event.handledByGateway,
               attachmentCount: event.attachmentCount,
               sentAt: event.sentAt,
             })
@@ -253,6 +254,8 @@ const instance = await (async () => {
           platform,
           oauthFlowStore,
           messagingRegistry: messagingHandle.registry,
+          getWorkflowRunner: () => sessionManager.getWorkflowRunner(),
+          getDeepResearchRunner: () => sessionManager.getDeepResearchRunner(),
           // Closure: trigger server starts after bootstrapServer resolves.
           getTriggerServerInfo: () => ({
             enabled: triggerServer != null,

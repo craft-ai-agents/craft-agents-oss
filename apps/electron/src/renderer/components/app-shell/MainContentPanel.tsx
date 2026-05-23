@@ -36,7 +36,7 @@ import {
   isWorkspaceContextNavigation,
   isOutputsNavigation,
 } from '@/contexts/NavigationContext'
-import { isWorkflowsNavigation, isWorkflowRunNavigation } from '../../../shared/types'
+import { isDeepResearchRunNavigation, isWorkflowsNavigation, isWorkflowRunNavigation } from '../../../shared/types'
 import type { LoadedSkill, LoadedSource } from '../../../shared/types'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
@@ -50,6 +50,7 @@ import WorkflowsListPage from '@/pages/WorkflowsListPage'
 import WorkflowInfoPage from '@/pages/WorkflowInfoPage'
 import WorkflowEditPage from '@/pages/WorkflowEditPage'
 import WorkflowRunPage from '@/pages/WorkflowRunPage'
+import DeepResearchRunPage from '@/pages/DeepResearchRunPage'
 import RecentRunsPage from '@/pages/RecentRunsPage'
 import OutputDetailPage from '@/pages/OutputDetailPage'
 import { AgentsLaunchpad } from './AgentsLaunchpad'
@@ -422,6 +423,14 @@ export function MainContentPanel({
     )
   }
 
+  if (isDeepResearchRunNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <DeepResearchRunPage runId={navState.runId} workspaceId={activeWorkspaceId || ''} />
+      </Panel>
+    )
+  }
+
   if (isOutputsNavigation(navState)) {
     if (!navState.outputId) {
       return wrapWithStoplight(
@@ -727,7 +736,7 @@ function ResourceRows({
               {automationCategoryCards.map((category) => (
                 <div
                   key={category.title}
-                  className="min-h-[136px] rounded-[16px] border border-white/[0.075] bg-[#0a0a0a] p-5 shadow-[0_0_50px_rgba(0,0,0,0.28)]"
+                  className="min-h-[136px] rounded-[16px] border border-white/[0.075] bg-[#0a0a0a] p-5 shadow-middle"
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
@@ -771,7 +780,7 @@ function ResourceRows({
                   <span className="text-[11px] text-white/32">{group.rows.length}</span>
                 </button>
                 {!collapsed && (
-                <div className="overflow-hidden rounded-[12px] border border-white/[0.075] bg-[#0a0a0a] shadow-[0_0_34px_rgba(0,0,0,0.36)]">
+                <div className="overflow-hidden rounded-[12px] border border-white/[0.075] bg-[#0a0a0a] shadow-middle">
                   {group.rows.map((row, index) => (
                     <div
                       key={row.id}
@@ -851,7 +860,7 @@ function ResourceRows({
       }}>
         <DialogContent
           showCloseButton={false}
-          className="max-h-[86vh] !w-[min(calc(100vw-96px),780px)] !max-w-[780px] overflow-hidden !rounded-[22px] !border !border-white/[0.09] !bg-[#08080a] p-0 !text-white !shadow-[0_28px_90px_rgba(0,0,0,0.62)] sm:!max-w-[780px]"
+          className="max-h-[86vh] !w-[min(calc(100vw-96px),780px)] !max-w-[780px] overflow-hidden !rounded-[22px] !border !border-white/[0.09] !bg-[#08080a] p-0 !text-white !shadow-modal-small sm:!max-w-[780px]"
         >
           <button
             type="button"
@@ -892,7 +901,7 @@ function ResourceRows({
       }}>
         <DialogContent
           showCloseButton={false}
-          className="max-h-[86vh] !w-[min(calc(100vw-96px),780px)] !max-w-[780px] overflow-hidden !rounded-[22px] !border !border-white/[0.09] !bg-[#08080a] p-0 !text-white !shadow-[0_28px_90px_rgba(0,0,0,0.62)] sm:!max-w-[780px]"
+          className="max-h-[86vh] !w-[min(calc(100vw-96px),780px)] !max-w-[780px] overflow-hidden !rounded-[22px] !border !border-white/[0.09] !bg-[#08080a] p-0 !text-white !shadow-modal-small sm:!max-w-[780px]"
         >
           <button
             type="button"

@@ -86,12 +86,15 @@ import { type Session, type SessionEvent, type FileAttachment, type SendMessageO
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
 import { loadAllSkills, loadGlobalSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
+import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
+import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
+import { profileDeepResearchSource } from '@craft-agent/shared/deep-research'
 import { OutputService } from '../outputs/OutputService'
 import {
   loadAllGlobalWorkflows,
@@ -126,7 +129,7 @@ import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntr
 import type { PulseAction } from '@craft-agent/shared/pulses'
 import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
-import { CONCIERGE_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
+import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { filterAttachmentsForModelInput } from './runtime-config'
 
 // Import from server-core domain utilities
@@ -1316,6 +1319,8 @@ export class SessionManager implements ISessionManager {
   private lastTimestamp = 0
   /** Workflow runner — bootstrapped during `initialize()`. */
   private workflowRunner!: WorkflowRunner
+  /** Deep Research runner — bootstrapped during `initialize()`. */
+  private deepResearchRunner!: DeepResearchRunner
 
   /**
    * Centralized setter for session processing state.
@@ -1842,7 +1847,9 @@ export class SessionManager implements ISessionManager {
   async resolveAgentSessionOptions(
     workspaceId: string,
     agentSlug: string,
+    options: { referenceMode?: 'strict' | 'lenient' } = {},
   ): Promise<Partial<CreateSessionOptions>> {
+    const strict = options.referenceMode !== 'lenient'
     const ws = getWorkspaceByNameOrId(workspaceId)
     if (!ws) throw new Error(`Workspace not found: ${workspaceId}`)
     const { loadActiveContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
@@ -1851,9 +1858,12 @@ export class SessionManager implements ISessionManager {
     const skills = loadAllSkills(ws.rootPath)
     const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
     const declaredSkillSlugs = agent.metadata.skills ?? []
-    const resolvedSkillSlugs = declaredSkillSlugs.filter((slug) => skillBySlug.has(slug))
-    const missingSkillSlugs = declaredSkillSlugs.filter((slug) => !skillBySlug.has(slug))
-    if (missingSkillSlugs.length > 0) {
+    const canUseSystemSkills = agent.slug === CONCIERGE_SLUG || agent.slug === ORCHESTRATOR_SLUG
+    const resolvedSkillSlugs = declaredSkillSlugs.filter((slug) => (
+      skillBySlug.has(slug) || (canUseSystemSkills && isSystemGlobalSkillSlug(slug))
+    ))
+    const missingSkillSlugs = declaredSkillSlugs.filter((slug) => !resolvedSkillSlugs.includes(slug))
+    if (strict && missingSkillSlugs.length > 0) {
       throw new Error(`Agent "${agentSlug}" references unavailable skills in this workspace: ${missingSkillSlugs.join(', ')}`)
     }
     const sources = getSourcesBySlugs(ws.rootPath, agent.metadata.sources ?? [])
@@ -1868,7 +1878,7 @@ export class SessionManager implements ISessionManager {
       ...missingSourceSlugs.map((slug) => `${slug} (not active in this workspace)`),
       ...unusableSourceSlugs.map((slug) => `${slug} (disabled or unauthenticated)`),
     ]
-    if (sourceProblems.length > 0) {
+    if (strict && sourceProblems.length > 0) {
       throw new Error(`Agent "${agentSlug}" references unavailable sources in this workspace: ${sourceProblems.join(', ')}`)
     }
     const usableSources = sources.filter(isSourceUsable)
@@ -2043,6 +2053,31 @@ export class SessionManager implements ISessionManager {
   /** Expose the workflow runner so RPC handlers can reach it via HandlerDeps. */
   getWorkflowRunner(): WorkflowRunner {
     return this.workflowRunner
+  }
+
+  private broadcastDeepResearchRunUpdated(event: DeepResearchRunnerEvent): void {
+    if (!this.eventSink) return
+    if (event.type === 'outputs.updated') {
+      this.eventSink(
+        RPC_CHANNELS.outputs.UPDATED,
+        { to: 'workspace', workspaceId: event.workspaceId },
+        event.workspaceId,
+      )
+      return
+    }
+    const eventType: 'created' | 'updated' | 'completed' =
+      event.type === 'run.created' ? 'created' : event.type === 'run.completed' ? 'completed' : 'updated'
+    this.eventSink(
+      RPC_CHANNELS.deepResearch.UPDATED,
+      { to: 'workspace', workspaceId: event.run.workspaceId },
+      event.run.workspaceId,
+      event.run,
+      eventType,
+    )
+  }
+
+  getDeepResearchRunner(): DeepResearchRunner {
+    return this.deepResearchRunner
   }
 
   private notificationServiceInstance?: import('../notifications/NotificationService').NotificationService
@@ -2398,6 +2433,76 @@ user a clickable link to where the thing now lives.`
       )
       if (recoveredWorkflowRuns.length > 0) {
         sessionLog.info(`Recovered ${recoveredWorkflowRuns.length} interrupted workflow run(s)`)
+      }
+
+      this.deepResearchRunner = new DeepResearchRunner({
+        createSession: (wsId, opts) => this.createSession(wsId, opts).then((s) => ({ id: s.id })),
+        sendMessage: (sessionId, prompt) => this.sendMessage(sessionId, prompt),
+        getLastAssistantText: (sessionId) => this.getLastAssistantTextForSession(sessionId),
+        getSessionToolUseSummary: (sessionId) => {
+          const managed = this.sessions.get(sessionId)
+          if (!managed) return { count: 0, names: [] }
+          const names = managed.messages
+            .filter((message) => (
+              message.role === 'tool' &&
+              message.toolStatus === 'completed' &&
+              message.isError !== true &&
+              typeof message.toolName === 'string' &&
+              message.toolName.length > 0
+            ))
+            .map((message) => message.toolName!)
+          return { count: names.length, names: Array.from(new Set(names)).sort() }
+        },
+        abortSession: async (sessionId) => {
+          const managed = this.sessions.get(sessionId)
+          if (!managed) return
+          managed.agent?.forceAbort(AbortReason.UserStop)
+        },
+        getWorkspaceRootPath: (wsId) => {
+          const ws = getWorkspaceByNameOrId(wsId)
+          if (!ws) throw new Error(`Workspace not found: ${wsId}`)
+          return ws.rootPath
+        },
+        resolveSourceReadiness: (wsId, requestedSlugs) => {
+          const ws = getWorkspaceByNameOrId(wsId)
+          if (!ws) throw new Error(`Workspace not found: ${wsId}`)
+          const sources = loadAllSources(ws.rootPath)
+          if (requestedSlugs.length === 0) {
+            const usable = sources.filter(isSourceUsable).map((source) => source.config.slug).sort()
+            return { requested: usable, usable, missing: [], unusable: [] }
+          }
+          const bySlug = new Map(sources.map((source) => [source.config.slug, source]))
+          const missing: string[] = []
+          const unusable: string[] = []
+          const usable: string[] = []
+          for (const slug of requestedSlugs) {
+            const source = bySlug.get(slug)
+            if (!source) {
+              missing.push(slug)
+            } else if (!isSourceUsable(source)) {
+              unusable.push(slug)
+            } else {
+              usable.push(slug)
+            }
+          }
+          return { requested: requestedSlugs, usable, missing, unusable }
+        },
+        resolveSourceProfiles: (wsId, sourceSlugs) => {
+          const ws = getWorkspaceByNameOrId(wsId)
+          if (!ws) throw new Error(`Workspace not found: ${wsId}`)
+          const bySlug = new Map(loadAllSources(ws.rootPath).map((source) => [source.config.slug, source]))
+          return sourceSlugs
+            .map((slug) => bySlug.get(slug))
+            .filter((source): source is LoadedSource => Boolean(source && isSourceUsable(source)))
+            .map(profileDeepResearchSource)
+        },
+        emit: (event) => this.broadcastDeepResearchRunUpdated(event),
+      })
+      const recoveredDeepResearchRuns = this.deepResearchRunner.recoverInterruptedRuns(
+        workspaces.map((workspace) => ({ id: workspace.id, rootPath: workspace.rootPath })),
+      )
+      if (recoveredDeepResearchRuns.length > 0) {
+        sessionLog.info(`Recovered ${recoveredDeepResearchRuns.length} interrupted deep research run(s)`)
       }
 
       // Signal that initialization is complete — IPC handlers waiting on initGate will proceed

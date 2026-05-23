@@ -46,10 +46,10 @@ const activeShadowSpecs: ShadowSpec[] = [
     component: 'ImageCardStack stacked card',
     file: 'packages/ui/components/markdown/ImageCardStack.tsx',
     kind: 'arbitrary',
-    shadow: 'shadow-[1px_3px_8px_rgba(0,0,0,0.28)]',
+    shadow: 'shadow-middle',
     border: 'none (card depth comes entirely from arbitrary shadow)',
     hasExplicitBorder: false,
-    previewClassName: 'rounded-[8px] bg-background px-3 py-2 text-sm shadow-[1px_3px_8px_rgba(0,0,0,0.28)]',
+    previewClassName: 'rounded-[8px] bg-background px-3 py-2 text-sm shadow-middle',
   },
 ]
 

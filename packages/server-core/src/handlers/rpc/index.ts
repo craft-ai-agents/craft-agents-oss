@@ -8,6 +8,7 @@ import { registerWorkspaceContextHandlers } from './workspace-context'
 import { registerMemoryHandlers } from './memory'
 import { registerWorkflowsHandlers } from './workflows'
 import { registerWorkflowRunsHandlers } from './workflow-runs'
+import { registerDeepResearchHandlers } from './deep-research'
 import { registerFilesHandlers } from './files'
 import { registerLabelsHandlers } from './labels'
 import { registerLlmConnectionsHandlers } from './llm-connections'
@@ -44,6 +45,7 @@ export function registerCoreRpcHandlers(
   registerMemoryHandlers(server, deps)
   registerWorkflowsHandlers(server, deps)
   registerWorkflowRunsHandlers(server, deps)
+  registerDeepResearchHandlers(server, deps)
   registerFilesHandlers(server, deps)
   registerLabelsHandlers(server, deps)
   registerLlmConnectionsHandlers(server, deps)

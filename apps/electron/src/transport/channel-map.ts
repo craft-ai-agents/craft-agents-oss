@@ -433,6 +433,16 @@ export const CHANNEL_MAP = {
   deleteWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.DELETE),
   onWorkflowRunUpdated: listener(RPC_CHANNELS.workflowRuns.UPDATED),
 
+  // Deep Research runs
+  startDeepResearchRun: invoke(RPC_CHANNELS.deepResearch.START),
+  getDeepResearchRun: invoke(RPC_CHANNELS.deepResearch.GET),
+  listDeepResearchRuns: invoke(RPC_CHANNELS.deepResearch.LIST),
+  approveDeepResearchPlan: invoke(RPC_CHANNELS.deepResearch.APPROVE),
+  reviseDeepResearchPlan: invoke(RPC_CHANNELS.deepResearch.REVISE),
+  cancelDeepResearchRun: invoke(RPC_CHANNELS.deepResearch.CANCEL),
+  deleteDeepResearchRun: invoke(RPC_CHANNELS.deepResearch.DELETE),
+  onDeepResearchRunUpdated: listener(RPC_CHANNELS.deepResearch.UPDATED),
+
   // Notifications (bell entries — pulse + system)
   listNotifications: invoke(RPC_CHANNELS.notifications.LIST),
   acknowledgeNotification: invoke(RPC_CHANNELS.notifications.ACKNOWLEDGE),

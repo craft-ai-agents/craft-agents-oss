@@ -50,7 +50,7 @@ export const MetadataBadge = React.forwardRef<HTMLButtonElement, MetadataBadgePr
         className={cn(
           'h-[30px] pl-3 pr-4 text-xs font-medium rounded-[8px] flex items-center shrink-0',
           'outline-none select-none transition-colors',
-          shadow === 'minimal' && 'shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]',
+          shadow === 'minimal' && 'shadow-middle',
           'border border-white/[0.08] bg-white/[0.045] text-white/64',
           interactive && 'cursor-pointer hover:bg-white/[0.08] hover:text-white',
           interactive && isActive && 'bg-white/[0.08] text-white',

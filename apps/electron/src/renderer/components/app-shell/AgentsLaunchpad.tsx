@@ -127,7 +127,7 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
             <button
               type="button"
               onClick={() => setLibraryOpen(true)}
-              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 shadow-[0_0_18px_rgba(249,115,22,0.16)] transition-colors hover:bg-[#f97316]/24"
+              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 shadow-middle transition-colors hover:bg-[#f97316]/24"
             >
               <Settings2 className="h-3 w-3" />
               Manage library
@@ -233,7 +233,7 @@ function AgentCard({ slug, name, description, isOrchestrator, onClick, onStartCh
         event.preventDefault()
         onClick()
       }}
-      className="group relative min-h-[122px] overflow-hidden rounded-[14px] border border-white/10 bg-neutral-900/60 p-3.5 pr-10 text-left shadow-[0_12px_34px_rgba(0,0,0,0.22)] transition-all duration-200 hover:-translate-y-0.5 hover:border-white/16 hover:bg-neutral-900/70 hover:shadow-[0_18px_48px_rgba(0,0,0,0.30),0_0_22px_rgba(255,237,213,0.045)]"
+      className="group relative min-h-[122px] overflow-hidden rounded-[14px] border border-white/10 bg-neutral-900/60 p-3.5 pr-10 text-left shadow-middle transition-all duration-200 hover:-translate-y-0.5 hover:border-white/16 hover:bg-neutral-900/70 hover:shadow-middle"
     >
       <div className={cn(
         "pointer-events-none absolute h-24 w-24 rounded-full blur-2xl",
@@ -251,7 +251,7 @@ function AgentCard({ slug, name, description, isOrchestrator, onClick, onStartCh
         <MessageSquare className="h-3 w-3" />
       </button>
       <div className="relative flex items-center gap-2.5">
-        <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-gradient-to-br from-[#fb923c] to-[#f97316] text-neutral-950 shadow-[0_0_14px_rgba(249,115,22,0.12)]">
+        <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-gradient-to-br from-[#fb923c] to-[#f97316] text-neutral-950 shadow-middle">
           <Icon className="h-[11px] w-[11px]" />
         </span>
         <div className="min-w-0">
@@ -334,7 +334,7 @@ function AgentDetailDialog({ agent, workspaceId, onAgentUpdated, onOpenChange }:
 
   return (
     <Dialog open={Boolean(agent)} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-3xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_28px_90px_rgba(0,0,0,0.62)]">
+      <DialogContent className="max-h-[88vh] max-w-3xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-modal-small">
         <DialogHeader className="border-b border-white/[0.06] bg-[radial-gradient(circle_at_18%_0%,rgba(249,115,22,0.20),transparent_34%),#0b0b0f] px-5 pb-3 pt-4">
           <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-[13px] border border-white/[0.08] bg-white/[0.055] font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[#fed7aa]">
             {name.slice(0, 2)}
@@ -482,7 +482,7 @@ function AgentDetailDialog({ agent, workspaceId, onAgentUpdated, onOpenChange }:
 
 function DetailTile({ label, value, onEdit }: { label: string; value: string; onEdit?: () => void }) {
   return (
-    <div className="rounded-[14px] border border-white/[0.1] bg-white/[0.04] p-3 shadow-[0_4px_12px_rgba(0,0,0,0.1)]">
+    <div className="rounded-[14px] border border-white/[0.1] bg-white/[0.04] p-3 shadow-middle">
       <div className="flex items-center justify-between gap-2">
         <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/34">{label}</div>
         {onEdit ? (
@@ -555,7 +555,7 @@ function AgentRuntimePickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md overflow-hidden !rounded-[16px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_24px_80px_rgba(0,0,0,0.62)]">
+      <DialogContent className="max-w-md overflow-hidden !rounded-[16px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-modal-small">
         <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
           <DialogTitle className="text-lg font-semibold text-white">Edit runtime</DialogTitle>
           <DialogDescription className="text-sm text-white/48">
@@ -764,7 +764,7 @@ function AgentBundlePickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[72vh] max-w-lg overflow-hidden !rounded-[16px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_24px_80px_rgba(0,0,0,0.62)]">
+      <DialogContent className="max-h-[72vh] max-w-lg overflow-hidden !rounded-[16px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-modal-small">
         <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
           <DialogTitle className="text-lg font-semibold text-white">{title}</DialogTitle>
           <DialogDescription className="text-sm text-white/48">
@@ -1045,7 +1045,7 @@ function AgentContextPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[72vh] max-w-lg overflow-hidden !rounded-[16px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_24px_80px_rgba(0,0,0,0.62)]">
+      <DialogContent className="max-h-[72vh] max-w-lg overflow-hidden !rounded-[16px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-modal-small">
         <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
           <DialogTitle className="text-lg font-semibold text-white">Edit context</DialogTitle>
           <DialogDescription className="text-sm text-white/48">

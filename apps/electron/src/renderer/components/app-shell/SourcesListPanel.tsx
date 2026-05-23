@@ -264,7 +264,7 @@ export function SourcesListPanel({
                   <button
                     type="button"
                     onClick={() => setLibraryOpen(true)}
-                    className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-[#fb923c]/30 bg-[#f97316]/18 px-3 text-xs font-medium text-white shadow-[0_0_24px_rgba(249,115,22,0.20)] transition-colors hover:bg-[#f97316]/26"
+                    className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-[#fb923c]/30 bg-[#f97316]/18 px-3 text-xs font-medium text-white shadow-middle transition-colors hover:bg-[#f97316]/26"
                     title={t('sourcesList.browseGlobal')}
                   >
                     <BookOpen className="size-3.5" />
@@ -314,10 +314,10 @@ export function SourcesListPanel({
                   const canPromote = globalSourcesReady && isWorkspaceSource && !globalSlugSet.has(source.config.slug)
 
                   return (
-                    <div key={source.config.slug} className="group relative min-h-[78px] overflow-hidden rounded-[11px] border border-white/[0.075] bg-white/[0.035] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#fb923c]/35 hover:bg-white/[0.06] hover:shadow-[0_12px_34px_rgba(0,0,0,0.28),0_0_22px_rgba(249,115,22,0.10)]">
+                    <div key={source.config.slug} className="group relative min-h-[78px] overflow-hidden rounded-[11px] border border-white/[0.075] bg-white/[0.035] p-2.5 shadow-middle transition-all duration-200 hover:-translate-y-0.5 hover:border-[#fb923c]/35 hover:bg-white/[0.06] hover:shadow-middle">
                       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#fb923c]/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
                       <button type="button" onClick={() => onSourceClick(source)} className="flex w-full items-start gap-2 text-left">
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.08] bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.08] bg-white/[0.06] shadow-middle">
                           <SourceAvatar source={source} size="sm" />
                         </div>
                         <div className="min-w-0 flex-1 pr-6">

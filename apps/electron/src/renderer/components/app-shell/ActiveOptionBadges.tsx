@@ -406,7 +406,7 @@ function FilesPopoverButton({ sessionId, sessionFolderPath }: { sessionId?: stri
           className={cn(
             "h-7 w-7 text-xs font-medium rounded-[8px] flex items-center justify-center shrink-0",
             "outline-none select-none transition-colors",
-            "border border-white/[0.08] bg-white/[0.045] text-white/64 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+            "border border-white/[0.08] bg-white/[0.045] text-white/64 shadow-middle",
             "hover:bg-white/[0.08] hover:text-white data-[state=open]:bg-white/[0.08] data-[state=open]:text-white",
           )}
           aria-label={t("common.info")}

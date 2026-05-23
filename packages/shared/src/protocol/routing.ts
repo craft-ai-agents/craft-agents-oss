@@ -463,6 +463,16 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workflowRuns.DELETE,
   RPC_CHANNELS.workflowRuns.UPDATED,
 
+  // deep research — workspace-local research runs
+  RPC_CHANNELS.deepResearch.START,
+  RPC_CHANNELS.deepResearch.GET,
+  RPC_CHANNELS.deepResearch.LIST,
+  RPC_CHANNELS.deepResearch.APPROVE,
+  RPC_CHANNELS.deepResearch.REVISE,
+  RPC_CHANNELS.deepResearch.CANCEL,
+  RPC_CHANNELS.deepResearch.DELETE,
+  RPC_CHANNELS.deepResearch.UPDATED,
+
   // pulses — tick history lives on the workspace server
   RPC_CHANNELS.pulses.LIST_TICKS,
   RPC_CHANNELS.pulses.TICK,

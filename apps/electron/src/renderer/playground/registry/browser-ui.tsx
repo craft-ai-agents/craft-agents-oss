@@ -338,7 +338,7 @@ function BrowserTraceSidebarSample({ scenario, runState, sidebarWidth, hdrEffect
               transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
             >
               <div
-                className="h-full w-full bg-black shadow-[0_0_12px_rgba(0,0,0,0.35)]"
+                className="h-full w-full bg-black shadow-middle"
                 style={{
                   clipPath: 'polygon(0% 0%, 0% 100%, 34% 73%, 51% 100%, 66% 94%, 48% 67%, 100% 67%)',
                   borderRadius: '2px',

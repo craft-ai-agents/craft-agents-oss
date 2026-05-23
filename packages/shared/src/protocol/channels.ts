@@ -461,6 +461,16 @@ export const RPC_CHANNELS = {
     /** Single push event covering created / updated / completed transitions. */
     UPDATED: 'workflow-runs:updated',
   },
+  deepResearch: {
+    START: 'deep-research:start',
+    GET: 'deep-research:get',
+    LIST: 'deep-research:list',
+    APPROVE: 'deep-research:approve',
+    REVISE: 'deep-research:revise',
+    CANCEL: 'deep-research:cancel',
+    DELETE: 'deep-research:delete',
+    UPDATED: 'deep-research:updated',
+  },
   outputs: {
     LIST: 'outputs:list',
     GET: 'outputs:get',

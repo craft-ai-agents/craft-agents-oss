@@ -129,7 +129,7 @@ export function SettingsMenuSelect({
         align="end"
         sideOffset={4}
         collisionPadding={8}
-        className="border-white/[0.08] bg-[#0b0b0d]/95 p-1.5 shadow-[0_24px_70px_rgba(0,0,0,0.5)]"
+        className="border-white/[0.08] bg-[#0b0b0d]/95 p-1.5 shadow-middle"
         style={{ width: menuWidth }}
         onMouseLeave={() => onHover?.(null)}
       >

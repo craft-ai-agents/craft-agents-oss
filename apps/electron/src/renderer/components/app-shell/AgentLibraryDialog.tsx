@@ -64,7 +64,7 @@ export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLib
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[86vh] max-w-2xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_28px_90px_rgba(0,0,0,0.62)]">
+      <DialogContent className="max-h-[86vh] max-w-2xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-modal-small">
         <DialogHeader className="border-b border-white/[0.06] bg-[radial-gradient(circle_at_18%_0%,rgba(249,115,22,0.20),transparent_34%),#0b0b0f] px-6 py-5">
           <DialogTitle className="text-[22px] font-semibold leading-tight text-white">Manage agents</DialogTitle>
           <DialogDescription className="max-w-xl text-sm leading-6 text-white/52">

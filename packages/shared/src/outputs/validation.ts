@@ -36,7 +36,7 @@ const ASSET_ROLES: ReadonlySet<OutputAssetRole> = new Set([
 ]);
 const RECEIPT_STATUSES = new Set(['succeeded', 'failed', 'pending']);
 const LINK_ROLES = new Set(['primary', 'source', 'related', 'external']);
-const ORIGIN_SOURCES = new Set(['workflow', 'session', 'automation', 'manual']);
+const ORIGIN_SOURCES = new Set(['workflow', 'session', 'automation', 'manual', 'deep-research']);
 const PREVIEW_MODES: ReadonlySet<OutputPreviewMode> = new Set([
   'markdown',
   'text',
@@ -102,6 +102,7 @@ function isOutputOrigin(value: unknown): value is OutputOrigin {
   if (typeof value.source !== 'string' || !ORIGIN_SOURCES.has(value.source)) return false;
   for (const field of [
     'workflowRunId',
+    'deepResearchRunId',
     'workflowSlug',
     'workflowName',
     'stepId',

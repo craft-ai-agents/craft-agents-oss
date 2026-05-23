@@ -321,7 +321,7 @@ function SourceCredentialDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-md !rounded-[18px] !border !border-white/[0.09] !bg-[#0a0a0c] p-5 !text-white shadow-[0_24px_80px_rgba(0,0,0,0.62)]">
+      <DialogContent className="!max-w-md !rounded-[18px] !border !border-white/[0.09] !bg-[#0a0a0c] p-5 !text-white shadow-middle">
         <DialogHeader>
           <DialogTitle className="text-white/90">{title}</DialogTitle>
           <DialogDescription className="text-white/46">
