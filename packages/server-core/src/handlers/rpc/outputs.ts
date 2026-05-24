@@ -98,6 +98,7 @@ function mimeTypeForPath(path: string): string {
     json: 'application/json',
     md: 'text/markdown',
     markdown: 'text/markdown',
+    pdf: 'application/pdf',
     txt: 'text/plain',
   };
   return mimeMap[ext] ?? 'application/octet-stream';

@@ -126,6 +126,31 @@ describe('output manifest validation', () => {
     expect(isOutputManifest(model, OUTPUT_OLD_ID)).toBe(true);
   });
 
+  test('accepts PDF outputs with PDF preview assets', () => {
+    const pdf = manifest(OUTPUT_OLD_ID, {
+      kind: 'document',
+      primary: {
+        id: 'asset-1',
+        label: 'PDF',
+        role: 'primary',
+        path: 'report.pdf',
+        mimeType: 'application/pdf',
+      },
+      assets: [
+        {
+          id: 'asset-1',
+          label: 'PDF',
+          role: 'primary',
+          path: 'report.pdf',
+          mimeType: 'application/pdf',
+        },
+      ],
+      preview: { mode: 'pdf', assetId: 'asset-1' },
+    });
+
+    expect(isOutputManifest(pdf, OUTPUT_OLD_ID)).toBe(true);
+  });
+
   test('rejects malformed manifests before saving', () => {
     expect(isOutputManifest({ ...manifest(OUTPUT_OLD_ID), kind: 'nope' }, OUTPUT_OLD_ID)).toBe(false);
     expect(isOutputManifest({ ...manifest(OUTPUT_OLD_ID), id: OUTPUT_NEW_ID }, OUTPUT_OLD_ID)).toBe(false);

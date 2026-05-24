@@ -159,6 +159,19 @@ export function OutputInlinePreview({
     )
   }
 
+  if (mode === 'pdf' && previewAsset) {
+    return (
+      <div className={className ?? 'h-full min-h-[420px] w-full overflow-hidden rounded-md bg-black'}>
+        <iframe
+          src={buildRunnerOutputAssetUrl(workspaceId, manifest.id, previewAsset.path)}
+          title={previewAsset.label ?? manifest.title}
+          className="h-full min-h-[420px] w-full border-0 bg-black"
+          onLoad={() => onPreviewSettled?.('ready')}
+        />
+      </div>
+    )
+  }
+
   if (mode === 'markdown' && content) {
     return (
       <div className={className}>
@@ -242,6 +255,7 @@ function inferPreviewMode(asset?: OutputAssetDTO): OutputPreviewMode {
   if (mime.startsWith('video/') || /\.(mp4|mov|webm|m4v)$/.test(path)) return 'video'
   if (mime.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)$/.test(path)) return 'audio'
   if (mime === 'model/gltf-binary' || mime === 'model/gltf+json' || /\.(glb|gltf)$/.test(path)) return 'model'
+  if (mime === 'application/pdf' || path.endsWith('.pdf')) return 'pdf'
   return 'text'
 }
 

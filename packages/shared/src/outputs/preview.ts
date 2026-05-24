@@ -13,6 +13,7 @@ export function previewModeForMimeType(mimeType: string | undefined): OutputPrev
   if (mimeType?.startsWith('video/')) return 'video';
   if (mimeType?.startsWith('audio/')) return 'audio';
   if (mimeType === 'model/gltf-binary' || mimeType === 'model/gltf+json') return 'model';
+  if (mimeType === 'application/pdf') return 'pdf';
   return 'text';
 }
 
@@ -24,6 +25,7 @@ export function inferPreviewMode(mimeType?: string, path?: string): OutputPrevie
   if (mimeType?.startsWith('video/') || /\.(mp4|mov|webm|m4v)$/.test(lowerPath)) return 'video';
   if (mimeType?.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)$/.test(lowerPath)) return 'audio';
   if (mimeType === 'model/gltf-binary' || mimeType === 'model/gltf+json' || /\.(glb|gltf)$/.test(lowerPath)) return 'model';
+  if (mimeType === 'application/pdf' || lowerPath.endsWith('.pdf')) return 'pdf';
   if (mimeType === 'text/csv' || /\.(csv|tsv)$/.test(lowerPath)) return 'table';
   return 'text';
 }

@@ -24,6 +24,7 @@ export type OutputPreviewMode =
   | 'video'
   | 'audio'
   | 'model'
+  | 'pdf'
   | 'table'
   | 'receipt'
   | 'external-link'
