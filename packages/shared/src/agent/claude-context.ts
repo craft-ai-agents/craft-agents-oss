@@ -60,6 +60,7 @@ import {
   type MicrosoftService,
 } from '../sources/types.ts';
 import { isGoogleOAuthConfigured as isGoogleOAuthConfiguredImpl } from '../auth/google-oauth.ts';
+import { SsoCredentialStore } from '../auth/sso-credential-store.ts';
 import { debug } from '../utils/debug.ts';
 import { getSessionPlansPath, getSessionPath, getSessionDataPath } from '../sessions/storage.ts';
 import { updatePreferences as updatePreferencesImpl } from '../config/preferences.ts';
@@ -224,6 +225,13 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
     fs,
     validators,
     credentialManager,
+    getSsoIdToken: async () => {
+      try {
+        return (await new SsoCredentialStore().load())?.idToken ?? null;
+      } catch {
+        return null;
+      }
+    },
     updatePreferences: (updates: Record<string, unknown>) => {
       updatePreferencesImpl(updates as any);
     },

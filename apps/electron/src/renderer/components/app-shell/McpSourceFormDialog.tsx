@@ -64,7 +64,7 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
   const [enabled, setEnabled] = React.useState(true)
   const [enableInWorkspace, setEnableInWorkspace] = React.useState(true)
   const [url, setUrl] = React.useState('')
-  const [authType, setAuthType] = React.useState<McpFormAuthType>('none')
+  const [authType, setAuthType] = React.useState<McpFormAuthType>('bearer')
   const [bearerToken, setBearerToken] = React.useState('')
   const [apiKeyHeader, setApiKeyHeader] = React.useState('X-API-Key')
   const [apiKeyValue, setApiKeyValue] = React.useState('')
@@ -205,7 +205,7 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
     setEnabled(true)
     setEnableInWorkspace(true)
     setUrl('')
-    setAuthType('none')
+    setAuthType('bearer')
     setBearerToken('')
     setApiKeyHeader('X-API-Key')
     setApiKeyValue('')
@@ -775,7 +775,7 @@ function getFormAuthTypeFromMcp(mcp: McpSourceConfig | undefined): McpFormAuthTy
   if (mcp.authType === 'bearer') return 'bearer'
   if (mcp.authType === 'oauth') return 'oauth'
   if (mcp.headerNames && mcp.headerNames.length > 0) return 'api-key'
-  return 'none'
+  return mcp.transport === 'stdio' ? 'none' : 'bearer'
 }
 
 function CredentialConfiguredBadge() {

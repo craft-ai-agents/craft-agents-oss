@@ -420,6 +420,7 @@ async function buildServersFromSources(
   const span = perf.span('sources.buildServers', { count: sources.length })
   const credManager = getSourceCredentialManager()
   const serverBuilder = getSourceServerBuilder()
+  const ssoIdToken = await loadSsoIdToken()
 
   // Load credentials for all sources
   const sourcesWithCreds: SourceWithCredential[] = await Promise.all(
@@ -427,6 +428,7 @@ async function buildServersFromSources(
       source,
       token: await credManager.getToken(source),
       credential: await credManager.getApiCredential(source),
+      ssoIdToken,
     }))
   )
   span.mark('credentials.loaded')
@@ -485,6 +487,15 @@ async function buildServersFromSources(
 
   span.end()
   return result
+}
+
+async function loadSsoIdToken(): Promise<string | null> {
+  try {
+    return (await new SsoCredentialStore().load())?.idToken ?? null
+  } catch (error) {
+    sessionLog.debug(`Unable to load SSO idToken for source auth: ${error instanceof Error ? error.message : String(error)}`)
+    return null
+  }
 }
 
 /**

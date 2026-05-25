@@ -75,6 +75,7 @@ describe('parseMcpJsonImportCandidates', () => {
           mcp: {
             transport: 'streamable_http',
             url: 'https://mcp.linear.app/mcp',
+            authType: 'bearer',
           },
         },
         enableInWorkspace: true,
@@ -94,10 +95,24 @@ describe('parseMcpJsonImportCandidates', () => {
 
     expect(result.candidates.map((candidate) => candidate.input.mcp)).toEqual([
       { transport: 'stdio', command: 'bun', args: ['server.ts'] },
-      { transport: 'streamable_http', url: 'https://example.com/sse' },
-      { transport: 'streamable_http', url: 'https://example.com/mcp' },
+      { transport: 'streamable_http', url: 'https://example.com/sse', authType: 'bearer' },
+      { transport: 'streamable_http', url: 'https://example.com/mcp', authType: 'bearer' },
     ]);
     expect(result.candidates.every((candidate) => candidate.errors.length === 0)).toBe(true);
+  });
+
+  test('defaults HTTP MCP candidates to bearer while preserving explicit none', () => {
+    const result = parseMcpJsonImportCandidates(JSON.stringify({
+      mcpServers: {
+        implicit: { url: 'https://implicit.example.com/mcp' },
+        explicitPublic: { url: 'https://public.example.com/mcp', authType: 'none' },
+      },
+    }));
+
+    expect(result.candidates.map((candidate) => candidate.input.mcp?.authType)).toEqual([
+      'bearer',
+      'none',
+    ]);
   });
 
   test('reports invalid JSON as a top-level field error', () => {
@@ -144,12 +159,12 @@ describe('parseMcpJsonImportCandidates', () => {
       },
       {
         key: 'missingUrl',
-        mcp: { transport: 'streamable_http' },
+        mcp: { transport: 'streamable_http', authType: 'bearer' },
         errors: [{ field: 'url', message: 'Streamable HTTP MCP servers require a URL string.' }],
       },
       {
         key: 'badTransport',
-        mcp: { transport: 'streamable_http', url: 'https://example.com/mcp' },
+        mcp: { transport: 'streamable_http', url: 'https://example.com/mcp', authType: 'bearer' },
         errors: [{ field: 'transport', message: 'Transport must be one of: streamable_http, stdio.' }],
       },
       {
@@ -159,7 +174,7 @@ describe('parseMcpJsonImportCandidates', () => {
       },
       {
         key: 'badHeaders',
-        mcp: { transport: 'streamable_http', url: 'https://example.com/mcp' },
+        mcp: { transport: 'streamable_http', url: 'https://example.com/mcp', authType: 'bearer' },
         errors: [{ field: 'headers', message: 'Headers must be an object with string values.' }],
       },
     ]);
@@ -768,7 +783,7 @@ describe('createMcpSourcesFromCandidates', () => {
       ]);
       expect(loadSourceConfig(workspaceRootPath, 'linear')?.mcp).toEqual({
         transport: 'streamable_http',
-        authType: 'none',
+        authType: 'bearer',
         url: 'https://new.example.com/mcp',
       });
       expect(loadSourceConfig(workspaceRootPath, 'skipped')).toBeNull();
@@ -985,6 +1000,30 @@ describe('createMcpSourceFromManualInput', () => {
       expect(testedSlugs).toEqual(['manual-remote']);
       const config = loadSourceConfig(workspaceRootPath, 'manual-remote');
       expect(config?.connectionStatus).toBe('connected');
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('defaults manual HTTP MCP sources to bearer when authType is omitted', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      const created = await createMcpSourceFromManualInput(workspaceRootPath, {
+        name: 'Manual Bearer Default',
+        provider: 'manual-bearer-default',
+        mcp: {
+          transport: 'streamable_http',
+          url: 'https://manual.example.com/mcp',
+        },
+      }, {
+        connectionTester: async () => ({ success: true }),
+      });
+
+      expect(created.mcp).toEqual({
+        transport: 'streamable_http',
+        url: 'https://manual.example.com/mcp',
+        authType: 'bearer',
+      });
     } finally {
       rmSync(workspaceRootPath, { recursive: true, force: true });
     }
