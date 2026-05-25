@@ -20,7 +20,7 @@ export interface PickerModeInput {
 
 export function derivePickerMode(input: PickerModeInput): PickerMode {
   if (input.connectionUnavailable) return 'unavailable'
-  if (input.isEmptySession && input.connectionCount > 1) return 'switcher'
+  if (input.connectionCount > 1) return 'switcher'
   if (input.connectionDefaultModel != null) return 'locked-single'
   return 'flat'
 }

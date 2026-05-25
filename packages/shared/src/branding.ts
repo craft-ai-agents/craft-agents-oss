@@ -1,18 +1,18 @@
 /**
- * Centralized branding assets for Craft Agent
+ * Centralized branding assets for Runner
  * Used by OAuth callback pages
  */
 
-export const CRAFT_LOGO = [
-  '  ████████ █████████    ██████   ██████████ ██████████',
-  '██████████ ██████████ ██████████ █████████  ██████████',
-  '██████     ██████████ ██████████ ████████   ██████████',
-  '██████████ ████████   ██████████ ███████      ██████  ',
-  '  ████████ ████  ████ ████  ████ █████        ██████  ',
+export const RUNNER_WORDMARK = [
+  '██████  ██    ██ ███    ██ ███    ██ ███████ ██████',
+  '██   ██ ██    ██ ████   ██ ████   ██ ██      ██   ██',
+  '██████  ██    ██ ██ ██  ██ ██ ██  ██ █████   ██████',
+  '██   ██ ██    ██ ██  ██ ██ ██  ██ ██ ██      ██   ██',
+  '██   ██  ██████  ██   ████ ██   ████ ███████ ██   ██',
 ] as const;
 
-/** Logo as a single string for HTML templates */
-export const CRAFT_LOGO_HTML = CRAFT_LOGO.map((line) => line.trimEnd()).join('\n');
+/** Wordmark as a single string for HTML templates */
+export const RUNNER_WORDMARK_HTML = RUNNER_WORDMARK.map((line) => line.trimEnd()).join('\n');
 
 /** Session viewer base URL */
-export const VIEWER_URL = 'https://agents.craft.do';
+export const VIEWER_URL = 'https://github.com/findmikeymike/RunnerOS';

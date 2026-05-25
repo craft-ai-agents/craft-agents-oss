@@ -21,6 +21,7 @@ import {
 import { DEFAULT_THEME, loadAppTheme } from '@craft-agent/shared/config'
 import { getBrowserLiveFxCornerRadii } from '../shared/browser-live-fx'
 import type { IBrowserPaneManager } from '@craft-agent/server-core/handlers'
+import { BROWSER_PANE_SESSION_PARTITION } from './browser-pane-constants'
 
 export type { BrowserInstanceInfo }
 
@@ -114,7 +115,6 @@ const TOOLBAR_CHANNELS = {
   STATE_UPDATE: 'browser-toolbar:state-update',
   THEME_COLOR: 'browser-toolbar:theme-color',
 } as const
-export const BROWSER_PANE_SESSION_PARTITION = 'persist:browser-pane'
 const SESSION_PARTITION = BROWSER_PANE_SESSION_PARTITION
 
 interface AgentControlState {

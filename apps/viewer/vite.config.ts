@@ -32,7 +32,7 @@ export default defineConfig({
     proxy: {
       // Proxy API requests to production R2 during local dev
       '/s/api': {
-        target: 'https://agents.craft.do',
+        target: 'https://github.com/findmikeymike/RunnerOS',
         changeOrigin: true,
         secure: true,
       },

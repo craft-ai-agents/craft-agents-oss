@@ -41,9 +41,17 @@ describe('wrapPreparedOAuthFlowForRelay', () => {
       provider: 'google',
     };
 
+    if (!OAUTH_RELAY_CALLBACK_URL) {
+      expect(() => wrapPreparedOAuthFlowForRelay(
+        prepared,
+        'https://runner.example/api/oauth/callback',
+      )).toThrow('OAuth relay not configured');
+      return;
+    }
+
     const wrapped = wrapPreparedOAuthFlowForRelay(
       prepared,
-      'https://ghalmos.craftdocs-cf-t1.com/api/oauth/callback',
+      'https://runner.example/api/oauth/callback',
     );
 
     expect(wrapped.state).toBe('inner-state-123');
@@ -57,7 +65,7 @@ describe('wrapPreparedOAuthFlowForRelay', () => {
     expect(outerState).not.toBe('inner-state-123');
     expect(isOAuthRelayState(outerState!)).toBe(true);
     expect(decodeOAuthRelayState(outerState!)).toEqual({
-      returnTo: 'https://ghalmos.craftdocs-cf-t1.com/api/oauth/callback',
+      returnTo: 'https://runner.example/api/oauth/callback',
       innerState: 'inner-state-123',
     });
   });

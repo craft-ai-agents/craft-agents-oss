@@ -89,7 +89,7 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
 
   const primary = manifest.primary ?? manifest.assets.find((asset) => asset.role === 'primary') ?? manifest.assets[0]
   const sessionId = manifest.origin.sessionId
-  const isMediaOutput = manifest.kind === 'image' || manifest.kind === 'video'
+  const canSendToCanvas = manifest.kind === 'image' || manifest.kind === 'video' || manifest.kind === 'model'
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
@@ -113,8 +113,8 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
                 Focus
               </Button>
             )}
-            {sessionId && isMediaOutput && (
-              <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => sendMediaToCanvas(workspaceId, manifest, sessionId, openDemoVisualSurface)}>
+            {sessionId && canSendToCanvas && (
+              <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => sendOutputToCanvas(workspaceId, manifest, sessionId, openDemoVisualSurface)}>
                 <PanelTopOpen className="mr-1.5 h-3.5 w-3.5" />
                 Canvas
               </Button>
@@ -261,13 +261,17 @@ function focusOutputSurface(
   })
 }
 
-async function sendMediaToCanvas(
+async function sendOutputToCanvas(
   workspaceId: string,
   manifest: OutputManifestDTO,
   sessionId: string,
   openDemoVisualSurface: (input: { workspaceId: string; sessionId: string }) => void,
 ) {
-  const action = manifest.kind === 'video' ? 'add_video' : 'add_image'
+  const action = manifest.kind === 'image'
+    ? 'add_image'
+    : manifest.kind === 'video'
+      ? 'add_video'
+      : 'pin_output'
   const api = window.electronAPI as OutputsElectronAPI
   if (typeof api.applyVisualSurfaceEvent !== 'function') {
     toast.error('Canvas action is unavailable in this window.')

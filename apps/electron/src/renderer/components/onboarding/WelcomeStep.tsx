@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
+import { RunnerMark } from "@/components/icons/RunnerMark"
 import { StepFormLayout, ContinueButton } from "./primitives"
 
 interface WelcomeStepProps {
@@ -14,7 +14,7 @@ interface WelcomeStepProps {
  * WelcomeStep - Initial welcome screen for onboarding
  *
  * Shows different messaging for new vs existing users:
- * - New users: Welcome to Craft Agents
+ * - New users: Welcome to Runner
  * - Existing users: Update your API connection settings
  */
 export function WelcomeStep({
@@ -28,7 +28,7 @@ export function WelcomeStep({
     <StepFormLayout
       iconElement={
         <div className="flex size-16 items-center justify-center">
-          <CraftAgentsSymbol className="size-10 text-accent" />
+          <RunnerMark className="size-10 text-accent" />
         </div>
       }
       title={isExistingUser ? t("onboarding.welcome.updateTitle") : t("onboarding.welcome.title")}

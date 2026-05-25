@@ -7,8 +7,35 @@ export interface PiModelInfo {
   reasoning: boolean
 }
 
+const PROVIDER_PREFERRED_TIERS: Record<string, { best: string; default_: string; cheap: string }> = {
+  openrouter: {
+    best: 'pi/moonshotai/kimi-k2.6',
+    default_: 'pi/deepseek/deepseek-v4-pro',
+    cheap: 'pi/openrouter/owl-alpha',
+  },
+}
+
+function pickProviderTierDefaults(
+  models: PiModelInfo[],
+  provider?: string,
+): { best: string; default_: string; cheap: string } | null {
+  if (!provider) return null
+  const preferred = PROVIDER_PREFERRED_TIERS[provider]
+  if (!preferred) return null
+
+  const valid = new Set(models.map(m => m.id))
+  if (!valid.has(preferred.best) || !valid.has(preferred.default_) || !valid.has(preferred.cheap)) {
+    return null
+  }
+
+  return preferred
+}
+
 /** Pick smart defaults for 3 tiers from a cost-sorted model list (expensive-first). */
-export function pickTierDefaults(models: PiModelInfo[]): { best: string; default_: string; cheap: string } {
+export function pickTierDefaults(models: PiModelInfo[], provider?: string): { best: string; default_: string; cheap: string } {
+  const providerDefaults = pickProviderTierDefaults(models, provider)
+  if (providerDefaults) return providerDefaults
+
   if (models.length === 0) return { best: '', default_: '', cheap: '' }
   if (models.length === 1) return { best: models[0].id, default_: models[0].id, cheap: models[0].id }
   const best = models[0].id
@@ -19,8 +46,8 @@ export function pickTierDefaults(models: PiModelInfo[]): { best: string; default
   return { best, default_, cheap }
 }
 
-export function resolveTierModels(models: PiModelInfo[], savedModels?: string[]): { best: string; default_: string; cheap: string } {
-  const defaults = pickTierDefaults(models)
+export function resolveTierModels(models: PiModelInfo[], savedModels?: string[], provider?: string): { best: string; default_: string; cheap: string } {
+  const defaults = pickTierDefaults(models, provider)
   const saved = (savedModels ?? []).filter(Boolean)
   if (saved.length === 0) return defaults
 

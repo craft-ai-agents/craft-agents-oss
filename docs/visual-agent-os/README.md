@@ -1,8 +1,8 @@
 # Visual Agent OS
 
-Status: draft
+Status: implemented through Phase 5C
 Owner: RunnerOS
-Last updated: 2026-05-22
+Last updated: 2026-05-23
 
 ## Purpose
 
@@ -23,6 +23,11 @@ Define the first shippable version of visual agent work inside RunnerOS: chat st
 - [11 Phase 3 Agent Surface Events Spec](./11-phase-3-agent-surface-events-spec.md)
 - [12 Phase 4 Media Outputs Spec](./12-phase-4-media-outputs-spec.md)
 - [13 Phase 5A Adapter Registry Spec](./13-phase-5a-adapter-registry-spec.md)
+- [14 Phase 5B Web Agent Awareness Spec](./14-phase-5b-web-agent-awareness-spec.md)
+- [15 Phase 5C Agent Canvas Guidance Spec](./15-phase-5c-agent-canvas-guidance-spec.md)
+- [16 Canvas Agent Smoke Prompts](./16-canvas-agent-smoke-prompts.md)
+- [17 Chart Canvas Spec](./17-chart-canvas-spec.md)
+- [18 Workflow Graph Canvas Spec](./18-workflow-graph-canvas-spec.md)
 
 ## Core Decision
 
@@ -40,3 +45,18 @@ The MVP is complete when a normal RunnerOS chat session can:
 4. Show generated image/video outputs in the sidecar.
 5. Reopen the same surface after restart.
 6. Preserve chat usability across wide, medium, and narrow app widths.
+
+## Current Build Status
+
+- Phase 2 output-backed Canvas: implemented.
+- Phase 2B local web preview adapter: implemented through Output preview policy and safe `runner-output://` HTML asset serving.
+- Phase 2C visual board: implemented.
+- Phase 3 agent surface events: implemented through `visual_surface`.
+- Phase 4 media outputs: implemented, including media Canvas cards and sidecar add-to-board.
+- Phase 5A adapter registry: implemented, including a local-web browser preview adapter.
+- Phase 5B web agent awareness: implemented through `visual_surface_state`.
+- Phase 5C agent guidance: implemented in the central system prompt and tool descriptions.
+- Static chart outputs: implemented for `.chart.json`, `.vega.json`, and `.vegalite.json`.
+- Workflow graph outputs: implemented for `.workflow.json` and `.workflow-run.json`.
+
+Next intelligent slice: deeper browser-pane state reporting if agent inspection needs it, or provider-specific adapters.

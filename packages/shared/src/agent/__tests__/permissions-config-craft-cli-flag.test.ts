@@ -44,7 +44,7 @@ afterEach(() => {
   else process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI = originalCliFlag
 })
 
-describe('permissions config craft-agents-cli feature flag', () => {
+describe('permissions config runner-cli feature flag', () => {
   it('skips compiling craft-agent bash allowlist patterns when feature is disabled', () => {
     const tempConfigDir = mkdtempSync(join(tmpdir(), 'craft-permissions-'))
     try {

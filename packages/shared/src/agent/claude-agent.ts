@@ -842,15 +842,18 @@ export class ClaudeAgent extends BaseAgent {
       }
 
       // Build full MCP servers set first, then filter for mini agents
+      const runnerDocsMcpUrl = process.env.RUNNER_DOCS_MCP_URL?.trim();
       const fullMcpServers: Options['mcpServers'] = {
         // Session-scoped tools (SubmitPlan, source_test, update_user_preferences, transform_data, etc.)
         session: getSessionScopedTools(sessionId, this.workspaceRootPath),
-        // Craft Agents documentation - always available for searching setup guides
-        // This is a public Mintlify MCP server, no auth needed
-        'craft-agents-docs': {
-          type: 'http',
-          url: 'https://agents.craft.do/docs/mcp',
-        },
+        ...(runnerDocsMcpUrl
+          ? {
+              'runner-docs': {
+                type: 'http' as const,
+                url: runnerDocsMcpUrl,
+              },
+            }
+          : {}),
         // Per-source proxy servers from centralized MCP pool (MCP + API sources)
         // Each source gets its own SDK server keyed by slug (e.g., 'linear', 'github', 'gmail')
         // so the SDK produces correct tool names: mcp__{slug}__{toolName}

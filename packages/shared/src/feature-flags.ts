@@ -38,11 +38,11 @@ export function isDeveloperFeedbackEnabled(): boolean {
 }
 
 /**
- * Runtime-evaluated check for craft-agents-cli integration.
+ * Runtime-evaluated check for runner-cli integration.
  *
  * Defaults to disabled. Override with CRAFT_FEATURE_CRAFT_AGENTS_CLI=1|0.
  */
-export function isCraftAgentsCliEnabled(): boolean {
+export function isRunnerCliEnabled(): boolean {
   const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_CRAFT_AGENTS_CLI'));
   if (override !== undefined) return override;
   return false;
@@ -77,7 +77,7 @@ export const FEATURE_FLAGS = {
    * Defaults to disabled. Override with CRAFT_FEATURE_CRAFT_AGENTS_CLI=1|0.
    */
   get craftAgentsCli(): boolean {
-    return isCraftAgentsCliEnabled();
+    return isRunnerCliEnabled();
   },
   /**
    * Enable embedded server settings page.

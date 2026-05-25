@@ -12,7 +12,7 @@ mock.module('../../config/preferences.ts', () => ({
 import { getSystemPrompt } from '../system'
 
 const GIT_CONVENTIONS_HEADING = '## Git Conventions'
-const CO_AUTHOR_TRAILER = 'Co-Authored-By: Craft Agent <agents-noreply@craft.do>'
+const CO_AUTHOR_TRAILER = 'Co-Authored-By: Runner <agents-noreply@runneros.local>'
 
 describe('system prompt guidance', () => {
   it('uses backend-neutral debug log querying guidance (rg/grep via Bash)', () => {
@@ -34,6 +34,23 @@ describe('system prompt guidance', () => {
 
     expect(prompt).toContain('The subtask needs file/shell tools (for example, Read or Bash)')
     expect(prompt).not.toContain('The subtask needs tools (Read, Bash, Grep)')
+  })
+
+  it('teaches agents the shared Canvas and Outputs workflow', () => {
+    const prompt = getSystemPrompt(undefined, undefined, '/tmp/workspace', '/tmp/workspace')
+
+    expect(prompt).toContain('## Canvas and Outputs')
+    expect(prompt).toContain('Use Outputs for durable user-facing artifacts')
+    expect(prompt).toContain('Set `showInCanvas: true` on `create_output`')
+    expect(prompt).toContain('Use `visual_surface_state` to see what is already visible')
+    expect(prompt).toContain('Use Browser Pane or browser tools when the user asks to test, debug, inspect')
+    expect(prompt).toContain('When `visual_surface_state` marks an Output as inspectable in Browser Pane')
+    expect(prompt).toContain('show the artifact in Canvas first and ask before launching Browser Pane')
+    expect(prompt).toContain('Show immediately in Canvas when the user asks to see, preview, compare, review, present, open, or iterate')
+    expect(prompt).toContain('Choose the most useful Canvas preview format')
+    expect(prompt).toContain('Local/generated web: attach the HTML file as the primary file')
+    expect(prompt).toContain('Workflow maps: `.workflow.json`')
+    expect(prompt).toContain('Do not claim you can inspect iframe DOM, console logs, or live app state from Canvas')
   })
 })
 
@@ -85,7 +102,7 @@ describe('includeCoAuthoredBy handling', () => {
       '/tmp/workspace',
       '/tmp/workspace',
       undefined,
-      'Craft Agents Backend'
+      'Runner Backend'
       // 7th arg omitted — must not regress to `true` default
     )
 

@@ -1,6 +1,6 @@
 import type { PreparedOAuthFlow } from './oauth-flow-types.ts';
 
-export const OAUTH_RELAY_CALLBACK_URL = 'https://agents.craft.do/auth/callback';
+export const OAUTH_RELAY_CALLBACK_URL = process.env.RUNNER_OAUTH_RELAY_CALLBACK_URL?.trim() || '';
 const OAUTH_RELAY_STATE_PREFIX = 'ca1.';
 const OAUTH_RELAY_STATE_VERSION = 1;
 
@@ -77,6 +77,10 @@ export function wrapPreparedOAuthFlowForRelay(
   prepared: PreparedOAuthFlow,
   returnTo: string,
 ): PreparedOAuthFlow {
+  if (!OAUTH_RELAY_CALLBACK_URL) {
+    throw new Error('OAuth relay not configured. Set RUNNER_OAUTH_RELAY_CALLBACK_URL.');
+  }
+
   const authUrl = new URL(prepared.authUrl);
   authUrl.searchParams.set('redirect_uri', OAUTH_RELAY_CALLBACK_URL);
   authUrl.searchParams.set('state', encodeOAuthRelayState(returnTo, prepared.state));

@@ -31,8 +31,9 @@ import {
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { isDeveloperFeedbackEnabled } from '@craft-agent/shared/feature-flags';
+import { OutputService } from '@craft-agent/server-core/outputs';
 // Import from session-tools-core
 import {
   type SessionToolContext,
@@ -57,6 +58,7 @@ interface SessionConfig {
   sessionId: string;
   workspaceRootPath: string;
   plansFolderPath: string;
+  workspaceId?: string;
   callbackPort?: string;
 }
 
@@ -154,6 +156,7 @@ function createCredentialManager(workspaceRootPath: string): CredentialManagerIn
  */
 function createCodexContext(config: SessionConfig): SessionToolContext {
   const { sessionId, workspaceRootPath, plansFolderPath } = config;
+  const workspaceId = config.workspaceId || basename(workspaceRootPath);
 
   // File system implementation
   const fs = {
@@ -195,6 +198,14 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
   // Session paths for transform_data / render_template
   const sessionsDir = join(workspaceRootPath, 'sessions', sessionId);
   const sessionDataDir = join(sessionsDir, 'data');
+  const outputService = new OutputService({
+    getWorkspaceRootPath: (requestedWorkspaceId) => {
+      if (requestedWorkspaceId !== workspaceId) {
+        throw new Error(`Workspace not available for this session: ${requestedWorkspaceId}`);
+      }
+      return workspaceRootPath;
+    },
+  });
 
   // Build context
   return {
@@ -249,6 +260,25 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
       writeFileSync(filePath, JSON.stringify(feedback, null, 2), 'utf-8');
     },
 
+    createOutput: (input) => outputService.createFromSessionTool({
+      workspaceId,
+      sessionId,
+      output: input,
+    }),
+
+    applyVisualSurfaceEvent: (input) => Promise.resolve(
+      outputService.applyVisualSurfaceEvent(
+        workspaceId,
+        sessionId,
+        input,
+        'agent',
+      ),
+    ),
+
+    getVisualSurfaceState: () => Promise.resolve(
+      outputService.getVisualSurfaceState(workspaceId, sessionId),
+    ),
+
     // Note: saveSourceConfig, validators, renderMermaid
     // are not available in Codex context (require Electron internals)
   };
@@ -269,20 +299,26 @@ function createSessionTools(includeDeveloperFeedback: boolean): Tool[] {
 }
 
 // ============================================================
-// Craft Agents Docs Upstream Proxy
+// Runner Docs Upstream Proxy
 // ============================================================
 
-const DOCS_MCP_URL = 'https://agents.craft.do/docs/mcp';
+const DOCS_MCP_URL = process.env.RUNNER_DOCS_MCP_URL?.trim() || '';
 
 /** Cached upstream client + tool list */
 let docsClient: Client | null = null;
 let docsTools: Tool[] = [];
 
 /**
- * Connect to the craft-agents-docs MCP server and fetch its tool definitions.
+ * Connect to the runner-docs MCP server and fetch its tool definitions.
  * Falls back gracefully if the server is unreachable (tools will just be empty).
  */
 async function connectDocsUpstream(): Promise<void> {
+  if (!DOCS_MCP_URL) {
+    docsClient = null;
+    docsTools = [];
+    return;
+  }
+
   try {
     const client = new Client(
       { name: 'craft-agent-session-proxy', version: '1.0.0' },
@@ -296,9 +332,9 @@ async function connectDocsUpstream(): Promise<void> {
     docsTools = (result.tools || []) as Tool[];
     docsClient = client;
 
-    console.error(`Craft Agents Docs proxy connected: ${docsTools.length} tools`);
+    console.error(`Runner Docs proxy connected: ${docsTools.length} tools`);
   } catch (err) {
-    console.error(`Craft Agents Docs proxy connection failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`Runner Docs proxy connection failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
     docsClient = null;
     docsTools = [];
   }
@@ -312,7 +348,7 @@ async function callDocsUpstream(
   args: Record<string, unknown>
 ): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
   if (!docsClient) {
-    return errorResponse(`Craft Agents Docs server is not connected. Tool '${name}' unavailable.`);
+    return errorResponse(`Runner Docs server is not connected. Tool '${name}' unavailable.`);
   }
 
   try {
@@ -471,6 +507,7 @@ async function main() {
   let sessionId: string | undefined;
   let workspaceRootPath: string | undefined;
   let plansFolderPath: string | undefined;
+  let workspaceId: string | undefined;
   let callbackPort: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
@@ -482,6 +519,9 @@ async function main() {
       i++;
     } else if (args[i] === '--plans-folder' && args[i + 1]) {
       plansFolderPath = args[i + 1];
+      i++;
+    } else if (args[i] === '--workspace-id' && args[i + 1]) {
+      workspaceId = args[i + 1];
       i++;
     } else if (args[i] === '--callback-port' && args[i + 1]) {
       callbackPort = args[i + 1];
@@ -498,6 +538,7 @@ async function main() {
     sessionId,
     workspaceRootPath,
     plansFolderPath,
+    workspaceId,
     // CLI arg takes priority, env var as fallback (Copilot CLI may not forward env to subprocesses)
     callbackPort: callbackPort || process.env.CRAFT_LLM_CALLBACK_PORT,
   };

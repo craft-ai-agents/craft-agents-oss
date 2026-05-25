@@ -19,6 +19,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.outputs.SAVE_VISUAL_BOARD,
   RPC_CHANNELS.outputs.APPLY_VISUAL_SURFACE_EVENT,
   RPC_CHANNELS.outputs.LIST_VISUAL_SURFACE_EVENTS,
+  RPC_CHANNELS.outputs.RECORD_VISUAL_CAPTURE,
   RPC_CHANNELS.outputs.OPEN_FILE,
   RPC_CHANNELS.outputs.SHOW_IN_FOLDER,
   RPC_CHANNELS.outputs.READ_ASSET_TEXT,
@@ -84,6 +85,7 @@ function mimeTypeForPath(path: string): string {
     png: 'image/png',
     svg: 'image/svg+xml',
     webp: 'image/webp',
+    excalidraw: 'application/vnd.excalidraw+json',
     m4v: 'video/mp4',
     mov: 'video/quicktime',
     mp4: 'video/mp4',
@@ -97,6 +99,7 @@ function mimeTypeForPath(path: string): string {
     json: 'application/json',
     md: 'text/markdown',
     markdown: 'text/markdown',
+    pdf: 'application/pdf',
     txt: 'text/plain',
   };
   return mimeMap[ext] ?? 'application/octet-stream';
@@ -163,6 +166,14 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
     async (_ctx, workspaceId: string, sessionId: string): Promise<VisualSurfaceEventRecord[]> => {
       assertLocalWorkspace(workspaceId, 'List visual surface events');
       return serviceFor(server).listVisualSurfaceEvents(workspaceId, sessionId);
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.RECORD_VISUAL_CAPTURE,
+    async (_ctx, input: Parameters<OutputService['recordVisualCapture']>[0]): Promise<ReturnType<OutputService['recordVisualCapture']>> => {
+      assertLocalWorkspace(input.workspaceId, 'Record visual capture');
+      return serviceFor(server).recordVisualCapture(input);
     },
   );
 

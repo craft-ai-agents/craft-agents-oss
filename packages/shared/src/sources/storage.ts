@@ -474,7 +474,7 @@ export function isSourceUsable(source: LoadedSource): boolean {
 /**
  * Get sources by slugs for a workspace.
  * Includes both user-configured sources from disk and builtin sources
- * (like craft-agents-docs) that don't have filesystem folders.
+ * (like runner-docs) that don't have filesystem folders.
  */
 export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): LoadedSource[] {
   const workspaceId = basename(workspaceRootPath);
@@ -503,7 +503,7 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
         sources.push({ ...getComputerUseSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'field-theory') {
         sources.push({ ...getFieldTheorySource(workspaceId, workspaceRootPath), tier: 'project' });
-      } else if (slug === 'craft-agents-docs') {
+      } else if (slug === 'runner-docs') {
         sources.push({ ...getDocsSource(workspaceId, workspaceRootPath), tier: 'project' });
       }
     }
@@ -1108,7 +1108,7 @@ export async function createSource(
   }
 
   // Create guide.md with skeleton template
-  // (bundled guides removed - agent should search craft-agents-docs MCP for service-specific guidance)
+  // (bundled guides removed - agent should search runner-docs MCP for service-specific guidance)
   const guideContent = `# ${input.name}
 
 ## Guidelines

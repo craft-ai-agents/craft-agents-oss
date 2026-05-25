@@ -157,27 +157,27 @@ export function getFieldTheorySource(workspaceId: string, workspaceRootPath: str
 }
 
 /**
- * Get the built-in Craft Agents docs source.
+ * Get the built-in Runner docs source.
  *
- * @deprecated craft-agents-docs is now an always-available MCP server
+ * @deprecated docs are now provided by an optional configured MCP server
  * configured directly in craft-agent.ts. This function is kept for
  * backwards compatibility but returns a placeholder.
  */
 export function getDocsSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
   // Return a placeholder - this shouldn't be called anymore
   const placeholderConfig: FolderSourceConfig = {
-    id: 'builtin-craft-agents-docs',
-    name: 'Craft Agents Docs',
-    slug: 'craft-agents-docs',
+    id: 'builtin-runner-docs',
+    name: 'Runner Docs',
+    slug: 'runner-docs',
     enabled: false,
     provider: 'mintlify',
     type: 'mcp',
     mcp: {
       transport: 'http',
-      url: 'https://agents.craft.do/docs/mcp',
+      url: process.env.RUNNER_DOCS_MCP_URL?.trim() || '',
       authType: 'none',
     },
-    tagline: 'Search Craft Agents documentation and source setup guides',
+    tagline: 'Search Runner documentation and source setup guides',
     icon: '📚',
     isAuthenticated: true,
     connectionStatus: 'connected',

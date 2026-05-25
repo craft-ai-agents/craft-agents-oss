@@ -1,11 +1,21 @@
 import * as React from 'react'
-import { AlertTriangle, ExternalLink, FileText, Link2, ReceiptText } from 'lucide-react'
+import { AlertTriangle, ExternalLink, FileText, Link2, Presentation, ReceiptText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { StreamingMarkdown } from '@/components/markdown'
 import { ShikiCodeViewer } from '@/components/shiki/ShikiCodeViewer'
 import { OutputWebPreview } from './OutputWebPreview'
 import { resolveWebPreviewTarget } from './web-preview'
+import { resolvePresentationPreviewAsset } from './presentation-preview'
+import { parseDelimitedTablePreview } from './table-preview'
+import { buildRunnerOutputAssetUrl } from '@craft-agent/shared/outputs/web-preview'
 import type { OutputAssetDTO, OutputManifestDTO, OutputPreviewMode } from '@/hooks/useOutputs'
+
+const OutputModelPreview = React.lazy(() => import('./OutputModelPreview').then((module) => ({ default: module.OutputModelPreview })))
+const OutputExcalidrawPreview = React.lazy(() => import('./OutputExcalidrawPreview').then((module) => ({ default: module.OutputExcalidrawPreview })))
+const OutputChartPreview = React.lazy(() => import('./chart-preview').then((module) => ({ default: module.OutputChartPreview })))
+const OutputWorkflowPreview = React.lazy(() => import('./workflow-preview').then((module) => ({ default: module.OutputWorkflowPreview })))
+
+export type OutputPreviewSettledHandler = (status: 'ready' | 'error') => void
 
 interface OutputInlinePreviewProps {
   workspaceId: string
@@ -13,6 +23,7 @@ interface OutputInlinePreviewProps {
   primary?: OutputAssetDTO
   className?: string
   compact?: boolean
+  onPreviewSettled?: OutputPreviewSettledHandler
 }
 
 type OutputsElectronAPI = typeof window.electronAPI & {
@@ -26,19 +37,29 @@ export function OutputInlinePreview({
   primary,
   className,
   compact = false,
+  onPreviewSettled,
 }: OutputInlinePreviewProps) {
   const previewAsset = resolvePreviewAsset(manifest, primary)
   const mode = manifest.preview?.mode ?? inferPreviewMode(previewAsset)
+  const presentationPreviewAsset = mode === 'presentation'
+    ? resolvePresentationPreviewAsset(manifest, previewAsset, inferPreviewMode)
+    : undefined
   const blockedWebPreviewOrigins = React.useMemo(() => getBlockedWebPreviewOrigins(), [])
   const webPreviewTarget = resolveWebPreviewTarget(manifest, { blockedOrigins: blockedWebPreviewOrigins })
   const inlineText = manifest.preview?.inlineText ?? null
   const assetId = manifest.preview?.assetId ?? previewAsset?.id
   const shouldReadAssetData = Boolean(assetId && (mode === 'image' || mode === 'video' || mode === 'audio'))
-  const shouldReadAssetText = Boolean(assetId && (mode === 'markdown' || mode === 'text' || mode === 'json' || mode === 'receipt'))
+  const shouldReadAssetText = Boolean(assetId && (mode === 'markdown' || mode === 'text' || mode === 'json' || mode === 'receipt' || mode === 'excalidraw' || mode === 'table' || mode === 'chart' || mode === 'workflow'))
   const [content, setContent] = React.useState<string | null>(shouldReadAssetText ? null : inlineText)
   const [dataUrl, setDataUrl] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const electronAPI = window.electronAPI as OutputsElectronAPI
+  const hasStaticPreview = Boolean(
+    (mode === 'image' || mode === 'video' || mode === 'audio') && dataUrl
+    || (mode === 'markdown' || mode === 'json' || mode === 'text' || mode === 'receipt' || mode === 'table' || mode === 'chart' || mode === 'workflow') && content !== null
+    || mode === 'receipt' && manifest.receipts.length > 0
+    || (mode === 'external-link' || mode === 'web' || manifest.links.length > 0) && manifest.links[0],
+  )
 
   React.useEffect(() => {
     setContent(shouldReadAssetText ? null : inlineText)
@@ -79,6 +100,21 @@ export function OutputInlinePreview({
     return () => { mounted = false }
   }, [assetId, electronAPI, manifest.id, shouldReadAssetText, workspaceId])
 
+  React.useEffect(() => {
+    if (webPreviewTarget) return
+    if (mode === 'presentation' && !presentationPreviewAsset) {
+      onPreviewSettled?.('error')
+      return
+    }
+    if (error) {
+      onPreviewSettled?.('error')
+      return
+    }
+    if (hasStaticPreview || (!assetId && !shouldReadAssetData && !shouldReadAssetText)) {
+      onPreviewSettled?.('ready')
+    }
+  }, [assetId, error, hasStaticPreview, mode, onPreviewSettled, presentationPreviewAsset, shouldReadAssetData, shouldReadAssetText, webPreviewTarget])
+
   if (error) {
     return (
       <EmptyPreview className={className}>
@@ -91,7 +127,12 @@ export function OutputInlinePreview({
   if (webPreviewTarget) {
     return (
       <div className="h-full min-h-0 w-full overflow-hidden">
-        <OutputWebPreview target={webPreviewTarget} className="h-full min-h-0" />
+        <OutputWebPreview
+          target={webPreviewTarget}
+          refreshKey={`${manifest.updatedAt}:${previewAsset?.id ?? ''}:${previewAsset?.path ?? ''}`}
+          className="h-full min-h-0"
+          onPreviewSettled={onPreviewSettled}
+        />
       </div>
     )
   }
@@ -124,6 +165,85 @@ export function OutputInlinePreview({
     )
   }
 
+  if (mode === 'model' && previewAsset) {
+    return (
+      <React.Suspense fallback={<EmptyPreview className={className}><span>Loading model viewer...</span></EmptyPreview>}>
+        <OutputModelPreview
+          url={buildRunnerOutputAssetUrl(workspaceId, manifest.id, previewAsset.path)}
+          label={previewAsset.label ?? manifest.title}
+          className={className}
+          onPreviewSettled={onPreviewSettled}
+        />
+      </React.Suspense>
+    )
+  }
+
+  if (mode === 'pdf' && previewAsset) {
+    return (
+      <div className={className ?? 'h-full min-h-[420px] w-full overflow-hidden rounded-md bg-black'}>
+        <iframe
+          src={buildRunnerOutputAssetUrl(workspaceId, manifest.id, previewAsset.path)}
+          title={previewAsset.label ?? manifest.title}
+          className="h-full min-h-[420px] w-full border-0 bg-black"
+          onLoad={() => onPreviewSettled?.('ready')}
+        />
+      </div>
+    )
+  }
+
+  if (mode === 'excalidraw' && content) {
+    return (
+      <React.Suspense fallback={<EmptyPreview className={className}><span>Loading Excalidraw preview...</span></EmptyPreview>}>
+        <OutputExcalidrawPreview
+          content={content}
+          label={previewAsset?.label ?? manifest.title}
+          className={className}
+          onPreviewSettled={onPreviewSettled}
+        />
+      </React.Suspense>
+    )
+  }
+
+  if (mode === 'presentation') {
+    const renderedAsset = presentationPreviewAsset
+    if (renderedAsset) {
+      const renderedMode = inferPreviewMode(renderedAsset)
+      const renderedUrl = buildRunnerOutputAssetUrl(workspaceId, manifest.id, renderedAsset.path)
+      if (renderedMode === 'pdf') {
+        return (
+          <div className={className ?? 'h-full min-h-[420px] w-full overflow-hidden rounded-md bg-black'}>
+            <iframe
+              src={renderedUrl}
+              title={renderedAsset.label ?? manifest.title}
+              className="h-full min-h-[420px] w-full border-0 bg-black"
+              onLoad={() => onPreviewSettled?.('ready')}
+            />
+          </div>
+        )
+      }
+      if (renderedMode === 'image') {
+        return (
+          <div className={className ?? 'flex h-full min-h-0 w-full items-center justify-center overflow-hidden rounded-md bg-black'}>
+            <img
+              src={renderedUrl}
+              alt={renderedAsset.label ?? manifest.title}
+              className="max-h-full w-full object-contain"
+              onLoad={() => onPreviewSettled?.('ready')}
+              onError={() => onPreviewSettled?.('error')}
+            />
+          </div>
+        )
+      }
+    }
+
+    return (
+      <EmptyPreview className={className}>
+        <Presentation className="h-4 w-4" />
+        <span>Deck preview needs an HTML, PDF, or image preview asset.</span>
+      </EmptyPreview>
+    )
+  }
+
   if (mode === 'markdown' && content) {
     return (
       <div className={className}>
@@ -141,6 +261,42 @@ export function OutputInlinePreview({
         language="json"
         className={className ?? 'max-h-[520px] overflow-auto rounded-[13px] border border-white/[0.08]'}
       />
+    )
+  }
+
+  if (mode === 'table' && content) {
+    return (
+      <TablePreview
+        content={content}
+        asset={previewAsset}
+        className={className}
+      />
+    )
+  }
+
+  if (mode === 'chart' && content) {
+    return (
+      <React.Suspense fallback={<EmptyPreview className={className}><span>Loading chart preview...</span></EmptyPreview>}>
+        <OutputChartPreview
+          content={content}
+          label={previewAsset?.label ?? manifest.title}
+          className={className}
+          onPreviewSettled={onPreviewSettled}
+        />
+      </React.Suspense>
+    )
+  }
+
+  if (mode === 'workflow' && content) {
+    return (
+      <React.Suspense fallback={<EmptyPreview className={className}><span>Loading workflow preview...</span></EmptyPreview>}>
+        <OutputWorkflowPreview
+          content={content}
+          label={previewAsset?.label ?? manifest.title}
+          className={className}
+          onPreviewSettled={onPreviewSettled}
+        />
+      </React.Suspense>
     )
   }
 
@@ -202,11 +358,44 @@ function inferPreviewMode(asset?: OutputAssetDTO): OutputPreviewMode {
   const mime = asset?.mimeType ?? ''
   const path = asset?.path.toLowerCase() ?? ''
   if (mime.includes('markdown') || path.endsWith('.md') || path.endsWith('.markdown')) return 'markdown'
+  if (isWorkflowAsset(asset)) return 'workflow'
+  if (isChartAsset(asset)) return 'chart'
   if (mime.includes('json') || path.endsWith('.json')) return 'json'
   if (mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|avif|svg)$/.test(path)) return 'image'
   if (mime.startsWith('video/') || /\.(mp4|mov|webm|m4v)$/.test(path)) return 'video'
   if (mime.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)$/.test(path)) return 'audio'
+  if (mime === 'model/gltf-binary' || mime === 'model/gltf+json' || /\.(glb|gltf)$/.test(path)) return 'model'
+  if (mime === 'application/pdf' || path.endsWith('.pdf')) return 'pdf'
+  if (mime === 'application/vnd.excalidraw+json' || path.endsWith('.excalidraw')) return 'excalidraw'
+  if (isPresentationAsset(asset)) return 'presentation'
+  if (mime === 'text/csv' || mime === 'text/tab-separated-values' || /\.(csv|tsv)$/.test(path)) return 'table'
   return 'text'
+}
+
+function isChartAsset(asset?: OutputAssetDTO): boolean {
+  const mime = asset?.mimeType ?? ''
+  const path = asset?.path.toLowerCase() ?? ''
+  return mime === 'application/vnd.runneros.chart+json'
+    || mime === 'application/vnd.vega.v5+json'
+    || mime === 'application/vnd.vegalite.v5+json'
+    || /\.(chart|vega|vegalite)\.json$/.test(path)
+}
+
+function isWorkflowAsset(asset?: OutputAssetDTO): boolean {
+  const mime = asset?.mimeType ?? ''
+  const path = asset?.path.toLowerCase() ?? ''
+  return mime === 'application/vnd.runneros.workflow+json'
+    || mime === 'application/vnd.runneros.workflow-run+json'
+    || /\.workflow(?:-run)?\.json$/.test(path)
+}
+
+function isPresentationAsset(asset?: OutputAssetDTO): boolean {
+  const mime = asset?.mimeType ?? ''
+  const path = asset?.path.toLowerCase() ?? ''
+  return mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    || mime === 'application/vnd.ms-powerpoint'
+    || mime === 'application/vnd.oasis.opendocument.presentation'
+    || /\.(pptx?|odp)$/.test(path)
 }
 
 function formatJson(content: string): string {
@@ -221,6 +410,54 @@ function EmptyPreview({ children, className }: { children: React.ReactNode; clas
   return (
     <div className={className ?? 'runneros-card flex items-center gap-2 px-3 py-2 text-sm text-white/45'}>
       {children}
+    </div>
+  )
+}
+
+function TablePreview({ content, asset, className }: { content: string; asset?: OutputAssetDTO; className?: string }) {
+  const table = parseDelimitedTablePreview(content, asset?.path, asset?.mimeType)
+  if (table.rows.length === 0) {
+    return (
+      <EmptyPreview className={className}>
+        <FileText className="h-4 w-4" />
+        <span>Table is empty</span>
+      </EmptyPreview>
+    )
+  }
+
+  const [header, ...bodyRows] = table.rows
+  return (
+    <div className={className ?? 'h-full min-h-[320px] w-full overflow-hidden rounded-md'}>
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md border border-white/[0.08] bg-black/65 text-left">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/[0.08] px-3 py-2 text-xs text-white/48">
+          <span className="truncate">{asset?.label ?? 'Table preview'}</span>
+          <span>{table.rows.length.toLocaleString()} rows{table.truncated ? '+' : ''}</span>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="min-w-full border-separate border-spacing-0 text-xs">
+            <thead className="sticky top-0 z-[1] bg-zinc-950">
+              <tr>
+                {header.map((cell, index) => (
+                  <th key={index} className="max-w-64 border-b border-r border-white/[0.08] px-2 py-1.5 text-left font-medium text-white/72">
+                    <span className="block truncate">{cell || `Column ${index + 1}`}</span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {bodyRows.map((row, rowIndex) => (
+                <tr key={rowIndex} className="odd:bg-white/[0.025]">
+                  {header.map((_, columnIndex) => (
+                    <td key={columnIndex} className="max-w-64 border-b border-r border-white/[0.055] px-2 py-1.5 text-white/64">
+                      <span className="block truncate">{row[columnIndex] ?? ''}</span>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }

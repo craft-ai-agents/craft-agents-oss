@@ -322,7 +322,7 @@ export function TopBar({
                 {t("menu.help")}
               </StyledDropdownMenuSubTrigger>
               <StyledDropdownMenuSubContent>
-                <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
+                <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://github.com/findmikeymike/RunnerOS')}>
                   <Icons.HelpCircle className="h-3.5 w-3.5" />
                   {t("menu.helpAndDocs")}
                   <Icons.ExternalLink className="h-3 w-3 ml-auto text-muted-foreground" />
@@ -366,7 +366,7 @@ export function TopBar({
 
             <StyledDropdownMenuItem onClick={() => window.electronAPI.menuQuit()}>
               <Icons.LogOut className="h-3.5 w-3.5" />
-              {t("menu.quitCraftAgents")}
+              {t("menu.quitRunner")}
               {quitHotkey && <DropdownMenuShortcut className="pl-6">{quitHotkey}</DropdownMenuShortcut>}
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
@@ -491,7 +491,7 @@ export function TopBar({
               <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
             </StyledDropdownMenuItem>
             <StyledDropdownMenuSeparator />
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
+            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://github.com/findmikeymike/RunnerOS')}>
               <Icons.ExternalLink className="h-3.5 w-3.5" />
               <span className="flex-1">{t("menu.allDocumentation")}</span>
             </StyledDropdownMenuItem>

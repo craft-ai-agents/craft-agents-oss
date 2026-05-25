@@ -14,12 +14,32 @@ export type {
 } from './types.ts';
 
 export {
+  OUTPUT_SHOW_IN_CANVAS_TAG,
+} from './constants.ts';
+
+export {
   summarizeOutputContent,
   deriveOutputSummaryFallback,
   inferPreviewMode,
   previewModeForMimeType,
   toOutputSummary,
 } from './preview.ts';
+
+export {
+  RUNNER_OUTPUT_SCHEME,
+  buildRunnerOutputAssetUrl,
+  isLocalWebPreviewUrl,
+  normalizeLocalWebHostname,
+  parseRunnerOutputAssetUrl,
+  resolveGeneratedHtmlPreviewTarget,
+  resolveLocalWebPreviewTarget,
+} from './web-preview.ts';
+
+export type {
+  WebPreviewAssetLike,
+  LocalWebPreviewTarget,
+  WebPreviewPolicyOptions,
+} from './web-preview.ts';
 
 export {
   assertOutputManifest,

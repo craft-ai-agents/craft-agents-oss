@@ -1,26 +1,26 @@
-# Craft Agents
+# Runner
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
 ## How it Works (Video)
-To understand what Craft Agents does and how it works watch this video.
+To understand what Runner does and how it works watch this video.
 
 [![Demo Video](https://img.youtube.com/vi/xQouiAIilvU/hqdefault.jpg)](https://www.youtube.com/watch?v=xQouiAIilvU)
 
 [Click Here (or on the image above) to watch the video on YouTube →](https://www.youtube.com/watch?v=xQouiAIilvU)
 
 
-## Why Craft Agents was built
-Craft Agents is a tool we built so that we (at craft.do) can work effectively with agents. It enables intuitive multitasking, no-fluff connection to any API or Service, sharing sessions, and a more document (vs code) centric workflow - in a beautiful and fluid UI.
+## Why Runner was built
+Runner is a tool for working effectively with agents. It enables intuitive multitasking, no-fluff connection to any API or service, sharing sessions, and a more document-centric workflow in a beautiful and fluid UI.
 
 It uses the Claude Agent SDK and the Pi SDK side by side—building on what we found great and improving areas where we've desired improvements.
 
 It's built with Agent Native software principles in mind, and is highly customisable out of the box. One of the first of its kind.
 
-Craft Agents is open source under the Apache 2.0 license - so you are free to remix, change anything. And that's actually possible. We ourselves are building Craft Agents with Craft Agents only - no code editors - so really, any customisation is just a prompt away.
+Runner is open source under the Apache 2.0 license - so you are free to remix, change anything. And that's actually possible. We ourselves are building Runner with Runner only - no code editors - so really, any customisation is just a prompt away.
 
-We built Craft Agents because we wanted a better, more opinionated (and preferably non-CLI way) of working with the most powerful agents in the world. We'll continue to improve it, based on our experiences and intuition.
+We built Runner because we wanted a better, more opinionated (and preferably non-CLI way) of working with the most powerful agents in the world. We'll continue to improve it, based on our experiences and intuition.
 
 <img width="1578" height="894" alt="image" src="https://github.com/user-attachments/assets/3f1f2fe8-7cf6-4487-99ff-76f6c8c0a3fb" />
 
@@ -29,7 +29,7 @@ We built Craft Agents because we wanted a better, more opinionated (and preferab
 **How do I connect to Linear, Gmail, Slack...?**
 Tell the agent "add Linear as a source." It finds public APIs and MCP servers, reads their docs, sets up credentials, and configures everything. No config files, no setup wizards.
 
-[Check out how I just connected to Slack →](https://agents.craft.do/s/DRNQEiy8w2e1v5LPgKl8b)
+[Check out how I just connected to Slack →](https://github.com/findmikeymike/RunnerOS)
 
 **I already have my MCP config JSON.**
 Paste it. The agent handles the rest.
@@ -41,12 +41,12 @@ Fully supported. Stdio-based MCP servers run as local subprocesses on your machi
 Yes. Paste an OpenAPI spec, some endpoint URLs, screenshots of docs, whatever you have. It figures it out and guides you through the rest.
 
 **APIs too? Not just MCPs?**
-Craft Agents connects to anything. We have it hooked up to a direct Postgres DB behind a jumpbox. Skills + Sources = magic.
+Runner connects to anything. We have it hooked up to a direct Postgres DB behind a jumpbox. Skills + Sources = magic.
 
 **How do I import my Claude Code skills and MCPs?**
 Tell the agent you want to import your skills from Claude Code. It handles the migration.
 
-[Here I imported all my skills in one go →](https://agents.craft.do/s/gWCFqwhObFWaNJIEJmd6j)
+[Here I imported all my skills in one go →](https://github.com/findmikeymike/RunnerOS)
 
 **How do I create a new skill?**
 Describe what the skill should do, give it context. The agent takes care of the rest.
@@ -64,19 +64,19 @@ Yes. That's the core idea behind agent-native software. You describe what you wa
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://agents.craft.do/install-app.sh | bash
+curl -fsSL https://github.com/findmikeymike/RunnerOS | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://agents.craft.do/install-app.ps1 | iex
+irm https://github.com/findmikeymike/RunnerOS | iex
 ```
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/lukilabs/craft-agents-oss.git
-cd craft-agents-oss
+git clone https://github.com/findmikeymike/RunnerOS.git
+cd RunnerOS
 bun install
 bun run electron:start
 ```
@@ -132,11 +132,11 @@ Computer Use lets agents observe and control desktop apps through a local MCP so
 
 On macOS:
 
-1. Install and launch Craft Agents.
-2. Open **System Settings → Privacy & Security → Accessibility** and enable Craft Agents/Electron.
-3. Open **System Settings → Privacy & Security → Screen & System Audio Recording** and enable Craft Agents/Electron.
-4. Restart Craft Agents after changing permissions.
-5. In Craft Agents, open **Library → Tools** and confirm **Computer Use** is available.
+1. Install and launch Runner.
+2. Open **System Settings → Privacy & Security → Accessibility** and enable Runner/Electron.
+3. Open **System Settings → Privacy & Security → Screen & System Audio Recording** and enable Runner/Electron.
+4. Restart Runner after changing permissions.
+5. In Runner, open **Library → Tools** and confirm **Computer Use** is available.
 6. When creating or editing an agent, attach **Computer Use** under **Sources**.
 
 If the tool does not appear, verify local MCP servers are enabled in Settings and restart the app. Browser automation is separate: use Browser Use or a browser/CDP MCP source when the task only needs web browsing, not full desktop control.
@@ -164,7 +164,7 @@ Use **SHIFT+TAB** to cycle through modes in the chat interface.
 
 ## Remote Server (Headless)
 
-Craft Agents can run as a headless server on a remote machine (e.g., a Linux VPS), with the desktop app connecting as a thin client. This lets you keep long-running sessions alive, access them from multiple machines, and run compute-heavy tasks on a powerful server.
+Runner can run as a headless server on a remote machine (e.g., a Linux VPS), with the desktop app connecting as a thin client. This lets you keep long-running sessions alive, access them from multiple machines, and run compute-heavy tasks on a powerful server.
 
 ### Quick Start
 
@@ -239,7 +239,7 @@ docker run -d \
   -e CRAFT_SERVER_TOKEN=<token> \
   -e CRAFT_RPC_HOST=0.0.0.0 \
   -v craft-data:/root/.craft-agent \
-  craft-agents-server
+  craft-agent-server
 ```
 
 To enable TLS in Docker, mount your certificates and set the env vars:
@@ -253,12 +253,12 @@ docker run -d \
   -e CRAFT_RPC_TLS_KEY=/certs/key.pem \
   -v ./certs:/certs:ro \
   -v craft-data:/root/.craft-agent \
-  craft-agents-server
+  craft-agent-server
 ```
 
 ## CLI Client
 
-A terminal client that connects to a running Craft Agent server over WebSocket (`ws://` or `wss://`). Use it for scripting, CI/CD pipelines, server validation, or when you prefer the command line.
+A terminal client that connects to a running Runner server over WebSocket (`ws://` or `wss://`). Use it for scripting, CI/CD pipelines, server validation, or when you prefer the command line.
 
 ### Installation
 
@@ -429,7 +429,7 @@ Go to **APIs & Services → Library** and enable the APIs you need:
 1. Go to **APIs & Services → OAuth consent screen**
 2. Select **External** user type (unless you have Google Workspace)
 3. Fill in required fields:
-   - App name: e.g., "My Craft Agent"
+   - App name: e.g., "My Runner"
    - User support email: your email
    - Developer contact: your email
 4. Add scopes (optional - can leave default)
@@ -441,11 +441,11 @@ Go to **APIs & Services → Library** and enable the APIs you need:
 1. Go to **APIs & Services → Credentials**
 2. Click **Create Credentials → OAuth Client ID**
 3. Application type: **Desktop app**
-4. Name: e.g., "Craft Agent Desktop"
+4. Name: e.g., "Runner Desktop"
 5. Click **Create**
 6. Note the **Client ID** and **Client Secret**
 
-#### 5. Configure in Craft Agent
+#### 5. Configure in Runner
 
 When setting up a Google source (Gmail, Calendar, Drive, YouTube, Search Console, etc.), add these fields to your source's `config.json`:
 
@@ -469,7 +469,7 @@ Or simply tell the agent you want to connect Gmail/Calendar/Drive - it will guid
 
 ## Supported LLM Providers
 
-Craft Agents supports multiple ways to connect to LLM providers:
+Runner supports multiple ways to connect to LLM providers:
 
 ### Direct Connections
 
@@ -493,7 +493,7 @@ Additional providers are supported through the **Claude / Anthropic API Key** co
 
 ### Architecture
 
-Craft Agents uses two agent backends:
+Runner uses two agent backends:
 
 - **Claude** — powered by the [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk), which natively supports custom base URLs and provider routing. Anthropic API key, Claude Max/Pro OAuth, and all third-party endpoints use this backend.
 - **Pi** — powered by the Pi SDK, which handles Google AI Studio, ChatGPT Plus (Codex OAuth), GitHub Copilot OAuth, and OpenAI API key connections. Pi connections route through their own provider infrastructure.
@@ -561,7 +561,7 @@ Or configure manually in `~/.craft-agent/workspaces/{id}/automations.json`:
 
 **Supported events:** `LabelAdd`, `LabelRemove`, `PermissionModeChange`, `FlagChange`, `SessionStatusChange`, `SchedulerTick`, `PreToolUse`, `PostToolUse`, `SessionStart`, `SessionEnd`, and more.
 
-See the [Automations documentation](https://agents.craft.do/docs/automations/overview) for the full reference.
+See the [Automations documentation](https://github.com/findmikeymike/RunnerOS/tree/main/docs) for the full reference.
 
 ## Advanced Features
 
@@ -606,12 +606,12 @@ To launch the packaged app with verbose logging enabled, use `-- --debug` (note 
 
 **Windows (PowerShell):**
 ```powershell
-& "$env:LOCALAPPDATA\Programs\@craft-agentelectron\Craft Agents.exe" -- --debug
+& "$env:LOCALAPPDATA\Programs\@craft-agentelectron\Runner.exe" -- --debug
 ```
 
 **Linux:**
 ```bash
-./craft-agents -- --debug
+./craft-agent -- --debug
 ```
 
 Logs are written to:
@@ -629,7 +629,7 @@ This project uses the [Claude Agent SDK](https://www.npmjs.com/package/@anthropi
 
 ### Trademark
 
-"Craft" and "Craft Agents" are trademarks of Craft Docs Ltd. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
+"Craft" and "Runner" are trademarks of Craft Docs Ltd. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
 
 ## Contributing
 

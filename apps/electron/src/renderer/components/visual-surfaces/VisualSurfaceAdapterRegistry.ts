@@ -1,5 +1,6 @@
 import { VISUAL_BOARD_TAG } from '@craft-agent/shared/visual-board'
 import type { VisualSurface, VisualSurfaceKind } from '@craft-agent/shared/visual-surfaces'
+import { resolveWebPreviewTarget } from '@/components/outputs/web-preview'
 import type { OutputManifestDTO, OutputSummaryDTO } from '@/hooks/useOutputs'
 
 export interface VisualSurfaceAdapterCapabilities {
@@ -20,6 +21,7 @@ export interface VisualSurfaceAdapterContext {
   boardOutput?: OutputSummaryDTO
   manifestError: string | null
   onOpenOutput: (output: OutputSummaryDTO) => void
+  onPreviewSettled?: (status: 'ready' | 'error') => void
 }
 
 export interface VisualSurfaceAdapterDescriptor {
@@ -48,6 +50,19 @@ export const visualSurfaceAdapterDescriptors: VisualSurfaceAdapterDescriptor[] =
         && (context.surface.kind === 'canvas' || selectedBoard)
         && (!context.selectedOutputId || selectedBoard)
     },
+  },
+  {
+    id: 'browser-preview',
+    label: 'Browser preview',
+    kinds: ['browser', 'output'],
+    capabilities: {
+      canRefresh: true,
+      canOpenExternal: true,
+      canSendToCanvas: true,
+      canInspect: true,
+      agentControllable: false,
+    },
+    canRender: (context) => !!context.selectedManifest && !!resolveWebPreviewTarget(context.selectedManifest),
   },
   {
     id: 'output-preview',

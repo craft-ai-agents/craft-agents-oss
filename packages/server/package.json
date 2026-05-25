@@ -1,7 +1,7 @@
 {
   "name": "@craft-agent/server",
   "version": "0.8.13",
-  "description": "Standalone headless Craft Agent server (Bun runtime)",
+  "description": "Standalone headless Runner server (Bun runtime)",
   "type": "module",
   "main": "src/index.ts",
   "bin": {
@@ -18,7 +18,7 @@
     "email": "support@craft.do"
   },
   "license": "Apache-2.0",
-  "homepage": "https://agents.craft.do",
+  "homepage": "https://github.com/findmikeymike/RunnerOS",
   "scripts": {
     "start": "bun run src/index.ts",
     "generate-token": "bun run src/index.ts --generate-token",

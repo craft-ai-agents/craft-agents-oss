@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import type { OutputManifestDTO } from '@/hooks/useOutputs'
 import { isLocalWebPreviewUrl, resolveWebPreviewTarget } from '../web-preview'
+import { isGeneratedOutputPreviewUrl } from '../OutputWebPreview'
+import { buildRunnerOutputAssetUrl, parseRunnerOutputAssetUrl } from '@craft-agent/shared/outputs'
 
 function manifest(url: string, mode: 'external-link' | 'web' = 'external-link'): OutputManifestDTO {
   return {
@@ -17,6 +19,38 @@ function manifest(url: string, mode: 'external-link' | 'web' = 'external-link'):
     receipts: [],
     links: [{ id: 'link-1', label: 'Local preview', url, role: 'primary' }],
     preview: { mode },
+  }
+}
+
+function htmlAssetManifest(overrides: Partial<OutputManifestDTO> = {}): OutputManifestDTO {
+  return {
+    id: 'output-html',
+    workspaceId: 'workspace-1',
+    title: 'Generated page',
+    kind: 'code',
+    status: 'published',
+    summary: 'HTML preview',
+    createdAt: '2026-05-22T00:00:00.000Z',
+    updatedAt: '2026-05-22T00:00:00.000Z',
+    origin: { source: 'session', sessionId: 'session-1' },
+    primary: {
+      id: 'index',
+      label: 'index.html',
+      role: 'primary',
+      path: 'site/index.html',
+      mimeType: 'text/html',
+    },
+    assets: [{
+      id: 'index',
+      label: 'index.html',
+      role: 'primary',
+      path: 'site/index.html',
+      mimeType: 'text/html',
+    }],
+    receipts: [],
+    links: [],
+    preview: { mode: 'web', assetId: 'index' },
+    ...overrides,
   }
 }
 
@@ -102,5 +136,112 @@ describe('web preview target resolution', () => {
     expect(resolveWebPreviewTarget(manifest('http://localhost:5173/'), {
       blockedOrigins: ['http://localhost:5173'],
     })).toBeNull()
+  })
+
+  test('resolves generated HTML assets to runner-output protocol previews', () => {
+    expect(resolveWebPreviewTarget(htmlAssetManifest())).toEqual({
+      url: 'runner-output://asset/workspace-1/output-html/site/index.html',
+      label: 'index.html',
+      displayHost: 'generated output',
+    })
+  })
+
+  test('resolves generated HTML assets without explicit web preview mode', () => {
+    expect(resolveWebPreviewTarget(htmlAssetManifest({
+      preview: undefined,
+    }))).toEqual({
+      url: 'runner-output://asset/workspace-1/output-html/site/index.html',
+      label: 'index.html',
+      displayHost: 'generated output',
+    })
+  })
+
+  test('does not override generated HTML assets with a non-web explicit preview mode', () => {
+    expect(resolveWebPreviewTarget(htmlAssetManifest({
+      preview: { mode: 'markdown', assetId: 'index' },
+    }))).toBeNull()
+  })
+
+  test('allows presentation outputs to use a generated HTML deck preview asset', () => {
+    expect(resolveWebPreviewTarget(htmlAssetManifest({
+      preview: { mode: 'presentation', assetId: 'deck' },
+      primary: {
+        id: 'deck',
+        label: 'deck.pptx',
+        role: 'primary',
+        path: 'deck.pptx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      },
+      assets: [
+        {
+          id: 'deck',
+          label: 'deck.pptx',
+          role: 'primary',
+          path: 'deck.pptx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        },
+        {
+          id: 'html-preview',
+          label: 'Deck preview',
+          role: 'supporting',
+          path: 'site/index.html',
+          mimeType: 'text/html',
+        },
+      ],
+    }))).toEqual({
+      url: 'runner-output://asset/workspace-1/output-html/site/index.html',
+      label: 'Deck preview',
+      displayHost: 'generated output',
+    })
+  })
+
+  test('blocks unsafe generated HTML asset paths', () => {
+    expect(resolveWebPreviewTarget(htmlAssetManifest({
+      primary: {
+        id: 'index',
+        label: 'index.html',
+        role: 'primary',
+        path: '../index.html',
+        mimeType: 'text/html',
+      },
+      assets: [{
+        id: 'index',
+        label: 'index.html',
+        role: 'primary',
+        path: '../index.html',
+        mimeType: 'text/html',
+      }],
+    }))).toBeNull()
+  })
+})
+
+describe('runner-output URL helpers', () => {
+  test('identifies generated output preview URLs for private-protocol handling', () => {
+    expect(isGeneratedOutputPreviewUrl('runner-output://asset/workspace-1/output-1/site/index.html')).toBe(true)
+    expect(isGeneratedOutputPreviewUrl('http://localhost:4187/index.html')).toBe(false)
+  })
+
+  test('round trips safe output asset URLs', () => {
+    const url = buildRunnerOutputAssetUrl('workspace 1', 'output-1', 'site/my page.html')
+    expect(url).toBe('runner-output://asset/workspace%201/output-1/site/my%20page.html')
+    expect(parseRunnerOutputAssetUrl(url)).toEqual({
+      workspaceId: 'workspace 1',
+      outputId: 'output-1',
+      assetPath: 'site/my page.html',
+    })
+  })
+
+  test('round trips absolute workspace output asset URLs for legacy session outputs', () => {
+    const url = buildRunnerOutputAssetUrl('workspace-1', 'output-1', '/Users/michael/workspace/sessions/session-1/data/index.html')
+    expect(url).toBe('runner-output://asset/workspace-1/output-1/%2FUsers%2Fmichael%2Fworkspace%2Fsessions%2Fsession-1%2Fdata%2Findex.html')
+    expect(parseRunnerOutputAssetUrl(url)).toEqual({
+      workspaceId: 'workspace-1',
+      outputId: 'output-1',
+      assetPath: '/Users/michael/workspace/sessions/session-1/data/index.html',
+    })
+  })
+
+  test('rejects traversal output asset URLs', () => {
+    expect(parseRunnerOutputAssetUrl('runner-output://asset/workspace-1/output-1/%2E%2E/secret.html')).toBeNull()
   })
 })

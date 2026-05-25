@@ -1,5 +1,8 @@
 # Phase 5A: Visual Surface Adapter Registry
 
+Status: implemented
+Last verified: 2026-05-23
+
 ## Goal
 
 Add one clean adapter layer for non-media visual surfaces so RunnerOS can support browser views, charts, workflow maps, Excalidraw/Canva-style artifacts, and TradingView-like charts without hardcoding each integration into the Canvas component.
@@ -24,9 +27,9 @@ Already present:
   - local web previews through existing Output preview policy
 - Browser-pane infrastructure already exists elsewhere in the app.
 
-Missing:
+Implemented in current branch:
 
-- One registry that maps `VisualSurfaceKind` / `OutputPreview.mode` to the correct sidecar renderer.
+- One registry that maps `VisualSurfaceKind` / selected Output manifest to the correct sidecar renderer.
 - A stable adapter interface for future tools.
 - Capability flags for whether a surface can be inspected, refreshed, opened externally, sent to Canvas, or controlled by an agent.
 - A single unsupported-surface fallback.

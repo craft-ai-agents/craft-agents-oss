@@ -1,7 +1,7 @@
 /**
  * Claude Event Adapter
  *
- * Maps Claude SDK messages (SDKMessage) to Craft Agent's AgentEvent format.
+ * Maps Claude SDK messages (SDKMessage) to Runner's AgentEvent format.
  * Extracted from ClaudeAgent.convertSDKMessage() for testability and
  * consistency with the Codex/Copilot adapter pattern.
  *

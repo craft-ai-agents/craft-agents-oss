@@ -109,18 +109,48 @@ describe('output handlers', () => {
       summary: ' A short research brief. ',
       content: '# Brief',
       contentMimeType: 'text/markdown',
+      showInCanvas: true,
     });
 
     expect(result.isError).toBe(false);
     expect(captured?.title).toBe('Research brief');
     expect(captured?.summary).toBe('A short research brief.');
+    expect(captured?.showInCanvas).toBe(true);
     expect(result.structuredContent).toEqual({
       ok: true,
       outputId: '11111111-1111-4111-8111-111111111111',
       route: '/outputs/11111111-1111-4111-8111-111111111111',
       file: '/tmp/outputs/output.json',
+      shownInCanvas: undefined,
+      canvasReceipt: undefined,
     });
     expect((result.content[0] as any).text).toContain('Created output "Research brief"');
+  });
+
+  it('create_output accepts show_in_canvas as an alias and normalizes it', async () => {
+    let captured: CreateOutputToolInput | undefined;
+    const ctx = makeCtx({
+      createOutput: async (input) => {
+        captured = input;
+        return { ok: true, shownInCanvas: true, canvasReceipt: 'Pinned output x to Canvas.' };
+      },
+    });
+
+    const result = await handleCreateOutput(ctx, {
+      title: 'Canvas brief',
+      kind: 'report',
+      summary: 'A brief for Canvas.',
+      show_in_canvas: true,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(captured?.showInCanvas).toBe(true);
+    expect(captured?.show_in_canvas).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      ok: true,
+      shownInCanvas: true,
+      canvasReceipt: 'Pinned output x to Canvas.',
+    });
   });
 
   describe('receipt occurredAt validation', () => {

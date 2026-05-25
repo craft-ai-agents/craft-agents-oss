@@ -53,6 +53,7 @@ import {
 } from './handlers/memory.ts';
 import { handleCreateOutput } from './handlers/outputs.ts';
 import { handleVisualSurface } from './handlers/visual-surface.ts';
+import { handleVisualSurfaceState } from './handlers/visual-surface-state.ts';
 import {
   handleListWorkflows,
   handleGetWorkflow,
@@ -145,7 +146,7 @@ export const UpdatePreferencesSchema = z.object({
   country: z.string().optional().describe("The user's country"),
   language: z.string().optional().describe("The user's preferred language for responses"),
   notes: z.string().optional().describe('Additional notes about the user that would be helpful to remember (preferences, context, etc.). Replaces any existing notes.'),
-  includeCoAuthoredBy: z.boolean().optional().describe("Whether to include 'Co-Authored-By: Craft Agent' trailer on git commits. Defaults to true."),
+  includeCoAuthoredBy: z.boolean().optional().describe("Whether to include 'Co-Authored-By: Runner' trailer on git commits. Defaults to true."),
 });
 
 export const TransformDataSchema = z.object({
@@ -336,6 +337,7 @@ export const CreateAgentSchema = z.object({
     thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional().describe('Reasoning depth. Default to "medium" for most agents.'),
     skills: z.array(z.string()).optional().describe('Skill slugs to bundle.'),
     sources: z.array(z.string()).optional().describe('Source slugs to bundle.'),
+    visualAgent: z.boolean().optional().describe('Set true for agents that should proactively create/pin visual, web, media, or document Outputs in Canvas.'),
     inputs: z.string().optional().describe('One sentence describing expected inputs.'),
     outputs: z.string().optional().describe('One sentence describing produced outputs.'),
     tags: z.array(z.string()).optional().describe('1-8 lowercase capability tags.'),
@@ -431,6 +433,7 @@ const OutputKindSchema = z.enum([
   'audio',
   'dataset',
   'code',
+  'model',
   'receipt',
   'external-action',
   'collection',
@@ -446,7 +449,7 @@ export const CreateOutputSchema = z.object({
   content: z.string().optional().describe('Inline output content to persist as the primary asset.'),
   contentMimeType: z.enum(['text/markdown', 'text/plain', 'application/json']).optional().describe('MIME type for inline content. Defaults backend-side when omitted.'),
   files: z.array(z.object({
-    path: z.string().min(1).describe('Path to a file that should be attached to this output.'),
+    path: z.string().min(1).describe('Path to a file that should be attached to this output. Use an absolute path inside the active workspace. Files outside the workspace must be copied into the workspace before calling this tool.'),
     label: z.string().optional(),
     role: OutputAssetRoleSchema.optional(),
   })).optional(),
@@ -465,6 +468,8 @@ export const CreateOutputSchema = z.object({
     metadata: z.record(z.string(), z.unknown()).optional(),
   })).optional(),
   tags: z.array(z.string()).optional(),
+  showInCanvas: z.boolean().optional().describe('Set true when the user should see this Output in Canvas immediately. The backend marks and pins the same-session Output when Canvas is available.'),
+  show_in_canvas: z.boolean().optional().describe('Alias for showInCanvas. Prefer showInCanvas in new calls.'),
 });
 
 export const VisualSurfaceSchema = z.object({
@@ -473,6 +478,8 @@ export const VisualSurfaceSchema = z.object({
   body: z.string().max(4000).optional().describe('Note body for add_note.'),
   outputId: z.string().optional().describe('Existing same-session Output ID for pin_output, add_image, or add_video.'),
 });
+
+export const VisualSurfaceStateSchema = z.object({});
 
 // ============================================================
 // Canonical Tool Descriptions (base — no DOC_REFS)
@@ -490,7 +497,7 @@ The plan will be displayed to the user in a special formatted view.
 - The conversation will resume when the user responds (accept, modify, or reject the plan)
 - Do NOT include any text or tool calls after SubmitPlan - they will not be executed`,
 
-  config_validate: `Validate Craft Agent configuration files.
+  config_validate: `Validate Runner configuration files.
 
 Use this after editing configuration files to check for errors before they take effect.
 Returns structured validation results with errors, warnings, and suggestions.
@@ -700,7 +707,7 @@ Optional overrides: \`model\`, \`llmConnection\`, \`permissionMode\`, \`thinking
 The spawned session appears in the session list and runs fire-and-forget.
 Only use 'attachments' for existing file paths on disk — the tool reads them automatically.`,
 
-  send_developer_feedback: `Send freeform feedback to the Craft Agent development team.
+  send_developer_feedback: `Send freeform feedback to the Runner development team.
 
 Use this to share anything that would help improve the product — issues you hit, ideas for better tools, suggestions for improved workflows, or patterns you notice. Write in markdown with as much detail as possible. This is your direct line to the developers.`,
 
@@ -789,7 +796,7 @@ Use this only after walking the user through the agent-creator interview and get
 
 **Inputs:**
 - \`slug\`: kebab-case (1-64 chars). If unsure, derive from the agent name.
-- \`metadata\`: name + description are required; the rest are strongly preferred (avatar, permissionMode, thinkingLevel, inputs, outputs, tags) and free for you to infer sensibly.
+- \`metadata\`: name + description are required; the rest are strongly preferred (avatar, permissionMode, thinkingLevel, visualAgent, inputs, outputs, tags) and free for you to infer sensibly. Set \`visualAgent: true\` only for agents that should proactively use Canvas for visual/web/media/document artifacts.
 - \`systemPrompt\`: the agent's identity + operating instructions. Required, non-empty.
 - \`activateInWorkspace\` (default true): activate in this workspace immediately so the user sees it.
 - \`overwrite\` (default false): only set true if the user explicitly asked to replace an existing agent.
@@ -912,11 +919,32 @@ Use this when you have produced a durable deliverable or external-action receipt
 
 Good outputs include research reports, generated media, exported datasets, code review reports, deployment receipts, published-post receipts, sent-message receipts, and final workflow deliverables.
 
+For visual work, create the image/video/web/report Output first. Set \`showInCanvas: true\` when the user asks to see, preview, compare, review, present, open, or iterate on the artifact immediately beside chat. Do not set it for scratch files, internal logs, transient plans, or ordinary text answers.
+
+Canvas preview format rules:
+- Images: PNG/JPG/WebP/SVG primary file.
+- Video/audio: MP4/WebM/MOV or audio primary file.
+- Local/generated web: attach the HTML file as the primary file, or publish a local localhost link. The Output system infers the Canvas web preview.
+- Markdown/report: Markdown primary file.
+- Data/table: CSV/TSV for tables; JSON when structure matters.
+- Charts: simple \`.chart.json\` with type/title/data; attach SVG/PNG fallback for complex charts.
+- Workflow diagrams: \`.workflow.json\` with nodes or a workflow run snapshot.
+- Slide decks: HTML deck preview first; attach PPTX/PDF exports as supporting files.
+- External services: link or receipt Output first; attach exported image/PDF/video/HTML preview when available.
+
+If an Output already exists, use visual_surface_state and visual_surface to pin/open it instead of creating a duplicate.
+
+Use Browser Pane or browser tools, not Canvas, when the user wants to test, debug, inspect, click through, check console logs, verify layout, capture screenshots, or interact with live web behavior.
+
 Do NOT use this for ordinary chat replies, scratch notes, temporary plans, or files that are not intended as final deliverables. Prefer one concise primary output over dumping every intermediate artifact.`,
 
   visual_surface: `Update the current session Canvas through a safe structured operation.
 
 Use this when the user asks you to show work visually, open the Canvas, add a note card, or pin an existing session Output to the Canvas.
+
+Canvas is for preview and review. If the user asks to test, debug, inspect, click through, check console logs, verify layout, or interact with live web behavior, use Browser Pane/browser tools instead. If intent is ambiguous, show Canvas first and ask before launching Browser Pane.
+
+Best flow for generated visuals: create_output first, read visual_surface_state, then pin the same-session Output with pin_output/add_image/add_video. If the Output is already visible or pinned, avoid duplicate cards and just reference what is already on Canvas.
 
 Allowed actions:
 - open_board: create/open the Canvas board for this session
@@ -926,6 +954,12 @@ Allowed actions:
 - add_video: add an existing same-session video Output to Canvas by outputId
 
 Do NOT pass workspaceId or sessionId. Do NOT use this for arbitrary React, drawing code, or cross-session content.`,
+
+  visual_surface_state: `Read the current session visual surface state.
+
+Use this before deciding what to show on Canvas. It reports the current session Canvas board cards, pinnable visual Outputs, and web/HTML Outputs that should be opened in Browser Pane for inspection.
+
+This is read-only. It does not open Canvas, inspect webpage DOM, read console logs, or mutate Outputs. Use visual_surface for Canvas mutations after reading this state; use Browser Pane/browser tools for DOM, console, screenshots, and interaction.`,
 } as const;
 
 // ============================================================
@@ -1017,6 +1051,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'update_memory', description: TOOL_DESCRIPTIONS.update_memory, inputSchema: UpdateMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateMemory },
   { name: 'forget_memory', description: TOOL_DESCRIPTIONS.forget_memory, inputSchema: ForgetMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleForgetMemory },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
+  { name: 'visual_surface_state', description: TOOL_DESCRIPTIONS.visual_surface_state, inputSchema: VisualSurfaceStateSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVisualSurfaceState },
   { name: 'visual_surface', description: TOOL_DESCRIPTIONS.visual_surface, inputSchema: VisualSurfaceSchema, executionMode: 'registry', safeMode: 'block', handler: handleVisualSurface },
 ];
 

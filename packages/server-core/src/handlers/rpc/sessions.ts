@@ -89,6 +89,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sessions.DELETE,
   RPC_CHANNELS.sessions.GET_MESSAGES,
   RPC_CHANNELS.sessions.SEND_MESSAGE,
+  RPC_CHANNELS.sessions.QUEUE_CANVAS_VISUAL_REVIEW,
   RPC_CHANNELS.sessions.CANCEL,
   RPC_CHANNELS.sessions.KILL_SHELL,
   RPC_CHANNELS.tasks.GET_OUTPUT,
@@ -220,6 +221,19 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
           } as SessionEvent)
         })
     })
+  })
+
+  server.handle(RPC_CHANNELS.sessions.QUEUE_CANVAS_VISUAL_REVIEW, async (_ctx, input: {
+    workspaceId: string
+    sessionId: string
+    outputId: string
+    outputTitle?: string
+    captureAssetId: string
+    capturePath: string
+    captureVersion: string
+    reviewTriggerId: string
+  }) => {
+    return sessionManager.queueCanvasVisualReview(input)
   })
 
   // Cancel processing

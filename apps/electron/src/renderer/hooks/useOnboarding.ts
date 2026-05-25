@@ -191,6 +191,10 @@ export function apiSetupMethodToConnectionSetup(
   }
 }
 
+export function shouldSetConnectionAsDefaultOnSave(editingSlug: string | null, updateOnly?: boolean): boolean {
+  return !editingSlug && !updateOnly
+}
+
 export function useOnboarding({
   onComplete,
   initialSetupNeeds,
@@ -278,6 +282,9 @@ export function useOnboarding({
         awsRegion: options?.awsRegion,
         bedrockAuthMethod: options?.bedrockAuthMethod,
       }, connectionSlugOverride ?? editingSlug, existingSlugs)
+      if (shouldSetConnectionAsDefaultOnSave(editingSlug, updateOnly)) {
+        setup.setAsDefault = true
+      }
       // Use new unified API
       const result = await window.electronAPI.setupLlmConnection(
         updateOnly ? { ...setup, updateOnly: true } : setup

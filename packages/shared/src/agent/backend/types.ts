@@ -593,6 +593,9 @@ export interface AgentBackend {
 
   /** Called when agent requests spawning a new session */
   onSpawnSession: ((request: import('../base-agent.ts').SpawnSessionRequest) => Promise<import('../base-agent.ts').SpawnSessionResult>) | null;
+
+  /** Called when an external session tool mutates Outputs or Canvas state */
+  onOutputsUpdated: ((workspaceId: string) => void) | null;
 }
 
 /**

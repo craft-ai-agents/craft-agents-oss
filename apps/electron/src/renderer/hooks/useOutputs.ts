@@ -18,13 +18,14 @@ export type OutputKind =
   | 'audio'
   | 'dataset'
   | 'code'
+  | 'model'
   | 'receipt'
   | 'external-action'
   | 'collection'
   | 'other'
 
 export type OutputStatus = 'draft' | 'published' | 'failed' | 'cancelled'
-export type OutputPreviewMode = 'markdown' | 'text' | 'json' | 'image' | 'video' | 'audio' | 'table' | 'receipt' | 'external-link' | 'web'
+export type OutputPreviewMode = 'markdown' | 'text' | 'json' | 'image' | 'video' | 'audio' | 'model' | 'pdf' | 'excalidraw' | 'presentation' | 'table' | 'chart' | 'workflow' | 'receipt' | 'external-link' | 'web'
 
 export interface OutputAssetDTO {
   id: string

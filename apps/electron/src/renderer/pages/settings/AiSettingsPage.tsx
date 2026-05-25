@@ -16,9 +16,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
-import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2 } from 'lucide-react'
+import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2, Plus } from 'lucide-react'
 import type { CredentialHealthStatus, CredentialHealthIssue } from '../../../shared/types'
-import { Spinner, FullscreenOverlayBase } from '@craft-agent/ui'
+import { FullscreenOverlayBase } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 import { motion, AnimatePresence } from 'motion/react'
@@ -40,7 +40,6 @@ import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import {
   SettingsSection,
   SettingsCard,
-  SettingsRow,
   SettingsMenuSelectRow,
   SettingsToggle,
 } from '@/components/settings'
@@ -81,6 +80,42 @@ function getModelOptionsForConnection(
     label: m.name,
     description: m.description,
     descriptionKey: m.descriptionKey,
+  }))
+}
+
+function stripPiPrefixForSettings(modelId: string): string {
+  return modelId.startsWith('pi/') ? modelId.slice(3) : modelId
+}
+
+function getSettingsModelLabel(model: string | ModelDefinition): string {
+  if (typeof model === 'string') return getModelShortName(stripPiPrefixForSettings(model))
+  return model.name || getModelShortName(stripPiPrefixForSettings(model.id))
+}
+
+function getConnectionProviderLabel(connection: LlmConnectionWithStatus): string {
+  const provider = connection.providerType || connection.type
+  const isSubscription = connection.authType === 'oauth'
+  if (provider === 'anthropic') return isSubscription ? 'Anthropic subscription' : 'Anthropic API'
+  if (provider === 'pi') {
+    if (!isSubscription && connection.piAuthProvider) {
+      return PI_AUTH_PROVIDER_LABELS[connection.piAuthProvider] ?? connection.piAuthProvider
+    }
+    if (connection.piAuthProvider === 'github-copilot') return 'GitHub Copilot'
+    if (connection.piAuthProvider === 'openai-codex') return 'Codex / ChatGPT'
+    return 'Runner backend'
+  }
+  if (provider === 'pi_compat') return 'OpenAI-compatible endpoint'
+  return provider || 'AI provider'
+}
+
+function getConnectionModelSummary(connection: LlmConnectionWithStatus): Array<{ label: string; value: string }> {
+  const models = connection.models && connection.models.length > 0
+    ? connection.models
+    : (connection.defaultModel ? [connection.defaultModel] : [])
+  const tierLabels = ['Best', 'Balanced', 'Fast']
+  return models.slice(0, 3).map((model, index) => ({
+    label: models.length > 1 ? tierLabels[index] ?? `Model ${index + 1}` : 'Default',
+    value: getSettingsModelLabel(model as string | ModelDefinition),
   }))
 }
 
@@ -206,125 +241,123 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
     }
   }, [connection.providerType, connection.type, connection.piAuthProvider, connection.baseUrl])
 
-  // Build description with provider, default indicator, auth status, and validation state
-  const getDescription = () => {
-    // Show validation state if not idle
-    if (validationState === 'validating') return t("settings.ai.validating")
-    if (validationState === 'success') return t("settings.ai.connectionValid")
-    if (validationState === 'error') return validationError || t("settings.ai.validationFailed")
-
-    const parts: string[] = []
-
-    // Provider type (fall back to legacy 'type' field if providerType missing)
-    // OAuth = subscription (Pro/Plus/Max), API key = API
+  const endpointLabel = useMemo(() => {
     const provider = connection.providerType || connection.type
-    const isSubscription = connection.authType === 'oauth'
-    switch (provider) {
-      case 'anthropic': parts.push(isSubscription ? 'Anthropic Subscription' : 'Anthropic API'); break
-      case 'pi': {
-        // Show upstream provider name for API key connections (e.g. "Google AI Studio")
-        const piLabel = !isSubscription && connection.piAuthProvider
-          ? PI_AUTH_PROVIDER_LABELS[connection.piAuthProvider]
-          : null
-        parts.push(piLabel ?? 'Craft Agents Backend')
-        break
-      }
-      case 'pi_compat': parts.push('Craft Agents Backend Compatible'); break
-      default: parts.push(provider || 'Unknown')
+    if (connection.authType === 'oauth') return 'Signed in'
+    let endpoint = connection.baseUrl
+    if (!endpoint) {
+      if (provider === 'anthropic') endpoint = 'https://api.anthropic.com'
+      else if (provider === 'pi' && connection.piAuthProvider) endpoint = piBaseUrl
     }
-
-    // Base URL for API key connections (show custom endpoint or default for provider)
-    if (connection.authType !== 'oauth') {
-      let endpoint = connection.baseUrl
-      // Use default endpoints for standard providers if no custom baseUrl
-      if (!endpoint) {
-        if (provider === 'anthropic') endpoint = 'https://api.anthropic.com'
-        else if (provider === 'pi' && connection.piAuthProvider) {
-          endpoint = piBaseUrl
-        }
-      }
-      if (endpoint) {
-        // Extract hostname from URL for cleaner display
-        try {
-          const url = new URL(endpoint)
-          parts.push(url.host)
-        } catch {
-          parts.push(endpoint)
-        }
-      }
+    if (!endpoint) return 'API key'
+    try {
+      return new URL(endpoint).host
+    } catch {
+      return endpoint
     }
+  }, [connection.authType, connection.baseUrl, connection.piAuthProvider, connection.providerType, connection.type, piBaseUrl])
 
-    // Auth status
-    if (!connection.isAuthenticated) parts.push(t("settings.ai.notAuthenticated"))
+  const status = useMemo(() => {
+    if (validationState === 'validating') return { tone: 'muted', label: t("settings.ai.validating") }
+    if (validationState === 'success') return { tone: 'good', label: t("settings.ai.connectionValid") }
+    if (validationState === 'error') return { tone: 'bad', label: validationError || t("settings.ai.validationFailed") }
+    if (!connection.isAuthenticated) return { tone: 'bad', label: t("settings.ai.notAuthenticated") }
+    return { tone: 'good', label: 'Ready' }
+  }, [connection.isAuthenticated, t, validationError, validationState])
 
-    return parts.join(' · ')
-  }
+  const modelSummary = getConnectionModelSummary(connection)
+  const providerLabel = getConnectionProviderLabel(connection)
 
   return (
-    <SettingsRow
-      label={(
-        <div className="flex items-center gap-1">
-          <ConnectionIcon connection={connection} size={14} />
-          <span>{connection.name}</span>
-          {connection.isDefault && (
-            <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
-              {t("common.default")}
+    <div className="border-b border-border/50 last:border-b-0 px-4 py-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <ConnectionIcon connection={connection} size={16} />
+            <span className="font-medium text-sm">{connection.name}</span>
+            {connection.isDefault && (
+              <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-foreground text-background">
+                {t("common.default")}
+              </span>
+            )}
+            <span className={cn(
+              "inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px]",
+              status.tone === 'good' && "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400",
+              status.tone === 'bad' && "bg-destructive/10 text-destructive",
+              status.tone === 'muted' && "bg-foreground/[0.06] text-muted-foreground",
+            )}>
+              {status.label}
             </span>
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {providerLabel} · {endpointLabel}
+          </div>
+
+          {modelSummary.length > 0 && (
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {modelSummary.map((model) => (
+                <div key={`${model.label}:${model.value}`} className="rounded-lg border border-border/60 bg-foreground/[0.025] px-3 py-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">{model.label}</div>
+                  <div className="mt-0.5 truncate text-xs font-medium">{model.value}</div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
-      )}
-      description={getDescription()}
-    >
-      <DropdownMenu modal={false} onOpenChange={setMenuOpen}>
-        <DropdownMenuTrigger asChild>
-          <button
-            className="p-1.5 rounded-md hover:bg-foreground/[0.05] data-[state=open]:bg-foreground/[0.05] transition-colors"
-            data-state={menuOpen ? 'open' : 'closed'}
-          >
-            <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-          </button>
-        </DropdownMenuTrigger>
-        <StyledDropdownMenuContent align="end">
-          <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onRenameClick)}>
-            <Pencil className="h-3.5 w-3.5" />
-            <span>{t("common.rename")}</span>
-          </StyledDropdownMenuItem>
+
+        <div className="flex shrink-0 items-center gap-2">
           {!connection.isDefault && (
-            <StyledDropdownMenuItem onClick={onSetDefault}>
-              <Star className="h-3.5 w-3.5" />
-              <span>{t("settings.ai.setAsDefault")}</span>
-            </StyledDropdownMenuItem>
+            <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs" onClick={onSetDefault}>
+              <Star className="mr-1.5 h-3.5 w-3.5" />
+              Make default
+            </Button>
           )}
           {connection.authType === 'oauth' ? (
-            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onReauthenticate)}>
-              <RefreshCcw className="h-3.5 w-3.5" />
-              <span>{t("settings.ai.reAuthenticate")}</span>
-            </StyledDropdownMenuItem>
+            <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs" onClick={onReauthenticate}>
+              <RefreshCcw className="mr-1.5 h-3.5 w-3.5" />
+              Reconnect
+            </Button>
           ) : (
-            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
-              <Settings2 className="h-3.5 w-3.5" />
-              <span>{t("common.edit")}</span>
-            </StyledDropdownMenuItem>
+            <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs" onClick={onEdit}>
+              <Settings2 className="mr-1.5 h-3.5 w-3.5" />
+              Edit
+            </Button>
           )}
-          <StyledDropdownMenuItem
-            onClick={onValidate}
-            disabled={validationState === 'validating'}
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            <span>{t("settings.ai.validateConnection")}</span>
-          </StyledDropdownMenuItem>
-          <StyledDropdownMenuSeparator />
-          <StyledDropdownMenuItem
-            onClick={onDelete}
-            variant="destructive"
-            disabled={isLastConnection}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            <span>{t("common.delete")}</span>
-          </StyledDropdownMenuItem>
-        </StyledDropdownMenuContent>
-      </DropdownMenu>
-    </SettingsRow>
+          <DropdownMenu modal={false} onOpenChange={setMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="p-1.5 rounded-md hover:bg-foreground/[0.05] data-[state=open]:bg-foreground/[0.05] transition-colors"
+                data-state={menuOpen ? 'open' : 'closed'}
+              >
+                <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <StyledDropdownMenuContent align="end">
+              <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onRenameClick)}>
+                <Pencil className="h-3.5 w-3.5" />
+                <span>{t("common.rename")}</span>
+              </StyledDropdownMenuItem>
+              <StyledDropdownMenuItem
+                onClick={onValidate}
+                disabled={validationState === 'validating'}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>Test connection</span>
+              </StyledDropdownMenuItem>
+              <StyledDropdownMenuSeparator />
+              <StyledDropdownMenuItem
+                onClick={onDelete}
+                variant="destructive"
+                disabled={isLastConnection}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{t("common.delete")}</span>
+              </StyledDropdownMenuItem>
+            </StyledDropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -503,7 +536,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
                     value: conn.slug,
                     label: conn.name,
                     description: conn.providerType === 'anthropic' ? 'Anthropic' :
-                                 conn.providerType === 'pi' ? 'Craft Agents Backend' :
+                                 conn.providerType === 'pi' ? 'Runner Backend' :
                                  conn.providerType || 'Unknown',
                   })),
                 ]}
@@ -905,27 +938,76 @@ export default function AiSettingsPage() {
             />
 
             <div className="space-y-6">
+              {/* Connections Management */}
+              <SettingsSection
+                title="AI providers"
+                description="Connect Codex, OpenRouter, local models, or other APIs. The default provider is what new chats use first."
+              >
+                <SettingsCard>
+                  {llmConnections.length === 0 ? (
+                    <div className="px-4 py-8 text-center">
+                      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-foreground/[0.04]">
+                        <Plus className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div className="text-sm font-medium">No AI provider connected</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Add one provider, then choose its models from the chat dropdown.</div>
+                    </div>
+                  ) : (
+                    [...llmConnections]
+                      .sort((a, b) => {
+                        if (a.isDefault && !b.isDefault) return -1
+                        if (!a.isDefault && b.isDefault) return 1
+                        return a.name.localeCompare(b.name)
+                      })
+                      .map((conn) => (
+                      <ConnectionRow
+                        key={conn.slug}
+                        connection={conn}
+                        isLastConnection={llmConnections.length <= 1}
+                        onRenameClick={() => handleRenameClick(conn)}
+                        onDelete={() => handleDeleteConnection(conn.slug)}
+                        onSetDefault={() => handleSetDefaultConnection(conn.slug)}
+                        onValidate={() => handleValidateConnection(conn.slug)}
+                        onReauthenticate={() => handleReauthenticateConnection(conn)}
+                        onEdit={() => handleEditConnection(conn)}
+                        validationState={validationStates[conn.slug]?.state || 'idle'}
+                        validationError={validationStates[conn.slug]?.error}
+                      />
+                    ))
+                  )}
+                </SettingsCard>
+                <div className="pt-1">
+                  <button
+                    onClick={() => openApiSetup()}
+                    className="inline-flex items-center h-8 px-3 gap-1.5 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add provider
+                  </button>
+                </div>
+              </SettingsSection>
+
               {/* Default Settings - only show if connections exist */}
               {llmConnections.length > 0 && (
-              <SettingsSection title={t("settings.ai.defaultSection")} description={t("settings.ai.defaultSectionDesc")}>
+              <SettingsSection title="Default for new chats" description="This is the provider and model used when a chat has no override. You can still hot-swap per chat from the message bar.">
                 <SettingsCard>
                   <SettingsMenuSelectRow
-                    label={t("settings.ai.connection")}
-                    description={t("settings.ai.connectionDesc")}
+                    label="Provider"
+                    description={defaultConnection ? `${getConnectionProviderLabel(defaultConnection)} · ${defaultConnection.name}` : t("settings.ai.connectionDesc")}
                     value={defaultConnection?.slug || ''}
                     onValueChange={handleSetDefaultConnection}
                     options={llmConnections.map((conn) => ({
                       value: conn.slug,
                       label: conn.name,
                       description: conn.providerType === 'anthropic' ? 'Anthropic API' :
-                                   conn.providerType === 'pi' ? 'Craft Agents Backend' :
-                                   conn.providerType === 'pi_compat' ? 'Craft Agents Backend Compatible' :
+                                   conn.providerType === 'pi' ? 'Runner Backend' :
+                                   conn.providerType === 'pi_compat' ? 'Runner Backend Compatible' :
                                    conn.providerType || 'Unknown',
                     }))}
                   />
                   <SettingsMenuSelectRow
-                    label={t("settings.ai.model")}
-                    description={t("settings.ai.modelDesc")}
+                    label="Model"
+                    description="Fallback model for this provider. Chat and agent overrides can use another model."
                     value={defaultModel}
                     onValueChange={handleDefaultModelChange}
                     options={getModelOptionsForConnection(defaultConnection).map(o => ({
@@ -962,47 +1044,6 @@ export default function AiSettingsPage() {
                   </div>
                 </SettingsSection>
               )}
-
-              {/* Connections Management */}
-              <SettingsSection title={t("settings.ai.connections")} description={t("settings.ai.connectionsDesc")}>
-                <SettingsCard>
-                  {llmConnections.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                      {t("settings.ai.noConnections")}
-                    </div>
-                  ) : (
-                    [...llmConnections]
-                      .sort((a, b) => {
-                        if (a.isDefault && !b.isDefault) return -1
-                        if (!a.isDefault && b.isDefault) return 1
-                        return a.name.localeCompare(b.name)
-                      })
-                      .map((conn) => (
-                      <ConnectionRow
-                        key={conn.slug}
-                        connection={conn}
-                        isLastConnection={false}
-                        onRenameClick={() => handleRenameClick(conn)}
-                        onDelete={() => handleDeleteConnection(conn.slug)}
-                        onSetDefault={() => handleSetDefaultConnection(conn.slug)}
-                        onValidate={() => handleValidateConnection(conn.slug)}
-                        onReauthenticate={() => handleReauthenticateConnection(conn)}
-                        onEdit={() => handleEditConnection(conn)}
-                        validationState={validationStates[conn.slug]?.state || 'idle'}
-                        validationError={validationStates[conn.slug]?.error}
-                      />
-                    ))
-                  )}
-                </SettingsCard>
-                <div className="pt-0">
-                  <button
-                    onClick={() => openApiSetup()}
-                    className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
-                  >
-                    {t("settings.ai.addConnection")}
-                  </button>
-                </div>
-              </SettingsSection>
 
               {/* Performance */}
               <SettingsSection title={t("settings.ai.performance")} description={t("settings.ai.performanceDesc")}>

@@ -101,6 +101,81 @@ describe('output manifest validation', () => {
     expect(isOutputManifest(web, OUTPUT_OLD_ID)).toBe(true);
   });
 
+  test('accepts model outputs with glTF preview assets', () => {
+    const model = manifest(OUTPUT_OLD_ID, {
+      kind: 'model',
+      primary: {
+        id: 'asset-1',
+        label: 'Model',
+        role: 'primary',
+        path: 'model.glb',
+        mimeType: 'model/gltf-binary',
+      },
+      assets: [
+        {
+          id: 'asset-1',
+          label: 'Model',
+          role: 'primary',
+          path: 'model.glb',
+          mimeType: 'model/gltf-binary',
+        },
+      ],
+      preview: { mode: 'model', assetId: 'asset-1' },
+    });
+
+    expect(isOutputManifest(model, OUTPUT_OLD_ID)).toBe(true);
+  });
+
+  test('accepts PDF outputs with PDF preview assets', () => {
+    const pdf = manifest(OUTPUT_OLD_ID, {
+      kind: 'document',
+      primary: {
+        id: 'asset-1',
+        label: 'PDF',
+        role: 'primary',
+        path: 'report.pdf',
+        mimeType: 'application/pdf',
+      },
+      assets: [
+        {
+          id: 'asset-1',
+          label: 'PDF',
+          role: 'primary',
+          path: 'report.pdf',
+          mimeType: 'application/pdf',
+        },
+      ],
+      preview: { mode: 'pdf', assetId: 'asset-1' },
+    });
+
+    expect(isOutputManifest(pdf, OUTPUT_OLD_ID)).toBe(true);
+  });
+
+  test('accepts Excalidraw outputs with Excalidraw preview assets', () => {
+    const excalidraw = manifest(OUTPUT_OLD_ID, {
+      kind: 'image',
+      primary: {
+        id: 'asset-1',
+        label: 'Diagram',
+        role: 'primary',
+        path: 'diagram.excalidraw',
+        mimeType: 'application/vnd.excalidraw+json',
+      },
+      assets: [
+        {
+          id: 'asset-1',
+          label: 'Diagram',
+          role: 'primary',
+          path: 'diagram.excalidraw',
+          mimeType: 'application/vnd.excalidraw+json',
+        },
+      ],
+      preview: { mode: 'excalidraw', assetId: 'asset-1' },
+    });
+
+    expect(isOutputManifest(excalidraw, OUTPUT_OLD_ID)).toBe(true);
+  });
+
   test('rejects malformed manifests before saving', () => {
     expect(isOutputManifest({ ...manifest(OUTPUT_OLD_ID), kind: 'nope' }, OUTPUT_OLD_ID)).toBe(false);
     expect(isOutputManifest({ ...manifest(OUTPUT_OLD_ID), id: OUTPUT_NEW_ID }, OUTPUT_OLD_ID)).toBe(false);

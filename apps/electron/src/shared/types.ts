@@ -272,6 +272,16 @@ export interface ElectronAPI {
   createSession(workspaceId: string, options?: CreateSessionOptions): Promise<Session>
   deleteSession(sessionId: string): Promise<void>
   sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachmentType[], options?: SendMessageOptions): Promise<void>
+  queueCanvasVisualReview(input: {
+    workspaceId: string
+    sessionId: string
+    outputId: string
+    outputTitle?: string
+    captureAssetId: string
+    capturePath: string
+    captureVersion: string
+    reviewTriggerId: string
+  }): Promise<{ accepted: boolean; reason?: string }>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
   getTaskOutput(taskId: string): Promise<string | null>
@@ -822,6 +832,31 @@ export interface ElectronAPI {
   showOutputInFolder(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
   readOutputAssetText(workspaceId: string, outputId: string, assetId?: string): Promise<string>
   readOutputAssetDataUrl(workspaceId: string, outputId: string, assetId?: string): Promise<string>
+  recordVisualCapture(input: {
+    workspaceId: string
+    sessionId: string
+    outputId: string
+    captureVersion: string
+    reviewTriggerId?: string
+    source: 'canvas'
+    dataUrl: string
+    width: number
+    height: number
+  }): Promise<{
+    ok: boolean
+    outputId: string
+    assetId: string
+    path: string
+    capturedAt: string
+    reviewQueued?: boolean
+    reviewTriggerId?: string
+    skipped?: boolean
+  }>
+  captureVisualElement(rect: { x: number; y: number; width: number; height: number }): Promise<{
+    dataUrl: string
+    width: number
+    height: number
+  }>
   onOutputsUpdated(callback: (workspaceId: string) => void): () => void
 
   // Notifications (bell entries from pulses + future system sources)

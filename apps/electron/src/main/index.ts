@@ -97,6 +97,7 @@ import { handleDeepLink } from './deep-link'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
+import { registerOutputAssetHandler } from './output-asset-protocol'
 import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
@@ -208,7 +209,7 @@ let triggerServerHandle: { url: string; stop: () => Promise<void> } | null = nul
 let pendingDeepLink: string | null = null
 
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
-// Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Craft Agents [1]")
+// Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Runner [1]")
 app.setName(process.env.CRAFT_APP_NAME || 'Runner')
 
 // Register as default protocol client for craftagents:// URLs
@@ -264,7 +265,7 @@ if (process.env.CRAFT_SERVER_URL) {
   }
 }
 
-// Register thumbnail:// custom protocol for file preview thumbnails in the sidebar.
+// Register privileged custom protocols.
 // Must happen before app.whenReady() — Electron requires early scheme registration.
 registerThumbnailScheme()
 
@@ -400,6 +401,7 @@ app.whenReady().then(async () => {
 
   // Register thumbnail:// protocol handler (scheme was registered earlier, before app.whenReady)
   registerThumbnailHandler()
+  registerOutputAssetHandler()
 
   // Re-apply proxy settings now that Electron sessions are available
   // (first call before app.whenReady only configured Node-level proxy)
@@ -530,6 +532,20 @@ app.whenReady().then(async () => {
         || BrowserWindow.getAllWindows()[0]
       const result = await dialog.showOpenDialog(win, spec)
       return { canceled: result.canceled, filePaths: result.filePaths }
+    })
+    ipcMain.handle('__visual:capture-element', async (event, rect: { x?: number; y?: number; width?: number; height?: number }) => {
+      const x = Math.max(0, Math.floor(Number(rect?.x) || 0))
+      const y = Math.max(0, Math.floor(Number(rect?.y) || 0))
+      const width = Math.min(2400, Math.max(1, Math.floor(Number(rect?.width) || 0)))
+      const height = Math.min(1800, Math.max(1, Math.floor(Number(rect?.height) || 0)))
+      if (width < 8 || height < 8) throw new Error('Visual capture target is too small.')
+      const image = await event.sender.capturePage({ x, y, width, height })
+      if (image.isEmpty()) throw new Error('Visual capture returned an empty image.')
+      return {
+        dataUrl: image.toDataURL(),
+        width: image.getSize().width,
+        height: image.getSize().height,
+      }
     })
 
     if (!isClientOnly) {

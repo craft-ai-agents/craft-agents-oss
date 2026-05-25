@@ -3,7 +3,7 @@
  * Summaries provide quick context; "Learn more" opens the full docs.
  */
 
-const DOC_BASE_URL = 'https://agents.craft.do/docs'
+const DOC_BASE_URL = 'https://github.com/findmikeymike/RunnerOS/tree/main/docs'
 
 export type DocFeature =
   | 'sources'

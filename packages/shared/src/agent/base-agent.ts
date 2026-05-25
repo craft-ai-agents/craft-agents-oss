@@ -77,7 +77,7 @@ const SOURCE_RECIPE_SKILL_SLUG = 'source-recipe';
 
 export function isRunnerOsSelfEditIntent(message: string): boolean {
   const text = message.toLowerCase();
-  const hasRunnerOsTarget = /\b(runneros|runner os|craft agents?|concierge|orchestrator)\b/.test(text);
+  const hasRunnerOsTarget = /\b(runneros|runner os|runner(os)?|concierge|orchestrator)\b/.test(text);
   const hasEditIntent = /\b(edit|change|modify|fix|debug|inspect|review|update|add|remove|implement|wire|test|typecheck|lint|theme|ui|setting|settings)\b/.test(text);
   const hasSelfEditPhrase = /\b(self-edit|self edit|edit itself|change itself|fix itself|this app itself|the app itself)\b/.test(text);
   return hasSelfEditPhrase || (hasRunnerOsTarget && hasEditIntent);
@@ -290,6 +290,7 @@ export abstract class BaseAgent implements AgentBackend {
   onUsageUpdate: ((update: UsageUpdate) => void) | null = null;
   onBackendAuthRequired: ((reason: string) => void) | null = null;
   onSpawnSession: ((request: SpawnSessionRequest) => Promise<SpawnSessionResult>) | null = null;
+  onOutputsUpdated: ((workspaceId: string) => void) | null = null;
 
   // ============================================================
   // Constructor
@@ -469,6 +470,12 @@ export abstract class BaseAgent implements AgentBackend {
     if (toolName === 'SubmitPlan' && args.planPath) {
       this.debug(`SubmitPlan completed: ${args.planPath}`);
       this.onPlanSubmitted?.(args.planPath as string);
+      return;
+    }
+
+    if (toolName === 'create_output' || toolName === 'visual_surface') {
+      this.debug(`Output-affecting session tool completed: ${toolName}`);
+      this.onOutputsUpdated?.(this.config.workspace.id);
       return;
     }
 

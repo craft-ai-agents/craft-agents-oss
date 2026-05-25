@@ -69,7 +69,7 @@ created: 2026-04-15
 ---
 
 Mikey, principal engineer pivoting to product. Building RunnerOS,
-a local-first personal agent OS forked from craft-agents-oss.
+a local-first personal agent OS forked from RunnerOS.
 
 ---
 name: collaboration style

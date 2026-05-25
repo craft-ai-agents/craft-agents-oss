@@ -1,6 +1,6 @@
 appId: com.findmikeymike.runner
 productName: Runner
-copyright: Copyright © 2026 Craft Docs Ltd.
+copyright: Copyright © 2026 RunnerOS
 
 electronVersion: "39.2.7"
 
@@ -73,7 +73,7 @@ extraMetadata:
 # Auto-update: electron-updater fetches from this URL for update manifests (.yml files)
 publish:
   provider: generic
-  url: https://agents.craft.do/electron/latest
+  url: https://github.com/findmikeymike/RunnerOS/releases/latest/download
 
 # Disable ASAR to avoid decompression overhead and click delays
 asar: false
@@ -201,7 +201,7 @@ nsis:
 linux:
   icon: resources/icon.png
   category: Utility
-  maintainer: "Craft Docs Ltd. <support@craft.do>"
+  maintainer: "RunnerOS <support@runneros.local>"
   target:
     - target: AppImage
       arch:

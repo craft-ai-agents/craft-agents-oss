@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
-import { OAUTH_RELAY_CALLBACK_URL, decodeOAuthRelayState, isOAuthRelayState } from '../../auth/oauth-relay.ts';
+import { OAUTH_RELAY_CALLBACK_URL, isOAuthRelayState } from '../../auth/oauth-relay.ts';
 import { SourceCredentialManager } from '../credential-manager.ts';
 import type { LoadedSource, FolderSourceConfig } from '../types.ts';
 
@@ -70,63 +70,54 @@ describe('SourceCredentialManager.prepareOAuth relay wrapping', () => {
     }) as unknown as typeof fetch;
   });
 
-  it('uses the stable relay redirect URI for WebUI Google flows', async () => {
+  it('uses the provided WebUI redirect URI when no Runner relay is configured', async () => {
     const result = await credManager.prepareOAuth(createApiSource(), {
-      callbackUrl: 'https://ghalmos.craftdocs-cf-t1.com/api/oauth/callback',
+      callbackUrl: 'https://runner.example/api/oauth/callback',
     });
 
-    expect(result.redirectUri).toBe(OAUTH_RELAY_CALLBACK_URL);
+    expect(OAUTH_RELAY_CALLBACK_URL).toBe('');
+    expect(result.redirectUri).toBe('https://runner.example/api/oauth/callback');
     expect(result.state).toBeTruthy();
 
     const authUrl = new URL(result.authUrl);
-    expect(authUrl.searchParams.get('redirect_uri')).toBe(OAUTH_RELAY_CALLBACK_URL);
+    expect(authUrl.searchParams.get('redirect_uri')).toBe('https://runner.example/api/oauth/callback');
 
-    const outerState = authUrl.searchParams.get('state');
-    expect(outerState).toBeTruthy();
-    expect(isOAuthRelayState(outerState!)).toBe(true);
-    expect(decodeOAuthRelayState(outerState!)).toEqual({
-      returnTo: 'https://ghalmos.craftdocs-cf-t1.com/api/oauth/callback',
-      innerState: result.state,
-    });
+    const state = authUrl.searchParams.get('state');
+    expect(state).toBeTruthy();
+    expect(isOAuthRelayState(state!)).toBe(false);
   });
 
-  it('uses the relay for desktop Google flows (callbackUrl)', async () => {
+  it('uses the provided desktop callback URL when no Runner relay is configured', async () => {
     const result = await credManager.prepareOAuth(createApiSource(), {
       callbackUrl: 'http://localhost:6477/callback',
     });
 
-    expect(result.redirectUri).toBe(OAUTH_RELAY_CALLBACK_URL);
+    expect(OAUTH_RELAY_CALLBACK_URL).toBe('');
+    expect(result.redirectUri).toBe('http://localhost:6477/callback');
     expect(result.state).toBeTruthy();
 
     const authUrl = new URL(result.authUrl);
-    expect(authUrl.searchParams.get('redirect_uri')).toBe(OAUTH_RELAY_CALLBACK_URL);
+    expect(authUrl.searchParams.get('redirect_uri')).toBe('http://localhost:6477/callback');
 
-    const outerState = authUrl.searchParams.get('state');
-    expect(outerState).toBeTruthy();
-    expect(isOAuthRelayState(outerState!)).toBe(true);
-    expect(decodeOAuthRelayState(outerState!)).toEqual({
-      returnTo: 'http://localhost:6477/callback',
-      innerState: result.state,
-    });
+    const state = authUrl.searchParams.get('state');
+    expect(state).toBeTruthy();
+    expect(isOAuthRelayState(state!)).toBe(false);
   });
 
-  it('passes the stable relay redirect URI into MCP prepare-time metadata flow', async () => {
+  it('passes the provided redirect URI into MCP prepare-time metadata flow when no Runner relay is configured', async () => {
     const result = await credManager.prepareOAuth(createMcpSource(), {
-      callbackUrl: 'https://ghalmos.craftdocs-cf-t1.com/api/oauth/callback',
+      callbackUrl: 'https://runner.example/api/oauth/callback',
     });
 
-    expect(result.redirectUri).toBe(OAUTH_RELAY_CALLBACK_URL);
+    expect(OAUTH_RELAY_CALLBACK_URL).toBe('');
+    expect(result.redirectUri).toBe('https://runner.example/api/oauth/callback');
 
     const authUrl = new URL(result.authUrl);
     expect(authUrl.origin + authUrl.pathname).toBe('https://example.com/oauth/authorize');
-    expect(authUrl.searchParams.get('redirect_uri')).toBe(OAUTH_RELAY_CALLBACK_URL);
+    expect(authUrl.searchParams.get('redirect_uri')).toBe('https://runner.example/api/oauth/callback');
 
-    const outerState = authUrl.searchParams.get('state');
-    expect(outerState).toBeTruthy();
-    expect(isOAuthRelayState(outerState!)).toBe(true);
-    expect(decodeOAuthRelayState(outerState!)).toEqual({
-      returnTo: 'https://ghalmos.craftdocs-cf-t1.com/api/oauth/callback',
-      innerState: result.state,
-    });
+    const state = authUrl.searchParams.get('state');
+    expect(state).toBeTruthy();
+    expect(isOAuthRelayState(state!)).toBe(false);
   });
 });

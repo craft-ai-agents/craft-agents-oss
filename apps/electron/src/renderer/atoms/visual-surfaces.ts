@@ -206,7 +206,9 @@ export const toggleVisualSurfaceAtom = atom(
     }
 
     const remembered = current.rememberedSurfacesBySession[input.sessionId]
-    if (remembered?.workspaceId === input.workspaceId && (remembered.source === 'output' || !input.output)) {
+    const shouldRestoreRemembered = remembered?.workspaceId === input.workspaceId
+      && (!input.output || remembered.outputId === input.output.id)
+    if (remembered && shouldRestoreRemembered) {
       set(visualSidecarAtom, {
         ...current,
         activeSurface: remembered,

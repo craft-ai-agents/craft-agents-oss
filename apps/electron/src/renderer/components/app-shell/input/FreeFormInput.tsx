@@ -230,9 +230,9 @@ export interface FreeFormInputProps {
   /** Enable compact mode - hides attach, sources, working directory for popover embedding */
   compactMode?: boolean
   // Connection selection (hierarchical connection → model selector)
-  /** Current LLM connection slug (locked after first message) */
+  /** Current LLM connection slug */
   currentConnection?: string
-  /** Callback when connection changes (only works when session is empty) */
+  /** Callback for pre-message connection changes; model changes can persist connection too. */
   onConnectionChange?: (connectionSlug: string) => void
   /** When true, the session's locked connection has been removed */
   connectionUnavailable?: boolean
@@ -365,7 +365,7 @@ export function FreeFormInput({
     const groups: Record<string, typeof llmConnections> = {
       'Anthropic': [],
       'Local': [],
-      'Craft Agents Backend': [],
+      'Runner Backend': [],
     }
     for (const conn of llmConnections) {
       const provider = conn.providerType || 'anthropic'
@@ -375,7 +375,7 @@ export function FreeFormInput({
       } else if (provider === 'pi_compat' && isLocalConnection(conn)) {
         groups['Local'].push(conn)
       } else if (provider === 'pi' || provider === 'pi_compat') {
-        groups['Craft Agents Backend'].push(conn)
+        groups['Runner Backend'].push(conn)
       }
     }
     // Return only non-empty groups
@@ -2019,7 +2019,7 @@ export function FreeFormInput({
                   <Check className="h-3 w-3 text-foreground shrink-0 ml-3" />
                 </StyledDropdownMenuItem>
               ) : pickerMode === 'switcher' ? (
-                /* Hierarchical view: Provider → Connection → Models (for new sessions with multiple connections) */
+                /* Hierarchical view: Provider → Connection → Models */
                 connectionsByProvider.map(([providerName, connections], index) => (
                   <React.Fragment key={providerName}>
                     {/* Provider group label */}
@@ -2060,8 +2060,9 @@ export function FreeFormInput({
                                   <StyledDropdownMenuItem
                                     key={modelId}
                                     onSelect={() => {
-                                      // If selecting a different connection, update both connection and model
-                                      if (!isCurrentConnection && onConnectionChange) {
+                                      // Pre-message sessions can update the connection directly.
+                                      // Started sessions persist connection through onModelChange below.
+                                      if (isEmptySession && !isCurrentConnection && onConnectionChange) {
                                         onConnectionChange(conn.slug)
                                       }
                                       // Always pass connection with model for proper persistence

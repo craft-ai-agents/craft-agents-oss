@@ -26,7 +26,7 @@ export function parseTestConnectionError(msg: string): string {
     return 'Cannot connect to API server. Check the URL and ensure the server is running.'
   }
   if (lower.includes('no api key found for')) {
-    return 'Provider mismatch during setup. Select a provider preset in Craft Agents Backend API Key mode, or use Anthropic API Key mode for arbitrary compatible endpoints.'
+    return 'Provider mismatch during setup. Select a provider preset in Runner Backend API Key mode, or use Anthropic API Key mode for arbitrary compatible endpoints.'
   }
   if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('authentication')) {
     return 'Invalid API key'
@@ -59,7 +59,7 @@ export function validateSetupTestInput(params: {
   if (params.provider === 'pi' && hasCustomEndpoint && !params.piAuthProvider) {
     return {
       valid: false,
-      error: 'Custom endpoint in Craft Agents Backend mode requires selecting a provider preset. For arbitrary Anthropic-compatible endpoints, use Anthropic API Key mode.',
+      error: 'Custom endpoint in Runner Backend mode requires selecting a provider preset. For arbitrary Anthropic-compatible endpoints, use Anthropic API Key mode.',
     }
   }
 
@@ -128,7 +128,7 @@ export const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
     piAuthProvider: 'github-copilot',
   },
   'pi-api-key': {
-    name: 'Craft Agents Backend (API Key)',
+    name: 'Runner Backend (API Key)',
     providerType: 'pi',
     authType: 'api_key',
     // piAuthProvider set dynamically from setup.piAuthProvider

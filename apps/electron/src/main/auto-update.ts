@@ -2,7 +2,7 @@
  * Auto-update module using electron-updater
  *
  * Handles checking for updates, downloading, and installing via the standard
- * electron-updater library. Updates are served from https://agents.craft.do/electron/latest
+ * electron-updater library. Updates are served from https://github.com/findmikeymike/RunnerOS/releases/latest/download
  * using the generic provider (YAML manifests + binaries on R2/S3).
  *
  * Platform behavior:
