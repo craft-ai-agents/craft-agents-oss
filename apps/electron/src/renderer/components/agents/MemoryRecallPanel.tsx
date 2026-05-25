@@ -2,18 +2,24 @@ import * as React from 'react'
 import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { MemoryRecallResult } from '@craft-agent/shared/memory/types'
+import type { MemoryRecallResult, MemoryScope, RecallMemoryInput } from '@craft-agent/shared/memory/types'
 
 interface MemoryRecallApi {
-  recallMemory?: (payload: { query: string; limit?: number }) => Promise<MemoryRecallResult[]>
+  recallMemory?: (payload: RecallMemoryInput) => Promise<MemoryRecallResult[]>
 }
 
-export function MemoryRecallPanel() {
+interface MemoryRecallPanelProps {
+  scope?: MemoryScope
+  agentSlug?: string
+}
+
+export function MemoryRecallPanel({ scope = 'user', agentSlug }: MemoryRecallPanelProps) {
   const [query, setQuery] = React.useState('')
   const [results, setResults] = React.useState<MemoryRecallResult[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [searched, setSearched] = React.useState(false)
+  const scopeLabel = scope === 'agent' ? 'agent MEMORY.md' : 'USER.md'
 
   const runRecall = React.useCallback(async () => {
     const trimmed = query.trim()
@@ -29,13 +35,18 @@ export function MemoryRecallPanel() {
     try {
       const api = window.electronAPI as unknown as MemoryRecallApi
       if (!api.recallMemory) throw new Error('Memory recall API is unavailable')
-      setResults(await api.recallMemory({ query: trimmed, limit: 8 }))
+      setResults(await api.recallMemory({
+        query: trimmed,
+        scopes: [scope],
+        agentSlug: scope === 'agent' ? agentSlug : undefined,
+        limit: 8,
+      }))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
-  }, [query])
+  }, [agentSlug, query, scope])
 
   return (
     <div className="runneros-card p-3">
@@ -43,7 +54,7 @@ export function MemoryRecallPanel() {
         <Search className="h-4 w-4 text-white/45" />
         <div>
           <div className="text-sm font-medium text-white/78">Recall search</div>
-          <div className="text-xs text-white/38">Search USER.md memory with the same backend agents will use.</div>
+          <div className="text-xs text-white/38">Search {scopeLabel} with the same backend agents will use.</div>
         </div>
       </div>
 
