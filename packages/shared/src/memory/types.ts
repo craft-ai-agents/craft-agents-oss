@@ -10,6 +10,7 @@ export const MEMORY_FILE = 'MEMORY.md';
 export const USER_MEMORY_FILE = 'USER.md';
 export const DELETED_MEMORIES_FILE = '.deleted-memories.json';
 export const MEMORY_EVENTS_FILE = '.memory-events.jsonl';
+export const MEMORY_REVIEW_QUEUE_FILE = '.memory-review-queue.json';
 export const MEMORY_SCHEMA_VERSION = 1;
 
 export type MemoryScope = 'user' | 'agent';
@@ -134,6 +135,49 @@ export interface MemoryEvent {
   evidence?: string;
   actor?: string;
   createdAt: string;
+}
+
+export type MemoryReviewAction = 'save' | 'update' | 'forget';
+
+export type MemoryReviewStatus = 'pending' | 'approved' | 'rejected' | 'applied';
+
+export interface MemoryReviewItem {
+  id: string;
+  status: MemoryReviewStatus;
+  action: MemoryReviewAction;
+  scope: MemoryScope;
+  agentSlug?: string;
+  name: string;
+  type?: MemoryEntryType;
+  body?: string;
+  expires?: string | null;
+  confidence: number;
+  evidence?: string;
+  sourceRunId?: string;
+  source: MemoryEventSource;
+  createdAt: string;
+  decidedAt?: string;
+  decisionReason?: string;
+}
+
+export interface EnqueueMemoryReviewInput {
+  action: MemoryReviewAction;
+  scope: MemoryScope;
+  agentSlug?: string;
+  name: string;
+  type?: MemoryEntryType;
+  body?: string;
+  expires?: string | null;
+  confidence: number;
+  evidence?: string;
+  sourceRunId?: string;
+  source?: MemoryEventSource;
+}
+
+export interface ResolveMemoryReviewInput {
+  id: string;
+  status: Exclude<MemoryReviewStatus, 'pending'>;
+  decisionReason?: string;
 }
 
 export type MemoryParseWarningCode =
