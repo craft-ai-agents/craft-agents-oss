@@ -121,7 +121,7 @@ Format rules:
 
 - Images: PNG/JPG/WebP/SVG primary file.
 - Video/audio: MP4/WebM/MOV or audio primary file.
-- Local/generated web: HTML Output with `preview.mode: "web"` or a local localhost link.
+- Local/generated web: HTML primary file or a local localhost link; the Output system infers the Canvas web preview.
 - Markdown/report: Markdown Output.
 - Data/table: CSV/TSV first; JSON when structure matters.
 - Charts: `.chart.json` with `type`, `title`, and `data`.

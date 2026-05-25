@@ -11,7 +11,7 @@ import { Agent, Dispatcher, ProxyAgent, setGlobalDispatcher } from 'undici';
 import { parseNoProxyRules, shouldBypassProxy, splitCommaSeparated, type NoProxyRule } from './network-proxy-utils';
 import { getNetworkProxySettings, setNetworkProxySettings } from '@craft-agent/shared/config/storage';
 import type { NetworkProxySettings } from '@craft-agent/shared/config/types';
-import { BROWSER_PANE_SESSION_PARTITION } from './browser-pane-manager';
+import { BROWSER_PANE_SESSION_PARTITION } from './browser-pane-constants';
 import log from './logger';
 
 // Track the current dispatcher so we can close it when reconfiguring

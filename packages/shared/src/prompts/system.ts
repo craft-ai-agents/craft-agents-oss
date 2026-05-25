@@ -456,7 +456,7 @@ Show immediately in Canvas when the user asks to see, preview, compare, review, 
 Choose the most useful Canvas preview format:
 - Images: PNG/JPG/WebP/SVG Output.
 - Video/audio: MP4/WebM/MOV or audio Output with the media file as primary.
-- Local/generated web: HTML Output with \`preview.mode: "web"\` or a local localhost link.
+- Local/generated web: attach the HTML file as the primary file, or publish a local localhost link.
 - Markdown/report: Markdown Output for readable text deliverables.
 - Data/table: CSV/TSV for tables; JSON only when the structure matters.
 - Charts: \`.chart.json\` with \`type\`, \`title\`, and \`data\` when possible.

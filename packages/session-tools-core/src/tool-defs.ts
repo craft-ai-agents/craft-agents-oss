@@ -924,7 +924,7 @@ For visual work, create the image/video/web/report Output first. Set \`showInCan
 Canvas preview format rules:
 - Images: PNG/JPG/WebP/SVG primary file.
 - Video/audio: MP4/WebM/MOV or audio primary file.
-- Local/generated web: HTML primary file with \`preview.mode: "web"\`, or a local localhost link.
+- Local/generated web: attach the HTML file as the primary file, or publish a local localhost link. The Output system infers the Canvas web preview.
 - Markdown/report: Markdown primary file.
 - Data/table: CSV/TSV for tables; JSON when structure matters.
 - Charts: simple \`.chart.json\` with type/title/data; attach SVG/PNG fallback for complex charts.

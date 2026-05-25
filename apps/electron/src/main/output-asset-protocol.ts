@@ -1,8 +1,9 @@
-import { protocol } from 'electron'
+import { protocol, session, type Session } from 'electron'
 import { readFile, stat } from 'fs/promises'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { assertOutputAssetPath, parseRunnerOutputAssetUrl, RUNNER_OUTPUT_SCHEME } from '@craft-agent/shared/outputs'
 import { mainLog } from './logger'
+import { BROWSER_PANE_SESSION_PARTITION } from './browser-pane-constants'
 
 const HTML_PREVIEW_CSP = [
   "default-src 'self'",
@@ -19,7 +20,12 @@ const HTML_PREVIEW_CSP = [
 ].join('; ')
 
 export function registerOutputAssetHandler(): void {
-  protocol.handle(RUNNER_OUTPUT_SCHEME, async (request) => {
+  registerOutputAssetProtocolHandler(protocol, 'default session')
+  registerOutputAssetProtocolHandler(session.fromPartition(BROWSER_PANE_SESSION_PARTITION).protocol, 'browser-pane session')
+}
+
+export function registerOutputAssetProtocolHandler(targetProtocol: Pick<typeof protocol, 'handle'> | Pick<Session['protocol'], 'handle'>, label: string): void {
+  targetProtocol.handle(RUNNER_OUTPUT_SCHEME, async (request) => {
     try {
       const parsed = parseRunnerOutputAssetUrl(request.url)
       if (!parsed) return new Response(null, { status: 400 })
@@ -46,7 +52,7 @@ export function registerOutputAssetHandler(): void {
     }
   })
 
-  mainLog.info(`Registered ${RUNNER_OUTPUT_SCHEME}:// protocol handler`)
+  mainLog.info(`Registered ${RUNNER_OUTPUT_SCHEME}:// protocol handler (${label})`)
 }
 
 function mimeTypeForPath(path: string): string {

@@ -48,7 +48,7 @@ describe('system prompt guidance', () => {
     expect(prompt).toContain('show the artifact in Canvas first and ask before launching Browser Pane')
     expect(prompt).toContain('Show immediately in Canvas when the user asks to see, preview, compare, review, present, open, or iterate')
     expect(prompt).toContain('Choose the most useful Canvas preview format')
-    expect(prompt).toContain('Local/generated web: HTML Output with `preview.mode: "web"`')
+    expect(prompt).toContain('Local/generated web: attach the HTML file as the primary file')
     expect(prompt).toContain('Workflow maps: `.workflow.json`')
     expect(prompt).toContain('Do not claim you can inspect iframe DOM, console logs, or live app state from Canvas')
   })
