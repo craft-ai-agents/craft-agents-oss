@@ -7,6 +7,7 @@ export function summarizeOutputContent(content: string, maxLength = 240): string
 }
 
 export function previewModeForMimeType(mimeType: string | undefined): OutputPreviewMode {
+  if (isWorkflowMimeType(mimeType)) return 'workflow';
   if (isChartMimeType(mimeType)) return 'chart';
   if (mimeType === 'text/markdown') return 'markdown';
   if (mimeType === 'application/json') return 'json';
@@ -22,6 +23,7 @@ export function previewModeForMimeType(mimeType: string | undefined): OutputPrev
 
 export function inferPreviewMode(mimeType?: string, path?: string): OutputPreviewMode {
   const lowerPath = path?.toLowerCase() ?? '';
+  if (isWorkflowMimeType(mimeType) || /\.workflow(?:-run)?\.json$/.test(lowerPath)) return 'workflow';
   if (isChartMimeType(mimeType) || /\.(chart|vega|vegalite)\.json$/.test(lowerPath)) return 'chart';
   if (mimeType === 'text/markdown' || lowerPath.endsWith('.md') || lowerPath.endsWith('.markdown')) return 'markdown';
   if (mimeType === 'application/json' || lowerPath.endsWith('.json')) return 'json';
@@ -46,6 +48,11 @@ function isChartMimeType(mimeType: string | undefined): boolean {
   return mimeType === 'application/vnd.runneros.chart+json'
     || mimeType === 'application/vnd.vega.v5+json'
     || mimeType === 'application/vnd.vegalite.v5+json';
+}
+
+function isWorkflowMimeType(mimeType: string | undefined): boolean {
+  return mimeType === 'application/vnd.runneros.workflow+json'
+    || mimeType === 'application/vnd.runneros.workflow-run+json';
 }
 
 export const deriveOutputSummaryFallback = summarizeOutputContent;

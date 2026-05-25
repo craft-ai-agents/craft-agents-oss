@@ -51,6 +51,7 @@ const PREVIEW_MODES: ReadonlySet<OutputPreviewMode> = new Set([
   'presentation',
   'table',
   'chart',
+  'workflow',
   'receipt',
   'external-link',
   'web',

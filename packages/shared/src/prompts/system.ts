@@ -459,6 +459,8 @@ For slide decks, prefer a beautiful HTML deck as the Canvas preview and attach P
 
 For charts, publish a simple .chart.json Output when possible: { "type": "bar" | "line" | "pie", "title": "...", "data": [{ "label": "...", "value": 123 }] }. Canvas can render this directly; attach SVG/PNG exports as fallback when the chart is complex.
 
+For workflow diagrams, publish a .workflow.json Output with either { "title": "...", "nodes": [{ "id": "...", "label": "...", "agent": "...", "state": "queued" }] } or an existing workflow run snapshot. Canvas can render this as a read-only step graph.
+
 Do not use Canvas for every answer. Do not create duplicate cards. Do not claim you can inspect iframe DOM, console logs, or live app state from Canvas; use browser tools for that when available.`;
 
 /**

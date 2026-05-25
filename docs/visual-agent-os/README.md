@@ -27,6 +27,7 @@ Define the first shippable version of visual agent work inside RunnerOS: chat st
 - [15 Phase 5C Agent Canvas Guidance Spec](./15-phase-5c-agent-canvas-guidance-spec.md)
 - [16 Canvas Agent Smoke Prompts](./16-canvas-agent-smoke-prompts.md)
 - [17 Chart Canvas Spec](./17-chart-canvas-spec.md)
+- [18 Workflow Graph Canvas Spec](./18-workflow-graph-canvas-spec.md)
 
 ## Core Decision
 
@@ -56,5 +57,6 @@ The MVP is complete when a normal RunnerOS chat session can:
 - Phase 5B web agent awareness: implemented through `visual_surface_state`.
 - Phase 5C agent guidance: implemented in the central system prompt and tool descriptions.
 - Static chart outputs: implemented for `.chart.json`, `.vega.json`, and `.vegalite.json`.
+- Workflow graph outputs: implemented for `.workflow.json` and `.workflow-run.json`.
 
-Next intelligent slice: deeper browser-pane state reporting if agent inspection needs it, or workflow graph adapters.
+Next intelligent slice: deeper browser-pane state reporting if agent inspection needs it, or provider-specific adapters.

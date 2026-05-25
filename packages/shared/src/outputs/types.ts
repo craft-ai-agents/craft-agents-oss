@@ -29,6 +29,7 @@ export type OutputPreviewMode =
   | 'presentation'
   | 'table'
   | 'chart'
+  | 'workflow'
   | 'receipt'
   | 'external-link'
   | 'web';

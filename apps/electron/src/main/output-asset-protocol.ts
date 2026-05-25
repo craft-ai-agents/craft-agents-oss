@@ -50,6 +50,8 @@ export function registerOutputAssetHandler(): void {
 }
 
 function mimeTypeForPath(path: string): string {
+  if (/\.workflow-run\.json$/i.test(path)) return 'application/vnd.runneros.workflow-run+json'
+  if (/\.workflow\.json$/i.test(path)) return 'application/vnd.runneros.workflow+json'
   if (/\.(chart|vega|vegalite)\.json$/i.test(path)) return 'application/vnd.runneros.chart+json'
   const ext = path.split('.').pop()?.toLowerCase() ?? ''
   const mimeMap: Record<string, string> = {

@@ -935,6 +935,8 @@ function fileAssetMetadata(path: string): Pick<OutputAsset, 'mimeType' | 'sizeBy
 
 function mimeTypeForAssetPath(path: string): string | undefined {
   const lowerPath = path.toLowerCase();
+  if (/\.workflow-run\.json$/.test(lowerPath)) return 'application/vnd.runneros.workflow-run+json';
+  if (/\.workflow\.json$/.test(lowerPath)) return 'application/vnd.runneros.workflow+json';
   if (/\.(chart|vega|vegalite)\.json$/.test(lowerPath)) return 'application/vnd.runneros.chart+json';
   const ext = extname(path).toLowerCase();
   if (ext === '.html' || ext === '.htm') return 'text/html';

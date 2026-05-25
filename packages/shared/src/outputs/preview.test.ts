@@ -33,4 +33,11 @@ describe('output preview mode inference', () => {
     expect(inferPreviewMode(undefined, 'sales.chart.json')).toBe('chart');
     expect(inferPreviewMode('application/json', 'sales.vegalite.json')).toBe('chart');
   });
+
+  test('detects workflow graph assets by mime type and extension', () => {
+    expect(previewModeForMimeType('application/vnd.runneros.workflow+json')).toBe('workflow');
+    expect(previewModeForMimeType('application/vnd.runneros.workflow-run+json')).toBe('workflow');
+    expect(inferPreviewMode(undefined, 'pipeline.workflow.json')).toBe('workflow');
+    expect(inferPreviewMode(undefined, 'pipeline.workflow-run.json')).toBe('workflow');
+  });
 });

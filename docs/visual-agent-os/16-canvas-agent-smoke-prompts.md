@@ -66,6 +66,18 @@ Expected:
 - The chart JSON renders as a chart, not raw JSON.
 - The chart output is selectable from the Canvas output tabs.
 
+## Workflow Graph Smoke
+
+```text
+Create a workflow graph output named canvas-workflow-smoke-test.workflow.json with three nodes: Brief succeeded, Draft running, Review queued. Publish it as an Output and show it in Canvas.
+```
+
+Expected:
+
+- Canvas opens automatically.
+- The workflow JSON renders as a step graph, not raw JSON.
+- Step states are visible.
+
 ## Agent Awareness Smoke
 
 ```text
