@@ -246,6 +246,7 @@ export const CHANNEL_MAP = {
   listMarketSkills: invoke(RPC_CHANNELS.skills.LIST_MARKET),
   uploadMarketSkill: invoke(RPC_CHANNELS.skills.UPLOAD_MARKET),
   installMarketSkill: invoke(RPC_CHANNELS.skills.INSTALL_MARKET),
+  installLocalZip: invoke(RPC_CHANNELS.skills.INSTALL_LOCAL_ZIP),
   deleteMarketSkill: invoke(RPC_CHANNELS.skills.DELETE_MARKET),
   fetchMarketSkillContent: invoke(RPC_CHANNELS.skills.FETCH_MARKET_CONTENT),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
