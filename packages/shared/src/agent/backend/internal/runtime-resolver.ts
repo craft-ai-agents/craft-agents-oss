@@ -186,21 +186,36 @@ function resolveServerPath(hostRuntime: BackendHostRuntimeContext, serverName: s
  * shipping `vendor/ripgrep/<platform>/rg` (the binary is now compiled into
  * the native `claude` executable, but our search service in
  * `packages/server-core/src/services/search.ts` still calls it directly).
+ *
+ * `@vscode/ripgrep` ≥ 1.18 no longer places the binary inside its own
+ * `bin/` directory — it delegates to platform-specific optional-dep packages
+ * (`@vscode/ripgrep-{platform}-{arch}`). We therefore probe both the legacy
+ * path and the new platform-scoped path.
  */
 function resolveRipgrepPath(hostRuntime: BackendHostRuntimeContext): string | undefined {
   const binaryName = process.platform === 'win32' ? 'rg.exe' : 'rg';
-  const ripgrepRelative = join('node_modules', '@vscode', 'ripgrep', 'bin', binaryName);
+  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+  // Legacy path (≤1.17): @vscode/ripgrep/bin/rg[.exe]
+  const legacyRelative = join('node_modules', '@vscode', 'ripgrep', 'bin', binaryName);
+  // New path (≥1.18): @vscode/ripgrep-{platform}-{arch}/bin/rg[.exe]
+  const platformRelative = join('node_modules', '@vscode', `ripgrep-${process.platform}-${arch}`, 'bin', binaryName);
+
+  const candidates = [legacyRelative, platformRelative];
 
   if (hostRuntime.isPackaged) {
-    const packaged = join(hostRuntime.appRootPath, ripgrepRelative);
-    if (existsSync(packaged)) return packaged;
+    for (const rel of candidates) {
+      const packaged = join(hostRuntime.appRootPath, rel);
+      if (existsSync(packaged)) return packaged;
+    }
   }
 
-  const fromHostRoot = resolveUpwards(hostRuntime.appRootPath, ripgrepRelative, 10);
-  if (fromHostRoot) return fromHostRoot;
+  for (const rel of candidates) {
+    const fromHostRoot = resolveUpwards(hostRuntime.appRootPath, rel, 10);
+    if (fromHostRoot) return fromHostRoot;
 
-  const cwdFallback = join(process.cwd(), ripgrepRelative);
-  if (existsSync(cwdFallback)) return cwdFallback;
+    const cwdFallback = join(process.cwd(), rel);
+    if (existsSync(cwdFallback)) return cwdFallback;
+  }
 
   // Non-packaged (headless server, dev mode): fall back to system rg via PATH.
   // Packaged apps must use vendored binary only — never resolve from PATH
