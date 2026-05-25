@@ -151,8 +151,9 @@ export function buildMemorySidecarPrompt(input: MemorySidecarTurnInput): string 
 
   return `You are RunnerOS Memory Sidecar. Decide whether the latest turn contains one durable memory worth proposing.
 
-Save only stable preferences, corrections, project facts, agent instructions, or reusable working context.
-Do not save secrets, credentials, one-off task details, temporary emotions, generic praise, or anything already present.
+Save only stable user preferences, direct corrections, agent instructions, or reusable working context that should follow the user or active agent across sessions.
+Do not save secrets, credentials, workspace-specific project facts, one-off task details, temporary emotions, generic praise, or anything already present.
+Workspace-specific project facts belong in workspace context, not user or agent memory.
 Prefer "update" when the user changes or clarifies an existing memory. Use "forget" only when the user asks to remove a known memory.
 If uncertain, choose "none". Confidence must be at least 0.85 for save/update/forget.
 

@@ -45,6 +45,9 @@ export function enqueueMemoryReviewItem(
 ): MemoryReviewItem {
   validateEnqueueInput(input);
   const items = listMemoryReviewItems(options);
+  const duplicate = findPendingDuplicate(items, input);
+  if (duplicate) return duplicate;
+
   const item: MemoryReviewItem = {
     id: randomUUID(),
     status: 'pending',
@@ -63,6 +66,23 @@ export function enqueueMemoryReviewItem(
   };
   writeReviewQueue([...items, item], options);
   return item;
+}
+
+function findPendingDuplicate(
+  items: MemoryReviewItem[],
+  input: EnqueueMemoryReviewInput,
+): MemoryReviewItem | undefined {
+  const normalizedName = input.name.trim().toLowerCase();
+  const normalizedBody = sanitizeOptional(input.body)?.toLowerCase();
+  return items.find((item) => {
+    if (item.status !== 'pending') return false;
+    if (item.action !== input.action) return false;
+    if (item.scope !== input.scope) return false;
+    if ((item.agentSlug ?? '') !== (input.scope === 'agent' ? input.agentSlug ?? '' : '')) return false;
+    if (item.name.trim().toLowerCase() !== normalizedName) return false;
+    if (input.action === 'forget') return true;
+    return (item.body ?? '').trim().toLowerCase() === (normalizedBody ?? '');
+  });
 }
 
 export function resolveMemoryReviewItem(

@@ -7,7 +7,7 @@ import type {
   MemoryScope,
 } from '@craft-agent/shared/memory/types'
 
-interface MemoryReviewApi {
+export interface MemoryReviewApi {
   listMemoryReviewQueue?: () => Promise<MemoryReviewItem[]>
   onMemoryChanged?: (listener: (scope: MemoryScope, agentSlug: string | null) => void) => () => void
   resolveMemoryReview?: (payload: { id: string; status: 'approved' | 'rejected' | 'applied'; decisionReason?: string }) => Promise<MemoryReviewItem | null>
@@ -80,43 +80,7 @@ export function useMemoryReviewQueue(filter?: { scope?: MemoryScope; agentSlug?:
 
   const apply = useCallback(async (item: MemoryReviewItem) => {
     const api = window.electronAPI as unknown as MemoryReviewApi
-    const metadata = {
-      actor: 'memory-review',
-      evidence: item.evidence,
-      runId: item.sourceRunId,
-    }
-
-    if (item.action === 'save') {
-      if (!item.type || !item.body) throw new Error('Save proposal is missing type or body')
-      await api.saveMemory?.({
-        scope: item.scope,
-        agentSlug: item.agentSlug ?? null,
-        name: item.name,
-        type: item.type,
-        body: item.body,
-        expires: item.expires,
-        force: true,
-        metadata,
-      })
-    } else if (item.action === 'update') {
-      await api.updateMemory?.({
-        scope: item.scope,
-        agentSlug: item.agentSlug ?? null,
-        name: item.name,
-        body: item.body,
-        expires: item.expires,
-        metadata,
-      })
-    } else {
-      await api.deleteMemory?.({
-        scope: item.scope,
-        agentSlug: item.agentSlug ?? null,
-        name: item.name,
-        metadata,
-      })
-    }
-
-    await api.resolveMemoryReview?.({ id: item.id, status: 'applied' })
+    await applyMemoryReviewItem(api, item)
     await refresh()
   }, [refresh])
 
@@ -144,4 +108,50 @@ function filterReviewItems(
 
 function sortReviewItems(items: MemoryReviewItem[]): MemoryReviewItem[] {
   return [...items].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+}
+
+export async function applyMemoryReviewItem(api: MemoryReviewApi, item: MemoryReviewItem): Promise<void> {
+  const metadata = {
+    actor: 'memory-review',
+    evidence: item.evidence,
+    runId: item.sourceRunId,
+  }
+
+  if (item.action === 'save') {
+    if (!item.type || !item.body) throw new Error('Save proposal is missing type or body')
+    if (!api.saveMemory) throw new Error('Memory save API is unavailable')
+    await api.saveMemory({
+      scope: item.scope,
+      agentSlug: item.agentSlug ?? null,
+      name: item.name,
+      type: item.type,
+      body: item.body,
+      expires: item.expires,
+      force: true,
+      metadata,
+    })
+  } else if (item.action === 'update') {
+    if (!api.updateMemory) throw new Error('Memory update API is unavailable')
+    const updated = await api.updateMemory({
+      scope: item.scope,
+      agentSlug: item.agentSlug ?? null,
+      name: item.name,
+      body: item.body,
+      expires: item.expires,
+      metadata,
+    })
+    if (!updated) throw new Error(`Memory not found: ${item.name}`)
+  } else {
+    if (!api.deleteMemory) throw new Error('Memory delete API is unavailable')
+    const deleted = await api.deleteMemory({
+      scope: item.scope,
+      agentSlug: item.agentSlug ?? null,
+      name: item.name,
+      metadata,
+    })
+    if (!deleted) throw new Error(`Memory not found: ${item.name}`)
+  }
+
+  if (!api.resolveMemoryReview) throw new Error('Memory review API is unavailable')
+  await api.resolveMemoryReview({ id: item.id, status: 'applied' })
 }

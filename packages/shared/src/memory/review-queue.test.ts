@@ -64,6 +64,24 @@ describe('memory review queue', () => {
     expect(listMemoryReviewItems(options)[0]!.status).toBe('rejected');
   });
 
+  test('enqueue reuses an identical pending proposal instead of duplicating it', () => {
+    const input = {
+      action: 'save' as const,
+      scope: 'user' as const,
+      name: 'answer length',
+      type: 'feedback' as const,
+      body: 'User prefers concise answers.',
+      confidence: 0.91,
+      evidence: 'User asked for concise output.',
+    };
+
+    const first = enqueueMemoryReviewItem(input, options);
+    const second = enqueueMemoryReviewItem({ ...input, confidence: 0.95 }, options);
+
+    expect(second.id).toBe(first.id);
+    expect(listMemoryReviewItems(options)).toHaveLength(1);
+  });
+
   test('rejects malformed save proposals', () => {
     expect(() => enqueueMemoryReviewItem({
       action: 'save',

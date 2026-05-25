@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { listMemoryReviewItems } from '@craft-agent/shared/memory'
 import {
+  buildMemorySidecarPrompt,
   createMemorySidecarReviewer,
   MemorySidecarService,
   parseMemorySidecarDecision,
@@ -202,6 +203,16 @@ describe('MemorySidecarService', () => {
       userMessage: 'remember this',
       assistantResponse: 'ok',
     })).toMatchObject({ decision: 'none', reason: 'invalid json' })
+  })
+
+  test('prompt routes workspace-specific facts away from memory', () => {
+    const prompt = buildMemorySidecarPrompt({
+      userMessage: 'The RunnerOS branch is codex/memory-os.',
+      assistantResponse: 'Noted.',
+    })
+
+    expect(prompt).toContain('Workspace-specific project facts belong in workspace context')
+    expect(prompt).not.toContain('project facts, agent instructions')
   })
 })
 
