@@ -75,8 +75,26 @@ export type { ContextDocDTO, ContextDocMetadata, ContextDocRouting };
 
 // Memory — DTOs are plain JSON entries. Import from the browser-safe type
 // module, not the memory barrel, because the barrel also exports file storage.
-import type { LoadedMemoryFile as LoadedMemoryFileDTO, MemoryEntry as MemoryEntryDTO, MemoryEvent as MemoryEventDTO, MemoryEntryType, MemoryScope } from '@craft-agent/shared/memory/types';
-export type { LoadedMemoryFileDTO, MemoryEntryDTO, MemoryEventDTO, MemoryEntryType, MemoryScope };
+import type {
+  EnqueueMemoryReviewInput,
+  LoadedMemoryFile as LoadedMemoryFileDTO,
+  MemoryEntry as MemoryEntryDTO,
+  MemoryEvent as MemoryEventDTO,
+  MemoryEntryType,
+  MemoryReviewItem,
+  MemoryScope,
+  ResolveMemoryReviewInput,
+} from '@craft-agent/shared/memory/types';
+export type {
+  EnqueueMemoryReviewInput,
+  LoadedMemoryFileDTO,
+  MemoryEntryDTO,
+  MemoryEventDTO,
+  MemoryEntryType,
+  MemoryReviewItem,
+  MemoryScope,
+  ResolveMemoryReviewInput,
+};
 
 // Workflows — DTOs match the shared LoadedWorkflow / WorkflowRunSnapshot.
 import type {
@@ -745,6 +763,9 @@ export interface ElectronAPI {
     scope: MemoryScope
     agentSlug?: string | null
   }): Promise<MemoryEventDTO[]>
+  listMemoryReviewQueue(): Promise<MemoryReviewItem[]>
+  enqueueMemoryReview(payload: EnqueueMemoryReviewInput): Promise<MemoryReviewItem>
+  resolveMemoryReview(payload: ResolveMemoryReviewInput): Promise<MemoryReviewItem | null>
   upsertMemory(payload: {
     scope: MemoryScope
     agentSlug?: string | null

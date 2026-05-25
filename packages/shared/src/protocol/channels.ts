@@ -410,6 +410,12 @@ export const RPC_CHANNELS = {
     LIST_USER: 'memory:listUser',
     /** List memory mutation/recall audit events. */
     LIST_EVENTS: 'memory:listEvents',
+    /** List pending and resolved memory review proposals. */
+    LIST_REVIEW_QUEUE: 'memory:listReviewQueue',
+    /** Add a memory proposal to the review queue. */
+    ENQUEUE_REVIEW: 'memory:enqueueReview',
+    /** Mark a memory proposal approved/rejected/applied. */
+    RESOLVE_REVIEW: 'memory:resolveReview',
     /** Create or replace a memory entry. */
     UPSERT: 'memory:upsert',
     /** Create a new memory entry. */

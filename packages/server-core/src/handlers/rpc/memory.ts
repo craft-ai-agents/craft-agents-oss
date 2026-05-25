@@ -5,20 +5,26 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
   deleteMemoryEntry,
+  enqueueMemoryReviewItem,
+  listMemoryReviewItems,
   listMemoryEvents,
   listAgentMemoryEntries,
   listUserMemoryEntries,
   loadAgentMemory,
   loadUserMemory,
+  resolveMemoryReviewItem,
   saveMemoryEntry,
   updateMemoryEntry,
   type DeleteMemoryInput,
+  type EnqueueMemoryReviewInput,
   type LoadedMemoryFile,
   type MemoryEntry,
   type MemoryEvent,
   type MemoryEntryType,
   type MemoryMutationEventMetadata,
+  type MemoryReviewItem,
   type MemoryScope,
+  type ResolveMemoryReviewInput,
   type SaveMemoryInput,
   type UpdateMemoryInput,
 } from '@craft-agent/shared/memory'
@@ -29,6 +35,9 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.memory.LIST_AGENT,
   RPC_CHANNELS.memory.LIST_USER,
   RPC_CHANNELS.memory.LIST_EVENTS,
+  RPC_CHANNELS.memory.LIST_REVIEW_QUEUE,
+  RPC_CHANNELS.memory.ENQUEUE_REVIEW,
+  RPC_CHANNELS.memory.RESOLVE_REVIEW,
   RPC_CHANNELS.memory.UPSERT,
   RPC_CHANNELS.memory.SAVE,
   RPC_CHANNELS.memory.UPDATE,
@@ -165,6 +174,18 @@ export function registerMemoryHandlers(server: RpcServer, deps: HandlerDeps): vo
   server.handle(RPC_CHANNELS.memory.LIST_EVENTS, async (_ctx, payload: ListMemoryEventsPayload): Promise<MemoryEvent[]> => {
     const agentSlug = requireAgentSlug(payload.scope, payload.agentSlug)
     return listMemoryEvents(payload.scope, agentSlug)
+  })
+
+  server.handle(RPC_CHANNELS.memory.LIST_REVIEW_QUEUE, async (): Promise<MemoryReviewItem[]> => {
+    return listMemoryReviewItems()
+  })
+
+  server.handle(RPC_CHANNELS.memory.ENQUEUE_REVIEW, async (_ctx, payload: EnqueueMemoryReviewInput): Promise<MemoryReviewItem> => {
+    return enqueueMemoryReviewItem(payload)
+  })
+
+  server.handle(RPC_CHANNELS.memory.RESOLVE_REVIEW, async (_ctx, payload: ResolveMemoryReviewInput): Promise<MemoryReviewItem | null> => {
+    return resolveMemoryReviewItem(payload)
   })
 
   server.handle(RPC_CHANNELS.memory.UPSERT, async (_ctx, payload: MemoryMutationPayload): Promise<unknown> => {

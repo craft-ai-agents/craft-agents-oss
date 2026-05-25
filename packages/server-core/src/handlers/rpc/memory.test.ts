@@ -24,6 +24,36 @@ const listMemoryEvents = mock(() => [{
   source: 'rpc',
   createdAt: '2026-05-01T00:00:00.000Z',
 }])
+const listMemoryReviewItems = mock(() => [{
+  id: 'rev_1',
+  status: 'pending',
+  action: 'save',
+  scope: 'user',
+  name: 'Preferred writing style',
+  type: 'feedback',
+  body: 'Use direct language.',
+  confidence: 0.9,
+  source: 'sidecar',
+  createdAt: '2026-05-01T00:00:00.000Z',
+}])
+const enqueueMemoryReviewItem = mock((input: any) => ({
+  id: 'rev_2',
+  status: 'pending',
+  createdAt: '2026-05-01T00:00:00.000Z',
+  source: 'sidecar',
+  ...input,
+}))
+const resolveMemoryReviewItem = mock((input: any) => ({
+  id: input.id,
+  status: input.status,
+  action: 'save',
+  scope: 'user',
+  name: 'Preferred writing style',
+  confidence: 0.9,
+  source: 'sidecar',
+  createdAt: '2026-05-01T00:00:00.000Z',
+  decidedAt: '2026-05-01T00:01:00.000Z',
+}))
 const listUserMemoryEntries = mock(() => [])
 const listAgentMemoryEntries = mock(() => [])
 const loadUserMemory = mock(() => ({
@@ -42,11 +72,14 @@ const loadAgentMemory = mock((agentSlug: string) => ({
 
 mock.module('@craft-agent/shared/memory', () => ({
   deleteMemoryEntry,
+  enqueueMemoryReviewItem,
+  listMemoryReviewItems,
   listMemoryEvents,
   listAgentMemoryEntries,
   listUserMemoryEntries,
   loadAgentMemory,
   loadUserMemory,
+  resolveMemoryReviewItem,
   saveMemoryEntry,
   updateMemoryEntry,
 }))
@@ -100,6 +133,9 @@ beforeEach(() => {
   updateMemoryEntry.mockClear()
   deleteMemoryEntry.mockClear()
   listMemoryEvents.mockClear()
+  listMemoryReviewItems.mockClear()
+  enqueueMemoryReviewItem.mockClear()
+  resolveMemoryReviewItem.mockClear()
   listUserMemoryEntries.mockClear()
   listAgentMemoryEntries.mockClear()
   loadUserMemory.mockClear()
@@ -186,5 +222,38 @@ describe('memory RPC handlers', () => {
       action: 'save',
       entryName: 'Preferred writing style',
     })])
+  })
+
+  it('lists and mutates memory review queue items', async () => {
+    const { handlers, server } = createHarness()
+    const { registerMemoryHandlers } = await import('./memory')
+    registerMemoryHandlers(server, deps)
+
+    const listQueue = handlers.get(RPC_CHANNELS.memory.LIST_REVIEW_QUEUE)
+    const enqueue = handlers.get(RPC_CHANNELS.memory.ENQUEUE_REVIEW)
+    const resolve = handlers.get(RPC_CHANNELS.memory.RESOLVE_REVIEW)
+    if (!listQueue || !enqueue || !resolve) throw new Error('memory review handlers not registered')
+
+    const queue = await listQueue(ctx())
+    expect(listMemoryReviewItems).toHaveBeenCalled()
+    expect(queue).toEqual([expect.objectContaining({ id: 'rev_1', status: 'pending' })])
+
+    await enqueue(ctx(), {
+      action: 'save',
+      scope: 'user',
+      name: 'Preferred writing style',
+      type: 'feedback',
+      body: 'Use direct language.',
+      confidence: 0.9,
+    })
+    expect(enqueueMemoryReviewItem).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'save',
+      scope: 'user',
+      name: 'Preferred writing style',
+    }))
+
+    const resolved = await resolve(ctx(), { id: 'rev_1', status: 'approved' })
+    expect(resolveMemoryReviewItem).toHaveBeenCalledWith({ id: 'rev_1', status: 'approved' })
+    expect(resolved).toEqual(expect.objectContaining({ id: 'rev_1', status: 'approved' }))
   })
 })
