@@ -529,8 +529,9 @@ export interface AgentBackend {
   /**
    * Schedule a source-activation auto-restart. Consumed by the backend's
    * event loop after the next tool_result, which yields `source_activated`
-   * and `forceAbort`s the turn — triggering the renderer's existing
-   * auto_retry effect. Set by SessionManager after a successful mid-turn
+   * and `forceAbort`s the turn. SessionManager's `source_activated` handler
+   * then schedules the server-side resend with a "[{slug} activated]" suffix
+   * (craft-agents-oss#804). Set by SessionManager after a successful mid-turn
    * activation (source_test auto-enable).
    */
   setPendingSourceActivationRestart(pending: { sourceSlug: string; userMessage: string }): void;

@@ -394,10 +394,13 @@ export function parseError(
     lowerMessage.includes('function calling not available') ||
     lowerMessage.includes('tools are not supported') ||
     lowerMessage.includes('doesn\'t support tool') ||
-    lowerMessage.includes('tool use is not supported') ||
-    (lowerMessage.includes('invalid_request_error') && lowerMessage.includes('tool')) ||
-    // Generic pattern: "tool" + "not" + "support" anywhere in message
-    (lowerMessage.includes('tool') && lowerMessage.includes('not') && lowerMessage.includes('support'))
+    lowerMessage.includes('tool use is not supported')
+    // NOTE: do NOT match on `invalid_request_error + tool` or `tool + not + support`
+    // alone. Anthropic 400 errors frequently mention `tools` (e.g. the cache_control
+    // ordering error "blocks are processed in the following order: `tools`, `system`,
+    // `messages`") which would otherwise be misclassified as "Model Does Not Support
+    // Tools". The specific phrases above are tight enough to catch real tool-support
+    // refusals without these broad fallbacks.
   ) {
     code = 'model_no_tool_support';
   } else if (lowerMessage.includes('is not a valid model') || lowerMessage.includes('model not found') || lowerMessage.includes('invalid model') || lowerMessage.includes('model identifier is invalid')) {
@@ -439,6 +442,11 @@ export function parseError(
     } else {
       code = 'service_error';
     }
+  } else if (lowerMessage.includes('invalid_request_error') || lowerMessage.includes('400 ')) {
+    // Generic Anthropic-style API validation failures (cache_control ordering, malformed
+    // payloads, etc.). Lands here only after all the more specific branches above have
+    // declined; better than falling through to "unknown_error" which hides the message.
+    code = 'invalid_request';
   }
 
   // ErrorCode is a finite union and ERROR_DEFINITIONS covers every member,

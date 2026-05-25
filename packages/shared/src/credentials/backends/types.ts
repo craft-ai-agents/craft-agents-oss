@@ -26,6 +26,9 @@ export interface CredentialBackend {
   /** Delete a credential */
   delete(id: CredentialId): Promise<boolean>;
 
+  /** Delete a credential synchronously, when supported by the backend. */
+  deleteSync?(id: CredentialId): boolean;
+
   /** List all credentials (optionally filtered by partial ID) */
   list(filter?: Partial<CredentialId>): Promise<CredentialId[]>;
 }
