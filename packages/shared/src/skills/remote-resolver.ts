@@ -73,12 +73,17 @@ function parseSkillMd(raw: string): { metadata: SkillMetadata; body: string } | 
         globs: parsed.data.globs as string[] | undefined,
         alwaysAllow: parsed.data.alwaysAllow as string[] | undefined,
         icon: parsed.data.icon as string | undefined,
+        metadata: isRecord(parsed.data.metadata) ? parsed.data.metadata : undefined,
       },
       body: parsed.content,
     }
   } catch {
     return null
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 const INACCESSIBLE_ERROR =

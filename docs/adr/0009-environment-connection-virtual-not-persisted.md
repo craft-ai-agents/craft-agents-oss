@@ -1,7 +1,7 @@
 # ADR 0009 — Environment Connection: Virtual, Not Persisted
 
-**Status**: Accepted  
-**Date**: 2026-05-18  
+**Status**: Accepted
+**Date**: 2026-05-18
 **Amended**: 2026-05-19 — Settings actions and display name
 
 ## Decision

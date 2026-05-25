@@ -232,7 +232,7 @@ export const ResolveTeamPublicTermSchema = z.object({
 
 export const SearchTeamPublicKnowledgeSchema = z.object({
   query: z.string().min(1).describe('Search query (must be non-empty)'),
-  kind: z.string().optional().describe('Filter by entry kind (alias, slang, concept, convention, rule, process, warning, background)'),
+  kind: z.string().optional().describe('Filter by entry kind (term, knowledge, notice, rule)'),
   tag: z.string().optional().describe('Filter by tag'),
   scope: z.string().optional().describe('Filter by scope'),
   limit: z.number().optional().describe('Max results per page (default 20)'),
@@ -241,7 +241,7 @@ export const SearchTeamPublicKnowledgeSchema = z.object({
 
 export const SuggestTeamPublicKnowledgeSchema = z.object({
   message: z.string().min(1).describe('Full user message to use for message-level team knowledge suggestions'),
-  kinds: z.array(z.enum(['alias', 'slang', 'concept', 'convention', 'rule', 'process', 'warning', 'background'])).optional()
+  kinds: z.array(z.enum(['term', 'knowledge', 'notice', 'rule'])).optional()
     .describe('Optional entry kinds to include'),
   limit: z.number().optional().describe('Maximum suggestions to return (default 3, maximum 5)'),
 });
@@ -529,7 +529,7 @@ Use this when the model needs to look up what a specific term means, or resolve 
   search_team_public_knowledge: `Search team public knowledge entries.
 
 Requires a non-empty \`query\` string. Supports optional filters:
-- \`kind\`: Narrow by entry kind (alias, slang, concept, convention, rule, process, warning, background)
+- \`kind\`: Narrow by entry kind (term, knowledge, notice, rule)
 - \`tag\`: Only entries with a specific tag
 - \`scope\`: Only entries in a specific scope
 - \`limit\`: Max results per page (default 20)
@@ -542,7 +542,7 @@ Use this for open-ended knowledge retrieval when you need to find relevant infor
   suggest_team_public_knowledge: `Suggest relevant team public knowledge for a full user message.
 
 Requires a non-empty \`message\` string. Supports optional filters:
-- \`kinds\`: Include only selected entry kinds (alias, slang, concept, convention, rule, process, warning, background)
+- \`kinds\`: Include only selected entry kinds (term, knowledge, notice, rule)
 - \`limit\`: Max suggestions (default 3, maximum 5)
 
 Suggestions include separate confidence and relevance scores, separate summary/excerpt/content/source fields, safety metadata for instruction-like content, tags, scope, stale/conflict flags, and match reasons. Stale, conflicted, or low-relevance entries are excluded from default suggestions.

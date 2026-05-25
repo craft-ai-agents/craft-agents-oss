@@ -25,6 +25,7 @@ import { registerSsoHandlers } from './sso'
 import { registerStatusesHandlers } from './statuses'
 import { registerSystemCoreHandlers } from './system'
 import { registerTransferHandlers } from './transfer'
+import { registerUserProfileHandlers } from './userProfile'
 import { registerWorkspaceCoreHandlers } from './workspace'
 import { registerWorkspaceFilesHandlers } from './workspace-files'
 import { registerMessagingHandlers } from './messaging'
@@ -53,6 +54,7 @@ export function registerCoreRpcHandlers(
   registerTeamKnowledgeHandlers(server, deps)
   registerSystemCoreHandlers(server, deps)
   registerTransferHandlers(server)
+  registerUserProfileHandlers(server, deps)
   registerWorkspaceCoreHandlers(server, deps)
   registerWorkspaceFilesHandlers(server, deps)
   registerMessagingHandlers(server, deps)

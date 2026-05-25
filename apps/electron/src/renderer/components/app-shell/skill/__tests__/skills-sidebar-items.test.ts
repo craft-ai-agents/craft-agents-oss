@@ -1,57 +1,45 @@
 import { describe, expect, test } from 'bun:test'
 import {
   createSkillsSidebarItems,
-  LOCAL_SKILLS_NAV_ID,
   SKILL_MARKETPLACE_NAV_ID,
 } from '../skills-sidebar-items'
 
 describe('createSkillsSidebarItems', () => {
-  test('builds local skills and marketplace as flat top-level sidebar items', () => {
+  test('builds a single merged skills sidebar item', () => {
     const addSkill = () => {}
-    const openLocalSkills = () => {}
-    const openMarketplace = () => {}
+    const openSkills = () => {}
 
     const items = createSkillsSidebarItems({
       skillsCount: 3,
       isLocalSkillsNav: true,
       isSkillMarketplaceNav: false,
-      onLocalSkillsClick: openLocalSkills,
-      onSkillMarketplaceClick: openMarketplace,
+      onLocalSkillsClick: () => {},
+      onSkillMarketplaceClick: openSkills,
       onAddSkill: addSkill,
       t: key => key,
     })
 
-    expect(items).toHaveLength(2)
-    expect(items.map(item => item.id)).toEqual([LOCAL_SKILLS_NAV_ID, SKILL_MARKETPLACE_NAV_ID])
+    expect(items).toHaveLength(1)
+    expect(items[0].id).toBe(SKILL_MARKETPLACE_NAV_ID)
 
-    const [localSkills, marketplace] = items
-    if ('type' in localSkills) throw new Error('Expected local skills to be a link item')
-    if ('type' in marketplace) throw new Error('Expected marketplace to be a link item')
+    const item = items[0]
+    if ('type' in item) throw new Error('Expected item to be a link item')
 
-    expect(localSkills).toMatchObject({
+    expect(item).toMatchObject({
       title: 'sidebar.skills',
       label: '3',
       variant: 'default',
-      onClick: openLocalSkills,
+      onClick: openSkills,
       contextMenu: {
         type: 'skills',
         onAddSkill: addSkill,
       },
     })
-    expect(localSkills).not.toHaveProperty('expandable')
-    expect(localSkills).not.toHaveProperty('items')
-
-    expect(marketplace).toMatchObject({
-      title: 'sidebar.marketplace',
-      variant: 'ghost',
-      onClick: openMarketplace,
-    })
-    expect(marketplace).not.toHaveProperty('label')
-    expect(marketplace).not.toHaveProperty('expandable')
-    expect(marketplace).not.toHaveProperty('items')
+    expect(item).not.toHaveProperty('expandable')
+    expect(item).not.toHaveProperty('items')
   })
 
-  test('highlights marketplace independently from local skills', () => {
+  test('highlights item when either local skills or marketplace nav is active', () => {
     const items = createSkillsSidebarItems({
       skillsCount: 0,
       isLocalSkillsNav: false,
@@ -62,11 +50,21 @@ describe('createSkillsSidebarItems', () => {
       t: key => key,
     })
 
-    const [localSkills, marketplace] = items
-    if ('type' in localSkills) throw new Error('Expected local skills to be a link item')
-    if ('type' in marketplace) throw new Error('Expected marketplace to be a link item')
+    expect(items).toHaveLength(1)
+    expect(items[0].variant).toBe('default')
+  })
 
-    expect(localSkills.variant).toBe('ghost')
-    expect(marketplace.variant).toBe('default')
+  test('uses ghost variant when neither nav is active', () => {
+    const items = createSkillsSidebarItems({
+      skillsCount: 0,
+      isLocalSkillsNav: false,
+      isSkillMarketplaceNav: false,
+      onLocalSkillsClick: () => {},
+      onSkillMarketplaceClick: () => {},
+      onAddSkill: () => {},
+      t: key => key,
+    })
+
+    expect(items[0].variant).toBe('ghost')
   })
 })
