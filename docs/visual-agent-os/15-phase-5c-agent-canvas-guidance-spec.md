@@ -105,3 +105,26 @@ The toggle writes `visualAgent: true` into `AGENT.md` frontmatter only when enab
 
 - Prompt test confirms the central system prompt includes the shared Canvas workflow.
 - Tool definition tests/typecheck confirm session tools still compile.
+
+## Phase 5C.3: Publishing Rules
+
+Status: implemented on 2026-05-25.
+
+Task list:
+
+1. Tell agents exactly when to set `showInCanvas: true`.
+2. Teach the preferred Canvas-native output format for each artifact class.
+3. Keep Browser Pane as the route for console, DOM, click, screenshot, and live inspection work.
+4. Avoid duplicate cards by checking `visual_surface_state` before pinning existing Outputs.
+
+Format rules:
+
+- Images: PNG/JPG/WebP/SVG primary file.
+- Video/audio: MP4/WebM/MOV or audio primary file.
+- Local/generated web: HTML Output with `preview.mode: "web"` or a local localhost link.
+- Markdown/report: Markdown Output.
+- Data/table: CSV/TSV first; JSON when structure matters.
+- Charts: `.chart.json` with `type`, `title`, and `data`.
+- Workflow maps: `.workflow.json` with `title` and `nodes`.
+- Slide decks: HTML preview first, PPTX/PDF exports as supporting files.
+- External services: link or receipt Output first, then attach exported image/PDF/video/HTML previews when available.

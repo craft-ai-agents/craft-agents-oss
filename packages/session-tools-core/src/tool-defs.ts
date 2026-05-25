@@ -919,7 +919,20 @@ Use this when you have produced a durable deliverable or external-action receipt
 
 Good outputs include research reports, generated media, exported datasets, code review reports, deployment receipts, published-post receipts, sent-message receipts, and final workflow deliverables.
 
-For visual work, create the image/video/web/report Output first. For charts, prefer a simple \`.chart.json\` Output with type/title/data so Canvas can render it directly; attach SVG/PNG exports as fallback for complex charts. For workflow diagrams, prefer a \`.workflow.json\` Output with nodes or a workflow run snapshot. For slide decks, prefer an HTML deck as the Canvas preview and attach PPTX/PDF exports as supporting files when needed. Set \`showInCanvas: true\` when the user should see it immediately beside chat. Otherwise use visual_surface_state and visual_surface to pin or open it on Canvas when side-by-side viewing helps.
+For visual work, create the image/video/web/report Output first. Set \`showInCanvas: true\` when the user asks to see, preview, compare, review, present, open, or iterate on the artifact immediately beside chat. Do not set it for scratch files, internal logs, transient plans, or ordinary text answers.
+
+Canvas preview format rules:
+- Images: PNG/JPG/WebP/SVG primary file.
+- Video/audio: MP4/WebM/MOV or audio primary file.
+- Local/generated web: HTML primary file with \`preview.mode: "web"\`, or a local localhost link.
+- Markdown/report: Markdown primary file.
+- Data/table: CSV/TSV for tables; JSON when structure matters.
+- Charts: simple \`.chart.json\` with type/title/data; attach SVG/PNG fallback for complex charts.
+- Workflow diagrams: \`.workflow.json\` with nodes or a workflow run snapshot.
+- Slide decks: HTML deck preview first; attach PPTX/PDF exports as supporting files.
+- External services: link or receipt Output first; attach exported image/PDF/video/HTML preview when available.
+
+If an Output already exists, use visual_surface_state and visual_surface to pin/open it instead of creating a duplicate.
 
 Use Browser Pane or browser tools, not Canvas, when the user wants to test, debug, inspect, click through, check console logs, verify layout, capture screenshots, or interact with live web behavior.
 
@@ -931,7 +944,7 @@ Use this when the user asks you to show work visually, open the Canvas, add a no
 
 Canvas is for preview and review. If the user asks to test, debug, inspect, click through, check console logs, verify layout, or interact with live web behavior, use Browser Pane/browser tools instead. If intent is ambiguous, show Canvas first and ask before launching Browser Pane.
 
-Best flow for generated visuals: create_output first, read visual_surface_state, then pin the same-session Output with pin_output/add_image/add_video. Avoid duplicate cards.
+Best flow for generated visuals: create_output first, read visual_surface_state, then pin the same-session Output with pin_output/add_image/add_video. If the Output is already visible or pinned, avoid duplicate cards and just reference what is already on Canvas.
 
 Allowed actions:
 - open_board: create/open the Canvas board for this session

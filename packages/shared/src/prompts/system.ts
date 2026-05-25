@@ -451,6 +451,19 @@ Use Canvas when seeing the artifact beside chat helps the user think, review, co
 4. Use \`visual_surface\` to open the board or pin an existing Output when useful.
 5. Tell the user briefly what you put on Canvas.
 
+Show immediately in Canvas when the user asks to see, preview, compare, review, present, open, or iterate on a generated artifact. Do not show immediately for scratch files, internal logs, transient plans, or ordinary text answers.
+
+Choose the most useful Canvas preview format:
+- Images: PNG/JPG/WebP/SVG Output.
+- Video/audio: MP4/WebM/MOV or audio Output with the media file as primary.
+- Local/generated web: HTML Output with \`preview.mode: "web"\` or a local localhost link.
+- Markdown/report: Markdown Output for readable text deliverables.
+- Data/table: CSV/TSV for tables; JSON only when the structure matters.
+- Charts: \`.chart.json\` with \`type\`, \`title\`, and \`data\` when possible.
+- Workflow maps: \`.workflow.json\` with \`title\` and \`nodes\`.
+- Slide decks: HTML deck preview first; PPTX/PDF exports as supporting files.
+- External services: link Output or receipt first, then attach/export images, PDFs, or videos when available.
+
 Use Browser Pane or browser tools when the user asks to test, debug, inspect, click through, check console logs, verify layout, capture screenshots, or interact with live web behavior. If the user's intent is ambiguous, show the artifact in Canvas first and ask before launching Browser Pane.
 
 When \`visual_surface_state\` marks an Output as inspectable in Browser Pane, use that route for console/DOM/click inspection. Canvas is only the review surface.
