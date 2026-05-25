@@ -55,7 +55,7 @@ function compactList(values: string[] | undefined): string | undefined {
   return cleaned.length ? cleaned.join(', ') : undefined
 }
 
-function hasProfileContent(profile: UserProfile | null | undefined): profile is UserProfile {
+export function hasProfileContent(profile: UserProfile | null | undefined): profile is UserProfile {
   return !!profile && !!(
     profile.name ||
     profile.oneStopId ||
@@ -66,7 +66,7 @@ function hasProfileContent(profile: UserProfile | null | undefined): profile is 
   )
 }
 
-function sanitizeProfile(profile: UserProfile): UserProfile {
+export function sanitizeProfile(profile: UserProfile): UserProfile {
   return {
     name: profile.name?.trim() || undefined,
     oneStopId: profile.oneStopId?.trim() || undefined,

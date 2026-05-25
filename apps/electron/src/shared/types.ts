@@ -104,6 +104,16 @@ export interface ToolIconMapping {
   commands: string[]
 }
 
+/** User profile data shown in workspace settings. */
+export interface UserProfile {
+  name?: string
+  oneStopId?: string
+  group?: string
+  department?: string
+  ownedModules?: string[]
+  ownedTopics?: string[]
+}
+
 /**
  * Browser pane creation options
  */
@@ -427,6 +437,10 @@ export interface ElectronAPI {
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
 
+  // User Profile
+  getUserProfile(): Promise<UserProfile | null>
+  refreshUserProfile(): Promise<UserProfile | null>
+
   // Workspace files
   getWorkspaceFiles(workspaceId: string, dirPath?: string, rootPath?: string): Promise<SessionFile[]>
   watchWorkspaceFiles(workspaceId: string, rootPath?: string): Promise<void>
@@ -501,7 +515,7 @@ export interface ElectronAPI {
   installMarketSkill(workspaceId: string, skillName: string, chineseName: string, description: string, version?: string): Promise<CopawInstallSkillResult>
   installLocalZip(workspaceId: string, skillName: string, zipBytes: Uint8Array): Promise<{ slug: string }>
   deleteMarketSkill(skillName: string): Promise<{ success: true }>
-  fetchMarketSkillContent(skillName: string, version?: string): Promise<{ content: string }>
+  fetchMarketSkillContent(skillName: string, version?: string): Promise<{ content: string; extraMetadata?: Record<string, unknown> }>
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void

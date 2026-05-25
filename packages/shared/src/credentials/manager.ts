@@ -47,21 +47,45 @@ export class CredentialManager {
     await this.initPromise;
   }
 
+  private ensureInitializedSync(): void {
+    if (this.initialized) {
+      return;
+    }
+
+    // SecureStorageBackend is always available and is currently the only
+    // credential backend. This sync path exists for sync callers such as
+    // saveSourceConfig(), where fire-and-forget cleanup can race immediate reloads.
+    const backend = new SecureStorageBackend();
+    this.backends = [backend];
+    this.writeBackend = backend;
+    this.initialized = true;
+    this.initPromise = null;
+    debug(`[CredentialManager] Backend available: ${backend.name} (priority ${backend.priority})`);
+    debug(`[CredentialManager] Using backend: ${backend.name}`);
+  }
+
   private async _doInitialize(): Promise<void> {
     const potentialBackends: CredentialBackend[] = [
       new SecureStorageBackend(),
     ];
+    const availableBackends: CredentialBackend[] = [];
 
     // Check which backends are available
     for (const backend of potentialBackends) {
       if (await backend.isAvailable()) {
-        this.backends.push(backend);
+        availableBackends.push(backend);
         debug(`[CredentialManager] Backend available: ${backend.name} (priority ${backend.priority})`);
       }
     }
 
+    // A synchronous caller may have initialized the singleton while the async
+    // availability checks above were in flight. In that case, keep the sync state
+    // instead of appending duplicate backends.
+    if (this.initialized) return;
+
     // Sort by priority (highest first)
-    this.backends.sort((a, b) => b.priority - a.priority);
+    availableBackends.sort((a, b) => b.priority - a.priority);
+    this.backends = availableBackends;
 
     // Use the first available backend for writing
     this.writeBackend = this.backends[0] || null;
@@ -128,6 +152,29 @@ export class CredentialManager {
     for (const backend of this.backends) {
       try {
         if (await backend.delete(id)) {
+          deleted = true;
+          debug(`[CredentialManager] Deleted ${id.type} from ${backend.name}`);
+        }
+      } catch (err) {
+        debug(`[CredentialManager] Error deleting from ${backend.name}:`, err);
+      }
+    }
+
+    return deleted;
+  }
+
+  deleteSync(id: CredentialId): boolean {
+    this.ensureInitializedSync();
+
+    let deleted = false;
+    for (const backend of this.backends) {
+      if (!backend.deleteSync) {
+        debug(`[CredentialManager] Backend ${backend.name} does not support synchronous delete`);
+        continue;
+      }
+
+      try {
+        if (backend.deleteSync(id)) {
           deleted = true;
           debug(`[CredentialManager] Deleted ${id.type} from ${backend.name}`);
         }

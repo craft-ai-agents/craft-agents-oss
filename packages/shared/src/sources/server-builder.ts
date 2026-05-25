@@ -44,6 +44,8 @@ export interface SourceWithCredential {
   /** Token for MCP sources, or ApiCredential for API sources */
   token?: string | null;
   credential?: ApiCredential | null;
+  /** SSO identity token used by bearer-auth MCP sources when available */
+  ssoIdToken?: string | null;
 }
 
 /**
@@ -83,7 +85,12 @@ export class SourceServerBuilder {
    * @param token - Authentication token (null for public/stdio sources)
    * @param credential - Multi-header credential from credential store (null if not set)
    */
-  buildMcpServer(source: LoadedSource, token: string | null, credential?: ApiCredential | null): McpServerConfig | null {
+  buildMcpServer(
+    source: LoadedSource,
+    token: string | null,
+    credential?: ApiCredential | null,
+    ssoIdToken?: string | null,
+  ): McpServerConfig | null {
     if (source.config.type !== 'mcp' || !source.config.mcp) {
       return null;
     }
@@ -137,7 +144,9 @@ export class SourceServerBuilder {
     // Credential-store imports can already provide Authorization as a header bundle.
     // In that case token may be the raw JSON credential value, so do not re-wrap it.
     if (mcp.authType !== 'none') {
-      if (token && !mergedHeaders.Authorization && !looksLikeCredentialHeaderBundle(token)) {
+      if (mcp.authType === 'bearer' && ssoIdToken) {
+        mergedHeaders = { ...mergedHeaders, Authorization: `Bearer ${ssoIdToken}` };
+      } else if (token && !mergedHeaders.Authorization && !looksLikeCredentialHeaderBundle(token)) {
         mergedHeaders = { ...mergedHeaders, Authorization: `Bearer ${token}` };
       } else if (source.config.isAuthenticated && !mergedHeaders.Authorization) {
         // Source claims to be authenticated but token is missing - needs re-auth
@@ -166,7 +175,8 @@ export class SourceServerBuilder {
     credential: ApiCredential | null,
     getToken?: () => Promise<string>,
     sessionPath?: string,
-    summarize?: SummarizeCallback
+    summarize?: SummarizeCallback,
+    getCredential?: () => Promise<ApiCredential | null>
   ): Promise<ReturnType<typeof createSdkMcpServer> | null> {
     if (source.config.type !== 'api') return null;
     if (!source.config.api) {
@@ -232,13 +242,30 @@ export class SourceServerBuilder {
       return createApiServer(config, getToken, sessionPath, summarize);
     }
 
-    // API key/bearer/header/query/basic auth - use static credential
+    // API key/bearer/header/query/basic auth.
+    //
+    // Use a per-request credential getter when available so that credential
+    // updates (e.g. user pasting a fresh JWT via source_credential_prompt)
+    // are picked up by the next tool call WITHOUT a session restart.
+    //
+    // The closure captured by createApiTool used to be a static string snapshot
+    // of the credential at build time, which meant the in-process tool kept
+    // using a stale token indefinitely. With a getter, the latest value is
+    // read from the vault on every request.
+    if (getCredential) {
+      debug(`[SourceServerBuilder] Building API server for ${source.config.slug} (auth: ${authType}, per-request credential)`);
+      const config = this.buildApiConfig(source);
+      return createApiServer(config, getCredential, sessionPath, summarize);
+    }
+
+    // Fallback: no getter provided — preserve legacy static-credential behavior
+    // (still used by tests and callers that don't pass a getter).
     if (!credential) {
       debug(`[SourceServerBuilder] API source ${source.config.slug} needs credentials`);
       return null;
     }
 
-    debug(`[SourceServerBuilder] Building API server for ${source.config.slug} (auth: ${authType})`);
+    debug(`[SourceServerBuilder] Building API server for ${source.config.slug} (auth: ${authType}, static credential)`);
     const config = this.buildApiConfig(source);
     return createApiServer(config, credential, sessionPath, summarize);
   }
@@ -288,25 +315,31 @@ export class SourceServerBuilder {
    * Build all MCP and API servers for enabled sources
    *
    * @param sourcesWithCredentials - Sources with their pre-loaded credentials
-   * @param getTokenForSource - Function to get token getter for OAuth sources
+   * @param getTokenForSource - Function to get token getter for OAuth / renew-endpoint sources
    * @param sessionPath - Optional path to session folder for saving large API responses
+   * @param summarize - Optional summarize callback for large API responses
+   * @param getCredentialForSource - Function to get a per-request credential getter for
+   *   non-OAuth API sources (bearer/header/query/basic). When provided, the in-process
+   *   tool reads the credential from the vault on every call instead of caching a
+   *   stale snapshot — required for mid-session credential updates to take effect.
    */
   async buildAll(
     sourcesWithCredentials: SourceWithCredential[],
     getTokenForSource?: (source: LoadedSource) => (() => Promise<string>) | undefined,
     sessionPath?: string,
-    summarize?: SummarizeCallback
+    summarize?: SummarizeCallback,
+    getCredentialForSource?: (source: LoadedSource) => (() => Promise<ApiCredential | null>) | undefined
   ): Promise<BuiltServers> {
     const mcpServers: Record<string, McpServerConfig> = {};
     const apiServers: Record<string, ReturnType<typeof createSdkMcpServer>> = {};
     const errors: BuiltServers['errors'] = [];
 
-    for (const { source, token, credential } of sourcesWithCredentials) {
+    for (const { source, token, credential, ssoIdToken } of sourcesWithCredentials) {
       if (!isSourceUsable(source)) continue;
 
       try {
         if (source.config.type === 'mcp') {
-          const config = this.buildMcpServer(source, token ?? null, credential);
+          const config = this.buildMcpServer(source, token ?? null, credential, ssoIdToken);
           if (config) {
             debug(`[SourceServerBuilder] Built MCP server for ${source.config.slug}`);
             mcpServers[source.config.slug] = config;
@@ -321,7 +354,15 @@ export class SourceServerBuilder {
           }
         } else if (source.config.type === 'api') {
           const getToken = getTokenForSource?.(source);
-          const server = await this.buildApiServer(source, credential ?? null, getToken, sessionPath, summarize);
+          const getCredential = getCredentialForSource?.(source);
+          const server = await this.buildApiServer(
+            source,
+            credential ?? null,
+            getToken,
+            sessionPath,
+            summarize,
+            getCredential
+          );
           if (server) {
             apiServers[source.config.slug] = server;
           }

@@ -371,6 +371,7 @@ describe('SSO RPC handlers', () => {
 
     expect(result).toEqual({
       authenticated: true,
+      employeeId: 'DEV-EMPLOYEE',
       userName: 'Development User',
       department: 'Development',
     })
@@ -413,6 +414,7 @@ describe('SSO RPC handlers', () => {
 
     expect(result).toEqual({
       authenticated: true,
+      employeeId: 'employee-1',
       userName: 'Ada Lovelace',
       department: 'Engineering',
     })

@@ -3,7 +3,7 @@ import { writeFileSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { zipSync, strToU8 } from 'fflate'
-import { extractSkillsFromZip } from '../zip-extractor.ts'
+import { extractSkillsFromZip, extractSkillsFromZipBytes } from '../zip-extractor.ts'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -137,5 +137,78 @@ describe('extractSkillsFromZip', () => {
 
     const skills = extractSkillsFromZip(zipPath)
     expect(skills[0]!.content.trim()).toBe(body)
+  })
+
+  it('preserves vendor metadata from frontmatter', () => {
+    const zipPath = writeZip(tmpDir, 'with-metadata.zip', {
+      'SKILL.md': strToU8(`---
+name: User Context
+description: Reads user context
+metadata:
+  builtin_skill_version: "1.2"
+  mdp:
+    mcp:
+      clients:
+        lego:
+          name: lego
+          transport: streamable_http
+          url: https://example.com/mcp
+---
+Body`),
+    })
+
+    const skills = extractSkillsFromZip(zipPath)
+
+    expect(skills[0]!.metadata.metadata).toEqual({
+      builtin_skill_version: '1.2',
+      mdp: {
+        mcp: {
+          clients: {
+            lego: {
+              name: 'lego',
+              transport: 'streamable_http',
+              url: 'https://example.com/mcp',
+            },
+          },
+        },
+      },
+    })
+  })
+
+  it('extracts a root skill from zip bytes with the caller-provided slug', () => {
+    const zipBytes = zipSync({
+      'SKILL.md': strToU8(`---
+name: User Context
+description: Reads user context
+metadata:
+  mdp:
+    mcp:
+      clients:
+        lego:
+          name: lego
+          transport: streamable_http
+          url: https://example.com/mcp
+---
+Body`),
+    })
+
+    const skills = extractSkillsFromZipBytes(zipBytes, {
+      sourcePath: 'uploaded.zip',
+      rootSlug: 'uploaded-skill',
+    })
+
+    expect(skills).toHaveLength(1)
+    expect(skills[0]!.slug).toBe('uploaded-skill')
+    expect(skills[0]!.metadata.metadata).toMatchObject({
+      mdp: {
+        mcp: {
+          clients: {
+            lego: {
+              url: 'https://example.com/mcp',
+            },
+          },
+        },
+      },
+    })
   })
 })

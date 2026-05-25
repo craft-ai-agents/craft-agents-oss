@@ -200,6 +200,11 @@ export interface SessionToolContext {
   credentialManager?: CredentialManagerInterface;
 
   /**
+   * Get the current SSO identity token for bearer-auth MCP sources.
+   */
+  getSsoIdToken?(): Promise<string | null>;
+
+  /**
    * Load a source config from the workspace.
    */
   loadSourceConfig(sourceSlug: string): SourceConfig | null;

@@ -22,11 +22,11 @@ describe('markdown entry parser', () => {
       expect(parseMarkdownEntries(md)).toEqual([]);
     });
 
-    it('splits non-heading text by paragraphs into concept entries', () => {
+    it('splits non-heading text by paragraphs into knowledge entries', () => {
       const md = 'Just a paragraph of text.\n\nAnother paragraph.';
       const entries = parseMarkdownEntries(md);
       expect(entries).toHaveLength(2);
-      expect(entries[0]!.kind).toBe('concept');
+      expect(entries[0]!.kind).toBe('knowledge');
       expect(entries[0]!.content).toBe('Just a paragraph of text.');
       expect(entries[1]!.content).toBe('Another paragraph.');
       expect(entries[0]!.headingPath).toEqual([]);
@@ -35,39 +35,39 @@ describe('markdown entry parser', () => {
 
   // ── Explicit markers ──────────────────────────────────────────
   describe('explicit markers', () => {
-    it('parses an alias marker with term and canonical', () => {
-      const md = '<!-- alias term:onboarding-flow canonical:user-onboarding-guide -->\nOnboarding flow is also known as the user onboarding guide.';
+    it('parses a term marker with name and canonical', () => {
+      const md = '<!-- term name:onboarding-flow canonical:user-onboarding-guide -->\nOnboarding flow is also known as the user onboarding guide.';
       const entries = parseMarkdownEntries(md);
       expect(entries).toHaveLength(1);
-      expect(entries[0]!.kind).toBe('alias');
+      expect(entries[0]!.kind).toBe('term');
       expect(entries[0]!.term).toBe('onboarding-flow');
       expect(entries[0]!.canonical).toBe('user-onboarding-guide');
       expect(entries[0]!.content).toBe('Onboarding flow is also known as the user onboarding guide.');
     });
 
-    it('parses a slang marker with term and canonical', () => {
-      const md = '<!-- slang term:afk canonical:away-from-keyboard -->\nAFK means Away From Keyboard.';
+    it('parses a term marker with legacy term key', () => {
+      const md = '<!-- term term:afk canonical:away-from-keyboard -->\nAFK means Away From Keyboard.';
       const entries = parseMarkdownEntries(md);
       expect(entries).toHaveLength(1);
-      expect(entries[0]!.kind).toBe('slang');
+      expect(entries[0]!.kind).toBe('term');
       expect(entries[0]!.term).toBe('afk');
       expect(entries[0]!.canonical).toBe('away-from-keyboard');
     });
 
-    it('parses a concept marker with title and summary', () => {
-      const md = '<!-- concept title:Frontend Architecture summary:The React-based UI layer -->\nThe frontend uses React 18 with TypeScript. State is managed via React context.';
+    it('parses a term marker with title and summary', () => {
+      const md = '<!-- term title:Frontend Architecture summary:The React-based UI layer -->\nThe frontend uses React 18 with TypeScript. State is managed via React context.';
       const entries = parseMarkdownEntries(md);
       expect(entries).toHaveLength(1);
-      expect(entries[0]!.kind).toBe('concept');
+      expect(entries[0]!.kind).toBe('term');
       expect(entries[0]!.title).toBe('Frontend Architecture');
       expect(entries[0]!.summary).toBe('The React-based UI layer');
     });
 
-    it('parses a convention marker with title and summary', () => {
-      const md = '<!-- convention title:Naming Convention summary:PascalCase for components -->\nAll React components must use PascalCase names.';
+    it('parses a rule marker with title and summary (convention)', () => {
+      const md = '<!-- rule title:Naming Convention summary:PascalCase for components -->\nAll React components must use PascalCase names.';
       const entries = parseMarkdownEntries(md);
       expect(entries).toHaveLength(1);
-      expect(entries[0]!.kind).toBe('convention');
+      expect(entries[0]!.kind).toBe('rule');
       expect(entries[0]!.title).toBe('Naming Convention');
       expect(entries[0]!.summary).toBe('PascalCase for components');
     });
@@ -80,28 +80,28 @@ describe('markdown entry parser', () => {
       expect(entries[0]!.title).toBe('Auth Required');
     });
 
-    it('parses a warning marker with title and summary', () => {
-      const md = '<!-- warning title:Deprecated API summary:Use v2 instead -->\nThe v1 API is deprecated and will be removed in Q3.';
+    it('parses a rule marker with title and summary (warning)', () => {
+      const md = '<!-- rule title:Deprecated API summary:Use v2 instead -->\nThe v1 API is deprecated and will be removed in Q3.';
       const entries = parseMarkdownEntries(md);
       expect(entries).toHaveLength(1);
-      expect(entries[0]!.kind).toBe('warning');
+      expect(entries[0]!.kind).toBe('rule');
       expect(entries[0]!.title).toBe('Deprecated API');
       expect(entries[0]!.summary).toBe('Use v2 instead');
     });
 
-    it('parses a process marker', () => {
-      const md = '<!-- process title:Deploy Flow summary:Steps to deploy -->\n1. Merge PR\n2. Wait for CI\n3. Deploy to prod';
+    it('parses a rule marker (process)', () => {
+      const md = '<!-- rule title:Deploy Flow summary:Steps to deploy -->\n1. Merge PR\n2. Wait for CI\n3. Deploy to prod';
       const entries = parseMarkdownEntries(md);
       expect(entries).toHaveLength(1);
-      expect(entries[0]!.kind).toBe('process');
+      expect(entries[0]!.kind).toBe('rule');
       expect(entries[0]!.title).toBe('Deploy Flow');
     });
 
-    it('parses a background marker', () => {
-      const md = '<!-- background title:Why Monorepo summary:Scaling the codebase -->\nWe chose a monorepo to share types and utilities across packages.';
+    it('parses a knowledge marker', () => {
+      const md = '<!-- knowledge title:Why Monorepo summary:Scaling the codebase -->\nWe chose a monorepo to share types and utilities across packages.';
       const entries = parseMarkdownEntries(md);
       expect(entries).toHaveLength(1);
-      expect(entries[0]!.kind).toBe('background');
+      expect(entries[0]!.kind).toBe('knowledge');
       expect(entries[0]!.title).toBe('Why Monorepo');
     });
   });
@@ -109,7 +109,7 @@ describe('markdown entry parser', () => {
   // ── Metadata parsing ──────────────────────────────────────────
   describe('metadata parsing', () => {
     it('parses optional id from marker', () => {
-      const md = '<!-- concept id:frontend-arch -->\nFrontend architecture details.';
+      const md = '<!-- term id:frontend-arch -->\nFrontend architecture details.';
       const entries = parseMarkdownEntries(md);
       expect(entries[0]!.metadata.id).toBe('frontend-arch');
     });
@@ -121,7 +121,7 @@ describe('markdown entry parser', () => {
     });
 
     it('parses scope from marker', () => {
-      const md = '<!-- concept scope:engineering -->\nEngineering guidelines.';
+      const md = '<!-- term scope:engineering -->\nEngineering guidelines.';
       const entries = parseMarkdownEntries(md);
       expect(entries[0]!.metadata.scope).toBe('engineering');
     });
@@ -139,7 +139,7 @@ describe('markdown entry parser', () => {
     });
 
     it('parses all metadata fields in one marker', () => {
-      const md = `<!-- alias id:alias-1 tags:migration,legacy scope:backend defaults:{retryCount:3} validUntil:2025-06-30 term:old-system canonical:new-system -->\nOld system is now called new-system.`;
+      const md = `<!-- term id:alias-1 tags:migration,legacy scope:backend defaults:{retryCount:3} validUntil:2025-06-30 term:old-system canonical:new-system -->\nOld system is now called new-system.`;
       const entries = parseMarkdownEntries(md);
       expect(entries[0]!.metadata).toEqual({
         id: 'alias-1',
@@ -156,13 +156,13 @@ describe('markdown entry parser', () => {
   // ── Heading path tracking ─────────────────────────────────────
   describe('heading path tracking', () => {
     it('tracks a single h1 heading path', () => {
-      const md = '# Team Wiki\n\n<!-- concept -->\nContent here.';
+      const md = '# Team Wiki\n\n<!-- knowledge -->\nContent here.';
       const entries = parseMarkdownEntries(md);
       expect(entries[0]!.headingPath).toEqual(['Team Wiki']);
     });
 
     it('tracks nested heading paths (h1 > h2 > h3)', () => {
-      const md = '# Guide\n\n## Architecture\n\n### Frontend\n\n<!-- concept -->\nReact with TypeScript.\n\n### Backend\n\n<!-- concept -->\nNode.js with Express.';
+      const md = '# Guide\n\n## Architecture\n\n### Frontend\n\n<!-- knowledge -->\nReact with TypeScript.\n\n### Backend\n\n<!-- knowledge -->\nNode.js with Express.';
       const entries = parseMarkdownEntries(md);
       expect(entries).toHaveLength(2);
       expect(entries[0]!.headingPath).toEqual(['Guide', 'Architecture', 'Frontend']);
@@ -170,7 +170,7 @@ describe('markdown entry parser', () => {
     });
 
     it('handles sibling headings under the same parent', () => {
-      const md = '# Project\n\n## Setup\n\n<!-- concept -->\nInstall steps.\n\n## Deployment\n\n<!-- concept -->\nDeploy steps.';
+      const md = '# Project\n\n## Setup\n\n<!-- knowledge -->\nInstall steps.\n\n## Deployment\n\n<!-- knowledge -->\nDeploy steps.';
       const entries = parseMarkdownEntries(md);
       expect(entries).toHaveLength(2);
       expect(entries[0]!.headingPath).toEqual(['Project', 'Setup']);
@@ -199,10 +199,10 @@ describe('markdown entry parser', () => {
       const md = '# Notes\n\nFirst note paragraph.\n\nSecond note paragraph.\n\nThird paragraph.';
       const entries = parseMarkdownEntries(md);
       expect(entries).toHaveLength(3);
-      expect(entries[0]!.kind).toBe('concept');
+      expect(entries[0]!.kind).toBe('knowledge');
       expect(entries[0]!.content).toBe('First note paragraph.');
       expect(entries[0]!.headingPath).toEqual(['Notes']);
-      expect(entries[1]!.kind).toBe('concept');
+      expect(entries[1]!.kind).toBe('knowledge');
       expect(entries[1]!.content).toBe('Second note paragraph.');
       expect(entries[2]!.content).toBe('Third paragraph.');
     });
@@ -212,7 +212,7 @@ describe('markdown entry parser', () => {
       const entries = parseMarkdownEntries(md);
       // Only header row and data rows are present; header row is skipped
       expect(entries).toHaveLength(3);
-      expect(entries[0]!.kind).toBe('concept');
+      expect(entries[0]!.kind).toBe('knowledge');
       expect(entries[0]!.content).toContain('AFK');
       expect(entries[0]!.content).toContain('Away From Keyboard');
       expect(entries[0]!.headingPath).toEqual(['Slang Terms']);
@@ -249,7 +249,7 @@ describe('markdown entry parser', () => {
   // ── Mixed document ────────────────────────────────────────────
   describe('mixed document', () => {
     it('handles a mix of marked and unmarked sections', () => {
-      const md = '# Team Wiki\n\n## Concepts\n\n<!-- concept title:Reactive System -->\nA system that reacts to events.\n\n## Slang\n\n| Slang | Meaning |\n|-------|--------|\n| WIP | Work In Progress |\n| ETA | Estimated Time of Arrival |\n\n## Rules\n\n<!-- rule id:no-direct-db -->\nNever access the database directly from controllers.\n\nAlways use the repository pattern.\n\n<!-- rule id:log-all-errors -->\nLog all errors with stack traces.';
+      const md = '# Team Wiki\n\n## Concepts\n\n<!-- term title:Reactive System -->\nA system that reacts to events.\n\n## Slang\n\n| Slang | Meaning |\n|-------|--------|\n| WIP | Work In Progress |\n| ETA | Estimated Time of Arrival |\n\n## Rules\n\n<!-- rule id:no-direct-db -->\nNever access the database directly from controllers.\n\nAlways use the repository pattern.\n\n<!-- rule id:log-all-errors -->\nLog all errors with stack traces.';
       const entries = parseMarkdownEntries(md);
 
       // Concepts: 1 marked entry; Slang: 2 table row entries; Rules: 2 marked entries
@@ -257,18 +257,18 @@ describe('markdown entry parser', () => {
 
       expect(entries).toHaveLength(5);
 
-      // Concept entry
+      // Concept entry (now term kind)
       expect(entries[0]!.headingPath).toEqual(['Team Wiki', 'Concepts']);
-      expect(entries[0]!.kind).toBe('concept');
+      expect(entries[0]!.kind).toBe('term');
       expect(entries[0]!.title).toBe('Reactive System');
 
-      // Table entries
+      // Table entries (fallback to knowledge kind)
       expect(entries[1]!.headingPath).toEqual(['Team Wiki', 'Slang']);
-      expect(entries[1]!.kind).toBe('concept');
+      expect(entries[1]!.kind).toBe('knowledge');
       expect(entries[1]!.content).toContain('WIP');
 
       expect(entries[2]!.headingPath).toEqual(['Team Wiki', 'Slang']);
-      expect(entries[2]!.kind).toBe('concept');
+      expect(entries[2]!.kind).toBe('knowledge');
       expect(entries[2]!.content).toContain('ETA');
 
       // Rule entries

@@ -117,7 +117,7 @@ describe('groupConnectionsByProvider', () => {
     const piConn = conn('pi-1', 'pi')
     const anth = conn('anthropic-1', 'anthropic')
     const result = groupConnectionsByProvider([piConn, anth])
-    expect(result.map(([k]) => k)).toEqual(['Anthropic', 'Craft Agents Backend'])
+    expect(result.map(([k]) => k)).toEqual(['Anthropic', 'MDP Agent Backend'])
   })
 
   test('"pi_compat" with localhost baseUrl goes to "Local"', () => {
@@ -126,16 +126,16 @@ describe('groupConnectionsByProvider', () => {
     expect(result).toEqual([['Local', [local]]])
   })
 
-  test('"pi_compat" with remote baseUrl goes to "Craft Agents Backend"', () => {
+  test('"pi_compat" with remote baseUrl goes to "MDP Agent Backend"', () => {
     const remote = conn('openrouter', 'pi_compat', { baseUrl: 'https://openrouter.ai/api/v1' })
     const result = groupConnectionsByProvider([remote])
-    expect(result).toEqual([['Craft Agents Backend', [remote]]])
+    expect(result).toEqual([['MDP Agent Backend', [remote]]])
   })
 
   test('drops empty groups from the output', () => {
     const a = conn('a', 'anthropic')
     const result = groupConnectionsByProvider([a])
-    // Only "Anthropic" appears; "Local" and "Craft Agents Backend" are dropped.
+    // Only "Anthropic" appears; "Local" and "MDP Agent Backend" are dropped.
     expect(result.length).toBe(1)
     expect(result[0][0]).toBe('Anthropic')
   })
@@ -156,7 +156,7 @@ describe('groupConnectionsByProvider', () => {
     expect(result.map(([k, conns]) => [k, conns.map(c => c.slug)])).toEqual([
       ['Anthropic', ['a']],
       ['Local', ['ollama']],
-      ['Craft Agents Backend', ['or', 'p']],
+      ['MDP Agent Backend', ['or', 'p']],
     ])
   })
 })

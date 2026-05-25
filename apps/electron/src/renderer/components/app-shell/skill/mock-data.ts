@@ -165,6 +165,46 @@ export const MOCK_MARKET_SKILLS: CopawMarketSkill[] = [
     createdAt: '2024-06-10T09:00:00Z',
     version: '20240610090000',
   },
+  // 最近 7 天内发布，用于测试 NEW badge
+  {
+    fileKey: 'mock-key-13',
+    userName: '林小明',
+    employeeId: 'EMP013',
+    department: '研发部',
+    name: 'prd-writer',
+    chineseName: 'PRD 写作助手',
+    description: '根据需求描述自动生成结构化产品需求文档，包含背景、目标、功能清单与验收标准。',
+    tag: 'A',
+    hot: 12,
+    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), // 1 天前
+    version: '1.0.0',
+  },
+  {
+    fileKey: 'mock-key-14',
+    userName: '吴大伟',
+    employeeId: 'EMP014',
+    department: 'DevOps团队',
+    name: 'helm-chart-gen',
+    chineseName: 'Helm Chart 生成器',
+    description: '根据应用描述自动生成标准 Helm Chart 模板，支持多环境 values 配置。',
+    tag: 'B',
+    hot: 8,
+    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 天前
+    version: '1.0.0',
+  },
+  {
+    fileKey: 'mock-key-15',
+    userName: '陈晓红',
+    employeeId: 'EMP015',
+    department: '数据团队',
+    name: 'data-lineage',
+    chineseName: '数据血缘分析',
+    description: '自动梳理数据表的上下游依赖关系，生成数据血缘图谱，辅助数据治理与问题排查。',
+    tag: 'A',
+    hot: 5,
+    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 天前
+    version: '1.0.0',
+  },
 ]
 
 export const MOCK_SKILLS: MarketplaceSkillListing[] = [
