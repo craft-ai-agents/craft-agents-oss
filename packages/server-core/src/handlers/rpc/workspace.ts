@@ -68,7 +68,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
 
   // Check if a workspace slug already exists (for validation before creation)
   server.handle(RPC_CHANNELS.workspaces.CHECK_SLUG, async (_ctx, slug: string) => {
-    const defaultWorkspacesDir = join(homedir(), '.craft-agent', 'workspaces')
+    const defaultWorkspacesDir = join(homedir(), '.mdp-agent', 'workspaces')
     const workspacePath = join(defaultWorkspacesDir, slug)
     const exists = existsSync(workspacePath)
     return { exists, path: workspacePath }
@@ -479,8 +479,6 @@ async function resolveFeedbackApiContext(): Promise<{ baseUrl: string; token: st
   }
 
   const baseUrl =
-    process.env.FEEDBACK_API_URL ||
-    process.env.PERMISSION_API_URL ||
     process.env.VITE_PERMISSION_API_URL ||
     process.env.MDP_API_URL ||
     ''

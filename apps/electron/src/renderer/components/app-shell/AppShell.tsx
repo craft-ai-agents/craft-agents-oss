@@ -88,8 +88,8 @@ import {
 import type { SettingsSubpage, AdminSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { ArchivedSessionsPanel } from "./ArchivedSessionsPanel"
-import { SkillsListPanel } from "./SkillsListPanel"
-import { SkillImportModal } from "./SkillImportModal"
+import { SkillsListPanel } from "./skill/SkillsListPanel"
+import { SkillImportModal } from "./skill/SkillImportModal"
 import { McpSourceFormDialog } from "./McpSourceFormDialog"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { APP_EVENTS, AGENT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
@@ -119,7 +119,7 @@ import {
   createSkillsSidebarItems,
   LOCAL_SKILLS_NAV_ID,
   SKILL_MARKETPLACE_NAV_ID,
-} from "./skills-sidebar-items"
+} from "./skill/skills-sidebar-items"
 import {
   loadRightSidebarOpenPreference,
   persistRightSidebarOpenPreference,

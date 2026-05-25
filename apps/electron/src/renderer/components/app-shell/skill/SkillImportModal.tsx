@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Bot, FileArchive, Globe2, PencilLine, Upload } from 'lucide-react'
 import { deriveSkillSlug } from '@craft-agent/shared/skills/slug'
-import type { CreateSkillResult, DiscoveredSkill } from '../../../shared/types'
+import type { CreateSkillResult, DiscoveredSkill } from '../../../../shared/types'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,

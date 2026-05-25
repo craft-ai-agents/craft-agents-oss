@@ -261,7 +261,7 @@ export function ConnectionRow({ connection, isLastConnection, onRenameClick, onD
       case 'pi_compat':
         parts.push(connection.baseUrl?.toLowerCase().includes('manifest.build')
           ? 'Manifest'
-          : 'Craft Agents Backend Compatible')
+          : 'MDP Agent Backend Compatible')
         break
       case 'openllm':
         parts.push('OpenLLM')
@@ -1089,8 +1089,8 @@ export default function AiSettingsPage() {
                       value: conn.slug,
                       label: conn.name,
                       description: conn.providerType === 'anthropic' ? 'Anthropic API' :
-                                   conn.providerType === 'pi' ? 'Craft Agents Backend' :
-                                   conn.providerType === 'pi_compat' ? (conn.baseUrl?.toLowerCase().includes('manifest.build') ? 'Manifest' : 'Craft Agents Backend Compatible') :
+                                   conn.providerType === 'pi' ? 'MDP Agent Backend' :
+                                   conn.providerType === 'pi_compat' ? (conn.baseUrl?.toLowerCase().includes('manifest.build') ? 'Manifest' : 'MDP Agent Backend Compatible') :
                                    conn.providerType === 'openllm' ? 'OpenLLM' :
                                    conn.providerType || 'Unknown',
                     }))}

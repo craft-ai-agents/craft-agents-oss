@@ -47,7 +47,7 @@ export default [
       '@typescript-eslint': tsPlugin,
       react: reactPlugin,
       'react-hooks': reactHooksPlugin,
-      // Custom plugin for Craft Agent rules
+      // Custom plugin for MDP Agent rules
       'craft-agent': {
         rules: {
           'no-direct-navigation-state': noDirectNavigationState,
@@ -96,7 +96,7 @@ export default [
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
 
-      // Custom Craft Agent rules
+      // Custom MDP Agent rules
       'craft-agent/no-direct-navigation-state': 'error',
       'craft-agent/no-localstorage': 'warn',
 

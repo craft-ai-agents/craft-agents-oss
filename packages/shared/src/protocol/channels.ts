@@ -280,6 +280,7 @@ export const RPC_CHANNELS = {
     LIST_MARKET: 'skills:listMarket',
     UPLOAD_MARKET: 'skills:uploadMarket',
     INSTALL_MARKET: 'skills:installMarket',
+    INSTALL_LOCAL_ZIP: 'skills:installLocalZip',
     DELETE_MARKET: 'skills:deleteMarket',
     FETCH_MARKET_CONTENT: 'skills:fetchMarketContent',
     CHANGED: 'skills:changed',

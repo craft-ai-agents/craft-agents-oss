@@ -7,10 +7,10 @@ import { EntityPanel } from '@/components/ui/entity-panel'
 import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
 import { skillSelection } from '@/hooks/useEntitySelection'
 import { SkillMenu } from './SkillMenu'
-import { SendResourceToWorkspaceDialog } from './SendResourceToWorkspaceDialog'
+import { SendResourceToWorkspaceDialog } from '../SendResourceToWorkspaceDialog'
 import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
 import { getFileManagerName } from '@/lib/platform'
-import type { LoadedSkill } from '../../../shared/types'
+import type { LoadedSkill } from '../../../../shared/types'
 
 export interface SkillsListPanelProps {
   skills: LoadedSkill[]

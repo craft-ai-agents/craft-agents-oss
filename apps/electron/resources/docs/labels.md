@@ -8,7 +8,7 @@ Labels are additive tags that can be applied to sessions. Unlike statuses (which
 
 ## Storage Locations
 
-- Config: `~/.craft-agent/workspaces/{id}/labels/config.json`
+- Config: `~/.mdp-agent/workspaces/{id}/labels/config.json`
 
 ## No Defaults (Regular Labels)
 

@@ -1,5 +1,5 @@
 import { Zap } from 'lucide-react'
-import type { SidebarItem } from './LeftSidebar'
+import type { SidebarItem } from '../LeftSidebar'
 
 /** Sidebar item ID for the local skills entry. */
 export const LOCAL_SKILLS_NAV_ID = 'nav:local-skills'
