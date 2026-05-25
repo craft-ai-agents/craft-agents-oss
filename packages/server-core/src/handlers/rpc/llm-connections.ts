@@ -270,7 +270,11 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       // Awaited so the model selector shows real available models immediately.
       const pendingModels = Array.isArray(pendingConnection.models) ? pendingConnection.models : []
       const isAutoSynced = pendingConnection.modelSelectionMode === 'automaticallySyncedFromProvider'
-      if (!pendingModels.length || isAutoSynced) {
+      // Re-auth with a new credential may point at a different account whose
+      // model entitlements differ — force a refresh instead of trusting the
+      // cached models from the prior credential.
+      const isReauthWithNewCredential = setup.updateOnly === true && !!setup.credential && !isMasked
+      if (!pendingModels.length || isAutoSynced || isReauthWithNewCredential) {
         try {
           await getModelRefreshService().refreshNow(setup.slug)
         } catch (err) {
@@ -671,6 +675,16 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       })
 
       pendingChatGptFlows.delete(state)
+
+      // Refresh the model list with the new credentials — the previously
+      // cached models reflect the old account's entitlements and would be
+      // stale (e.g. a new account may have access to newer GPT models).
+      try {
+        await getModelRefreshService().refreshNow(flow.connectionSlug)
+      } catch (err) {
+        deps.platform.logger?.warn(`Model refresh after ChatGPT OAuth failed for ${flow.connectionSlug}: ${err instanceof Error ? err.message : err}`)
+      }
+
       deps.platform.logger?.info(`[ChatGPT OAuth] Flow complete for ${flow.connectionSlug}`)
       return { success: true }
     } catch (error) {
@@ -794,6 +808,15 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         refreshToken: credentials.refresh,
         expiresAt: credentials.expires,
       })
+
+      // Refresh the model list with the new credentials — Copilot's available
+      // models depend on the GitHub account's subscription policy, which can
+      // differ between the previous and newly authenticated account.
+      try {
+        await getModelRefreshService().refreshNow(connectionSlug)
+      } catch (err) {
+        deps.platform.logger?.warn(`Model refresh after Copilot OAuth failed for ${connectionSlug}: ${err instanceof Error ? err.message : err}`)
+      }
 
       deps.platform.logger?.info('GitHub Copilot OAuth completed successfully')
       return { success: true }
