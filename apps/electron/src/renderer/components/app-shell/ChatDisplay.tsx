@@ -1091,7 +1091,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
         replaceFeedbackByMessageId(buildFeedbackStateByMessageId(entries, sessionId))
       })
       .catch(error => {
-        console.error('[Craft Agent Feedback] Failed to load feedback state:', error)
+        console.error('[MDP Agent Feedback] Failed to load feedback state:', error)
       })
 
     return () => {
@@ -1113,7 +1113,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       turn.turnId
     )
 
-    console.log('[Craft Agent Feedback]', {
+    console.log('[MDP Agent Feedback]', {
       time: new Date().toISOString(),
       action: rating === 'like' ? '点赞' : '点踩',
       sessionId: currentSession.id,
@@ -1249,7 +1249,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     if (!nextRating) {
       setDislikeFeedbackDialog(prev => prev?.messageId === messageId ? null : prev)
       const pendingSave = pendingFeedbackSaveByMessageIdRef.current[messageId]
-      console.log('[Craft Agent Feedback] cancel feedback:', {
+      console.log('[MDP Agent Feedback] cancel feedback:', {
         time: new Date().toISOString(),
         sessionId: currentSession.id,
         messageId,
@@ -1265,7 +1265,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
         feedbackIdForDelete
           .then(feedbackId => {
             if (!feedbackId) {
-              console.warn('[Craft Agent Feedback] deleteChatFeedback skipped: missing feedback id after resolve', {
+              console.warn('[MDP Agent Feedback] deleteChatFeedback skipped: missing feedback id after resolve', {
                 time: new Date().toISOString(),
                 messageId,
                 previousFeedback: previousFeedback ?? null,
@@ -1275,10 +1275,10 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             return deleteRemoteFeedbackWithLog(feedbackId).catch(() => undefined)
           })
           .catch(error => {
-            console.error('[Craft Agent Feedback] Failed to resolve feedback id for delete:', error)
+            console.error('[MDP Agent Feedback] Failed to resolve feedback id for delete:', error)
           })
       } else {
-        console.warn('[Craft Agent Feedback] deleteChatFeedback skipped: no feedback id available', {
+        console.warn('[MDP Agent Feedback] deleteChatFeedback skipped: no feedback id available', {
           time: new Date().toISOString(),
           messageId,
           previousFeedback: previousFeedback ?? null,
@@ -1287,7 +1287,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       }
       window.electronAPI.deleteChatFeedbackState(currentSession.workspaceId, currentSession.id, messageId)
         .catch(error => {
-          console.error('[Craft Agent Feedback] Failed to delete feedback state:', error)
+          console.error('[MDP Agent Feedback] Failed to delete feedback state:', error)
         })
       return
     }
@@ -1299,7 +1299,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       nextRating === 'like',
       previousFeedback?.feedbackId,
     ).catch(error => {
-      console.error('[Craft Agent Feedback] Failed to save feedback state:', error)
+      console.error('[MDP Agent Feedback] Failed to save feedback state:', error)
     })
 
     const savePromise = persistFeedbackSelection(
@@ -1309,7 +1309,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       '',
       previousFeedback?.feedbackId,
     ).catch(error => {
-      console.error('[Craft Agent Feedback] Failed to save remote feedback:', error)
+      console.error('[MDP Agent Feedback] Failed to save remote feedback:', error)
       return ''
     }).finally(() => {
       if (pendingFeedbackSaveByMessageIdRef.current[messageId] === savePromise) {
@@ -1378,7 +1378,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           ))
       })
       .catch(error => {
-        console.error('[Craft Agent Feedback] Failed to update dislike comment:', error)
+        console.error('[MDP Agent Feedback] Failed to update dislike comment:', error)
       })
 
     logFeedbackToConsole(dislikeFeedbackDialog.turn, 'dislike', comment)

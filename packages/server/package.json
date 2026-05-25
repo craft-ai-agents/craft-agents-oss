@@ -1,7 +1,7 @@
 {
   "name": "@craft-agent/server",
   "version": "0.9.5",
-  "description": "Standalone headless Craft Agent server (Bun runtime)",
+  "description": "Standalone headless MDP Agent server (Bun runtime)",
   "type": "module",
   "main": "src/index.ts",
   "bin": {
