@@ -918,6 +918,8 @@
   "settings.server.connectionSection": "Connection",
   "settings.server.copiedToClipboard": "{{label}} copied to clipboard",
   "settings.server.description": "Remote server access",
+  "settings.memory.description": "Memory review, activity, and durable user facts",
+  "settings.memory.title": "Memory",
   "settings.server.enableServerMode": "Enable Server Mode",
   "settings.server.failedToSave": "Failed to save: {{message}}",
   "settings.server.insecureWarning": "Server is running without TLS. Auth tokens are sent in cleartext.",

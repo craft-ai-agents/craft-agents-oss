@@ -918,6 +918,8 @@
   "settings.server.connectionSection": "Połączenie",
   "settings.server.copiedToClipboard": "{{label}} skopiowano do schowka",
   "settings.server.description": "Zdalny dostęp do serwera",
+  "settings.memory.description": "Memory review, activity, and durable user facts",
+  "settings.memory.title": "Memory",
   "settings.server.enableServerMode": "Włącz tryb serwera",
   "settings.server.failedToSave": "Nie udało się zapisać: {{message}}",
   "settings.server.insecureWarning": "Serwer działa bez TLS. Tokeny uwierzytelniające są wysyłane jako zwykły tekst.",

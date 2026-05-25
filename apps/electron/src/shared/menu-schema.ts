@@ -240,6 +240,7 @@ const SETTINGS_ICONS: Record<SettingsSubpage, string> = {
   labels: 'Tag',
   messaging: 'MessageSquare',
   server: 'Server',
+  memory: 'Brain',
   shortcuts: 'Keyboard',
   preferences: 'UserCircle',
 }

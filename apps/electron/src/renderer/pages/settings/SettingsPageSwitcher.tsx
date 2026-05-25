@@ -17,6 +17,7 @@ const PRIMARY_ORDER: SettingsSubpage[] = [
   'input',
   'labels',
   'messaging',
+  'memory',
   'shortcuts',
   'preferences',
   'server',

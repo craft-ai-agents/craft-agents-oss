@@ -6,7 +6,7 @@ import { useMemoryReviewQueue } from '@/hooks/useMemoryReviewQueue'
 import type { MemoryReviewItem, MemoryScope } from '@craft-agent/shared/memory/types'
 
 interface MemoryReviewQueuePanelProps {
-  scope: MemoryScope
+  scope?: MemoryScope
   agentSlug?: string | null
 }
 
@@ -92,6 +92,7 @@ function MemoryReviewRow({
             <div className="mt-1 line-clamp-2 text-xs text-white/45">{item.body}</div>
           ) : null}
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-white/34">
+            <span>{item.scope}{item.agentSlug ? `:${item.agentSlug}` : ''}</span>
             <span>{Math.round(item.confidence * 100)}% confidence</span>
             <span>{item.source}</span>
             {item.sourceRunId ? <span>run: {item.sourceRunId}</span> : null}

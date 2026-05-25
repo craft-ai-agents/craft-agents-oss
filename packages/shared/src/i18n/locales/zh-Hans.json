@@ -918,6 +918,8 @@
   "settings.server.connectionSection": "连接",
   "settings.server.copiedToClipboard": "{{label}} 已复制到剪贴板",
   "settings.server.description": "远程服务器访问",
+  "settings.memory.description": "Memory review, activity, and durable user facts",
+  "settings.memory.title": "Memory",
   "settings.server.enableServerMode": "启用服务器模式",
   "settings.server.failedToSave": "保存失败: {{message}}",
   "settings.server.insecureWarning": "服务器未启用 TLS 运行。认证令牌以明文传输。",

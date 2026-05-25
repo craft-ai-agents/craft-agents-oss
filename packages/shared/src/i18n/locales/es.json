@@ -918,6 +918,8 @@
   "settings.server.connectionSection": "Conexión",
   "settings.server.copiedToClipboard": "{{label}} copiado al portapapeles",
   "settings.server.description": "Acceso a servidor remoto",
+  "settings.memory.description": "Memory review, activity, and durable user facts",
+  "settings.memory.title": "Memory",
   "settings.server.enableServerMode": "Activar modo servidor",
   "settings.server.failedToSave": "No se pudo guardar: {{message}}",
   "settings.server.insecureWarning": "El servidor está funcionando sin TLS. Los tokens de autenticación se envían en texto sin cifrar.",

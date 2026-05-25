@@ -771,6 +771,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'settings', subpage: 'permissions' }
     case 'labels':
       return { navigator: 'settings', subpage: 'labels' }
+    case 'memory':
+      return { navigator: 'settings', subpage: 'memory' }
     case 'shortcuts':
       return { navigator: 'settings', subpage: 'shortcuts' }
     case 'preferences':
