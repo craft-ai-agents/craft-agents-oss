@@ -6,6 +6,7 @@ import { ShikiCodeViewer } from '@/components/shiki/ShikiCodeViewer'
 import { OutputWebPreview } from './OutputWebPreview'
 import { resolveWebPreviewTarget } from './web-preview'
 import { resolvePresentationPreviewAsset } from './presentation-preview'
+import { parseDelimitedTablePreview } from './table-preview'
 import { buildRunnerOutputAssetUrl } from '@craft-agent/shared/outputs/web-preview'
 import type { OutputAssetDTO, OutputManifestDTO, OutputPreviewMode } from '@/hooks/useOutputs'
 
@@ -46,14 +47,14 @@ export function OutputInlinePreview({
   const inlineText = manifest.preview?.inlineText ?? null
   const assetId = manifest.preview?.assetId ?? previewAsset?.id
   const shouldReadAssetData = Boolean(assetId && (mode === 'image' || mode === 'video' || mode === 'audio'))
-  const shouldReadAssetText = Boolean(assetId && (mode === 'markdown' || mode === 'text' || mode === 'json' || mode === 'receipt' || mode === 'excalidraw'))
+  const shouldReadAssetText = Boolean(assetId && (mode === 'markdown' || mode === 'text' || mode === 'json' || mode === 'receipt' || mode === 'excalidraw' || mode === 'table'))
   const [content, setContent] = React.useState<string | null>(shouldReadAssetText ? null : inlineText)
   const [dataUrl, setDataUrl] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const electronAPI = window.electronAPI as OutputsElectronAPI
   const hasStaticPreview = Boolean(
     (mode === 'image' || mode === 'video' || mode === 'audio') && dataUrl
-    || (mode === 'markdown' || mode === 'json' || mode === 'text' || mode === 'receipt') && content !== null
+    || (mode === 'markdown' || mode === 'json' || mode === 'text' || mode === 'receipt' || mode === 'table') && content !== null
     || mode === 'receipt' && manifest.receipts.length > 0
     || (mode === 'external-link' || mode === 'web' || manifest.links.length > 0) && manifest.links[0],
   )
@@ -256,6 +257,16 @@ export function OutputInlinePreview({
     )
   }
 
+  if (mode === 'table' && content) {
+    return (
+      <TablePreview
+        content={content}
+        asset={previewAsset}
+        className={className}
+      />
+    )
+  }
+
   if ((mode === 'text' || mode === 'receipt') && content) {
     return (
       <pre className={className ?? 'runneros-card max-h-[520px] overflow-auto whitespace-pre-wrap p-3 text-xs text-white/68'}>
@@ -322,6 +333,7 @@ function inferPreviewMode(asset?: OutputAssetDTO): OutputPreviewMode {
   if (mime === 'application/pdf' || path.endsWith('.pdf')) return 'pdf'
   if (mime === 'application/vnd.excalidraw+json' || path.endsWith('.excalidraw')) return 'excalidraw'
   if (isPresentationAsset(asset)) return 'presentation'
+  if (mime === 'text/csv' || mime === 'text/tab-separated-values' || /\.(csv|tsv)$/.test(path)) return 'table'
   return 'text'
 }
 
@@ -346,6 +358,54 @@ function EmptyPreview({ children, className }: { children: React.ReactNode; clas
   return (
     <div className={className ?? 'runneros-card flex items-center gap-2 px-3 py-2 text-sm text-white/45'}>
       {children}
+    </div>
+  )
+}
+
+function TablePreview({ content, asset, className }: { content: string; asset?: OutputAssetDTO; className?: string }) {
+  const table = parseDelimitedTablePreview(content, asset?.path, asset?.mimeType)
+  if (table.rows.length === 0) {
+    return (
+      <EmptyPreview className={className}>
+        <FileText className="h-4 w-4" />
+        <span>Table is empty</span>
+      </EmptyPreview>
+    )
+  }
+
+  const [header, ...bodyRows] = table.rows
+  return (
+    <div className={className ?? 'h-full min-h-[320px] w-full overflow-hidden rounded-md'}>
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md border border-white/[0.08] bg-black/65 text-left">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/[0.08] px-3 py-2 text-xs text-white/48">
+          <span className="truncate">{asset?.label ?? 'Table preview'}</span>
+          <span>{table.rows.length.toLocaleString()} rows{table.truncated ? '+' : ''}</span>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="min-w-full border-separate border-spacing-0 text-xs">
+            <thead className="sticky top-0 z-[1] bg-zinc-950">
+              <tr>
+                {header.map((cell, index) => (
+                  <th key={index} className="max-w-64 border-b border-r border-white/[0.08] px-2 py-1.5 text-left font-medium text-white/72">
+                    <span className="block truncate">{cell || `Column ${index + 1}`}</span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {bodyRows.map((row, rowIndex) => (
+                <tr key={rowIndex} className="odd:bg-white/[0.025]">
+                  {header.map((_, columnIndex) => (
+                    <td key={columnIndex} className="max-w-64 border-b border-r border-white/[0.055] px-2 py-1.5 text-white/64">
+                      <span className="block truncate">{row[columnIndex] ?? ''}</span>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }
