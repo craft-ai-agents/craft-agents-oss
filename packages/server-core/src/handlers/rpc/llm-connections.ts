@@ -410,16 +410,11 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     return getLlmConnection(slug)
   })
 
-  // Get stored API key for an LLM connection (masked — for edit form display only)
+  // Get stored API key for an LLM connection (real key — UI masks via type="password")
   server.handle(RPC_CHANNELS.llmConnections.GET_API_KEY, async (_ctx, slug: string): Promise<string | null> => {
     const manager = getCredentialManager()
     const key = await manager.getLlmApiKey(slug)
-    if (!key) return null
-    // Show provider prefix (first 7 chars) + last 4 chars, mask the middle
-    if (key.length > 15) {
-      return key.slice(0, 7) + '••••••••' + key.slice(-4)
-    }
-    return '••••••••'
+    return key ?? null
   })
 
   // Save (create or update) an LLM connection
