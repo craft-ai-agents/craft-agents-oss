@@ -212,28 +212,30 @@ export function TopBar({
             </>
           )}
 
-          <div className="min-w-0 flex-1">
-            {isCompact ? (
-              <CompactWorkspaceSwitcher
-                workspaces={workspaces}
-                activeWorkspaceId={activeWorkspaceId}
-                onSelect={onSelectWorkspace}
-                onWorkspaceCreated={onWorkspaceCreated}
-                onWorkspaceRemoved={onWorkspaceRemoved}
-                workspaceUnreadMap={workspaceUnreadMap}
-              />
-            ) : (
-              <WorkspaceSwitcher
-                variant="topbar"
-                workspaces={workspaces}
-                activeWorkspaceId={activeWorkspaceId}
-                onSelect={onSelectWorkspace}
-                onWorkspaceCreated={onWorkspaceCreated}
-                onWorkspaceRemoved={onWorkspaceRemoved}
-                workspaceUnreadMap={workspaceUnreadMap}
-              />
-            )}
-          </div>
+          {workspaces.some(w => w.remoteServer) && (
+            <div className="min-w-0 flex-1">
+              {isCompact ? (
+                <CompactWorkspaceSwitcher
+                  workspaces={workspaces}
+                  activeWorkspaceId={activeWorkspaceId}
+                  onSelect={onSelectWorkspace}
+                  onWorkspaceCreated={onWorkspaceCreated}
+                  onWorkspaceRemoved={onWorkspaceRemoved}
+                  workspaceUnreadMap={workspaceUnreadMap}
+                />
+              ) : (
+                <WorkspaceSwitcher
+                  variant="topbar"
+                  workspaces={workspaces}
+                  activeWorkspaceId={activeWorkspaceId}
+                  onSelect={onSelectWorkspace}
+                  onWorkspaceCreated={onWorkspaceCreated}
+                  onWorkspaceRemoved={onWorkspaceRemoved}
+                  workspaceUnreadMap={workspaceUnreadMap}
+                />
+              )}
+            </div>
+          )}
         </div>
       </div>
 
