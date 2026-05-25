@@ -135,7 +135,7 @@ export async function buildSsoSubprocessEnvOverrides(
   if (connectionSlug === ENV_CONNECTION_SLUG) {
     baseUrl = (options.env?.LLM_BASE_URL ?? process.env.LLM_BASE_URL)?.trim()
   } else if (connectionSlug === OPENLLM_ENV_CONNECTION_SLUG) {
-    baseUrl = process.env[OPENLLM_BASE_HOST_ENV_VAR]?.trim()
+    baseUrl = process.env.OPENLLM_BASE_HOST?.trim()
   } else {
     return {}
   }
