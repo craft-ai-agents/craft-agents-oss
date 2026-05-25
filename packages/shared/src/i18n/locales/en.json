@@ -884,7 +884,7 @@
   "settings.appearance.title": "Appearance",
   "settings.appearance.toolHeader": "Tool",
   "settings.appearance.toolIcons": "Tool Icons",
-  "settings.appearance.toolIconsDesc": "Icons shown next to CLI commands in chat activity. Stored in ~/.craft-agent/tool-icons/.",
+  "settings.appearance.toolIconsDesc": "Icons shown next to CLI commands in chat activity. Stored in ~/.mdp-agent/tool-icons/.",
   "settings.appearance.useDefault": "Use Default",
   "settings.appearance.useDefaultWithTheme": "Use Default ({{theme}})",
   "settings.appearance.usingBundledFallback": "using bundled fallback",
@@ -1062,7 +1062,7 @@
   "settings.permissions.noCustomPermissions": "No custom permissions configured.",
   "settings.permissions.noCustomPermissionsDesc": "Create a permissions.json file in your workspace to add custom rules.",
   "settings.permissions.noDefaultPermissions": "No default permissions found.",
-  "settings.permissions.noDefaultPermissionsDesc": "Default permissions should be at ~/.craft-agent/permissions/default.json",
+  "settings.permissions.noDefaultPermissionsDesc": "Default permissions should be at ~/.mdp-agent/permissions/default.json",
   "settings.permissions.title": "Permissions",
   "settings.permissions.workspaceCustomizations": "Workspace Customizations",
   "settings.permissions.workspaceCustomizationsDesc": "Workspace-level patterns that extend the app defaults above.",
@@ -1621,5 +1621,5 @@
   "workspace.selectWorkspaceDesc": "Choose a workspace on this server, or create a new one.",
   "workspace.selectWorkspacePlaceholder": "Select a workspace...",
   "workspace.serverAuthToken": "Server authentication token",
-  "workspace.underDefaultFolder": "under .craft-agent folder"
+  "workspace.underDefaultFolder": "under .mdp-agent folder"
 }

@@ -515,7 +515,7 @@ export interface ElectronAPI {
   installMarketSkill(workspaceId: string, skillName: string, chineseName: string, description: string, version?: string): Promise<CopawInstallSkillResult>
   installLocalZip(workspaceId: string, skillName: string, zipBytes: Uint8Array): Promise<{ slug: string }>
   deleteMarketSkill(skillName: string): Promise<{ success: true }>
-  fetchMarketSkillContent(skillName: string, version?: string): Promise<{ content: string }>
+  fetchMarketSkillContent(skillName: string, version?: string): Promise<{ content: string; extraMetadata?: Record<string, unknown> }>
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void

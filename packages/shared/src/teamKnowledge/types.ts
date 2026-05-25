@@ -6,7 +6,7 @@
  * warnings, background context) that are periodically fetched and cached.
  *
  * Directory structure:
- * ~/.craft-agent/workspaces/{slug}/
+ * ~/.mdp-agent/workspaces/{slug}/
  *   └── teamKnowledge/
  *       └── config.json    - TeamKnowledgeConfig
  */

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * @craft-agent/server — standalone headless Craft Agent server.
+ * @craft-agent/server — standalone headless MDP Agent server.
  *
  * Usage:
  *   CRAFT_SERVER_TOKEN=<secret> bun run packages/server/src/index.ts
@@ -202,7 +202,7 @@ const instance = await (async () => {
           sessionManager,
           credentialManager: getCredentialManager(),
           getMessagingDir: (wsId: string) =>
-            join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+            join(homedir(), '.mdp-agent', 'workspaces', wsId, 'messaging'),
           // Headless has no legacy messaging dir — workspaces start clean.
         })
         return {

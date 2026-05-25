@@ -234,7 +234,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     }
   })
 
-  // Get default permissions from ~/.craft-agent/permissions/default.json
+  // Get default permissions from ~/.mdp-agent/permissions/default.json
   server.handle(RPC_CHANNELS.permissions.GET_DEFAULTS, async () => {
     const { existsSync, readFileSync } = await import('fs')
     const { getAppPermissionsDir } = await import('@craft-agent/shared/agent')

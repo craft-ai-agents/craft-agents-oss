@@ -50,6 +50,37 @@ export function LocalSkillMoreMenu({ slug, workspaceId }: { slug: string; worksp
   )
 }
 
+export function ExpandableDescription({ text }: { text: string }) {
+  const [expanded, setExpanded] = React.useState(false)
+  const [overflows, setOverflows] = React.useState(false)
+  const ref = React.useRef<HTMLParagraphElement>(null)
+
+  React.useLayoutEffect(() => {
+    const el = ref.current
+    if (el) setOverflows(el.scrollHeight > el.clientHeight)
+  }, [text])
+
+  return (
+    <div className="mt-0.5">
+      <p
+        ref={ref}
+        className={`text-[13px] text-muted-foreground ${expanded ? '' : 'line-clamp-2'}`}
+      >
+        {text}
+      </p>
+      {(overflows || expanded) && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-0.5 text-[12px] text-muted-foreground/60 hover:text-muted-foreground"
+        >
+          {expanded ? '收起' : '展开'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function LocalSkillDetailDialog({
   skill,
   workspaceId,
@@ -83,7 +114,7 @@ export function LocalSkillDetailDialog({
                 <h2 className="text-[18px] font-bold text-foreground">{name}</h2>
                 <span className="text-[13px] font-normal text-muted-foreground">本地</span>
               </div>
-              <p className="mt-0.5 text-[13px] text-muted-foreground">{description || '—'}</p>
+              {description ? <ExpandableDescription text={description} /> : <p className="mt-0.5 text-[13px] text-muted-foreground">—</p>}
             </div>
           </div>
           <div className="ml-4 flex flex-shrink-0 items-center gap-2 pt-1">
@@ -108,9 +139,18 @@ export function LocalSkillDetailDialog({
 
         {/* Markdown 内容区 */}
         <div className="mx-7 mb-5 min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/20 px-6 py-5 text-[13px] leading-relaxed">
+          {skill.metadata?.extraMetadata && (
+            <div className="mb-4">
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">Metadata</p>
+              <pre className="overflow-x-auto rounded-lg bg-muted/40 px-4 py-3 text-[12px] leading-relaxed text-foreground/80">
+                {JSON.stringify(skill.metadata.extraMetadata, null, 2)}
+              </pre>
+              {skill.content && <div className="my-4 border-t border-border" />}
+            </div>
+          )}
           {skill.content
             ? <Markdown>{skill.content}</Markdown>
-            : <p className="text-muted-foreground">（内容为空）</p>
+            : !skill.metadata?.extraMetadata && <p className="text-muted-foreground">（内容为空）</p>
           }
         </div>
 

@@ -87,7 +87,8 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const effectiveWorkingDir = workingDirectory && existsSync(workingDirectory)
       ? workingDirectory
       : undefined
-    const { loadAllSkills } = await import('@craft-agent/shared/skills')
+    const { loadAllSkills, invalidateSkillsCache } = await import('@craft-agent/shared/skills')
+    invalidateSkillsCache()
     const skills = loadAllSkills(workspace.rootPath, effectiveWorkingDir)
     deps.platform.logger?.info(`SKILLS_GET: Loaded ${skills.length} skills from ${workspace.rootPath}`)
     return skills
@@ -390,8 +391,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (!workspace) throw new Error('Workspace not found')
 
     const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
-    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL, GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache, extractSkillsFromZipBytes } = await import('@craft-agent/shared/skills')
-    const { unzipSync } = await import('fflate')
+    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL, GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache, extractSkillsFromZipBytes, unzipSyncEncoding } = await import('@craft-agent/shared/skills')
     const { join, dirname, isAbsolute } = await import('path')
     const { mkdirSync, writeFileSync } = await import('fs')
 
@@ -400,7 +400,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
 
     // Download zip from market
     const zipBytes = await downloadCopawMarketSkillZip(skillName, COPAW_MARKET_BASE_URL, session.token, version)
-    const unzipped = unzipSync(zipBytes)
+    const unzipped = unzipSyncEncoding(zipBytes)
 
     // Collect valid entries (filter __MACOSX and path traversal)
     const entries: Array<{ relPath: string; data: Uint8Array }> = []
@@ -437,6 +437,18 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       writeFileSync(destPath, data)
     }
 
+    // Sync display_name with chineseName from marketplace database
+    const { readFileSync: readFS, existsSync: existsFS } = await import('fs')
+    const skillMdPath = join(skillDir, 'SKILL.md')
+    if (existsFS(skillMdPath) && chineseName) {
+      const { default: matter } = await import('gray-matter')
+      const parsed = matter(readFS(skillMdPath, 'utf-8'))
+      if (parsed.data.display_name !== chineseName) {
+        parsed.data.display_name = chineseName
+        writeFileSync(skillMdPath, matter.stringify(parsed.content, parsed.data))
+      }
+    }
+
     const discoveredSkills = extractSkillsFromZipBytes(zipBytes, {
       sourcePath: `${skillName}.zip`,
       rootSlug: skillName,
@@ -459,21 +471,28 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
    */
   server.handle(RPC_CHANNELS.skills.FETCH_MARKET_CONTENT, async (_ctx, skillName: string, version?: string) => {
     const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
-    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL } = await import('@craft-agent/shared/skills')
-    const { unzipSync } = await import('fflate')
+    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL, unzipSyncEncoding } = await import('@craft-agent/shared/skills')
 
     const session = await new SsoCredentialStore().load()
     if (!session) throw new Error('未登录，无法获取技能内容')
 
     const zipBytes = await downloadCopawMarketSkillZip(skillName, COPAW_MARKET_BASE_URL, session.token, version)
-    const unzipped = unzipSync(zipBytes)
+    const unzipped = unzipSyncEncoding(zipBytes)
 
     const skillMdKey = Object.keys(unzipped).find((k) =>
       k.toLowerCase() === 'skill.md' || k.toLowerCase().match(/^[^/]+\/skill\.md$/)
     )
     if (!skillMdKey) throw new Error('zip 中未找到 SKILL.md 文件')
 
-    return { content: new TextDecoder().decode(unzipped[skillMdKey]) }
+    const raw = new TextDecoder().decode(unzipped[skillMdKey])
+    try {
+      const { default: matter } = await import('gray-matter')
+      const parsed = matter(raw)
+      const extraMetadata = parsed.data.metadata as Record<string, unknown> | undefined
+      return { content: parsed.content, extraMetadata }
+    } catch {
+      return { content: raw }
+    }
   })
 
   /**
@@ -490,12 +509,11 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache, extractSkillsFromZipBytes } = await import('@craft-agent/shared/skills')
-    const { unzipSync } = await import('fflate')
+    const { GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache, extractSkillsFromZipBytes, unzipSyncEncoding } = await import('@craft-agent/shared/skills')
     const { join, dirname, isAbsolute } = await import('path')
     const { mkdirSync, writeFileSync } = await import('fs')
 
-    const unzipped = unzipSync(zipBytes)
+    const unzipped = unzipSyncEncoding(zipBytes)
 
     // Collect valid entries (filter __MACOSX and path traversal)
     const entries: Array<{ relPath: string; data: Uint8Array }> = []

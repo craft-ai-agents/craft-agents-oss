@@ -17919,7 +17919,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 function getCredentialCachePath(workspaceId, sourceSlug) {
-  return join(homedir(), ".craft-agent", "workspaces", workspaceId, "sources", sourceSlug, ".credential-cache.json");
+  return join(homedir(), ".mdp-agent", "workspaces", workspaceId, "sources", sourceSlug, ".credential-cache.json");
 }
 function readCredential(workspaceId, sourceSlug) {
   const cachePath = getCredentialCachePath(workspaceId, sourceSlug);
@@ -18044,7 +18044,7 @@ async function executeApiTool(config2, args, sessionPath) {
     return {
       content: [{
         type: "text",
-        text: `Authentication required for ${config2.name}. Please authenticate the source in Craft Agent settings.`
+        text: `Authentication required for ${config2.name}. Please authenticate the source in MDP Agent settings.`
       }],
       isError: true
     };

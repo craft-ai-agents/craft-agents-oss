@@ -32,6 +32,8 @@ export interface SkillMetadata {
   metadata?: Record<string, unknown>;
   /** Optional author display name */
   author?: string;
+  /** Optional arbitrary metadata object from frontmatter */
+  extraMetadata?: Record<string, unknown>;
 }
 
 /** Source of a loaded skill */

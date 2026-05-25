@@ -884,7 +884,7 @@
   "settings.appearance.title": "外观",
   "settings.appearance.toolHeader": "工具",
   "settings.appearance.toolIcons": "工具图标",
-  "settings.appearance.toolIconsDesc": "聊天活动中 CLI 命令旁显示的图标。存储在 ~/.craft-agent/tool-icons/。",
+  "settings.appearance.toolIconsDesc": "聊天活动中 CLI 命令旁显示的图标。存储在 ~/.mdp-agent/tool-icons/。",
   "settings.appearance.useDefault": "使用默认",
   "settings.appearance.useDefaultWithTheme": "使用默认 ({{theme}})",
   "settings.appearance.usingBundledFallback": "使用内置备选",
@@ -1062,7 +1062,7 @@
   "settings.permissions.noCustomPermissions": "未配置自定义权限。",
   "settings.permissions.noCustomPermissionsDesc": "在 Workspace 中创建 permissions.json 文件以添加自定义规则。",
   "settings.permissions.noDefaultPermissions": "未找到默认权限。",
-  "settings.permissions.noDefaultPermissionsDesc": "默认权限应位于 ~/.craft-agent/permissions/default.json",
+  "settings.permissions.noDefaultPermissionsDesc": "默认权限应位于 ~/.mdp-agent/permissions/default.json",
   "settings.permissions.title": "权限",
   "settings.permissions.workspaceCustomizations": "Workspace 自定义",
   "settings.permissions.workspaceCustomizationsDesc": "Workspace 级别的模式，扩展上述应用默认值。",
@@ -1621,5 +1621,5 @@
   "workspace.selectWorkspaceDesc": "选择此服务器上的 Workspace 或创建新的。",
   "workspace.selectWorkspacePlaceholder": "选择 Workspace...",
   "workspace.serverAuthToken": "服务器认证令牌",
-  "workspace.underDefaultFolder": ".craft-agent 文件夹下"
+  "workspace.underDefaultFolder": ".mdp-agent 文件夹下"
 }
