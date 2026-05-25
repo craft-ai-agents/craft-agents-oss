@@ -95,7 +95,11 @@ import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
-import { createMemorySidecarReviewer, MemorySidecarService } from '../memory/MemorySidecarService'
+import {
+  createAgentMemorySidecarApplyMemory,
+  createMemorySidecarReviewer,
+  MemorySidecarService,
+} from '../memory/MemorySidecarService'
 import { profileDeepResearchSource } from '@craft-agent/shared/deep-research'
 import { OutputService } from '../outputs/OutputService'
 import {
@@ -5854,30 +5858,9 @@ user a clickable link to where the thing now lives.`
     const activeAgentSlug = managed.spawnedFromAgent?.agentSlug
     const service = new MemorySidecarService({
       reviewer: createMemorySidecarReviewer(managed.agent.runMiniCompletion.bind(managed.agent)),
-      applyMemory: sidecarMode === 'auto' ? async (proposal) => {
-        if (proposal.action !== 'save') return { ok: false, error: 'only save proposals can auto-apply' }
-        if (proposal.scope !== 'agent') return { ok: false, error: 'only agent memory can auto-apply' }
-        const agentSlug = proposal.agentSlug ?? activeAgentSlug
-        if (!agentSlug) return { ok: false, error: 'agentSlug is required' }
-        if (!proposal.type || !proposal.body?.trim()) return { ok: false, error: 'type and body are required' }
-
-        const saved = await saveMemoryEntry({
-          scope: 'agent',
-          agentSlug,
-          name: proposal.name,
-          type: proposal.type,
-          body: proposal.body,
-          expires: typeof proposal.expires === 'string' ? proposal.expires : undefined,
-          event: {
-            source: 'sidecar',
-            runId: managed.id,
-            actor: agentSlug,
-            evidence: proposal.evidence,
-          },
-        } satisfies SaveMemoryInput)
-
-        return { ok: true, name: saved.name }
-      } : undefined,
+      applyMemory: sidecarMode === 'auto'
+        ? createAgentMemorySidecarApplyMemory({ activeAgentSlug, runId: managed.id })
+        : undefined,
     })
 
     void service.reviewTurn({

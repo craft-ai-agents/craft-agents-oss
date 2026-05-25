@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { listAgentMemoryEntries, listMemoryReviewItems, saveMemoryEntry } from '@craft-agent/shared/memory'
 import {
   buildMemorySidecarPrompt,
+  createAgentMemorySidecarApplyMemory,
   createMemorySidecarReviewer,
   MemorySidecarService,
   parseMemorySidecarDecision,
@@ -185,6 +186,47 @@ describe('MemorySidecarService', () => {
     expect(result.queued).toBe(true)
     expect(listMemoryReviewItems({ globalAgentsDir: agentsRoot })).toEqual([
       expect.objectContaining({ action: 'save', scope: 'agent', name: 'browser loops' }),
+    ])
+  })
+
+  test('auto-apply dedupes concurrent agent save proposals before writing', async () => {
+    const applyMemory = createAgentMemorySidecarApplyMemory({
+      activeAgentSlug: 'deep-researcher',
+      runId: 'run_race',
+      storage: { globalAgentsDir: agentsRoot },
+    })
+    const makeService = () => new MemorySidecarService({
+      reviewer: reviewer({
+        decision: 'save',
+        scope: 'agent',
+        name: 'browser loops',
+        type: 'feedback',
+        content: 'Deep Research should follow browser leads before synthesis.',
+        confidence: 0.94,
+        evidence: 'User asked for browser follow-up loops.',
+      }),
+      storage: { globalAgentsDir: agentsRoot },
+      applyMemory,
+    })
+
+    const [first, second] = await Promise.all([
+      makeService().reviewTurn({
+        userMessage: 'browser loops matter',
+        assistantResponse: 'ok',
+        activeAgentSlug: 'deep-researcher',
+      }),
+      makeService().reviewTurn({
+        userMessage: 'browser loops matter',
+        assistantResponse: 'ok',
+        activeAgentSlug: 'deep-researcher',
+      }),
+    ])
+
+    expect(first).toMatchObject({ queued: false, applied: true, name: 'browser loops' })
+    expect(second).toMatchObject({ queued: false, applied: true, name: 'browser loops' })
+    expect(listMemoryReviewItems({ globalAgentsDir: agentsRoot })).toEqual([])
+    expect(listAgentMemoryEntries('deep-researcher', { globalAgentsDir: agentsRoot })).toEqual([
+      expect.objectContaining({ name: 'browser loops' }),
     ])
   })
 

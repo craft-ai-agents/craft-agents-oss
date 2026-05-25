@@ -1,9 +1,13 @@
 import {
   enqueueMemoryReviewItem,
+  listAgentMemoryEntries,
+  saveMemoryEntry,
   type EnqueueMemoryReviewInput,
   type MemoryEntryType,
+  type MemoryMutationEventMetadata,
   type MemoryScope,
   type MemoryStorageOptions,
+  type SaveMemoryInput,
 } from '@craft-agent/shared/memory'
 
 export interface MemorySidecarTurnInput {
@@ -62,8 +66,15 @@ export interface MemorySidecarApplyResult {
   error?: string
 }
 
+export interface AgentMemorySidecarApplyOptions {
+  activeAgentSlug?: string
+  runId?: string
+  storage?: MemoryStorageOptions
+}
+
 const DEFAULT_MIN_CONFIDENCE = 0.85
 const DEFAULT_AUTO_APPLY_AGENT_CONFIDENCE = 0.9
+const agentMemoryAutoApplyLocks = new Map<string, Promise<void>>()
 const SECRET_PATTERNS = [
   /\b(api[_-]?key|secret|token|password|private[_-]?key)\b/i,
   /\b(sk-[a-z0-9_-]{12,})\b/i,
@@ -206,6 +217,76 @@ export function createMemorySidecarReviewer(
       return parseMemorySidecarDecision(response)
     },
   }
+}
+
+export function createAgentMemorySidecarApplyMemory(
+  options: AgentMemorySidecarApplyOptions,
+): MemorySidecarServiceOptions['applyMemory'] {
+  return async (proposal) => {
+    if (proposal.action !== 'save') return { ok: false, error: 'only save proposals can auto-apply' }
+    if (proposal.scope !== 'agent') return { ok: false, error: 'only agent memory can auto-apply' }
+    const agentSlug = proposal.agentSlug ?? options.activeAgentSlug
+    if (!agentSlug) return { ok: false, error: 'agentSlug is required' }
+    if (!proposal.type || !proposal.body?.trim()) return { ok: false, error: 'type and body are required' }
+    const type = proposal.type
+    const body = proposal.body
+
+    return withAgentMemoryAutoApplyLock(agentSlug, async () => {
+      const existing = listAgentMemoryEntries(agentSlug, options.storage)
+      const duplicate = existing.find((entry) => isSameMemorySave(entry.name, entry.body, proposal.name, body))
+      if (duplicate) return { ok: true, name: duplicate.name }
+
+      const event: MemoryMutationEventMetadata = {
+        source: 'sidecar',
+        runId: options.runId,
+        actor: agentSlug,
+        evidence: proposal.evidence,
+      }
+      const saved = await saveMemoryEntry({
+        scope: 'agent',
+        agentSlug,
+        name: proposal.name,
+        type,
+        body,
+        expires: typeof proposal.expires === 'string' ? proposal.expires : undefined,
+        event,
+      } satisfies SaveMemoryInput, options.storage)
+
+      return { ok: true, name: saved.name }
+    })
+  }
+}
+
+async function withAgentMemoryAutoApplyLock<T>(agentSlug: string, work: () => Promise<T>): Promise<T> {
+  const previous = agentMemoryAutoApplyLocks.get(agentSlug) ?? Promise.resolve()
+  let release!: () => void
+  const current = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const chained = previous.then(() => current, () => current)
+  agentMemoryAutoApplyLocks.set(agentSlug, chained)
+
+  await previous
+  try {
+    return await work()
+  } finally {
+    release()
+    if (agentMemoryAutoApplyLocks.get(agentSlug) === chained) {
+      agentMemoryAutoApplyLocks.delete(agentSlug)
+    }
+  }
+}
+
+function isSameMemorySave(
+  existingName: string,
+  existingBody: string,
+  proposalName: string,
+  proposalBody: string | undefined,
+): boolean {
+  const body = proposalBody?.trim().toLowerCase()
+  if (!body) return false
+  return existingName.trim().toLowerCase() === proposalName.trim().toLowerCase() ||
+    existingBody.trim().toLowerCase() === body
 }
 
 export function buildMemorySidecarPrompt(input: MemorySidecarTurnInput): string {
