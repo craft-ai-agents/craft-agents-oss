@@ -5670,6 +5670,7 @@ user a clickable link to where the thing now lives.`
     if (!finalMessageId) return
     if (!managed.agent) return
     if (managed.hidden || managed.systemPromptPreset === 'mini') return
+    if ((loadPreferences().memory?.sidecarMode ?? 'review') === 'manual') return
 
     const assistantIndex = managed.messages.findIndex((message) => message.id === finalMessageId)
     if (assistantIndex < 0) return

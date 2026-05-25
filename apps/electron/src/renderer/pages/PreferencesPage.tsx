@@ -22,8 +22,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { Spinner } from '@craft-agent/ui'
 import { Save, RotateCcw, Check, ExternalLink } from 'lucide-react'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
+import { SettingsSelectRow } from '@/components/settings/SettingsSelect'
 import { routes } from '@/lib/navigate'
 import { getFileManagerName } from '@/lib/platform'
+
+type MemorySidecarMode = 'manual' | 'review'
 
 interface PreferencesFormState {
   name: string
@@ -32,6 +35,8 @@ interface PreferencesFormState {
   city: string
   country: string
   notes: string
+  memorySidecarMode: MemorySidecarMode
+  passthrough: Record<string, unknown>
 }
 
 const emptyFormState: PreferencesFormState = {
@@ -41,19 +46,26 @@ const emptyFormState: PreferencesFormState = {
   city: '',
   country: '',
   notes: '',
+  memorySidecarMode: 'review',
+  passthrough: {},
 }
 
 // Parse JSON to form state
 function parsePreferences(json: string): PreferencesFormState {
   try {
-    const prefs = JSON.parse(json)
+    const prefs = JSON.parse(json) as Record<string, unknown>
+    const location = isRecord(prefs.location) ? prefs.location : {}
+    const memory = isRecord(prefs.memory) ? prefs.memory : {}
+    const sidecarMode = memory.sidecarMode === 'manual' ? 'manual' : 'review'
     return {
-      name: prefs.name || '',
-      timezone: prefs.timezone || '',
-      language: prefs.language || '',
-      city: prefs.location?.city || '',
-      country: prefs.location?.country || '',
-      notes: prefs.notes || '',
+      name: typeof prefs.name === 'string' ? prefs.name : '',
+      timezone: typeof prefs.timezone === 'string' ? prefs.timezone : '',
+      language: typeof prefs.language === 'string' ? prefs.language : '',
+      city: typeof location.city === 'string' ? location.city : '',
+      country: typeof location.country === 'string' ? location.country : '',
+      notes: typeof prefs.notes === 'string' ? prefs.notes : '',
+      memorySidecarMode: sidecarMode,
+      passthrough: stripKnownPreferences(prefs),
     }
   } catch {
     return emptyFormState
@@ -62,7 +74,7 @@ function parsePreferences(json: string): PreferencesFormState {
 
 // Serialize form state to JSON
 function serializePreferences(state: PreferencesFormState): string {
-  const prefs: Record<string, unknown> = {}
+  const prefs: Record<string, unknown> = { ...state.passthrough }
 
   if (state.name) prefs.name = state.name
   if (state.timezone) prefs.timezone = state.timezone
@@ -76,9 +88,30 @@ function serializePreferences(state: PreferencesFormState): string {
   }
 
   if (state.notes) prefs.notes = state.notes
+  const existingMemory = isRecord(state.passthrough.memory) ? state.passthrough.memory : {}
+  const memory = { ...existingMemory, sidecarMode: state.memorySidecarMode }
+  delete prefs.memory
+  if (Object.keys(memory).length > 1 || state.memorySidecarMode !== 'review') {
+    prefs.memory = memory
+  }
   prefs.updatedAt = Date.now()
 
   return JSON.stringify(prefs, null, 2)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function stripKnownPreferences(prefs: Record<string, unknown>): Record<string, unknown> {
+  const rest = { ...prefs }
+  delete rest.name
+  delete rest.timezone
+  delete rest.language
+  delete rest.location
+  delete rest.notes
+  delete rest.updatedAt
+  return rest
 }
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
@@ -281,6 +314,22 @@ export default function PreferencesPage() {
               placeholder={t("settings.preferences.notesPlaceholder")}
               className="min-h-[120px] text-sm resize-y"
             />
+          </section>
+
+          <section>
+            <SectionHeader>Memory</SectionHeader>
+            <div className="rounded-[10px] border border-white/[0.07] bg-white/[0.025]">
+              <SettingsSelectRow
+                label="Memory sidecar"
+                description="Review queues suggestions for approval. Manual disables automatic review."
+                value={formState.memorySidecarMode}
+                onValueChange={(value) => updateField('memorySidecarMode', value === 'manual' ? 'manual' : 'review')}
+                options={[
+                  { value: 'review', label: 'Review' },
+                  { value: 'manual', label: 'Manual' },
+                ]}
+              />
+            </div>
           </section>
         </div>
       </ScrollArea>
