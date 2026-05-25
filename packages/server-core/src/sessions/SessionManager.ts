@@ -89,6 +89,7 @@ import { loadAllSkills, loadGlobalSkills, loadSkillBySlug, invalidateSkillsCache
 import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
+import { assertOutputAssetPath, readOutput } from '@craft-agent/shared/outputs'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -126,6 +127,7 @@ import {
   type SaveMemoryInput,
   type UpdateMemoryInput,
 } from '@craft-agent/shared/memory'
+import { buildCanvasGuidanceSection } from '@craft-agent/shared/agent-definitions/canvas-guidance'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
@@ -378,7 +380,7 @@ function formatWorkflowBundleBullet(slug: string, name: string | undefined, desc
 }
 
 function buildWorkflowAgentPrompt(
-  agent: { systemPrompt: string; metadata: { skills?: string[]; sources?: string[] } },
+  agent: { systemPrompt: string; metadata: { skills?: string[]; sources?: string[]; visualAgent?: boolean } },
   skills: LoadedSkill[],
   sources: LoadedSource[],
   contextDocs: Array<{ slug: string; metadata: { name: string; enabled?: boolean }; body: string }>,
@@ -408,6 +410,7 @@ function buildWorkflowAgentPrompt(
   if (contextSection) parts.push(contextSection)
   const memorySection = buildWorkflowMemoryText(memory)
   if (memorySection) parts.push(memorySection)
+  parts.push(buildCanvasGuidanceSection(agent))
   if (footerParts.length > 0) parts.push(footerParts.join('\n\n'))
   return parts.join(SECTION_DELIMITER)
 }
@@ -939,8 +942,8 @@ async function resolveToolDisplayMeta(
           'send_developer_feedback': 'Send Feedback',
           'browser_tool': 'Browser',
         },
-        'craft-agents-docs': {
-          'SearchCraftAgents': 'Search Docs',
+        'runner-docs': {
+          'SearchDocs': 'Search Docs',
         },
       }
 
@@ -2250,7 +2253,7 @@ export class SessionManager implements ISessionManager {
     const workspaceRootPath = managed.workspace.rootPath
     sessionLog.info(`Reloading sources for session ${managed.id}`)
 
-    // Reload all sources from disk (craft-agents-docs is always available as MCP server)
+    // Reload all sources from disk (runner-docs is always available as MCP server)
     const allSources = loadAllSources(workspaceRootPath)
     managed.agent.setAllSources(allSources)
 
@@ -2280,7 +2283,7 @@ export class SessionManager implements ISessionManager {
    * Bun's automatic .env loading is disabled in the subprocess (--env-file=/dev/null)
    * to prevent a user's project .env from injecting ANTHROPIC_API_KEY and overriding
    * OAuth auth — Claude Code prioritizes API key over OAuth token when both are set.
-   * See: https://github.com/lukilabs/craft-agents-oss/issues/39
+   * See: upstream OAuth environment issue notes
    */
   /**
    * Reinitialize authentication environment variables.
@@ -4358,6 +4361,10 @@ user a clickable link to where the thing now lives.`
         }, managed.workspace.id)
       }
 
+      managed.agent.onOutputsUpdated = (workspaceId) => {
+        this.eventSink?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId)
+      }
+
       // Wire up onPlanSubmitted to add plan message to conversation
       managed.agent.onPlanSubmitted = async (planPath) => {
         sessionLog.info(`Plan submitted for session ${managed.id}:`, planPath)
@@ -4645,6 +4652,36 @@ user a clickable link to where the thing now lives.`
             stepId: workflow?.stepId,
             output: input,
           })
+        },
+        applyVisualSurfaceEventFn: async (input) => {
+          const outputService = new OutputService({
+            getWorkspaceRootPath: (workspaceId) => {
+              if (workspaceId !== managed.workspace.id) {
+                throw new Error(`Workspace not available for this session: ${workspaceId}`)
+              }
+              return managed.workspace.rootPath
+            },
+            emitOutputsUpdated: (workspaceId) => {
+              this.eventSink?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId)
+            },
+          })
+          return outputService.applyVisualSurfaceEvent(
+            managed.workspace.id,
+            managed.id,
+            input,
+            'agent',
+          )
+        },
+        getVisualSurfaceStateFn: async () => {
+          const outputService = new OutputService({
+            getWorkspaceRootPath: (workspaceId) => {
+              if (workspaceId !== managed.workspace.id) {
+                throw new Error(`Workspace not available for this session: ${workspaceId}`)
+              }
+              return managed.workspace.rootPath
+            },
+          })
+          return outputService.getVisualSurfaceState(managed.workspace.id, managed.id)
         },
         listSessionsFn: (options) => {
           const DEFAULT_LIMIT = 20
@@ -6468,6 +6505,61 @@ user a clickable link to where the thing now lives.`
     sessionLog.info(`Deleted session ${sessionId}`)
   }
 
+  async queueCanvasVisualReview(input: {
+    workspaceId: string
+    sessionId: string
+    outputId: string
+    outputTitle?: string
+    captureAssetId: string
+    capturePath: string
+    captureVersion: string
+    reviewTriggerId: string
+  }): Promise<{ accepted: boolean; reason?: string }> {
+    const managed = this.sessions.get(input.sessionId)
+    if (!managed) throw new Error(`Session ${input.sessionId} not found`)
+    if (managed.workspace.id !== input.workspaceId) {
+      throw new Error(`Session "${input.sessionId}" is not in workspace "${input.workspaceId}".`)
+    }
+
+    const output = readOutput(managed.workspace.rootPath, input.outputId)
+    if (!output) throw new Error(`Output not found: ${input.outputId}`)
+    if (output.workspaceId !== input.workspaceId) {
+      throw new Error(`Output "${input.outputId}" is not in workspace "${input.workspaceId}".`)
+    }
+    if (output.origin.sessionId !== input.sessionId) {
+      throw new Error(`Output "${input.outputId}" is not from session "${input.sessionId}".`)
+    }
+
+    const captureAsset = output.assets.find((asset) => asset.id === input.captureAssetId && asset.path === input.capturePath)
+    if (!captureAsset || captureAsset.mimeType !== 'image/png') {
+      return { accepted: false, reason: 'visual capture asset missing' }
+    }
+
+    const absoluteCapturePath = assertOutputAssetPath(managed.workspace.rootPath, input.outputId, captureAsset.path)
+    if (!existsSync(absoluteCapturePath)) {
+      return { accepted: false, reason: 'visual capture file missing' }
+    }
+
+    const attachment = readFileAttachment(absoluteCapturePath)
+    if (!attachment) return { accepted: false, reason: 'visual capture attachment unreadable' }
+    attachment.name = `${output.slug || input.outputId}-canvas-preview.png`
+
+    const title = input.outputTitle ?? output.title
+    const message = [
+      '<system-reminder>',
+      `Canvas just captured a preview screenshot for "${title}".`,
+      'Inspect and review the image in the context of what you and the user are working on.',
+      'Look for anything obviously off, broken, ugly, misaligned, out of whack, or missing from what the user specifically asked for or would reasonably expect to see.',
+      'If something is clearly wrong, briefly mention it to the user and state your concrete idea for fixing it before making one focused edit.',
+      'If it looks right to you, do not give a sterile pass/fail verdict. Ask the user for their take on what they see.',
+      'Do not start another Canvas visual review unless the user reopens Canvas or clicks another board/output tab.',
+      '</system-reminder>',
+    ].join('\n')
+
+    await this.sendMessage(input.sessionId, message, [attachment], undefined, { displayIntent: 'canvas-visual-review' })
+    return { accepted: true }
+  }
+
   async sendMessage(
     sessionId: string,
     message: string,
@@ -6520,6 +6612,7 @@ user a clickable link to where the thing now lives.`
         timestamp: this.monotonic(),
         attachments: storedAttachments,
         badges: options?.badges,
+        displayIntent: options?.displayIntent,
       }
       managed.messages.push(userMessage)
 
@@ -6566,6 +6659,7 @@ user a clickable link to where the thing now lives.`
         timestamp: this.monotonic(),
         attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
         badges: options?.badges,  // Include content badges (sources, skills with embedded icons)
+        displayIntent: options?.displayIntent,
       }
       managed.messages.push(userMessage)
 

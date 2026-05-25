@@ -33,14 +33,14 @@ describe('derivePickerMode', () => {
     ).toBe('switcher')
   })
 
-  test('non-empty session with single-model custom endpoint stays locked', () => {
+  test('non-empty session with multiple connections still shows switcher for hot swapping', () => {
     expect(
       derivePickerMode(input({
         connectionDefaultModel: 'mistral-7b',
         isEmptySession: false,
         connectionCount: 5,
       })),
-    ).toBe('locked-single')
+    ).toBe('switcher')
   })
 
   test('empty session with one single-model connection stays locked', () => {
@@ -53,14 +53,14 @@ describe('derivePickerMode', () => {
     ).toBe('locked-single')
   })
 
-  test('multi-model connection falls through to flat picker', () => {
+  test('started session with multiple connections uses switcher', () => {
     expect(
       derivePickerMode(input({
         connectionDefaultModel: null,
         isEmptySession: false,
         connectionCount: 3,
       })),
-    ).toBe('flat')
+    ).toBe('switcher')
   })
 
   test('empty session with one multi-model connection falls through to flat picker', () => {

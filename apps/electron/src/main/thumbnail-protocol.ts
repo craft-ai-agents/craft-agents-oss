@@ -21,6 +21,7 @@
 import { protocol, nativeImage } from 'electron'
 import { stat } from 'fs/promises'
 import { isAbsolute } from 'path'
+import { RUNNER_OUTPUT_SCHEME } from '@craft-agent/shared/outputs'
 import { mainLog } from './logger'
 
 /** Thumbnail output size in pixels (width and height) */
@@ -99,9 +100,10 @@ async function generateThumbnail(filePath: string, ext: string): Promise<Buffer 
 }
 
 /**
- * Register the thumbnail:// custom protocol scheme.
+ * Register custom protocol schemes used by the app.
  * MUST be called before app.whenReady() — Electron requires scheme
- * registration during the earliest phase of app initialization.
+ * registration during the earliest phase of app initialization, and
+ * registerSchemesAsPrivileged can only be called once.
  */
 export function registerThumbnailScheme(): void {
   protocol.registerSchemesAsPrivileged([
@@ -115,6 +117,16 @@ export function registerThumbnailScheme(): void {
         // Allow cross-origin access from the renderer
         corsEnabled: true,
         // Stream support for efficient response delivery
+        stream: true,
+      },
+    },
+    {
+      scheme: RUNNER_OUTPUT_SCHEME,
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
         stream: true,
       },
     },

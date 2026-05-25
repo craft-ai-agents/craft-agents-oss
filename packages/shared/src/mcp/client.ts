@@ -42,7 +42,7 @@ export type McpClientConfig = HttpMcpClientConfig | StdioMcpClientConfig;
  * If you add a new entry here, update it there too.
  */
 const BLOCKED_ENV_VARS = [
-  // Craft Agent auth (set by the app itself)
+  // Runner auth (set by the app itself)
   'ANTHROPIC_API_KEY',
   'CLAUDE_CODE_OAUTH_TOKEN',
 

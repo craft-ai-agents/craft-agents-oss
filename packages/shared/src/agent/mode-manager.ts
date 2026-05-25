@@ -2026,7 +2026,7 @@ export function shouldAllowToolInMode(
   // Handle MCP tools - allow read-only, block write operations
   if (toolName.startsWith('mcp__')) {
     // Always allow documentation tools (read-only, always available)
-    if (toolName.startsWith('mcp__craft-agents-docs__')) {
+    if (toolName.startsWith('mcp__runner-docs__')) {
       return { allowed: true };
     }
 

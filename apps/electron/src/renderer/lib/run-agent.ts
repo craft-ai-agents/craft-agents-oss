@@ -51,6 +51,7 @@ export function buildAgentCreateSessionOptions(
           description: a.metadata.description,
           inputs: a.metadata.inputs,
           outputs: a.metadata.outputs,
+          visualAgent: a.metadata.visualAgent,
           tags: a.metadata.tags,
         })),
         {
@@ -113,6 +114,7 @@ export function buildAgentCreateSessionOptions(
                 description: a.metadata.description,
                 inputs: a.metadata.inputs,
                 outputs: a.metadata.outputs,
+                visualAgent: a.metadata.visualAgent,
                 tags: a.metadata.tags,
               })),
             }

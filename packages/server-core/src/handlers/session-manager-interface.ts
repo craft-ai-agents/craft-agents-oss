@@ -90,6 +90,16 @@ export interface ISessionManager {
     _isAuthRetry?: boolean,
     onAck?: (messageId: string) => void,
   ): Promise<void>
+  queueCanvasVisualReview(input: {
+    workspaceId: string
+    sessionId: string
+    outputId: string
+    outputTitle?: string
+    captureAssetId: string
+    capturePath: string
+    captureVersion: string
+    reviewTriggerId: string
+  }): Promise<{ accepted: boolean; reason?: string }>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
   getTaskOutput(taskId: string): Promise<string | null>

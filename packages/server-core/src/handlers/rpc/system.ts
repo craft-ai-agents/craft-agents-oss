@@ -67,7 +67,7 @@ function collectDeepLinkParams(parsed: URL, pathId?: string): Record<string, str
   return Object.keys(params).length > 0 ? params : undefined
 }
 
-function parseInternalCraftAgentsDeepLink(parsed: URL): ParsedInternalDeepLink | null {
+function parseInternalRunnerDeepLink(parsed: URL): ParsedInternalDeepLink | null {
   if (parsed.protocol !== 'craftagents:') return null
 
   const host = parsed.hostname
@@ -284,7 +284,7 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
       const parsed = new URL(url)
 
       if (parsed.protocol === 'craftagents:') {
-        const deepLink = parseInternalCraftAgentsDeepLink(parsed)
+        const deepLink = parseInternalRunnerDeepLink(parsed)
 
         if (deepLink?.handledNoop) {
           deps.platform.logger.info('[OPEN_URL] Ignoring auth-callback deep link in OPEN_URL handler')

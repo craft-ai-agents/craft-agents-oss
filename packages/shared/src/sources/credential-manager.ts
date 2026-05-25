@@ -500,9 +500,10 @@ export class SourceCredentialManager {
     // When callbackUrl is provided (WebUI), keep the provider-facing redirect_uri
     // stable so providers like Google only need a single registered callback.
     // The relay unwraps the real server callback target from the outer state.
-    const providerCallbackUrl = relayReturnTo
+    const useRelay = Boolean(relayReturnTo && OAUTH_RELAY_CALLBACK_URL);
+    const providerCallbackUrl = useRelay
       ? OAUTH_RELAY_CALLBACK_URL
-      : undefined;
+      : relayReturnTo;
     const provider = this.detectProvider(source);
 
     let prepared: PreparedOAuthFlow;
@@ -606,7 +607,7 @@ export class SourceCredentialManager {
       }
     }
 
-    return relayReturnTo
+    return useRelay && relayReturnTo
       ? wrapPreparedOAuthFlowForRelay(prepared, relayReturnTo)
       : prepared;
   }

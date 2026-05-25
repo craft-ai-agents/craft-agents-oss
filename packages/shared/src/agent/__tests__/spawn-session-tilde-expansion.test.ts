@@ -49,8 +49,8 @@ describe('preExecuteSpawnSession workingDirectory normalization', () => {
   });
 
   it('expands `~/foo` to an absolute path under home', async () => {
-    await agent.invokeSpawn({ prompt: 'hi', workingDirectory: '~/Documents/CraftAgents' });
-    expect(captured[0]?.workingDirectory).toBe(join(homedir(), 'Documents/CraftAgents'));
+    await agent.invokeSpawn({ prompt: 'hi', workingDirectory: '~/Documents/RunnerOS' });
+    expect(captured[0]?.workingDirectory).toBe(join(homedir(), 'Documents/RunnerOS'));
   });
 
   it('expands `${HOME}/foo`', async () => {

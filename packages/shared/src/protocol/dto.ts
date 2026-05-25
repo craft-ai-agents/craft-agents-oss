@@ -226,6 +226,7 @@ export interface SendMessageOptions {
   skillSlugs?: string[]
   badges?: ContentBadge[]
   optimisticMessageId?: string
+  displayIntent?: 'canvas-visual-review'
 }
 
 // ---------------------------------------------------------------------------
@@ -362,6 +363,8 @@ export interface LlmConnectionSetup {
   models?: string[] | null
   piAuthProvider?: string
   modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
+  /** When true, make this connection the app default after saving. */
+  setAsDefault?: boolean
   /** When true, reject setup if the connection doesn't already exist (reauth guard). */
   updateOnly?: boolean
   /** Custom endpoint protocol for arbitrary OpenAI/Anthropic-compatible APIs */

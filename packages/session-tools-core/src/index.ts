@@ -199,6 +199,9 @@ export {
   handleRecallMemory,
   // Outputs
   handleCreateOutput,
+  // Visual surface
+  handleVisualSurface,
+  handleVisualSurfaceState,
 } from './handlers/index.ts';
 
 export type {
@@ -272,6 +275,11 @@ export type {
   CreateOutputFileInput,
   CreateOutputLinkInput,
   CreateOutputReceiptInput,
+  VisualSurfaceToolInput,
+  VisualSurfaceToolResult,
+  VisualSurfaceStateCapture,
+  VisualSurfaceStateOutput,
+  VisualSurfaceStateToolResult,
 } from './handlers/index.ts';
 
 // Tool definitions — single source of truth
@@ -305,6 +313,8 @@ export {
   ForgetMemorySchema,
   RecallMemorySchema,
   CreateOutputSchema,
+  VisualSurfaceSchema,
+  VisualSurfaceStateSchema,
   // Descriptions
   TOOL_DESCRIPTIONS,
   // Registry

@@ -303,9 +303,9 @@ describe('runPreToolUseChecks', () => {
       expect(result.type).toBe('call_llm_intercept');
     });
 
-    it('skips source check for built-in MCP servers (craft-agents-docs)', () => {
+    it('skips source check for built-in MCP servers (runner-docs)', () => {
       const result = runPreToolUseChecks(createInput({
-        toolName: 'mcp__craft-agents-docs__search',
+        toolName: 'mcp__runner-docs__search',
         input: {},
         activeSourceSlugs: [],
       }));

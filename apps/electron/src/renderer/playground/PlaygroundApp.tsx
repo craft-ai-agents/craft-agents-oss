@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { PanelRight } from 'lucide-react'
-import { CraftAgentsSymbol } from '@/components/icons/CraftAgentsSymbol'
+import { RunnerMark } from '@/components/icons/RunnerMark'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 import {
@@ -196,7 +196,7 @@ export function PlaygroundApp() {
       {/* Header */}
       <header className="h-12 shrink-0 flex items-center justify-between px-4 border-b border-border bg-background">
         <div className="flex items-center gap-3">
-          <CraftAgentsSymbol className="h-5 w-5" />
+          <RunnerMark className="h-5 w-5" />
           <h1 className="font-semibold text-foreground font-sans">
             Design System Playground
           </h1>

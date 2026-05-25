@@ -264,9 +264,12 @@ export function prepareSlackOAuth(options: PrepareSlackOAuthOptions): PreparedOA
   const userScopes = getSlackScopes(options);
   const state = generateState();
 
-  // Slack requires HTTPS → use Cloudflare relay when using callbackPort
+  const slackRelayBaseUrl = process.env.RUNNER_SLACK_OAUTH_RELAY_BASE_URL?.trim();
+  if (!options.callbackUrl && !slackRelayBaseUrl) {
+    throw new Error('Slack OAuth relay not configured. Set RUNNER_SLACK_OAUTH_RELAY_BASE_URL.');
+  }
   const redirectUri = options.callbackUrl
-    ?? `https://agents.craft.do/auth/slack/callback?port=${options.callbackPort}`;
+    ?? `${slackRelayBaseUrl}/auth/slack/callback?port=${options.callbackPort}`;
 
   const authUrl = new URL(SLACK_AUTH_URL);
   authUrl.searchParams.set('client_id', SLACK_CLIENT_ID);
@@ -355,9 +358,11 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
     const localUrl = new URL(callbackServer.url);
     const port = localUrl.port;
 
-    // Use Cloudflare Worker relay for Slack OAuth (Slack requires HTTPS)
-    // The relay redirects: https://agents.craft.do/auth/slack/callback → http://localhost:{port}/callback
-    const redirectUri = `https://agents.craft.do/auth/slack/callback?port=${port}`;
+    const slackRelayBaseUrl = process.env.RUNNER_SLACK_OAUTH_RELAY_BASE_URL?.trim();
+    if (!slackRelayBaseUrl) {
+      throw new Error('Slack OAuth relay not configured. Set RUNNER_SLACK_OAUTH_RELAY_BASE_URL.');
+    }
+    const redirectUri = `${slackRelayBaseUrl}/auth/slack/callback?port=${port}`;
 
     // Build authorization URL
     // Use user_scope (not scope) to get a user token instead of bot token

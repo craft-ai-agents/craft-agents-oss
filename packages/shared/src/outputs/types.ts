@@ -6,6 +6,7 @@ export type OutputKind =
   | 'audio'
   | 'dataset'
   | 'code'
+  | 'model'
   | 'receipt'
   | 'external-action'
   | 'collection'
@@ -22,9 +23,16 @@ export type OutputPreviewMode =
   | 'image'
   | 'video'
   | 'audio'
+  | 'model'
+  | 'pdf'
+  | 'excalidraw'
+  | 'presentation'
   | 'table'
+  | 'chart'
+  | 'workflow'
   | 'receipt'
-  | 'external-link';
+  | 'external-link'
+  | 'web';
 
 export interface OutputAsset {
   id: string;

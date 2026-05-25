@@ -25,6 +25,7 @@ const VALID_OUTPUT_KINDS = new Set<string>([
   'audio',
   'dataset',
   'code',
+  'model',
   'receipt',
   'external-action',
   'collection',

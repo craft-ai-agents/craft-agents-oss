@@ -74,6 +74,8 @@ export interface ActiveOptionBadgesProps {
   currentSessionStatus?: string
   /** Callback when state changes */
   onSessionStatusChange?: (stateId: string) => void
+  /** Optional control shown directly after the session state badge. */
+  afterStateSlot?: React.ReactNode
   /** Additional CSS classes */
   className?: string
 }
@@ -102,6 +104,7 @@ export function ActiveOptionBadges({
   sessionStatuses = [],
   currentSessionStatus,
   onSessionStatusChange,
+  afterStateSlot,
   className,
 }: ActiveOptionBadgesProps) {
   // Resolve session label entries to their config objects + parsed values.
@@ -169,6 +172,8 @@ export function ActiveOptionBadges({
             />
           </div>
         )}
+
+        {afterStateSlot ? <div className="shrink-0">{afterStateSlot}</div> : null}
 
         {/* Stacking container for label badges (left side).
          * useDynamicStack sets per-child marginLeft directly via ResizeObserver.
@@ -406,7 +411,7 @@ function FilesPopoverButton({ sessionId, sessionFolderPath }: { sessionId?: stri
           className={cn(
             "h-7 w-7 text-xs font-medium rounded-[8px] flex items-center justify-center shrink-0",
             "outline-none select-none transition-colors",
-            "border border-white/[0.08] bg-white/[0.045] text-white/64 shadow-middle",
+            "border border-white/[0.08] bg-white/[0.045] text-white/64 shadow-xs",
             "hover:bg-white/[0.08] hover:text-white data-[state=open]:bg-white/[0.08] data-[state=open]:text-white",
           )}
           aria-label={t("common.info")}

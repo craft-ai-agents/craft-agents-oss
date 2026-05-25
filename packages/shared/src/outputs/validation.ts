@@ -21,6 +21,7 @@ const OUTPUT_KINDS: ReadonlySet<OutputKind> = new Set([
   'audio',
   'dataset',
   'code',
+  'model',
   'receipt',
   'external-action',
   'collection',
@@ -44,9 +45,16 @@ const PREVIEW_MODES: ReadonlySet<OutputPreviewMode> = new Set([
   'image',
   'video',
   'audio',
+  'model',
+  'pdf',
+  'excalidraw',
+  'presentation',
   'table',
+  'chart',
+  'workflow',
   'receipt',
   'external-link',
+  'web',
 ]);
 
 export function isValidOutputId(outputId: string): boolean {

@@ -12,6 +12,21 @@ const MODELS = [
 ]
 
 describe('ApiKeyInput tier hydration helpers', () => {
+  it('uses curated OpenRouter defaults when available', () => {
+    const models = [
+      { id: 'pi/x-ai/grok-4', name: 'Grok 4', costInput: 3, costOutput: 15, contextWindow: 256000, reasoning: true },
+      { id: 'pi/moonshotai/kimi-k2.6', name: 'Kimi K2.6', costInput: 0.75, costOutput: 3.5, contextWindow: 262144, reasoning: true },
+      { id: 'pi/deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', costInput: 0.435, costOutput: 0.87, contextWindow: 1048576, reasoning: true },
+      { id: 'pi/openrouter/owl-alpha', name: 'Owl Alpha', costInput: 0, costOutput: 0, contextWindow: 1048756, reasoning: false },
+    ]
+
+    expect(resolveTierModels(models, undefined, 'openrouter')).toEqual({
+      best: 'pi/moonshotai/kimi-k2.6',
+      default_: 'pi/deepseek/deepseek-v4-pro',
+      cheap: 'pi/openrouter/owl-alpha',
+    })
+  })
+
   it('resolveTierModels keeps saved tier selections when all are valid', () => {
     const saved = ['pi/zai-fast', 'pi/zai-balanced', 'pi/zai-best']
     const resolved = resolveTierModels(MODELS, saved)

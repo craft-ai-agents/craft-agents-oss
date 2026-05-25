@@ -73,21 +73,80 @@ function normalizeHeaderPermissionModes<T extends SessionHeader>(header: T): T {
   return header;
 }
 
+const HEADER_READ_CHUNK_BYTES = 8192;
+const MAX_SESSION_HEADER_BYTES = 1024 * 1024;
+
+function readFirstJsonlLineSync(sessionFile: string): string {
+  const fd = openSync(sessionFile, 'r');
+  try {
+    const chunks: Buffer[] = [];
+    const buffer = Buffer.alloc(HEADER_READ_CHUNK_BYTES);
+    let position = 0;
+
+    while (position < MAX_SESSION_HEADER_BYTES) {
+      const bytesRead = readSync(fd, buffer, 0, HEADER_READ_CHUNK_BYTES, position);
+      if (bytesRead === 0) break;
+
+      const readable = buffer.subarray(0, bytesRead);
+      const newlineIndex = readable.indexOf(10);
+      if (newlineIndex >= 0) {
+        chunks.push(Buffer.from(readable.subarray(0, newlineIndex)));
+        return Buffer.concat(chunks).toString('utf-8');
+      }
+
+      chunks.push(Buffer.from(readable));
+      position += bytesRead;
+    }
+
+    if (position >= MAX_SESSION_HEADER_BYTES) {
+      throw new Error(`Session header exceeds ${MAX_SESSION_HEADER_BYTES} bytes`);
+    }
+
+    return Buffer.concat(chunks).toString('utf-8');
+  } finally {
+    closeSync(fd);
+  }
+}
+
+async function readFirstJsonlLineAsync(sessionFile: string): Promise<string> {
+  const handle = await open(sessionFile, 'r');
+  try {
+    const chunks: Buffer[] = [];
+    const buffer = Buffer.alloc(HEADER_READ_CHUNK_BYTES);
+    let position = 0;
+
+    while (position < MAX_SESSION_HEADER_BYTES) {
+      const { bytesRead } = await handle.read(buffer, 0, HEADER_READ_CHUNK_BYTES, position);
+      if (bytesRead === 0) break;
+
+      const readable = buffer.subarray(0, bytesRead);
+      const newlineIndex = readable.indexOf(10);
+      if (newlineIndex >= 0) {
+        chunks.push(Buffer.from(readable.subarray(0, newlineIndex)));
+        return Buffer.concat(chunks).toString('utf-8');
+      }
+
+      chunks.push(Buffer.from(readable));
+      position += bytesRead;
+    }
+
+    if (position >= MAX_SESSION_HEADER_BYTES) {
+      throw new Error(`Session header exceeds ${MAX_SESSION_HEADER_BYTES} bytes`);
+    }
+
+    return Buffer.concat(chunks).toString('utf-8');
+  } finally {
+    await handle.close();
+  }
+}
+
 /**
  * Read only the header (first line) from a session.jsonl file.
  * Uses low-level fs to read minimal bytes for fast list loading.
  */
 export function readSessionHeader(sessionFile: string): SessionHeader | null {
   try {
-    const fd = openSync(sessionFile, 'r');
-    const buffer = Buffer.alloc(8192); // 8KB is plenty for metadata header
-    const bytesRead = readSync(fd, buffer, 0, 8192, 0);
-    closeSync(fd);
-
-    const content = buffer.toString('utf-8', 0, bytesRead);
-    const firstNewline = content.indexOf('\n');
-    const firstLine = firstNewline > 0 ? content.slice(0, firstNewline) : content;
-
+    const firstLine = readFirstJsonlLineSync(sessionFile);
     const parsed = safeJsonParse(expandSessionPath(firstLine, dirname(sessionFile))) as SessionHeader;
     return normalizeHeaderPermissionModes(parsed);
   } catch (error) {
@@ -243,18 +302,9 @@ function extractPreview(messages: StoredMessage[]): string | undefined {
  */
 export async function readSessionHeaderAsync(sessionFile: string): Promise<SessionHeader | null> {
   try {
-    const handle = await open(sessionFile, 'r');
-    try {
-      const buffer = Buffer.alloc(8192);
-      const { bytesRead } = await handle.read(buffer, 0, 8192, 0);
-      const content = buffer.toString('utf-8', 0, bytesRead);
-      const firstNewline = content.indexOf('\n');
-      const firstLine = firstNewline > 0 ? content.slice(0, firstNewline) : content;
-      const parsed = safeJsonParse(expandSessionPath(firstLine, dirname(sessionFile))) as SessionHeader;
-      return normalizeHeaderPermissionModes(parsed);
-    } finally {
-      await handle.close();
-    }
+    const firstLine = await readFirstJsonlLineAsync(sessionFile);
+    const parsed = safeJsonParse(expandSessionPath(firstLine, dirname(sessionFile))) as SessionHeader;
+    return normalizeHeaderPermissionModes(parsed);
   } catch (error) {
     debug('[jsonl] Failed to read session header async:', sessionFile, error);
     return null;

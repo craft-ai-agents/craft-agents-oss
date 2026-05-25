@@ -1,6 +1,6 @@
 {
-  "name": "Craft Agents",
-  "short_name": "Craft Agents",
+  "name": "Runner",
+  "short_name": "Runner",
   "description": "AI agent interface",
   "start_url": "./",
   "display": "standalone",

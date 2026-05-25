@@ -22,7 +22,7 @@
 import * as React from 'react'
 import { useAtomValue } from 'jotai'
 import { toast } from 'sonner'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Eye } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -74,6 +74,7 @@ interface FormState {
   model: string
   permissionMode: PermissionMode | ''
   thinkingLevel: ThinkingLevel | ''
+  visualAgent: boolean
   skills: string[]
   sources: string[]
   inputs: string
@@ -229,6 +230,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
       model: form.model.trim() || undefined,
       permissionMode: (form.permissionMode || undefined) as PermissionMode | undefined,
       thinkingLevel: (form.thinkingLevel || undefined) as ThinkingLevel | undefined,
+      visualAgent: form.visualAgent || undefined,
       skills: form.skills.length > 0 ? form.skills : undefined,
       sources: form.sources.length > 0 ? form.sources : undefined,
       greeting: form.greeting.trim() || undefined,
@@ -296,6 +298,10 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
 
           {/* Behavior — system prompt + greeting */}
           <FormSection title="Behavior">
+            <VisualAgentToggle
+              checked={form.visualAgent}
+              onChange={(checked) => setForm((p) => ({ ...p, visualAgent: checked }))}
+            />
             <PromptEditorPanel
               value={form.systemPrompt}
               open={promptEditorOpen}
@@ -487,6 +493,7 @@ function buildInitialState(agent: AgentDefinitionDTO | undefined): FormState {
       model: '',
       permissionMode: '',
       thinkingLevel: '',
+      visualAgent: false,
       skills: [],
       sources: [],
       inputs: '',
@@ -505,6 +512,7 @@ function buildInitialState(agent: AgentDefinitionDTO | undefined): FormState {
     model: agent.metadata.model ?? '',
     permissionMode: agent.metadata.permissionMode ?? '',
     thinkingLevel: agent.metadata.thinkingLevel ?? '',
+    visualAgent: agent.metadata.visualAgent === true,
     skills: agent.metadata.skills ?? [],
     sources: agent.metadata.sources ?? [],
     inputs: agent.metadata.inputs ?? '',
@@ -572,6 +580,49 @@ function Field({ label, hint, children }: FieldProps) {
       </span>
       {children}
     </label>
+  )
+}
+
+function VisualAgentToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="flex w-full items-center justify-between gap-3 rounded-[13px] border border-white/[0.065] bg-black/20 px-3 py-3 text-left transition-colors hover:border-[#38bdf8]/30 hover:bg-white/[0.045]"
+    >
+      <span className="flex min-w-0 items-start gap-3">
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.08] bg-white/[0.045] text-[#7dd3fc]">
+          <Eye className="h-3.5 w-3.5" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-sm font-medium text-white/82">Visual agent</span>
+          <span className="mt-0.5 block text-xs leading-5 text-white/40">
+            Automatically uses Canvas for visual, web, media, and document outputs.
+          </span>
+        </span>
+      </span>
+      <span
+        className={`relative h-5 w-9 shrink-0 rounded-full border transition-colors ${
+          checked
+            ? 'border-[#38bdf8]/55 bg-[#0ea5e9]/35'
+            : 'border-white/[0.10] bg-white/[0.04]'
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white/82 transition-transform ${
+            checked ? 'translate-x-4' : 'translate-x-0.5'
+          }`}
+        />
+      </span>
+    </button>
   )
 }
 

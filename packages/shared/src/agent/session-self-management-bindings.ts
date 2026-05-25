@@ -244,6 +244,22 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'applyVisualSurfaceEvent', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.applyVisualSurfaceEventFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'getVisualSurfaceState', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.getVisualSurfaceStateFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   // listSources is implemented inline (not via the callback registry):
   // it reads the workspace + global tiers via loadAllSources and projects
   // each LoadedSource into the SourceListItem shape declared in

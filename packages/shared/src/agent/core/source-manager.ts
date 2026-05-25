@@ -18,7 +18,7 @@ import { sourceNeedsAuthentication } from '../../sources/credential-manager.ts';
 import type { SourceManagerConfig } from './types.ts';
 
 /** Slugs exempt from guide.md prerequisite (internal sources) */
-const GUIDE_EXEMPT_SLUGS = new Set(['session', 'craft-agents-docs']);
+const GUIDE_EXEMPT_SLUGS = new Set(['session', 'runner-docs']);
 
 /**
  * SourceManager provides centralized source state tracking for agent backends.

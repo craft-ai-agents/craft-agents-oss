@@ -25,6 +25,7 @@ interface ChatInputZoneProps {
   sessionStatuses?: SessionStatus[]
   currentSessionStatus?: string
   onSessionStatusChange?: (stateId: string) => void
+  afterStateSlot?: React.ReactNode
   className?: string
   inputProps: React.ComponentProps<typeof InputContainer>
 }
@@ -45,6 +46,7 @@ export function ChatInputZone({
   sessionStatuses = [],
   currentSessionStatus = 'todo',
   onSessionStatusChange,
+  afterStateSlot,
   className,
   inputProps,
 }: ChatInputZoneProps) {
@@ -97,6 +99,7 @@ export function ChatInputZone({
           sessionStatuses={sessionStatuses}
           currentSessionStatus={currentSessionStatus}
           onSessionStatusChange={onSessionStatusChange}
+          afterStateSlot={afterStateSlot}
         />
       )}
 

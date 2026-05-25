@@ -658,7 +658,7 @@ export interface PrerequisiteManagerLike {
 }
 
 /** Built-in MCP servers that are always available (not user sources) */
-const BUILT_IN_MCP_SERVERS = new Set(['session', 'craft-agents-docs']);
+const BUILT_IN_MCP_SERVERS = new Set(['session', 'runner-docs']);
 
 /** File write tools that require permission in ask mode */
 const FILE_WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);

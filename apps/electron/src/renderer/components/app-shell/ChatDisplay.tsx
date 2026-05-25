@@ -9,13 +9,16 @@ import {
   ChevronUp,
   CircleAlert,
   ExternalLink,
+  Image as ImageIcon,
   Info,
   X,
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
 import { toast } from "sonner"
+import { useAtomValue, useSetAtom } from "jotai"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Markdown, CollapsibleMarkdownProvider, StreamingMarkdown, type RenderMode } from "@/components/markdown"
 import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
@@ -77,6 +80,15 @@ import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } fro
 import { resolveBranchNewPanelOption } from "./branching"
 import { handleErrorMessageAction } from "./error-message-actions"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
+import { VISUAL_BOARD_TAG } from "@craft-agent/shared/visual-board"
+import { OUTPUT_SHOW_IN_CANVAS_TAG } from "@craft-agent/shared/outputs/constants"
+import { useOutputs } from "@/hooks/useOutputs"
+import {
+  openOutputVisualSurfaceAtom,
+  visualSidecarAtom,
+} from "@/atoms/visual-surfaces"
+import { VisualSurfacePanel } from "@/components/visual-surfaces/VisualSurfacePanel"
+import { VisualSurfaceToggle } from "@/components/visual-surfaces/VisualSurfaceToggle"
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -494,6 +506,47 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     || session?.launchReceipt?.origin === 'concierge'
     || session?.launchReceipt?.agent?.slug === CONCIERGE_SLUG
   const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
+  const visualSidecar = useAtomValue(visualSidecarAtom)
+  const openOutputVisualSurface = useSetAtom(openOutputVisualSurfaceAtom)
+  const currentWorkspaceId = workspaceId ?? session?.workspaceId
+  const { outputs, loading: outputsLoading } = useOutputs(currentWorkspaceId)
+  const activeSessionVisualSurface =
+    visualSidecar.activeSurface?.sessionId === session?.id ? visualSidecar.activeSurface : null
+  const showRollupVisualSurface =
+    !!activeSessionVisualSurface && visualSidecar.resolvedPresentation !== 'sidecar'
+  const sessionVisualOutputs = useMemo(
+    () => session?.id ? outputs.filter((output) => output.origin?.sessionId === session.id) : [],
+    [outputs, session?.id],
+  )
+  const latestSessionVisualOutput = sessionVisualOutputs.find((output) => !output.tags?.includes(VISUAL_BOARD_TAG))
+  const seenCanvasIntentOutputIdsRef = React.useRef<Record<string, Set<string>>>({})
+
+  useEffect(() => {
+    if (!session?.id || !currentWorkspaceId || outputsLoading) return
+    const seen = seenCanvasIntentOutputIdsRef.current[session.id]
+    if (!seen) {
+      seenCanvasIntentOutputIdsRef.current[session.id] = new Set(sessionVisualOutputs.map((output) => output.id))
+      return
+    }
+
+    const nextCanvasOutput = sessionVisualOutputs.find((output) =>
+      !seen.has(output.id)
+      && !output.tags?.includes(VISUAL_BOARD_TAG)
+      && output.tags?.includes(OUTPUT_SHOW_IN_CANVAS_TAG)
+    )
+    for (const output of sessionVisualOutputs) seen.add(output.id)
+    if (!nextCanvasOutput) return
+
+    openOutputVisualSurface({
+      workspaceId: currentWorkspaceId,
+      sessionId: session.id,
+      outputId: nextCanvasOutput.id,
+      title: nextCanvasOutput.title,
+      kind: nextCanvasOutput.kind,
+      createdAt: nextCanvasOutput.createdAt,
+      updatedAt: nextCanvasOutput.updatedAt,
+    })
+  }, [currentWorkspaceId, openOutputVisualSurface, outputsLoading, session?.id, sessionVisualOutputs])
 
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -1479,9 +1532,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       {session ? (
         <div className="flex flex-1 flex-col min-h-0 min-w-0 relative">
           {/* Content layer */}
-          <div className="flex flex-1 flex-col min-h-0 min-w-0 relative z-10">
+          <div className="flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden relative z-10">
           {/* === MESSAGES AREA: Scrollable list of message bubbles === */}
-          <div className="relative flex-1 min-h-0">
+          <div className={cn("relative flex-1 min-h-0", showRollupVisualSurface && "hidden")}>
             {/* Mask wrapper - fades content at top and bottom over transparent/image backgrounds */}
             <div
               className="h-full"
@@ -1890,7 +1943,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           </div>
 
           {/* === INPUT CONTAINER: FreeForm or Structured Input === */}
+          {showRollupVisualSurface ? <VisualSurfacePanel presentation="rollup" /> : null}
           <ChatInputZone
+            className="shrink-0"
             compactMode={compactMode}
             permissionMode={permissionMode}
             onPermissionModeChange={onPermissionModeChange}
@@ -1905,6 +1960,13 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             sessionStatuses={sessionStatuses}
             currentSessionStatus={session.sessionStatus || 'todo'}
             onSessionStatusChange={onSessionStatusChange}
+            afterStateSlot={
+              <VisualSurfaceToggle
+                workspaceId={currentWorkspaceId}
+                sessionId={session.id}
+                latestOutput={latestSessionVisualOutput}
+              />
+            }
             inputProps={{
               placeholder,
               disabled: isInputDisabled,
@@ -2208,6 +2270,10 @@ function MessageBubble({
 
   // === USER MESSAGE: Right-aligned bubble with attachments above ===
   if (message.role === 'user') {
+    if (isCanvasVisualReviewMessage(message)) {
+      return <CanvasVisualReviewNotice />
+    }
+
     return (
       <UserMessageBubble
         content={message.content}
@@ -2333,6 +2399,25 @@ function MessageBubble({
   }
 
   return null
+}
+
+function isCanvasVisualReviewMessage(message: Message): boolean {
+  return message.displayIntent === 'canvas-visual-review'
+    || message.content.startsWith('<system-reminder>\nCanvas just captured a preview screenshot')
+}
+
+function CanvasVisualReviewNotice() {
+  return (
+    <div className="flex justify-end">
+      <div className="flex max-w-[90%] items-center gap-2 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-3 py-2 text-[13px] text-white/62">
+        <ImageIcon className="h-3.5 w-3.5 text-cyan-300/75" />
+        <div className="flex min-w-0 flex-col">
+          <span className="font-medium text-white/72">Canvas review sent to agent</span>
+          <span className="text-[12px] text-white/42">Preview screenshot attached</span>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 /**

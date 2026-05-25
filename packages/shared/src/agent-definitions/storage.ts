@@ -251,6 +251,7 @@ export function parseAgentFile(content: string): { metadata: AgentMetadata; syst
     thinkingLevel: coerceThinkingLevel(data.thinkingLevel, warnings),
     skills: coerceStringArray(data.skills, 'skills', warnings),
     sources: coerceStringArray(data.sources, 'sources', warnings),
+    visualAgent: data.visualAgent === true ? true : undefined,
     greeting: typeof data.greeting === 'string' ? data.greeting.trim() || undefined : undefined,
     inputs: typeof data.inputs === 'string' ? data.inputs.trim() || undefined : undefined,
     outputs: typeof data.outputs === 'string' ? data.outputs.trim() || undefined : undefined,
@@ -422,6 +423,7 @@ export function serializeAgent(metadata: AgentMetadata, systemPrompt: string): s
   if (metadata.thinkingLevel) data.thinkingLevel = metadata.thinkingLevel;
   if (metadata.skills?.length) data.skills = metadata.skills;
   if (metadata.sources?.length) data.sources = metadata.sources;
+  if (metadata.visualAgent) data.visualAgent = true;
   if (metadata.greeting) data.greeting = metadata.greeting;
   if (metadata.inputs) data.inputs = metadata.inputs;
   if (metadata.outputs) data.outputs = metadata.outputs;
