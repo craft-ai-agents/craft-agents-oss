@@ -161,6 +161,39 @@ describe('web preview target resolution', () => {
     }))).toBeNull()
   })
 
+  test('allows presentation outputs to use a generated HTML deck preview asset', () => {
+    expect(resolveWebPreviewTarget(htmlAssetManifest({
+      preview: { mode: 'presentation', assetId: 'deck' },
+      primary: {
+        id: 'deck',
+        label: 'deck.pptx',
+        role: 'primary',
+        path: 'deck.pptx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      },
+      assets: [
+        {
+          id: 'deck',
+          label: 'deck.pptx',
+          role: 'primary',
+          path: 'deck.pptx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        },
+        {
+          id: 'html-preview',
+          label: 'Deck preview',
+          role: 'supporting',
+          path: 'site/index.html',
+          mimeType: 'text/html',
+        },
+      ],
+    }))).toEqual({
+      url: 'runner-output://asset/workspace-1/output-html/site/index.html',
+      label: 'Deck preview',
+      displayHost: 'generated output',
+    })
+  })
+
   test('blocks unsafe generated HTML asset paths', () => {
     expect(resolveWebPreviewTarget(htmlAssetManifest({
       primary: {

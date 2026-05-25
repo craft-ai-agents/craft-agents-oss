@@ -15,6 +15,7 @@ export function previewModeForMimeType(mimeType: string | undefined): OutputPrev
   if (mimeType === 'model/gltf-binary' || mimeType === 'model/gltf+json') return 'model';
   if (mimeType === 'application/pdf') return 'pdf';
   if (mimeType === 'application/vnd.excalidraw+json') return 'excalidraw';
+  if (isPresentationMimeType(mimeType)) return 'presentation';
   return 'text';
 }
 
@@ -28,8 +29,15 @@ export function inferPreviewMode(mimeType?: string, path?: string): OutputPrevie
   if (mimeType === 'model/gltf-binary' || mimeType === 'model/gltf+json' || /\.(glb|gltf)$/.test(lowerPath)) return 'model';
   if (mimeType === 'application/pdf' || lowerPath.endsWith('.pdf')) return 'pdf';
   if (mimeType === 'application/vnd.excalidraw+json' || lowerPath.endsWith('.excalidraw')) return 'excalidraw';
+  if (isPresentationMimeType(mimeType) || /\.(pptx?|odp)$/.test(lowerPath)) return 'presentation';
   if (mimeType === 'text/csv' || /\.(csv|tsv)$/.test(lowerPath)) return 'table';
   return 'text';
+}
+
+function isPresentationMimeType(mimeType: string | undefined): boolean {
+  return mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    || mimeType === 'application/vnd.ms-powerpoint'
+    || mimeType === 'application/vnd.oasis.opendocument.presentation';
 }
 
 export const deriveOutputSummaryFallback = summarizeOutputContent;

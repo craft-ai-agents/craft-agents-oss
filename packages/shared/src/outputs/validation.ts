@@ -48,6 +48,7 @@ const PREVIEW_MODES: ReadonlySet<OutputPreviewMode> = new Set([
   'model',
   'pdf',
   'excalidraw',
+  'presentation',
   'table',
   'receipt',
   'external-link',

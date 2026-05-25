@@ -65,7 +65,7 @@ export function resolveLocalWebPreviewTarget(
 }
 
 export function resolveGeneratedHtmlPreviewTarget(output: WebPreviewOutputLike): LocalWebPreviewTarget | null {
-  if (output.preview?.mode && output.preview.mode !== 'web') return null;
+  if (output.preview?.mode && output.preview.mode !== 'web' && output.preview.mode !== 'presentation') return null;
   if (!output.workspaceId || !output.id) return null;
 
   const asset = selectHtmlPreviewAsset(output);
@@ -127,7 +127,9 @@ function selectPreviewLink(output: WebPreviewOutputLike, options: WebPreviewPoli
 
 function selectHtmlPreviewAsset(output: WebPreviewOutputLike): WebPreviewAssetLike | null {
   if (output.preview?.assetId) {
-    return output.assets.find((asset) => asset.id === output.preview?.assetId && isHtmlAsset(asset)) ?? null;
+    const selected = output.assets.find((asset) => asset.id === output.preview?.assetId);
+    if (selected && isHtmlAsset(selected)) return selected;
+    if (output.preview?.mode && output.preview.mode !== 'presentation') return null;
   }
   if (output.primary && isHtmlAsset(output.primary)) return output.primary;
   return output.assets.find((asset) => asset.role === 'primary' && isHtmlAsset(asset))

@@ -26,6 +26,7 @@ export type OutputPreviewMode =
   | 'model'
   | 'pdf'
   | 'excalidraw'
+  | 'presentation'
   | 'table'
   | 'receipt'
   | 'external-link'

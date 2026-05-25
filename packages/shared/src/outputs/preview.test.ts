@@ -20,4 +20,11 @@ describe('output preview mode inference', () => {
     expect(previewModeForMimeType('application/vnd.excalidraw+json')).toBe('excalidraw');
     expect(inferPreviewMode(undefined, 'diagram.excalidraw')).toBe('excalidraw');
   });
+
+  test('detects presentation assets by mime type and extension', () => {
+    expect(previewModeForMimeType('application/vnd.openxmlformats-officedocument.presentationml.presentation')).toBe('presentation');
+    expect(previewModeForMimeType('application/vnd.ms-powerpoint')).toBe('presentation');
+    expect(inferPreviewMode(undefined, 'deck.pptx')).toBe('presentation');
+    expect(inferPreviewMode(undefined, 'deck.odp')).toBe('presentation');
+  });
 });

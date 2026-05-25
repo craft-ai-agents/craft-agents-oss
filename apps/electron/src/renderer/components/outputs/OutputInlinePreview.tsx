@@ -1,10 +1,11 @@
 import * as React from 'react'
-import { AlertTriangle, ExternalLink, FileText, Link2, ReceiptText } from 'lucide-react'
+import { AlertTriangle, ExternalLink, FileText, Link2, Presentation, ReceiptText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { StreamingMarkdown } from '@/components/markdown'
 import { ShikiCodeViewer } from '@/components/shiki/ShikiCodeViewer'
 import { OutputWebPreview } from './OutputWebPreview'
 import { resolveWebPreviewTarget } from './web-preview'
+import { resolvePresentationPreviewAsset } from './presentation-preview'
 import { buildRunnerOutputAssetUrl } from '@craft-agent/shared/outputs/web-preview'
 import type { OutputAssetDTO, OutputManifestDTO, OutputPreviewMode } from '@/hooks/useOutputs'
 
@@ -37,6 +38,9 @@ export function OutputInlinePreview({
 }: OutputInlinePreviewProps) {
   const previewAsset = resolvePreviewAsset(manifest, primary)
   const mode = manifest.preview?.mode ?? inferPreviewMode(previewAsset)
+  const presentationPreviewAsset = mode === 'presentation'
+    ? resolvePresentationPreviewAsset(manifest, previewAsset, inferPreviewMode)
+    : undefined
   const blockedWebPreviewOrigins = React.useMemo(() => getBlockedWebPreviewOrigins(), [])
   const webPreviewTarget = resolveWebPreviewTarget(manifest, { blockedOrigins: blockedWebPreviewOrigins })
   const inlineText = manifest.preview?.inlineText ?? null
@@ -95,6 +99,10 @@ export function OutputInlinePreview({
 
   React.useEffect(() => {
     if (webPreviewTarget) return
+    if (mode === 'presentation' && !presentationPreviewAsset) {
+      onPreviewSettled?.('error')
+      return
+    }
     if (error) {
       onPreviewSettled?.('error')
       return
@@ -102,7 +110,7 @@ export function OutputInlinePreview({
     if (hasStaticPreview || (!assetId && !shouldReadAssetData && !shouldReadAssetText)) {
       onPreviewSettled?.('ready')
     }
-  }, [assetId, error, hasStaticPreview, onPreviewSettled, shouldReadAssetData, shouldReadAssetText, webPreviewTarget])
+  }, [assetId, error, hasStaticPreview, mode, onPreviewSettled, presentationPreviewAsset, shouldReadAssetData, shouldReadAssetText, webPreviewTarget])
 
   if (error) {
     return (
@@ -185,6 +193,46 @@ export function OutputInlinePreview({
           onPreviewSettled={onPreviewSettled}
         />
       </React.Suspense>
+    )
+  }
+
+  if (mode === 'presentation') {
+    const renderedAsset = presentationPreviewAsset
+    if (renderedAsset) {
+      const renderedMode = inferPreviewMode(renderedAsset)
+      const renderedUrl = buildRunnerOutputAssetUrl(workspaceId, manifest.id, renderedAsset.path)
+      if (renderedMode === 'pdf') {
+        return (
+          <div className={className ?? 'h-full min-h-[420px] w-full overflow-hidden rounded-md bg-black'}>
+            <iframe
+              src={renderedUrl}
+              title={renderedAsset.label ?? manifest.title}
+              className="h-full min-h-[420px] w-full border-0 bg-black"
+              onLoad={() => onPreviewSettled?.('ready')}
+            />
+          </div>
+        )
+      }
+      if (renderedMode === 'image') {
+        return (
+          <div className={className ?? 'flex h-full min-h-0 w-full items-center justify-center overflow-hidden rounded-md bg-black'}>
+            <img
+              src={renderedUrl}
+              alt={renderedAsset.label ?? manifest.title}
+              className="max-h-full w-full object-contain"
+              onLoad={() => onPreviewSettled?.('ready')}
+              onError={() => onPreviewSettled?.('error')}
+            />
+          </div>
+        )
+      }
+    }
+
+    return (
+      <EmptyPreview className={className}>
+        <Presentation className="h-4 w-4" />
+        <span>Deck preview needs an HTML, PDF, or image preview asset.</span>
+      </EmptyPreview>
     )
   }
 
@@ -273,7 +321,17 @@ function inferPreviewMode(asset?: OutputAssetDTO): OutputPreviewMode {
   if (mime === 'model/gltf-binary' || mime === 'model/gltf+json' || /\.(glb|gltf)$/.test(path)) return 'model'
   if (mime === 'application/pdf' || path.endsWith('.pdf')) return 'pdf'
   if (mime === 'application/vnd.excalidraw+json' || path.endsWith('.excalidraw')) return 'excalidraw'
+  if (isPresentationAsset(asset)) return 'presentation'
   return 'text'
+}
+
+function isPresentationAsset(asset?: OutputAssetDTO): boolean {
+  const mime = asset?.mimeType ?? ''
+  const path = asset?.path.toLowerCase() ?? ''
+  return mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    || mime === 'application/vnd.ms-powerpoint'
+    || mime === 'application/vnd.oasis.opendocument.presentation'
+    || /\.(pptx?|odp)$/.test(path)
 }
 
 function formatJson(content: string): string {
