@@ -3,7 +3,12 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { listMemoryReviewItems } from '@craft-agent/shared/memory'
-import { MemorySidecarService, type MemorySidecarReviewer } from './MemorySidecarService'
+import {
+  createMemorySidecarReviewer,
+  MemorySidecarService,
+  parseMemorySidecarDecision,
+  type MemorySidecarReviewer,
+} from './MemorySidecarService'
 
 let root: string
 let agentsRoot: string
@@ -116,6 +121,87 @@ describe('MemorySidecarService', () => {
 
     expect(result.queued).toBe(false)
     expect(listMemoryReviewItems({ globalAgentsDir: agentsRoot })).toEqual([])
+  })
+
+  test('rejects duplicate agent proposals when reviewer omits agent slug', async () => {
+    const service = new MemorySidecarService({
+      reviewer: reviewer({
+        decision: 'save',
+        scope: 'agent',
+        name: 'browser loops',
+        type: 'feedback',
+        content: 'Deep Research should use browser follow-up loops.',
+        confidence: 0.92,
+        evidence: 'User emphasized browser loops.',
+      }),
+      storage: { globalAgentsDir: agentsRoot },
+    })
+
+    const result = await service.reviewTurn({
+      userMessage: 'browser loops matter',
+      assistantResponse: 'ok',
+      activeAgentSlug: 'deep-researcher',
+      existingMemoryIndex: [{
+        scope: 'agent',
+        agentSlug: 'deep-researcher',
+        name: 'browser loops',
+        type: 'feedback',
+        body: 'Deep Research should use browser follow-up loops.',
+      }],
+    })
+
+    expect(result.queued).toBe(false)
+    expect(listMemoryReviewItems({ globalAgentsDir: agentsRoot })).toEqual([])
+  })
+
+  test('allows update proposals for existing memory names', async () => {
+    const service = new MemorySidecarService({
+      reviewer: reviewer({
+        decision: 'update',
+        scope: 'user',
+        name: 'answer length',
+        type: 'feedback',
+        content: 'User now prefers concise but complete answers.',
+        confidence: 0.9,
+        evidence: 'User clarified answer style.',
+      }),
+      storage: { globalAgentsDir: agentsRoot },
+    })
+
+    const result = await service.reviewTurn({
+      userMessage: 'keep it concise but complete',
+      assistantResponse: 'ok',
+      existingMemoryIndex: [{
+        scope: 'user',
+        name: 'answer length',
+        type: 'feedback',
+        body: 'User prefers very short answers.',
+      }],
+    })
+
+    expect(result.queued).toBe(true)
+    expect(listMemoryReviewItems({ globalAgentsDir: agentsRoot })).toEqual([
+      expect.objectContaining({ action: 'update', name: 'answer length' }),
+    ])
+  })
+
+  test('parses fenced JSON reviewer output', async () => {
+    const decision = parseMemorySidecarDecision('```json\n{"decision":"save","scope":"user","name":"short answers","type":"feedback","content":"User prefers concise responses.","confidence":0.91,"evidence":"User asked for concise output."}\n```')
+    expect(decision).toMatchObject({
+      decision: 'save',
+      scope: 'user',
+      name: 'short answers',
+      type: 'feedback',
+      content: 'User prefers concise responses.',
+    })
+  })
+
+  test('LLM reviewer returns none for invalid model output', async () => {
+    const llmReviewer = createMemorySidecarReviewer(async () => 'not json')
+    expect(await llmReviewer.review({
+      userMessage: 'remember this',
+      assistantResponse: 'ok',
+    })).toMatchObject({ decision: 'none', reason: 'invalid json' })
   })
 })
 

@@ -9,6 +9,7 @@ import type {
 
 interface MemoryReviewApi {
   listMemoryReviewQueue?: () => Promise<MemoryReviewItem[]>
+  onMemoryChanged?: (listener: (scope: MemoryScope, agentSlug: string | null) => void) => () => void
   resolveMemoryReview?: (payload: { id: string; status: 'approved' | 'rejected' | 'applied'; decisionReason?: string }) => Promise<MemoryReviewItem | null>
   saveMemory?: (payload: {
     scope: MemoryScope
@@ -62,6 +63,13 @@ export function useMemoryReviewQueue(filter?: { scope?: MemoryScope; agentSlug?:
 
   useEffect(() => {
     void refresh()
+  }, [refresh])
+
+  useEffect(() => {
+    const api = window.electronAPI as unknown as MemoryReviewApi
+    return api.onMemoryChanged?.(() => {
+      void refresh()
+    })
   }, [refresh])
 
   const reject = useCallback(async (item: MemoryReviewItem, reason?: string) => {

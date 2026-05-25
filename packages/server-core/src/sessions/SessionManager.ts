@@ -94,6 +94,7 @@ import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
+import { createMemorySidecarReviewer, MemorySidecarService } from '../memory/MemorySidecarService'
 import { profileDeepResearchSource } from '@craft-agent/shared/deep-research'
 import { OutputService } from '../outputs/OutputService'
 import {
@@ -277,6 +278,20 @@ function memoryEntryTitle(entry: WorkflowMemoryEntry): string {
  */
 function buildWorkflowMemoryText(memory?: WorkflowMemoryInputs): string {
   return buildMemorySectionsText(memory?.userEntries ?? [], memory?.agentEntries ?? [])
+}
+
+function findPreviousUserMessage(messages: Message[], beforeIndex: number): Message | undefined {
+  for (let index = beforeIndex - 1; index >= 0; index--) {
+    const message = messages[index]
+    if (message.role === 'user') return message
+  }
+  return undefined
+}
+
+function truncateMemorySidecarText(value: string, maxLength = 8000): string {
+  const normalized = value.trim()
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, maxLength)}\n[truncated]`
 }
 
 function formatWorkflowBundleBullet(slug: string, name: string | undefined, description: string | undefined): string {
@@ -5651,6 +5666,81 @@ user a clickable link to where the thing now lives.`
     return undefined
   }
 
+  private scheduleMemorySidecarReview(managed: ManagedSession, finalMessageId: string | undefined): void {
+    if (!finalMessageId) return
+    if (!managed.agent) return
+    if (managed.hidden || managed.systemPromptPreset === 'mini') return
+
+    const assistantIndex = managed.messages.findIndex((message) => message.id === finalMessageId)
+    if (assistantIndex < 0) return
+
+    const assistantMessage = managed.messages[assistantIndex]
+    const userMessage = findPreviousUserMessage(managed.messages, assistantIndex)
+    if (!userMessage?.content.trim() || !assistantMessage.content.trim()) return
+
+    const activeAgentSlug = managed.spawnedFromAgent?.agentSlug
+    const service = new MemorySidecarService({
+      reviewer: createMemorySidecarReviewer(managed.agent.runMiniCompletion.bind(managed.agent)),
+    })
+
+    void service.reviewTurn({
+      userMessage: truncateMemorySidecarText(userMessage.content),
+      assistantResponse: truncateMemorySidecarText(assistantMessage.content),
+      activeAgentSlug,
+      runId: managed.id,
+      existingMemoryIndex: this.buildMemorySidecarIndex(activeAgentSlug),
+    }).then((result) => {
+      if (!result.queued || !result.scope) return
+      this.broadcastMemoryChanged(result.scope, result.scope === 'agent' ? result.agentSlug ?? null : null)
+      sessionLog.info(`[memory] Sidecar queued review item ${result.itemId ?? '(unknown)'} for session ${managed.id}`)
+    }).catch((error) => {
+      sessionLog.warn(`[memory] Sidecar review failed for session ${managed.id}:`, error)
+    })
+  }
+
+  private buildMemorySidecarIndex(activeAgentSlug?: string): Array<{
+    scope: MemoryScope
+    agentSlug?: string
+    name: string
+    type: MemoryEntryType
+    body: string
+  }> {
+    const entries: Array<{
+      scope: MemoryScope
+      agentSlug?: string
+      name: string
+      type: MemoryEntryType
+      body: string
+    }> = []
+
+    try {
+      entries.push(...listUserMemoryEntries().map((entry) => ({
+        scope: 'user' as const,
+        name: entry.name,
+        type: entry.type,
+        body: truncateMemorySidecarText(entry.body, 1000),
+      })))
+    } catch (error) {
+      sessionLog.warn('[memory] Failed to load user memory for sidecar index:', error)
+    }
+
+    if (activeAgentSlug) {
+      try {
+        entries.push(...listAgentMemoryEntries(activeAgentSlug).map((entry) => ({
+          scope: 'agent' as const,
+          agentSlug: activeAgentSlug,
+          name: entry.name,
+          type: entry.type,
+          body: truncateMemorySidecarText(entry.body, 1000),
+        })))
+      } catch (error) {
+        sessionLog.warn(`[memory] Failed to load agent memory for sidecar index (${activeAgentSlug}):`, error)
+      }
+    }
+
+    return entries
+  }
+
   /**
    * Set which session the user is actively viewing.
    * Called when user navigates to a session. Used to determine whether to mark
@@ -7080,6 +7170,10 @@ user a clickable link to where the thing now lives.`
       if (this.browserPaneManager) {
         await this.browserPaneManager.clearVisualsForSession(sessionId)
         this.browserPaneManager.unbindAllForSession(sessionId)
+      }
+
+      if (reason === 'complete' && didReceiveNewFinalMessage) {
+        this.scheduleMemorySidecarReview(managed, currentFinalMessageId)
       }
 
       // No queue - emit complete to UI (include tokenUsage and hasUnread for state updates)
