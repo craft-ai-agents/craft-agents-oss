@@ -64,11 +64,10 @@ export function synthesizeEnvConnectionWithStatus(env: EnvConnectionEnv, activeS
 
 /** Build the UI-facing OpenLLM environment connection when an active SSO token is available. */
 export function synthesizeOpenLlmEnvConnectionWithStatus(
-  env: NodeJS.ProcessEnv,
   activeSsoToken: string | undefined,
   defaultSlug: string | null,
 ): LlmConnectionWithStatus | null {
-  const conn = activeSsoToken ? synthesizeOpenLlmEnvConnection(env) : null
+  const conn = activeSsoToken ? synthesizeOpenLlmEnvConnection() : null
   if (!conn) return null
 
   return {
@@ -477,7 +476,7 @@ export function registerLlmConnectionsHandlersWithRuntime(
       deps.platform.logger?.warn(`Failed to load SSO session for Environment connection: ${error instanceof Error ? error.message : error}`)
     }
 
-    const openLlmEnvConnection = synthesizeOpenLlmEnvConnectionWithStatus(process.env, ssoToken, defaultSlug)
+    const openLlmEnvConnection = synthesizeOpenLlmEnvConnectionWithStatus(ssoToken, defaultSlug)
     const envConnection = synthesizeEnvConnectionWithStatus(getCurrentEnvConnectionEnv(), ssoToken, defaultSlug)
 
     return [
@@ -602,7 +601,7 @@ export function registerLlmConnectionsHandlersWithRuntime(
     try {
       if (isEnvironmentConnectionSlug(slug)) {
         const envConnection = slug === OPENLLM_ENV_CONNECTION_SLUG
-          ? synthesizeOpenLlmEnvConnection(process.env)
+          ? synthesizeOpenLlmEnvConnection()
           : synthesizeEnvConnection(getCurrentEnvConnectionEnv())
 
         if (!envConnection) {

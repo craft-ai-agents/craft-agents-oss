@@ -20,8 +20,9 @@ const PI_AGENT_SERVER_OUTPUT = join(PI_AGENT_SERVER_DIR, "dist/index.js");
 
 // Load .env file if it exists
 function loadEnvFile(): void {
-  const envPath = join(ROOT_DIR, ".env");
-  if (existsSync(envPath)) {
+  for (const filename of [".env", ".env.local"]) {
+    const envPath = join(ROOT_DIR, filename);
+    if (!existsSync(envPath)) continue;
     const content = readFileSync(envPath, "utf-8");
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
@@ -46,37 +47,38 @@ function loadEnvFile(): void {
 // To enable in the future, add @sentry/esbuild-plugin. See apps/electron/CLAUDE.md.
 // NOTE: Google OAuth credentials are NOT baked into the build - users provide their own
 // via source config. See README_FOR_OSS.md for setup instructions.
-function getBuildDefines(): string[] {
-  const definedVars = [
-    "SLACK_OAUTH_CLIENT_ID",
-    "SLACK_OAUTH_CLIENT_SECRET",
-    "MICROSOFT_OAUTH_CLIENT_ID",
-    "MICROSOFT_OAUTH_CLIENT_SECRET",
-    "SENTRY_ELECTRON_INGEST_URL",
-    "CRAFT_DEV_RUNTIME",
-    // MDP SSO / deployment config
-    "MDP_AUTH_URL",
-    "MDP_CLIENT_ID",
-    "MDP_API_URL",
-    "MDP_RELAY_URL",
-    "MDP_ENABLE_SSO_STATE_CHECK",
-    // Environment LLM connection (generic OpenAI-compatible endpoint)
-    "LLM_BASE_URL",
-    "LLM_MODEL",
-    "LLM_CONNECTION_NAME",
-    // Built-in OpenLLM connection (deployment-owned; baked at build time)
-    "OPENLLM_BASE_HOST",
-    "OPENLLM_BASE_MODELS",
-    "OPENLLM_BASE_CONNECTION_NAME",
-    // Marketplace
-    "COPAW_MARKET_BASE_URL",
-  ];
+const BUILD_ENV_VARS = [
+  "SLACK_OAUTH_CLIENT_ID",
+  "SLACK_OAUTH_CLIENT_SECRET",
+  "MICROSOFT_OAUTH_CLIENT_ID",
+  "MICROSOFT_OAUTH_CLIENT_SECRET",
+  "SENTRY_ELECTRON_INGEST_URL",
+  "CRAFT_DEV_RUNTIME",
+  // MDP SSO / deployment config
+  "MDP_AUTH_URL",
+  "MDP_CLIENT_ID",
+  "MDP_API_URL",
+  "MDP_RELAY_URL",
+  "MDP_ENABLE_SSO_STATE_CHECK",
+  // Environment LLM connection (generic OpenAI-compatible endpoint)
+  "LLM_BASE_URL",
+  "LLM_MODEL",
+  "LLM_CONNECTION_NAME",
+  // Built-in OpenLLM connection (deployment-owned; baked at build time)
+  "OPENLLM_BASE_HOST",
+  "OPENLLM_BASE_MODELS",
+  "OPENLLM_BASE_CONNECTION_NAME",
+  // Marketplace
+  "COPAW_MARKET_BASE_URL",
+];
 
-  return definedVars.map((varName) => {
+function getBuildDefines(): string[] {
+  return BUILD_ENV_VARS.map((varName) => {
     const value = process.env[varName] || "";
     return `--define:process.env.${varName}="${value}"`;
   });
 }
+
 
 // Wait for file to stabilize (no size changes)
 async function waitForFileStable(filePath: string, timeoutMs = 10000): Promise<boolean> {
