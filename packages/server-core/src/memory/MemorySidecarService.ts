@@ -41,18 +41,29 @@ export interface MemorySidecarReviewer {
 export interface MemorySidecarServiceOptions {
   reviewer: MemorySidecarReviewer
   minConfidence?: number
+  autoApplyAgentConfidence?: number
   storage?: MemoryStorageOptions
+  applyMemory?: (proposal: EnqueueMemoryReviewInput) => Promise<MemorySidecarApplyResult>
 }
 
 export interface MemorySidecarResult {
   queued: boolean
+  applied?: boolean
   reason?: string
   itemId?: string
   scope?: MemoryScope
   agentSlug?: string
+  name?: string
+}
+
+export interface MemorySidecarApplyResult {
+  ok: boolean
+  name?: string
+  error?: string
 }
 
 const DEFAULT_MIN_CONFIDENCE = 0.85
+const DEFAULT_AUTO_APPLY_AGENT_CONFIDENCE = 0.9
 const SECRET_PATTERNS = [
   /\b(api[_-]?key|secret|token|password|private[_-]?key)\b/i,
   /\b(sk-[a-z0-9_-]{12,})\b/i,
@@ -62,12 +73,16 @@ const SECRET_PATTERNS = [
 export class MemorySidecarService {
   private readonly reviewer: MemorySidecarReviewer
   private readonly minConfidence: number
+  private readonly autoApplyAgentConfidence: number
   private readonly storage: MemoryStorageOptions | undefined
+  private readonly applyMemory: MemorySidecarServiceOptions['applyMemory']
 
   constructor(options: MemorySidecarServiceOptions) {
     this.reviewer = options.reviewer
     this.minConfidence = options.minConfidence ?? DEFAULT_MIN_CONFIDENCE
+    this.autoApplyAgentConfidence = options.autoApplyAgentConfidence ?? DEFAULT_AUTO_APPLY_AGENT_CONFIDENCE
     this.storage = options.storage
+    this.applyMemory = options.applyMemory
   }
 
   async reviewTurn(input: MemorySidecarTurnInput): Promise<MemorySidecarResult> {
@@ -80,8 +95,29 @@ export class MemorySidecarService {
       }
     }
 
+    if (this.applyMemory && shouldAutoApplyAgentSave(proposal, this.autoApplyAgentConfidence)) {
+      const applied = await this.tryApplyMemory(proposal)
+      if (applied.ok) {
+        return {
+          queued: false,
+          applied: true,
+          scope: proposal.scope,
+          agentSlug: proposal.agentSlug,
+          name: applied.name ?? proposal.name,
+        }
+      }
+    }
+
     const item = enqueueMemoryReviewItem(proposal, this.storage)
     return { queued: true, itemId: item.id, scope: item.scope, agentSlug: item.agentSlug }
+  }
+
+  private async tryApplyMemory(proposal: EnqueueMemoryReviewInput): Promise<MemorySidecarApplyResult> {
+    try {
+      return await this.applyMemory!(proposal)
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
   }
 
   private normalizeDecision(
@@ -127,6 +163,18 @@ export class MemorySidecarService {
       source: 'sidecar',
     }
   }
+}
+
+function shouldAutoApplyAgentSave(
+  proposal: EnqueueMemoryReviewInput,
+  minConfidence: number,
+): boolean {
+  return proposal.action === 'save' &&
+    proposal.scope === 'agent' &&
+    proposal.confidence >= minConfidence &&
+    Boolean(proposal.agentSlug) &&
+    Boolean(proposal.type) &&
+    Boolean(proposal.body?.trim())
 }
 
 export function createMemorySidecarReviewer(

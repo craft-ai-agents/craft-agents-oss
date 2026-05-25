@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { listMemoryReviewItems } from '@craft-agent/shared/memory'
+import { listAgentMemoryEntries, listMemoryReviewItems, saveMemoryEntry } from '@craft-agent/shared/memory'
 import {
   buildMemorySidecarPrompt,
   createMemorySidecarReviewer,
@@ -24,7 +24,54 @@ afterEach(() => {
 })
 
 describe('MemorySidecarService', () => {
-  test('queues one safe high-confidence save proposal', async () => {
+  test('auto-applies one safe high-confidence agent save proposal', async () => {
+    const service = new MemorySidecarService({
+      reviewer: reviewer({
+        decision: 'save',
+        scope: 'agent',
+        name: 'prefers browser loops',
+        type: 'feedback',
+        content: 'Deep Research should perform browser follow-up loops before synthesis.',
+        confidence: 0.93,
+        evidence: 'User said browser work loop and follow-up search are most important.',
+      }),
+      storage: { globalAgentsDir: agentsRoot },
+      applyMemory: async (proposal) => {
+        const saved = await saveMemoryEntry({
+          scope: 'agent',
+          agentSlug: proposal.agentSlug,
+          name: proposal.name,
+          type: proposal.type!,
+          body: proposal.body!,
+        }, { globalAgentsDir: agentsRoot })
+        return { ok: true, name: saved.name }
+      },
+    })
+
+    const result = await service.reviewTurn({
+      userMessage: 'browser loops matter',
+      assistantResponse: 'noted',
+      activeAgentSlug: 'deep-researcher',
+      runId: 'run_123',
+    })
+
+    expect(result).toMatchObject({
+      queued: false,
+      applied: true,
+      scope: 'agent',
+      agentSlug: 'deep-researcher',
+      name: 'prefers browser loops',
+    })
+    expect(listMemoryReviewItems({ globalAgentsDir: agentsRoot })).toEqual([])
+    expect(listAgentMemoryEntries('deep-researcher', { globalAgentsDir: agentsRoot })).toEqual([
+      expect.objectContaining({
+        name: 'prefers browser loops',
+        body: 'Deep Research should perform browser follow-up loops before synthesis.',
+      }),
+    ])
+  })
+
+  test('queues safe save proposal when no auto-apply hook is configured', async () => {
     const service = new MemorySidecarService({
       reviewer: reviewer({
         decision: 'save',
@@ -46,14 +93,99 @@ describe('MemorySidecarService', () => {
     })
 
     expect(result.queued).toBe(true)
-    const queued = listMemoryReviewItems({ globalAgentsDir: agentsRoot })
-    expect(queued).toEqual([expect.objectContaining({
+    expect(listMemoryReviewItems({ globalAgentsDir: agentsRoot })).toEqual([expect.objectContaining({
       action: 'save',
       scope: 'agent',
       agentSlug: 'deep-researcher',
       name: 'prefers browser loops',
       sourceRunId: 'run_123',
     })])
+  })
+
+  test('queues user save proposals even when auto-apply hook exists', async () => {
+    const service = new MemorySidecarService({
+      reviewer: reviewer({
+        decision: 'save',
+        scope: 'user',
+        name: 'short answers',
+        type: 'feedback',
+        content: 'User prefers concise answers.',
+        confidence: 0.97,
+        evidence: 'User said be concise.',
+      }),
+      storage: { globalAgentsDir: agentsRoot },
+      applyMemory: async () => {
+        throw new Error('should not auto-apply user memory')
+      },
+    })
+
+    const result = await service.reviewTurn({
+      userMessage: 'be concise',
+      assistantResponse: 'ok',
+      activeAgentSlug: 'deep-researcher',
+    })
+
+    expect(result.queued).toBe(true)
+    expect(listMemoryReviewItems({ globalAgentsDir: agentsRoot })).toEqual([
+      expect.objectContaining({ action: 'save', scope: 'user', name: 'short answers' }),
+    ])
+  })
+
+  test('queues update proposals even when auto-apply hook exists', async () => {
+    const service = new MemorySidecarService({
+      reviewer: reviewer({
+        decision: 'update',
+        scope: 'agent',
+        agentSlug: 'deep-researcher',
+        name: 'answer style',
+        type: 'feedback',
+        content: 'Deep Research should be concise but complete.',
+        confidence: 0.94,
+        evidence: 'User clarified answer style.',
+      }),
+      storage: { globalAgentsDir: agentsRoot },
+      applyMemory: async () => {
+        throw new Error('should not auto-apply updates')
+      },
+    })
+
+    const result = await service.reviewTurn({
+      userMessage: 'concise but complete',
+      assistantResponse: 'ok',
+      activeAgentSlug: 'deep-researcher',
+    })
+
+    expect(result.queued).toBe(true)
+    expect(listMemoryReviewItems({ globalAgentsDir: agentsRoot })).toEqual([
+      expect.objectContaining({ action: 'update', scope: 'agent', name: 'answer style' }),
+    ])
+  })
+
+  test('queues agent save proposal when auto-apply fails', async () => {
+    const service = new MemorySidecarService({
+      reviewer: reviewer({
+        decision: 'save',
+        scope: 'agent',
+        name: 'browser loops',
+        type: 'feedback',
+        content: 'Deep Research should follow browser leads before synthesis.',
+        confidence: 0.94,
+        evidence: 'User asked for browser follow-up loops.',
+      }),
+      storage: { globalAgentsDir: agentsRoot },
+      applyMemory: async () => ({ ok: false, error: 'write failed' }),
+    })
+
+    const result = await service.reviewTurn({
+      userMessage: 'browser loops matter',
+      assistantResponse: 'ok',
+      activeAgentSlug: 'deep-researcher',
+    })
+
+    expect(result.queued).toBe(true)
+    expect(listMemoryReviewItems({ globalAgentsDir: agentsRoot })).toEqual([
+      expect.objectContaining({ action: 'save', scope: 'agent', name: 'browser loops' }),
+    ])
   })
 
   test('rejects low-confidence or secret-looking proposals', async () => {

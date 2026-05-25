@@ -5853,6 +5853,30 @@ user a clickable link to where the thing now lives.`
     const activeAgentSlug = managed.spawnedFromAgent?.agentSlug
     const service = new MemorySidecarService({
       reviewer: createMemorySidecarReviewer(managed.agent.runMiniCompletion.bind(managed.agent)),
+      applyMemory: async (proposal) => {
+        if (proposal.action !== 'save') return { ok: false, error: 'only save proposals can auto-apply' }
+        if (proposal.scope !== 'agent') return { ok: false, error: 'only agent memory can auto-apply' }
+        const agentSlug = proposal.agentSlug ?? activeAgentSlug
+        if (!agentSlug) return { ok: false, error: 'agentSlug is required' }
+        if (!proposal.type || !proposal.body?.trim()) return { ok: false, error: 'type and body are required' }
+
+        const saved = await saveMemoryEntry({
+          scope: 'agent',
+          agentSlug,
+          name: proposal.name,
+          type: proposal.type,
+          body: proposal.body,
+          expires: typeof proposal.expires === 'string' ? proposal.expires : undefined,
+          event: {
+            source: 'sidecar',
+            runId: managed.id,
+            actor: agentSlug,
+            evidence: proposal.evidence,
+          },
+        } satisfies SaveMemoryInput)
+
+        return { ok: true, name: saved.name }
+      },
     })
 
     void service.reviewTurn({
@@ -5862,9 +5886,13 @@ user a clickable link to where the thing now lives.`
       runId: managed.id,
       existingMemoryIndex: this.buildMemorySidecarIndex(activeAgentSlug),
     }).then((result) => {
-      if (!result.queued || !result.scope) return
+      if ((!result.queued && !result.applied) || !result.scope) return
       this.broadcastMemoryChanged(result.scope, result.scope === 'agent' ? result.agentSlug ?? null : null)
-      sessionLog.info(`[memory] Sidecar queued review item ${result.itemId ?? '(unknown)'} for session ${managed.id}`)
+      if (result.applied) {
+        sessionLog.info(`[memory] Sidecar auto-saved ${result.scope} memory ${result.name ?? '(unknown)'} for session ${managed.id}`)
+      } else {
+        sessionLog.info(`[memory] Sidecar queued review item ${result.itemId ?? '(unknown)'} for session ${managed.id}`)
+      }
     }).catch((error) => {
       sessionLog.warn(`[memory] Sidecar review failed for session ${managed.id}:`, error)
     })
