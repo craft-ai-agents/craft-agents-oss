@@ -5841,7 +5841,8 @@ user a clickable link to where the thing now lives.`
     if (!finalMessageId) return
     if (!managed.agent) return
     if (managed.hidden || managed.systemPromptPreset === 'mini') return
-    if ((loadPreferences().memory?.sidecarMode ?? 'review') === 'manual') return
+    const sidecarMode = loadPreferences().memory?.sidecarMode ?? 'auto'
+    if (sidecarMode === 'manual') return
 
     const assistantIndex = managed.messages.findIndex((message) => message.id === finalMessageId)
     if (assistantIndex < 0) return
@@ -5853,7 +5854,7 @@ user a clickable link to where the thing now lives.`
     const activeAgentSlug = managed.spawnedFromAgent?.agentSlug
     const service = new MemorySidecarService({
       reviewer: createMemorySidecarReviewer(managed.agent.runMiniCompletion.bind(managed.agent)),
-      applyMemory: async (proposal) => {
+      applyMemory: sidecarMode === 'auto' ? async (proposal) => {
         if (proposal.action !== 'save') return { ok: false, error: 'only save proposals can auto-apply' }
         if (proposal.scope !== 'agent') return { ok: false, error: 'only agent memory can auto-apply' }
         const agentSlug = proposal.agentSlug ?? activeAgentSlug
@@ -5876,7 +5877,7 @@ user a clickable link to where the thing now lives.`
         } satisfies SaveMemoryInput)
 
         return { ok: true, name: saved.name }
-      },
+      } : undefined,
     })
 
     void service.reviewTurn({

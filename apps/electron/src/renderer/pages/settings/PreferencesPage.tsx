@@ -37,7 +37,7 @@ interface PreferencesFormState {
   city: string
   country: string
   notes: string
-  memorySidecarMode: 'manual' | 'review'
+  memorySidecarMode: 'auto' | 'manual' | 'review'
   passthrough: Record<string, unknown>
 }
 
@@ -47,7 +47,7 @@ const emptyFormState: PreferencesFormState = {
   city: '',
   country: '',
   notes: '',
-  memorySidecarMode: 'review',
+  memorySidecarMode: 'auto',
   passthrough: {},
 }
 
@@ -63,7 +63,7 @@ function parsePreferences(json: string): PreferencesFormState {
       city: typeof location.city === 'string' ? location.city : '',
       country: typeof location.country === 'string' ? location.country : '',
       notes: typeof prefs.notes === 'string' ? prefs.notes : '',
-      memorySidecarMode: memory.sidecarMode === 'manual' ? 'manual' : 'review',
+      memorySidecarMode: parseMemorySidecarMode(memory.sidecarMode),
       passthrough: stripKnownPreferences(prefs),
     }
   } catch {
@@ -89,7 +89,7 @@ function serializePreferences(state: PreferencesFormState): string {
   const existingMemory = isRecord(state.passthrough.memory) ? state.passthrough.memory : {}
   const memory = { ...existingMemory, sidecarMode: state.memorySidecarMode }
   delete prefs.memory
-  if (Object.keys(memory).length > 1 || state.memorySidecarMode !== 'review') {
+  if (Object.keys(memory).length > 1 || state.memorySidecarMode !== 'auto') {
     prefs.memory = memory
   }
   prefs.updatedAt = Date.now()
@@ -99,6 +99,10 @@ function serializePreferences(state: PreferencesFormState): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function parseMemorySidecarMode(value: unknown): PreferencesFormState['memorySidecarMode'] {
+  return value === 'manual' || value === 'review' || value === 'auto' ? value : 'auto'
 }
 
 function stripKnownPreferences(prefs: Record<string, unknown>): Record<string, unknown> {
@@ -307,10 +311,11 @@ export default function PreferencesPage() {
             <SettingsCard divided>
               <SettingsSelectRow
                 label="Memory sidecar"
-                description="Review queues suggestions for approval. Manual disables background review."
+                description="Auto quietly saves safe agent memory. Review asks first. Manual disables background review."
                 value={formState.memorySidecarMode}
-                onValueChange={(value) => updateField('memorySidecarMode', value === 'manual' ? 'manual' : 'review')}
+                onValueChange={(value) => updateField('memorySidecarMode', parseMemorySidecarMode(value))}
                 options={[
+                  { value: 'auto', label: 'Auto' },
                   { value: 'review', label: 'Review' },
                   { value: 'manual', label: 'Manual' },
                 ]}

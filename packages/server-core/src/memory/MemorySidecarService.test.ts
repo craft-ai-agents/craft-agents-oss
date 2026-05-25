@@ -227,6 +227,88 @@ describe('MemorySidecarService', () => {
     expect(listMemoryReviewItems({ globalAgentsDir: agentsRoot })).toEqual([])
   })
 
+  test('rejects provider tokens and env assignment secrets', async () => {
+    const githubToken = new MemorySidecarService({
+      reviewer: reviewer({
+        decision: 'save',
+        scope: 'agent',
+        name: 'github token',
+        type: 'reference',
+        content: 'Use ghp_1234567890abcdefghijklmnop for GitHub API calls.',
+        confidence: 0.99,
+        evidence: 'User pasted a GitHub token.',
+      }),
+      storage: { globalAgentsDir: agentsRoot },
+    })
+
+    expect((await githubToken.reviewTurn({
+      userMessage: 'remember this token',
+      assistantResponse: 'no',
+      activeAgentSlug: 'coder',
+    })).queued).toBe(false)
+
+    const envSecret = new MemorySidecarService({
+      reviewer: reviewer({
+        decision: 'save',
+        scope: 'agent',
+        name: 'openrouter env',
+        type: 'reference',
+        content: 'OPENROUTER_API_KEY=or-secret-1234567890',
+        confidence: 0.99,
+        evidence: 'User pasted an env var.',
+      }),
+      storage: { globalAgentsDir: agentsRoot },
+    })
+
+    expect((await envSecret.reviewTurn({
+      userMessage: 'remember this env',
+      assistantResponse: 'no',
+      activeAgentSlug: 'coder',
+    })).queued).toBe(false)
+    expect(listMemoryReviewItems({ globalAgentsDir: agentsRoot })).toEqual([])
+  })
+
+  test('rejects transient workspace and runtime facts', async () => {
+    const branchFact = new MemorySidecarService({
+      reviewer: reviewer({
+        decision: 'save',
+        scope: 'agent',
+        name: 'current branch',
+        type: 'project',
+        content: 'The active branch is codex/memory-os-hardening.',
+        confidence: 0.96,
+        evidence: 'Branch status showed codex/memory-os-hardening.',
+      }),
+      storage: { globalAgentsDir: agentsRoot },
+    })
+
+    expect((await branchFact.reviewTurn({
+      userMessage: 'where are we',
+      assistantResponse: 'branch is codex/memory-os-hardening',
+      activeAgentSlug: 'coder',
+    })).queued).toBe(false)
+
+    const runtimeFact = new MemorySidecarService({
+      reviewer: reviewer({
+        decision: 'save',
+        scope: 'agent',
+        name: 'electron runner',
+        type: 'project',
+        content: 'Electron dev server is running on localhost:5173.',
+        confidence: 0.96,
+        evidence: 'Smoke test launched the dev server.',
+      }),
+      storage: { globalAgentsDir: agentsRoot },
+    })
+
+    expect((await runtimeFact.reviewTurn({
+      userMessage: 'launch electron',
+      assistantResponse: 'running',
+      activeAgentSlug: 'coder',
+    })).queued).toBe(false)
+    expect(listMemoryReviewItems({ globalAgentsDir: agentsRoot })).toEqual([])
+  })
+
   test('rejects duplicate proposals against compact memory index', async () => {
     const service = new MemorySidecarService({
       reviewer: reviewer({

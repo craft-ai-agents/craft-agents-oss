@@ -23,10 +23,10 @@ export interface DiffViewerPreferences {
   disableBackground?: boolean;
 }
 
-export type MemorySidecarMode = 'manual' | 'review';
+export type MemorySidecarMode = 'auto' | 'review' | 'manual';
 
 export interface MemoryPreferences {
-  /** manual: never run sidecar review; review: enqueue proposals for approval */
+  /** auto: quietly save safe agent memory; review: enqueue proposals; manual: disable sidecar */
   sidecarMode?: MemorySidecarMode;
 }
 

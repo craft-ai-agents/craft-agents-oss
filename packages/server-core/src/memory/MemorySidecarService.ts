@@ -67,7 +67,23 @@ const DEFAULT_AUTO_APPLY_AGENT_CONFIDENCE = 0.9
 const SECRET_PATTERNS = [
   /\b(api[_-]?key|secret|token|password|private[_-]?key)\b/i,
   /\b(sk-[a-z0-9_-]{12,})\b/i,
+  /\b(bearer|authorization)\s+[a-z0-9._~+/=-]{16,}/i,
+  /\b(ghp|gho|ghu|ghs|ghr)_[a-z0-9_]{20,}\b/i,
+  /\bgithub_pat_[a-z0-9_]{20,}\b/i,
+  /\bnpm_[a-z0-9]{20,}\b/i,
+  /\bxox[baprs]-[a-z0-9-]{20,}\b/i,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\b[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{16,}\b/,
+  /\b[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*=\s*\S+/i,
   /-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----/,
+]
+const TRANSIENT_TASK_PATTERNS = [
+  /\b(?:branch|worktree|commit|sha|pr|pull request)\b.*\b[a-f0-9]{7,40}\b/i,
+  /\b(?:current|active)\s+(?:branch|worktree|cwd|repo|repository)\b/i,
+  /\b(?:cwd|repo|repository|worktree)\s*(?:is|=|:)\s*\/[^\s]+/i,
+  /\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d{2,5}\b/i,
+  /\b(?:tests?|typechecks?|lint|build)\s+(?:passed|failed|is passing|is failing)\b/i,
+  /\b(?:server|runner|electron|dev server)\s+(?:is\s+)?(?:running|open|launched|frozen|stopped)\b/i,
 ]
 
 export class MemorySidecarService {
@@ -139,6 +155,7 @@ export class MemorySidecarService {
       if (!decision.type) return null
       if (!decision.content?.trim()) return null
       if (containsSecret(decision.content)) return null
+      if (containsTransientTaskFact(decision.name) || containsTransientTaskFact(decision.content)) return null
     }
 
     if (isDuplicate({
@@ -278,6 +295,11 @@ export function parseMemorySidecarDecision(text: string): MemorySidecarDecision 
 function containsSecret(value: string | undefined): boolean {
   if (!value) return false
   return SECRET_PATTERNS.some((pattern) => pattern.test(value))
+}
+
+function containsTransientTaskFact(value: string | undefined): boolean {
+  if (!value) return false
+  return TRANSIENT_TASK_PATTERNS.some((pattern) => pattern.test(value))
 }
 
 function isDuplicate(
