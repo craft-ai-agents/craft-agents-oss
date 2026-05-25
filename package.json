@@ -76,6 +76,7 @@
     "lint:i18n:staged": "bash scripts/lint-i18n-staged.sh",
     "lint:i18n:parity": "bun run scripts/check-i18n-parity.ts",
     "lint": "bun run lint:ipc-sends && bun run lint:electron && bun run lint:shared && bun run lint:ui",
+    "canvas:smoke:seed": "bun run scripts/seed-canvas-smoke.ts",
     "link": "bun link",
     "electron:clean": "bun run scripts/electron-clean.ts",
     "electron:build:main": "bun run scripts/electron-build-main.ts",
