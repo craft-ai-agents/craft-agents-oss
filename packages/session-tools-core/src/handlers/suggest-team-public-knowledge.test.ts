@@ -66,10 +66,10 @@ describe('suggest_team_public_knowledge', () => {
           priority: 1,
           content: `# Delivery
 
-<!-- process id:release-checklist title:发布检查 summary:生产发布需要审批 tags:release scope:backend -->
+<!-- rule id:release-checklist title:发布检查 summary:生产发布需要审批 tags:release scope:backend -->
 生产发布前要运行 typecheck 和集成测试，并找发布负责人审批。
 
-<!-- background id:lunch -->
+<!-- knowledge id:lunch -->
 Lunch is usually around noon.`,
           contentHash: 'abc',
           version: 1,
@@ -89,7 +89,7 @@ Lunch is usually around noon.`,
     expect(parsed.suggestions).toHaveLength(1);
     expect(parsed.suggestions[0]).toMatchObject({
       id: 'release-checklist',
-      kind: 'process',
+      kind: 'rule',
       source: 'Team Handbook',
       scope: 'backend',
     });
@@ -108,13 +108,13 @@ Lunch is usually around noon.`,
           priority: 1,
           content: `# Delivery
 
-<!-- convention id:deploy-convention title:Deploy convention summary:Deploys use the release queue tags:release -->
+<!-- rule id:deploy-convention title:Deploy convention summary:Deploys use the release queue tags:release -->
 Use the release queue for production deploy requests.
 
-<!-- warning id:deploy-freeze title:Production deploy freeze summary:Do not deploy during the payment reconciliation window tags:release,payments -->
+<!-- rule id:deploy-freeze title:Production deploy freeze summary:Do not deploy during the payment reconciliation window tags:release,payments -->
 Payment reconciliation runs on Friday afternoon. Production deploys are blocked during that window.
 
-<!-- background id:release-history title:Release history summary:Background on how release ownership evolved tags:release -->
+<!-- knowledge id:release-history title:Release history summary:Background on how release ownership evolved tags:release -->
 The release owner role started last year.`,
           contentHash: 'abc',
           version: 1,
@@ -132,13 +132,13 @@ The release owner role started last year.`,
     const parsed = JSON.parse(result.content[0]?.text ?? '');
 
     expect(parsed.suggestions.map((s: any) => s.id)[0]).toBe('deploy-freeze');
-    expect(parsed.suggestions.map((s: any) => s.kind)).toContain('convention');
+    expect(parsed.suggestions.map((s: any) => s.kind)).toContain('rule');
   });
 
   it('enforces the default limit and maximum limit of five', async () => {
     let content = '# Items\n';
     for (let i = 1; i <= 8; i++) {
-      content += `\n<!-- process id:item-${i} title:Deploy item ${i} summary:Production deploy checklist item ${i} -->\nProduction deploy checklist item ${i}.\n`;
+      content += `\n<!-- rule id:item-${i} title:Deploy item ${i} summary:Production deploy checklist item ${i} -->\nProduction deploy checklist item ${i}.\n`;
     }
     writeCache(tempDir, {
       entries: {
@@ -194,7 +194,7 @@ API requests must include authentication headers.`,
           priority: 1,
           content: `# Stale
 
-<!-- warning id:old-api-auth title:Old API auth warning summary:Old API authentication warning tags:security -->
+<!-- rule id:old-api-auth title:Old API auth warning summary:Old API authentication warning tags:security -->
 API authentication used to require a legacy header.`,
           contentHash: 'def',
           version: 1,
@@ -224,7 +224,7 @@ API authentication used to require a legacy header.`,
           priority: 1,
           content: `# Knowledge
 
-<!-- slang id:ship-it term:ship it summary:Deploy to production after approval -->
+<!-- term id:ship-it term:ship it summary:Deploy to production after approval -->
 Deploy to production after approval.
 
 <!-- rule id:approval-rule title:Production approval rule summary:Production deploys require approval from the release owner tags:release -->

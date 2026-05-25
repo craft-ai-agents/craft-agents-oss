@@ -14,8 +14,8 @@ import {
   type TeamKnowledgeSafety,
 } from '../../team-public-knowledge/safety.ts';
 
-const TRIGGER_KINDS: readonly MarkdownEntryKind[] = ['alias', 'slang', 'concept'];
-const MAX_TRIGGER_TERMS = 5;
+const TRIGGER_KINDS: readonly MarkdownEntryKind[] = ['term'];
+const MAX_TRIGGER_TERMS = 30;
 const MAX_PREFETCH = 3;
 
 export interface PrefetchEntry {

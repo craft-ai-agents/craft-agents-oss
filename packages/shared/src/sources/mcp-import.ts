@@ -656,10 +656,12 @@ function buildCandidate(key: string, server: unknown, options: McpImportParseOpt
   const candidate: McpImportCandidate = {
     key,
     input: {
-      name: titleizeKey(key),
+      name: typeof serverObject.name === 'string' && serverObject.name.trim()
+        ? serverObject.name.trim()
+        : titleizeKey(key),
       provider: key,
       type: 'mcp',
-      enabled: true,
+      enabled: typeof serverObject.enabled === 'boolean' ? serverObject.enabled : true,
       mcp,
     },
     enableInWorkspace: true,

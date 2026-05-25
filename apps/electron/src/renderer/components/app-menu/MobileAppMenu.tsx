@@ -88,7 +88,7 @@ function affordanceFor(action: MobileMenuRow['action']): MobileMenuItemAffordanc
 }
 
 /**
- * Mobile AppMenu — Craft logo trigger that opens a full-screen, navigation-stack sheet.
+ * Mobile AppMenu — app logo trigger that opens a full-screen, navigation-stack sheet.
  *
  * Mounted only when `AppShellContext.isCompactMode === true` via the `AppMenu` router.
  *

@@ -104,6 +104,16 @@ export interface ToolIconMapping {
   commands: string[]
 }
 
+/** User profile data shown in workspace settings. */
+export interface UserProfile {
+  name?: string
+  oneStopId?: string
+  group?: string
+  department?: string
+  ownedModules?: string[]
+  ownedTopics?: string[]
+}
+
 /**
  * Browser pane creation options
  */
@@ -426,6 +436,10 @@ export interface ElectronAPI {
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
+
+  // User Profile
+  getUserProfile(): Promise<UserProfile | null>
+  refreshUserProfile(): Promise<UserProfile | null>
 
   // Workspace files
   getWorkspaceFiles(workspaceId: string, dirPath?: string, rootPath?: string): Promise<SessionFile[]>

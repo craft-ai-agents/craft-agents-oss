@@ -6,17 +6,17 @@
  * - API OAuth sources (Google, Slack, Microsoft)
  */
 
-import { describe, test, expect, mock, beforeEach } from 'bun:test';
+import { describe, test, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
 import { isOAuthSource, hasRenewEndpoint, isRefreshableSource, type LoadedSource, type FolderSourceConfig } from '../types.ts';
 import { TokenRefreshManager } from '../token-refresh-manager.ts';
 import { isSourceUsable } from '../storage.ts';
+import * as storage from '../storage.ts';
 import type { SourceCredentialManager } from '../credential-manager.ts';
 
-// Mock storage module to prevent disk I/O
-const mockMarkSourceAuthenticated = mock(() => true);
-mock.module('../storage.ts', () => ({
-  markSourceAuthenticated: mockMarkSourceAuthenticated,
-}));
+// Spy instead of mock.module(): Bun module mocks leak across files in the same
+// process, which can mask storage.ts regressions in neighboring source tests.
+let mockMarkSourceAuthenticated = mock(() => true);
+let markSourceAuthenticatedSpy: { mockRestore: () => void } | null = null;
 
 /**
  * Helper to create a mock LoadedSource for testing
@@ -314,7 +314,13 @@ function createMockCredManager(overrides: Partial<SourceCredentialManager> = {})
 
 describe('TokenRefreshManager', () => {
   beforeEach(() => {
-    mockMarkSourceAuthenticated.mockClear();
+    mockMarkSourceAuthenticated = mock(() => true);
+    markSourceAuthenticatedSpy = spyOn(storage, 'markSourceAuthenticated').mockImplementation(mockMarkSourceAuthenticated);
+  });
+
+  afterEach(() => {
+    markSourceAuthenticatedSpy?.mockRestore();
+    markSourceAuthenticatedSpy = null;
   });
 
   describe('needsRefresh', () => {

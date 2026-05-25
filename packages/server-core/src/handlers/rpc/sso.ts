@@ -121,9 +121,9 @@ export interface SsoLogoutDeps {
 }
 
 /** Build the OIDC authorization URL used to start system-browser SSO login. */
-export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): { authUrl: string; nonce: string | null } {
-  const authUrl = env.MDP_AUTH_URL
-  const clientId = env.MDP_CLIENT_ID
+export function buildSsoLoginUrl(): { authUrl: string; nonce: string | null } {
+  const authUrl = process.env.MDP_AUTH_URL
+  const clientId = process.env.MDP_CLIENT_ID
 
   if (!authUrl) {
     throw new Error('MDP_AUTH_URL is required to start SSO login')
@@ -133,7 +133,7 @@ export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): { authUr
     throw new Error('MDP_CLIENT_ID is required to start SSO login')
   }
 
-  const relayUrl = env.MDP_RELAY_URL
+  const relayUrl = process.env.MDP_RELAY_URL
   if (!relayUrl) {
     throw new Error('MDP_RELAY_URL is required to start SSO login')
   }
@@ -144,7 +144,7 @@ export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): { authUr
   url.searchParams.set('response_type', 'code')
 
   let nonce: string | null = null
-  if (env.MDP_ENABLE_SSO_STATE_CHECK === '1') {
+  if (process.env.MDP_ENABLE_SSO_STATE_CHECK === '1') {
     nonce = randomBytes(16).toString('hex')
     url.searchParams.set('state', encodeOAuthRelayState(DEFAULT_SSO_CALLBACK_URL, nonce))
   }
@@ -153,8 +153,8 @@ export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): { authUr
 }
 
 /** Start an SSO login and remember the one pending callback nonce. */
-export function startSsoLogin(env: NodeJS.ProcessEnv = process.env): string {
-  const { authUrl, nonce } = buildSsoLoginUrl(env)
+export function startSsoLogin(): string {
+  const { authUrl, nonce } = buildSsoLoginUrl()
   pendingSsoNonce = nonce
   return authUrl
 }

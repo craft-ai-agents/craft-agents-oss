@@ -1669,9 +1669,12 @@ export function FreeFormInput({
             onChange={handleFileInputChange}
           />
 
-          {/* Compact mode: permission mode drawer + standard icon badges for attach/sources/working dir */}
+          {/* Compact mode: permission mode drawer + standard icon badges for attach/sources/working dir.
+              Wrapper absorbs all squeeze so the model label truncates first and the send button stays
+              anchored to the right (craft-agents-oss#798). overflow-hidden is safe — Radix Drawer /
+              dropdowns inside render via portals, so they aren't clipped. */}
           {compactMode && (
-          <>
+          <div className="flex items-center gap-1 min-w-0 shrink overflow-hidden">
           {onPermissionModeChange && (
             <CompactPermissionModeSelector
               permissionMode={permissionMode}
@@ -1784,7 +1787,7 @@ export function FreeFormInput({
               workspaceId={workspaceId}
             />
           )}
-          </>
+          </div>
           )}
 
           {/* Desktop: full badges row with labels and working directory */}

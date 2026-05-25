@@ -6,7 +6,7 @@ import type { AppMenuProps } from './app-menu/types'
 export type { AppMenuProps }
 
 /**
- * AppMenu — Craft logo trigger + dropdown/sheet for the top bar.
+ * AppMenu — app logo trigger + dropdown/sheet for the top bar.
  *
  * Routes between the desktop dropdown and the mobile full-screen sheet based on
  * `AppShellContext.isCompactMode` (panel width < 768px). When the context is

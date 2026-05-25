@@ -40,10 +40,28 @@ export function buildAuthorizationHeader(authScheme: string | undefined, token: 
 }
 
 /**
- * API credential source - can be a static credential or a function that returns a token.
- * Token getter functions are used for OAuth sources that need auto-refresh.
+ * API credential source — either a static credential value or a function that
+ * resolves one on demand.
+ *
+ * Static form: a string / BasicAuthCredential / MultiHeaderCredential captured
+ * at tool creation time. Used for the legacy path and for public APIs (empty
+ * string).
+ *
+ * Getter form: a function called before each request. Two return shapes are
+ * supported:
+ *   - `() => Promise<string>` — OAuth / renew-endpoint sources that always
+ *     resolve to a non-null access token.
+ *   - `() => Promise<ApiCredential | null>` — non-OAuth API sources that read
+ *     the latest credential from the vault on every call. Null is returned
+ *     when the user has not (yet) provided a credential.
+ *
+ * Using a getter is what makes mid-session credential updates take effect
+ * without restarting the in-process tool.
  */
-export type ApiCredentialSource = ApiCredential | (() => Promise<string>);
+export type ApiCredentialSource =
+  | ApiCredential
+  | (() => Promise<string>)
+  | (() => Promise<ApiCredential | null>);
 
 /**
  * Type guard to check if credential is BasicAuthCredential
@@ -53,9 +71,13 @@ function isBasicAuthCredential(cred: ApiCredential): cred is BasicAuthCredential
 }
 
 /**
- * Type guard to check if credential source is a token getter function
+ * Type guard to check if credential source is a token getter function.
+ * Both narrow shapes (Promise<string> and Promise<ApiCredential | null>) flow
+ * through the same call site and are normalized by the caller.
  */
-function isTokenGetter(cred: ApiCredentialSource): cred is () => Promise<string> {
+function isTokenGetter(
+  cred: ApiCredentialSource
+): cred is () => Promise<string> | Promise<ApiCredential | null> {
   return typeof cred === 'function';
 }
 
@@ -227,10 +249,14 @@ export function createApiTool(
       const { path, method, params, _intent } = args;
 
       try {
-        // Resolve credential - if it's a token getter function, call it to get fresh token
-        const resolvedCredential: ApiCredential = isTokenGetter(credential)
+        // Resolve credential — if a getter, call it to get a fresh credential.
+        // A null result (vault has nothing for this source) is normalized to
+        // an empty string; buildHeaders / buildUrl already treat that as
+        // "no auth", letting the upstream API surface its own 401.
+        const rawCredential = isTokenGetter(credential)
           ? await credential()
           : credential;
+        const resolvedCredential: ApiCredential = rawCredential ?? '';
 
         const url = buildUrl(config.baseUrl, path, method, params, config.auth, resolvedCredential);
         const headers = buildHeaders(config.auth, resolvedCredential, config.defaultHeaders);

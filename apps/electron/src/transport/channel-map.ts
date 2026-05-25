@@ -169,6 +169,10 @@ export const CHANNEL_MAP = {
   getWorkspaceSettings: invoke(RPC_CHANNELS.workspace.SETTINGS_GET),
   updateWorkspaceSetting: invoke(RPC_CHANNELS.workspace.SETTINGS_UPDATE),
 
+  // User Profile
+  getUserProfile: invoke(RPC_CHANNELS.userProfile.GET),
+  refreshUserProfile: invoke(RPC_CHANNELS.userProfile.REFRESH),
+
   // Workspace files
   getWorkspaceFiles: invoke(RPC_CHANNELS.workspace.GET_FILES),
   watchWorkspaceFiles: invoke(RPC_CHANNELS.workspace.WATCH_FILES),

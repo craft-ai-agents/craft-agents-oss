@@ -7,7 +7,6 @@ export interface AuthenticatedSsoSessionState {
   token: string;
   userName?: string;
   department?: string;
-  employeeId?: string;
 }
 
 /** Public renderer-safe view used when no valid SSO session exists. */
