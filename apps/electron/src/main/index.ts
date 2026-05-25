@@ -678,7 +678,6 @@ app.whenReady().then(async () => {
                 bound: event.bound,
                 wasBound: event.wasBound,
                 boundAfterRoute: event.boundAfterRoute,
-                handledByGateway: event.handledByGateway,
                 attachmentCount: event.attachmentCount,
                 sentAt: event.sentAt,
               })

@@ -196,6 +196,19 @@ type WorkflowMemoryInputs = {
   userEntries?: WorkflowMemoryEntry[]
   agentEntries?: WorkflowMemoryEntry[]
 }
+type SpawnedAgentRef = { agentSlug: string; agentName?: string; timestamp?: number }
+
+const DIRECT_USER_MEMORY_AGENT_SLUGS = new Set([CONCIERGE_SLUG, ORCHESTRATOR_SLUG])
+
+export function canDirectlyMutateUserMemory(spawnedFromAgent?: SpawnedAgentRef): boolean {
+  if (!spawnedFromAgent) return true
+  return DIRECT_USER_MEMORY_AGENT_SLUGS.has(spawnedFromAgent.agentSlug)
+}
+
+export function directUserMemoryPolicyError(spawnedFromAgent?: SpawnedAgentRef): string {
+  const actor = spawnedFromAgent?.agentSlug ? `Agent "${spawnedFromAgent.agentSlug}"` : 'This session'
+  return `${actor} cannot directly write USER.md. Save agent-scoped memory instead, or let the memory review queue propose the user-level change for approval.`
+}
 
 function isPrerequisiteRetryResult(result: string): boolean {
   return /^\s*You must read the (?:skill instruction files|source guide|browser tools guide) before/i.test(result)
@@ -4585,6 +4598,9 @@ user a clickable link to where the thing now lives.`
         },
         saveMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
+          if (scope === 'user' && !canDirectlyMutateUserMemory(managed.spawnedFromAgent)) {
+            return { ok: false, scope, name: input.name, error: directUserMemoryPolicyError(managed.spawnedFromAgent) }
+          }
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
           const result = await mutateMemory('save', scope, { ...input }, agentSlug, {
             source: 'agent_tool',
@@ -4596,6 +4612,9 @@ user a clickable link to where the thing now lives.`
         },
         updateMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
+          if (scope === 'user' && !canDirectlyMutateUserMemory(managed.spawnedFromAgent)) {
+            return { ok: false, scope, name: input.name, error: directUserMemoryPolicyError(managed.spawnedFromAgent) }
+          }
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
           const result = await mutateMemory('update', scope, { ...input }, agentSlug, {
             source: 'agent_tool',
@@ -4607,6 +4626,9 @@ user a clickable link to where the thing now lives.`
         },
         forgetMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
+          if (scope === 'user' && !canDirectlyMutateUserMemory(managed.spawnedFromAgent)) {
+            return { ok: false, scope, name: input.name, error: directUserMemoryPolicyError(managed.spawnedFromAgent) }
+          }
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
           const result = await mutateMemory('delete', scope, { ...input }, agentSlug, {
             source: 'agent_tool',
