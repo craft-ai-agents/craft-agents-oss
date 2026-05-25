@@ -24,20 +24,18 @@ export function SkillDetailDialog({
 }) {
   const [skillContent, setSkillContent] = React.useState<string | null>(null)
   const [skillExtraMetadata, setSkillExtraMetadata] = React.useState<Record<string, unknown> | null>(null)
-  const [showSpinner, setShowSpinner] = React.useState(false)
+  const [isLoading, setIsLoading] = React.useState(false)
 
   React.useEffect(() => {
     if (!skill) return
-    // 不立即清空旧内容，保留上一个技能的内容直到新内容加载完
-    // spinner 延迟 250ms 才显示，加载够快时完全不闪
+    setIsLoading(true)
+    setSkillContent(null)
+    setSkillExtraMetadata(null)
     let active = true
-    const spinnerTimer = setTimeout(() => { if (active) setShowSpinner(true) }, 250)
 
     if (USE_MOCK_MARKET) {
-      const t = setTimeout(() => {
-        if (active) { setSkillContent(null); setShowSpinner(false) }
-      }, 800)
-      return () => { active = false; clearTimeout(t); clearTimeout(spinnerTimer) }
+      const t = setTimeout(() => { if (active) setIsLoading(false) }, 600)
+      return () => { active = false; clearTimeout(t) }
     }
 
     window.electronAPI.fetchMarketSkillContent(skill.slug, skill.latestVersion)
@@ -48,8 +46,8 @@ export function SkillDetailDialog({
         }
       })
       .catch(() => { if (active) { setSkillContent(null); setSkillExtraMetadata(null) } })
-      .finally(() => { if (active) { setShowSpinner(false); clearTimeout(spinnerTimer) } })
-    return () => { active = false; clearTimeout(spinnerTimer) }
+      .finally(() => { if (active) setIsLoading(false) })
+    return () => { active = false }
   }, [skill?.slug])
 
   if (!skill) return null
@@ -242,20 +240,23 @@ ${skill.slug} config export --format json --output ./backup/
 
         {/* Markdown 内容区 */}
         <div className="relative mx-7 mb-5 min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/20 px-6 py-5 text-[13px] leading-relaxed">
-          {skillExtraMetadata && (
-            <div className="mb-4">
-              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">Metadata</p>
-              <pre className="overflow-x-auto rounded-lg bg-muted/40 px-4 py-3 text-[12px] leading-relaxed text-foreground/80">
-                {JSON.stringify(skillExtraMetadata, null, 2)}
-              </pre>
-              <div className="my-4 border-t border-border" />
-            </div>
-          )}
-          <Markdown>{skillContent ?? mockMarkdown}</Markdown>
-          {showSpinner && (
-            <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-muted/60 backdrop-blur-[2px]">
+          {isLoading ? (
+            <div className="flex h-full min-h-[200px] items-center justify-center">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
+          ) : (
+            <>
+              {skillExtraMetadata && (
+                <div className="mb-4">
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">Metadata</p>
+                  <pre className="overflow-x-auto rounded-lg bg-muted/40 px-4 py-3 text-[12px] leading-relaxed text-foreground/80">
+                    {JSON.stringify(skillExtraMetadata, null, 2)}
+                  </pre>
+                  <div className="my-4 border-t border-border" />
+                </div>
+              )}
+              <Markdown>{skillContent ?? mockMarkdown}</Markdown>
+            </>
           )}
         </div>
 

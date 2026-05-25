@@ -10,7 +10,7 @@ import type {
 } from '@craft-agent/shared/skills'
 
 import type { MarketplaceApi, MarketplaceSkillListing, MarketplaceInstallState, MarketplaceCatalogFilters, MarketplacePublishResult } from './types'
-import { USE_MOCK_MARKET, MOCK_MARKET_SKILLS, MOCK_LOCAL_SKILLS } from './mock-data'
+import { USE_MOCK_MARKET, MOCK_MARKET_SKILLS, MOCK_LOCAL_SKILLS, USE_MOCK_SKILL_UPDATE, MOCK_SKILL_UPDATE_RESULT } from './mock-data'
 import { mapCopawSkillToListing } from './copaw-mapping'
 import { defaultMarketplaceApi } from './marketplace-api'
 import { ConfirmDialog } from './components/ConfirmDialog'
@@ -24,7 +24,12 @@ import { PublishSkillDialog } from './components/PublishSkillDialog'
 import { CategoryDropdown, LocalOriginDropdown, LocalCreateDropdown } from './components/Dropdowns'
 import type { PageTab, LocalOriginFilter } from './components/Dropdowns'
 import type { Category } from './copaw-mapping'
-import type { LoadedSkill } from '../../../../shared/types'
+import type { LoadedSkill, SkillUpdateCandidate, SkillOrphan, SkillUpdateItem } from '../../../../shared/types'
+import { SkillUpdateBanner } from './components/SkillUpdateBanner'
+import type { UpdateStatus, UpdateProgress, UpdateResult } from './components/SkillUpdateBanner'
+
+// Session-only guard: resets on app restart
+let updateCheckedThisSession = false
 
 // ============================================================================
 // Main Page
@@ -205,6 +210,134 @@ export function SkillMarketplacePage({
       setMarketSkills(rawMarketSkillsRef.current.map((s) => mapCopawSkillToListing(s, localSlugs)))
     }
   }, [localSlugs])
+
+  // ── Skill update state ──────────────────────────────────────────────────────
+  const [updateStatus, setUpdateStatus] = React.useState<UpdateStatus>('idle')
+  const [updateProgress, setUpdateProgress] = React.useState<UpdateProgress>({ total: 0, completed: 0, failedCount: 0 })
+  const [updateResult, setUpdateResult] = React.useState<UpdateResult | null>(null)
+  const [updateOrphans, setUpdateOrphans] = React.useState<SkillOrphan[]>([])
+  const updateCandidatesRef = React.useRef<SkillUpdateCandidate[]>([])
+  const isRunningUpdateRef = React.useRef(false)
+
+  const runUpdateCheck = React.useCallback(async () => {
+    if (isRunningUpdateRef.current) return
+    if (!USE_MOCK_SKILL_UPDATE && !currentUserId) return
+    isRunningUpdateRef.current = true
+    updateCheckedThisSession = true  // block re-trigger while in-flight
+    setUpdateStatus('checking')
+    try {
+      if (USE_MOCK_SKILL_UPDATE) {
+        await new Promise((r) => setTimeout(r, 800))
+        const checkResult = MOCK_SKILL_UPDATE_RESULT
+        updateCandidatesRef.current = checkResult.toUpdate
+        setUpdateOrphans(checkResult.orphans)
+        if (checkResult.toUpdate.length === 0 && checkResult.orphans.length === 0) {
+          setUpdateStatus('idle')
+          return
+        }
+        await new Promise((r) => setTimeout(r, 600))
+        setUpdateStatus('updating')
+        setUpdateProgress({ total: checkResult.toUpdate.length, completed: 0, failedCount: 0 })
+        await new Promise((r) => setTimeout(r, 1200))
+        setUpdateResult({ updated: checkResult.toUpdate.map((c) => c.slug), failed: [], orphans: checkResult.orphans })
+        setUpdateProgress({ total: checkResult.toUpdate.length, completed: checkResult.toUpdate.length, failedCount: 0 })
+        setUpdateStatus('done')
+        return
+      }
+      const checkResult = await window.electronAPI.checkMarketSkillUpdates(workspaceId)
+      updateCandidatesRef.current = checkResult.toUpdate
+      setUpdateOrphans(checkResult.orphans)
+      if (checkResult.toUpdate.length === 0 && checkResult.orphans.length === 0) {
+        setUpdateStatus('idle')
+        return
+      }
+      if (checkResult.toUpdate.length === 0) {
+        setUpdateResult({ updated: [], failed: [], orphans: checkResult.orphans })
+        setUpdateStatus('done')
+        return
+      }
+      const items: SkillUpdateItem[] = checkResult.toUpdate.map((c) => ({
+        slug: c.slug, chineseName: c.chineseName, description: c.description,
+        newVersion: c.newVersion, ownerId: c.ownerId, ownerName: c.ownerName,
+      }))
+      setUpdateProgress({ total: items.length, completed: 0, failedCount: 0 })
+      setUpdateStatus('updating')
+      const batchResult = await window.electronAPI.updateMarketSkillsBatch(workspaceId, items)
+      setUpdateResult({ updated: batchResult.updated, failed: batchResult.failed, orphans: checkResult.orphans })
+      setUpdateProgress({ total: items.length, completed: batchResult.updated.length, failedCount: batchResult.failed.length })
+      setUpdateStatus('done')
+      fetchSkills()
+    } catch {
+      setUpdateStatus('idle')
+    } finally {
+      isRunningUpdateRef.current = false
+      updateCheckedThisSession = false  // update finished — allow re-check on next mount
+    }
+  }, [workspaceId, currentUserId, fetchSkills])
+
+  const handleRetry = React.useCallback(async (slugs: string[]) => {
+    if (isRunningUpdateRef.current) return
+    const items: SkillUpdateItem[] = updateCandidatesRef.current
+      .filter((c) => slugs.includes(c.slug))
+      .map((c) => ({ slug: c.slug, chineseName: c.chineseName, description: c.description, newVersion: c.newVersion, ownerId: c.ownerId, ownerName: c.ownerName }))
+    if (items.length === 0) return
+    isRunningUpdateRef.current = true
+    setUpdateStatus('updating')
+    setUpdateProgress({ total: items.length, completed: 0, failedCount: 0 })
+    try {
+      const batchResult = await window.electronAPI.updateMarketSkillsBatch(workspaceId, items)
+      setUpdateResult((prev) => prev
+        ? { ...prev, updated: [...prev.updated, ...batchResult.updated], failed: prev.failed.filter((f) => !batchResult.updated.includes(f.slug)) }
+        : { updated: batchResult.updated, failed: batchResult.failed, orphans: updateOrphans })
+      setUpdateStatus('done')
+      fetchSkills()
+    } catch {
+      setUpdateStatus('done')
+    } finally {
+      isRunningUpdateRef.current = false
+    }
+  }, [workspaceId, updateOrphans, fetchSkills])
+
+  const handleDeleteOrphans = React.useCallback(async (slugs: string[]) => {
+    for (const slug of slugs) {
+      const skill = localSkills.find((s) => s.slug === slug)
+      if (skill) {
+        setLocalSkillSlugs((prev) => new Set([...prev, slug]))
+        await window.electronAPI.deleteSkill(workspaceId, slug, skill.source, skill.path).catch(() => {})
+      }
+    }
+    setUpdateOrphans((prev) => prev.filter((o) => !slugs.includes(o.slug)))
+    setUpdateResult((prev) => prev ? { ...prev, orphans: (prev.orphans ?? []).filter((o) => !slugs.includes(o.slug)) } : prev)
+    fetchSkills()
+  }, [workspaceId, localSkills, fetchSkills])
+
+  const handleDismissBanner = React.useCallback(() => {
+    setUpdateStatus('idle')
+    setUpdateResult(null)
+    setUpdateOrphans([])
+    updateCheckedThisSession = true
+  }, [])
+
+  // Trigger check on mount (= user clicked skills sidebar item), once per session
+  React.useEffect(() => {
+    const alreadyChecked = !USE_MOCK_SKILL_UPDATE && updateCheckedThisSession
+    if (alreadyChecked) return
+    const timer = setTimeout(() => { runUpdateCheck() }, 1000)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Listen for main-process trigger (startup + 10am cron)
+  React.useEffect(() => {
+    if (!window.electronAPI?.onSkillUpdateCheck) return
+    return window.electronAPI.onSkillUpdateCheck(() => {
+      const alreadyChecked = !USE_MOCK_SKILL_UPDATE && updateCheckedThisSession
+      if (!alreadyChecked && !isRunningUpdateRef.current && updateStatus === 'idle') {
+        runUpdateCheck()
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updateStatus])
 
   const [sortOrder, setSortOrder] = React.useState<'hot' | 'new'>('hot')
 
@@ -463,6 +596,16 @@ export function SkillMarketplacePage({
         {tab === 'local' ? (
           /* ── 本地技能 Tab ── */
           <div>
+            {/* 更新横幅 */}
+            <SkillUpdateBanner
+              status={updateStatus}
+              progress={updateProgress}
+              result={updateResult}
+              orphans={updateOrphans}
+              onRetry={handleRetry}
+              onDeleteOrphans={handleDeleteOrphans}
+              onDismiss={handleDismissBanner}
+            />
             {/* 搜索 */}
             <div className="mb-5 flex items-center gap-2">
               <div className="relative flex-1">
@@ -587,8 +730,8 @@ export function SkillMarketplacePage({
           <CategoryDropdown value={category} onChange={setCategory} />
         </div>
 
-        {/* 精选推荐 Banner（搜索时隐藏） */}
-        {!marketSearch.trim() && (
+        {/* 精选推荐 Banner（搜索时隐藏，无数据时也隐藏） */}
+        {!marketSearch.trim() && marketSkills.length > 0 && (
           <div className="mb-8">
             <h2 className="mb-3 text-[15px] font-semibold text-foreground">精选推荐</h2>
             <HeroBanner

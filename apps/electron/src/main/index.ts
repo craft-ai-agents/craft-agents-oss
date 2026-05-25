@@ -1078,6 +1078,9 @@ app.whenReady().then(async () => {
       pendingDeepLink = null
     }
 
+    // Set up skill update scheduler: check on startup + daily at 10am
+    setupSkillUpdateScheduler(windowManager)
+
     mainLog.info('App initialized successfully')
     if (isDebugMode) {
       mainLog.info('Debug mode enabled - logs at:', getLogFilePath())
@@ -1223,6 +1226,42 @@ app.on('before-quit', async (event) => {
     app.exit(0)
   }
 })
+
+// ─── Skill Update Scheduler ──────────────────────────────────────────────────
+
+/**
+ * Set up skill update triggers:
+ * 1. On app startup: send trigger to renderer once window is ready
+ * 2. Daily at 10:00am: check every minute, fire when hour=10 & minute=0
+ */
+function setupSkillUpdateScheduler(wm: WindowManager): void {
+  const channel = 'skills:triggerUpdateCheck'
+
+  // Startup trigger — send once the first window finishes loading
+  const sendToAllWindows = (reason: string) => {
+    for (const managed of wm.getAllWindows()) {
+      if (!managed.window.isDestroyed()) {
+        managed.window.webContents.send(channel, reason)
+      }
+    }
+  }
+
+  // Delay startup check slightly so renderer hydrates first
+  setTimeout(() => sendToAllWindows('startup'), 3000)
+
+  // Daily 10am trigger — check every 60s
+  let lastFiredDate = ''
+  setInterval(() => {
+    const now = new Date()
+    if (now.getHours() === 10 && now.getMinutes() === 0) {
+      const today = now.toDateString()
+      if (lastFiredDate !== today) {
+        lastFiredDate = today
+        sendToAllWindows('scheduled')
+      }
+    }
+  }, 60_000)
+}
 
 // Handle uncaught exceptions — forward to Sentry explicitly since registering
 // a custom handler can interfere with @sentry/electron's automatic capture.

@@ -1,12 +1,43 @@
 import type { CopawMarketSkill } from '@craft-agent/shared/skills'
 import type { MarketplaceSkillListing } from './types'
-import type { LoadedSkill } from '../../../../shared/types'
+import type { LoadedSkill, SkillUpdateCheckResult } from '../../../../shared/types'
 
 // ============================================================================
 // Mock switch — set to false to use real API
 // ============================================================================
 
-export const USE_MOCK_MARKET = false
+export const USE_MOCK_MARKET = true
+
+// Set to true to preview the skill update banner with mock data
+export const USE_MOCK_SKILL_UPDATE = true
+
+export const MOCK_SKILL_UPDATE_RESULT: SkillUpdateCheckResult = {
+  toUpdate: [
+    {
+      slug: 'code-review',
+      name: '代码审查',
+      chineseName: '代码审查',
+      description: '审查代码质量、风格与最佳实践',
+      currentVersion: '20240101120000',
+      newVersion: '20250115093000',
+      ownerId: 'user-001',
+      ownerName: '技能团队',
+    },
+    {
+      slug: 'write-tests',
+      name: '单元测试生成',
+      chineseName: '单元测试生成',
+      description: '为函数和模块自动生成单元测试',
+      currentVersion: '20231201000000',
+      newVersion: '20250120110000',
+      ownerId: 'user-002',
+      ownerName: '技能团队',
+    },
+  ],
+  orphans: [
+    { slug: 'old-deploy-helper', name: '部署助手（旧版）' },
+  ],
+}
 
 export const MOCK_MARKET_SKILLS: CopawMarketSkill[] = [
   {
