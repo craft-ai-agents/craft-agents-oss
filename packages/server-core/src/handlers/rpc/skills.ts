@@ -391,9 +391,16 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (!workspace) throw new Error('Workspace not found')
 
     const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
-    const { downloadCopawMarketSkillZip, COPAW_MARKET_BASE_URL, GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache, extractSkillsFromZipBytes, unzipSyncEncoding } = await import('@craft-agent/shared/skills')
+    const {
+      downloadCopawMarketSkillZip,
+      COPAW_MARKET_BASE_URL,
+      GLOBAL_AGENT_SKILLS_DIR,
+      invalidateSkillsCache,
+      unzipSyncEncoding,
+      extractSkillsFromZipBytes,
+    } = await import('@craft-agent/shared/skills')
     const { join, dirname, isAbsolute } = await import('path')
-    const { mkdirSync, writeFileSync } = await import('fs')
+    const { mkdirSync, writeFileSync, readFileSync, existsSync } = await import('fs')
 
     const session = await new SsoCredentialStore().load()
     if (!session) throw new Error('未登录，无法安装技能')
@@ -437,23 +444,21 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       writeFileSync(destPath, data)
     }
 
-    // Sync display_name with chineseName from marketplace database
-    const { readFileSync: readFS, existsSync: existsFS } = await import('fs')
-    const skillMdPath = join(skillDir, 'SKILL.md')
-    if (existsFS(skillMdPath) && chineseName) {
-      const { default: matter } = await import('gray-matter')
-      const parsed = matter(readFS(skillMdPath, 'utf-8'))
-      if (parsed.data.display_name !== chineseName) {
-        parsed.data.display_name = chineseName
-        writeFileSync(skillMdPath, matter.stringify(parsed.content, parsed.data))
-      }
-    }
-
     const discoveredSkills = extractSkillsFromZipBytes(zipBytes, {
       sourcePath: `${skillName}.zip`,
       rootSlug: skillName,
     })
     const discoveredSkill = discoveredSkills.find((skill) => skill.slug === skillName) ?? discoveredSkills[0]
+
+    const skillMdPath = join(skillDir, 'SKILL.md')
+    if (existsSync(skillMdPath) && chineseName) {
+      const { default: matter } = await import('gray-matter')
+      const parsed = matter(readFileSync(skillMdPath, 'utf-8'))
+      if (parsed.data.display_name !== chineseName) {
+        parsed.data.display_name = chineseName
+        writeFileSync(skillMdPath, matter.stringify(parsed.content, parsed.data))
+      }
+    }
 
     invalidateSkillsCache()
     if (discoveredSkill) {
@@ -509,7 +514,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache, extractSkillsFromZipBytes, unzipSyncEncoding } = await import('@craft-agent/shared/skills')
+    const { GLOBAL_AGENT_SKILLS_DIR, invalidateSkillsCache, unzipSyncEncoding, extractSkillsFromZipBytes } = await import('@craft-agent/shared/skills')
     const { join, dirname, isAbsolute } = await import('path')
     const { mkdirSync, writeFileSync } = await import('fs')
 
