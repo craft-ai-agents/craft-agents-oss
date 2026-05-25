@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { OutputManifestDTO } from '@/hooks/useOutputs'
 import { isLocalWebPreviewUrl, resolveWebPreviewTarget } from '../web-preview'
+import { isGeneratedOutputPreviewUrl } from '../OutputWebPreview'
 import { buildRunnerOutputAssetUrl, parseRunnerOutputAssetUrl } from '@craft-agent/shared/outputs'
 
 function manifest(url: string, mode: 'external-link' | 'web' = 'external-link'): OutputManifestDTO {
@@ -215,6 +216,11 @@ describe('web preview target resolution', () => {
 })
 
 describe('runner-output URL helpers', () => {
+  test('identifies generated output preview URLs for private-protocol handling', () => {
+    expect(isGeneratedOutputPreviewUrl('runner-output://asset/workspace-1/output-1/site/index.html')).toBe(true)
+    expect(isGeneratedOutputPreviewUrl('http://localhost:4187/index.html')).toBe(false)
+  })
+
   test('round trips safe output asset URLs', () => {
     const url = buildRunnerOutputAssetUrl('workspace 1', 'output-1', 'site/my page.html')
     expect(url).toBe('runner-output://asset/workspace%201/output-1/site/my%20page.html')

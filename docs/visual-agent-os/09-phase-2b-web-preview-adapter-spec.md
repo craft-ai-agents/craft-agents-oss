@@ -1,6 +1,6 @@
 # Phase 2B Web Preview Adapter Spec
 
-Status: ready for build
+Status: implemented, polish active
 Owner: RunnerOS
 Last updated: 2026-05-22
 
@@ -230,6 +230,7 @@ Inside preview:
   - Reload
   - Open external
   - Copy URL
+  - Inspect in Browser Pane for console/DOM/screenshot debugging
 - Optional label:
   - `Local preview`
   - host/port, e.g. `localhost:3000`
@@ -237,7 +238,7 @@ Inside preview:
 States:
 
 - Loading: subtle spinner or "Loading preview..."
-- Loaded: iframe fills available preview area.
+- Loaded: iframe fills available preview area and shows low-noise loaded status.
 - Blocked remote URL: show link card with "Open external".
 - Failed load: show retry/open external.
 - No local output: keep Phase 2A placeholder.
@@ -285,6 +286,18 @@ Implemented design:
 4. Relative HTML subresources work when they stay inside the same Output bundle.
 
 Do not iframe raw `file://` paths.
+
+## Phase 2B.3 Web Preview Polish
+
+Status: implemented on 2026-05-25.
+
+Task list:
+
+1. Refresh generated HTML previews when the Output manifest changes.
+2. Keep the iframe header compact: title, host/source, reload, copy, inspect, open.
+3. Surface a small load/error status without turning Canvas into a browser.
+4. Route console/DOM/screenshot debugging to Browser Pane instead of pretending Canvas can inspect iframe internals.
+5. Keep generated `runner-output://` URLs inside Browser Pane inspection because system browsers cannot open that private protocol.
 
 ## Test Plan
 

@@ -127,7 +127,12 @@ export function OutputInlinePreview({
   if (webPreviewTarget) {
     return (
       <div className="h-full min-h-0 w-full overflow-hidden">
-        <OutputWebPreview target={webPreviewTarget} className="h-full min-h-0" onPreviewSettled={onPreviewSettled} />
+        <OutputWebPreview
+          target={webPreviewTarget}
+          refreshKey={`${manifest.updatedAt}:${previewAsset?.id ?? ''}:${previewAsset?.path ?? ''}`}
+          className="h-full min-h-0"
+          onPreviewSettled={onPreviewSettled}
+        />
       </div>
     )
   }

@@ -9,20 +9,22 @@ const WEB_PREVIEW_LOAD_TIMEOUT_MS = 8000
 
 interface OutputWebPreviewProps {
   target: WebPreviewTarget
+  refreshKey?: string
   className?: string
   onPreviewSettled?: (status: 'ready' | 'error') => void
 }
 
-export function OutputWebPreview({ target, className, onPreviewSettled }: OutputWebPreviewProps) {
+export function OutputWebPreview({ target, refreshKey, className, onPreviewSettled }: OutputWebPreviewProps) {
   const [frameKey, setFrameKey] = React.useState(0)
   const [isLoading, setIsLoading] = React.useState(true)
   const [loadError, setLoadError] = React.useState<string | null>(null)
+  const [lastLoadedAt, setLastLoadedAt] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     setFrameKey((key) => key + 1)
     setIsLoading(true)
     setLoadError(null)
-  }, [target.url])
+  }, [refreshKey, target.url])
 
   React.useEffect(() => {
     if (!isLoading) return
@@ -43,12 +45,16 @@ export function OutputWebPreview({ target, className, onPreviewSettled }: Output
   const copyUrl = React.useCallback(() => {
     navigator.clipboard?.writeText(target.url).catch(() => {})
   }, [target.url])
-  const isGeneratedOutputUrl = target.url.startsWith(`${RUNNER_OUTPUT_SCHEME}:`)
+  const isGeneratedOutputUrl = isGeneratedOutputPreviewUrl(target.url)
 
   const openInBrowserPane = React.useCallback(async () => {
     const browserPane = window.electronAPI?.browserPane
     if (!browserPane) {
-      if (!isGeneratedOutputUrl) window.electronAPI.openUrl(target.url)
+      if (!isGeneratedOutputUrl) {
+        window.electronAPI.openUrl(target.url)
+        return
+      }
+      setLoadError('Browser Pane is unavailable for generated output inspection.')
       return
     }
     try {
@@ -57,9 +63,21 @@ export function OutputWebPreview({ target, className, onPreviewSettled }: Output
       await browserPane.focus(instanceId)
     } catch (error) {
       console.error('[OutputWebPreview] Failed to open preview in browser pane:', error)
-      if (!isGeneratedOutputUrl) window.electronAPI.openUrl(target.url)
+      if (!isGeneratedOutputUrl) {
+        window.electronAPI.openUrl(target.url)
+        return
+      }
+      setLoadError('Could not open generated output in Browser Pane.')
     }
   }, [isGeneratedOutputUrl, target.url])
+
+  const statusText = loadError
+    ? 'Preview error'
+    : isLoading
+      ? 'Loading'
+      : lastLoadedAt
+        ? `Loaded ${lastLoadedAt}`
+        : 'Loaded'
 
   return (
     <div className={cn('flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md border border-border/55 bg-background/80', className)}>
@@ -77,7 +95,7 @@ export function OutputWebPreview({ target, className, onPreviewSettled }: Output
         <Button type="button" size="icon" variant="ghost" className="h-7 w-7" aria-label="Copy preview URL" onClick={copyUrl}>
           <Copy className="h-3.5 w-3.5" />
         </Button>
-        <Button type="button" size="icon" variant="ghost" className="h-7 w-7" aria-label="Inspect preview in Browser Pane" title="Inspect in Browser Pane" onClick={() => { void openInBrowserPane() }}>
+        <Button type="button" size="icon" variant="ghost" className="h-7 w-7" aria-label="Inspect preview in Browser Pane" title="Inspect in Browser Pane for console, DOM, and screenshots" onClick={() => { void openInBrowserPane() }}>
           <PanelRightOpen className="h-3.5 w-3.5" />
         </Button>
         <Button
@@ -99,6 +117,9 @@ export function OutputWebPreview({ target, className, onPreviewSettled }: Output
         </Button>
       </div>
       <div className="relative min-h-0 flex-1 bg-white">
+        <div className="absolute bottom-2 left-2 z-[1] rounded border border-black/10 bg-white/88 px-2 py-1 text-[10px] text-zinc-600 shadow-sm backdrop-blur">
+          {statusText}
+        </div>
         {isLoading && !loadError ? (
           <div className="absolute inset-x-0 top-0 z-[2] bg-background/85 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur">
             Loading preview...
@@ -138,6 +159,7 @@ export function OutputWebPreview({ target, className, onPreviewSettled }: Output
           onLoad={() => {
             setIsLoading(false)
             setLoadError(null)
+            setLastLoadedAt(new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))
             onPreviewSettled?.('ready')
           }}
           onError={() => {
@@ -149,4 +171,8 @@ export function OutputWebPreview({ target, className, onPreviewSettled }: Output
       </div>
     </div>
   )
+}
+
+export function isGeneratedOutputPreviewUrl(url: string): boolean {
+  return url.startsWith(`${RUNNER_OUTPUT_SCHEME}:`)
 }
