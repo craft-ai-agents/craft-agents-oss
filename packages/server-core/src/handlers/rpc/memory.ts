@@ -6,12 +6,14 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
   deleteMemoryEntry,
   enqueueMemoryReviewItem,
+  appendMemoryEvent,
   listMemoryReviewItems,
   listMemoryEvents,
   listAgentMemoryEntries,
   listUserMemoryEntries,
   loadAgentMemory,
   loadUserMemory,
+  recallMemoryEntries,
   resolveMemoryReviewItem,
   saveMemoryEntry,
   updateMemoryEntry,
@@ -22,8 +24,10 @@ import {
   type MemoryEvent,
   type MemoryEntryType,
   type MemoryMutationEventMetadata,
+  type MemoryRecallResult,
   type MemoryReviewItem,
   type MemoryScope,
+  type RecallMemoryInput,
   type ResolveMemoryReviewInput,
   type SaveMemoryInput,
   type UpdateMemoryInput,
@@ -34,6 +38,7 @@ import type { HandlerDeps } from '../handler-deps'
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.memory.LIST_AGENT,
   RPC_CHANNELS.memory.LIST_USER,
+  RPC_CHANNELS.memory.RECALL,
   RPC_CHANNELS.memory.LIST_EVENTS,
   RPC_CHANNELS.memory.LIST_REVIEW_QUEUE,
   RPC_CHANNELS.memory.ENQUEUE_REVIEW,
@@ -169,6 +174,19 @@ export function registerMemoryHandlers(server: RpcServer, deps: HandlerDeps): vo
     const loaded = loadUserMemory()
     if (!loaded) throw new Error('USER.md is invalid or unreadable')
     return loaded
+  })
+
+  server.handle(RPC_CHANNELS.memory.RECALL, async (_ctx, payload: RecallMemoryInput): Promise<MemoryRecallResult[]> => {
+    const results = recallMemoryEntries(payload)
+    if (results.length > 0) {
+      await Promise.all(results.map((result) => {
+        return appendMemoryEvent('recall', result.scope, result.agentSlug, result.entry.name, undefined, {
+          source: 'rpc',
+          evidence: payload.query,
+        })
+      }))
+    }
+    return results
   })
 
   server.handle(RPC_CHANNELS.memory.LIST_EVENTS, async (_ctx, payload: ListMemoryEventsPayload): Promise<MemoryEvent[]> => {

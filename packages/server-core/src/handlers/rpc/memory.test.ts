@@ -9,6 +9,13 @@ const saveMemoryEntry = mock(async (input: any) => ({
   created: '2026-05-01',
   body: input.body,
 }))
+const appendMemoryEvent = mock(async () => ({
+  id: 'evt_recall',
+  action: 'recall',
+  scope: 'user',
+  source: 'system',
+  createdAt: '2026-05-01T00:00:00.000Z',
+}))
 const updateMemoryEntry = mock(async (input: any) => ({
   name: input.name,
   type: 'reference',
@@ -69,8 +76,21 @@ const loadAgentMemory = mock((agentSlug: string) => ({
   entries: [],
   filePath: `/tmp/agents/${agentSlug}/MEMORY.md`,
 }))
+const recallMemoryEntries = mock(() => [{
+  scope: 'user',
+  entry: {
+    name: 'Preferred writing style',
+    type: 'feedback',
+    created: '2026-05-01',
+    body: 'Use direct language.',
+  },
+  score: 7,
+  reason: 'Matched writing',
+  excerpt: 'Use direct language.',
+}])
 
 mock.module('@craft-agent/shared/memory', () => ({
+  appendMemoryEvent,
   deleteMemoryEntry,
   enqueueMemoryReviewItem,
   listMemoryReviewItems,
@@ -79,6 +99,7 @@ mock.module('@craft-agent/shared/memory', () => ({
   listUserMemoryEntries,
   loadAgentMemory,
   loadUserMemory,
+  recallMemoryEntries,
   resolveMemoryReviewItem,
   saveMemoryEntry,
   updateMemoryEntry,
@@ -130,6 +151,7 @@ function ctx(): RequestContext {
 
 beforeEach(() => {
   saveMemoryEntry.mockClear()
+  appendMemoryEvent.mockClear()
   updateMemoryEntry.mockClear()
   deleteMemoryEntry.mockClear()
   listMemoryEvents.mockClear()
@@ -140,6 +162,7 @@ beforeEach(() => {
   listAgentMemoryEntries.mockClear()
   loadUserMemory.mockClear()
   loadAgentMemory.mockClear()
+  recallMemoryEntries.mockClear()
 })
 
 describe('memory RPC handlers', () => {
@@ -222,6 +245,48 @@ describe('memory RPC handlers', () => {
       action: 'save',
       entryName: 'Preferred writing style',
     })])
+  })
+
+  it('recalls memory entries and logs recall audit events', async () => {
+    const { handlers, server } = createHarness()
+    const { registerMemoryHandlers } = await import('./memory')
+    registerMemoryHandlers(server, deps)
+
+    const recall = handlers.get(RPC_CHANNELS.memory.RECALL)
+    if (!recall) throw new Error('memory recall handler not registered')
+
+    const result = await recall(ctx(), {
+      query: 'writing style',
+      agentSlug: 'helper',
+    })
+
+    expect(recallMemoryEntries).toHaveBeenCalledWith({
+      query: 'writing style',
+      agentSlug: 'helper',
+    })
+    expect(appendMemoryEvent).toHaveBeenCalledTimes(1)
+    expect(appendMemoryEvent).toHaveBeenCalledWith('recall', 'user', undefined, 'Preferred writing style', undefined, {
+      source: 'rpc',
+      evidence: 'writing style',
+    })
+    expect(result).toEqual([expect.objectContaining({
+      score: 7,
+      reason: 'Matched writing',
+    })])
+  })
+
+  it('does not log recall audit events for empty recall results', async () => {
+    recallMemoryEntries.mockImplementationOnce(() => [])
+    const { handlers, server } = createHarness()
+    const { registerMemoryHandlers } = await import('./memory')
+    registerMemoryHandlers(server, deps)
+
+    const recall = handlers.get(RPC_CHANNELS.memory.RECALL)
+    if (!recall) throw new Error('memory recall handler not registered')
+
+    await recall(ctx(), { query: 'missing' })
+
+    expect(appendMemoryEvent).not.toHaveBeenCalled()
   })
 
   it('lists and mutates memory review queue items', async () => {

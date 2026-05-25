@@ -110,6 +110,7 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     workflowRuns,
     workflows,
     workspaceContext,
+    deepResearch,
   ] = await Promise.all([
     import('@craft-agent/server-core/handlers/rpc/auth'),
     import('@craft-agent/server-core/handlers/rpc/automations'),
@@ -135,6 +136,7 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     import('@craft-agent/server-core/handlers/rpc/workflow-runs'),
     import('@craft-agent/server-core/handlers/rpc/workflows'),
     import('@craft-agent/server-core/handlers/rpc/workspace-context'),
+    import('@craft-agent/server-core/handlers/rpc/deep-research'),
   ])
 
   return new Set([
@@ -162,6 +164,7 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     ...workflowRuns.HANDLED_CHANNELS,
     ...workflows.HANDLED_CHANNELS,
     ...workspaceContext.HANDLED_CHANNELS,
+    ...deepResearch.HANDLED_CHANNELS,
   ])
 }
 

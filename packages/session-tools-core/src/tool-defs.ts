@@ -50,6 +50,7 @@ import {
   handleSaveMemory,
   handleUpdateMemory,
   handleForgetMemory,
+  handleRecallMemory,
 } from './handlers/memory.ts';
 import { handleCreateOutput } from './handlers/outputs.ts';
 import {
@@ -420,6 +421,12 @@ export const UpdateMemorySchema = z.object({
 export const ForgetMemorySchema = z.object({
   scope: MemoryScopeSchema.optional(),
   name: MemoryNameSchema.describe('Existing memory entry name to delete and tombstone.'),
+});
+
+export const RecallMemorySchema = z.object({
+  query: z.string().min(1).describe('What to look for in durable memory. Ask a concise semantic question or keyword phrase.'),
+  scopes: z.array(MemoryScopeSchema).min(1).optional().describe('Optional scopes to search. Defaults to USER.md plus this agent MEMORY.md when available.'),
+  limit: z.number().int().min(1).max(25).optional().describe('Maximum matches to return. Defaults to 8, maximum 25.'),
 });
 
 const OutputKindSchema = z.enum([
@@ -898,6 +905,12 @@ Use this when the user asks you to forget something, when a memory is wrong and 
 
 Do NOT use this for normal short-term context cleanup; only durable memory entries should be forgotten.`,
 
+  recall_memory: `Search durable memory without bloating the prompt.
+
+Use this when the current task may depend on prior user preferences, agent feedback, project state, or references that are not already visible in the prompt. This is read-only.
+
+Defaults to USER.md plus this agent's MEMORY.md when the session has an active agent. Narrow \`scopes\` only when you explicitly need user-wide or agent-only memory.`,
+
   create_output: `Publish a first-class user-facing output from this session.
 
 Use this when you have produced a durable deliverable or external-action receipt that the user should find later from the Outputs area instead of hunting through chat.
@@ -995,6 +1008,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'save_memory', description: TOOL_DESCRIPTIONS.save_memory, inputSchema: SaveMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveMemory },
   { name: 'update_memory', description: TOOL_DESCRIPTIONS.update_memory, inputSchema: UpdateMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateMemory },
   { name: 'forget_memory', description: TOOL_DESCRIPTIONS.forget_memory, inputSchema: ForgetMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleForgetMemory },
+  { name: 'recall_memory', description: TOOL_DESCRIPTIONS.recall_memory, inputSchema: RecallMemorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleRecallMemory },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
 ];
 

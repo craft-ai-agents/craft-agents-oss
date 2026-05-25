@@ -408,6 +408,8 @@ export const RPC_CHANNELS = {
     LIST_AGENT: 'memory:listAgent',
     /** List shared USER.md entries. */
     LIST_USER: 'memory:listUser',
+    /** Recall relevant USER.md / MEMORY.md entries for a query. */
+    RECALL: 'memory:recall',
     /** List memory mutation/recall audit events. */
     LIST_EVENTS: 'memory:listEvents',
     /** List pending and resolved memory review proposals. */

@@ -127,12 +127,16 @@ export {
   handleSaveMemory,
   handleUpdateMemory,
   handleForgetMemory,
+  handleRecallMemory,
 } from './memory.ts';
 export type {
   SaveMemoryToolInput,
   UpdateMemoryToolInput,
   ForgetMemoryToolInput,
+  RecallMemoryToolInput,
   MemoryMutationResult,
+  RecalledMemoryEntry,
+  RecallMemoryResult,
   MemoryScope,
   MemoryType,
 } from './memory.ts';

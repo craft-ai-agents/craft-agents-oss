@@ -20,7 +20,7 @@ export function MemoryActivityPanel({ scope, agentSlug }: MemoryActivityPanelPro
           <Clock3 className="h-4 w-4 shrink-0 text-white/45" />
           <div className="min-w-0">
             <div className="text-sm font-medium text-white/78">Memory activity</div>
-            <div className="text-xs text-white/38">Recent writes and deletes from this memory file.</div>
+            <div className="text-xs text-white/38">Recent writes, recalls, and session injections.</div>
           </div>
         </div>
         <Button
@@ -88,6 +88,8 @@ function activityBadgeClass(action: MemoryEvent['action']): string {
       return `${base} border border-sky-400/25 bg-sky-400/10 text-sky-200/85`
     case 'forget':
       return `${base} border border-red-400/25 bg-red-400/10 text-red-200/85`
+    case 'inject':
+      return `${base} border border-violet-400/25 bg-violet-400/10 text-violet-200/85`
     default:
       return `${base} border border-white/15 bg-white/[0.06] text-white/65`
   }
@@ -95,6 +97,7 @@ function activityBadgeClass(action: MemoryEvent['action']): string {
 
 function formatAction(action: MemoryEvent['action']): string {
   if (action === 'forget') return 'forgot'
+  if (action === 'inject') return 'injected'
   return action
 }
 

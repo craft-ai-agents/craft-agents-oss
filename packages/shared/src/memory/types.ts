@@ -106,7 +106,7 @@ export interface DeleteMemoryInput {
   event?: MemoryMutationEventMetadata;
 }
 
-export type MemoryEventAction = 'save' | 'update' | 'forget' | 'recall' | 'consolidate';
+export type MemoryEventAction = 'save' | 'update' | 'forget' | 'inject' | 'recall' | 'consolidate';
 
 export type MemoryEventSource =
   | 'user'
@@ -135,6 +135,26 @@ export interface MemoryEvent {
   evidence?: string;
   actor?: string;
   createdAt: string;
+}
+
+export interface RecallMemoryInput {
+  query: string;
+  /**
+   * Defaults to USER.md plus the selected agent MEMORY.md when agentSlug is
+   * provided. Pass a narrowed list when the caller needs strict scope control.
+   */
+  scopes?: MemoryScope[];
+  agentSlug?: string;
+  limit?: number;
+}
+
+export interface MemoryRecallResult {
+  scope: MemoryScope;
+  agentSlug?: string;
+  entry: MemoryEntry;
+  score: number;
+  reason: string;
+  excerpt: string;
 }
 
 export type MemoryReviewAction = 'save' | 'update' | 'forget';

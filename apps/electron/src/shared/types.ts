@@ -81,8 +81,10 @@ import type {
   MemoryEntry as MemoryEntryDTO,
   MemoryEvent as MemoryEventDTO,
   MemoryEntryType,
+  MemoryRecallResult,
   MemoryReviewItem,
   MemoryScope,
+  RecallMemoryInput,
   ResolveMemoryReviewInput,
 } from '@craft-agent/shared/memory/types';
 export type {
@@ -91,8 +93,10 @@ export type {
   MemoryEntryDTO,
   MemoryEventDTO,
   MemoryEntryType,
+  MemoryRecallResult,
   MemoryReviewItem,
   MemoryScope,
+  RecallMemoryInput,
   ResolveMemoryReviewInput,
 };
 
@@ -759,6 +763,7 @@ export interface ElectronAPI {
   // Memory (global USER.md + per-agent MEMORY.md)
   listAgentMemory(agentSlug: string): Promise<LoadedMemoryFileDTO>
   listUserMemory(): Promise<LoadedMemoryFileDTO>
+  recallMemory(payload: RecallMemoryInput): Promise<MemoryRecallResult[]>
   listMemoryEvents(payload: {
     scope: MemoryScope
     agentSlug?: string | null

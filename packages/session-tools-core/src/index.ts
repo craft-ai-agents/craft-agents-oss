@@ -196,6 +196,7 @@ export {
   handleSaveMemory,
   handleUpdateMemory,
   handleForgetMemory,
+  handleRecallMemory,
   // Outputs
   handleCreateOutput,
 } from './handlers/index.ts';
@@ -258,7 +259,10 @@ export type {
   SaveMemoryToolInput,
   UpdateMemoryToolInput,
   ForgetMemoryToolInput,
+  RecallMemoryToolInput,
   MemoryMutationResult,
+  RecalledMemoryEntry,
+  RecallMemoryResult,
   MemoryScope,
   MemoryType,
   CreateOutputToolInput,
@@ -299,6 +303,7 @@ export {
   SaveMemorySchema,
   UpdateMemorySchema,
   ForgetMemorySchema,
+  RecallMemorySchema,
   CreateOutputSchema,
   // Descriptions
   TOOL_DESCRIPTIONS,

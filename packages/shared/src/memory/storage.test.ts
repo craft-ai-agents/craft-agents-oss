@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  appendMemoryEvent,
   deleteMemoryEntry,
   getAgentMemoryFile,
   getMemoryEventsFile,
@@ -468,6 +469,26 @@ describe('CRUD', () => {
     await deleteMemoryEntry({ scope: 'user', name: 'ghost' }, options);
     expect(listMemoryEvents('user', undefined, options)).toEqual([]);
     expect(existsSync(getMemoryEventsFile('user', undefined, options))).toBe(false);
+  });
+
+  test('appendMemoryEvent records injected memory usage', async () => {
+    await appendMemoryEvent('inject', 'user', undefined, 'primary sources', options, {
+      source: 'system',
+      runId: 'session_123',
+      actor: 'researcher',
+      evidence: 'agent launch injected memory',
+    });
+
+    const [event] = listMemoryEvents('user', undefined, options);
+    expect(event).toMatchObject({
+      action: 'inject',
+      scope: 'user',
+      entryName: 'primary sources',
+      source: 'system',
+      runId: 'session_123',
+      actor: 'researcher',
+      evidence: 'agent launch injected memory',
+    });
   });
 
   test('listMemoryEvents skips malformed jsonl lines', async () => {

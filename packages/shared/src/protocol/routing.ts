@@ -430,6 +430,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // memory — global USER.md + per-agent MEMORY.md on the owning server
   RPC_CHANNELS.memory.LIST_AGENT,
   RPC_CHANNELS.memory.LIST_USER,
+  RPC_CHANNELS.memory.RECALL,
   RPC_CHANNELS.memory.LIST_EVENTS,
   RPC_CHANNELS.memory.LIST_REVIEW_QUEUE,
   RPC_CHANNELS.memory.ENQUEUE_REVIEW,

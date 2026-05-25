@@ -7,6 +7,7 @@ import { Spinner } from '@craft-agent/ui'
 import { SettingsCard, SettingsSection } from '@/components/settings'
 import { MemoryReviewQueuePanel } from '@/components/agents/MemoryReviewQueuePanel'
 import { MemoryActivityPanel } from '@/components/agents/MemoryActivityPanel'
+import { MemoryRecallPanel } from '@/components/agents/MemoryRecallPanel'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
@@ -58,6 +59,13 @@ export default function MemorySettingsPage() {
                   </div>
                 )}
               </SettingsCard>
+            </SettingsSection>
+
+            <SettingsSection
+              title="Recall"
+              description="Search durable memory through the recall path agents can use."
+            >
+              <MemoryRecallPanel />
             </SettingsSection>
 
             <SettingsSection

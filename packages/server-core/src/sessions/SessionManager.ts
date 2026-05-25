@@ -37,7 +37,7 @@ import {
   type WorkspaceInfo,
 } from '@craft-agent/shared/config'
 import type { ActiveSessionInfo, SessionProcessingStatus } from '@craft-agent/core/types'
-import type { MemoryMutationResult } from '@craft-agent/session-tools-core'
+import type { MemoryMutationResult, RecalledMemoryEntry, RecallMemoryResult, RecallMemoryToolInput } from '@craft-agent/session-tools-core'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import {
   // Session persistence functions
@@ -107,9 +107,11 @@ import {
   writeGlobalWorkflow,
 } from '@craft-agent/shared/workflows'
 import {
+  appendMemoryEvent,
   deleteMemoryEntry,
   listAgentMemoryEntries,
   listUserMemoryEntries,
+  recallMemoryEntries,
   saveMemoryEntry,
   updateMemoryEntry,
   buildMemorySectionsText,
@@ -118,6 +120,7 @@ import {
   type MemoryEntry as StoredMemoryEntry,
   type MemoryEntryType,
   type MemoryMutationEventMetadata,
+  type MemoryRecallResult,
   type MemoryScope,
   type SaveMemoryInput,
   type UpdateMemoryInput,
@@ -263,6 +266,59 @@ async function mutateMemory(
   return deleted ? { ok: true, scope, name } : { ok: false, scope, name, error: `Memory not found: ${name}` }
 }
 
+async function recallSessionMemory(
+  input: RecallMemoryToolInput,
+  sessionId: string,
+  activeAgentSlug?: string,
+): Promise<RecallMemoryResult> {
+  const scopes: MemoryScope[] = input.scopes?.length ? input.scopes : (activeAgentSlug ? ['user', 'agent'] : ['user'])
+  if (scopes.includes('agent') && !activeAgentSlug) {
+    return { ok: false, error: 'agent scope recall requires an active agent for this session.' }
+  }
+
+  const results = recallMemoryEntries({
+    query: input.query,
+    scopes,
+    agentSlug: activeAgentSlug,
+    limit: input.limit,
+  })
+
+  if (results.length > 0) {
+    await Promise.all(results.map((result) => appendMemoryEvent(
+      'recall',
+      result.scope,
+      result.agentSlug,
+      result.entry.name,
+      undefined,
+      {
+        source: 'agent_tool',
+        runId: sessionId,
+        actor: activeAgentSlug ?? 'session',
+        evidence: input.query,
+      },
+    )))
+  }
+
+  return {
+    ok: true,
+    query: input.query,
+    results: results.map(toSessionRecallResult),
+  }
+}
+
+function toSessionRecallResult(result: MemoryRecallResult): RecalledMemoryEntry {
+  return {
+    scope: result.scope,
+    agentSlug: result.agentSlug,
+    name: result.entry.name,
+    type: result.entry.type,
+    content: result.entry.body,
+    score: result.score,
+    reason: result.reason,
+    excerpt: result.excerpt,
+  }
+}
+
 function memoryEntryTitle(entry: WorkflowMemoryEntry): string {
   return entry.name.trim() || 'Memory'
 }
@@ -389,6 +445,35 @@ function completeLaunchReceipt(
     },
     routing: receipt?.routing,
   }
+}
+
+async function recordInjectedMemoryFromLaunchReceipt(
+  receipt: SessionLaunchReceipt,
+  sessionId: string,
+): Promise<void> {
+  const userEntries = receipt.injected.memory?.user ?? []
+  const agentEntries = receipt.injected.memory?.agent ?? []
+  if (userEntries.length === 0 && agentEntries.length === 0) return
+
+  const actor = receipt.agent?.slug ?? receipt.origin
+  const evidence = `${receipt.origin} launch injected memory`
+  const writes = userEntries.map((entry) => appendMemoryEvent('inject', 'user', undefined, entry.name, undefined, {
+    source: 'system',
+    runId: sessionId,
+    actor,
+    evidence,
+  }))
+
+  if (receipt.agent?.slug) {
+    writes.push(...agentEntries.map((entry) => appendMemoryEvent('inject', 'agent', receipt.agent!.slug, entry.name, undefined, {
+      source: 'system',
+      runId: sessionId,
+      actor,
+      evidence,
+    })))
+  }
+
+  await Promise.all(writes)
 }
 
 const automationConfigMutexes = new Map<string, Promise<void>>()
@@ -3384,6 +3469,12 @@ user a clickable link to where the thing now lives.`
       launchReceipt,
     })
 
+    try {
+      await recordInjectedMemoryFromLaunchReceipt(launchReceipt, storedSession.id)
+    } catch (error) {
+      sessionLog.warn(`[memory] Failed to record injected memory for session ${storedSession.id}:`, error)
+    }
+
     // Branch: copy messages from source session up to and including the branch point
     if (validatedBranch) {
       const branchedStored = loadStoredSession(workspaceRootPath, storedSession.id)
@@ -4499,6 +4590,9 @@ user a clickable link to where the thing now lives.`
           })
           this.broadcastMemoryChanged(scope, scope === 'agent' ? agentSlug ?? null : null)
           return result
+        },
+        recallMemoryFn: async (input) => {
+          return recallSessionMemory(input, managed.id, managed.spawnedFromAgent?.agentSlug)
         },
         createOutputFn: async (input) => {
           const workflow = managed.launchReceipt?.workflow
