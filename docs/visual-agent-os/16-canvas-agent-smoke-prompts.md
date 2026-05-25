@@ -1,9 +1,28 @@
 # Canvas Agent Smoke Prompts
 
 Status: active
-Last updated: 2026-05-23
+Last updated: 2026-05-25
 
 Use these prompts inside Runner after Canvas-agent-awareness changes. Each smoke should create a durable Output and set `showInCanvas: true` when the artifact should appear immediately. The tool also accepts the alias `show_in_canvas: true`.
+
+## Fast Seed Smoke
+
+Use this when you want a repeatable fixture set instead of asking an agent to create each artifact manually.
+
+```bash
+bun run canvas:smoke:seed -- --workspace <workspace-name-or-id> --session <session-id>
+```
+
+The command writes fixtures under `.runneros-canvas-smoke/`, creates durable Outputs through `OutputService`, and pins them to the session Canvas. It seeds HTML, markdown, chart JSON, workflow JSON, CSV table, SVG image, Excalidraw JSON, and PDF.
+
+You can also set `RUNNEROS_CANVAS_SMOKE_SESSION` and `RUNNEROS_CANVAS_SMOKE_WORKSPACE` instead of passing flags.
+
+Expected:
+
+- New output tabs appear in Canvas for each seeded artifact.
+- Generated HTML loads through `runner-output://` and its button changes the heading.
+- The board tab shows pinned cards, newest first.
+- Agent auto-review may fire only when a seeded output is opened in Canvas.
 
 ## HTML Output Smoke
 
