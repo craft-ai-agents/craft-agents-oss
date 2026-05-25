@@ -919,7 +919,7 @@ Use this when you have produced a durable deliverable or external-action receipt
 
 Good outputs include research reports, generated media, exported datasets, code review reports, deployment receipts, published-post receipts, sent-message receipts, and final workflow deliverables.
 
-For visual work, create the image/video/web/report Output first. For slide decks, prefer an HTML deck as the Canvas preview and attach PPTX/PDF exports as supporting files when needed. Set \`showInCanvas: true\` when the user should see it immediately beside chat. Otherwise use visual_surface_state and visual_surface to pin or open it on Canvas when side-by-side viewing helps.
+For visual work, create the image/video/web/report Output first. For charts, prefer a simple \`.chart.json\` Output with type/title/data so Canvas can render it directly; attach SVG/PNG exports as fallback for complex charts. For slide decks, prefer an HTML deck as the Canvas preview and attach PPTX/PDF exports as supporting files when needed. Set \`showInCanvas: true\` when the user should see it immediately beside chat. Otherwise use visual_surface_state and visual_surface to pin or open it on Canvas when side-by-side viewing helps.
 
 Use Browser Pane or browser tools, not Canvas, when the user wants to test, debug, inspect, click through, check console logs, verify layout, capture screenshots, or interact with live web behavior.
 

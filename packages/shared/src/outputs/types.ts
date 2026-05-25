@@ -28,6 +28,7 @@ export type OutputPreviewMode =
   | 'excalidraw'
   | 'presentation'
   | 'table'
+  | 'chart'
   | 'receipt'
   | 'external-link'
   | 'web';

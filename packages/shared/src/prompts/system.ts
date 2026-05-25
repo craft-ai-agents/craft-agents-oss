@@ -442,7 +442,7 @@ function getCraftAgentEnvironmentMarker(): string {
 
 const VISUAL_CANVAS_GUIDANCE = `## Canvas and Outputs
 
-Use Outputs for durable user-facing artifacts: images, videos, reports, datasets, slide decks, local web previews, receipts, and links.
+Use Outputs for durable user-facing artifacts: images, videos, reports, datasets, charts, slide decks, local web previews, receipts, and links.
 
 Use Canvas when seeing the artifact beside chat helps the user think, review, compare, or continue giving instructions. The normal flow is:
 1. Create or identify the relevant Output.
@@ -456,6 +456,8 @@ Use Browser Pane or browser tools when the user asks to test, debug, inspect, cl
 When \`visual_surface_state\` marks an Output as inspectable in Browser Pane, use that route for console/DOM/click inspection. Canvas is only the review surface.
 
 For slide decks, prefer a beautiful HTML deck as the Canvas preview and attach PPTX/PDF exports as supporting files when needed. A PPTX-only file is an export, not a good visual preview.
+
+For charts, publish a simple .chart.json Output when possible: { "type": "bar" | "line" | "pie", "title": "...", "data": [{ "label": "...", "value": 123 }] }. Canvas can render this directly; attach SVG/PNG exports as fallback when the chart is complex.
 
 Do not use Canvas for every answer. Do not create duplicate cards. Do not claim you can inspect iframe DOM, console logs, or live app state from Canvas; use browser tools for that when available.`;
 

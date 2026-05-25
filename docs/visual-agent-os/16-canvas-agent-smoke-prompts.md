@@ -54,6 +54,18 @@ Expected:
 - Remote URLs are not iframe embedded.
 - Generated HTML assets render through `runner-output://`.
 
+## Chart Output Smoke
+
+```text
+Create a small chart output named canvas-chart-smoke-test.chart.json showing monthly revenue for Jan, Feb, and Mar. Use a bar chart with three data points. Publish it as an Output and show it in Canvas.
+```
+
+Expected:
+
+- Canvas opens automatically.
+- The chart JSON renders as a chart, not raw JSON.
+- The chart output is selectable from the Canvas output tabs.
+
 ## Agent Awareness Smoke
 
 ```text

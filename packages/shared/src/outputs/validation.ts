@@ -50,6 +50,7 @@ const PREVIEW_MODES: ReadonlySet<OutputPreviewMode> = new Set([
   'excalidraw',
   'presentation',
   'table',
+  'chart',
   'receipt',
   'external-link',
   'web',

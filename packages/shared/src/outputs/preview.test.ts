@@ -27,4 +27,10 @@ describe('output preview mode inference', () => {
     expect(inferPreviewMode(undefined, 'deck.pptx')).toBe('presentation');
     expect(inferPreviewMode(undefined, 'deck.odp')).toBe('presentation');
   });
+
+  test('detects chart assets by mime type and extension', () => {
+    expect(previewModeForMimeType('application/vnd.runneros.chart+json')).toBe('chart');
+    expect(inferPreviewMode(undefined, 'sales.chart.json')).toBe('chart');
+    expect(inferPreviewMode('application/json', 'sales.vegalite.json')).toBe('chart');
+  });
 });

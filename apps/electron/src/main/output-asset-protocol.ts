@@ -50,6 +50,7 @@ export function registerOutputAssetHandler(): void {
 }
 
 function mimeTypeForPath(path: string): string {
+  if (/\.(chart|vega|vegalite)\.json$/i.test(path)) return 'application/vnd.runneros.chart+json'
   const ext = path.split('.').pop()?.toLowerCase() ?? ''
   const mimeMap: Record<string, string> = {
     css: 'text/css',

@@ -12,6 +12,7 @@ import type { OutputAssetDTO, OutputManifestDTO, OutputPreviewMode } from '@/hoo
 
 const OutputModelPreview = React.lazy(() => import('./OutputModelPreview').then((module) => ({ default: module.OutputModelPreview })))
 const OutputExcalidrawPreview = React.lazy(() => import('./OutputExcalidrawPreview').then((module) => ({ default: module.OutputExcalidrawPreview })))
+const OutputChartPreview = React.lazy(() => import('./chart-preview').then((module) => ({ default: module.OutputChartPreview })))
 
 export type OutputPreviewSettledHandler = (status: 'ready' | 'error') => void
 
@@ -47,14 +48,14 @@ export function OutputInlinePreview({
   const inlineText = manifest.preview?.inlineText ?? null
   const assetId = manifest.preview?.assetId ?? previewAsset?.id
   const shouldReadAssetData = Boolean(assetId && (mode === 'image' || mode === 'video' || mode === 'audio'))
-  const shouldReadAssetText = Boolean(assetId && (mode === 'markdown' || mode === 'text' || mode === 'json' || mode === 'receipt' || mode === 'excalidraw' || mode === 'table'))
+  const shouldReadAssetText = Boolean(assetId && (mode === 'markdown' || mode === 'text' || mode === 'json' || mode === 'receipt' || mode === 'excalidraw' || mode === 'table' || mode === 'chart'))
   const [content, setContent] = React.useState<string | null>(shouldReadAssetText ? null : inlineText)
   const [dataUrl, setDataUrl] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const electronAPI = window.electronAPI as OutputsElectronAPI
   const hasStaticPreview = Boolean(
     (mode === 'image' || mode === 'video' || mode === 'audio') && dataUrl
-    || (mode === 'markdown' || mode === 'json' || mode === 'text' || mode === 'receipt' || mode === 'table') && content !== null
+    || (mode === 'markdown' || mode === 'json' || mode === 'text' || mode === 'receipt' || mode === 'table' || mode === 'chart') && content !== null
     || mode === 'receipt' && manifest.receipts.length > 0
     || (mode === 'external-link' || mode === 'web' || manifest.links.length > 0) && manifest.links[0],
   )
@@ -267,6 +268,19 @@ export function OutputInlinePreview({
     )
   }
 
+  if (mode === 'chart' && content) {
+    return (
+      <React.Suspense fallback={<EmptyPreview className={className}><span>Loading chart preview...</span></EmptyPreview>}>
+        <OutputChartPreview
+          content={content}
+          label={previewAsset?.label ?? manifest.title}
+          className={className}
+          onPreviewSettled={onPreviewSettled}
+        />
+      </React.Suspense>
+    )
+  }
+
   if ((mode === 'text' || mode === 'receipt') && content) {
     return (
       <pre className={className ?? 'runneros-card max-h-[520px] overflow-auto whitespace-pre-wrap p-3 text-xs text-white/68'}>
@@ -325,6 +339,7 @@ function inferPreviewMode(asset?: OutputAssetDTO): OutputPreviewMode {
   const mime = asset?.mimeType ?? ''
   const path = asset?.path.toLowerCase() ?? ''
   if (mime.includes('markdown') || path.endsWith('.md') || path.endsWith('.markdown')) return 'markdown'
+  if (isChartAsset(asset)) return 'chart'
   if (mime.includes('json') || path.endsWith('.json')) return 'json'
   if (mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|avif|svg)$/.test(path)) return 'image'
   if (mime.startsWith('video/') || /\.(mp4|mov|webm|m4v)$/.test(path)) return 'video'
@@ -335,6 +350,15 @@ function inferPreviewMode(asset?: OutputAssetDTO): OutputPreviewMode {
   if (isPresentationAsset(asset)) return 'presentation'
   if (mime === 'text/csv' || mime === 'text/tab-separated-values' || /\.(csv|tsv)$/.test(path)) return 'table'
   return 'text'
+}
+
+function isChartAsset(asset?: OutputAssetDTO): boolean {
+  const mime = asset?.mimeType ?? ''
+  const path = asset?.path.toLowerCase() ?? ''
+  return mime === 'application/vnd.runneros.chart+json'
+    || mime === 'application/vnd.vega.v5+json'
+    || mime === 'application/vnd.vegalite.v5+json'
+    || /\.(chart|vega|vegalite)\.json$/.test(path)
 }
 
 function isPresentationAsset(asset?: OutputAssetDTO): boolean {
