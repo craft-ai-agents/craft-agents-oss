@@ -415,6 +415,7 @@ export const CHANNEL_MAP = {
   listMemoryReviewQueue: invoke(RPC_CHANNELS.memory.LIST_REVIEW_QUEUE),
   enqueueMemoryReview: invoke(RPC_CHANNELS.memory.ENQUEUE_REVIEW),
   resolveMemoryReview: invoke(RPC_CHANNELS.memory.RESOLVE_REVIEW),
+  applyMemoryReview: invoke(RPC_CHANNELS.memory.APPLY_REVIEW),
   upsertMemory: invoke(RPC_CHANNELS.memory.UPSERT),
   saveMemory: invoke(RPC_CHANNELS.memory.SAVE),
   updateMemory: invoke(RPC_CHANNELS.memory.UPDATE),

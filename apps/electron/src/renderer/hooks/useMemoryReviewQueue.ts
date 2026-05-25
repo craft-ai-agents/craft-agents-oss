@@ -11,6 +11,7 @@ export interface MemoryReviewApi {
   listMemoryReviewQueue?: () => Promise<MemoryReviewItem[]>
   onMemoryChanged?: (listener: (scope: MemoryScope, agentSlug: string | null) => void) => () => void
   resolveMemoryReview?: (payload: { id: string; status: 'approved' | 'rejected' | 'applied'; decisionReason?: string }) => Promise<MemoryReviewItem | null>
+  applyMemoryReview?: (payload: { id: string; decisionReason?: string }) => Promise<MemoryReviewItem | null>
   saveMemory?: (payload: {
     scope: MemoryScope
     agentSlug?: string | null
@@ -111,6 +112,14 @@ function sortReviewItems(items: MemoryReviewItem[]): MemoryReviewItem[] {
 }
 
 export async function applyMemoryReviewItem(api: MemoryReviewApi, item: MemoryReviewItem): Promise<void> {
+  if (api.applyMemoryReview) {
+    const applied = await api.applyMemoryReview({ id: item.id })
+    if (!applied || applied.status !== 'applied') {
+      throw new Error(`Memory review proposal was not applied: ${item.name}`)
+    }
+    return
+  }
+
   const metadata = {
     actor: 'memory-review',
     evidence: item.evidence,

@@ -77,6 +77,7 @@ export type { ContextDocDTO, ContextDocMetadata, ContextDocRouting };
 // module, not the memory barrel, because the barrel also exports file storage.
 import type {
   EnqueueMemoryReviewInput,
+  ApplyMemoryReviewInput,
   LoadedMemoryFile as LoadedMemoryFileDTO,
   MemoryEntry as MemoryEntryDTO,
   MemoryEvent as MemoryEventDTO,
@@ -89,6 +90,7 @@ import type {
 } from '@craft-agent/shared/memory/types';
 export type {
   EnqueueMemoryReviewInput,
+  ApplyMemoryReviewInput,
   LoadedMemoryFileDTO,
   MemoryEntryDTO,
   MemoryEventDTO,
@@ -789,6 +791,7 @@ export interface ElectronAPI {
   listMemoryReviewQueue(): Promise<MemoryReviewItem[]>
   enqueueMemoryReview(payload: EnqueueMemoryReviewInput): Promise<MemoryReviewItem>
   resolveMemoryReview(payload: ResolveMemoryReviewInput): Promise<MemoryReviewItem | null>
+  applyMemoryReview(payload: ApplyMemoryReviewInput): Promise<MemoryReviewItem | null>
   upsertMemory(payload: {
     scope: MemoryScope
     agentSlug?: string | null

@@ -17,6 +17,7 @@ import {
   resolveMemoryReviewItem,
   saveMemoryEntry,
   updateMemoryEntry,
+  type ApplyMemoryReviewInput,
   type DeleteMemoryInput,
   type EnqueueMemoryReviewInput,
   type LoadedMemoryFile,
@@ -43,6 +44,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.memory.LIST_REVIEW_QUEUE,
   RPC_CHANNELS.memory.ENQUEUE_REVIEW,
   RPC_CHANNELS.memory.RESOLVE_REVIEW,
+  RPC_CHANNELS.memory.APPLY_REVIEW,
   RPC_CHANNELS.memory.UPSERT,
   RPC_CHANNELS.memory.SAVE,
   RPC_CHANNELS.memory.UPDATE,
@@ -64,6 +66,14 @@ export interface MemoryMutationPayload {
 export interface ListMemoryEventsPayload {
   scope: MemoryScope
   agentSlug?: string | null
+}
+
+let memoryReviewApplyLock = Promise.resolve()
+
+function withMemoryReviewApplyLock<T>(work: () => Promise<T>): Promise<T> {
+  const run = memoryReviewApplyLock.then(work, work)
+  memoryReviewApplyLock = run.then(() => undefined, () => undefined)
+  return run
 }
 
 function broadcastChanged(server: RpcServer, scope: MemoryScope, agentSlug: string | null): void {
@@ -161,6 +171,76 @@ async function deleteMemory(payload: MemoryMutationPayload): Promise<boolean> {
   return deleteMemoryEntry(input)
 }
 
+function entriesForReviewItem(item: MemoryReviewItem): MemoryEntry[] {
+  return item.scope === 'user'
+    ? listUserMemoryEntries()
+    : listAgentMemoryEntries(requireAgentSlug(item.scope, item.agentSlug)!)
+}
+
+function reviewSaveAlreadyApplied(item: MemoryReviewItem): boolean {
+  const body = item.body?.trim()
+  if (!body) return false
+  return entriesForReviewItem(item).some((entry) => (
+    entry.name === item.name.trim() &&
+    entry.body.trim() === body
+  ))
+}
+
+async function applyMemoryReview(payload: ApplyMemoryReviewInput): Promise<MemoryReviewItem | null> {
+  return withMemoryReviewApplyLock(async () => {
+    const item = listMemoryReviewItems().find((candidate) => candidate.id === payload.id.trim())
+    if (!item) return null
+    if (item.status !== 'pending') return item
+
+    const event: MemoryMutationEventMetadata = {
+      source: 'rpc',
+      runId: item.sourceRunId,
+      actor: 'memory-review',
+      evidence: item.evidence,
+    }
+
+    if (item.action === 'save') {
+      if (!item.type || !item.body) throw new Error('Save proposal is missing type or body')
+      if (!reviewSaveAlreadyApplied(item)) {
+        await saveMemoryEntry({
+          scope: item.scope,
+          agentSlug: requireAgentSlug(item.scope, item.agentSlug),
+          name: item.name,
+          type: item.type,
+          body: item.body,
+          expires: item.expires ?? undefined,
+          force: true,
+          event,
+        })
+      }
+    } else if (item.action === 'update') {
+      const updated = await updateMemoryEntry({
+        scope: item.scope,
+        agentSlug: requireAgentSlug(item.scope, item.agentSlug),
+        name: item.name,
+        body: item.body,
+        expires: item.expires,
+        event,
+      })
+      if (!updated) throw new Error(`Memory not found: ${item.name}`)
+    } else {
+      const deleted = await deleteMemoryEntry({
+        scope: item.scope,
+        agentSlug: requireAgentSlug(item.scope, item.agentSlug),
+        name: item.name,
+        event,
+      })
+      if (!deleted) throw new Error(`Memory not found: ${item.name}`)
+    }
+
+    return resolveMemoryReviewItem({
+      id: item.id,
+      status: 'applied',
+      decisionReason: payload.decisionReason,
+    })
+  })
+}
+
 export function registerMemoryHandlers(server: RpcServer, deps: HandlerDeps): void {
   void deps
 
@@ -204,6 +284,14 @@ export function registerMemoryHandlers(server: RpcServer, deps: HandlerDeps): vo
 
   server.handle(RPC_CHANNELS.memory.RESOLVE_REVIEW, async (_ctx, payload: ResolveMemoryReviewInput): Promise<MemoryReviewItem | null> => {
     return resolveMemoryReviewItem(payload)
+  })
+
+  server.handle(RPC_CHANNELS.memory.APPLY_REVIEW, async (_ctx, payload: ApplyMemoryReviewInput): Promise<MemoryReviewItem | null> => {
+    const result = await applyMemoryReview(payload)
+    if (result) {
+      broadcastChanged(server, result.scope, result.scope === 'agent' ? result.agentSlug ?? null : null)
+    }
+    return result
   })
 
   server.handle(RPC_CHANNELS.memory.UPSERT, async (_ctx, payload: MemoryMutationPayload): Promise<unknown> => {

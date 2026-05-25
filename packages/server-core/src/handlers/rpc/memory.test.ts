@@ -321,4 +321,54 @@ describe('memory RPC handlers', () => {
     expect(resolveMemoryReviewItem).toHaveBeenCalledWith({ id: 'rev_1', status: 'approved' })
     expect(resolved).toEqual(expect.objectContaining({ id: 'rev_1', status: 'approved' }))
   })
+
+  it('applies a pending review proposal through one backend handler', async () => {
+    const { handlers, pushCalls, server } = createHarness()
+    const { registerMemoryHandlers } = await import('./memory')
+    registerMemoryHandlers(server, deps)
+
+    const apply = handlers.get(RPC_CHANNELS.memory.APPLY_REVIEW)
+    if (!apply) throw new Error('memory apply review handler not registered')
+
+    const result = await apply(ctx(), { id: 'rev_1' })
+
+    expect(saveMemoryEntry).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'user',
+      name: 'Preferred writing style',
+      type: 'feedback',
+      body: 'Use direct language.',
+      force: true,
+      event: expect.objectContaining({
+        source: 'rpc',
+        actor: 'memory-review',
+      }),
+    }))
+    expect(resolveMemoryReviewItem).toHaveBeenCalledWith({ id: 'rev_1', status: 'applied', decisionReason: undefined })
+    expect(pushCalls).toEqual([{
+      channel: RPC_CHANNELS.memory.CHANGED,
+      target: { to: 'all' },
+      args: ['user', null],
+    }])
+    expect(result).toEqual(expect.objectContaining({ id: 'rev_1', status: 'applied' }))
+  })
+
+  it('does not duplicate a save proposal that was already applied before queue resolution', async () => {
+    listUserMemoryEntries.mockImplementationOnce(() => [{
+      name: 'Preferred writing style',
+      type: 'feedback',
+      created: '2026-05-01',
+      body: 'Use direct language.',
+    }] as any)
+    const { handlers, server } = createHarness()
+    const { registerMemoryHandlers } = await import('./memory')
+    registerMemoryHandlers(server, deps)
+
+    const apply = handlers.get(RPC_CHANNELS.memory.APPLY_REVIEW)
+    if (!apply) throw new Error('memory apply review handler not registered')
+
+    await apply(ctx(), { id: 'rev_1' })
+
+    expect(saveMemoryEntry).not.toHaveBeenCalled()
+    expect(resolveMemoryReviewItem).toHaveBeenCalledWith({ id: 'rev_1', status: 'applied', decisionReason: undefined })
+  })
 })

@@ -419,6 +419,8 @@ export const RPC_CHANNELS = {
     ENQUEUE_REVIEW: 'memory:enqueueReview',
     /** Mark a memory proposal approved/rejected/applied. */
     RESOLVE_REVIEW: 'memory:resolveReview',
+    /** Apply a pending memory proposal and mark it applied in one backend operation. */
+    APPLY_REVIEW: 'memory:applyReview',
     /** Create or replace a memory entry. */
     UPSERT: 'memory:upsert',
     /** Create a new memory entry. */
