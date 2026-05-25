@@ -6,6 +6,7 @@ import { Info_Section } from '@/components/info'
 import { useAgentMemory } from '@/hooks/useAgentMemory'
 import { MemoryEditDialog } from './MemoryEditDialog'
 import { MemoryActivityPanel } from './MemoryActivityPanel'
+import { MemoryReviewQueuePanel } from './MemoryReviewQueuePanel'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 
 interface AgentMemoryTabProps {
@@ -101,6 +102,7 @@ export function AgentMemoryTab({ agentSlug, agentName }: AgentMemoryTabProps) {
           </>
         )}
 
+        <MemoryReviewQueuePanel scope="agent" agentSlug={agentSlug} />
         <MemoryActivityPanel scope="agent" agentSlug={agentSlug} />
       </div>
 

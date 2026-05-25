@@ -1,6 +1,6 @@
 import { atom } from 'jotai'
 import { atomFamily } from 'jotai-family'
-import type { MemoryEntry, MemoryEvent } from '@craft-agent/shared/memory/types'
+import type { MemoryEntry, MemoryEvent, MemoryReviewItem } from '@craft-agent/shared/memory/types'
 
 export interface MemoryState {
   entries: MemoryEntry[]
@@ -39,3 +39,17 @@ export const memoryEventsStateAtomFamily = atomFamily(
   (key: string) => atom<MemoryEventsState>(initialMemoryEventsState),
   (a, b) => a === b,
 )
+
+export interface MemoryReviewQueueState {
+  items: MemoryReviewItem[]
+  loading: boolean
+  error: string | null
+}
+
+export const initialMemoryReviewQueueState: MemoryReviewQueueState = {
+  items: [],
+  loading: true,
+  error: null,
+}
+
+export const memoryReviewQueueStateAtom = atom<MemoryReviewQueueState>(initialMemoryReviewQueueState)
