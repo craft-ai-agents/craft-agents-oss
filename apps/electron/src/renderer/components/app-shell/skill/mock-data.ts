@@ -6,10 +6,10 @@ import type { LoadedSkill, SkillUpdateCheckResult } from '../../../../shared/typ
 // Mock switch — set to false to use real API
 // ============================================================================
 
-export const USE_MOCK_MARKET = true
+export const USE_MOCK_MARKET = false
 
 // Set to true to preview the skill update banner with mock data
-export const USE_MOCK_SKILL_UPDATE = true
+export const USE_MOCK_SKILL_UPDATE = false
 
 export const MOCK_SKILL_UPDATE_RESULT: SkillUpdateCheckResult = {
   toUpdate: [
