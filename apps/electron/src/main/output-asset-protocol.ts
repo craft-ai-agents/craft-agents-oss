@@ -12,7 +12,7 @@ const HTML_PREVIEW_CSP = [
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "media-src 'self' data: blob:",
-  "connect-src 'self'",
+  `connect-src 'self' ${RUNNER_OUTPUT_SCHEME}:`,
   "frame-src 'none'",
   "object-src 'none'",
   "base-uri 'none'",
