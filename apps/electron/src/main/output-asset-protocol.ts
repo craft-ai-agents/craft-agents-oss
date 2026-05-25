@@ -65,6 +65,7 @@ function mimeTypeForPath(path: string): string {
     gif: 'image/gif',
     webp: 'image/webp',
     avif: 'image/avif',
+    excalidraw: 'application/vnd.excalidraw+json',
     mp4: 'video/mp4',
     webm: 'video/webm',
     glb: 'model/gltf-binary',

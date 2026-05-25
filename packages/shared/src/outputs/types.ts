@@ -25,6 +25,7 @@ export type OutputPreviewMode =
   | 'audio'
   | 'model'
   | 'pdf'
+  | 'excalidraw'
   | 'table'
   | 'receipt'
   | 'external-link'

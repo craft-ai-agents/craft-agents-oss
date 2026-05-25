@@ -9,6 +9,9 @@ import { buildRunnerOutputAssetUrl } from '@craft-agent/shared/outputs/web-previ
 import type { OutputAssetDTO, OutputManifestDTO, OutputPreviewMode } from '@/hooks/useOutputs'
 
 const OutputModelPreview = React.lazy(() => import('./OutputModelPreview').then((module) => ({ default: module.OutputModelPreview })))
+const OutputExcalidrawPreview = React.lazy(() => import('./OutputExcalidrawPreview').then((module) => ({ default: module.OutputExcalidrawPreview })))
+
+export type OutputPreviewSettledHandler = (status: 'ready' | 'error') => void
 
 interface OutputInlinePreviewProps {
   workspaceId: string
@@ -16,7 +19,7 @@ interface OutputInlinePreviewProps {
   primary?: OutputAssetDTO
   className?: string
   compact?: boolean
-  onPreviewSettled?: (status: 'ready' | 'error') => void
+  onPreviewSettled?: OutputPreviewSettledHandler
 }
 
 type OutputsElectronAPI = typeof window.electronAPI & {
@@ -39,7 +42,7 @@ export function OutputInlinePreview({
   const inlineText = manifest.preview?.inlineText ?? null
   const assetId = manifest.preview?.assetId ?? previewAsset?.id
   const shouldReadAssetData = Boolean(assetId && (mode === 'image' || mode === 'video' || mode === 'audio'))
-  const shouldReadAssetText = Boolean(assetId && (mode === 'markdown' || mode === 'text' || mode === 'json' || mode === 'receipt'))
+  const shouldReadAssetText = Boolean(assetId && (mode === 'markdown' || mode === 'text' || mode === 'json' || mode === 'receipt' || mode === 'excalidraw'))
   const [content, setContent] = React.useState<string | null>(shouldReadAssetText ? null : inlineText)
   const [dataUrl, setDataUrl] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
@@ -172,6 +175,19 @@ export function OutputInlinePreview({
     )
   }
 
+  if (mode === 'excalidraw' && content) {
+    return (
+      <React.Suspense fallback={<EmptyPreview className={className}><span>Loading Excalidraw preview...</span></EmptyPreview>}>
+        <OutputExcalidrawPreview
+          content={content}
+          label={previewAsset?.label ?? manifest.title}
+          className={className}
+          onPreviewSettled={onPreviewSettled}
+        />
+      </React.Suspense>
+    )
+  }
+
   if (mode === 'markdown' && content) {
     return (
       <div className={className}>
@@ -256,6 +272,7 @@ function inferPreviewMode(asset?: OutputAssetDTO): OutputPreviewMode {
   if (mime.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)$/.test(path)) return 'audio'
   if (mime === 'model/gltf-binary' || mime === 'model/gltf+json' || /\.(glb|gltf)$/.test(path)) return 'model'
   if (mime === 'application/pdf' || path.endsWith('.pdf')) return 'pdf'
+  if (mime === 'application/vnd.excalidraw+json' || path.endsWith('.excalidraw')) return 'excalidraw'
   return 'text'
 }
 

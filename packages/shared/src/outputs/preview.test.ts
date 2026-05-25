@@ -15,4 +15,9 @@ describe('output preview mode inference', () => {
     expect(inferPreviewMode('image/svg+xml', 'diagram.svg')).toBe('image');
     expect(inferPreviewMode(undefined, 'diagram.svg')).toBe('image');
   });
+
+  test('detects Excalidraw assets by mime type and extension', () => {
+    expect(previewModeForMimeType('application/vnd.excalidraw+json')).toBe('excalidraw');
+    expect(inferPreviewMode(undefined, 'diagram.excalidraw')).toBe('excalidraw');
+  });
 });

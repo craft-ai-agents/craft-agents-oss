@@ -151,6 +151,31 @@ describe('output manifest validation', () => {
     expect(isOutputManifest(pdf, OUTPUT_OLD_ID)).toBe(true);
   });
 
+  test('accepts Excalidraw outputs with Excalidraw preview assets', () => {
+    const excalidraw = manifest(OUTPUT_OLD_ID, {
+      kind: 'image',
+      primary: {
+        id: 'asset-1',
+        label: 'Diagram',
+        role: 'primary',
+        path: 'diagram.excalidraw',
+        mimeType: 'application/vnd.excalidraw+json',
+      },
+      assets: [
+        {
+          id: 'asset-1',
+          label: 'Diagram',
+          role: 'primary',
+          path: 'diagram.excalidraw',
+          mimeType: 'application/vnd.excalidraw+json',
+        },
+      ],
+      preview: { mode: 'excalidraw', assetId: 'asset-1' },
+    });
+
+    expect(isOutputManifest(excalidraw, OUTPUT_OLD_ID)).toBe(true);
+  });
+
   test('rejects malformed manifests before saving', () => {
     expect(isOutputManifest({ ...manifest(OUTPUT_OLD_ID), kind: 'nope' }, OUTPUT_OLD_ID)).toBe(false);
     expect(isOutputManifest({ ...manifest(OUTPUT_OLD_ID), id: OUTPUT_NEW_ID }, OUTPUT_OLD_ID)).toBe(false);
