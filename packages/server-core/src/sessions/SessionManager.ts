@@ -8551,9 +8551,10 @@ user a clickable link to where the thing now lives.`
         },
         config: {},
         injected: {
-          skills: resolved?.skillSlugs ?? [],
-          sources: resolved?.sourceSlugs ?? [],
-          contextDocs: [],
+          ...(agentOptions?.launchReceipt?.injected ?? {}),
+          skills: agentSkillSlugs ?? [],
+          sources: enabledSourceSlugs ?? [],
+          contextDocs: agentOptions?.launchReceipt?.injected.contextDocs ?? [],
         },
       },
     })
