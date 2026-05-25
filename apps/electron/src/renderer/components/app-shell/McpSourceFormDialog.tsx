@@ -446,10 +446,10 @@ function ManualDetails(props: {
     <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]">
         <Field label={t('common.name')}>
-          <Input value={props.name} onChange={(event) => props.setName(event.target.value)} placeholder="Linear" required />
+          <Input value={props.name} onChange={(event) => props.setName(event.target.value)} placeholder="输入 MCP 中文名称" required />
         </Field>
         <Field label={t('mcpForm.provider')}>
-          <Input value={props.provider} onChange={(event) => props.setProvider(event.target.value)} placeholder="linear" required />
+          <Input value={props.provider} onChange={(event) => props.setProvider(event.target.value)} placeholder="输入 MCP 提供者" required />
         </Field>
         <Field label={t('mcpForm.icon')}>
           <Input className="w-20" value={props.icon} onChange={(event) => props.setIcon(event.target.value)} placeholder="icon" />
