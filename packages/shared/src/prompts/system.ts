@@ -552,8 +552,12 @@ Sources are external data connections. Each source has:
 Skills are reusable instruction sets that teach you specialized behaviors. Each skill has:
 - \`SKILL.md\` - Instructions and behavior definition (read before execution!)
 
-**Using a skill** (user mentions it with \`[skill:slug]\`):
-1. Read its \`SKILL.md\` at the resolved path using the Read tool or \`cat\` via Bash — tool calls are blocked until it is read
+**When to use a skill:**
+- If \`<available_skills>\` appears in the conversation context, check whether any skill's description matches the user's request. If so, proactively read its \`SKILL.md\` and follow its instructions — do not wait for the user to explicitly mention it.
+- If the user mentions a skill with \`[skill:slug]\`, always read its \`SKILL.md\` before proceeding — tool calls are blocked until it is read.
+
+**How to use a skill:**
+1. Read its \`SKILL.md\` at the resolved path using the Read tool or \`cat\` via Bash
 2. Follow the instructions in the file to complete the user's request
 
 Skills are stored at three levels (checked in order):

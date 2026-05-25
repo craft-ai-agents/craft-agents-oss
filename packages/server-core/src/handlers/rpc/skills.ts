@@ -386,6 +386,8 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     chineseName: string,
     description: string,
     version?: string,
+    ownerId?: string,
+    ownerName?: string,
   ) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
@@ -398,9 +400,11 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       invalidateSkillsCache,
       unzipSyncEncoding,
       extractSkillsFromZipBytes,
+      MARKETPLACE_ORIGIN_METADATA_FILE,
     } = await import('@craft-agent/shared/skills')
     const { join, dirname, isAbsolute } = await import('path')
     const { mkdirSync, writeFileSync, readFileSync, existsSync } = await import('fs')
+    const { createHash } = await import('crypto')
 
     const session = await new SsoCredentialStore().load()
     if (!session) throw new Error('未登录，无法安装技能')
@@ -409,13 +413,15 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const zipBytes = await downloadCopawMarketSkillZip(skillName, COPAW_MARKET_BASE_URL, session.token, version)
     const unzipped = unzipSyncEncoding(zipBytes)
 
-    // Collect valid entries (filter __MACOSX and path traversal)
+    // Collect valid entries (filter __MACOSX, path traversal, and sidecar file)
     const entries: Array<{ relPath: string; data: Uint8Array }> = []
     for (const [filePath, data] of Object.entries(unzipped)) {
       const normalized = filePath.replace(/\\/g, '/')
       if (normalized.startsWith('__MACOSX/') || normalized.includes('/__MACOSX/')) continue
       if (isAbsolute(normalized) || normalized.split('/').some((p) => p === '..')) continue
       if (normalized.endsWith('/')) continue
+      // Skip sidecar file — we write it ourselves after install
+      if (normalized === MARKETPLACE_ORIGIN_METADATA_FILE || normalized.endsWith(`/${MARKETPLACE_ORIGIN_METADATA_FILE}`)) continue
       entries.push({ relPath: normalized, data })
     }
 
@@ -459,6 +465,21 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
         writeFileSync(skillMdPath, matter.stringify(parsed.content, parsed.data))
       }
     }
+
+    // Write .marketplace-origin.json sidecar so the skill is recognised as market-installed
+    const sourceBundleHash = createHash('sha256').update(zipBytes).digest('hex')
+    writeFileSync(join(skillDir, MARKETPLACE_ORIGIN_METADATA_FILE), JSON.stringify({
+      marketplaceId: skillName,
+      marketplaceSlug: skillName,
+      ownerId: ownerId ?? '',
+      ownerDisplayName: ownerName ?? '',
+      installedVersion: version ?? '1.0.0',
+      installedAt: new Date().toISOString(),
+      lastCheckedAt: new Date().toISOString(),
+      modified: false,
+      sourceBundleHash,
+      safetyStatus: 'ok',
+    }, null, 2) + '\n')
 
     invalidateSkillsCache()
     if (discoveredSkill) {

@@ -64,31 +64,6 @@ export function SkillMarketplacePage({
   const [uploadError, setUploadError] = React.useState<string | null>(null)
   const uploadZipInputRef = React.useRef<HTMLInputElement>(null)
 
-  // Persist CoPaw market-installed skill slugs across sessions via localStorage.
-  // useState (not useRef) so that updates trigger re-renders and filteredLocal re-classifies immediately.
-  const [copawInstalledSlugs, setCopawInstalledSlugs] = React.useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem('copaw-installed-slugs')
-      return new Set<string>(stored ? JSON.parse(stored) as string[] : [])
-    } catch { return new Set<string>() }
-  })
-  const addCopawInstalledSlug = React.useCallback((slug: string) => {
-    setCopawInstalledSlugs((prev) => {
-      const next = new Set(prev)
-      next.add(slug)
-      try { localStorage.setItem('copaw-installed-slugs', JSON.stringify([...next])) } catch { /* ignore */ }
-      return next
-    })
-  }, [])
-  const removeCopawInstalledSlug = React.useCallback((slug: string) => {
-    setCopawInstalledSlugs((prev) => {
-      const next = new Set(prev)
-      next.delete(slug)
-      try { localStorage.setItem('copaw-installed-slugs', JSON.stringify([...next])) } catch { /* ignore */ }
-      return next
-    })
-  }, [])
-
   const effectiveCurrentUserId = USE_MOCK_MARKET ? 'MOCK_CURRENT_USER' : currentUserId
 
   const { skills: ctxSkills = [] } = useAppShellContext()
@@ -257,8 +232,7 @@ export function SkillMarketplacePage({
 
   const filteredLocal = React.useMemo(() => {
     const q = localSearch.trim().toLowerCase()
-    const isMarketInstalled = (s: LoadedSkill) =>
-      s.marketplaceOrigin != null || copawInstalledSlugs.has(s.slug)
+    const isMarketInstalled = (s: LoadedSkill) => s.marketplaceOrigin != null
     return localSkills.filter((s) => {
       const matchOrigin =
         localOriginFilter === '全部' ||
@@ -272,7 +246,7 @@ export function SkillMarketplacePage({
         (s.metadata?.author ?? '').toLowerCase().includes(q)
       return matchOrigin && matchQ
     })
-  }, [localSkills, localSearch, localOriginFilter, copawInstalledSlugs])
+  }, [localSkills, localSearch, localOriginFilter])
 
   const handleInstall = React.useCallback(async (s: MarketplaceSkillListing, onInstalled?: () => void) => {
     if (installingIds.has(s.id)) return
@@ -292,13 +266,14 @@ export function SkillMarketplacePage({
         s.name,          // chineseName (已由 mapCopawSkillToListing 取 chineseName ?? name)
         s.description,
         s.latestVersion,
+        s.ownerId,
+        s.owner,
       )
       if (result.conflicts.length > 0 && result.count === 0) {
         const conflictNames = result.conflicts.map((c) => c.skill_name).join('、')
         toast.warning(`安装冲突，与本地已有技能冲突：${conflictNames}`)
         return
       }
-      addCopawInstalledSlug(s.slug)
       setInstalledIds((prev) => new Set([...prev, s.id]))
       // Clear from optimistic-hide set in case the user is reinstalling a previously uninstalled skill
       setLocalSkillSlugs((prev) => { const n = new Set(prev); n.delete(s.slug); return n })
@@ -310,7 +285,7 @@ export function SkillMarketplacePage({
     } finally {
       setInstallingIds((prev) => { const n = new Set(prev); n.delete(s.id); return n })
     }
-  }, [workspaceId, installingIds, addCopawInstalledSlug])
+  }, [workspaceId, installingIds])
 
   const handleUninstall = React.useCallback((s: MarketplaceSkillListing) => {
     setConfirmDialog({
@@ -351,7 +326,6 @@ export function SkillMarketplacePage({
         setSelectedLocalSkill(null)
         window.electronAPI.deleteSkill(workspaceId, s.slug, s.source, s.path)
           .then(() => {
-            removeCopawInstalledSlug(s.slug)
             // Clear from installedIds so the market tab shows the skill as not-installed
             setInstalledIds((prev) => { const n = new Set(prev); n.delete(s.slug); return n })
             // Clear from uploadedSkills so it doesn't resurrect via the de-dup logic in localSkills
@@ -365,7 +339,7 @@ export function SkillMarketplacePage({
           })
       },
     })
-  }, [workspaceId, removeCopawInstalledSlug])
+  }, [workspaceId])
 
   const handleMarketRefresh = React.useCallback(() => {
     if (USE_MOCK_MARKET) return
@@ -433,7 +407,7 @@ export function SkillMarketplacePage({
       onClose={() => setSelectedLocalSkill(null)}
       onUninstall={handleLocalUninstall}
       onPublish={(s) => { setSelectedLocalSkill(null); setPublishSourceSkill(s); setPublishOpen(true) }}
-      isFromMarket={selectedLocalSkill ? copawInstalledSlugs.has(selectedLocalSkill.slug) : false}
+      isFromMarket={selectedLocalSkill ? selectedLocalSkill.marketplaceOrigin != null : false}
     />
     <div className="flex h-full flex-col bg-background">
 
@@ -527,7 +501,7 @@ export function SkillMarketplacePage({
                 <>
                   {(['本地上传', '市场安装'] as const).map((section) => {
                     const sectionSkills = displayedLocalSkills.filter((s) => {
-                      const fromMarket = s.marketplaceOrigin != null || copawInstalledSlugs.has(s.slug)
+                      const fromMarket = s.marketplaceOrigin != null
                       return section === '市场安装' ? fromMarket : !fromMarket
                     })
                     if (sectionSkills.length === 0) return null
