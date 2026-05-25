@@ -1,9 +1,9 @@
 /**
  * TopBar - Persistent top bar above all panels (Slack-style)
  *
- * Layout: [Sidebar] [Menu] [Back] [Forward] [Workspace selector] ... [Browser strip] [+] [Help]
+ * Layout: [Menu] [Sidebar] [Back] [Forward] [Workspace selector] ... [Browser strip] [+] [Help]
  *
- * Fixed at top of window, 48px tall.
+ * Fixed at top of window, height controlled by --topbar-height.
  * macOS: offset left to avoid stoplight controls.
  */
 
@@ -152,7 +152,7 @@ export function TopBar({
       style={{ height: 'var(--topbar-height)' }}
     >
       <div className="flex h-full w-full items-center justify-between gap-2">
-      {/* === LEFT: Sidebar + Menu + Navigation + Workspace === */}
+      {/* === LEFT: Menu + Sidebar + Navigation + Workspace === */}
       {/* Keep this container draggable. Only individual interactive controls should use titlebar-no-drag. */}
       {/* In compact mode the right slot is hidden, so we add right padding here
           so the workspace pill doesn't run flush against the viewport edge. */}
@@ -161,17 +161,6 @@ export function TopBar({
         style={{ paddingLeft: menuLeftPadding, paddingRight: isCompact ? 12 : 0 }}
       >
         <div className="flex items-center gap-0.5">
-        {!isCompact && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <TopBarButton onClick={onToggleSidebar} aria-label={t("menu.toggleSidebar")}>
-              <PanelLeftRounded className="h-[18px] w-[18px] text-foreground/70" />
-            </TopBarButton>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{t("menu.toggleSidebar")}</TooltipContent>
-        </Tooltip>
-        )}
-
         <AppMenu
           onNewChat={onNewChat}
           onNewWindow={onNewWindow}
@@ -182,6 +171,17 @@ export function TopBar({
           onToggleSidebar={onToggleSidebar}
           onToggleFocusMode={onToggleFocusMode}
         />
+
+        {!isCompact && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <TopBarButton onClick={onToggleSidebar} aria-label={t("menu.toggleSidebar")}>
+              <PanelLeftRounded className="h-[18px] w-[18px] text-foreground/70" />
+            </TopBarButton>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t("menu.toggleSidebar")}</TooltipContent>
+        </Tooltip>
+        )}
         </div>
 
         {/* Back / Forward / Workspace selector (moved from center).

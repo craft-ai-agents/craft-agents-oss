@@ -134,13 +134,22 @@ describe('getLlmConnection openllm-env connection', () => {
 })
 
 describe('synthesizeOpenLlmEnvConnection', () => {
+  afterEach(() => {
+    delete process.env.OPENLLM_BASE_HOST
+    delete process.env.OPENLLM_BASE_MODELS
+  })
+
   it('trims whitespace from OPENLLM_BASE_MODELS entries', () => {
-    const conn = synthesizeOpenLlmEnvConnection({ OPENLLM_BASE_HOST: 'http://h', OPENLLM_BASE_MODELS: ' llama-3 , mistral-7b ' })
+    process.env.OPENLLM_BASE_HOST = 'http://h'
+    process.env.OPENLLM_BASE_MODELS = ' llama-3 , mistral-7b '
+    const conn = synthesizeOpenLlmEnvConnection()
     expect(conn?.models).toEqual(['llama-3', 'mistral-7b'])
   })
 
   it('filters empty entries from OPENLLM_BASE_MODELS', () => {
-    const conn = synthesizeOpenLlmEnvConnection({ OPENLLM_BASE_HOST: 'http://h', OPENLLM_BASE_MODELS: 'llama-3,,mistral-7b' })
+    process.env.OPENLLM_BASE_HOST = 'http://h'
+    process.env.OPENLLM_BASE_MODELS = 'llama-3,,mistral-7b'
+    const conn = synthesizeOpenLlmEnvConnection()
     expect(conn?.models).toEqual(['llama-3', 'mistral-7b'])
   })
 })
