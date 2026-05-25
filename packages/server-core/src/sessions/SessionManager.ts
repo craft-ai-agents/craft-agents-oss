@@ -110,6 +110,7 @@ import {
   appendMemoryEvent,
   deleteMemoryEntry,
   listAgentMemoryEntries,
+  listMemoryEvents,
   listUserMemoryEntries,
   recallMemoryEntries,
   saveMemoryEntry,
@@ -317,6 +318,22 @@ function toSessionRecallResult(result: MemoryRecallResult): RecalledMemoryEntry 
     reason: result.reason,
     excerpt: result.excerpt,
   }
+}
+
+function countMemoryMutationsSince(sinceIso: string): number {
+  const sinceTime = Date.parse(sinceIso)
+  if (!Number.isFinite(sinceTime)) return 0
+  const isWrite = (action: string) => action === 'save' || action === 'update' || action === 'forget' || action === 'consolidate'
+  const afterSince = (createdAt: string) => {
+    const eventTime = Date.parse(createdAt)
+    return Number.isFinite(eventTime) && eventTime >= sinceTime
+  }
+
+  let count = listMemoryEvents('user').filter((event) => isWrite(event.action) && afterSince(event.createdAt)).length
+  for (const agent of loadAllGlobalAgents()) {
+    count += listMemoryEvents('agent', agent.slug).filter((event) => isWrite(event.action) && afterSince(event.createdAt)).length
+  }
+  return count
 }
 
 function memoryEntryTitle(entry: WorkflowMemoryEntry): string {
@@ -1894,6 +1911,7 @@ export class SessionManager implements ISessionManager {
               entry,
             )
           },
+          countMemoryWritesSince: (_workspaceRootPath, sinceIso) => countMemoryMutationsSince(sinceIso),
         })
 
         try {
