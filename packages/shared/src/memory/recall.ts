@@ -2,6 +2,7 @@ import {
   listAgentMemoryEntries,
   listUserMemoryEntries,
 } from './storage.ts';
+import { selectActiveMemoryEntries } from './render.ts';
 import type {
   MemoryEntry,
   MemoryRecallResult,
@@ -87,11 +88,11 @@ function collectRecallEntries(
 ): ScopedEntry[] {
   const scoped: ScopedEntry[] = [];
   if (scopes.includes('user')) {
-    scoped.push(...listUserMemoryEntries(options).map((entry) => ({ scope: 'user' as const, entry })));
+    scoped.push(...selectActiveMemoryEntries(listUserMemoryEntries(options)).map((entry) => ({ scope: 'user' as const, entry })));
   }
   if (scopes.includes('agent')) {
     if (!agentSlug) throw new Error('agentSlug is required for agent memory recall');
-    scoped.push(...listAgentMemoryEntries(agentSlug, options).map((entry) => ({ scope: 'agent' as const, agentSlug, entry })));
+    scoped.push(...selectActiveMemoryEntries(listAgentMemoryEntries(agentSlug, options)).map((entry) => ({ scope: 'agent' as const, agentSlug, entry })));
   }
   return scoped;
 }
@@ -106,21 +107,31 @@ function scoreEntry(
   const body = normalize(scoped.entry.body);
   const haystack = `${name} ${type} ${body}`;
   let score = 0;
+  let phraseScore = 0;
   const matched: string[] = [];
 
   for (const token of tokens) {
     let tokenScore = 0;
-    if (name.includes(token)) tokenScore += 5;
-    if (type.includes(token)) tokenScore += 2;
-    if (body.includes(token)) tokenScore += 1;
+    if (hasWord(name, token)) tokenScore += 7;
+    else if (name.includes(token)) tokenScore += 4;
+    if (hasWord(type, token)) tokenScore += 3;
+    else if (type.includes(token)) tokenScore += 1;
+    if (hasWord(body, token)) tokenScore += 2;
+    else if (body.includes(token)) tokenScore += 1;
     if (tokenScore > 0) {
       score += tokenScore;
       matched.push(token);
     }
   }
 
-  if (normalizedQuery.length > 2 && haystack.includes(normalizedQuery)) score += 8;
-  if (matched.length === 0 && score === 0) return null;
+  if (normalizedQuery.length > 2) {
+    if (name.includes(normalizedQuery)) phraseScore = 14;
+    else if (body.includes(normalizedQuery)) phraseScore = 10;
+    else if (haystack.includes(normalizedQuery)) phraseScore = 6;
+  }
+  if (matched.length === 0 && phraseScore === 0) return null;
+  score += phraseScore;
+  score += recencyBoost(scoped.entry);
 
   return {
     scope: scoped.scope,
@@ -147,6 +158,23 @@ function tokenize(value: string): string[] {
 
 function normalize(value: string): string {
   return value.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function hasWord(value: string, token: string): boolean {
+  return new RegExp(`(^|[^a-z0-9])${escapeRegExp(token)}([^a-z0-9]|$)`).test(value);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function recencyBoost(entry: MemoryEntry): number {
+  const date = Date.parse(entry.updated ?? entry.created);
+  if (!Number.isFinite(date)) return 0;
+  const ageDays = Math.max(0, Math.floor((Date.now() - date) / 86_400_000));
+  if (ageDays <= 30) return 3;
+  if (ageDays <= 180) return 1;
+  return 0;
 }
 
 function buildExcerpt(body: string, tokens: readonly string[]): string {

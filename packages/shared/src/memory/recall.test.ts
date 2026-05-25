@@ -47,6 +47,75 @@ describe('rankMemoryEntries', () => {
     ]);
     expect(results[0]!.score).toBeGreaterThan(results[1]!.score);
   });
+
+  test('boosts exact phrase matches above scattered token matches', () => {
+    const results = rankMemoryEntries('browser follow up', [
+      {
+        scope: 'user',
+        entry: {
+          name: 'research method',
+          type: 'feedback',
+          created: '2026-05-01',
+          body: 'Prefer browser follow up before synthesis.',
+        },
+      },
+      {
+        scope: 'user',
+        entry: {
+          name: 'browser notes',
+          type: 'feedback',
+          created: '2026-05-01',
+          body: 'Use browser searches. Follow leads. Summarize up front.',
+        },
+      },
+    ]);
+
+    expect(results.map((result) => result.entry.name)).toEqual([
+      'research method',
+      'browser notes',
+    ]);
+  });
+
+  test('gives recent memories a small tie-break boost', () => {
+    const results = rankMemoryEntries('launch receipt', [
+      {
+        scope: 'user',
+        entry: {
+          name: 'old receipt note',
+          type: 'reference',
+          created: '2024-01-01',
+          body: 'Launch receipt should list injected context.',
+        },
+      },
+      {
+        scope: 'user',
+        entry: {
+          name: 'new receipt note',
+          type: 'reference',
+          created: new Date().toISOString().slice(0, 10),
+          body: 'Launch receipt should list injected context.',
+        },
+      },
+    ]);
+
+    expect(results[0]!.entry.name).toBe('new receipt note');
+  });
+
+  test('does not return unrelated recent memories', () => {
+    const results = rankMemoryEntries('browser follow up', [
+      {
+        scope: 'user',
+        entry: {
+          name: 'new unrelated note',
+          type: 'reference',
+          created: new Date().toISOString().slice(0, 10),
+          body: 'Launch receipts include injected memory.',
+        },
+      },
+    ]);
+
+    expect(results).toEqual([]);
+  });
 });
 
 describe('recallMemoryEntries', () => {
@@ -79,5 +148,25 @@ describe('recallMemoryEntries', () => {
       query: 'browser',
       scopes: ['agent'],
     }, options)).toThrow(/agentSlug is required/);
+  });
+
+  test('does not recall expired memory entries', async () => {
+    await saveMemoryEntry({
+      scope: 'user',
+      name: 'expired launch note',
+      type: 'reference',
+      body: 'Launch receipts used to omit memory.',
+      expires: '2000-01-01',
+    }, options);
+    await saveMemoryEntry({
+      scope: 'user',
+      name: 'active launch note',
+      type: 'reference',
+      body: 'Launch receipts include memory.',
+    }, options);
+
+    const results = recallMemoryEntries({ query: 'launch receipts' }, options);
+
+    expect(results.map((result) => result.entry.name)).toEqual(['active launch note']);
   });
 });
