@@ -22,7 +22,7 @@ import {
 } from '../config/llm-connections.ts';
 import type { McpClientPool } from '../mcp/mcp-pool.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
-import { DEFAULT_MODEL, isClaudeModel, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
+import { DEFAULT_MODEL, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { loadPreferences, formatPreferencesForPrompt, getCoAuthorPreference } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
@@ -144,37 +144,12 @@ const CONVERTIBLE_FILE_HINTS: Record<string, string> = {
 
 export function resolveClaudeThinkingOptions(args: {
   thinkingEnabled: ThinkingEnabled;
-  model: string;
-  providerType?: BackendConfig['providerType'];
   minimizeThinking: boolean;
 }): Partial<Options> {
-  const { thinkingEnabled, model, minimizeThinking } = args;
-  const isClaude = isClaudeModel(model);
-  const effort = thinkingEnabled ? 'medium' : null;
-  const isHaiku = model.toLowerCase().includes('haiku');
-  const supportsAdaptiveThinking = isClaude && !isHaiku;
-
-  if (minimizeThinking || !isClaude || !effort) {
-    return supportsAdaptiveThinking
-      ? { thinking: { type: 'disabled' as const } }
-      : { maxThinkingTokens: 0 };
+  if (args.minimizeThinking || !args.thinkingEnabled) {
+    return { thinking: { type: 'disabled' as const } };
   }
-
-  if (supportsAdaptiveThinking) {
-    return {
-      thinking: { type: 'adaptive' as const },
-      effort,
-    };
-  }
-
-  return {
-    maxThinkingTokens: getThinkingTokens(thinkingEnabled, model),
-  };
-}
-
-function getThinkingTokens(enabled: ThinkingEnabled, modelId: string): number {
-  if (!enabled) return 0;
-  return modelId.toLowerCase().includes('haiku') ? 4_000 : 10_000;
+  return { thinking: { type: 'adaptive' as const }, effort: 'xhigh' };
 }
 
 export interface ClaudeAgentConfig {
@@ -926,16 +901,12 @@ export class ClaudeAgent extends BaseAgent {
 
       const thinkingOptions = resolveClaudeThinkingOptions({
         thinkingEnabled: this._thinkingEnabled,
-        model,
-        providerType: this.config.providerType,
         minimizeThinking: miniConfig.minimizeThinking,
       });
       if ('effort' in thinkingOptions && thinkingOptions.effort) {
-        debug(`[chat] Thinking: level=${this._thinkingEnabled}, effort=${thinkingOptions.effort}`);
-      } else if ('maxThinkingTokens' in thinkingOptions) {
-        debug(`[chat] Thinking: level=${this._thinkingEnabled}, tokens=${thinkingOptions.maxThinkingTokens}`);
+        debug(`[chat] Thinking: enabled=${this._thinkingEnabled}, effort=${thinkingOptions.effort}`);
       } else {
-        debug(`[chat] Thinking: level=${this._thinkingEnabled}, disabled`);
+        debug(`[chat] Thinking: enabled=${this._thinkingEnabled}, disabled`);
       }
 
       // NOTE: Parent-child tracking for subagents is documented below (search for
