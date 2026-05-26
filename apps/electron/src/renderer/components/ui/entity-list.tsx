@@ -109,16 +109,16 @@ function CollapsibleGroupHeader({
       <ContextMenuTrigger asChild>
         <button
           onClick={onToggle}
-          className="w-full py-1.5 px-3 flex items-center gap-1.5 cursor-pointer group/header relative"
+          className="w-full py-2 px-3 flex items-center gap-1.5 cursor-pointer group/header relative"
         >
-          <div className="absolute inset-y-0.5 left-2 right-2 rounded-[6px] group-hover/header:bg-foreground/2 transition-colors pointer-events-none" />
+          <div className="absolute inset-y-0.5 left-2 right-2 rounded-[6px] bg-foreground/[0.035] group-hover/header:bg-foreground/[0.055] transition-colors pointer-events-none" />
           <ChevronRight
             className={cn(
-              "h-2.5 w-2.5 text-muted-foreground/60 transition-transform relative",
+              "h-3 w-3 text-muted-foreground/70 transition-transform relative",
               !isCollapsed && "rotate-90"
             )}
           />
-          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground relative">
+          <span className="text-[11px] font-semibold text-foreground/70 relative">
             {label} <span className="text-muted-foreground/50">{itemCount}</span>
           </span>
         </button>

@@ -72,6 +72,7 @@ import { useAction } from "@/actions"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
+import { GENERAL_PROJECT_KEY, getSessionProjectInfo } from "@/utils/session-project"
 import { useSetAtom } from "jotai"
 import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
@@ -657,6 +658,12 @@ function AppShellContent({
           for (const id of entry.labels) newLabels[id] = 'include'
           saved[key] = { statuses: newStatuses, labels: newLabels }
         }
+      }
+    }
+    for (const key of Object.keys(saved)) {
+      const entry = saved[key]
+      if (entry?.groupingMode && entry.groupingMode !== 'project') {
+        saved[key] = { ...entry, groupingMode: 'project' }
       }
     }
     // Also migrate legacy global filters if no allSessions entry exists
@@ -2030,6 +2037,24 @@ function AppShellContent({
     return result
   }, [handleChatClick, handleAgentsClick, handleAutomationsClick, handleSessionsNavClick, handleSettingsClick])
 
+  const sidebarProjectGroups = React.useMemo(() => {
+    const groups = new Map<string, { key: string; label: string; items: SessionMeta[] }>()
+    const visibleSessions = searchActive ? workspaceSessionMetas : filteredSessionMetas
+
+    for (const item of visibleSessions) {
+      const project = getSessionProjectInfo(item)
+      const group = groups.get(project.key) ?? { key: project.key, label: project.label, items: [] }
+      group.items.push(item)
+      groups.set(project.key, group)
+    }
+
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.key === GENERAL_PROJECT_KEY) return -1
+      if (b.key === GENERAL_PROJECT_KEY) return 1
+      return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+    })
+  }, [filteredSessionMetas, searchActive, workspaceSessionMetas])
+
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
     setExpandedFolders(prev => {
@@ -2367,25 +2392,36 @@ function AppShellContent({
                   ]}
                 />
                 {sessionsNavExpanded && (
-                  <div className="mt-2 space-y-0.5 px-4 pb-5">
-                    {(searchActive ? workspaceSessionMetas : filteredSessionMetas).map((item) => {
-                      const active = item.id === session.selected
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => navigateToSession(item.id)}
-                          className={cn(
-                            "block w-full truncate rounded-[7px] px-3 py-1.5 text-left text-[13px] leading-5 transition-colors",
-                            active
-                              ? "bg-white/[0.055] text-white"
-                              : "text-white/38 hover:bg-white/[0.035] hover:text-white/66",
-                          )}
-                        >
-                          {getSessionTitle(item)}
-                        </button>
-                      )
-                    })}
+                  <div className="mt-2 space-y-2 px-3 pb-5">
+                    {sidebarProjectGroups.map((project) => (
+                      <div key={project.key} className="space-y-0.5">
+                        <div className="flex items-center gap-1.5 rounded-[7px] bg-white/[0.035] px-2 py-1 text-[11px] font-semibold text-white/70">
+                          <ChevronDown className="h-3 w-3 text-white/45" />
+                          <span className="min-w-0 flex-1 truncate">{project.label}</span>
+                          <span className="text-[10px] tabular-nums text-white/35">{project.items.length}</span>
+                        </div>
+                        <div className="space-y-0.5 pl-3">
+                          {project.items.map((item) => {
+                            const active = item.id === session.selected
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => navigateToSession(item.id)}
+                                className={cn(
+                                  "block w-full truncate rounded-[7px] px-2.5 py-1.5 text-left text-[12px] leading-5 transition-colors",
+                                  active
+                                    ? "bg-white/[0.06] text-white"
+                                    : "text-white/42 hover:bg-white/[0.035] hover:text-white/70",
+                                )}
+                              >
+                                {getSessionTitle(item)}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
                 {/* Agent Tree: Hierarchical list of agents */}
