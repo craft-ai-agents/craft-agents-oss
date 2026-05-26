@@ -271,6 +271,12 @@ export const updateFocusedPanelRouteAtom = atom(
 
     const focusedId = get(focusedPanelIdAtom)
     const focused = stack.find(p => p.id === focusedId) ?? stack[0]
+    if (focused.route === route) {
+      if (focusedId !== focused.id) {
+        set(focusedPanelIdAtom, focused.id)
+      }
+      return
+    }
 
     const updated = stack.map((p) =>
       p.id === focused.id

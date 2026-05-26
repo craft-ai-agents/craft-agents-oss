@@ -47,6 +47,19 @@ describe('panel stack single-lane behavior', () => {
     expect(stack.some((p) => p.route === 'allSessions/session/s1')).toBe(true)
   })
 
+  it('implicit navigation to the focused route is a no-op', () => {
+    const store = createStore()
+
+    store.set(pushPanelAtom, { route: 'allSessions/session/s1' })
+    const stackBefore = getStack(store)
+    const focusedBefore = store.get(focusedPanelIdAtom)
+
+    store.set(updateFocusedPanelRouteAtom, 'allSessions/session/s1')
+
+    expect(getStack(store)).toBe(stackBefore)
+    expect(store.get(focusedPanelIdAtom)).toBe(focusedBefore)
+  })
+
   it('pushPanel afterIndex inserts immediately after the given panel', () => {
     const store = createStore()
 

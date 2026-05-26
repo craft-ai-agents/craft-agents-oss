@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useTranslation, Trans } from "react-i18next"
 import { useRef, useState, useEffect, useCallback, useMemo } from "react"
-import { useAtomValue, useStore } from "jotai"
+import { useAtomValue } from "jotai"
 import {
   Archive,
   Settings,
@@ -58,7 +58,7 @@ import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSourc
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
-import { panelStackAtom, panelCountAtom, focusedPanelIdAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom } from "@/atoms/panel-stack"
+import { panelCountAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom } from "@/atoms/panel-stack"
 import { openFileTabAtom } from "@/atoms/editor-tabs"
 import { type SessionStatus, statusConfigsToSessionStatuses } from "@/config/session-status-config"
 import { useStatuses } from "@/hooks/useStatuses"
@@ -130,7 +130,7 @@ import {
   loadEditorPanelOpenPreference,
   persistEditorPanelOpenPreference,
 } from "./editor-panel-state"
-import { resolveSessionPanelNavigation } from "./session-panel-routing"
+import { getSessionClickRoute } from "./session-click-route"
 import { createAllSessionsSidebarItem } from "./all-sessions-sidebar-item"
 import { createArchivedSidebarItem, ARCHIVED_NAV_ID } from "./archived-sidebar-item"
 import {
@@ -265,7 +265,7 @@ function AppShellContent({
   const resizeHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
   const { resolvedMode, isDark, setMode } = useTheme()
-  const { canGoBack, canGoForward, goBack, goForward, navigateToSource, navigateToSession } = useNavigation()
+  const { canGoBack, canGoForward, goBack, goForward, navigateToSource } = useNavigation()
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
   const { handleEscapePress } = useEscapeInterrupt()
@@ -327,8 +327,6 @@ function AppShellContent({
     setCollapsedItems(prev => toggleCollapsedSidebarItem(prev, id))
   }, [])
   const isAllSessionsExpanded = isExpanded(ALL_SESSIONS_NAV_ITEM_ID)
-  const store = useStore()
-  const panelStack = useAtomValue(panelStackAtom)
   const panelCount = useAtomValue(panelCountAtom)
   const focusedSessionId = useAtomValue(focusedSessionIdAtom)
   const sidebarLayout = resolveSidebarLayout({
@@ -346,31 +344,13 @@ function AppShellContent({
     isRightSidebarOpen,
   )
 
-  // Navigate the focused panel to a session.
-  // If the session is already open in another panel, focus that panel unless
-  // the current navigator needs a route-specific session view.
-  const setFocusedPanel = useSetAtom(focusedPanelIdAtom)
   const openFileTab = useSetAtom(openFileTabAtom)
   const navigateToSessionInPanel = useCallback((sessionId: string) => {
-    const result = resolveSessionPanelNavigation({
+    navigate(getSessionClickRoute({
       navState,
-      panelStack: store.get(panelStackAtom),
       sessionId,
-    })
-
-    if (result.type === 'focus') {
-      setFocusedPanel(result.panelId)
-      return
-    }
-
-    if (result.type === 'navigate-route') {
-      navigate(result.route)
-      return
-    }
-
-    // Not open in any panel — navigate() updates the focused panel
-    navigateToSession(sessionId)
-  }, [navState, store, setFocusedPanel, navigateToSession])
+    }))
+  }, [navState])
 
   const sessionsContext = React.useMemo(() => {
     if (isSessionsNavigation(navState)) {
@@ -1677,7 +1657,7 @@ function AppShellContent({
     sessionListFocusedSessionId = focusedSessionId
   }
 
-  const sessionListNavigateToSession = panelCount > 1 ? navigateToSessionInPanel : undefined
+  const sessionListNavigateToSession = navigateToSessionInPanel
 
   const renderSessionList = (key: string, items: SessionMeta[], heightBehavior?: SessionListHeightBehavior) => (
     <SessionList
@@ -1693,9 +1673,6 @@ function AppShellContent({
       onRename={onRenameSession}
       onFocusChatInput={(targetSessionId) => {
         focusChatInputForSession(targetSessionId ?? focusedSessionId ?? session.selected)
-      }}
-      onSessionSelect={(selectedMeta) => {
-        navigateToSession(selectedMeta.id)
       }}
       onOpenInNewWindow={(selectedMeta) => {
         if (activeWorkspaceId) {
