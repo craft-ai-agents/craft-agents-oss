@@ -654,6 +654,121 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
   })
 
   /**
+   * Auto-install all DevOps (tag=B) market skills for the current user.
+   * Triggered on each login. Already-installed skills are skipped (idempotent).
+   * For each skill: download zip → write files → write sidecar → install MCP sources.
+   */
+  server.handle(RPC_CHANNELS.skills.DEVOPS_AUTO_INSTALL, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+    const {
+      listCopawMarketSkills,
+      downloadCopawMarketSkillZip,
+      COPAW_MARKET_BASE_URL,
+      GLOBAL_AGENT_SKILLS_DIR,
+      invalidateSkillsCache,
+      unzipSyncEncoding,
+      extractSkillsFromZipBytes,
+      MARKETPLACE_ORIGIN_METADATA_FILE,
+    } = await import('@craft-agent/shared/skills')
+    const { join, dirname, isAbsolute } = await import('path')
+    const { mkdirSync, writeFileSync } = await import('fs')
+    const { createHash } = await import('crypto')
+
+    const session = await new SsoCredentialStore().load()
+    if (!session) return { status: 'not-logged-in' as const, installed: [], skipped: [], failed: [] }
+
+    const allSkills = await listCopawMarketSkills(COPAW_MARKET_BASE_URL, session.token)
+    const devopsSkills = allSkills.filter((s) => s.tag === 'B')
+
+    const installed: string[] = []
+    const skipped: string[] = []
+    const failed: Array<{ slug: string; error: string }> = []
+
+    for (const skill of devopsSkills) {
+      try {
+        // 已存在则跳过，不覆盖
+        const skillDir = join(GLOBAL_AGENT_SKILLS_DIR, skill.name)
+        if (existsSync(join(skillDir, 'SKILL.md'))) {
+          skipped.push(skill.name)
+          continue
+        }
+
+        // 下载 zip
+        const versionParam = skill.version && skill.version !== 'latest' ? skill.version : undefined
+        const zipBytes = await downloadCopawMarketSkillZip(skill.name, COPAW_MARKET_BASE_URL, session.token, versionParam)
+        const unzipped = unzipSyncEncoding(zipBytes)
+
+        // 收集有效文件（过滤 __MACOSX、路径穿越、sidecar）
+        const entries: Array<{ relPath: string; data: Uint8Array }> = []
+        for (const [filePath, data] of Object.entries(unzipped)) {
+          const normalized = filePath.replace(/\\/g, '/')
+          if (normalized.startsWith('__MACOSX/') || normalized.includes('/__MACOSX/')) continue
+          if (isAbsolute(normalized) || normalized.split('/').some((p) => p === '..')) continue
+          if (normalized.endsWith('/')) continue
+          if (normalized === MARKETPLACE_ORIGIN_METADATA_FILE || normalized.endsWith(`/${MARKETPLACE_ORIGIN_METADATA_FILE}`)) continue
+          entries.push({ relPath: normalized, data })
+        }
+
+        // 处理子目录包装（zip 内 slug/SKILL.md → 提取为 SKILL.md）
+        let stripPrefix = ''
+        const hasRootSkillMd = entries.some((e) => e.relPath.toLowerCase() === 'skill.md')
+        if (!hasRootSkillMd) {
+          const wrapped = entries.find((e) => /^[^/]+\/skill\.md$/i.test(e.relPath))
+          if (wrapped) stripPrefix = wrapped.relPath.slice(0, wrapped.relPath.lastIndexOf('/') + 1)
+        }
+
+        // 写文件
+        mkdirSync(skillDir, { recursive: true })
+        for (const { relPath, data } of entries) {
+          let destRelPath = relPath
+          if (stripPrefix) {
+            if (!relPath.startsWith(stripPrefix)) continue
+            destRelPath = relPath.slice(stripPrefix.length)
+          }
+          if (!destRelPath) continue
+          const destPath = join(skillDir, destRelPath)
+          mkdirSync(dirname(destPath), { recursive: true })
+          writeFileSync(destPath, data)
+        }
+
+        // 写 .marketplace-origin.json sidecar
+        const sourceBundleHash = createHash('sha256').update(zipBytes).digest('hex')
+        writeFileSync(join(skillDir, MARKETPLACE_ORIGIN_METADATA_FILE), JSON.stringify({
+          marketplaceId: skill.name,
+          marketplaceSlug: skill.name,
+          ownerId: '',
+          ownerDisplayName: '',
+          installedVersion: versionParam ?? skill.version ?? '1.0.0',
+          installedAt: new Date().toISOString(),
+          lastCheckedAt: new Date().toISOString(),
+          modified: false,
+          sourceBundleHash,
+          safetyStatus: 'ok',
+        }, null, 2) + '\n')
+
+        // 解析 metadata → 安装 MCP sources
+        const discoveredSkills = extractSkillsFromZipBytes(zipBytes, { sourcePath: `${skill.name}.zip`, rootSlug: skill.name })
+        const discoveredSkill = discoveredSkills.find((s) => s.slug === skill.name) ?? discoveredSkills[0]
+        if (discoveredSkill) {
+          await installSkillMcpSources(workspace.id, workspace.rootPath, discoveredSkill.metadata)
+        }
+
+        installed.push(skill.name)
+      } catch (err) {
+        failed.push({ slug: skill.name, error: err instanceof Error ? err.message : '安装失败' })
+      }
+    }
+
+    invalidateSkillsCache()
+    await pushSkillsChanged(workspace.id, workspace.rootPath)
+
+    return { status: 'done' as const, installed, skipped, failed }
+  })
+
+  /**
    * Batch update market-installed skills.
    * Accepts a list of skill update items (slug + metadata) and re-installs each one.
    * Returns lists of updated slugs and failed slugs with error messages.
