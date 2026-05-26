@@ -5,6 +5,7 @@ import {
 } from '@/contexts/NavigationContext'
 import type { ViewRoute } from '../../../shared/routes'
 
+/** Returns the canonical in-place route for a clicked session list item. */
 export function getSessionClickRoute({
   navState,
   sessionId,
