@@ -717,12 +717,8 @@ function AppShellContent({
   const [searchActive, setSearchActive] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
 
-  // Grouping mode for chat list: per-view (stored in viewFiltersMap), forced to 'date' for state sub-views
-  const isStateSubView = sessionFilter?.kind === 'state'
-
-  const chatGroupingMode: ChatGroupingMode = isStateSubView
-    ? 'date'
-    : (viewFiltersMap[sessionFilterKey ?? '']?.groupingMode ?? 'project')
+  // Grouping mode for chat list: per-view, defaulting to project folders.
+  const chatGroupingMode: ChatGroupingMode = viewFiltersMap[sessionFilterKey ?? '']?.groupingMode ?? 'project'
 
   const setChatGroupingMode = useCallback((mode: ChatGroupingMode) => {
     setViewFiltersMap(prev => {
@@ -2747,35 +2743,30 @@ function AppShellContent({
                               </StyledDropdownMenuSubContent>
                             </DropdownMenuSub>
 
-                            {/* Group by submenu - hidden in state sub-views (always date there) */}
-                            {!isStateSubView && (
-                              <>
-                                <StyledDropdownMenuSeparator />
-                                <DropdownMenuSub>
-                                  <StyledDropdownMenuSubTrigger>
-                                    <Layers className="h-3.5 w-3.5" />
-                                    <span className="flex-1">{t("sidebar.group")}</span>
-                                  </StyledDropdownMenuSubTrigger>
-                                  <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
-                                    <StyledDropdownMenuItem onClick={() => setChatGroupingMode('project')}>
-                                      <FolderOpen className="h-3.5 w-3.5" />
-                                      <span className="flex-1">Projects</span>
-                                      {chatGroupingMode === 'project' && <Check className="h-3 w-3 text-muted-foreground" />}
-                                    </StyledDropdownMenuItem>
-                                    <StyledDropdownMenuItem onClick={() => setChatGroupingMode('date')}>
-                                      <Calendar className="h-3.5 w-3.5" />
-                                      <span className="flex-1">{t("sidebar.groupByDate")}</span>
-                                      {chatGroupingMode === 'date' && <Check className="h-3 w-3 text-muted-foreground" />}
-                                    </StyledDropdownMenuItem>
-                                    <StyledDropdownMenuItem onClick={() => setChatGroupingMode('status')}>
-                                      <Inbox className="h-3.5 w-3.5" />
-                                      <span className="flex-1">{t("sidebar.groupByStatus")}</span>
-                                      {chatGroupingMode === 'status' && <Check className="h-3 w-3 text-muted-foreground" />}
-                                    </StyledDropdownMenuItem>
-                                  </StyledDropdownMenuSubContent>
-                                </DropdownMenuSub>
-                              </>
-                            )}
+                            <StyledDropdownMenuSeparator />
+                            <DropdownMenuSub>
+                              <StyledDropdownMenuSubTrigger>
+                                <Layers className="h-3.5 w-3.5" />
+                                <span className="flex-1">{t("sidebar.group")}</span>
+                              </StyledDropdownMenuSubTrigger>
+                              <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
+                                <StyledDropdownMenuItem onClick={() => setChatGroupingMode('project')}>
+                                  <FolderOpen className="h-3.5 w-3.5" />
+                                  <span className="flex-1">Projects</span>
+                                  {chatGroupingMode === 'project' && <Check className="h-3 w-3 text-muted-foreground" />}
+                                </StyledDropdownMenuItem>
+                                <StyledDropdownMenuItem onClick={() => setChatGroupingMode('date')}>
+                                  <Calendar className="h-3.5 w-3.5" />
+                                  <span className="flex-1">{t("sidebar.groupByDate")}</span>
+                                  {chatGroupingMode === 'date' && <Check className="h-3 w-3 text-muted-foreground" />}
+                                </StyledDropdownMenuItem>
+                                <StyledDropdownMenuItem onClick={() => setChatGroupingMode('status')}>
+                                  <Inbox className="h-3.5 w-3.5" />
+                                  <span className="flex-1">{t("sidebar.groupByStatus")}</span>
+                                  {chatGroupingMode === 'status' && <Check className="h-3 w-3 text-muted-foreground" />}
+                                </StyledDropdownMenuItem>
+                              </StyledDropdownMenuSubContent>
+                            </DropdownMenuSub>
 
                             <StyledDropdownMenuSeparator />
                             <StyledDropdownMenuItem
