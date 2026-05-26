@@ -15,6 +15,11 @@ Note: `workspace.rootPath` is an internal metadata directory (`labels/`, `sessio
 ### Workspace File Browser
 The `WorkspaceFilesSection` panel rendered in the right sidebar's `workspace` tab. Provides a lazy-loaded, per-folder tree view rooted at the active session's **CWD Root**. Shows an empty state ("No working directory set") when no valid CWD Root exists. Shares icon/thumbnail helpers with `SessionFilesSection` but manages its own loading-state machine for per-node fetching.
 
+### User Profile
+The authenticated user's enterprise identity and organization metadata as returned by the user profile API.
+
+Avoid: normalized profile, one-stop profile.
+
 ### CWD Root
 The effective root directory shown in the Workspace File Browser. Resolved from the focused session's `workingDirectory`: returned as-is if it is a real path (not `undefined`, `'none'`, or `'user_default'`); `undefined` otherwise. No workspace-containment check — `workingDirectory` is always outside `workspace.rootPath`.
 
