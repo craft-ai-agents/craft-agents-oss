@@ -43,3 +43,18 @@ export function formatProjectLabel(value: string): string {
     })
     .join(' ')
 }
+
+export function slugifyProjectName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60)
+}
+
+export function setSessionProjectLabel(labels: string[], projectSlug?: string): string[] {
+  const withoutProject = labels.filter((entry) => parseLabelEntry(entry).id !== PROJECT_LABEL_ID)
+  const normalized = projectSlug?.trim()
+  return normalized ? [...withoutProject, `${PROJECT_LABEL_ID}::${normalized}`] : withoutProject
+}

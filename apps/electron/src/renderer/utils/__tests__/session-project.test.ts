@@ -3,6 +3,8 @@ import {
   formatProjectLabel,
   GENERAL_PROJECT_KEY,
   getSessionProjectInfo,
+  setSessionProjectLabel,
+  slugifyProjectName,
 } from '../session-project'
 
 describe('getSessionProjectInfo', () => {
@@ -27,5 +29,26 @@ describe('formatProjectLabel', () => {
     expect(formatProjectLabel('runneros-launch')).toBe('RunnerOS Launch')
     expect(formatProjectLabel('ltr-os')).toBe('LTR OS')
     expect(formatProjectLabel('client_a')).toBe('Client A')
+  })
+})
+
+describe('slugifyProjectName', () => {
+  it('creates stable project slugs', () => {
+    expect(slugifyProjectName('LTR OS')).toBe('ltr-os')
+    expect(slugifyProjectName('  Client A / Spring Launch  ')).toBe('client-a-spring-launch')
+  })
+})
+
+describe('setSessionProjectLabel', () => {
+  it('replaces project labels while preserving other labels', () => {
+    expect(setSessionProjectLabel(['bug', 'project::old', 'priority::2'], 'new-project')).toEqual([
+      'bug',
+      'priority::2',
+      'project::new-project',
+    ])
+  })
+
+  it('removes project label when project is cleared', () => {
+    expect(setSessionProjectLabel(['bug', 'project::old'], undefined)).toEqual(['bug'])
   })
 })

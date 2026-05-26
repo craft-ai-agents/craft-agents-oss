@@ -37,6 +37,7 @@ import {
   RefreshCw,
   Tag,
   Send,
+  FolderKanban,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
@@ -49,6 +50,8 @@ import { LabelMenuItems, StatusMenuItems, ShareMenuItems } from './SessionMenuPa
 import { getFileManagerName } from '@/lib/platform'
 import type { SessionMeta } from '@/atoms/sessions'
 import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
+import { getSessionProjectInfo, setSessionProjectLabel, slugifyProjectName } from '@/utils/session-project'
+import type { SessionProjectOption } from '@/context/SessionListContext'
 import { MessagingSessionMenuItem } from '@/components/messaging/MessagingSessionMenuItem'
 
 export interface SessionMenuProps {
@@ -60,6 +63,8 @@ export interface SessionMenuProps {
   labels?: LabelConfig[]
   /** Callback when labels are toggled (receives full updated labels array) */
   onLabelsChange?: (labels: string[]) => void
+  /** Project options derived from existing project labels in the session list */
+  projectOptions?: SessionProjectOption[]
   /** Whether multiple workspaces exist (enables "Send to Workspace" item) */
   hasRemoteWorkspaces?: boolean
   /** Callbacks */
@@ -84,6 +89,7 @@ export function SessionMenu({
   sessionStatuses,
   labels = [],
   onLabelsChange,
+  projectOptions = [],
   onRename,
   onFlag,
   onUnflag,
@@ -150,6 +156,7 @@ export function SessionMenu({
     () => new Set(sessionLabels.map(extractLabelId)),
     [sessionLabels]
   )
+  const currentProject = React.useMemo(() => getSessionProjectInfo(item), [item])
 
   // Toggle a label: add if not applied, remove if applied (by base ID)
   const handleLabelToggle = React.useCallback((labelId: string) => {
@@ -168,6 +175,23 @@ export function SessionMenu({
   const handleOpenInNewPanel = () => {
     navigate(routes.view.allSessions(sessionId), { newPanel: true })
   }
+
+  const handleMoveToProject = React.useCallback((projectSlug?: string) => {
+    if (!onLabelsChange) return
+    onLabelsChange(setSessionProjectLabel(sessionLabels, projectSlug))
+  }, [onLabelsChange, sessionLabels])
+
+  const handleNewProject = React.useCallback(() => {
+    if (!onLabelsChange) return
+    const name = window.prompt('Project name')
+    if (!name?.trim()) return
+    const slug = slugifyProjectName(name)
+    if (!slug) {
+      toast.error('Project name needs at least one letter or number.')
+      return
+    }
+    onLabelsChange(setSessionProjectLabel(sessionLabels, slug))
+  }, [onLabelsChange, sessionLabels])
 
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
@@ -247,6 +271,35 @@ export function SessionMenu({
               onToggle={handleLabelToggle}
               menu={{ MenuItem, Separator, Sub, SubTrigger, SubContent }}
             />
+          </SubContent>
+        </Sub>
+      )}
+
+      {onLabelsChange && (
+        <Sub>
+          <SubTrigger className="pr-2">
+            <FolderKanban className="h-3.5 w-3.5" />
+            <span className="flex-1">Move to Project</span>
+          </SubTrigger>
+          <SubContent>
+            <MenuItem onClick={() => handleMoveToProject(undefined)} className={currentProject.value ? '' : 'bg-foreground/5'}>
+              <span className="flex-1">General</span>
+              {!currentProject.value && <span className="text-[10px] text-muted-foreground">Current</span>}
+            </MenuItem>
+            {projectOptions.map((project) => (
+              <MenuItem
+                key={project.slug}
+                onClick={() => handleMoveToProject(project.slug)}
+                className={currentProject.value === project.slug ? 'bg-foreground/5' : ''}
+              >
+                <span className="flex-1">{project.label}</span>
+                {currentProject.value === project.slug && <span className="text-[10px] text-muted-foreground">Current</span>}
+              </MenuItem>
+            ))}
+            <Separator />
+            <MenuItem onClick={handleNewProject}>
+              <span className="flex-1">New Project...</span>
+            </MenuItem>
           </SubContent>
         </Sub>
       )}

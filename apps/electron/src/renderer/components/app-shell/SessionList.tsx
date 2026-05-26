@@ -19,7 +19,7 @@ import { EntityList, type EntityListGroup } from "@/components/ui/entity-list"
 import { RenameDialog } from "@/components/ui/rename-dialog"
 import { SessionSearchHeader } from "./SessionSearchHeader"
 import { SessionItem } from "./SessionItem"
-import { SessionListProvider, type SessionListContextValue } from "@/context/SessionListContext"
+import { SessionListProvider, type SessionListContextValue, type SessionProjectOption } from "@/context/SessionListContext"
 import { useSessionSelection, useSessionSelectionStore } from "@/hooks/useSession"
 import { useSessionSearch, type FilterMode } from "@/hooks/useSessionSearch"
 import { useSessionActions } from "@/hooks/useSessionActions"
@@ -439,6 +439,17 @@ export function SessionList({
 
   const flatRows = rowData.rows
 
+  const projectOptions = useMemo((): SessionProjectOption[] => {
+    const bySlug = new Map<string, string>()
+    for (const item of items) {
+      const project = getSessionProjectInfo(item)
+      if (project.value) bySlug.set(project.value, project.label)
+    }
+    return Array.from(bySlug.entries())
+      .map(([slug, label]) => ({ slug, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
+  }, [items])
+
   const collapseAllGroups = useCallback(() => {
     if (groupingMode === 'project') {
       const allKeys = new Set(items.map(item => getSessionProjectInfo(item).key))
@@ -626,6 +637,7 @@ export function SessionList({
     onMarkUnread,
     onDelete: handleDeleteWithToast,
     onLabelsChange,
+    projectOptions,
     onSelectSessionById: handleSelectSessionById,
     onOpenInNewWindow: handleOpenInNewWindow,
     onSendToWorkspace: (ids: string[]) => setSendToWorkspace(ids),
@@ -647,7 +659,7 @@ export function SessionList({
     onArchive, handleArchiveWithToast, onUnarchive, handleUnarchiveWithToast,
     onMarkUnread, handleDeleteWithToast, onLabelsChange,
     handleSelectSessionById, handleOpenInNewWindow, setSendToWorkspace, handleFocusZone, handleKeyDown,
-    sessionStatuses, flatLabels, labels, resolvedSearchQuery,
+    sessionStatuses, flatLabels, labels, projectOptions, resolvedSearchQuery,
     focusedSessionId, selectionStore.state.selected, isMultiSelectActive,
     sessionOptions, contentSearchResults, activeChatMatchInfo, hasPendingPrompt,
   ])

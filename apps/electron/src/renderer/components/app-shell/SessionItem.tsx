@@ -123,6 +123,7 @@ export function SessionItem({
           item={item}
           sessionStatuses={ctx.sessionStatuses}
           labels={ctx.labels}
+          projectOptions={ctx.projectOptions}
           onLabelsChange={ctx.onLabelsChange ? (ls) => ctx.onLabelsChange!(item.id, ls) : undefined}
           onRename={() => ctx.onRenameClick(item.id, title)}
           onFlag={() => ctx.onFlag?.(item.id)}
