@@ -2830,35 +2830,27 @@ function ThinkingBlock({
 
   if (!reasoningText) return null
 
+  const headerButtonClass = "flex items-center gap-1.5 w-full px-3 py-1.5 text-left text-muted-foreground hover:bg-muted/40 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+
   return (
     <div className={cn("rounded-[8px] border border-border/50 overflow-hidden", SIZE_CONFIG.fontSize)}>
-      {expanded ? (
-        <>
-          <button
-            onClick={() => setExpanded(false)}
-            className="flex items-center gap-1.5 w-full px-3 py-1.5 text-left text-muted-foreground hover:bg-muted/40 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          >
-            <motion.div
-              initial={false}
-              animate={{ rotate: 90 }}
-              className="flex items-center justify-center shrink-0"
-            >
-              <ChevronRight className={SIZE_CONFIG.iconSize} />
-            </motion.div>
-            <span>Reasoning</span>
-          </button>
-          <div className="px-3 pb-3 pt-0.5 text-muted-foreground/80 whitespace-pre-wrap break-words">
-            {reasoningText}
-          </div>
-        </>
-      ) : (
-        <button
-          onClick={() => setExpanded(true)}
-          className="flex items-center gap-1.5 w-full px-3 py-1.5 text-left text-muted-foreground hover:bg-muted/40 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className={headerButtonClass}
+      >
+        <motion.div
+          initial={false}
+          animate={{ rotate: expanded ? 90 : 0 }}
+          className="flex items-center justify-center shrink-0"
         >
           <ChevronRight className={SIZE_CONFIG.iconSize} />
-          <span>Show reasoning</span>
-        </button>
+        </motion.div>
+        <span>{expanded ? 'Reasoning' : 'Show reasoning'}</span>
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 pt-0.5 text-muted-foreground/80 whitespace-pre-wrap break-words">
+          {reasoningText}
+        </div>
       )}
     </div>
   )
