@@ -395,6 +395,10 @@ function setInterceptorApiHints(model: { api?: string; provider?: string; baseUr
   );
 }
 
+function setInterceptorThinkingEnabled(enabled: boolean): void {
+  process.env.CRAFT_PI_THINKING_ENABLED = String(enabled);
+}
+
 /**
  * Resolve the API key for custom endpoint auth.
  * Returns empty string for local endpoints (Ollama etc.) that don't need auth.
@@ -1285,6 +1289,7 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
   }
 
   initConfig = msg;
+  setInterceptorThinkingEnabled(msg.thinkingEnabled);
 
   // Azure OpenAI requires a tenant-specific endpoint URL.
   // The Pi SDK (via Vercel AI SDK) reads AZURE_OPENAI_BASE_URL from env.
@@ -1631,6 +1636,10 @@ async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }
 
 async function handleSetThinkingEnabled(msg: Extract<InboundMessage, { type: 'set_thinking_enabled' }>): Promise<void> {
   debugLog(`[set_thinking_enabled] Received: ${msg.enabled}`);
+  if (initConfig) {
+    initConfig = { ...initConfig, thinkingEnabled: msg.enabled };
+  }
+  setInterceptorThinkingEnabled(msg.enabled);
 
   if (!piSession) {
     debugLog('[set_thinking_enabled] No active session, ignoring');
