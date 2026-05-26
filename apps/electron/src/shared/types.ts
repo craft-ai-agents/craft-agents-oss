@@ -66,6 +66,41 @@ export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, McpImpor
 import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult } from '@craft-agent/shared/skills';
 export type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult };
 
+export interface SkillUpdateCandidate {
+  slug: string
+  name: string
+  chineseName: string
+  description: string
+  currentVersion: string
+  newVersion: string
+  ownerId: string
+  ownerName: string
+}
+
+export interface SkillOrphan {
+  slug: string
+  name: string
+}
+
+export interface SkillUpdateCheckResult {
+  toUpdate: SkillUpdateCandidate[]
+  orphans: SkillOrphan[]
+}
+
+export interface SkillUpdateItem {
+  slug: string
+  chineseName: string
+  description: string
+  newVersion?: string
+  ownerId?: string
+  ownerName?: string
+}
+
+export interface SkillBatchUpdateResult {
+  updated: string[]
+  failed: Array<{ slug: string; error: string }>
+}
+
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
 export type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult };
@@ -102,6 +137,16 @@ export interface ToolIconMapping {
   /** Data URL of the icon (e.g., data:image/png;base64,...) */
   iconDataUrl: string
   commands: string[]
+}
+
+/** User profile data shown in workspace settings. */
+export interface UserProfile {
+  name?: string
+  oneStopId?: string
+  group?: string
+  department?: string
+  ownedModules?: string[]
+  ownedTopics?: string[]
 }
 
 /**
@@ -427,6 +472,10 @@ export interface ElectronAPI {
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
 
+  // User Profile
+  getUserProfile(): Promise<UserProfile | null>
+  refreshUserProfile(): Promise<UserProfile | null>
+
   // Workspace files
   getWorkspaceFiles(workspaceId: string, dirPath?: string, rootPath?: string): Promise<SessionFile[]>
   watchWorkspaceFiles(workspaceId: string, rootPath?: string): Promise<void>
@@ -498,10 +547,13 @@ export interface ElectronAPI {
   // CoPaw market service
   listMarketSkills(): Promise<CopawMarketSkill[]>
   uploadMarketSkill(input: CopawMarketUploadInput): Promise<CopawMarketUploadResult>
-  installMarketSkill(workspaceId: string, skillName: string, chineseName: string, description: string, version?: string): Promise<CopawInstallSkillResult>
+  installMarketSkill(workspaceId: string, skillName: string, chineseName: string, description: string, version?: string, ownerId?: string, ownerName?: string): Promise<CopawInstallSkillResult>
   installLocalZip(workspaceId: string, skillName: string, zipBytes: Uint8Array): Promise<{ slug: string }>
   deleteMarketSkill(skillName: string): Promise<{ success: true }>
   fetchMarketSkillContent(skillName: string, version?: string): Promise<{ content: string; extraMetadata?: Record<string, unknown> }>
+  checkMarketSkillUpdates(workspaceId: string): Promise<SkillUpdateCheckResult>
+  updateMarketSkillsBatch(workspaceId: string, items: SkillUpdateItem[]): Promise<SkillBatchUpdateResult>
+  onSkillUpdateCheck(callback: (reason: string) => void): () => void
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void

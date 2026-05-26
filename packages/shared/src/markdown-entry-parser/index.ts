@@ -3,14 +3,10 @@ import { createHash } from 'node:crypto';
 // ── Types ───────────────────────────────────────────────────────
 
 export type MarkdownEntryKind =
-  | 'alias'
-  | 'slang'
-  | 'concept'
-  | 'convention'
-  | 'rule'
-  | 'process'
-  | 'warning'
-  | 'background';
+  | 'term'
+  | 'knowledge'
+  | 'notice'
+  | 'rule';
 
 /**
  * Optional metadata parsed from an explicit marker line.
@@ -69,14 +65,10 @@ export interface ParseMarkdownOptions {
 // ── Constants ───────────────────────────────────────────────────
 
 const VALID_KINDS: readonly MarkdownEntryKind[] = [
-  'alias',
-  'slang',
-  'concept',
-  'convention',
+  'term',
+  'knowledge',
+  'notice',
   'rule',
-  'process',
-  'warning',
-  'background',
 ];
 
 // ── Main parser ─────────────────────────────────────────────────
@@ -210,7 +202,7 @@ function processTableLines(
   return rows.map(row => {
     const content = row.join(' | ');
     return buildEntry(
-      { kind: 'concept', metadata: {} },
+      { kind: 'knowledge', metadata: {} },
       content,
       headingPath,
       options,
@@ -229,7 +221,7 @@ function processParagraphs(
     .filter(p => p.length > 0);
 
   return paragraphs.map(p =>
-    buildEntry({ kind: 'concept', metadata: {} }, p, headingPath, options),
+    buildEntry({ kind: 'knowledge', metadata: {} }, p, headingPath, options),
   );
 }
 
@@ -282,6 +274,7 @@ export function parseMarkerLine(line: string): ExplicitMarker | null {
         marker.summary = value;
         break;
       case 'term':
+      case 'name':
         marker.term = value;
         break;
       case 'canonical':

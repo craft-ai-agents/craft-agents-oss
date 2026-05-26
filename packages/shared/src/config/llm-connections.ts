@@ -55,23 +55,12 @@ export type LlmProviderType =
   | 'pi_compat'
   | 'openllm';
 
-/** Environment variable set by the user to provide the host for user-configured OpenLLM Connections. */
-export const OPENLLM_HOST_ENV_VAR = 'OPENLLM_HOST';
-
-/** Deployment-owned env var that triggers the built-in OpenLLM Environment Connection. */
-export const OPENLLM_BASE_HOST_ENV_VAR = 'OPENLLM_BASE_HOST';
-
 /** Pi auth-provider hint used for OpenAI Chat Completions-compatible OpenLLM endpoints. */
 export const OPENLLM_PI_AUTH_PROVIDER = 'openai';
 
 /** Reserved slug for the synthesized OpenLLM environment connection. */
 export const OPENLLM_ENV_CONNECTION_SLUG = 'openllm-env';
 
-/** Comma-separated model list env var for the built-in OpenLLM Environment Connection. First entry is the default model. */
-export const OPENLLM_BASE_MODELS_ENV_VAR = 'OPENLLM_BASE_MODELS';
-
-/** Optional display name override for the built-in OpenLLM Environment Connection. */
-export const OPENLLM_BASE_CONNECTION_NAME_ENV_VAR = 'OPENLLM_BASE_CONNECTION_NAME';
 
 /**
  * Build the per-model OpenLLM endpoint URL.
@@ -79,8 +68,8 @@ export const OPENLLM_BASE_CONNECTION_NAME_ENV_VAR = 'OPENLLM_BASE_CONNECTION_NAM
  *                    false for user-configured connections (reads OPENLLM_HOST).
  */
 export function buildOpenLlmBaseUrl(modelName: string, env: NodeJS.ProcessEnv = process.env, isBuiltIn = false): string {
-  const envVar = isBuiltIn ? OPENLLM_BASE_HOST_ENV_VAR : OPENLLM_HOST_ENV_VAR;
-  const host = env[envVar]?.trim();
+  const envVar = isBuiltIn ? process.env.OPENLLM_BASE_HOST : process.env.OPENLLM_HOST;
+  const host = envVar?.trim();
   if (!host) {
     throw new Error(`${envVar} is required for OpenLLM connections`);
   }
@@ -314,8 +303,8 @@ export const ENV_CONNECTION_SSO_BASE_URL_ENV_VAR = 'CRAFT_LLM_SSO_BASE_URL';
 export function synthesizeEnvConnection(
   env: EnvConnectionEnv,
 ): LlmConnection | null {
-  const baseUrl = env.LLM_BASE_URL;
-  if (baseUrl === undefined) return null;
+  const baseUrl = env.LLM_BASE_URL?.trim();
+  if (!baseUrl) return null;
 
   const model = env.LLM_MODEL;
 
@@ -344,13 +333,11 @@ export function synthesizeEnvConnection(
  * `OPENLLM_BASE_HOST` is deployment-owned. `OPENLLM_HOST` is user-owned and
  * powers user-configured OpenLLM Connections — it does not affect this function.
  */
-export function synthesizeOpenLlmEnvConnection(
-  env: NodeJS.ProcessEnv = process.env,
-): LlmConnection | null {
-  const host = env[OPENLLM_BASE_HOST_ENV_VAR]?.trim();
+export function synthesizeOpenLlmEnvConnection(): LlmConnection | null {
+  const host = process.env.OPENLLM_BASE_HOST?.trim();
   if (!host) return null;
 
-  const rawModels = env[OPENLLM_BASE_MODELS_ENV_VAR]?.trim();
+  const rawModels = process.env.OPENLLM_BASE_MODELS?.trim();
   const models = rawModels
     ? rawModels.split(',').map(m => m.trim()).filter(Boolean)
     : [];
@@ -358,7 +345,7 @@ export function synthesizeOpenLlmEnvConnection(
 
   return {
     slug: OPENLLM_ENV_CONNECTION_SLUG,
-    name: env[OPENLLM_BASE_CONNECTION_NAME_ENV_VAR]?.trim() ?? 'OpenLLM',
+    name: process.env.OPENLLM_BASE_CONNECTION_NAME?.trim() ?? 'OpenLLM',
     providerType: 'openllm',
     authType: 'none',
     piAuthProvider: OPENLLM_PI_AUTH_PROVIDER,

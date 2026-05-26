@@ -39,6 +39,7 @@ describe('getSsoSessionState', () => {
       authenticated: true,
       userName: 'Ada Lovelace',
       department: 'Engineering',
+      employeeId: 'E123',
     });
     expect('token' in result).toBe(false);
     expect('accessToken' in result).toBe(false);
@@ -101,6 +102,7 @@ describe('getSsoSessionState', () => {
       authenticated: true,
       userName: 'Grace Hopper',
       department: 'Product',
+      employeeId: 'E123',
     });
     expect(savedSessions).toEqual([refreshedSession]);
   });
@@ -160,6 +162,7 @@ describe('refreshStoredSsoSession', () => {
       authenticated: true,
       userName: 'Katherine Johnson',
       department: 'Engineering',
+      employeeId: 'E123',
     });
     expect('token' in result).toBe(false);
   });

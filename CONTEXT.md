@@ -59,6 +59,11 @@ Marketplace-installed Local Skills can be edited locally; local edits keep marke
 
 Updating a modified marketplace-installed Local Skill warns the user that local changes will be overwritten.
 
+### Skill-provided MCP Source
+An MCP Source declared by a skill's frontmatter metadata. When the skill is added or updated, the declared source becomes available in the workspace without requiring the user to add the same MCP server manually.
+
+A Skill-provided MCP Source is still a normal Source after it is added; duplicate declarations reuse the existing workspace Source.
+
 ### Skill Marketplace
 A product-provided catalog where users can publish, browse, fetch, and install shared skills into local skill storage.
 
@@ -216,7 +221,14 @@ Avoid: access token (that's a separate field), auth token.
 ### Identity Token (`idToken`)
 A short-lived token returned alongside the Session Token. Expires per `expiresIn` (seconds). When expired, the app silently calls `/api/mdp/auth/refresh-token` using the Session Token to obtain a new Identity Token. If refresh fails, the app shows the Login Page.
 
-Avoid: JWT, id token.
+Used when another product surface needs to authenticate as the logged-in YST user rather than as a separately configured source credential. For MCP Sources that use Bearer authentication, the Identity Token is the preferred bearer credential. A source-specific Bearer Token remains the fallback when no Identity Token is available.
+
+Avoid: JWT, id token, Session Token, access token.
+
+### MCP Source Bearer Default
+New Streamable HTTP MCP Sources default to Bearer authentication when no authentication type is specified. Explicit authentication choices remain authoritative: public MCP Sources use `none`, OAuth MCP Sources use `oauth`, and local stdio MCP Sources do not use HTTP bearer authentication.
+
+Avoid: default token, default auth.
 
 ### SSO Login Flow
 The browser-based OIDC authorization code flow used to establish an SSO Session. The OIDC provider only accepts `http/https` redirect URIs, so the app routes through the shared OAuth relay instead of using the `mdp://` scheme directly as `redirect_uri`.

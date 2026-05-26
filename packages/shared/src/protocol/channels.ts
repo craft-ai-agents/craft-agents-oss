@@ -283,6 +283,9 @@ export const RPC_CHANNELS = {
     INSTALL_LOCAL_ZIP: 'skills:installLocalZip',
     DELETE_MARKET: 'skills:deleteMarket',
     FETCH_MARKET_CONTENT: 'skills:fetchMarketContent',
+    CHECK_MARKET_UPDATES: 'skills:checkMarketUpdates',
+    UPDATE_MARKET_BATCH: 'skills:updateMarketBatch',
+    TRIGGER_UPDATE_CHECK: 'skills:triggerUpdateCheck',
     CHANGED: 'skills:changed',
   },
   statuses: {
@@ -405,6 +408,10 @@ export const RPC_CHANNELS = {
     REFRESH: 'teamKnowledge:refresh',
     CHANGED: 'teamKnowledge:changed',
     GET_PREVIEW: 'teamKnowledge:getPreview',
+  },
+  userProfile: {
+    REFRESH: 'userProfile:refresh',
+    GET: 'userProfile:get',
   },
   resources: {
     EXPORT: 'resources:export',

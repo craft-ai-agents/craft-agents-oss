@@ -384,6 +384,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.skills.INSTALL_MARKET,
   RPC_CHANNELS.skills.DELETE_MARKET,
   RPC_CHANNELS.skills.FETCH_MARKET_CONTENT,
+  RPC_CHANNELS.skills.CHECK_MARKET_UPDATES,
+  RPC_CHANNELS.skills.UPDATE_MARKET_BATCH,
   RPC_CHANNELS.skills.DELETE,
   RPC_CHANNELS.skills.CHANGED,
 
@@ -429,6 +431,10 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // resources — workspace resource export/import
   RPC_CHANNELS.resources.EXPORT,
   RPC_CHANNELS.resources.IMPORT,
+
+  // userProfile — server-side user profile refresh/read
+  RPC_CHANNELS.userProfile.REFRESH,
+  RPC_CHANNELS.userProfile.GET,
 
   // teamKnowledge — workspace-scoped team knowledge cache
   RPC_CHANNELS.teamKnowledge.GET_CONFIG,

@@ -1444,12 +1444,12 @@ html.dark[data-scenic] .fullscreen-overlay-background {
 }
 
 /* ==========================================================================
-   TopBar height — bumps to 56px on narrow viewports so it matches the larger
-   touch targets and feels less cramped on mobile. The TopBar uses position:
+   TopBar height — desktop uses a taller 64px title bar while narrow viewports
+   stay at 56px to preserve vertical space. The TopBar uses position:
    fixed so the App content area reads the same variable for its padding-top.
    ========================================================================== */
 :root {
-  --topbar-height: 48px;
+  --topbar-height: 64px;
 }
 @media (max-width: 768px) {
   :root {

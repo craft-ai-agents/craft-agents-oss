@@ -1,6 +1,6 @@
 # ADR 0010 — OpenLLM Provider: New ProviderType with Per-Model URL Construction
 
-**Status**: Accepted  
+**Status**: Accepted
 **Date**: 2026-05-20
 
 ## Decision

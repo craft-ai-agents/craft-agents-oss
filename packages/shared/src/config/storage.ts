@@ -2548,7 +2548,7 @@ export function getLlmConnection(slug: string): LlmConnection | null {
   }
 
   if (slug === OPENLLM_ENV_CONNECTION_SLUG) {
-    return synthesizeOpenLlmEnvConnection(process.env);
+    return synthesizeOpenLlmEnvConnection();
   }
 
   const connections = getLlmConnections();
@@ -2738,7 +2738,7 @@ export function getDefaultLlmConnection(): string | null {
   if (config?.defaultLlmConnection) return config.defaultLlmConnection;
 
   // OpenLLM env connection takes priority over plain env-provider when OPENLLM_BASE_HOST is set.
-  if (process.env[OPENLLM_BASE_HOST_ENV_VAR]) return OPENLLM_ENV_CONNECTION_SLUG;
+  if (process.env.OPENLLM_BASE_HOST) return OPENLLM_ENV_CONNECTION_SLUG;
 
   // Env-provider is the implicit default when LLM_BASE_URL is configured —
   // matches the UI contract where it always shows with the "Default" badge.

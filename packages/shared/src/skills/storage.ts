@@ -91,14 +91,19 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
         alwaysAllow: parsed.data.alwaysAllow as string[] | undefined,
         icon,
         requiredSources: normalizeRequiredSources(parsed.data.requiredSources),
+        metadata: isRecord(parsed.data.metadata) ? parsed.data.metadata : undefined,
         author: parsed.data.author as string | undefined,
-        extraMetadata: parsed.data.metadata as Record<string, unknown> | undefined,
+        extraMetadata: isRecord(parsed.data.metadata) ? parsed.data.metadata : undefined,
       },
       body: parsed.content,
     };
   } catch {
     return null;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function readMarketplaceOriginSidecar(skillDir: string): LoadedSkill['marketplaceOrigin'] {
@@ -155,7 +160,7 @@ function loadSkillFromDir(skillsDir: string, slug: string, source: SkillSource):
     iconPath: findIconFile(skillDir),
     path: skillDir,
     source,
-    marketplaceOrigin: source === 'workspace' ? readMarketplaceOriginSidecar(skillDir) : undefined,
+    marketplaceOrigin: (source === 'workspace' || source === 'global') ? readMarketplaceOriginSidecar(skillDir) : undefined,
   };
 }
 

@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
 import { Spinner } from '@craft-agent/ui'
 import { RenameDialog } from '@/components/ui/rename-dialog'
-import type { PermissionMode, WorkspaceSettings, LoadedSource, TeamContextPreview } from '../../../shared/types'
+import type { PermissionMode, WorkspaceSettings, LoadedSource, TeamContextPreview, UserProfile } from '../../../shared/types'
 import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
 import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
 import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
@@ -85,6 +85,11 @@ export default function WorkspaceSettingsPage() {
   const [enabledModes, setEnabledModes] = useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
   const [modeCyclingError, setModeCyclingError] = useState<string | null>(null)
 
+  // User Profile state
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [userProfileFetchedAt, setUserProfileFetchedAt] = useState<number | null>(null)
+  const [userProfileRefreshing, setUserProfileRefreshing] = useState(false)
+
   // Load workspace settings when active workspace changes
   useEffect(() => {
     const loadWorkspaceSettings = async () => {
@@ -125,6 +130,17 @@ export default function WorkspaceSettingsPage() {
           if (healedSlugs.length !== savedSlugs.length) {
             window.electronAPI.updateWorkspaceSetting(activeWorkspaceId, 'enabledSourceSlugs', healedSlugs)
           }
+        }
+
+        // Load user profile
+        try {
+          const profile = await window.electronAPI.getUserProfile()
+          setUserProfile(profile)
+          if (profile) {
+            setUserProfileFetchedAt(Date.now())
+          }
+        } catch (error) {
+          console.error('Failed to load user profile:', error)
         }
 
         // Try to load workspace icon (check common extensions)
@@ -373,6 +389,23 @@ export default function WorkspaceSettingsPage() {
     },
     [enabledModes, updateWorkspaceSetting, t]
   )
+
+  // User Profile refresh handler
+  const handleRefreshUserProfile = useCallback(async () => {
+    if (!window.electronAPI) return
+    setUserProfileRefreshing(true)
+    try {
+      const result = await window.electronAPI.refreshUserProfile()
+      if (result) {
+        setUserProfile(result)
+        setUserProfileFetchedAt(Date.now())
+      }
+    } catch (error) {
+      console.error('Failed to refresh user profile:', error)
+    } finally {
+      setUserProfileRefreshing(false)
+    }
+  }, [])
 
   // Show empty state if no workspace is active
   if (!activeWorkspaceId) {
@@ -669,6 +702,67 @@ export default function WorkspaceSettingsPage() {
                 </SettingsCard>
               </SettingsSection>
             )}
+
+            {/* User Profile */}
+            <SettingsSection
+              title={t("settings.workspace.userProfile")}
+              description={t("settings.workspace.userProfileDesc")}
+            >
+              <SettingsCard>
+                {userProfile ? (
+                  <>
+                    <SettingsRow
+                      label={t("settings.workspace.userProfileName")}
+                      description={userProfile.name || t("settings.workspace.userProfileNotConfigured")}
+                    />
+                    <SettingsRow
+                      label={t("settings.workspace.userProfileOneStopId")}
+                      description={userProfile.oneStopId || t("settings.workspace.userProfileNotConfigured")}
+                    />
+                    <SettingsRow
+                      label={t("settings.workspace.userProfileGroup")}
+                      description={userProfile.group || t("settings.workspace.userProfileNotConfigured")}
+                    />
+                    <SettingsRow
+                      label={t("settings.workspace.userProfileDepartment")}
+                      description={userProfile.department || t("settings.workspace.userProfileNotConfigured")}
+                    />
+                    {userProfile.ownedModules && userProfile.ownedModules.length > 0 && (
+                      <SettingsRow
+                        label={t("settings.workspace.userProfileOwnedModules")}
+                        description={userProfile.ownedModules.join(', ')}
+                      />
+                    )}
+                    {userProfile.ownedTopics && userProfile.ownedTopics.length > 0 && (
+                      <SettingsRow
+                        label={t("settings.workspace.userProfileOwnedTopics")}
+                        description={userProfile.ownedTopics.join(', ')}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <div className="px-4 py-3">
+                    <p className="text-sm text-muted-foreground">{t("settings.workspace.userProfileNotConfigured")}</p>
+                  </div>
+                )}
+                <div className="border-t border-border/50 px-4 py-3 flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    {userProfileFetchedAt
+                      ? t("settings.workspace.userProfileLastRefresh", { time: new Date(userProfileFetchedAt).toLocaleString() })
+                      : t("settings.workspace.userProfileNotConfigured")
+                    }
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRefreshUserProfile}
+                    disabled={userProfileRefreshing}
+                    className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors disabled:opacity-50"
+                  >
+                    {userProfileRefreshing ? t("settings.workspace.userProfileRefreshing") : t("settings.workspace.userProfileRefresh")}
+                  </button>
+                </div>
+              </SettingsCard>
+            </SettingsSection>
 
             {/* Advanced */}
             <SettingsSection title={t("settings.workspace.advanced")}>

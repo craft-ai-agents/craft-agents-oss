@@ -25,6 +25,7 @@ import type {
 } from '@craft-agent/shared/protocol'
 import type { SessionBundle, DispatchMode } from '@craft-agent/shared/sessions'
 import type { EventSink } from '../transport'
+import type { UserProfile } from '../sessions/user-profile-context'
 
 export interface ISessionManager {
   // ---------------------------------------------------------------------------
@@ -242,6 +243,15 @@ export interface ISessionManager {
   setAutomationBinder?(
     fn: (input: { workspaceId: string; sessionId: string; topicName: string }) => Promise<void>,
   ): void
+
+  // ---------------------------------------------------------------------------
+  // User Profile
+  // ---------------------------------------------------------------------------
+
+  /** Trigger a manual refresh of the user profile from the HTTP API. */
+  refreshUserProfile(): Promise<UserProfile | null>
+  /** Read the current user profile from disk without triggering a network request. */
+  getUserProfile(): Promise<UserProfile | null>
 }
 
 /**

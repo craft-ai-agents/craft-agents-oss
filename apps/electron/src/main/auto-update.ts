@@ -15,7 +15,7 @@
  */
 
 import { autoUpdater } from 'electron-updater'
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { platform } from 'os'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -66,6 +66,19 @@ let eventSink: EventSink | null = null
 
 // Flag to indicate update is in progress — used to prevent force exit during quitAndInstall
 let __isUpdating = false
+
+// Hook fired immediately before quitAndInstall, while BrowserWindows still exist.
+// electron-updater destroys windows between quitAndInstall and before-quit firing,
+// so the regular before-quit save site would see an empty array.
+let beforeUpdateQuitHook: (() => void) | null = null
+
+/**
+ * Register a callback to run inside installUpdate() before quitAndInstall.
+ * Used by index.ts to snapshot multi-window state while windows are still alive.
+ */
+export function setBeforeUpdateQuitHook(fn: () => void): void {
+  beforeUpdateQuitHook = fn
+}
 
 /**
  * Check if an update installation is in progress.
@@ -383,6 +396,24 @@ export async function installUpdate(): Promise<void> {
 
   // Set flag to prevent force exit from breaking electron-updater's shutdown sequence
   __isUpdating = true
+
+  // Diagnostic correlation with before-quit's [update-flow] log. If these
+  // window counts diverge, electron-updater is destroying windows between
+  // here and before-quit firing — confirms the multi-window restore bug.
+  mainLog.info('[update-flow] installUpdate pre-quit', {
+    electronWindowCount: BrowserWindow.getAllWindows().length,
+    downloadState: updateInfo.downloadState,
+    latestVersion: updateInfo.latestVersion,
+  })
+
+  // Snapshot window state BEFORE quitAndInstall — electron-updater destroys
+  // BrowserWindows between this call and before-quit firing, so the regular
+  // before-quit save would clobber window-state.json with an empty array.
+  try {
+    beforeUpdateQuitHook?.()
+  } catch (err) {
+    mainLog.error('[auto-update] beforeUpdateQuit hook failed:', err)
+  }
 
   try {
     // isSilent=false shows the installer UI on Windows if needed (fallback)

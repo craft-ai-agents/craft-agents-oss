@@ -11,7 +11,7 @@ import {
   saveSourceGuide,
 } from './storage.ts';
 import { getSourceCredentialManager } from './credential-manager.ts';
-import type { CreateSourceInput, FolderSourceConfig, LoadedSource, McpSourceConfig, McpTransport, SourceConnectionStatus, SourceGuide } from './types.ts';
+import type { CreateSourceInput, FolderSourceConfig, LoadedSource, McpSourceConfig, McpTransport, SourceConnectionStatus, SourceGuide, SourceMcpAuthType } from './types.ts';
 import { isLocalMcpEnabled } from '../workspaces/storage.ts';
 
 /**
@@ -505,7 +505,7 @@ function addManualRemoteFields(
     state.errors.push({ field: 'url', message: 'Streamable HTTP MCP servers require a URL string.' });
   }
 
-  state.mcp.authType = mcpInput.authType ?? 'none';
+  state.mcp.authType = mcpInput.authType ?? 'bearer';
   if (mcpInput.clientId) {
     state.mcp.clientId = mcpInput.clientId;
   }
@@ -651,15 +651,27 @@ function buildCandidate(key: string, server: unknown, options: McpImportParseOpt
         errors.push({ field: 'headerNames', message: 'Header names must be an array of strings.' });
       }
     }
+    if (serverObject.authType !== undefined) {
+      if (isSourceMcpAuthType(serverObject.authType)) {
+        mcp.authType = serverObject.authType;
+      } else {
+        errors.push({ field: 'authType', message: 'Auth type must be one of: oauth, bearer, none.' });
+      }
+    }
+    if (!mcp.authType) {
+      mcp.authType = 'bearer';
+    }
   }
 
   const candidate: McpImportCandidate = {
     key,
     input: {
-      name: titleizeKey(key),
+      name: typeof serverObject.name === 'string' && serverObject.name.trim()
+        ? serverObject.name.trim()
+        : titleizeKey(key),
       provider: key,
       type: 'mcp',
-      enabled: true,
+      enabled: typeof serverObject.enabled === 'boolean' ? serverObject.enabled : true,
       mcp,
     },
     enableInWorkspace: true,
@@ -855,7 +867,7 @@ function parseCredentialHeaders(credentialValue: string | null | undefined): Rec
 function buildCreationMcpConfig(candidate: McpImportCandidate): McpSourceConfig {
   const mcp: McpSourceConfig = { ...candidate.input.mcp };
   if (mcp.transport !== 'stdio' && !mcp.authType) {
-    mcp.authType = 'none';
+    mcp.authType = 'bearer';
   }
   const credentialStoreSecrets = getCredentialStoreSecrets(candidate);
   const envSecretNames = new Set(credentialStoreSecrets.filter((secret) => secret.location === 'env').map((secret) => secret.name));
@@ -1034,6 +1046,10 @@ function isStringArray(value: unknown): value is string[] {
 
 function isStringRecord(value: unknown): value is Record<string, string> {
   return isPlainObject(value) && Object.values(value).every((item) => typeof item === 'string');
+}
+
+function isSourceMcpAuthType(value: unknown): value is SourceMcpAuthType {
+  return value === 'oauth' || value === 'bearer' || value === 'none';
 }
 
 const REDACTED_PREVIEW_VALUE = '••••••••';
