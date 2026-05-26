@@ -2,22 +2,12 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test'
 import { RPC_CHANNELS } from '../../../shared/types'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { defaultThinkingSettingsStorage, registerSettingsHandlers } from '@craft-agent/server-core/handlers/rpc/settings'
 
 type HandlerFn = (ctx: { clientId: string }, ...args: any[]) => Promise<any> | any
 
 const getDefaultThinkingEnabledMock = mock(() => true)
 const setDefaultThinkingEnabledMock = mock((_enabled: boolean) => true)
-
-mock.module('@craft-agent/shared/config', () => ({
-  getPreferencesPath: () => '/tmp/preferences.json',
-  getSessionDraft: () => null,
-  setSessionDraft: () => {},
-  deleteSessionDraft: () => {},
-  getAllSessionDrafts: () => ({}),
-  getWorkspaceByNameOrId: () => null,
-  getDefaultThinkingEnabled: getDefaultThinkingEnabledMock,
-  setDefaultThinkingEnabled: setDefaultThinkingEnabledMock,
-}))
 
 describe('settings default thinking RPC handlers', () => {
   const handlers = new Map<string, HandlerFn>()
@@ -26,6 +16,8 @@ describe('settings default thinking RPC handlers', () => {
     handlers.clear()
     getDefaultThinkingEnabledMock.mockClear()
     setDefaultThinkingEnabledMock.mockClear()
+    defaultThinkingSettingsStorage.getDefaultThinkingEnabled = getDefaultThinkingEnabledMock
+    defaultThinkingSettingsStorage.setDefaultThinkingEnabled = setDefaultThinkingEnabledMock
 
     const server: RpcServer = {
       handle(channel, handler) {
@@ -66,7 +58,6 @@ describe('settings default thinking RPC handlers', () => {
       } as unknown as HandlerDeps['oauthFlowStore'],
     }
 
-    const { registerSettingsHandlers } = await import('@craft-agent/server-core/handlers/rpc/settings')
     registerSettingsHandlers(server, deps)
   })
 

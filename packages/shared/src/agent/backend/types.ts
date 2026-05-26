@@ -297,8 +297,6 @@ export interface CoreBackendConfig {
 export interface ChatOptions {
   /** Retry flag (internal use for session recovery) */
   isRetry?: boolean;
-  /** Override thinking toggle for this message only */
-  thinkingOverride?: ThinkingEnabled;
 }
 
 /**

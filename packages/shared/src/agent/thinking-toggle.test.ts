@@ -25,10 +25,10 @@ describe('thinking toggle', () => {
     expect(normalizeThinkingEnabled(false)).toBe(false);
   });
 
-  it('maps other truthy values to enabled and empty values to unset', () => {
-    expect(normalizeThinkingEnabled('custom')).toBe(true);
-    expect(normalizeThinkingEnabled(1)).toBe(true);
-    expect(normalizeThinkingEnabled({})).toBe(true);
+  it('leaves unknown values unset', () => {
+    expect(normalizeThinkingEnabled('custom')).toBeUndefined();
+    expect(normalizeThinkingEnabled(1)).toBeUndefined();
+    expect(normalizeThinkingEnabled({})).toBeUndefined();
     expect(normalizeThinkingEnabled(null)).toBeUndefined();
     expect(normalizeThinkingEnabled(0)).toBeUndefined();
   });

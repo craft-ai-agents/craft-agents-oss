@@ -97,16 +97,24 @@ describe('validation', () => {
       expect(action).toMatchObject({ thinkingEnabled: true });
     });
 
-    it('PromptActionSchema migrates legacy string thinkingEnabled values', () => {
+    it('PromptActionSchema migrates known legacy string thinkingEnabled values', () => {
       // ActionDefinitionSchema has a passthrough fallback that absorbs malformed
       // actions (so old configs with unknown action types don't crash). To verify
       // the schema's own contract for thinkingEnabled, parse with PromptActionSchema
       // directly — that's the strict path.
       const result = PromptActionSchema.safeParse({
-        type: 'prompt', prompt: 'echo', thinkingEnabled: 'extreme',
+        type: 'prompt', prompt: 'echo', thinkingEnabled: 'high',
       });
       expect(result.success).toBe(true);
       expect(result.data?.thinkingEnabled).toBe(true);
+    });
+
+    it('PromptActionSchema leaves unknown thinkingEnabled values unset', () => {
+      const result = PromptActionSchema.safeParse({
+        type: 'prompt', prompt: 'echo', thinkingEnabled: 'extreme',
+      });
+      expect(result.success).toBe(true);
+      expect(result.data?.thinkingEnabled).toBeUndefined();
     });
 
     it('should migrate legacy thinkingLevel "off" to false', () => {

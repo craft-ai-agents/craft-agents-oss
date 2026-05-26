@@ -7,10 +7,14 @@ export const THINKING_ENABLEDS = [
   { id: false, nameKey: 'thinking.off', descriptionKey: 'thinking.offDesc' },
 ] as const;
 
+const LEGACY_ENABLED_THINKING_LEVELS = new Set(['think', 'low', 'medium', 'high', 'xhigh', 'max']);
+
 export function normalizeThinkingEnabled(value: unknown): ThinkingEnabled | undefined {
   if (value === undefined) return undefined;
-  if (value === false || value === 'off') return false;
-  if (value) return true;
+  if (value === true) return true;
+  if (value === false) return false;
+  if (value === 'off') return false;
+  if (typeof value === 'string' && LEGACY_ENABLED_THINKING_LEVELS.has(value)) return true;
   return undefined;
 }
 

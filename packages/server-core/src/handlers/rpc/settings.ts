@@ -50,20 +50,25 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.rtk.GET_GAIN,
 ] as const
 
+export const defaultThinkingSettingsStorage = {
+  getDefaultThinkingEnabled,
+  setDefaultThinkingEnabled,
+}
+
 export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): void {
   // ============================================================
   // Settings - Default Thinking Toggle (App-Level)
   // ============================================================
 
   server.handle(RPC_CHANNELS.settings.GET_DEFAULT_THINKING_ENABLED, async () => {
-    return getDefaultThinkingEnabled()
+    return defaultThinkingSettingsStorage.getDefaultThinkingEnabled()
   })
 
   server.handle(RPC_CHANNELS.settings.SET_DEFAULT_THINKING_ENABLED, async (_ctx, enabled: boolean) => {
     if (typeof enabled !== 'boolean') {
       throw new Error(`Invalid thinking toggle: ${String(enabled)}. Valid values: true, false`)
     }
-    const success = setDefaultThinkingEnabled(enabled)
+    const success = defaultThinkingSettingsStorage.setDefaultThinkingEnabled(enabled)
     if (!success) {
       throw new Error('Failed to persist default thinking toggle')
     }
