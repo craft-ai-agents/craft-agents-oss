@@ -157,8 +157,11 @@ export const defaultMcpPostCreateConnectionTester: McpPostCreateConnectionTester
   }
 
   const credentialHeaders = parseCredentialHeaders(credentialValue);
+  const ssoIdToken = mcp.authType === 'bearer' ? await loadSsoIdentityToken() : null;
   let accessToken: string | undefined;
-  if (!credentialHeaders && (mcp.authType === 'bearer' || mcp.authType === 'oauth')) {
+  if (mcp.authType === 'bearer') {
+    accessToken = ssoIdToken ?? (!credentialHeaders ? credentialValue : undefined);
+  } else if (!credentialHeaders && mcp.authType === 'oauth') {
     accessToken = credentialValue;
   }
 
@@ -172,6 +175,15 @@ export const defaultMcpPostCreateConnectionTester: McpPostCreateConnectionTester
     mcpAccessToken: accessToken,
   });
 };
+
+async function loadSsoIdentityToken(): Promise<string | null> {
+  try {
+    const { SsoCredentialStore } = await import('../auth/sso-credential-store.ts');
+    return (await new SsoCredentialStore().load())?.idToken ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Compute a stable fingerprint for a stdio command + args combination.

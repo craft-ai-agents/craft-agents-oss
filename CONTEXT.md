@@ -228,6 +228,8 @@ Avoid: JWT, id token, Session Token, access token.
 ### MCP Source Bearer Default
 New Streamable HTTP MCP Sources default to Bearer authentication when no authentication type is specified. Explicit authentication choices remain authoritative: public MCP Sources use `none`, OAuth MCP Sources use `oauth`, and local stdio MCP Sources do not use HTTP bearer authentication.
 
+For Bearer-authenticated MCP Sources, MCP connection setup, tool discovery, and tool calls all authenticate as the same source identity.
+
 Avoid: default token, default auth.
 
 ### SSO Login Flow
