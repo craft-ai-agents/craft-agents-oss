@@ -383,7 +383,7 @@ export interface TurnCardProps {
    *  Accept Plan dropdown when a plan is the last response. */
   compactMode?: boolean
   /** Callback to branch the session from a specific message */
-  onBranch?: (messageId: string, options?: { newPanel?: boolean }) => void
+  onBranch?: (messageId: string) => void
   /** Callback to add an annotation to a response message */
   onAddAnnotation?: (messageId: string, annotation: AnnotationV1) => void
   /** Callback to remove a persisted annotation from a response message */
@@ -1451,7 +1451,7 @@ export interface ResponseCardProps {
    *  keeps the Accept Plan dropdown when a plan is the last response. */
   compactMode?: boolean
   /** Callback to branch the session from this response */
-  onBranch?: (options?: { newPanel?: boolean }) => void
+  onBranch?: () => void
   /** Callback to add annotation from selected text */
   onAddAnnotation?: (messageId: string, annotation: AnnotationV1) => void
   /** Callback to remove persisted annotation */
@@ -1471,14 +1471,11 @@ export interface ResponseCardProps {
 }
 
 interface BranchDropdownProps {
-  onBranch: (options?: { newPanel?: boolean }) => void
+  onBranch: () => void
 }
 
 function BranchDropdown({ onBranch }: BranchDropdownProps) {
   const { t } = useTranslation()
-  const handleBranchClick = () => {
-    onBranch({ newPanel: true })
-  }
 
   return (
     <DropdownMenu>
@@ -1499,7 +1496,7 @@ function BranchDropdown({ onBranch }: BranchDropdownProps) {
       </DropdownMenuTrigger>
 
       <StyledDropdownMenuContent align="end" minWidth="min-w-64" sideOffset={6}>
-        <StyledDropdownMenuItem onClick={handleBranchClick} className="items-start py-2">
+        <StyledDropdownMenuItem onClick={onBranch} className="items-start py-2">
           <div className="flex flex-col gap-0.5">
             <span className="text-[14px] leading-tight">{t('chat.branchFromThisMessage')}</span>
             <span className="max-w-[220px] whitespace-normal text-sm leading-tight text-muted-foreground">
@@ -3202,7 +3199,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse && index === planActivities.length - 1}
             compactMode={compactMode}
-            onBranch={onBranch ? (options?: { newPanel?: boolean }) => onBranch(planActivity.messageId ?? planActivity.id, options) : undefined}
+            onBranch={onBranch ? () => onBranch(planActivity.messageId ?? planActivity.id) : undefined}
             sendMessageKey={sendMessageKey}
             hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
             openAnnotationRequest={openAnnotationRequest}
@@ -3243,7 +3240,7 @@ export const TurnCard = React.memo(function TurnCard({
                 onAcceptWithCompact={onAcceptPlanWithCompact}
                 isLastResponse={isLastResponse}
                 compactMode={compactMode}
-                onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
+                onBranch={onBranch && response.messageId ? () => onBranch(response.messageId!) : undefined}
                 sendMessageKey={sendMessageKey}
                 hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
                 openAnnotationRequest={openAnnotationRequest}
@@ -3277,7 +3274,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse}
             compactMode={compactMode}
-            onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
+            onBranch={onBranch && response.messageId ? () => onBranch(response.messageId!) : undefined}
             sendMessageKey={sendMessageKey}
             hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
             openAnnotationRequest={openAnnotationRequest}

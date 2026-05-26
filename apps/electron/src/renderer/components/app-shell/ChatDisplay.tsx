@@ -82,7 +82,7 @@ import { useAppShellContext } from "@/context/AppShellContext"
 import { navigate, routes } from "@/lib/navigate"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from "@/lib/file-changes"
-import { resolveBranchNewPanelOption } from "./branching"
+import { createBranchSessionAndNavigate } from "./branch-session-navigation"
 import { handleErrorMessageAction } from "./error-message-actions"
 import {
   applySavedFeedbackId,
@@ -2099,24 +2099,15 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                                       openAnnotationRequest={openAnnotationRequest}
                                       feedbackValue={canShowFeedback && responseMessageId ? feedbackByMessageId[responseMessageId]?.rating ?? null : null}
                                       onFeedback={canShowFeedback && responseMessageId ? (rating: FeedbackRating) => handleFeedback(turn, responseMessageId, rating) : undefined}
-                                      onBranch={session?.supportsBranching ? async (messageId: string, options?: { newPanel?: boolean }) => {
+                                      onBranch={session?.supportsBranching ? async (messageId: string) => {
                                         if (!session) return
                                         try {
-                                          const child = await appShellContext.onCreateSession(
-                                            session.workspaceId,
-                                            {
-                                              branchFromMessageId: messageId,
-                                              branchFromSessionId: session.id,
-                                              name: `Branch of ${session.name || 'Untitled'}`,
-                                              // Keep branch on the same backend/provider by inheriting parent session settings.
-                                              llmConnection: session.llmConnection,
-                                              model: session.model,
-                                              permissionMode: session.permissionMode,
-                                              workingDirectory: session.workingDirectory,
-                                              enabledSourceSlugs: session.enabledSourceSlugs,
-                                            }
-                                          )
-                                          navigate(routes.view.allSessions(child.id), { newPanel: resolveBranchNewPanelOption(options) })
+                                          await createBranchSessionAndNavigate({
+                                            session,
+                                            messageId,
+                                            createSession: appShellContext.onCreateSession,
+                                            navigate,
+                                          })
                                         } catch (error) {
                                           const rawMessage = error instanceof Error ? error.message : 'Failed to create branch'
                                           const message = rawMessage.includes('source and target providers must match')
