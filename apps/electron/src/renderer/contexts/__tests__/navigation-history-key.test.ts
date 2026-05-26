@@ -2,31 +2,41 @@ import { describe, expect, it } from 'bun:test'
 import { buildSemanticHistoryKey, canRunInitialRestore } from '../navigation-history'
 
 describe('buildSemanticHistoryKey', () => {
-  it('changes when focused panel index changes even if routes are identical', () => {
-    const panelRoutes = ['allSessions/session/s1', 'allSessions/session/s1']
-
+  it('changes when the single panel route changes', () => {
     const keyA = buildSemanticHistoryKey({
       workspaceSlug: 'ws',
-      panelRoutes,
-      focusedPanelIndex: 0,
+      panelRoutes: ['allSessions/session/s1'],
       sidebarParam: '',
     })
 
     const keyB = buildSemanticHistoryKey({
       workspaceSlug: 'ws',
-      panelRoutes,
-      focusedPanelIndex: 1,
+      panelRoutes: ['sources/source/github'],
       sidebarParam: '',
     })
 
     expect(keyA).not.toBe(keyB)
   })
 
+  it('ignores stale duplicate panel routes from legacy callers', () => {
+    const keyA = buildSemanticHistoryKey({
+      workspaceSlug: 'ws',
+      panelRoutes: ['allSessions/session/s1'],
+      sidebarParam: '',
+    })
+    const keyB = buildSemanticHistoryKey({
+      workspaceSlug: 'ws',
+      panelRoutes: ['allSessions/session/s1'],
+      sidebarParam: '',
+    })
+
+    expect(keyA).toBe(keyB)
+  })
+
   it('stays stable for identical semantic inputs', () => {
     const input = {
       workspaceSlug: 'ws',
-      panelRoutes: ['allSessions/session/s1', 'sources/source/github'],
-      focusedPanelIndex: 1,
+      panelRoutes: ['allSessions/session/s1'],
       sidebarParam: 'files',
     }
 

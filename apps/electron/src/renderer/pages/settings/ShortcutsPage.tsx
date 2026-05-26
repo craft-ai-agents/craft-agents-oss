@@ -73,7 +73,6 @@ function Kbd({ children }: { children: React.ReactNode }) {
 // Map action IDs to i18n keys for translated labels
 const ACTION_LABEL_KEYS: Partial<Record<ActionId, string>> = {
   'app.newChat': 'shortcuts.action.newChat',
-  'app.newChatInPanel': 'shortcuts.action.newChatInPanel',
   'app.settings': 'shortcuts.action.settings',
   'app.toggleTheme': 'shortcuts.action.toggleTheme',
   'app.search': 'shortcuts.action.search',
@@ -92,8 +91,6 @@ const ACTION_LABEL_KEYS: Partial<Record<ActionId, string>> = {
   'view.toggleFocusMode': 'shortcuts.action.toggleFocusMode',
   'navigator.selectAll': 'shortcuts.action.selectAll',
   'navigator.clearSelection': 'shortcuts.action.clearSelection',
-  'panel.focusNext': 'shortcuts.action.focusNextPanel',
-  'panel.focusPrev': 'shortcuts.action.focusPrevPanel',
   'chat.stopProcessing': 'shortcuts.action.stopProcessing',
   'chat.cyclePermissionMode': 'shortcuts.action.cyclePermissionMode',
   'chat.nextSearchMatch': 'shortcuts.action.nextSearchMatch',

@@ -22,15 +22,6 @@ export type { Route }
 export const NAVIGATE_EVENT = 'craft-agent-navigate'
 
 export interface NavigateOptions {
-  /** Open the target in a new panel instead of navigating the current one */
-  newPanel?: boolean
-  /**
-   * Optional explicit lane target for new-panel opens.
-   *
-   * This is intentionally generic (not browser-specific) so future lane types
-   * can reuse the same API without introducing per-feature navigation flags.
-   */
-  targetLaneId?: 'main'
   /** Skip auto-selecting first item when navigating to a list view (used when closing panels) */
   skipAutoSelect?: boolean
 }

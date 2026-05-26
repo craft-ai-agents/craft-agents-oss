@@ -3,21 +3,19 @@
  *
  * Renders a single content panel within the PanelStackContainer.
  *
- * When a panel is the only one (isOnly), it flex-grows to fill available space.
- * When multiple panels exist, each uses flex-grow with its proportion as the weight,
- * combined with min-width to prevent shrinking below PANEL_MIN_WIDTH.
- *
  * Each PanelSlot overrides AppShellContext to inject per-panel header state
  * such as the compact back button and focused-panel metadata.
  */
 
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSetAtom } from 'jotai'
 import { cn } from '@/lib/utils'
 import { ChevronLeft } from 'lucide-react'
-import { parseRouteToNavigationState } from '../../../shared/route-parser'
-import { closePanelAtom, focusedPanelIdAtom, type PanelStackEntry } from '@/atoms/panel-stack'
+import { buildRouteFromNavigationState, parseRouteToNavigationState } from '../../../shared/route-parser'
+import type { NavigationState } from '../../../shared/types'
+import type { Route } from '../../../shared/routes'
+import type { PanelStackEntry } from '@/atoms/panel-stack'
+import { navigate } from '@/lib/navigate'
 import { useAppShellContext, AppShellProvider } from '@/context/AppShellContext'
 import { PanelHeaderCenterButton } from '@/components/ui/PanelHeaderCenterButton'
 import { MainContentPanel } from './MainContentPanel'
@@ -27,19 +25,30 @@ import { createPanelSlotHeaderContext } from './panel-slot-header-context'
 interface PanelSlotProps {
   entry: PanelStackEntry
   isOnly: boolean
-  /** Whether this panel is the focused panel in a multi-panel layout */
   isFocusedPanel: boolean
   isSidebarAndNavigatorHidden: boolean
   /** Whether this panel's left corners touch the window edge (no sidebar/navigator before it) */
   isAtLeftEdge: boolean
   /** Whether this panel's right corners touch the window edge (no right sidebar after it) */
   isAtRightEdge: boolean
-  /** Flex-grow weight for proportional sizing */
-  proportion: number
-  /** Optional sash element rendered before this panel */
-  sash?: React.ReactNode
   /** Compact (mobile) mode — shows back button in panel header */
   isCompact?: boolean
+}
+
+function getNavigatorRoute(navState: NavigationState): ReturnType<typeof buildRouteFromNavigationState> {
+  switch (navState.navigator) {
+    case 'sessions':
+    case 'sources':
+    case 'local-skills':
+    case 'automations':
+    case 'archived':
+      return buildRouteFromNavigationState({ ...navState, details: null } as NavigationState)
+    case 'settings':
+    case 'admin':
+      return buildRouteFromNavigationState({ ...navState, subpage: null } as NavigationState)
+    case 'skill-marketplace':
+      return buildRouteFromNavigationState(navState)
+  }
 }
 
 export function PanelSlot({
@@ -49,31 +58,28 @@ export function PanelSlot({
   isSidebarAndNavigatorHidden,
   isAtLeftEdge,
   isAtRightEdge,
-  proportion,
-  sash,
   isCompact,
 }: PanelSlotProps) {
   const { t } = useTranslation()
-  const closePanel = useSetAtom(closePanelAtom)
-  const setFocusedPanel = useSetAtom(focusedPanelIdAtom)
   const parentContext = useAppShellContext()
   const navState = parseRouteToNavigationState(entry.route)
 
-  const handleClose = useCallback(() => {
-    closePanel(entry.id)
-  }, [closePanel, entry.id])
+  const handleBack = useCallback(() => {
+    if (!navState) return
+    navigate(getNavigatorRoute(navState) as Route, { skipAutoSelect: true })
+  }, [navState])
 
-  // Build back button for compact mode — closes the panel to reveal the session list.
+  // Build back button for compact mode — returns to the navigator list.
   const backButton = useMemo(() => {
     if (!isCompact) return undefined
     return (
       <PanelHeaderCenterButton
         icon={<ChevronLeft className="h-4 w-4" />}
-        onClick={handleClose}
+        onClick={handleBack}
         tooltip={t("common.backToList")}
       />
     )
-  }, [isCompact, handleClose, t])
+  }, [isCompact, handleBack, t])
 
   // Override AppShellContext so ChatPage/PanelHeader gets our per-panel back
   // button (compact mode) and isFocusedPanel for input field appearance.
@@ -85,17 +91,8 @@ export function PanelSlot({
     [parentContext, backButton, isFocusedPanel],
   )
 
-  const handlePointerDown = useCallback(() => {
-    if (!isFocusedPanel) {
-      setFocusedPanel(entry.id)
-    }
-  }, [isFocusedPanel, setFocusedPanel, entry.id])
-
   return (
-    <>
-      {sash}
       <div
-        onPointerDown={handlePointerDown}
         data-panel-role="content"
         data-compact={isCompact || undefined}
         className={cn(
@@ -104,8 +101,7 @@ export function PanelSlot({
           'bg-foreground-3',
         )}
         style={{
-          // In multi-panel, unfocused panels override --background so all
-          // bg-background children render at the elevated (dimmed) background.
+          // Kept for callers that deliberately render an unfocused panel slot.
           ...(!isFocusedPanel && !isOnly
             ? {
                 '--background': 'var(--background-elevated)',
@@ -122,7 +118,7 @@ export function PanelSlot({
           borderBottomRightRadius: isCompact ? 0 : (isAtRightEdge ? RADIUS_EDGE : RADIUS_INNER),
           ...(isOnly
             ? { flexGrow: 1, minWidth: 0 }
-            : { flexGrow: proportion, flexShrink: 1, flexBasis: 0, minWidth: PANEL_MIN_WIDTH }
+            : { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: PANEL_MIN_WIDTH }
           ),
         }}
       >
@@ -135,6 +131,5 @@ export function PanelSlot({
           </AppShellProvider>
         </div>
       </div>
-    </>
   )
 }

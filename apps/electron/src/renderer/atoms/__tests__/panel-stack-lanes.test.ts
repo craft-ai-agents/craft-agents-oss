@@ -3,7 +3,6 @@ import { createStore } from 'jotai'
 import {
   panelStackAtom,
   focusedPanelIdAtom,
-  pushPanelAtom,
   reconcilePanelStackAtom,
   updateFocusedPanelRouteAtom,
   type PanelStackEntry,
@@ -13,112 +12,58 @@ function getStack(store: ReturnType<typeof createStore>): PanelStackEntry[] {
   return store.get(panelStackAtom)
 }
 
-describe('panel stack single-lane behavior', () => {
-  it('keeps insertion order for new panels', () => {
+describe('panel stack single-entry behavior', () => {
+  it('replaces the current panel when the focused route changes', () => {
     const store = createStore()
-
-    store.set(pushPanelAtom, { route: 'allSessions/session/s1' })
-    store.set(pushPanelAtom, { route: 'sources/source/github' })
-    store.set(pushPanelAtom, { route: 'settings' })
-
-    const stack = getStack(store)
-    expect(stack).toHaveLength(3)
-    expect(stack[0].route).toBe('allSessions/session/s1')
-    expect(stack[1].route).toBe('sources/source/github')
-    expect(stack[2].route).toBe('settings')
-    expect(stack.every((p) => p.laneId === 'main')).toBe(true)
-  })
-
-  it('implicit navigation updates focused panel route', () => {
-    const store = createStore()
-
-    store.set(pushPanelAtom, { route: 'allSessions/session/s1' })
-    store.set(pushPanelAtom, { route: 'sources/source/github' })
-
-    const sourcePanel = getStack(store).find((p) => p.route === 'sources/source/github')
-    expect(sourcePanel).toBeDefined()
-    store.set(focusedPanelIdAtom, sourcePanel!.id)
-
-    store.set(updateFocusedPanelRouteAtom, 'allSessions/session/s2')
-
-    const stack = getStack(store)
-    expect(stack).toHaveLength(2)
-    expect(stack.some((p) => p.route === 'allSessions/session/s2')).toBe(true)
-    expect(stack.some((p) => p.route === 'allSessions/session/s1')).toBe(true)
-  })
-
-  it('implicit navigation to the focused route is a no-op', () => {
-    const store = createStore()
-
-    store.set(pushPanelAtom, { route: 'allSessions/session/s1' })
-    const stackBefore = getStack(store)
-    const focusedBefore = store.get(focusedPanelIdAtom)
 
     store.set(updateFocusedPanelRouteAtom, 'allSessions/session/s1')
+    const firstEntry = getStack(store)[0]
 
-    expect(getStack(store)).toBe(stackBefore)
-    expect(store.get(focusedPanelIdAtom)).toBe(focusedBefore)
-  })
-
-  it('pushPanel afterIndex inserts immediately after the given panel', () => {
-    const store = createStore()
-
-    store.set(pushPanelAtom, { route: 'allSessions/session/s1' })
-    store.set(pushPanelAtom, { route: 'allSessions/session/s2' })
-
-    store.set(pushPanelAtom, { route: 'sources/source/linear', afterIndex: 0 })
+    store.set(updateFocusedPanelRouteAtom, 'sources/source/github')
 
     const stack = getStack(store)
-    expect(stack).toHaveLength(3)
-    expect(stack[0].route).toBe('allSessions/session/s1')
-    expect(stack[1].route).toBe('sources/source/linear')
-    expect(stack[2].route).toBe('allSessions/session/s2')
+    expect(stack).toHaveLength(1)
+    expect(stack[0].id).toBe(firstEntry.id)
+    expect(stack[0].route).toBe('sources/source/github')
+    expect(store.get(focusedPanelIdAtom)).toBe(firstEntry.id)
   })
 
-  it('reconcile focuses by focusedIndex first when duplicate routes exist', () => {
+  it('reconciles multi-panel URL state into the focused single panel', () => {
     const store = createStore()
 
     const changed = store.set(reconcilePanelStackAtom, {
       entries: [
-        { route: 'allSessions/session/s1', proportion: 0.5 },
-        { route: 'allSessions/session/s1', proportion: 0.5 },
+        { route: 'allSessions/session/s1' },
+        { route: 'sources/source/github' },
+        { route: 'settings' },
       ],
       focusedIndex: 1,
     })
 
-    expect(changed).toBe(true)
-
     const stack = getStack(store)
-    expect(stack).toHaveLength(2)
-    const focusedId = store.get(focusedPanelIdAtom)
-    expect(focusedId).toBe(stack[1].id)
+    expect(changed).toBe(true)
+    expect(stack).toHaveLength(1)
+    expect(stack[0].route).toBe('sources/source/github')
+    expect(store.get(focusedPanelIdAtom)).toBe(stack[0].id)
   })
 
-  it('reconcile no-op keeps focused index target with duplicate routes', () => {
+  it('reconcile no-op keeps the existing panel id', () => {
     const store = createStore()
 
     store.set(reconcilePanelStackAtom, {
-      entries: [
-        { route: 'allSessions/session/s1', proportion: 0.5 },
-        { route: 'allSessions/session/s1', proportion: 0.5 },
-      ],
-      focusedIndex: 1,
+      entries: [{ route: 'allSessions/session/s1' }],
+      focusedIndex: 0,
     })
 
-    const stack = getStack(store)
-    const firstId = stack[0].id
-    const secondId = stack[1].id
-    expect(firstId).not.toBe(secondId)
-
+    const firstEntry = getStack(store)[0]
     const changed = store.set(reconcilePanelStackAtom, {
-      entries: [
-        { route: 'allSessions/session/s1', proportion: 0.5 },
-        { route: 'allSessions/session/s1', proportion: 0.5 },
-      ],
-      focusedIndex: 1,
+      entries: [{ route: 'allSessions/session/s1' }],
+      focusedIndex: 0,
     })
 
     expect(changed).toBe(false)
-    expect(store.get(focusedPanelIdAtom)).toBe(secondId)
+    expect(getStack(store)).toHaveLength(1)
+    expect(getStack(store)[0].id).toBe(firstEntry.id)
+    expect(store.get(focusedPanelIdAtom)).toBe(firstEntry.id)
   })
 })

@@ -58,7 +58,7 @@ import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSourc
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
-import { panelCountAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom } from "@/atoms/panel-stack"
+import { focusedSessionIdAtom } from "@/atoms/panel-stack"
 import { openFileTabAtom } from "@/atoms/editor-tabs"
 import { type SessionStatus, statusConfigsToSessionStatuses } from "@/config/session-status-config"
 import { useStatuses } from "@/hooks/useStatuses"
@@ -271,7 +271,7 @@ function AppShellContent({
   const { handleEscapePress } = useEscapeInterrupt()
 
   // UNIFIED NAVIGATION STATE - single source of truth from NavigationContext
-  // Derived from focused panel's route — all panels are peers
+  // Derived from the single content panel's route.
   const navState = useNavigationState()
   const isLocalSkillsNav = isLocalSkillsNavigation(navState)
   const isSkillMarketplaceNav = isSkillMarketplaceNavigation(navState)
@@ -327,7 +327,6 @@ function AppShellContent({
     setCollapsedItems(prev => toggleCollapsedSidebarItem(prev, id))
   }, [])
   const isAllSessionsExpanded = isExpanded(ALL_SESSIONS_NAV_ITEM_ID)
-  const panelCount = useAtomValue(panelCountAtom)
   const focusedSessionId = useAtomValue(focusedSessionIdAtom)
   const sidebarLayout = resolveSidebarLayout({
     navState,
@@ -632,10 +631,9 @@ function AppShellContent({
   }, { enabled: () => !document.querySelector('[role="dialog"]') })
 
   // Shift+Tab cycles permission mode through enabled modes (textarea handles its own, this handles when focus is elsewhere)
-  // In multi-panel, targets the focused panel's session
   const effectiveSessionId = focusedSessionId ?? session.selected
 
-  // Focus chat input for the target session only (multi-panel safe).
+  // Focus chat input for the target session only.
   const focusChatInputForSession = useCallback((targetSessionId?: string | null) => {
     if (!targetSessionId) return
     dispatchFocusInputEvent({ sessionId: targetSessionId })
@@ -669,15 +667,8 @@ function AppShellContent({
   // Focus mode toggle (CMD+.) - hides both sidebars
   useAction('view.toggleFocusMode', () => setIsSidebarAndNavigatorHidden(v => !v))
 
-  // Panel focus navigation (CMD+SHIFT+[ / ])
-  const focusNextPanel = useSetAtom(focusNextPanelAtom)
-  const focusPrevPanel = useSetAtom(focusPrevPanelAtom)
-  useAction('panel.focusNext', focusNextPanel, { enabled: () => panelCount > 1 })
-  useAction('panel.focusPrev', focusPrevPanel, { enabled: () => panelCount > 1 })
-
   // New chat
   useAction('app.newChat', () => handleNewChat())
-  useAction('app.newChatInPanel', () => handleNewChat(true))
 
   // Settings
   useAction('app.settings', onOpenSettings)
@@ -709,7 +700,6 @@ function AppShellContent({
 
   // ESC to stop processing - requires double-press within 1 second
   // First press shows warning overlay, second press interrupts
-  // In multi-panel, targets the focused panel's session
   useAction('chat.stopProcessing', () => {
     if (effectiveSessionId) {
       const meta = sessionMetaMap.get(effectiveSessionId)
@@ -1337,7 +1327,7 @@ function AppShellContent({
   }, [captureContextMenuPosition])
 
   // Create a new chat and select it
-  const handleNewChat = useCallback((newPanel: boolean = false) => {
+  const handleNewChat = useCallback(() => {
     if (!activeWorkspace) return
 
     // Exit search mode and switch to All Sessions
@@ -1345,10 +1335,7 @@ function AppShellContent({
     setSearchQuery('')
 
     // Delegate to NavigationContext which handles session creation
-    navigate(
-      routes.action.newSession(),
-      newPanel ? { newPanel: true, targetLaneId: 'main' } : undefined
-    )
+    navigate(routes.action.newSession())
 
     // Focus the chat input after navigation completes
     setTimeout(() => focusZone('chat', { intent: 'programmatic' }), 50)
@@ -1650,13 +1637,6 @@ function AppShellContent({
     })
   }, [sessionFilter, labelCounts, activeWorkspace?.id, handleLabelClick, isExpanded, toggleExpanded, openConfigureLabels, handleAddLabel, handleDeleteLabel])
 
-  let sessionListFocusedSessionId: string | null | undefined
-  if (panelCount === 0) {
-    sessionListFocusedSessionId = null
-  } else if (panelCount > 1) {
-    sessionListFocusedSessionId = focusedSessionId
-  }
-
   const sessionListNavigateToSession = navigateToSessionInPanel
 
   const renderSessionList = (key: string, items: SessionMeta[], heightBehavior?: SessionListHeightBehavior) => (
@@ -1691,7 +1671,7 @@ function AppShellContent({
       sessionStatuses={effectiveSessionStatuses}
       evaluateViews={evaluateViews}
       workspaceId={activeWorkspaceId ?? undefined}
-      focusedSessionId={sessionListFocusedSessionId}
+      focusedSessionId={undefined}
       onNavigateToSession={sessionListNavigateToSession}
       hasPendingPrompt={hasPendingPrompt}
       activeChatMatchInfo={chatMatchInfo}
@@ -1736,7 +1716,6 @@ function AppShellContent({
           onToggleSidebar={handleToggleSidebar}
           onToggleRightSidebar={handleToggleRightSidebar}
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
-          onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
           isRightSidebarToggleVisible={areContextualPanelsAvailable}
           isEditorPanelToggleVisible={areContextualPanelsAvailable}
@@ -1779,7 +1758,7 @@ function AppShellContent({
                           <ContextMenuTrigger asChild>
                             <Button
                               variant="ghost"
-                              onClick={(e) => handleNewChat(e.metaKey || e.ctrlKey)}
+                              onClick={() => handleNewChat()}
                               className="w-full justify-start gap-2 py-[7px] px-2 text-[14px] font-normal rounded-[6px] shadow-minimal bg-background"
                               data-tutorial="new-chat-button"
                             >
