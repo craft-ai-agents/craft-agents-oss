@@ -1,21 +1,61 @@
 import { describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import type { AppShellContextType } from '@/context/AppShellContext'
+import { createPanelSlotHeaderContext } from '../panel-slot-header-context'
 
-const panelSlotSource = readFileSync(
-  join(import.meta.dir, '../PanelSlot.tsx'),
-  'utf8',
-)
+const parentContext = {
+  workspaces: [],
+  activeWorkspaceId: 'workspace-1',
+  activeWorkspaceSlug: 'workspace-1',
+  llmConnections: [],
+  refreshLlmConnections: async () => {},
+  pendingPermissions: new Map(),
+  pendingCredentials: new Map(),
+  getDraft: () => '',
+  getDraftAttachmentRefs: () => [],
+  hydrateDraftAttachments: async () => [],
+  sessionOptions: new Map(),
+  onCreateSession: async () => ({ id: 'session-1' }),
+  onSendMessage: () => {},
+  onRenameSession: () => {},
+  onFlagSession: () => {},
+  onUnflagSession: () => {},
+  onArchiveSession: () => {},
+  onUnarchiveSession: () => {},
+  onMarkSessionRead: () => {},
+  onMarkSessionUnread: () => {},
+  onSetActiveViewingSession: () => {},
+  onSessionStatusChange: () => {},
+  onDeleteSession: async () => true,
+  onOpenFile: () => {},
+  onOpenUrl: () => {},
+  onSelectWorkspace: () => {},
+  onOpenSettings: () => {},
+  onOpenKeyboardShortcuts: () => {},
+  onOpenStoredUserPreferences: () => {},
+  onReset: () => {},
+  onSsoLogout: async () => {},
+  onSessionOptionsChange: () => {},
+  onInputChange: () => {},
+  onAttachmentsChange: () => {},
+} as unknown as AppShellContextType
 
-describe('PanelSlot header actions', () => {
-  test('does not inject a close button into the panel header', () => {
-    expect(panelSlotSource).not.toContain('rightSidebarButton: closeButton')
-    expect(panelSlotSource).not.toContain('const closeButton')
-    expect(panelSlotSource).not.toContain('icon={<X')
+describe('PanelSlot header context', () => {
+  test('does not add a close action to the panel header context', () => {
+    const context = createPanelSlotHeaderContext(parentContext, {
+      leadingAction: undefined,
+      isFocusedPanel: true,
+    })
+
+    expect(context.rightSidebarButton).toBeUndefined()
   })
 
   test('keeps the compact back button as the leading header action', () => {
-    expect(panelSlotSource).toContain('leadingAction: backButton')
-    expect(panelSlotSource).toContain('icon={<ChevronLeft')
+    const backButton = 'back-button'
+    const context = createPanelSlotHeaderContext(parentContext, {
+      leadingAction: backButton,
+      isFocusedPanel: true,
+    })
+
+    expect(context.leadingAction).toBe(backButton)
   })
 })

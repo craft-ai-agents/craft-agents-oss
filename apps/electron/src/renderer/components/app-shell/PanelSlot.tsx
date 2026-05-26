@@ -22,6 +22,7 @@ import { useAppShellContext, AppShellProvider } from '@/context/AppShellContext'
 import { PanelHeaderCenterButton } from '@/components/ui/PanelHeaderCenterButton'
 import { MainContentPanel } from './MainContentPanel'
 import { PANEL_MIN_WIDTH, RADIUS_EDGE, RADIUS_INNER } from './panel-constants'
+import { createPanelSlotHeaderContext } from './panel-slot-header-context'
 
 interface PanelSlotProps {
   entry: PanelStackEntry
@@ -72,15 +73,17 @@ export function PanelSlot({
         tooltip={t("common.backToList")}
       />
     )
-  }, [isCompact, handleClose])
+  }, [isCompact, handleClose, t])
 
   // Override AppShellContext so ChatPage/PanelHeader gets our per-panel back
   // button (compact mode) and isFocusedPanel for input field appearance.
-  const contextOverride = useMemo(() => ({
-    ...parentContext,
-    leadingAction: backButton,
-    isFocusedPanel,
-  }), [parentContext, backButton, isFocusedPanel])
+  const contextOverride = useMemo(
+    () => createPanelSlotHeaderContext(parentContext, {
+      leadingAction: backButton,
+      isFocusedPanel,
+    }),
+    [parentContext, backButton, isFocusedPanel],
+  )
 
   const handlePointerDown = useCallback(() => {
     if (!isFocusedPanel) {
