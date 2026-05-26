@@ -11,12 +11,11 @@
  *
  * Compact mode (mobile / narrow window):
  * The flex layout is replaced with an absolute-positioned, transform-animated
- * stack — navigator and the focused content panel both stay mounted and slide
+ * stack — navigator and the content panel both stay mounted and slide
  * in/out via CompactPanelTransition. This produces an iOS UINavigationController
  * feel rather than a CSS reflow.
  */
 
-import { useRef } from 'react'
 import { useAtomValue } from 'jotai'
 import { motion } from 'motion/react'
 import { cn } from '@/lib/utils'
@@ -73,13 +72,8 @@ export function PanelStackContainer({
   const isDetailFocused = isDetailNavState(focusedNavState)
   const hasSelectedContent = isCompact && isDetailFocused
 
-  const scrollRef = useRef<HTMLDivElement>(null)
-
   const hasSidebar = sidebarWidth > 0
-  // Desktop: navigator is shown when AppShell asks for it. Compact: navigator
-  // is always mounted (transform-hidden when detail-focused) so the slide can
-  // animate both slots in lockstep.
-  const hasNavigator = isCompact ? navigatorWidth > 0 : navigatorWidth > 0
+  const hasNavigator = navigatorWidth > 0
   const isLeftEdge = !hasSidebar && !hasNavigator
 
   const transition = (isResizing || isCompact) ? { duration: 0 } : PANEL_SPRING
@@ -91,7 +85,6 @@ export function PanelStackContainer({
   if (isCompact) {
     return (
       <div
-        ref={scrollRef}
         data-mobile-menu-root="true"
         className="flex-1 min-w-0 relative panel-scroll @container/shell"
         style={{
@@ -131,8 +124,6 @@ export function PanelStackContainer({
               <PanelSlot
                 key={contentPanel.id}
                 entry={contentPanel}
-                isOnly={true}
-                isFocusedPanel={true}
                 isSidebarAndNavigatorHidden={isSidebarAndNavigatorHidden}
                 isAtLeftEdge={isLeftEdge}
                 isAtRightEdge={!isRightSidebarVisible}
@@ -146,10 +137,9 @@ export function PanelStackContainer({
   }
 
   // === DESKTOP BRANCH ===
-  // Same flex-row layout as before; behavior is unchanged.
+  // Fixed sidebar/navigator slots plus one content panel.
   return (
     <div
-      ref={scrollRef}
       data-mobile-menu-root="true"
       className="flex-1 min-w-0 flex relative z-panel panel-scroll @container/shell"
       style={{
@@ -221,8 +211,6 @@ export function PanelStackContainer({
           <PanelSlot
             key={contentPanel.id}
             entry={contentPanel}
-            isOnly={true}
-            isFocusedPanel={true}
             isSidebarAndNavigatorHidden={isSidebarAndNavigatorHidden}
             isAtLeftEdge={isLeftEdge}
             isAtRightEdge={!isRightSidebarVisible}

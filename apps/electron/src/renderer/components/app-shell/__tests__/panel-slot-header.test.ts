@@ -43,7 +43,6 @@ describe('PanelSlot header context', () => {
   test('does not add a close action to the panel header context', () => {
     const context = createPanelSlotHeaderContext(parentContext, {
       leadingAction: undefined,
-      isFocusedPanel: true,
     })
 
     expect(context.rightSidebarButton).toBeUndefined()
@@ -53,9 +52,16 @@ describe('PanelSlot header context', () => {
     const backButton = 'back-button'
     const context = createPanelSlotHeaderContext(parentContext, {
       leadingAction: backButton,
-      isFocusedPanel: true,
     })
 
     expect(context.leadingAction).toBe(backButton)
+  })
+
+  test('marks the single content panel as focused', () => {
+    const context = createPanelSlotHeaderContext(parentContext, {
+      leadingAction: undefined,
+    })
+
+    expect(context.isFocusedPanel).toBe(true)
   })
 })

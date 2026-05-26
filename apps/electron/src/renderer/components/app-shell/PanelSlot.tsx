@@ -19,13 +19,11 @@ import { navigate } from '@/lib/navigate'
 import { useAppShellContext, AppShellProvider } from '@/context/AppShellContext'
 import { PanelHeaderCenterButton } from '@/components/ui/PanelHeaderCenterButton'
 import { MainContentPanel } from './MainContentPanel'
-import { PANEL_MIN_WIDTH, RADIUS_EDGE, RADIUS_INNER } from './panel-constants'
+import { RADIUS_EDGE, RADIUS_INNER } from './panel-constants'
 import { createPanelSlotHeaderContext } from './panel-slot-header-context'
 
 interface PanelSlotProps {
   entry: PanelStackEntry
-  isOnly: boolean
-  isFocusedPanel: boolean
   isSidebarAndNavigatorHidden: boolean
   /** Whether this panel's left corners touch the window edge (no sidebar/navigator before it) */
   isAtLeftEdge: boolean
@@ -53,8 +51,6 @@ function getNavigatorRoute(navState: NavigationState): ReturnType<typeof buildRo
 
 export function PanelSlot({
   entry,
-  isOnly,
-  isFocusedPanel,
   isSidebarAndNavigatorHidden,
   isAtLeftEdge,
   isAtRightEdge,
@@ -86,9 +82,8 @@ export function PanelSlot({
   const contextOverride = useMemo(
     () => createPanelSlotHeaderContext(parentContext, {
       leadingAction: backButton,
-      isFocusedPanel,
     }),
-    [parentContext, backButton, isFocusedPanel],
+    [parentContext, backButton],
   )
 
   return (
@@ -97,29 +92,18 @@ export function PanelSlot({
         data-compact={isCompact || undefined}
         className={cn(
           'h-full overflow-hidden relative @container/panel',
-          !isOnly && isFocusedPanel ? 'shadow-panel-focused z-[1]' : 'shadow-middle z-0',
+          'shadow-middle z-0',
           'bg-foreground-3',
         )}
         style={{
-          // Kept for callers that deliberately render an unfocused panel slot.
-          ...(!isFocusedPanel && !isOnly
-            ? {
-                '--background': 'var(--background-elevated)',
-                '--shadow-minimal': 'var(--shadow-minimal-flat)',
-                '--user-message-bubble': 'var(--user-message-bubble-dimmed)',
-              } as React.CSSProperties
-            : {}
-          ),
           // Corner radii: edge corners (touching window boundary) vs interior corners.
           // Compact mode panels run flush to the viewport floor — no rounded bottom.
           borderTopLeftRadius: RADIUS_INNER,
           borderBottomLeftRadius: isCompact ? 0 : (isAtLeftEdge ? RADIUS_EDGE : RADIUS_INNER),
           borderTopRightRadius: RADIUS_INNER,
           borderBottomRightRadius: isCompact ? 0 : (isAtRightEdge ? RADIUS_EDGE : RADIUS_INNER),
-          ...(isOnly
-            ? { flexGrow: 1, minWidth: 0 }
-            : { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: PANEL_MIN_WIDTH }
-          ),
+          flexGrow: 1,
+          minWidth: 0,
         }}
       >
         <div className="h-full flex flex-col">
