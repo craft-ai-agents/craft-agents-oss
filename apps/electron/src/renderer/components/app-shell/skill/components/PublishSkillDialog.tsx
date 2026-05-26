@@ -83,6 +83,7 @@ export function PublishSkillDialog({
     } else if (!/^[a-z0-9_]+$/.test(name.trim())) {
       errs.name = '只允许英文小写字母、数字和下划线'
     }
+    if (!chineseName.trim()) errs.chineseName = '请输入 Skill 展示名称'
     if (!description.trim()) errs.description = '请输入 Skill 描述'
     if (!sourceSkill && !file) errs.file = '请选择要上传的 zip 文件'
     return errs
@@ -194,18 +195,24 @@ export function PublishSkillDialog({
 
           {/* Skill 展示名称 */}
           <div>
-            <label className="mb-1.5 block text-[14px] font-medium text-foreground">Skill 展示名称</label>
+            <label className="mb-1.5 block text-[14px] font-medium text-foreground">
+              Skill 展示名称<span className="ml-0.5 text-rose-500">*</span>
+            </label>
             <div className="relative">
               <input
                 type="text"
                 value={chineseName}
-                onChange={(e) => setChineseName(e.target.value)}
+                onChange={(e) => { setChineseName(e.target.value); setErrors((p) => ({ ...p, chineseName: '' })) }}
                 placeholder="例如：浏览器工具"
                 maxLength={36}
-                className="h-9 w-full rounded-lg border border-border bg-background px-3 pr-12 text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                className={cn(
+                  'h-9 w-full rounded-lg border bg-background px-3 pr-12 text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring',
+                  errors.chineseName ? 'border-rose-400' : 'border-border',
+                )}
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground/50">{chineseName.length}/36</span>
             </div>
+            {errors.chineseName && <p className="mt-1 text-[12px] text-rose-500">{errors.chineseName}</p>}
           </div>
 
           {/* Skill 描述 */}

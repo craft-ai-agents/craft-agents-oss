@@ -1153,7 +1153,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
     return window.electronAPI.deleteChatFeedback(feedbackId)
       .then(result => {
-        console.log('[Craft Agent Feedback] deleteChatFeedback result:', {
+        console.log('[MDP Agent Feedback] deleteChatFeedback result:', {
           time: new Date().toISOString(),
           params,
           result: result ?? null,
@@ -1161,7 +1161,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
         return result
       })
       .catch(error => {
-        console.error('[Craft Agent Feedback] deleteChatFeedback result:', {
+        console.error('[MDP Agent Feedback] deleteChatFeedback result:', {
           time: new Date().toISOString(),
           params,
           error,
@@ -1189,7 +1189,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       : window.electronAPI.addChatFeedback(body)
 
     return save.then(savedFeedbackId => {
-      console.log('[Craft Agent Feedback] saveChatFeedback result:', {
+      console.log('[MDP Agent Feedback] saveChatFeedback result:', {
         time: new Date().toISOString(),
         mode: saveMode,
         messageId,

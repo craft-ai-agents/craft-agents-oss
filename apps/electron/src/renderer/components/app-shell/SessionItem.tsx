@@ -85,7 +85,7 @@ export function SessionItem({
       className="session-item"
       dataAttributes={{ 'data-session-id': item.id }}
       showSeparator={!isFirstInGroup}
-      separatorClassName="pl-[38px] pr-4"
+      separatorClassName="pl-[22px] pr-3"
       isSelected={isSelected}
       isInMultiSelect={isInMultiSelect}
       onMouseDown={handleClick}
