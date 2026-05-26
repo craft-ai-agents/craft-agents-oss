@@ -17,7 +17,7 @@ mock.module('@/lib/navigate', () => ({
   navigate: navigateMock,
   routes: {
     view: {
-      allSessions: (sessionId?: string) => ({ type: 'view', view: 'allSessions', sessionId }),
+      allSessions: (sessionId?: string) => sessionId ? `allSessions/session/${sessionId}` : 'allSessions',
     },
   },
 }))
@@ -95,14 +95,14 @@ mock.module('@/components/ui/entity-row', () => ({
     title?: React.ReactNode
     menuContent?: React.ReactNode
     onMouseDown?: (event: React.MouseEvent) => void
-  }) => (
-    latestEntityRowMouseDown = onMouseDown,
-    <article>
+  }) => {
+    latestEntityRowMouseDown = onMouseDown
+    return <article>
       <div data-slot="icon">{icon}</div>
       <div data-slot="title">{title}</div>
       <div data-slot="menu">{menuContent}</div>
     </article>
-  ),
+  },
 }))
 
 const { SessionMenu } = await import('../SessionMenu')
@@ -201,6 +201,11 @@ function renderSessionItemWithContext(contextOverrides: Partial<SessionListConte
   )
 }
 
+function dispatchSessionItemMouseDown(event: Partial<React.MouseEvent>) {
+  expect(latestEntityRowMouseDown).toBeDefined()
+  latestEntityRowMouseDown!(event as React.MouseEvent)
+}
+
 describe('session popup status controls', () => {
   test('omits the workflow status submenu from the shared session menu', () => {
     const html = renderToStaticMarkup(<SessionMenu {...menuProps()} />)
@@ -271,7 +276,7 @@ describe('session popup status controls', () => {
     navigateMock.mockClear()
     renderSessionItemWithContext({ onOpenInNewWindow: openInNewWindow })
 
-    latestEntityRowMouseDown?.({
+    dispatchSessionItemMouseDown({
       button: 0,
       metaKey: true,
       ctrlKey: false,
