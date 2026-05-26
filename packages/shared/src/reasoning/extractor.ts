@@ -1,10 +1,16 @@
+/** Extracted reasoning text plus the user-visible message content. */
 export interface ReasoningExtractionResult {
+  /** Reasoning text extracted from the first supported format, or null when absent. */
   reasoningText: string | null;
+  /** Message content with any embedded <think>...</think> sections removed. */
   cleanContent: string;
 }
 
+/** Minimal model-response shape accepted by the reasoning extractor. */
 export interface ReasoningMessage {
+  /** Response content as a string or Anthropic-style content block array. */
   content?: unknown;
+  /** Provider-specific top-level reasoning field. */
   reasoning_content?: unknown;
 }
 
@@ -42,6 +48,12 @@ function extractThinkTags(content: string): ReasoningExtractionResult | null {
   let cursor = 0;
   let foundTag = false;
 
+  const flushReasoningBuffer = () => {
+    const reasoningText = reasoningBuffer.trim();
+    if (reasoningText.length > 0) reasoningParts.push(reasoningText);
+    reasoningBuffer = '';
+  };
+
   for (const tag of content.matchAll(tagPattern)) {
     const tagText = tag[0] ?? '';
     const tagIndex = tag.index;
@@ -59,9 +71,7 @@ function extractThinkTags(content: string): ReasoningExtractionResult | null {
       if (depth > 0) {
         depth -= 1;
         if (depth === 0) {
-          const reasoningText = reasoningBuffer.trim();
-          if (reasoningText.length > 0) reasoningParts.push(reasoningText);
-          reasoningBuffer = '';
+          flushReasoningBuffer();
         }
       }
     } else {
@@ -75,8 +85,7 @@ function extractThinkTags(content: string): ReasoningExtractionResult | null {
   const tail = content.slice(cursor);
   if (depth > 0) {
     reasoningBuffer += tail;
-    const reasoningText = reasoningBuffer.trim();
-    if (reasoningText.length > 0) reasoningParts.push(reasoningText);
+    flushReasoningBuffer();
   } else {
     cleanContent += tail;
   }
@@ -89,6 +98,10 @@ function extractThinkTags(content: string): ReasoningExtractionResult | null {
   };
 }
 
+/**
+ * Extracts model reasoning from Anthropic thinking blocks, a top-level
+ * reasoning_content field, or embedded <think>...</think> tags, in that order.
+ */
 export function extractReasoningContent(message: ReasoningMessage): ReasoningExtractionResult {
   const tagResult = typeof message.content === 'string' ? extractThinkTags(message.content) : null;
   const cleanContent = tagResult?.cleanContent ?? getContentString(message.content);
