@@ -20,6 +20,7 @@ interface BranchSessionNavigationArgs {
   navigate: (route: Route) => void | Promise<void>
 }
 
+/** Creates a child branch session and navigates the current panel to it. */
 export async function createBranchSessionAndNavigate({
   session,
   messageId,
