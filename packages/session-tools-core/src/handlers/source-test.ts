@@ -796,15 +796,22 @@ async function testMcpConnection(
             } catch {
               // Not JSON or no credential — continue without credential headers
             }
+            if (source.mcp.authType === 'bearer') {
+              accessToken = (await ctx.getSsoIdToken?.()) ?? undefined;
+            }
           } else if (source.mcp.authType === 'oauth' || source.mcp.authType === 'bearer') {
             // OAuth / bearer single-token path — mirror the runtime so the probe
-            // sends an Authorization header. Cached token first, refresh fallback
-            // only on miss (matches checkAuthStatus and TokenRefreshManager).
+            // sends an Authorization header. Bearer MCP prefers the SSO idToken;
+            // otherwise cached source token first, refresh fallback only on miss
+            // (matches checkAuthStatus and TokenRefreshManager).
             try {
               accessToken =
                 (await ctx.credentialManager.getToken(loadedSource)) ??
                 (await ctx.credentialManager.refresh(loadedSource)) ??
                 undefined;
+              if (source.mcp.authType === 'bearer') {
+                accessToken = (await ctx.getSsoIdToken?.()) ?? accessToken;
+              }
             } catch {
               // Token resolution failed — fall through; the probe will surface
               // the resulting `needsAuth` / 401 the same way it always has.

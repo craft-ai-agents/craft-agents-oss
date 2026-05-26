@@ -301,6 +301,10 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
             : { type: 'source_bearer' as const, workspaceId: source.workspaceId, sourceId: sourceSlug }
           const credential = await credentialManager.get(credentialId)
           accessToken = credential?.value
+          if (source.config.mcp.authType === 'bearer') {
+            const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+            accessToken = (await new SsoCredentialStore().load().catch(() => null))?.idToken ?? accessToken
+          }
         }
 
         log.info(`Fetching MCP tools from ${source.config.mcp.url}`)
