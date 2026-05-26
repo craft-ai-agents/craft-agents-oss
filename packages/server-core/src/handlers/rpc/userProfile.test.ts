@@ -10,8 +10,8 @@ describe('userProfile RPC handlers', () => {
       handle: (channel: string, handler: Function) => { handlers.set(channel, handler) },
     } as unknown as RpcServer
 
-    let refreshResult = { name: 'Refreshed', oneStopId: 'OS-999', group: 'Eng', department: 'AI' }
-    let getResult = { name: 'Cached', oneStopId: 'OS-888', group: 'Eng', department: 'AI' }
+    let refreshResult = { userName: 'Refreshed', ystId: 'OS-999', zuName: 'Eng', shiName: 'AI' }
+    let getResult = { userName: 'Cached', ystId: 'OS-888', zuName: 'Eng', shiName: 'AI' }
 
     const deps = {
       sessionManager: {
@@ -38,13 +38,13 @@ describe('userProfile RPC handlers', () => {
     const { handlers } = setup()
     const handler = handlers.get(RPC_CHANNELS.userProfile.REFRESH)!
     const result = await handler()
-    expect(result).toEqual({ name: 'Refreshed', oneStopId: 'OS-999', group: 'Eng', department: 'AI' })
+    expect(result).toEqual({ userName: 'Refreshed', ystId: 'OS-999', zuName: 'Eng', shiName: 'AI' })
   })
 
   it('userProfile:get delegates to sessionManager.getUserProfile', async () => {
     const { handlers } = setup()
     const handler = handlers.get(RPC_CHANNELS.userProfile.GET)!
     const result = await handler()
-    expect(result).toEqual({ name: 'Cached', oneStopId: 'OS-888', group: 'Eng', department: 'AI' })
+    expect(result).toEqual({ userName: 'Cached', ystId: 'OS-888', zuName: 'Eng', shiName: 'AI' })
   })
 })

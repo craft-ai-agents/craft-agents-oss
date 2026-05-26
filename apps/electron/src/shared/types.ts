@@ -141,12 +141,22 @@ export interface ToolIconMapping {
 
 /** User profile data shown in workspace settings. */
 export interface UserProfile {
-  name?: string
-  oneStopId?: string
-  group?: string
-  department?: string
-  ownedModules?: string[]
-  ownedTopics?: string[]
+  zhaohuOpenId?: string
+  userName?: string
+  ystId?: string
+  positon?: string
+  zuName?: string
+  leaderUserInfo?: string
+  shiName?: string
+  pathName?: string
+  sex?: string
+  ip?: string
+  chargeModule?: Array<{
+    appCode?: string
+    appName?: string
+  }>
+  ingProjectInfo?: unknown[]
+  onlineInfo?: unknown[]
 }
 
 /**

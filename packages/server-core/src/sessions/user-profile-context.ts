@@ -3,12 +3,24 @@ import { dirname, join } from 'path'
 import { CONFIG_DIR } from '@craft-agent/shared/config'
 
 export interface UserProfile {
-  name?: string
-  oneStopId?: string
-  group?: string
-  department?: string
-  ownedModules?: string[]
-  ownedTopics?: string[]
+  zhaohuOpenId?: string
+  userName?: string
+  ystId?: string
+  positon?: string
+  zuName?: string
+  leaderUserInfo?: string
+  shiName?: string
+  pathName?: string
+  sex?: string
+  ip?: string
+  chargeModule?: UserProfileChargeModule[]
+  ingProjectInfo?: unknown[]
+  onlineInfo?: unknown[]
+}
+
+export interface UserProfileChargeModule {
+  appCode?: string
+  appName?: string
 }
 
 /** Cached profile data and the time it was last refreshed successfully. */
@@ -50,31 +62,70 @@ export interface UserProfileContextManagerOptions {
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 const DEFAULT_CACHE_PATH = join(CONFIG_DIR, 'user-profile-cache.json')
 
-function compactList(values: string[] | undefined): string | undefined {
-  const cleaned = (values ?? []).map(v => v.trim()).filter(Boolean)
-  return cleaned.length ? cleaned.join(', ') : undefined
-}
-
 export function hasProfileContent(profile: UserProfile | null | undefined): profile is UserProfile {
   return !!profile && !!(
-    profile.name ||
-    profile.oneStopId ||
-    profile.group ||
-    profile.department ||
-    compactList(profile.ownedModules) ||
-    compactList(profile.ownedTopics)
+    profile.zhaohuOpenId ||
+    profile.userName ||
+    profile.ystId ||
+    profile.positon ||
+    profile.zuName ||
+    profile.leaderUserInfo ||
+    profile.shiName ||
+    profile.pathName ||
+    profile.sex ||
+    profile.ip ||
+    compactChargeModules(profile.chargeModule) ||
+    profile.ingProjectInfo?.length ||
+    profile.onlineInfo?.length
   )
 }
 
-export function sanitizeProfile(profile: UserProfile): UserProfile {
+export function sanitizeProfile(profile: unknown): UserProfile {
+  const candidate = unwrapProfileEnvelope(profile)
   return {
-    name: profile.name?.trim() || undefined,
-    oneStopId: profile.oneStopId?.trim() || undefined,
-    group: profile.group?.trim() || undefined,
-    department: profile.department?.trim() || undefined,
-    ownedModules: (profile.ownedModules ?? []).map(v => v.trim()).filter(Boolean),
-    ownedTopics: (profile.ownedTopics ?? []).map(v => v.trim()).filter(Boolean),
+    zhaohuOpenId: trimString(candidate.zhaohuOpenId),
+    userName: trimString(candidate.userName),
+    ystId: trimString(candidate.ystId),
+    positon: trimString(candidate.positon),
+    zuName: trimString(candidate.zuName),
+    leaderUserInfo: trimString(candidate.leaderUserInfo),
+    shiName: trimString(candidate.shiName),
+    pathName: trimString(candidate.pathName),
+    sex: trimString(candidate.sex),
+    ip: trimString(candidate.ip),
+    chargeModule: sanitizeChargeModules(candidate.chargeModule),
+    ingProjectInfo: Array.isArray(candidate.ingProjectInfo) ? candidate.ingProjectInfo : [],
+    onlineInfo: Array.isArray(candidate.onlineInfo) ? candidate.onlineInfo : [],
   }
+}
+
+function unwrapProfileEnvelope(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object') return {}
+  const root = value as Record<string, unknown>
+  const body = root.body
+  if (body && typeof body === 'object') {
+    const data = (body as Record<string, unknown>).data
+    if (data && typeof data === 'object') return data as Record<string, unknown>
+  }
+  return root
+}
+
+function trimString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value.trim() || undefined : undefined
+}
+
+function sanitizeChargeModules(value: unknown): UserProfileChargeModule[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item): UserProfileChargeModule | null => {
+      if (!item || typeof item !== 'object') return null
+      const candidate = item as Record<string, unknown>
+      return {
+        appCode: trimString(candidate.appCode),
+        appName: trimString(candidate.appName),
+      }
+    })
+    .filter((item): item is UserProfileChargeModule => !!item && !!(item.appCode || item.appName))
 }
 
 function escapeContextValue(value: string): string {
@@ -103,12 +154,18 @@ export function formatUserProfileDynamicContext(input: {
   }
 
   const fields: Array<[string, string | undefined]> = [
-    ['Name', profile.name],
-    ['One-stop ID', profile.oneStopId],
-    ['Group', profile.group],
-    ['Department', profile.department],
-    ['Owned modules', compactList(profile.ownedModules)],
-    ['Owned topics', compactList(profile.ownedTopics)],
+    ['User name', profile.userName],
+    ['YST ID', profile.ystId],
+    ['Position', profile.positon],
+    ['Group name', profile.zuName],
+    ['Leader user info', profile.leaderUserInfo],
+    ['Office name', profile.shiName],
+    ['Path name', profile.pathName],
+    ['Sex', profile.sex],
+    ['IP', profile.ip],
+    ['Charge modules', compactChargeModules(profile.chargeModule)],
+    ['In-progress project info', compactJsonList(profile.ingProjectInfo)],
+    ['Online info', compactJsonList(profile.onlineInfo)],
   ]
 
   for (const [label, value] of fields) {
@@ -117,9 +174,24 @@ export function formatUserProfileDynamicContext(input: {
     }
   }
 
-  lines.push('Instruction: Use this profile only to resolve user context. Do not reveal the one-stop ID in normal replies.')
+  lines.push('Instruction: Use this profile only to resolve user context. Do not reveal identity IDs or IP addresses in normal replies.')
   lines.push('</user_profile>')
   return lines.join('\n')
+}
+
+function compactChargeModules(values: UserProfileChargeModule[] | undefined): string | undefined {
+  const cleaned = (values ?? [])
+    .map(module => {
+      if (module.appCode && module.appName) return `${module.appName} (${module.appCode})`
+      return module.appName ?? module.appCode
+    })
+    .filter(Boolean)
+  return cleaned.length ? cleaned.join(', ') : undefined
+}
+
+function compactJsonList(values: unknown[] | undefined): string | undefined {
+  if (!values?.length) return undefined
+  return values.map(value => typeof value === 'string' ? value : JSON.stringify(value)).join(', ')
 }
 
 /** Loads user profile data from the configured profile JSON source. */

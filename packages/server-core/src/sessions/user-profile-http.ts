@@ -140,7 +140,7 @@ async function buildIdTokenHeaders(
   getIdToken: () => Promise<string | null | undefined>,
 ): Promise<Record<string, string> | undefined> {
   const idToken = await getIdToken().catch(() => null);
-  return idToken ? { idtoken: idToken } : undefined;
+  return idToken ? { Authorization: `Bearer ${idToken}` } : undefined;
 }
 
 async function loadSsoIdToken(): Promise<string | null> {
