@@ -10,6 +10,18 @@ import { SessionListProvider, type SessionListContextValue } from '@/context/Ses
 
 setupI18n([initReactI18next])
 
+const navigateMock = mock(() => {})
+let latestEntityRowMouseDown: ((event: React.MouseEvent) => void) | undefined
+
+mock.module('@/lib/navigate', () => ({
+  navigate: navigateMock,
+  routes: {
+    view: {
+      allSessions: (sessionId?: string) => ({ type: 'view', view: 'allSessions', sessionId }),
+    },
+  },
+}))
+
 mock.module('@/components/ui/menu-context', () => ({
   useMenuComponents: () => ({
     MenuItem: ({
@@ -77,11 +89,14 @@ mock.module('@/components/ui/entity-row', () => ({
     icon,
     title,
     menuContent,
+    onMouseDown,
   }: {
     icon?: React.ReactNode
     title?: React.ReactNode
     menuContent?: React.ReactNode
+    onMouseDown?: (event: React.MouseEvent) => void
   }) => (
+    latestEntityRowMouseDown = onMouseDown,
     <article>
       <div data-slot="icon">{icon}</div>
       <div data-slot="title">{title}</div>
@@ -169,6 +184,23 @@ function listContext(): SessionListContextValue {
   }
 }
 
+function renderSessionItemWithContext(contextOverrides: Partial<SessionListContextValue> = {}) {
+  latestEntityRowMouseDown = undefined
+  renderToStaticMarkup(
+    <SessionListProvider value={{ ...listContext(), ...contextOverrides }}>
+      <SessionItem
+        item={session()}
+        index={0}
+        itemProps={{ onKeyDown: () => {} }}
+        isSelected={false}
+        isFirstInGroup
+        isInMultiSelect={false}
+        onSelect={() => {}}
+      />
+    </SessionListProvider>,
+  )
+}
+
 describe('session popup status controls', () => {
   test('omits the workflow status submenu from the shared session menu', () => {
     const html = renderToStaticMarkup(<SessionMenu {...menuProps()} />)
@@ -230,5 +262,25 @@ describe('session popup status controls', () => {
     expect(html).not.toContain('aria-haspopup="menu"')
     expect(html).not.toContain('status-dot')
     expect(html).toContain('Session One')
+  })
+
+  test('opens a session in a new window on Cmd+Shift+Click without pushing a panel', () => {
+    const openInNewWindow = mock(() => {})
+    const preventDefault = mock(() => {})
+
+    navigateMock.mockClear()
+    renderSessionItemWithContext({ onOpenInNewWindow: openInNewWindow })
+
+    latestEntityRowMouseDown?.({
+      button: 0,
+      metaKey: true,
+      ctrlKey: false,
+      shiftKey: true,
+      preventDefault,
+    } as unknown as React.MouseEvent)
+
+    expect(preventDefault).toHaveBeenCalled()
+    expect(openInNewWindow).toHaveBeenCalledWith(expect.objectContaining({ id: 'session-1' }))
+    expect(navigateMock).not.toHaveBeenCalled()
   })
 })
