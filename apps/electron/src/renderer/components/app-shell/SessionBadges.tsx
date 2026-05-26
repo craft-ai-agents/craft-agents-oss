@@ -17,6 +17,7 @@ export function SessionBadges({ item }: SessionBadgesProps) {
     return item.labels
       .map(entry => {
         const parsed = parseLabelEntry(entry)
+        if (parsed.id === 'project') return null
         const config = ctx.flatLabels.find(l => l.id === parsed.id)
         if (!config) return null
         return { config, rawValue: parsed.rawValue }

@@ -12,6 +12,7 @@ import { BatchSessionMenu } from "./BatchSessionMenu"
 import { SessionStatusIcon } from "./SessionStatusIcon"
 import { SessionBadges } from "./SessionBadges"
 import { getSessionTitle, getSessionPreviewText, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
+import { getSessionProjectInfo } from "@/utils/session-project"
 import { useSessionListContext } from "@/context/SessionListContext"
 import { useAppShellContext } from "@/context/AppShellContext"
 import { navigate, routes } from "@/lib/navigate"
@@ -74,6 +75,7 @@ export function SessionItem({
   const messagingBindingsBySession = useAtomValue(messagingBindingsBySessionAtom)
   const sessionBindings = messagingBindingsBySession.get(item.id) ?? []
   const hasMessagingBinding = sessionBindings.length > 0
+  const projectInfo = getSessionProjectInfo(item)
 
   const handleClick = (e: React.MouseEvent) => {
     ctx.onFocusZone()
@@ -170,8 +172,18 @@ export function SessionItem({
       titleClassName={cn("text-[13px]", item.isAsyncOperationOngoing && "animate-shimmer-text")}
       subtitle={previewText}
       titleSuffix={
-        hasMessagingBinding ? (
+        hasMessagingBinding || projectInfo.value ? (
           <div className="flex items-center gap-1">
+            {projectInfo.value && (
+              <EntityListBadge
+                variant="text"
+                colorClass="bg-foreground/[0.045] text-foreground/55"
+                tooltip={`Project: ${projectInfo.label}`}
+                className="max-w-[92px] overflow-hidden"
+              >
+                <span className="truncate">{projectInfo.label}</span>
+              </EntityListBadge>
+            )}
             {sessionBindings.map((binding) => {
               const pill = PLATFORM_PILL[binding.platform as 'telegram' | 'whatsapp']
               if (!pill) return null
