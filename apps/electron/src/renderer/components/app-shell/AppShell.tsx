@@ -124,6 +124,7 @@ import { PanelHeader } from "./PanelHeader"
 import { SendToWorkspaceDialog } from "./SendToWorkspaceDialog"
 import { MessagingDialogHost } from "@/components/messaging/MessagingDialogHost"
 import { SessionProjectDialogHost } from "./SessionProjectDialogHost"
+import { sessionProjectDialogAtom } from "@/atoms/session-project-dialog"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import {
@@ -819,6 +820,7 @@ function AppShellContent({
   const [skills, setSkills] = React.useState<LoadedSkill[]>([])
   // Sync skills to atom for NavigationContext auto-selection
   const setSkillsAtom = useSetAtom(skillsAtom)
+  const setSessionProjectDialog = useSetAtom(sessionProjectDialogAtom)
   React.useEffect(() => {
     setSkillsAtom(skills)
   }, [skills, setSkillsAtom])
@@ -1662,6 +1664,16 @@ function AppShellContent({
     }
   }, [navState])
 
+  const handleNewProjectClick = useCallback(() => {
+    const targetSessionId = focusedSessionId ?? session.selected ?? filteredSessionMetas[0]?.id ?? workspaceSessionMetas[0]?.id
+    if (!targetSessionId) {
+      toast.error('Create a session first, then move it into a project.')
+      return
+    }
+    setSessionsNavExpanded(true)
+    setSessionProjectDialog({ kind: 'new_project', sessionId: targetSessionId })
+  }, [filteredSessionMetas, focusedSessionId, session.selected, setSessionProjectDialog, workspaceSessionMetas])
+
   const handleFlaggedClick = useCallback(() => {
     navigate(routes.view.flagged())
   }, [])
@@ -2393,35 +2405,59 @@ function AppShellContent({
                 />
                 {sessionsNavExpanded && (
                   <div className="mt-2 space-y-2 px-3 pb-5">
-                    {sidebarProjectGroups.map((project) => (
-                      <div key={project.key} className="space-y-0.5">
-                        <div className="flex items-center gap-1.5 rounded-[7px] bg-white/[0.035] px-2 py-1 text-[11px] font-semibold text-white/70">
-                          <ChevronDown className="h-3 w-3 text-white/45" />
-                          <span className="min-w-0 flex-1 truncate">{project.label}</span>
-                          <span className="text-[10px] tabular-nums text-white/35">{project.items.length}</span>
+                    <button
+                      type="button"
+                      onClick={handleNewProjectClick}
+                      className="flex w-full items-center gap-1.5 rounded-[7px] px-2 py-1.5 text-left text-[11px] font-medium text-white/45 transition-colors hover:bg-white/[0.035] hover:text-white/75"
+                    >
+                      <Plus className="h-3 w-3" />
+                      <span className="min-w-0 truncate">New Project</span>
+                    </button>
+                    {sidebarProjectGroups.map((project) => {
+                      const projectCollapseKey = `session-project:${project.key}`
+                      const projectExpanded = isExpanded(projectCollapseKey)
+
+                      return (
+                        <div key={project.key} className="space-y-0.5">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(projectCollapseKey)}
+                            aria-expanded={projectExpanded}
+                            className="flex w-full items-center gap-1.5 rounded-[7px] bg-white/[0.035] px-2 py-1 text-left text-[11px] font-semibold text-white/70 transition-colors hover:bg-white/[0.055] hover:text-white/85"
+                          >
+                            {projectExpanded ? (
+                              <ChevronDown className="h-3 w-3 shrink-0 text-white/45" />
+                            ) : (
+                              <ChevronRight className="h-3 w-3 shrink-0 text-white/45" />
+                            )}
+                            <span className="min-w-0 flex-1 truncate">{project.label}</span>
+                            <span className="text-[10px] tabular-nums text-white/35">{project.items.length}</span>
+                          </button>
+                          {projectExpanded && (
+                            <div className="space-y-0.5 pl-3">
+                              {project.items.map((item) => {
+                                const active = item.id === session.selected
+                                return (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => navigateToSession(item.id)}
+                                    className={cn(
+                                      "block w-full truncate rounded-[7px] px-2.5 py-1.5 text-left text-[12px] leading-5 transition-colors",
+                                      active
+                                        ? "bg-white/[0.06] text-white"
+                                        : "text-white/42 hover:bg-white/[0.035] hover:text-white/70",
+                                    )}
+                                  >
+                                    {getSessionTitle(item)}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
-                        <div className="space-y-0.5 pl-3">
-                          {project.items.map((item) => {
-                            const active = item.id === session.selected
-                            return (
-                              <button
-                                key={item.id}
-                                type="button"
-                                onClick={() => navigateToSession(item.id)}
-                                className={cn(
-                                  "block w-full truncate rounded-[7px] px-2.5 py-1.5 text-left text-[12px] leading-5 transition-colors",
-                                  active
-                                    ? "bg-white/[0.06] text-white"
-                                    : "text-white/42 hover:bg-white/[0.035] hover:text-white/70",
-                                )}
-                              >
-                                {getSessionTitle(item)}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
                 {/* Agent Tree: Hierarchical list of agents */}
