@@ -7,17 +7,15 @@
  * When multiple panels exist, each uses flex-grow with its proportion as the weight,
  * combined with min-width to prevent shrinking below PANEL_MIN_WIDTH.
  *
- * Each PanelSlot overrides AppShellContext to inject a per-panel close button
- * into PanelHeader's rightSidebarButton slot. All panels are equal — closing
- * any panel removes it from the stack. A reactive effect handles window close
- * when the stack becomes empty.
+ * Each PanelSlot overrides AppShellContext to inject per-panel header state
+ * such as the compact back button and focused-panel metadata.
  */
 
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSetAtom } from 'jotai'
 import { cn } from '@/lib/utils'
-import { X, ChevronLeft } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import { parseRouteToNavigationState } from '../../../shared/route-parser'
 import { closePanelAtom, focusedPanelIdAtom, type PanelStackEntry } from '@/atoms/panel-stack'
 import { useAppShellContext, AppShellProvider } from '@/context/AppShellContext'
@@ -64,19 +62,7 @@ export function PanelSlot({
     closePanel(entry.id)
   }, [closePanel, entry.id])
 
-  // Build close button for PanelHeader (via context override)
-  const closeButton = useMemo(() => {
-    return (
-      <PanelHeaderCenterButton
-        icon={<X className="h-4 w-4" />}
-        onClick={handleClose}
-        tooltip={t("common.close")}
-      />
-    )
-  }, [handleClose])
-
   // Build back button for compact mode — closes the panel to reveal the session list.
-  // Same PanelHeaderCenterButton style as X and share, just on the left side.
   const backButton = useMemo(() => {
     if (!isCompact) return undefined
     return (
@@ -88,14 +74,13 @@ export function PanelSlot({
     )
   }, [isCompact, handleClose])
 
-  // Override AppShellContext so ChatPage/PanelHeader gets our per-panel close button,
-  // back button (compact mode), and isFocusedPanel for input field appearance
+  // Override AppShellContext so ChatPage/PanelHeader gets our per-panel back
+  // button (compact mode) and isFocusedPanel for input field appearance.
   const contextOverride = useMemo(() => ({
     ...parentContext,
-    rightSidebarButton: closeButton,
     leadingAction: backButton,
     isFocusedPanel,
-  }), [parentContext, closeButton, backButton, isFocusedPanel])
+  }), [parentContext, backButton, isFocusedPanel])
 
   const handlePointerDown = useCallback(() => {
     if (!isFocusedPanel) {
