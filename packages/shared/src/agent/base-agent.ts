@@ -979,7 +979,7 @@ ${formattedMessages}
     return {
       skillPaths,
       cleanMessage,
-      missingSkills: parsed.invalidSkills || []
+      missingSkills: parsed.invalidSkills || [],
     };
   }
 
