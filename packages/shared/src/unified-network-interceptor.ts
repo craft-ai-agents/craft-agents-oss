@@ -1871,6 +1871,11 @@ function getPiThinkingEnabledHint(): boolean | undefined {
   return undefined;
 }
 
+/**
+ * Applies Pi's Qwen/OpenAI-compatible chat-template thinking switch.
+ * Enabled requests include the top-level chat_template_kwargs field; disabled
+ * requests omit it so the provider falls back to non-thinking output.
+ */
 export function applyPiThinkingChatTemplateKwargs(body: Record<string, unknown>, thinkingEnabled: boolean | undefined): void {
   if (thinkingEnabled === undefined) return;
 

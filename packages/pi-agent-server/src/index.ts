@@ -42,6 +42,7 @@ import type {
   CreateAgentSessionOptions,
   ToolDefinition,
 } from '@mariozechner/pi-coding-agent';
+import type { ThinkingLevel as PiThinkingLevel } from '@mariozechner/pi-agent-core';
 
 // Pi AI types
 import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
@@ -149,6 +150,8 @@ type InboundMessage =
   | { type: 'steer'; message: string }
   | { type: 'token_update'; piAuth: { provider: string; credential: PiCredential } }
   | { type: 'shutdown' };
+
+type PiThinkingEnabledKey = keyof typeof THINKING_ENABLED_TO_PI;
 
 /** Proxy tool definition from main process */
 interface ProxyToolDef {
@@ -397,6 +400,10 @@ function setInterceptorApiHints(model: { api?: string; provider?: string; baseUr
 
 function setInterceptorThinkingEnabled(enabled: boolean): void {
   process.env.CRAFT_PI_THINKING_ENABLED = String(enabled);
+}
+
+function mapThinkingEnabledToPi(enabled: boolean): PiThinkingLevel {
+  return THINKING_ENABLED_TO_PI[String(enabled) as PiThinkingEnabledKey];
 }
 
 /**
@@ -679,11 +686,7 @@ async function ensureSession(): Promise<AgentSession> {
     setInterceptorApiHints(undefined);
   }
 
-  // Set thinking toggle
-  const piThinkingEnabled = THINKING_ENABLED_TO_PI[String(initConfig.thinkingEnabled) as keyof typeof THINKING_ENABLED_TO_PI];
-  if (piThinkingEnabled) {
-    (sessionOptions as Record<string, unknown>)['thinking' + 'Level'] = piThinkingEnabled;
-  }
+  sessionOptions.thinkingLevel = mapThinkingEnabledToPi(initConfig.thinkingEnabled);
 
   // Create the session — tools flow through customTools + allowlist (see comment above).
   const { session } = await createAgentSession(sessionOptions);
@@ -1646,14 +1649,10 @@ async function handleSetThinkingEnabled(msg: Extract<InboundMessage, { type: 'se
     return;
   }
 
-  const piLevel = THINKING_ENABLED_TO_PI[String(msg.enabled) as keyof typeof THINKING_ENABLED_TO_PI];
-  if (!piLevel) {
-    debugLog(`[set_thinking_enabled] No Pi mapping for enabled: ${msg.enabled}`);
-    return;
-  }
+  const piLevel = mapThinkingEnabledToPi(msg.enabled);
 
   try {
-    (piSession as unknown as Record<string, (value: string) => void>)['setThinking' + 'Level'](piLevel);
+    piSession.setThinkingLevel(piLevel);
     debugLog(`[set_thinking_enabled] Thinking toggle changed to: ${msg.enabled} (mapped: ${piLevel})`);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);

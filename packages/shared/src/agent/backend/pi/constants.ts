@@ -6,11 +6,12 @@
  */
 
 import type { ThinkingEnabled } from '../../thinking-toggle.ts';
+import type { ThinkingLevel as PiThinkingLevel } from '@mariozechner/pi-agent-core';
 
 /**
  * Map Craft's boolean thinking toggle to Pi's reasoning setting.
  */
-export const THINKING_ENABLED_TO_PI: Record<`${ThinkingEnabled}`, 'off' | 'medium'> = {
+export const THINKING_ENABLED_TO_PI: Record<`${ThinkingEnabled}`, PiThinkingLevel> = {
   false: 'off',
   true: 'medium',
 };
