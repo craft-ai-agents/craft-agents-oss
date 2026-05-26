@@ -179,7 +179,7 @@ export default function FeedbackDetailPage({ record, onBack }: FeedbackDetailPag
           variant="outline"
           size="sm"
           onClick={onBack}
-          className="titlebar-no-drag border-foreground/15 bg-background/70 text-[14px] font-medium text-foreground/65 shadow-sm hover:border-foreground/25 hover:bg-foreground/5 hover:text-foreground"
+          className="titlebar-no-drag inline-flex items-center justify-center gap-1.5 border-foreground/15 bg-background/70 text-[12px] font-medium leading-none text-foreground/65 shadow-sm hover:border-foreground/25 hover:bg-foreground/5 hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
           返回
