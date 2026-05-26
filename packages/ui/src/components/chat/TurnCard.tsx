@@ -435,9 +435,14 @@ type BufferReason =
   | 'high_word_count'
   | 'buffering'
 
-/** Count words in text */
+const CJK_RE = /[一-鿿㐀-䶿぀-ヿ가-힯]/g
+
+/** Count content units in text. CJK characters each count as one unit (no spaces between words). */
 function countWords(text: string): number {
-  return text.trim().split(/\s+/).filter(w => w.length > 0).length
+  const cjkCount = (text.match(CJK_RE) ?? []).length
+  const stripped = text.replace(CJK_RE, ' ')
+  const latinCount = stripped.trim().split(/\s+/).filter(w => w.length > 0).length
+  return cjkCount + latinCount
 }
 
 /** Detect code blocks (fenced) */
@@ -457,8 +462,8 @@ function hasHeader(text: string): boolean {
 
 /** Detect structural content (sentences, paragraphs, etc) */
 function hasStructure(text: string): boolean {
-  // Sentence ending (period, exclamation, question mark, colon)
-  if (/[.!?:]\s*$/.test(text.trimEnd())) return true
+  // Sentence ending (ASCII or CJK fullwidth punctuation)
+  if (/[.!?:。！？：]\s*$/.test(text.trimEnd())) return true
   // Paragraph breaks
   if (/\n\s*\n/.test(text)) return true
   // Headers anywhere
@@ -470,7 +475,7 @@ function hasStructure(text: string): boolean {
 
 /** Detect if text ends with a question (AI asking for clarification) */
 function isQuestion(text: string): boolean {
-  return /\?\s*$/.test(text.trim())
+  return /[?？]\s*$/.test(text.trim())
 }
 
 /**

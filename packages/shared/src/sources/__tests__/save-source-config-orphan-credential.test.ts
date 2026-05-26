@@ -104,7 +104,7 @@ describe('saveSourceConfig orphan credential cleanup', () => {
       enabled: true,
       provider: 'custom',
       type: 'mcp',
-      mcp: { transport: 'http', url: 'https://example.com/mcp', authType: 'none' },
+      mcp: { transport: 'streamable_http', url: 'https://example.com/mcp', authType: 'none' },
     };
 
     saveSourceConfig(workspaceRoot, config);

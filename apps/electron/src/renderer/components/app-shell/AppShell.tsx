@@ -59,7 +59,7 @@ import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/ato
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
 import { focusedSessionIdAtom } from "@/atoms/panel-stack"
-import { openFileTabAtom } from "@/atoms/editor-tabs"
+import { hasOpenTabsAtom, openFileTabAtom } from "@/atoms/editor-tabs"
 import { type SessionStatus, statusConfigsToSessionStatuses } from "@/config/session-status-config"
 import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
@@ -338,6 +338,14 @@ function AppShellContent({
     activeSessionId: focusedSessionId,
     navState,
   })
+  const hasOpenTabs = useAtomValue(hasOpenTabsAtom)
+  const prevHasOpenTabsRef = React.useRef(hasOpenTabs)
+  useEffect(() => {
+    if (hasOpenTabs && !prevHasOpenTabsRef.current) {
+      setIsEditorPanelOpen(true)
+    }
+    prevHasOpenTabsRef.current = hasOpenTabs
+  }, [hasOpenTabs])
   const isPanelStackRightSidebarVisible = resolvePanelStackRightSidebarVisible(
     areContextualPanelsAvailable,
     isRightSidebarOpen,

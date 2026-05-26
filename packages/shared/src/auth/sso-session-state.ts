@@ -4,7 +4,6 @@ import type { SsoSession } from './mdp-auth-client.ts';
 export interface AuthenticatedSsoSessionState {
   authenticated: true;
   employeeId: string;
-  token: string;
   userName?: string;
   department?: string;
 }
@@ -71,7 +70,6 @@ function authenticated(session: SsoSession): AuthenticatedSsoSessionState {
   return {
     authenticated: true,
     employeeId: session.employeeId,
-    token: session.token,
     userName: session.userName,
     department: session.department,
   };

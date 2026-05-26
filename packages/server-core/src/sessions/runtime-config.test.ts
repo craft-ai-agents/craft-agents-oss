@@ -94,7 +94,7 @@ describe('buildBackendRuntimeSignature', () => {
       expect(buildRuntimeConfigUpdate({
         ...mistral,
         capabilities: { needsHttpPoolServer: false },
-      }).runtime?.customEndpoint).toEqual({ api: 'anthropic-messages' })
+      }).runtime?.customEndpoint).toEqual({ api: 'openai-completions' })
       expect(buildBackendRuntimeSignature(llama)).not.toBe(buildBackendRuntimeSignature(mistral))
       expect(buildRestartRequiredSignature(llama)).toBe(buildRestartRequiredSignature(mistral))
     } finally {

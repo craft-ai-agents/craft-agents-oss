@@ -93,6 +93,8 @@ mock.module('@craft-agent/shared/config', () => ({
   getSummarizationModel: () => 'claude-haiku-4-5-20251001',
   defaultMidStreamBehavior: (providerType: string) => providerType === 'anthropic' ? 'queue' : 'steer',
   OPENLLM_HOST_ENV_VAR: 'OPENLLM_HOST',
+  OPENLLM_BASE_HOST_ENV_VAR: 'OPENLLM_BASE_HOST',
+  OPENLLM_ENV_CONNECTION_SLUG: 'openllm-env',
   OPENLLM_PI_AUTH_PROVIDER: 'anthropic',
   OPENLLM_CUSTOM_ENDPOINT: { api: 'anthropic-messages' },
   buildOpenLlmBaseUrl: (modelName: string) => `https://openllm.test/llm/${encodeURIComponent(modelName)}/v1`,
