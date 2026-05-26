@@ -68,3 +68,6 @@ credentials.enc
 # act (local GitHub Actions runner)
 .secrets
 .actrc
+
+# CocoIndex Code (ccc)
+/.cocoindex_code/
