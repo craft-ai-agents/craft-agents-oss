@@ -1797,7 +1797,7 @@ function AppShellContent({
                 <div className="px-2 pb-2 shrink-0">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div>
+                      <div className="pr-2">
                         <ContextMenu modal={true}>
                           <ContextMenuTrigger asChild>
                             <Button
