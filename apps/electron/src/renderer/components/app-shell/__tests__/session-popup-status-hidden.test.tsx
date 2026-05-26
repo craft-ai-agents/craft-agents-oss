@@ -26,6 +26,14 @@ mock.module('@/components/ui/menu-context', () => ({
   }),
 }))
 
+mock.module('@/components/ui/drawer', () => ({
+  Drawer: ({ children }: { children: React.ReactNode }) => <div data-drawer>{children}</div>,
+  DrawerTrigger: ({ children }: { children: React.ReactNode }) => <div data-drawer-trigger>{children}</div>,
+  DrawerContent: ({ children }: { children: React.ReactNode }) => <div data-drawer-content>{children}</div>,
+  DrawerHeader: ({ children }: { children: React.ReactNode }) => <div data-drawer-header>{children}</div>,
+  DrawerTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
+}))
+
 mock.module('@/hooks/useSessionMenuActions', () => ({
   useSessionMenuActions: () => ({
     appliedLabelIds: new Set<string>(),
@@ -34,7 +42,6 @@ mock.module('@/hooks/useSessionMenuActions', () => ({
     showInFinder: () => {},
     copyPath: () => {},
     refreshTitle: () => {},
-    openInNewPanel: () => {},
     openSharedInBrowser: () => {},
     copySharedLink: () => {},
     updateShare: () => {},
@@ -55,6 +62,10 @@ mock.module('@/context/ThemeContext', () => ({
 
 mock.module('@craft-agent/ui', () => ({
   Spinner: () => <span data-testid="spinner" />,
+}))
+
+mock.module('@/components/messaging/MessagingSessionMenuItem', () => ({
+  useMessagingConnect: () => () => {},
 }))
 
 mock.module('@/actions', () => ({
@@ -80,7 +91,16 @@ mock.module('@/components/ui/entity-row', () => ({
 }))
 
 const { SessionMenu } = await import('../SessionMenu')
+const { CompactSessionMenu } = await import('../CompactSessionMenu')
 const { SessionItem } = await import('../SessionItem')
+
+function StatusDot(_props: { bare?: boolean }) {
+  return <span>status-dot</span>
+}
+
+function DoneDot(_props: { bare?: boolean }) {
+  return <span>done-dot</span>
+}
 
 function session(overrides: Partial<SessionMeta> = {}): SessionMeta {
   return {
@@ -103,14 +123,14 @@ const sessionStatuses = [
     id: 'in-progress',
     label: 'In Progress',
     resolvedColor: 'var(--success)',
-    icon: <span>status-dot</span>,
+    icon: <StatusDot />,
     iconColorable: true,
   },
   {
     id: 'done',
     label: 'Done',
     resolvedColor: 'var(--muted)',
-    icon: <span>done-dot</span>,
+    icon: <DoneDot />,
     iconColorable: true,
   },
 ]
@@ -160,6 +180,35 @@ describe('session popup status controls', () => {
     expect(html).toContain('Archive')
     expect(html).toContain('Open in New Window')
     expect(html).toContain('Delete')
+  })
+
+  test('omits open in new panel from the shared session menu', () => {
+    const html = renderToStaticMarkup(<SessionMenu {...menuProps()} />)
+
+    expect(html).not.toContain('Open in New Panel')
+    expect(html).toContain('Open in New Window')
+  })
+
+  test('omits open in new panel from the compact session menu', () => {
+    const html = renderToStaticMarkup(
+      <CompactSessionMenu
+        title="Session One"
+        item={session()}
+        sessionStatuses={sessionStatuses}
+        onRename={() => {}}
+        onFlag={() => {}}
+        onUnflag={() => {}}
+        onArchive={() => {}}
+        onUnarchive={() => {}}
+        onMarkUnread={() => {}}
+        onSessionStatusChange={() => {}}
+        onOpenInNewWindow={() => {}}
+        onDelete={() => {}}
+      />,
+    )
+
+    expect(html).not.toContain('Open in New Panel')
+    expect(html).toContain('Open in New Window')
   })
 
   test('omits the clickable status picker button from the session list row', () => {

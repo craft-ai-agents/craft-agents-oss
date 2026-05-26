@@ -775,7 +775,6 @@
   "sessionMenu.labels": "Labels",
   "sessionMenu.markAsUnread": "Mark as Unread",
   "sessionMenu.openInBrowser": "Open in Browser",
-  "sessionMenu.openInNewPanel": "Open in New Panel",
   "sessionMenu.openInNewWindow": "Open in New Window",
   "sessionMenu.regenerateTitle": "Regenerate Title",
   "sessionMenu.sendToWorkspace": "Send to Workspace...",
