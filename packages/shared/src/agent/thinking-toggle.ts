@@ -10,8 +10,6 @@ export const THINKING_ENABLEDS = [
 export function normalizeThinkingEnabled(value: unknown): ThinkingEnabled | undefined {
   if (value === undefined) return undefined;
   if (value === false || value === 'off') return false;
-  if (value === true) return true;
-  if (typeof value === 'string') return true;
   if (value) return true;
   return undefined;
 }
