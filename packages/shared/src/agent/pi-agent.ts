@@ -30,7 +30,7 @@ import { getBackendRuntime } from './backend/internal/driver-types.ts';
 import { SourceActivationDrainController } from './source-activation-drain.ts';
 
 import type { PermissionMode } from './mode-manager.ts';
-import type { ThinkingLevel } from './thinking-levels.ts';
+import type { ThinkingEnabled } from './thinking-toggle.ts';
 
 // Import models from centralized registry
 import { getModelById } from '../config/models.ts';
@@ -475,7 +475,7 @@ export class PiAgent extends BaseAgent {
       apiKey: legacyApiKey || '',
       model: this._model,
       cwd,
-      thinkingLevel: this._thinkingLevel,
+      thinkingEnabled: this._thinkingEnabled,
       workspaceRootPath: this.config.workspace.rootPath,
       sessionId,
       sessionPath,
@@ -2180,15 +2180,15 @@ export class PiAgent extends BaseAgent {
     }
   }
 
-  override setThinkingLevel(level: ThinkingLevel): void {
-    const previousLevel = this.getThinkingLevel();
-    super.setThinkingLevel(level);
-    // Forward to subprocess so it uses the new thinking level on next turn
+  override setThinkingEnabled(enabled: ThinkingEnabled): void {
+    const previousEnabled = this.getThinkingEnabled();
+    super.setThinkingEnabled(enabled);
+    // Forward to subprocess so it uses the new thinking toggle on next turn
     if (this.subprocess) {
-      this.debug(`Forwarding thinking level change to subprocess: ${previousLevel} → ${level}`);
-      this.send({ type: 'set_thinking_level', level });
+      this.debug(`Forwarding thinking toggle change to subprocess: ${previousEnabled} → ${enabled}`);
+      this.send({ type: 'set_thinking_enabled', enabled });
     } else {
-      this.debug(`Thinking level updated but no subprocess to forward to: ${previousLevel} → ${level}`);
+      this.debug(`Thinking toggle updated but no subprocess to forward to: ${previousEnabled} → ${enabled}`);
     }
   }
 

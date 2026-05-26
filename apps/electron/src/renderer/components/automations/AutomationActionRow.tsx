@@ -5,13 +5,13 @@
  * Used within the "Then" section of AutomationInfoPage.
  *
  * Prompt actions surface optional per-action overrides (llmConnection,
- * model, thinkingLevel) as low-emphasis badges below the prompt text.
+ * model, thinkingEnabled) as low-emphasis badges below the prompt text.
  */
 
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
+import { THINKING_ENABLEDS } from '@craft-agent/shared/agent/thinking-toggle'
 import type { AutomationAction, PromptAction } from './types'
 import { ActionTypeIcon } from './ActionTypeIcon'
 import { DEFAULT_WEBHOOK_METHOD } from './constants'
@@ -55,7 +55,7 @@ function WebhookText({ action }: { action: Extract<AutomationAction, { type: 'we
 }
 
 /**
- * Render the per-action override chips (connection / model / thinking level).
+ * Render the per-action override chips (connection / model / thinking toggle).
  * Each chip is conditional on its field being set on the action.
  *
  * The connection slug is shown verbatim (no display-name resolution) — that
@@ -64,11 +64,11 @@ function WebhookText({ action }: { action: Extract<AutomationAction, { type: 'we
  * stale, executePromptAutomation already logs a warning at run time.
  */
 function PromptActionBadges({ action, t }: { action: PromptAction; t: (key: string) => string }) {
-  const { llmConnection, model, thinkingLevel } = action
-  if (!llmConnection && !model && !thinkingLevel) return null
+  const { llmConnection, model, thinkingEnabled } = action
+  if (!llmConnection && !model && thinkingEnabled === undefined) return null
 
-  const thinkingDef = thinkingLevel ? THINKING_LEVELS.find((l) => l.id === thinkingLevel) : undefined
-  const thinkingLabel = thinkingDef ? t(thinkingDef.nameKey) : thinkingLevel
+  const thinkingDef = thinkingEnabled !== undefined ? THINKING_ENABLEDS.find((l) => l.id === thinkingEnabled) : undefined
+  const thinkingLabel = thinkingDef ? t(thinkingDef.nameKey) : String(thinkingEnabled)
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
@@ -90,7 +90,7 @@ function PromptActionBadges({ action, t }: { action: PromptAction; t: (key: stri
           {model}
         </Badge>
       )}
-      {thinkingLevel && (
+      {thinkingEnabled !== undefined && (
         <Badge
           variant="secondary"
           className="text-[10px] px-1.5 py-0 font-normal"

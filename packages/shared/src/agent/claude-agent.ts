@@ -71,7 +71,7 @@ import {
 import { getRtkPath } from './core/rtk-detector.ts';
 import { getRtkEnabled } from '../config/storage.ts';
 import type { RtkContext } from './core/rtk-rewrite.ts';
-import { type ThinkingLevel, THINKING_TO_EFFORT, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
+import { type ThinkingEnabled, DEFAULT_THINKING_ENABLED } from './thinking-toggle.ts';
 import { generateConversationSummary } from './conversation-summary.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { sourceNeedsAuthentication } from '../sources/credential-manager.ts';
@@ -143,14 +143,14 @@ const CONVERTIBLE_FILE_HINTS: Record<string, string> = {
 };
 
 export function resolveClaudeThinkingOptions(args: {
-  thinkingLevel: ThinkingLevel;
+  thinkingEnabled: ThinkingEnabled;
   model: string;
   providerType?: BackendConfig['providerType'];
   minimizeThinking: boolean;
 }): Partial<Options> {
-  const { thinkingLevel, model, providerType, minimizeThinking } = args;
+  const { thinkingEnabled, model, minimizeThinking } = args;
   const isClaude = isClaudeModel(model);
-  const effort = THINKING_TO_EFFORT[thinkingLevel];
+  const effort = thinkingEnabled ? 'medium' : null;
   const isHaiku = model.toLowerCase().includes('haiku');
   const supportsAdaptiveThinking = isClaude && !isHaiku;
 
@@ -168,8 +168,13 @@ export function resolveClaudeThinkingOptions(args: {
   }
 
   return {
-    maxThinkingTokens: getThinkingTokens(thinkingLevel, model),
+    maxThinkingTokens: getThinkingTokens(thinkingEnabled, model),
   };
+}
+
+function getThinkingTokens(enabled: ThinkingEnabled, modelId: string): number {
+  if (!enabled) return 0;
+  return modelId.toLowerCase().includes('haiku') ? 4_000 : 10_000;
 }
 
 export interface ClaudeAgentConfig {
@@ -177,7 +182,7 @@ export interface ClaudeAgentConfig {
   session?: Session;           // Current session (primary isolation boundary)
   mcpToken?: string;           // Override token (for testing)
   model?: string;
-  thinkingLevel?: ThinkingLevel; // Initial thinking level (defaults to 'medium')
+  thinkingEnabled?: ThinkingEnabled; // Initial thinking toggle (defaults to true)
   onSdkSessionIdUpdate?: (sdkSessionId: string) => void;  // Callback when SDK session ID is captured
   onSdkSessionIdCleared?: () => void;  // Callback when SDK session ID is cleared (e.g., after failed resume)
   /**
@@ -491,7 +496,7 @@ export class ClaudeAgent extends BaseAgent {
   private safeMode: boolean = false;
   // Event adapter for SDK message → AgentEvent conversion (testable, pluggable)
   private eventAdapter!: ClaudeEventAdapter;
-  // Thinking level is managed by BaseAgent
+  // Thinking toggle is managed by BaseAgent
   // Pinned system prompt components (captured on first chat, used for consistency after compaction)
   private pinnedPreferencesPrompt: string | null = null;
   private pinnedIncludeCoAuthoredBy: boolean | null = null;
@@ -572,7 +577,7 @@ export class ClaudeAgent extends BaseAgent {
       workspace: config.workspace,
       session: config.session,
       model,
-      thinkingLevel: config.thinkingLevel,
+      thinkingEnabled: config.thinkingEnabled,
       mcpToken: config.mcpToken,
       isHeadless: config.isHeadless,
       skipConfigWatcher: config.skipConfigWatcher,
@@ -594,7 +599,7 @@ export class ClaudeAgent extends BaseAgent {
       automationSystem: config.automationSystem,
     };
 
-    // Call BaseAgent constructor - initializes model, thinkingLevel, permissionManager, sourceManager, etc.
+    // Call BaseAgent constructor - initializes model, thinkingEnabled, permissionManager, sourceManager, etc.
     // The inherited this.config is set by super() and compatible with ClaudeAgentConfig
     super(backendConfig, DEFAULT_MODEL, CLAUDE_CONTEXT_WINDOW);
 
@@ -706,7 +711,7 @@ export class ClaudeAgent extends BaseAgent {
   }
 
   // Config watcher methods (startConfigWatcher, stopConfigWatcher) are now inherited from BaseAgent
-  // Thinking level methods (setThinkingLevel, getThinkingLevel) are inherited from BaseAgent
+  // Thinking toggle methods (setThinkingEnabled, getThinkingEnabled) are inherited from BaseAgent
 
   // Permission command utilities (getBaseCommand, isDangerousCommand, extractDomainFromNetworkCommand)
   // are now available via this.permissionManager
@@ -920,17 +925,17 @@ export class ClaudeAgent extends BaseAgent {
       }
 
       const thinkingOptions = resolveClaudeThinkingOptions({
-        thinkingLevel: this._thinkingLevel,
+        thinkingEnabled: this._thinkingEnabled,
         model,
         providerType: this.config.providerType,
         minimizeThinking: miniConfig.minimizeThinking,
       });
       if ('effort' in thinkingOptions && thinkingOptions.effort) {
-        debug(`[chat] Thinking: level=${this._thinkingLevel}, effort=${thinkingOptions.effort}`);
+        debug(`[chat] Thinking: level=${this._thinkingEnabled}, effort=${thinkingOptions.effort}`);
       } else if ('maxThinkingTokens' in thinkingOptions) {
-        debug(`[chat] Thinking: level=${this._thinkingLevel}, tokens=${thinkingOptions.maxThinkingTokens}`);
+        debug(`[chat] Thinking: level=${this._thinkingEnabled}, tokens=${thinkingOptions.maxThinkingTokens}`);
       } else {
-        debug(`[chat] Thinking: level=${this._thinkingLevel}, disabled`);
+        debug(`[chat] Thinking: level=${this._thinkingEnabled}, disabled`);
       }
 
       // NOTE: Parent-child tracking for subagents is documented below (search for

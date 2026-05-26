@@ -14,7 +14,7 @@
 
 import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../../utils/files.ts';
-import type { ThinkingLevel } from '../thinking-levels.ts';
+import type { ThinkingEnabled } from '../thinking-toggle.ts';
 import type { PermissionMode } from '../mode-manager.ts';
 import type { LoadedSource } from '../../sources/types.ts';
 import type { AuthRequest } from '../session-scoped-tools.ts';
@@ -179,8 +179,8 @@ export interface CoreBackendConfig {
   /** Mini/utility model for summarization/title generation/mini-completions */
   miniModel?: string;
 
-  /** Initial thinking level */
-  thinkingLevel?: ThinkingLevel;
+  /** Initial thinking toggle */
+  thinkingEnabled?: ThinkingEnabled;
 
   /** Headless mode flag (disables interactive tools) */
   isHeadless?: boolean;
@@ -297,8 +297,8 @@ export interface CoreBackendConfig {
 export interface ChatOptions {
   /** Retry flag (internal use for session recovery) */
   isRetry?: boolean;
-  /** Override thinking level for this message only */
-  thinkingOverride?: ThinkingLevel;
+  /** Override thinking toggle for this message only */
+  thinkingOverride?: ThinkingEnabled;
 }
 
 /**
@@ -467,11 +467,11 @@ export interface AgentBackend {
    */
   disposeForRestart?(): Promise<void>;
 
-  /** Get current thinking level */
-  getThinkingLevel(): ThinkingLevel;
+  /** Get current thinking toggle */
+  getThinkingEnabled(): ThinkingEnabled;
 
-  /** Set thinking level */
-  setThinkingLevel(level: ThinkingLevel): void;
+  /** Set thinking toggle */
+  setThinkingEnabled(level: ThinkingEnabled): void;
 
   // ============================================================
   // Permission Mode

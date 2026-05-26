@@ -20,8 +20,8 @@ import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../utils/files.ts';
 import { expandPath } from '../utils/paths.ts';
 import { buildTransferredSessionContext } from './conversation-summary.ts';
-import type { ThinkingLevel } from './thinking-levels.ts';
-import { DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from './thinking-levels.ts';
+import type { ThinkingEnabled } from './thinking-toggle.ts';
+import { DEFAULT_THINKING_ENABLED, normalizeThinkingEnabled } from './thinking-toggle.ts';
 import type { PermissionMode } from './mode-manager.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { buildCallLlmRequest, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
@@ -97,7 +97,7 @@ export interface SpawnSessionRequest {
   model?: string;
   enabledSourceSlugs?: string[];
   permissionMode?: PermissionMode;
-  thinkingLevel?: ThinkingLevel;
+  thinkingEnabled?: ThinkingEnabled;
   labels?: string[];
   workingDirectory?: string;
   attachments?: Array<{ path: string; name?: string }>;
@@ -180,7 +180,7 @@ export abstract class BaseAgent implements AgentBackend {
   // Model Configuration (protected for subclass access)
   // ============================================================
   protected _model: string;
-  protected _thinkingLevel: ThinkingLevel;
+  protected _thinkingEnabled: ThinkingEnabled;
 
   // ============================================================
   // Core Modules (protected for subclass access)
@@ -272,7 +272,7 @@ export abstract class BaseAgent implements AgentBackend {
     this.workingDirectory = config.session?.workingDirectory ?? config.workspace.rootPath ?? process.cwd();
     this._sessionId = config.session?.id || `agent-${Date.now()}`;
     this._model = config.model || defaultModel;
-    this._thinkingLevel = normalizeThinkingLevel(config.thinkingLevel) ?? DEFAULT_THINKING_LEVEL;
+    this._thinkingEnabled = normalizeThinkingEnabled(config.thinkingEnabled) ?? DEFAULT_THINKING_ENABLED;
 
     // Initialize core modules
     // PermissionManager: handles permission evaluation, mode management, and command whitelisting
@@ -486,13 +486,13 @@ export abstract class BaseAgent implements AgentBackend {
     this._model = model;
   }
 
-  getThinkingLevel(): ThinkingLevel {
-    return this._thinkingLevel;
+  getThinkingEnabled(): ThinkingEnabled {
+    return this._thinkingEnabled;
   }
 
-  setThinkingLevel(level: ThinkingLevel): void {
-    this._thinkingLevel = level;
-    this.debug(`Thinking level set to: ${level}`);
+  setThinkingEnabled(level: ThinkingEnabled): void {
+    this._thinkingEnabled = level;
+    this.debug(`Thinking toggle set to: ${level}`);
   }
 
   // ============================================================
@@ -1185,7 +1185,7 @@ ${formattedMessages}
       model: input.model as string | undefined,
       enabledSourceSlugs: input.enabledSourceSlugs as string[] | undefined,
       permissionMode: input.permissionMode as SpawnSessionRequest['permissionMode'],
-      thinkingLevel: input.thinkingLevel as SpawnSessionRequest['thinkingLevel'],
+      thinkingEnabled: input.thinkingEnabled as SpawnSessionRequest['thinkingEnabled'],
       labels: input.labels as string[] | undefined,
       workingDirectory: typeof input.workingDirectory === 'string' && input.workingDirectory
         ? expandPath(input.workingDirectory)

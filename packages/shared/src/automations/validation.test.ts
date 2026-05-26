@@ -82,50 +82,51 @@ describe('validation', () => {
       expect(result.valid).toBe(true);
     });
 
-    it('should accept thinkingLevel on prompt actions', () => {
+    it('should accept thinkingEnabled on prompt actions', () => {
       const config = {
         automations: {
           LabelAdd: [{
             matcher: 'review',
-            actions: [{ type: 'prompt', prompt: 'Audit changes', thinkingLevel: 'high' }],
+            actions: [{ type: 'prompt', prompt: 'Audit changes', thinkingEnabled: true }],
           }],
         },
       };
       const result = validateAutomationsConfig(config);
       expect(result.valid).toBe(true);
       const action = result.config?.automations.LabelAdd?.[0]?.actions[0];
-      expect(action).toMatchObject({ thinkingLevel: 'high' });
+      expect(action).toMatchObject({ thinkingEnabled: true });
     });
 
-    it('PromptActionSchema rejects invalid thinkingLevel values', () => {
+    it('PromptActionSchema migrates legacy string thinkingEnabled values', () => {
       // ActionDefinitionSchema has a passthrough fallback that absorbs malformed
       // actions (so old configs with unknown action types don't crash). To verify
-      // the schema's own contract for thinkingLevel, parse with PromptActionSchema
+      // the schema's own contract for thinkingEnabled, parse with PromptActionSchema
       // directly — that's the strict path.
       const result = PromptActionSchema.safeParse({
-        type: 'prompt', prompt: 'echo', thinkingLevel: 'extreme',
+        type: 'prompt', prompt: 'echo', thinkingEnabled: 'extreme',
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
+      expect(result.data?.thinkingEnabled).toBe(true);
     });
 
-    it('should migrate legacy thinkingLevel "think" to "medium"', () => {
+    it('should migrate legacy thinkingEnabled "off" to false', () => {
       // Mirrors the workspace-default migration in config/validators.ts so persisted
       // 'think' values from old configs don't break automation parsing.
       const config = {
         automations: {
           LabelAdd: [{
             matcher: 'review',
-            actions: [{ type: 'prompt', prompt: 'echo', thinkingLevel: 'think' }],
+            actions: [{ type: 'prompt', prompt: 'echo', thinkingEnabled: 'off' }],
           }],
         },
       };
       const result = validateAutomationsConfig(config);
       expect(result.valid).toBe(true);
       const action = result.config?.automations.LabelAdd?.[0]?.actions[0];
-      expect(action).toMatchObject({ thinkingLevel: 'medium' });
+      expect(action).toMatchObject({ thinkingEnabled: false });
     });
 
-    it('should accept prompt actions without thinkingLevel (backward compat)', () => {
+    it('should accept prompt actions without thinkingEnabled (backward compat)', () => {
       const config = {
         automations: {
           LabelAdd: [{

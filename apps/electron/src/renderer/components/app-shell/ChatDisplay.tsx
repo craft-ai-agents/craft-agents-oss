@@ -53,7 +53,7 @@ import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
 import type { PermissionMode } from "@craft-agent/shared/agent/modes"
-import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
+import type { ThinkingEnabled } from "@craft-agent/shared/agent/thinking-toggle"
 import {
   TurnCard,
   UserMessageBubble,
@@ -188,11 +188,11 @@ interface ChatDisplayProps {
   pendingCredential?: CredentialRequest
   /** Callback to respond to credential request */
   onRespondToCredential?: (sessionId: string, requestId: string, response: CredentialResponse) => void
-  // Thinking level (session-level setting)
-  /** Current thinking level ('off', 'think', 'max') */
-  thinkingLevel?: ThinkingLevel
-  /** Callback when thinking level changes */
-  onThinkingLevelChange?: (level: ThinkingLevel) => void
+  // Thinking toggle (session-level setting)
+  /** Current thinking toggle */
+  thinkingEnabled?: ThinkingEnabled
+  /** Callback when thinking toggle changes */
+  onThinkingEnabledChange?: (level: ThinkingEnabled) => void
   // Advanced options
   /** Current permission mode */
   permissionMode?: PermissionMode
@@ -480,9 +480,9 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   onRespondToPermission,
   pendingCredential,
   onRespondToCredential,
-  // Thinking level
-  thinkingLevel = 'medium',
-  onThinkingLevelChange,
+  // Thinking toggle
+  thinkingEnabled = true,
+  onThinkingEnabledChange,
   // Advanced options
   permissionMode = 'ask',
   onPermissionModeChange,
@@ -2301,8 +2301,8 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                   textareaRef,
                   currentModel,
                   onModelChange,
-                  thinkingLevel,
-                  onThinkingLevelChange,
+                  thinkingEnabled,
+                  onThinkingEnabledChange,
                   enabledModes,
                   enableCompactModelPicker,
                   structuredInput,

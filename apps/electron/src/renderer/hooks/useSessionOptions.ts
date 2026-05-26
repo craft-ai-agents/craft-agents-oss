@@ -11,8 +11,8 @@
  */
 
 import type { PermissionMode } from '../../shared/types'
-import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
-import { DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
+import type { ThinkingEnabled } from '@craft-agent/shared/agent/thinking-toggle'
+import { DEFAULT_THINKING_ENABLED } from '@craft-agent/shared/agent/thinking-toggle'
 
 /**
  * All session-scoped options in one place.
@@ -22,14 +22,14 @@ export interface SessionOptions {
   permissionMode: PermissionMode
   /** Monotonic version from backend permission mode state (used to ignore stale events) */
   permissionModeVersion?: number
-  /** Session-level thinking level — sticky, persisted. See {@link ThinkingLevel}. */
-  thinkingLevel: ThinkingLevel
+  /** Session-level thinking toggle — sticky, persisted. See {@link ThinkingEnabled}. */
+  thinkingEnabled: ThinkingEnabled
 }
 
 /** Default values for new sessions */
 export const defaultSessionOptions: SessionOptions = {
   permissionMode: 'ask', // Default to ask mode (prompt for permissions)
-  thinkingLevel: DEFAULT_THINKING_LEVEL, // Default to 'medium' level
+  thinkingEnabled: DEFAULT_THINKING_ENABLED, // Default to enabled
 }
 
 /** Type for partial updates to session options */

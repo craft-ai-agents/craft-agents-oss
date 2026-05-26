@@ -13,7 +13,7 @@
     "browserToolEnabled": true
   },
   "workspaceDefaults": {
-    "thinkingLevel": "think",
+    "thinkingEnabled": true,
     "permissionMode": "safe",
     "cyclablePermissionModes": ["safe", "allow-all"],
     "localMcpServers": {

@@ -32,9 +32,9 @@ import {
   type LlmConnectionWithStatus,
 } from '@config/llm-connections'
 import {
-  THINKING_LEVELS,
-  type ThinkingLevel,
-} from '@craft-agent/shared/agent/thinking-levels'
+  THINKING_ENABLEDS,
+  type ThinkingEnabled,
+} from '@craft-agent/shared/agent/thinking-toggle'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { derivePickerMode } from './picker-mode'
 import {
@@ -49,8 +49,8 @@ interface CompactModelSelectorProps {
   currentConnection?: string
   onModelChange: (model: string, connection?: string) => void
   onConnectionChange?: (connectionSlug: string) => void
-  thinkingLevel?: ThinkingLevel
-  onThinkingLevelChange?: (level: ThinkingLevel) => void
+  thinkingEnabled?: ThinkingEnabled
+  onThinkingEnabledChange?: (level: ThinkingEnabled) => void
   isEmptySession?: boolean
   connectionUnavailable?: boolean
   contextStatus?: {
@@ -65,8 +65,8 @@ export function CompactModelSelector({
   currentConnection,
   onModelChange,
   onConnectionChange,
-  thinkingLevel = 'medium',
-  onThinkingLevelChange,
+  thinkingEnabled = true,
+  onThinkingEnabledChange,
   isEmptySession = false,
   connectionUnavailable = false,
   contextStatus,
@@ -395,19 +395,19 @@ export function CompactModelSelector({
           )}
 
           {/* === Thinking section === */}
-          {THINKING_LEVELS.length > 0 && pickerMode !== 'unavailable' && (
+          {THINKING_ENABLEDS.length > 0 && pickerMode !== 'unavailable' && (
             <>
               <div className="px-3 pt-4 pb-1 text-sm font-medium text-foreground/60 uppercase tracking-wide select-none">
                 {t('chat.modelPicker.thinkingSection')}
               </div>
-              {THINKING_LEVELS.map(({ id, nameKey, descriptionKey }) => {
-                const isSelected = thinkingLevel === id
+              {THINKING_ENABLEDS.map(({ id, nameKey, descriptionKey }) => {
+                const isSelected = thinkingEnabled === id
                 return (
-                  <DrawerClose asChild key={id}>
+                  <DrawerClose asChild key={String(id)}>
                     <button
                       type="button"
                       disabled={thinkingDisabled}
-                      onClick={() => onThinkingLevelChange?.(id)}
+                      onClick={() => onThinkingEnabledChange?.(id)}
                       className={cn(
                         'flex items-center justify-between w-full px-3 py-2 rounded-lg text-left transition-colors',
                         thinkingDisabled && 'opacity-50 cursor-not-allowed',

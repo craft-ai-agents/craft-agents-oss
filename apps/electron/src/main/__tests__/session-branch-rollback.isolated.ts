@@ -62,7 +62,7 @@ mock.module('@craft-agent/shared/config', () => ({
   loadConfigDefaults: () => ({
     workspaceDefaults: {
       permissionMode: 'ask',
-      thinkingLevel: 'medium',
+      thinkingEnabled: 'medium',
     },
   }),
   getLlmConnection: () => null,
@@ -71,7 +71,7 @@ mock.module('@craft-agent/shared/config', () => ({
   resetManagedAnthropicAuthEnvVars: () => {},
   getToolIconsDir: () => '/tmp/tool-icons',
   getMiniModel: () => 'claude-haiku-4-5-20251001',
-  getDefaultThinkingLevel: () => 'medium',
+  getDefaultThinkingEnabled: () => 'medium',
   ConfigWatcher: class ConfigWatcher {
     constructor(..._args: unknown[]) {}
     start() {}
@@ -132,7 +132,7 @@ mock.module('@craft-agent/shared/workspaces', () => ({
   loadWorkspaceConfig: () => ({
     defaults: {
       permissionMode: 'ask',
-      thinkingLevel: 'medium',
+      thinkingEnabled: 'medium',
       defaultLlmConnection: undefined,
     },
   }),
@@ -265,7 +265,7 @@ mock.module('@craft-agent/shared/sessions', () => ({
       'name','isFlagged','sessionStatus','labels','hidden',
       'lastReadMessageId','hasUnread',
       'enabledSourceSlugs','permissionMode','previousPermissionMode','workingDirectory',
-      'model','llmConnection','connectionLocked','thinkingLevel',
+      'model','llmConnection','connectionLocked','thinkingEnabled',
       'sharedUrl','sharedId','pendingPlanExecution',
       'isArchived','archivedAt',
       'branchFromMessageId','branchFromSdkSessionId','branchFromSessionPath',

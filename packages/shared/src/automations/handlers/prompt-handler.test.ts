@@ -111,7 +111,7 @@ describe('PromptHandler', () => {
       handler.dispose();
     });
 
-    it('should propagate thinkingLevel from PromptAction to PendingPrompt', async () => {
+    it('should propagate thinkingEnabled from PromptAction to PendingPrompt', async () => {
       const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [{
@@ -121,7 +121,7 @@ describe('PromptHandler', () => {
             prompt: 'Audit changes',
             llmConnection: 'anthropic',
             model: 'claude-opus-4-7',
-            thinkingLevel: 'high',
+            thinkingEnabled: 'high',
           }],
         }],
       });
@@ -140,13 +140,13 @@ describe('PromptHandler', () => {
       expect(prompts[0]).toMatchObject({
         llmConnection: 'anthropic',
         model: 'claude-opus-4-7',
-        thinkingLevel: 'high',
+        thinkingEnabled: 'high',
       });
 
       handler.dispose();
     });
 
-    it('should leave thinkingLevel undefined when omitted (workspace default applies downstream)', async () => {
+    it('should leave thinkingEnabled undefined when omitted (workspace default applies downstream)', async () => {
       const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({
         LabelAdd: [{
@@ -165,7 +165,7 @@ describe('PromptHandler', () => {
       });
 
       const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
-      expect(prompts[0]!.thinkingLevel).toBeUndefined();
+      expect(prompts[0]!.thinkingEnabled).toBeUndefined();
 
       handler.dispose();
     });

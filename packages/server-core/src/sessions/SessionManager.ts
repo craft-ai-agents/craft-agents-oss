@@ -18,7 +18,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { ENV_CONNECTION_SLUG, ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_BASE_HOST_ENV_VAR, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
+import { ENV_CONNECTION_SLUG, ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_BASE_HOST_ENV_VAR, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingEnabled, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -88,7 +88,7 @@ import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
-import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
+import { type ThinkingEnabled, DEFAULT_THINKING_ENABLED, normalizeThinkingEnabled } from '@craft-agent/shared/agent/thinking-toggle'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
@@ -894,8 +894,8 @@ interface ManagedSession {
   llmConnection?: string
   // Whether the connection is locked (cannot be changed after first agent creation)
   connectionLocked?: boolean
-  // Thinking level for this session ('off', 'think', 'max')
-  thinkingLevel?: ThinkingLevel
+  // Thinking toggle for this session
+  thinkingEnabled?: ThinkingEnabled
   // System prompt preset for mini agents ('default' | 'mini')
   systemPromptPreset?: 'default' | 'mini' | string
   // Role/type of the last message (for badge display without loading messages)
@@ -1062,14 +1062,14 @@ export function createManagedSession(
     Object.entries(s).filter(([, v]) => v !== undefined)
   ) as Partial<ManagedSession>
 
-  if ('thinkingLevel' in sourceFields) {
+  if ('thinkingEnabled' in sourceFields) {
     // TODO: Remove legacy 'think' normalization after old persisted session
     // headers have realistically aged out across upgrades.
-    const normalizedThinkingLevel = normalizeThinkingLevel(sourceFields.thinkingLevel)
-    if (normalizedThinkingLevel) {
-      sourceFields.thinkingLevel = normalizedThinkingLevel
+    const normalizedThinkingEnabled = normalizeThinkingEnabled(sourceFields.thinkingEnabled)
+    if (normalizedThinkingEnabled !== undefined) {
+      sourceFields.thinkingEnabled = normalizedThinkingEnabled
     } else {
-      delete sourceFields.thinkingLevel
+      delete sourceFields.thinkingEnabled
     }
   }
 
@@ -1093,7 +1093,7 @@ export function createManagedSession(
     tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
       log: (msg) => sessionLog.debug(msg),
     }),
-    // Caller overrides (permissionMode defaults, thinkingLevel, messagesLoaded, etc.)
+    // Caller overrides (permissionMode defaults, thinkingEnabled, messagesLoaded, etc.)
     ...overrides,
   } as ManagedSession
 
@@ -1580,7 +1580,7 @@ export class SessionManager implements ISessionManager {
                 mentions: pending.mentions,
                 llmConnection: pending.llmConnection,
                 model: pending.model,
-                thinkingLevel: pending.thinkingLevel,
+                thinkingEnabled: pending.thinkingEnabled,
                 automationName: pending.automationName,
                 telegramTopic: pending.telegramTopic,
               })
@@ -2466,13 +2466,13 @@ export class SessionManager implements ISessionManager {
       ?? globalDefaults.workspaceDefaults.permissionMode
 
     const userDefaultWorkingDir = wsConfig?.defaults?.workingDirectory || undefined
-    // Resolve thinking level with caller-first precedence, matching permissionMode above:
+    // Resolve thinking toggle with caller-first precedence, matching permissionMode above:
     //   caller override → workspace default → global default.
-    // normalizeThinkingLevel() tolerates undefined/unknown inputs.
-    const defaultThinkingLevel =
-      normalizeThinkingLevel(options?.thinkingLevel)
-      ?? normalizeThinkingLevel(wsConfig?.defaults?.thinkingLevel)
-      ?? getDefaultThinkingLevel()
+    // normalizeThinkingEnabled() tolerates undefined/unknown inputs.
+    const defaultThinkingEnabled =
+      normalizeThinkingEnabled(options?.thinkingEnabled)
+      ?? normalizeThinkingEnabled(wsConfig?.defaults?.thinkingEnabled)
+      ?? getDefaultThinkingEnabled()
     // Get default model from workspace config (used when no session-specific model is set)
     const defaultModel = wsConfig?.defaults?.model
     // Get default enabled sources from workspace config
@@ -2799,7 +2799,7 @@ export class SessionManager implements ISessionManager {
       workingDirectory: resolvedWorkingDir,
       model: resolvedModel,
       llmConnection: options?.llmConnection,
-      thinkingLevel: defaultThinkingLevel,
+      thinkingEnabled: defaultThinkingEnabled,
       systemPromptPreset: options?.systemPromptPreset,
       enabledSourceSlugs: defaultEnabledSourceSlugs,
       branchFromMessageId: validatedBranch?.sourceMessageId,
@@ -3297,7 +3297,7 @@ export class SessionManager implements ISessionManager {
         coreConfig: {
         workspace: managed.workspace,
         miniModel,
-        thinkingLevel: managed.thinkingLevel,
+        thinkingEnabled: managed.thinkingEnabled,
         session: sessionConfig,
         onSdkSessionIdUpdate,
         onSdkSessionIdCleared,
@@ -3949,7 +3949,7 @@ export class SessionManager implements ISessionManager {
           model: request.model ?? managed.model,
           enabledSourceSlugs: request.enabledSourceSlugs ?? managed.enabledSourceSlugs,
           permissionMode: request.permissionMode ?? managed.permissionMode,
-          thinkingLevel: request.thinkingLevel ?? managed.thinkingLevel,
+          thinkingEnabled: request.thinkingEnabled ?? managed.thinkingEnabled,
           labels: request.labels ?? managed.labels,
           workingDirectory: request.workingDirectory,
         })
@@ -6631,21 +6631,21 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
-   * Set the thinking level for a session. See {@link ThinkingLevel} for valid values.
+   * Set the thinking toggle for a session. See {@link ThinkingEnabled} for valid values.
    * This is sticky and persisted across messages.
    */
-  setSessionThinkingLevel(sessionId: string, level: ThinkingLevel): void {
+  setSessionThinkingEnabled(sessionId: string, enabled: ThinkingEnabled): void {
     const managed = this.sessions.get(sessionId)
     if (managed) {
-      // Update thinking level in managed session
-      managed.thinkingLevel = level
+      // Update thinking toggle in managed session
+      managed.thinkingEnabled = enabled
 
-      // Update the agent's thinking level if it exists
+      // Update the agent's thinking toggle if it exists
       if (managed.agent) {
-        managed.agent.setThinkingLevel(level)
+        managed.agent.setThinkingEnabled(enabled)
       }
 
-      sessionLog.info(`Session ${sessionId}: thinking level set to ${level}`)
+      sessionLog.info(`Session ${sessionId}: thinking toggle set to ${enabled}`)
       // Persist to disk
       this.persistSession(managed)
     }
@@ -7497,9 +7497,9 @@ export class SessionManager implements ISessionManager {
    * Execute a prompt automation by creating a new session and sending the prompt.
    *
    * The options-object form replaced the previous positional-args signature
-   * once the param list outgrew readability — `thinkingLevel` was the trigger.
-   * When `thinkingLevel` is omitted, `createSession` falls back to the
-   * workspace default (then DEFAULT_THINKING_LEVEL).
+   * once the param list outgrew readability — `thinkingEnabled` was the trigger.
+   * When `thinkingEnabled` is omitted, `createSession` falls back to the
+   * workspace default (then DEFAULT_THINKING_ENABLED).
    */
   async executePromptAutomation(
     input: ExecutePromptAutomationInput,
@@ -7513,7 +7513,7 @@ export class SessionManager implements ISessionManager {
       mentions,
       llmConnection,
       model,
-      thinkingLevel,
+      thinkingEnabled,
       automationName,
       telegramTopic,
     } = input
@@ -7546,7 +7546,7 @@ export class SessionManager implements ISessionManager {
       enabledSourceSlugs: resolved?.sourceSlugs,
       llmConnection,
       model,
-      thinkingLevel,
+      thinkingEnabled,
     })
 
     // Populate triggeredBy metadata so title generation is explicitly skipped
@@ -7851,7 +7851,7 @@ export class SessionManager implements ISessionManager {
       model: header.model,
       llmConnection: header.llmConnection,
       connectionLocked: header.connectionLocked,
-      thinkingLevel: header.thinkingLevel,
+      thinkingEnabled: header.thinkingEnabled,
       hidden: header.hidden,
       transferredSessionSummary: header.transferredSessionSummary,
       transferredSessionSummaryApplied: header.transferredSessionSummaryApplied,
@@ -7895,8 +7895,8 @@ export class SessionManager implements ISessionManager {
         storedSession.llmConnection = undefined
         storedSession.connectionLocked = false
       }
-      // Clear thinking level so the session inherits the workspace default
-      storedSession.thinkingLevel = undefined
+      // Clear thinking toggle so the session inherits the workspace default
+      storedSession.thinkingEnabled = undefined
       // Clear working directory — the source path won't exist on a different server.
       // The user can set a new cwd after the session is transferred.
       storedSession.workingDirectory = undefined
