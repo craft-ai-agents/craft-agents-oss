@@ -70,12 +70,12 @@ function PendingRow({
         <div className="flex items-baseline gap-2">
           <span className="truncate text-sm">{primary}</span>
           {sender.username && (
-            <span className="shrink-0 truncate text-xs text-foreground/40">
+            <span className="shrink-0 truncate text-sm text-foreground/40">
               @{sender.username}
             </span>
           )}
         </div>
-        <div className="mt-0.5 truncate text-xs text-foreground/50">
+        <div className="mt-0.5 truncate text-sm text-foreground/50">
           {t('settings.messaging.telegram.access.pending.metaLine', {
             attempts: attemptText,
             relative: lastAttemptText,

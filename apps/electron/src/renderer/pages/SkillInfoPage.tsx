@@ -241,7 +241,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
               <button
                 type="button"
                 onClick={() => setPublishDialogOpen(true)}
-                className="inline-flex h-7 items-center rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
+                className="inline-flex h-7 items-center rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted disabled:bg-muted disabled:text-muted-foreground"
                 disabled={skill.source !== 'workspace'}
               >
                 Publish Skill
@@ -299,7 +299,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
           {skill.metadata.alwaysAllow && skill.metadata.alwaysAllow.length > 0 && (
             <Info_Section title={t('skillInfo.permissionModes')}>
               <div className="space-y-2 px-4 py-3">
-                <p className="text-xs text-muted-foreground mb-3">
+                <p className="text-sm text-muted-foreground mb-3">
                   {t('skillInfo.permissionModesDesc')}
                 </p>
                 <div className="rounded-[8px] border border-border/50 overflow-hidden">
@@ -362,7 +362,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold">Publish Skill</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {publishDialogDescription}
                 </p>
               </div>
@@ -371,16 +371,16 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
               </button>
             </div>
             <div className="mt-4 grid gap-3">
-              <label className="grid gap-1 text-xs font-medium">
+              <label className="grid gap-1 text-sm font-medium">
                 Marketplace slug
                 <input className="h-8 rounded-md border border-border bg-background px-2 font-normal" value={marketplaceSlug} onChange={(event) => setMarketplaceSlug(event.target.value)} />
               </label>
               <div className="grid grid-cols-2 gap-3">
-                <label className="grid gap-1 text-xs font-medium">
+                <label className="grid gap-1 text-sm font-medium">
                   Version
                   <input className="h-8 rounded-md border border-border bg-background px-2 font-normal" value={version} onChange={(event) => setVersion(event.target.value)} />
                 </label>
-                <label className="grid gap-1 text-xs font-medium">
+                <label className="grid gap-1 text-sm font-medium">
                   Category
                   <select className="h-8 rounded-md border border-border bg-background px-2 font-normal" value={category} onChange={(event) => setCategory(event.target.value)}>
                     {PRODUCT_MARKETPLACE_CATEGORIES.map((candidate) => (
@@ -389,20 +389,20 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
                   </select>
                 </label>
               </div>
-              <label className="grid gap-1 text-xs font-medium">
+              <label className="grid gap-1 text-sm font-medium">
                 Tags
                 <input className="h-8 rounded-md border border-border bg-background px-2 font-normal" value={tags} onChange={(event) => setTags(event.target.value)} placeholder="review, ci" />
               </label>
-              <label className="grid gap-1 text-xs font-medium">
+              <label className="grid gap-1 text-sm font-medium">
                 Release notes
                 <textarea className="min-h-20 rounded-md border border-border bg-background px-2 py-2 font-normal" value={releaseNotes} onChange={(event) => setReleaseNotes(event.target.value)} />
               </label>
             </div>
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" className="h-8 rounded-md border border-border px-3 text-xs font-medium hover:bg-muted" onClick={() => setPublishDialogOpen(false)}>
+              <button type="button" className="h-8 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted" onClick={() => setPublishDialogOpen(false)}>
                 Cancel
               </button>
-              <button type="button" className="h-8 rounded-md border border-border bg-foreground px-3 text-xs font-medium text-background disabled:bg-muted disabled:text-muted-foreground" disabled={publishState.status === 'publishing'} onClick={handlePublish}>
+              <button type="button" className="h-8 rounded-md border border-border bg-foreground px-3 text-sm font-medium text-background disabled:bg-muted disabled:text-muted-foreground" disabled={publishState.status === 'publishing'} onClick={handlePublish}>
                 {publishState.status === 'publishing' ? 'Publishing...' : 'Publish Skill'}
               </button>
             </div>

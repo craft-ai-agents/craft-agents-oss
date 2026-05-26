@@ -114,7 +114,7 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
 
 function EmptyState({ children }: { children: string }) {
   return (
-    <div className="h-full flex items-center justify-center px-4 text-center text-xs text-muted-foreground">
+    <div className="h-full flex items-center justify-center px-4 text-center text-sm text-muted-foreground">
       {children}
     </div>
   )
@@ -139,7 +139,7 @@ function renderStatusEntries(
       return (
         <div
           key={`${entry.status}:${entry.path}`}
-          className="h-7 px-3 flex items-center gap-2 text-xs"
+          className="h-7 px-3 flex items-center gap-2 text-sm"
           title={entry.path}
         >
           {content}
@@ -151,7 +151,7 @@ function renderStatusEntries(
       <button
         key={`${entry.status}:${entry.path}`}
         type="button"
-        className="h-7 w-full px-3 flex items-center gap-2 text-left text-xs hover:bg-sidebar-hover focus-visible:bg-sidebar-hover focus-visible:outline-none"
+        className="h-7 w-full px-3 flex items-center gap-2 text-left text-sm hover:bg-sidebar-hover focus-visible:bg-sidebar-hover focus-visible:outline-none"
         title={entry.path}
         onClick={() => onOpenDiff(entry.path)}
       >
@@ -201,7 +201,7 @@ function renderCommits(commits: GitCommit[], onOpenCommit: (hash: string) => voi
       title={`${commit.shortHash} ${commit.message}`}
       onClick={() => onOpenCommit(commit.hash)}
     >
-      <div className="flex items-center gap-2 text-xs">
+      <div className="flex items-center gap-2 text-sm">
         <GitCommitHorizontal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate text-foreground">{commit.message}</span>
       </div>
@@ -343,7 +343,7 @@ export function GitPanel({ workspacePath, className }: GitPanelProps) {
   if (error && !hasVisibleCachedData) {
     return (
       <div className={cn('h-full bg-background', className)}>
-        <div className="h-full flex flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted-foreground">
+        <div className="h-full flex flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground">
           <GitPullRequestClosed className="h-4 w-4 text-destructive" />
           <span>{error}</span>
         </div>
@@ -359,7 +359,7 @@ export function GitPanel({ workspacePath, className }: GitPanelProps) {
         </div>
       )}
       {error && (
-        <div className="shrink-0 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+        <div className="shrink-0 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {error}
         </div>
       )}

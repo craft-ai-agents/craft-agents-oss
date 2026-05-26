@@ -119,7 +119,7 @@ export function LarkConnectDialog({
         <div className="space-y-3 py-2">
           {/* Region selector */}
           <div>
-            <div className="mb-1.5 text-xs text-muted-foreground">
+            <div className="mb-1.5 text-sm text-muted-foreground">
               {t('settings.messaging.lark.domainLabel')}
             </div>
             <div className="flex gap-2">
@@ -143,7 +143,7 @@ export function LarkConnectDialog({
           </div>
 
           <div>
-            <div className="mb-1.5 text-xs text-muted-foreground">
+            <div className="mb-1.5 text-sm text-muted-foreground">
               {t('settings.messaging.lark.appIdLabel')}
             </div>
             <SettingsSecretInput
@@ -155,7 +155,7 @@ export function LarkConnectDialog({
           </div>
 
           <div>
-            <div className="mb-1.5 text-xs text-muted-foreground">
+            <div className="mb-1.5 text-sm text-muted-foreground">
               {t('settings.messaging.lark.appSecretLabel')}
             </div>
             <SettingsSecretInput
@@ -178,13 +178,13 @@ export function LarkConnectDialog({
             </Button>
 
             {test.state === 'success' && (
-              <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+              <span className="inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400">
                 <Check className="h-3.5 w-3.5" />
                 {t('settings.messaging.lark.testOk')}
               </span>
             )}
             {test.state === 'error' && (
-              <span className="inline-flex items-center gap-1 text-xs text-destructive">
+              <span className="inline-flex items-center gap-1 text-sm text-destructive">
                 <X className="h-3.5 w-3.5" />
                 {test.error}
               </span>

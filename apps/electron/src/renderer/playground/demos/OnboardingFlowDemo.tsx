@@ -62,7 +62,7 @@ export function OnboardingFlowDemo() {
     <div className="flex flex-col h-full">
       {/* Step indicator bar */}
       <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-foreground/[0.03] border-b border-border">
-        <div className="flex items-center gap-1 text-xs">
+        <div className="flex items-center gap-1 text-sm">
           {STEP_ORDER.map((s, i) => (
             <span key={s.key} className="flex items-center gap-1">
               {i > 0 && <span className="text-muted-foreground/40 mx-1">→</span>}
@@ -82,7 +82,7 @@ export function OnboardingFlowDemo() {
         </div>
         <button
           onClick={handleRestart}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-foreground/5"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-foreground/5"
         >
           Restart
         </button>

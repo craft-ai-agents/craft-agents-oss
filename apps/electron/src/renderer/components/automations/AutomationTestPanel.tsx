@@ -37,7 +37,7 @@ export function AutomationTestPanel({ result, className }: AutomationTestPanelPr
         <Info_Alert.Title>
           {t('automations.testPassed')}
           {result.duration != null && (
-            <span className="ml-2 text-xs font-normal text-muted-foreground">
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
               {result.duration}ms
             </span>
           )}
@@ -53,7 +53,7 @@ export function AutomationTestPanel({ result, className }: AutomationTestPanelPr
         <Info_Alert.Title>{t('automations.testFailed')}</Info_Alert.Title>
         {result.stderr && (
           <Info_Alert.Description>
-            <pre className="font-mono text-xs mt-1 whitespace-pre-wrap text-destructive">{result.stderr}</pre>
+            <pre className="font-mono text-sm mt-1 whitespace-pre-wrap text-destructive">{result.stderr}</pre>
           </Info_Alert.Description>
         )}
       </Info_Alert>

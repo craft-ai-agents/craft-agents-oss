@@ -60,7 +60,7 @@ export function SkillPicker({ skills, onConfirm, onCancel, installing = false, r
           size="sm"
           onClick={toggleAll}
           disabled={isInstalling}
-          className="h-7 px-2 text-xs"
+          className="h-7 px-2 text-sm"
         >
           {allSelected ? 'Deselect all' : 'Select all'}
         </Button>
@@ -121,9 +121,9 @@ function SkillRow({
           <StatusBadge status={row.status} />
         </div>
         {row.skill.metadata.description && (
-          <p className="truncate text-xs text-muted-foreground">{row.skill.metadata.description}</p>
+          <p className="truncate text-sm text-muted-foreground">{row.skill.metadata.description}</p>
         )}
-        <p className="mt-0.5 truncate text-xs text-muted-foreground/60">{row.skill.sourcePath}</p>
+        <p className="mt-0.5 truncate text-sm text-muted-foreground/60">{row.skill.sourcePath}</p>
       </div>
     </label>
   )

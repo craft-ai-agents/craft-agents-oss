@@ -116,7 +116,7 @@ export function ComponentPreview({ component, props }: ComponentPreviewProps) {
         <div className="mt-1 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
           <p>{component.description}</p>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono">
+            <span className="text-sm font-mono">
               {Math.round(size.width)} × {Math.round(size.height)}
             </span>
             <button
@@ -124,7 +124,7 @@ export function ComponentPreview({ component, props }: ComponentPreviewProps) {
                 setSize({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })
                 localStorage.removeItem(STORAGE_KEY)
               }}
-              className="px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors"
+              className="px-2 py-1 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors"
             >
               Reset
             </button>

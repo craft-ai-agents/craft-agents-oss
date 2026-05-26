@@ -873,7 +873,7 @@ function BrowserTabStripPlayground({
     return (
       <div className="w-full max-w-[900px] p-6 rounded-xl border border-border bg-background shadow-sm">
         <div className="text-sm font-medium mb-2">Top Bar Browser Strip</div>
-        <p className="text-xs text-foreground/60">
+        <p className="text-sm text-foreground/60">
           Live mode requires Electron preload APIs (`window.electronAPI.browserPane`), which are not available in plain browser context.
           Switch mode to Auto or Mock for visual review here.
         </p>
@@ -885,12 +885,12 @@ function BrowserTabStripPlayground({
     <div className="w-full max-w-[900px] p-6 rounded-xl border border-border bg-background shadow-sm">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium">Top Bar Browser Strip</h3>
-        <span className="text-xs text-foreground/50">
+        <span className="text-sm text-foreground/50">
           {resolvedMode === 'live' ? 'Live data from browser registry' : 'Mock preview states'}
         </span>
       </div>
       {resolvedMode === 'mock' && (
-        <div className="text-xs text-foreground/50 mb-2">
+        <div className="text-sm text-foreground/50 mb-2">
           {mockInstances.length} tabs • {mockInstances.filter(i => i.isLoading).length} loading • {mockInstances.filter(i => !i.isVisible).length} hidden • {mockInstances.filter(i => i.agentControlActive).length} agent-controlled
         </div>
       )}
@@ -900,7 +900,7 @@ function BrowserTabStripPlayground({
           instancesOverride={resolvedMode === 'mock' ? mockInstances : undefined}
         />
       </div>
-      <p className="text-xs text-foreground/50 mt-3">
+      <p className="text-sm text-foreground/50 mt-3">
         Accent 1px border indicates a browser currently controlled by an agent.
       </p>
     </div>

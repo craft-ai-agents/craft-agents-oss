@@ -78,11 +78,11 @@ export function HeroBanner({
 
         <div className="relative flex flex-col items-center px-8 py-10">
           <div className="mb-4 flex w-full max-w-lg items-center gap-3 rounded-xl bg-white/80 px-5 py-3 shadow-thin backdrop-blur-sm dark:bg-black/30">
-            <div className={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white', slide.iconBg ?? 'bg-foreground')}>
+            <div className={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white', slide.iconBg ?? 'bg-foreground')}>
               {slide.icon}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold text-foreground">{slide.name}</p>
+              <p className="truncate text-[14px] font-semibold text-foreground">{slide.name}</p>
               {slide.description && (
                 <p className="truncate text-[12px] text-muted-foreground">{slide.description}</p>
               )}
@@ -92,7 +92,7 @@ export function HeroBanner({
           <button
             type="button"
             onClick={handleUseClick}
-            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-[13px] font-medium text-white transition-opacity hover:opacity-85"
+            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-[14px] font-medium text-white transition-opacity hover:opacity-85"
           >
             <MessageCircle className="h-3.5 w-3.5" />
             在对话中试用
@@ -129,12 +129,12 @@ export function HeroBanner({
                 {promptInstalled ? '在对话中使用' : `安装 ${promptSkill.name}`}
               </h2>
               {promptSkill.owner && (
-                <p className="mb-5 text-[13px] text-muted-foreground">由 {promptSkill.owner} 开发</p>
+                <p className="mb-5 text-[14px] text-muted-foreground">由 {promptSkill.owner} 开发</p>
               )}
 
               {/* 描述 */}
               {promptSkill.description && (
-                <p className="mb-6 text-center text-[13px] text-muted-foreground leading-relaxed">
+                <p className="mb-6 text-center text-[14px] text-muted-foreground leading-relaxed">
                   {promptSkill.description}
                 </p>
               )}

@@ -52,22 +52,22 @@ function AuthCardHeader({
         <div className="text-sm font-medium leading-5">
           {title}
           {titleSuffix && (
-            <span className="text-xs text-muted-foreground ml-2">({titleSuffix})</span>
+            <span className="text-sm text-muted-foreground ml-2">({titleSuffix})</span>
           )}
         </div>
         {/* Subtitles use 50% opacity of inherited color */}
         {subtitle && (
-          <div className="text-xs mt-0.5 opacity-50">
+          <div className="text-sm mt-0.5 opacity-50">
             {subtitle}
           </div>
         )}
         {subtitleSecondary && (
-          <div className="text-xs mt-0.5 opacity-50">
+          <div className="text-sm mt-0.5 opacity-50">
             {subtitleSecondary}
           </div>
         )}
         {description && (
-          <p className="text-xs text-muted-foreground mt-1">{description}</p>
+          <p className="text-sm text-muted-foreground mt-1">{description}</p>
         )}
       </div>
     </div>
@@ -405,7 +405,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
             <div className="text-sm font-medium leading-5">
               {`${authSourceName} Authenticating...`}
             </div>
-            <div className="text-xs mt-0.5 opacity-50">
+            <div className="text-sm mt-0.5 opacity-50">
               Complete authentication in your browser
             </div>
           </div>
@@ -442,7 +442,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
           <>
             {/* Username field */}
             <div className="space-y-1.5">
-              <Label htmlFor={`auth-username-${authRequestId}`} className="text-xs">
+              <Label htmlFor={`auth-username-${authRequestId}`} className="text-sm">
                 {usernameLabel}
               </Label>
               <div className="relative">
@@ -464,7 +464,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
             </div>
             {/* Password field */}
             <div className="space-y-1.5">
-              <Label htmlFor={`auth-password-${authRequestId}`} className="text-xs">
+              <Label htmlFor={`auth-password-${authRequestId}`} className="text-sm">
                 {passwordLabel}
               </Label>
               <div className="relative">
@@ -497,7 +497,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
           <>
             {authHeaderNames.map((headerName, index) => (
               <div key={headerName} className="space-y-1.5">
-                <Label htmlFor={`auth-header-${authRequestId}-${index}`} className="text-xs">
+                <Label htmlFor={`auth-header-${authRequestId}-${index}`} className="text-sm">
                   {headerName}
                 </Label>
                 <div className="relative">
@@ -533,7 +533,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
         ) : (
           /* Single credential field (API key, bearer token) */
           <div className="space-y-1.5">
-            <Label htmlFor={`auth-value-${authRequestId}`} className="text-xs">
+            <Label htmlFor={`auth-value-${authRequestId}`} className="text-sm">
               {credentialLabel}
               {authCredentialMode === 'header' && authHeaderName && (
                 <span className="text-muted-foreground ml-1">

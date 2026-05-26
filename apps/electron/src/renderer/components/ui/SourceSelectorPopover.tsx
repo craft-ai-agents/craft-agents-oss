@@ -48,7 +48,7 @@ export function SourceSelectorPopover({
         <div
           data-tutorial={index === 0 ? 'source-dropdown-item-first' : undefined}
           className={cn(
-            'flex cursor-pointer select-none items-center gap-3 rounded-[6px] px-3 py-2 text-[13px]',
+            'flex cursor-pointer select-none items-center gap-3 rounded-[6px] px-3 py-2 text-[14px]',
             state.highlighted && 'bg-foreground/5',
             state.selected && 'bg-foreground/3',
           )}

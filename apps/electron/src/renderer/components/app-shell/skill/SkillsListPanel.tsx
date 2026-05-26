@@ -65,7 +65,7 @@ export function SkillsListPanel({
         >
           {workspaceRootPath && onAddSkill && (
             <button
-              className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
+              className="inline-flex items-center h-7 px-3 text-sm font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
               onClick={onAddSkill}
             >
               {t('skillsList.addSkill')}

@@ -444,7 +444,7 @@ export function SkillMarketplacePage({
             type="button"
             onClick={() => { setTab('market'); fetchSkills() }}
             className={cn(
-              'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors',
+              'rounded-lg px-3 py-1.5 text-[14px] font-medium transition-colors',
               tab === 'market'
                 ? 'bg-foreground/[0.08] text-foreground'
                 : 'text-muted-foreground hover:text-foreground',
@@ -456,7 +456,7 @@ export function SkillMarketplacePage({
             type="button"
             onClick={() => { setTab('local'); fetchSkills() }}
             className={cn(
-              'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors',
+              'rounded-lg px-3 py-1.5 text-[14px] font-medium transition-colors',
               tab === 'local'
                 ? 'bg-foreground/[0.08] text-foreground'
                 : 'text-muted-foreground hover:text-foreground',
@@ -469,7 +469,7 @@ export function SkillMarketplacePage({
           <button
             type="button"
             onClick={() => { setPublishSourceSkill(null); setPublishOpen(true) }}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3.5 py-1.5 text-[13px] font-medium text-foreground shadow-xs transition-colors hover:bg-foreground/[0.04]"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3.5 py-1.5 text-[14px] font-medium text-foreground shadow-xs transition-colors hover:bg-foreground/[0.04]"
           >
             发布技能
           </button>
@@ -498,7 +498,7 @@ export function SkillMarketplacePage({
                   value={localSearch}
                   onChange={(e) => setLocalSearch(e.target.value)}
                   placeholder="搜索本地技能"
-                  className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 />
               </div>
               <LocalOriginDropdown value={localOriginFilter} onChange={setLocalOriginFilter} />
@@ -513,7 +513,7 @@ export function SkillMarketplacePage({
                 <button
                   type="button"
                   onClick={() => setTab('market')}
-                  className="mt-1 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-85"
+                  className="mt-1 rounded-lg bg-foreground px-4 py-2 text-[14px] font-medium text-background transition-opacity hover:opacity-85"
                 >
                   前往市场
                 </button>
@@ -535,7 +535,7 @@ export function SkillMarketplacePage({
                       <div key={section} className="mb-8">
                         <h2 className="mb-3 text-[15px] font-semibold text-foreground">
                           {section}
-                          <span className="ml-2 text-[13px] font-normal text-muted-foreground">{sectionSkills.length}</span>
+                          <span className="ml-2 text-[14px] font-normal text-muted-foreground">{sectionSkills.length}</span>
                         </h2>
                         <LocalSkillGrid
                           skills={sectionSkills}
@@ -550,7 +550,7 @@ export function SkillMarketplacePage({
                 <>
                   <h2 className="mb-3 text-[15px] font-semibold text-foreground">
                     {localOriginFilter}
-                    <span className="ml-2 text-[13px] font-normal text-muted-foreground">{displayedLocalSkills.length}</span>
+                    <span className="ml-2 text-[14px] font-normal text-muted-foreground">{displayedLocalSkills.length}</span>
                   </h2>
                   <LocalSkillGrid
                     skills={displayedLocalSkills}
@@ -563,7 +563,7 @@ export function SkillMarketplacePage({
 
             {/* 空状态：有技能但当前搜索/筛选无结果 */}
             {displayedLocalSkills.length === 0 && (localSkills.length > 0 || localSearch) && (
-              <div className="py-12 text-center text-[13px] text-muted-foreground">
+              <div className="py-12 text-center text-[14px] text-muted-foreground">
                 {localSearch ? '没有匹配的技能' : '当前分类下没有技能'}
               </div>
             )}
@@ -585,7 +585,7 @@ export function SkillMarketplacePage({
               value={marketSearch}
               onChange={(e) => setMarketSearch(e.target.value)}
               placeholder="搜索技能"
-              className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
           <div className="flex h-9 items-center rounded-lg border border-border bg-background p-0.5">
@@ -628,7 +628,7 @@ export function SkillMarketplacePage({
 
         {/* 技能列表 */}
         {filtered.length === 0 ? (
-          <p className="py-12 text-center text-[13px] text-muted-foreground">
+          <p className="py-12 text-center text-[14px] text-muted-foreground">
             {marketSearch.trim() ? '没有匹配的技能' : '暂无技能'}
           </p>
         ) : category === '全部' ? (
@@ -686,7 +686,7 @@ export function SkillMarketplacePageHeader({
         type="button"
         disabled={!canPublish}
         onClick={onPublishClick}
-        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted disabled:opacity-50"
+        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted disabled:opacity-50"
       >
         <UserCog className="h-3.5 w-3.5" />
         {canPublish ? '发布技能' : '登录后发布'}
@@ -703,7 +703,7 @@ export function MarketplaceEmptyState({ canPublish, onPublishClick }: { canPubli
         type="button"
         disabled={!canPublish}
         onClick={onPublishClick}
-        className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted disabled:opacity-50"
+        className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted disabled:opacity-50"
       >
         <UserCog className="h-3.5 w-3.5" />
         {canPublish ? '发布技能' : '登录后发布'}
@@ -730,12 +730,12 @@ export function MarketplaceListingCard({
         selected ? 'border-foreground/40 bg-muted/60' : 'border-border hover:bg-muted/40',
       )}
     >
-      <div className={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white', listing.iconBg ?? 'bg-foreground')}>
+      <div className={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white', listing.iconBg ?? 'bg-foreground')}>
         {listing.icon}
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{listing.name}</p>
-        <p className="truncate text-xs text-muted-foreground">{listing.description}</p>
+        <p className="truncate text-sm text-muted-foreground">{listing.description}</p>
       </div>
     </button>
   )
@@ -772,12 +772,12 @@ export function LocalSkillMarketplaceStatus({
         <span className="text-muted-foreground">/{metadata.marketplaceSlug}</span>
         <span className="text-muted-foreground">v{metadata.installedVersion}</span>
         {metadata.modified && (
-          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-200">
+          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-sm text-amber-800 dark:text-amber-200">
             有未发布的改动
           </span>
         )}
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">市场 ID：{metadata.marketplaceId}</p>
+      <p className="mt-2 text-sm text-muted-foreground">市场 ID：{metadata.marketplaceId}</p>
     </div>
   )
 }

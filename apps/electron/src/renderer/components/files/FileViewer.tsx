@@ -55,7 +55,7 @@ export function FileViewer({ path }: FileViewerProps) {
       {/* File path header */}
       <div className="px-4 py-3 bg-muted/50 border-b flex items-center gap-2 shrink-0">
         <FileText className="size-4 text-muted-foreground shrink-0" />
-        <p className="text-xs font-mono text-muted-foreground truncate select-all" title={path}>
+        <p className="text-sm font-mono text-muted-foreground truncate select-all" title={path}>
           {path}
         </p>
       </div>
@@ -71,7 +71,7 @@ export function FileViewer({ path }: FileViewerProps) {
           ) : error ? (
             <div className="flex flex-col items-center justify-center h-32 text-destructive gap-2">
               <p className="text-sm font-medium">{t("fileViewer.errorLoading")}</p>
-              <p className="text-xs">{error}</p>
+              <p className="text-sm">{error}</p>
             </div>
           ) : (
             <pre className="text-sm whitespace-pre-wrap font-mono leading-relaxed selection:bg-foreground/20">

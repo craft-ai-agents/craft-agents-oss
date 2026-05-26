@@ -121,7 +121,7 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
         <button
           type="button"
           className={cn(
-            "h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px]",
+            "h-[30px] pl-2.5 pr-2 text-sm font-medium rounded-[8px]",
             "flex items-center gap-1.5 shrink-0 select-none",
             "transition-all shadow-minimal cursor-pointer",
             // Plain white badge with hover
@@ -134,7 +134,7 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, o
         >
           {/* Spinner */}
           <div className="flex items-center justify-center shrink-0">
-            <Spinner className="text-xs" />
+            <Spinner className="text-sm" />
           </div>
 
           {/* Type badge */}

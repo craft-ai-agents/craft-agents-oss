@@ -39,7 +39,7 @@ export function AppMenuMobilePreview({
             />
           </div>
           <div className="flex-1 flex items-start justify-center pt-12">
-            <p className="text-xs text-muted-foreground/70 px-6 text-center">
+            <p className="text-sm text-muted-foreground/70 px-6 text-center">
               Tap the Craft logo (top-left) to open the menu.<br />
               Settings &amp; Help open as full-screen sub-pages in compact mode.
             </p>

@@ -1633,7 +1633,7 @@ function AppShellContent({
             <TooltipTrigger asChild>
               <span className="flex items-center"><LabelValueTypeIcon valueType={node.label.valueType} size={10} /></span>
             </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
+            <TooltipContent side="top" className="text-sm">
               {t("sidebar.labelValueTypeTooltip", { valueType: t(`sidebar.labelValueType.${node.label.valueType}`) })}
             </TooltipContent>
           </Tooltip>
@@ -1803,7 +1803,7 @@ function AppShellContent({
                             <Button
                               variant="ghost"
                               onClick={(e) => handleNewChat(e.metaKey || e.ctrlKey)}
-                              className="w-full justify-start gap-2 py-[7px] px-2 text-[13px] font-normal rounded-[6px] shadow-minimal bg-background"
+                              className="w-full justify-start gap-2 py-[7px] px-2 text-[14px] font-normal rounded-[6px] shadow-minimal bg-background"
                               data-tutorial="new-chat-button"
                             >
                               <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />

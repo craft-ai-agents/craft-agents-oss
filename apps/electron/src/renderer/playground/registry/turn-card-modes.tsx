@@ -271,7 +271,7 @@ function TurnCardModesDemo({
         >
           Detailed
         </button>
-        <span className="ml-4 text-xs text-muted-foreground">
+        <span className="ml-4 text-sm text-muted-foreground">
           {mode === 'informative'
             ? 'Hides MCP/API tool names and params, shows only source + intent'
             : 'Shows full tool names, params, and all metadata'

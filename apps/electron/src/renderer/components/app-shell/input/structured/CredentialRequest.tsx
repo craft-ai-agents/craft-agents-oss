@@ -130,12 +130,12 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
                 <span className="text-sm font-medium text-foreground">
                   Authentication Required
                 </span>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-sm text-muted-foreground">
                   ({request.sourceName})
                 </span>
               </div>
               {request.description && (
-                <p className="text-xs text-muted-foreground">{request.description}</p>
+                <p className="text-sm text-muted-foreground">{request.description}</p>
               )}
             </div>
           </div>
@@ -146,7 +146,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
               <>
                 {/* Username field */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="credential-username" className="text-xs">
+                  <Label htmlFor="credential-username" className="text-sm">
                     {usernameLabel}
                   </Label>
                   <div className="relative">
@@ -167,7 +167,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
                 </div>
                 {/* Password field */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="credential-password" className="text-xs">
+                  <Label htmlFor="credential-password" className="text-sm">
                     {passwordLabel}
                   </Label>
                   <div className="relative">
@@ -199,7 +199,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
               <>
                 {request.headerNames.map((headerName, index) => (
                   <div key={headerName} className="space-y-1.5">
-                    <Label htmlFor={`credential-header-${index}`} className="text-xs">
+                    <Label htmlFor={`credential-header-${index}`} className="text-sm">
                       {headerName}
                     </Label>
                     <div className="relative">
@@ -234,7 +234,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
             ) : (
               /* Single credential field (API key, bearer token) */
               <div className="space-y-1.5">
-                <Label htmlFor="credential-value" className="text-xs">
+                <Label htmlFor="credential-value" className="text-sm">
                   {credentialLabel}
                   {request.mode === 'header' && request.headerName && (
                     <span className="text-muted-foreground ml-1">

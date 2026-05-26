@@ -229,12 +229,12 @@ export function MarkdownHtmlBlock({ code, className }: MarkdownHtmlBlockProps) {
 
           {/* Loading state for uncached active item */}
           {!activeHtml && loading && (
-            <div className="py-8 text-center text-muted-foreground text-[13px]">{t('common.loading')}</div>
+            <div className="py-8 text-center text-muted-foreground text-[14px]">{t('common.loading')}</div>
           )}
 
           {/* Error state for uncached active item */}
           {!activeHtml && !loading && error && (
-            <div className="py-6 text-center text-destructive/70 text-[13px]">{error}</div>
+            <div className="py-6 text-center text-destructive/70 text-[14px]">{error}</div>
           )}
 
           {/* Bottom fade gradient */}

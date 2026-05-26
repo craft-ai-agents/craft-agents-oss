@@ -102,7 +102,7 @@ export function WhatsAppConnectDialog({ open, onOpenChange, onConnected }: Whats
           <DialogDescription>{t('dialog.whatsapp.description')}</DialogDescription>
         </DialogHeader>
 
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {t('dialog.whatsapp.selfChatHint')}
         </p>
 

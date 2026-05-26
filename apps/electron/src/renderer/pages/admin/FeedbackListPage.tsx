@@ -45,7 +45,7 @@ function RatingMetric({
       )}
     >
       <strong className="block w-full text-center text-lg leading-none">{count}</strong>
-      <span className="flex w-full items-center justify-center gap-1 text-center text-xs text-foreground/65">
+      <span className="flex w-full items-center justify-center gap-1 text-center text-sm text-foreground/65">
         <Icon
           className={cn(
             'h-3.5 w-3.5 stroke-[2.2]',
@@ -65,7 +65,7 @@ function TurnSummary({ record }: { record: FeedbackRecord }) {
   const final = finalAssistantMessage(record)
 
   return (
-    <div className="space-y-2 text-xs">
+    <div className="space-y-2 text-sm">
       <div className="grid grid-cols-[48px_minmax(0,1fr)] gap-3">
         <span className="text-foreground/45">用户</span>
         <span className="line-clamp-2 text-foreground/80">{user ? messageText(user) : '-'}</span>
@@ -94,17 +94,17 @@ function FeedbackRow({
       className="grid w-full grid-cols-1 items-center gap-3 border-b border-violet-100/70 bg-white/70 px-4 py-4 text-left text-sm transition-colors last:border-b-0 hover:bg-violet-50/55 dark:border-border/60 dark:bg-card/70 dark:hover:bg-violet-500/5 lg:grid-cols-[150px_minmax(210px,250px)_110px_180px_minmax(280px,1fr)] lg:gap-4"
     >
       <span className="text-foreground/70">
-        <span className="mr-2 text-xs text-foreground/40 lg:hidden">时间</span>
+        <span className="mr-2 text-sm text-foreground/40 lg:hidden">时间</span>
         {formatFeedbackTime(record.time)}
       </span>
-      <code className="inline-flex h-7 w-fit max-w-full items-center truncate rounded-md border border-amber-300/60 bg-amber-50 px-2 text-xs text-amber-700 shadow-sm dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-300">
+      <code className="inline-flex h-7 w-fit max-w-full items-center truncate rounded-md border border-amber-300/60 bg-amber-50 px-2 text-sm text-amber-700 shadow-sm dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-300">
         {record.id || '-'}
       </code>
-      <code className="inline-flex h-7 w-fit items-center rounded-md border border-violet-200/70 bg-violet-50 px-2 text-xs text-violet-700 shadow-sm dark:border-violet-400/20 dark:bg-violet-500/10 dark:text-violet-200">
+      <code className="inline-flex h-7 w-fit items-center rounded-md border border-violet-200/70 bg-violet-50 px-2 text-sm text-violet-700 shadow-sm dark:border-violet-400/20 dark:bg-violet-500/10 dark:text-violet-200">
         {record.employee_id || '-'}
       </code>
       <span className="line-clamp-2 text-foreground/70">
-        <span className="mr-2 text-xs text-foreground/40 lg:hidden">{showComment ? '用户评价' : '评价状态'}</span>
+        <span className="mr-2 text-sm text-foreground/40 lg:hidden">{showComment ? '用户评价' : '评价状态'}</span>
         {showComment ? (record.comment || '-') : (record.is_like ? '点赞' : '点踩')}
       </span>
       <TurnSummary record={record} />
@@ -184,7 +184,7 @@ export default function FeedbackListPage({
           )}
 
           <section className={cn('overflow-hidden rounded-[8px]', elevatedCardClassName)}>
-            <div className="hidden grid-cols-[150px_minmax(210px,250px)_110px_180px_minmax(280px,1fr)] items-center gap-4 border-b border-violet-100/80 bg-white px-4 py-3 text-xs font-semibold text-foreground dark:border-border/70 dark:bg-card dark:text-foreground lg:grid">
+            <div className="hidden grid-cols-[150px_minmax(210px,250px)_110px_180px_minmax(280px,1fr)] items-center gap-4 border-b border-violet-100/80 bg-white px-4 py-3 text-sm font-semibold text-foreground dark:border-border/70 dark:bg-card dark:text-foreground lg:grid">
               <span>时间</span>
               <span>评价 ID</span>
               <span>评价人</span>

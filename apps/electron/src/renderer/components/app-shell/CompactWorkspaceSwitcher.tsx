@@ -246,7 +246,7 @@ export function CompactWorkspaceSwitcher({
                         {workspaceUnreadMap?.[workspace.id] && <span className="h-2 w-2 rounded-full bg-accent shrink-0" />}
                       </div>
                       {workspace.remoteServer && (
-                        <div className="flex items-center gap-1 text-xs text-foreground/50 mt-0.5">
+                        <div className="flex items-center gap-1 text-sm text-foreground/50 mt-0.5">
                           {disconnected
                             ? <><CloudOff className="h-3 w-3 text-destructive shrink-0" /><span title={getDisconnectTooltip(workspace.id)}>{t('toast.disconnected')}</span></>
                             : <><Cloud className="h-3 w-3 shrink-0" /><span className="truncate">{workspace.remoteServer.url}</span></>

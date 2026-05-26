@@ -49,7 +49,7 @@ export function EntityListBadge({ children, variant = 'text', colorClass, style,
       <Tooltip>
         <TooltipTrigger asChild>{badge}</TooltipTrigger>
         <TooltipContent side="top" className="max-w-xs">
-          <span className="text-xs">{tooltip}</span>
+          <span className="text-sm">{tooltip}</span>
         </TooltipContent>
       </Tooltip>
     )

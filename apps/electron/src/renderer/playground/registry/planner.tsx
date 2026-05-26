@@ -852,7 +852,7 @@ function PlannerBoard() {
                         )}
                       >
                         <div className="flex items-center justify-between gap-2 border-b border-border/70 pb-1.5 px-1">
-                          <div className="text-[13px] font-semibold text-foreground">
+                          <div className="text-[14px] font-semibold text-foreground">
                             {heading.title}
                           </div>
                           <DropdownMenu modal={false}>
@@ -991,7 +991,7 @@ function PlannerBoard() {
                 <div className="mb-1 text-sm font-semibold">Attached Sessions</div>
                 <div className="space-y-2 mt-3">
                   {selectedLinks.length === 0 ? (
-                    <div className="text-xs text-foreground/40">No sessions linked.</div>
+                    <div className="text-sm text-foreground/40">No sessions linked.</div>
                   ) : (
                     selectedLinks.map(link => {
                       const snap = snapshots.find(s => s.id === link.snapshotId)
@@ -1003,7 +1003,7 @@ function PlannerBoard() {
                           <div className="mb-1 flex items-center justify-between gap-2">
                             <div className="min-w-0 flex items-center gap-1.5">
                               <Link2 className="h-3.5 w-3.5 text-foreground/45" />
-                              <span className="truncate text-xs font-medium">{snap.title}</span>
+                              <span className="truncate text-sm font-medium">{snap.title}</span>
                             </div>
                             <span className={cn('inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px]', meta.cls)}>
                               <Icon className="h-3 w-3" />
@@ -1030,7 +1030,7 @@ function PlannerBoard() {
                         <History className="h-3 w-3 text-foreground/45" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs text-foreground/75">{ev.payloadSummary}</div>
+                        <div className="text-sm text-foreground/75">{ev.payloadSummary}</div>
                         <div className="mt-0.5 text-[11px] text-foreground/40">
                           {ev.actor} · {ev.at}
                         </div>
@@ -1115,7 +1115,7 @@ function PlannerSyncStatePalette() {
                 <Icon className={cn('h-4 w-4', meta.cls.split(' ')[0])} />
                 {meta.label}
               </div>
-              <div className="text-xs text-foreground/60">
+              <div className="text-sm text-foreground/60">
                 Snapshot card always visible; live session resolution is optional enhancement.
               </div>
             </div>

@@ -240,7 +240,7 @@ export function CompactSessionMenu({
             >
               <h1
                 className={cn(
-                  'text-sm font-semibold truncate font-sans leading-tight',
+                  'text-base font-semibold truncate font-sans leading-tight',
                   isRegeneratingTitle && 'animate-shimmer-text',
                 )}
               >

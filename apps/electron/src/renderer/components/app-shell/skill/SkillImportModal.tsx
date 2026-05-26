@@ -675,7 +675,7 @@ function RemoteTabContent({
           </Button>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         Supports GitHub, GitLab, or any git remote (requires git for non-GitHub/GitLab URLs).
       </p>
     </div>

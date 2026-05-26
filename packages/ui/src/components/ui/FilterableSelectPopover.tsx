@@ -169,7 +169,7 @@ export function FilterableSelectPopover<T>({
         }}
       >
         {!hasItems ? (
-          <div className="p-3 text-xs text-muted-foreground select-none">
+          <div className="p-3 text-sm text-muted-foreground select-none">
             {emptyState ?? 'No items configured.'}
           </div>
         ) : (
@@ -187,7 +187,7 @@ export function FilterableSelectPopover<T>({
 
             <div ref={listRef} className="max-h-[240px] overflow-y-auto p-1">
               {!hasResults ? (
-                <div className="px-3 py-2 text-xs text-muted-foreground select-none">
+                <div className="px-3 py-2 text-sm text-muted-foreground select-none">
                   {noResultsState ?? 'No matching items.'}
                 </div>
               ) : (
@@ -203,7 +203,7 @@ export function FilterableSelectPopover<T>({
                       onClick={() => handleToggle(item)}
                       className={cn(
                         'w-full text-left outline-none',
-                        !renderItem && 'flex cursor-pointer select-none items-center gap-3 rounded-[6px] px-3 py-2 text-[13px]',
+                        !renderItem && 'flex cursor-pointer select-none items-center gap-3 rounded-[6px] px-3 py-2 text-[14px]',
                         highlighted && 'bg-foreground/5',
                         selected && 'bg-foreground/3',
                       )}

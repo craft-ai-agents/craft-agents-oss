@@ -78,7 +78,7 @@ function OverviewCard({
 }) {
   return (
     <section className={cn('min-h-[136px] rounded-[8px] p-4', elevatedCardClassName)}>
-      <div className="mb-3 flex items-center gap-2 text-xs font-medium text-foreground/55">
+      <div className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground/55">
         <Icon className="h-4 w-4" />
         <span>{title}</span>
       </div>
@@ -99,8 +99,8 @@ function ToolPayload({
 
   return (
     <div>
-      <div className="mb-1.5 text-xs font-medium text-foreground/50">{label}</div>
-      <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-[6px] border border-slate-700/80 bg-[#1F2937] px-3 py-2.5 font-mono text-xs leading-5 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_24px_rgba(15,23,42,0.16)]">
+      <div className="mb-1.5 text-sm font-medium text-foreground/50">{label}</div>
+      <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-[6px] border border-slate-700/80 bg-[#1F2937] px-3 py-2.5 font-mono text-sm leading-5 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_24px_rgba(15,23,42,0.16)]">
         {text}
       </pre>
     </div>
@@ -114,7 +114,7 @@ function MessageCard({ index, message }: { index: number; message: FeedbackTurnM
   return (
     <div className="grid grid-cols-[36px_minmax(0,1fr)] gap-3">
       <div className="flex flex-col items-center">
-        <div className="flex aspect-square h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500/75 text-xs font-semibold leading-none text-white shadow-[0_8px_18px_rgba(124,58,237,0.18)]">
+        <div className="flex aspect-square h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500/75 text-sm font-semibold leading-none text-white shadow-[0_8px_18px_rgba(124,58,237,0.18)]">
           {index + 1}
         </div>
         <div className="mt-2 h-full w-px bg-gradient-to-b from-violet-300 via-violet-200 to-transparent dark:from-violet-500/40 dark:via-violet-500/20" />
@@ -122,10 +122,10 @@ function MessageCard({ index, message }: { index: number; message: FeedbackTurnM
       <article className="mb-4 rounded-[8px] border border-violet-100/80 bg-gradient-to-br from-white via-white to-violet-50/45 p-4 shadow-[0_14px_36px_rgba(124,58,237,0.10),0_1px_4px_rgba(15,23,42,0.04)] dark:border-violet-400/20 dark:from-card dark:via-card dark:to-violet-950/20">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={cn('rounded-md border px-2 py-0.5 text-xs font-medium', tagClassForRole(message.role))}>
+            <span className={cn('rounded-md border px-2 py-0.5 text-sm font-medium', tagClassForRole(message.role))}>
               {roleLabel(message.role)}
             </span>
-            <span className={cn('rounded-md border px-2 py-0.5 text-xs font-medium', messageKindClassName(message))}>
+            <span className={cn('rounded-md border px-2 py-0.5 text-sm font-medium', messageKindClassName(message))}>
               {messageKindLabel(message)}
             </span>
             {displayToolName && (
@@ -134,7 +134,7 @@ function MessageCard({ index, message }: { index: number; message: FeedbackTurnM
               </Badge>
             )}
           </div>
-          <span className="max-w-[360px] truncate font-mono text-xs text-foreground/35">{message.id}</span>
+          <span className="max-w-[360px] truncate font-mono text-sm text-foreground/35">{message.id}</span>
         </div>
 
         <div className="space-y-3">
@@ -188,24 +188,24 @@ export default function FeedbackDetailPage({ record, onBack }: FeedbackDetailPag
           <section className={cn('rounded-[8px] p-5', elevatedCardClassName)}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0">
-                <div className="flex items-center gap-2 text-xs text-foreground/45">
+                <div className="flex items-center gap-2 text-sm text-foreground/45">
                   <Clock className="h-3.5 w-3.5" />
                   {formatFeedbackTime(record.time)}
                 </div>
                 <div className="mt-3 flex items-center gap-2">
                   <h2 className="text-lg font-semibold">对话回放</h2>
-                  <span className={cn('rounded-md border px-2 py-0.5 text-xs font-medium', ratingClassName)}>
+                  <span className={cn('rounded-md border px-2 py-0.5 text-sm font-medium', ratingClassName)}>
                     {ratingLabel}
                   </span>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-foreground/55">
                   <span>评价人</span>
-                  <code className="rounded-md border border-violet-200/70 bg-violet-50 px-2 py-0.5 text-xs text-violet-700 dark:border-violet-400/20 dark:bg-violet-500/10 dark:text-violet-200">
+                  <code className="rounded-md border border-violet-200/70 bg-violet-50 px-2 py-0.5 text-sm text-violet-700 dark:border-violet-400/20 dark:bg-violet-500/10 dark:text-violet-200">
                     {record.employee_id || '-'}
                   </code>
                   <span className="text-foreground/30">/</span>
                   <span>会话</span>
-                  <code className="rounded-md border border-violet-200/70 bg-violet-50 px-2 py-0.5 text-xs text-violet-700 dark:border-violet-400/20 dark:bg-violet-500/10 dark:text-violet-200">
+                  <code className="rounded-md border border-violet-200/70 bg-violet-50 px-2 py-0.5 text-sm text-violet-700 dark:border-violet-400/20 dark:bg-violet-500/10 dark:text-violet-200">
                     {record.session_id || '-'}
                   </code>
                 </div>
@@ -213,7 +213,7 @@ export default function FeedbackDetailPage({ record, onBack }: FeedbackDetailPag
 
               {!record.is_like && (
                 <div className="min-h-[72px] w-full max-w-md rounded-[8px] border border-violet-200/80 bg-violet-50/80 p-3 shadow-inner dark:border-violet-400/20 dark:bg-violet-500/10">
-                  <div className="mb-1 text-xs font-medium text-foreground/45">用户评论</div>
+                  <div className="mb-1 text-sm font-medium text-foreground/45">用户评论</div>
                   <p className="whitespace-pre-wrap text-sm leading-6 text-foreground/75">{record.comment || '-'}</p >
                 </div>
               )}
@@ -242,7 +242,7 @@ export default function FeedbackDetailPage({ record, onBack }: FeedbackDetailPag
           <section className={cn('rounded-[8px] p-4', elevatedCardClassName)}>
             <div className="mb-4 flex items-center justify-between gap-4">
               <h3 className="text-sm font-semibold">详细过程</h3>
-              <span className="text-xs text-foreground/45">按接口返回顺序展示</span>
+              <span className="text-sm text-foreground/45">按接口返回顺序展示</span>
             </div>
             {summary.displayMessages.length === 0 ? (
               <div className="py-12 text-center text-sm text-foreground/40">暂无详细过程</div>

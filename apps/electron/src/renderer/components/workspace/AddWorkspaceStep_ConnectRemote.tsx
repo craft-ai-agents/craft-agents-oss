@@ -251,19 +251,19 @@ export function AddWorkspaceStep_ConnectRemote({
             {testState === 'testing' ? 'Testing...' : 'Test Connection'}
           </AddWorkspaceSecondaryButton>
           {testState === 'ok' && !isFreshServer && (
-            <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+            <span className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
               <CheckCircle className="h-3.5 w-3.5" />
               Connected{serverVersion ? ` — v${serverVersion}` : ''}
             </span>
           )}
           {testState === 'ok' && isFreshServer && (
-            <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+            <span className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
               <CheckCircle className="h-3.5 w-3.5" />
               Connected{serverVersion ? ` — v${serverVersion}` : ''} — no workspaces yet
             </span>
           )}
           {testState === 'error' && (
-            <span className="flex items-center gap-1 text-xs text-destructive">
+            <span className="flex items-center gap-1 text-sm text-destructive">
               <XCircle className="h-3.5 w-3.5" />
               {testError || 'Failed'}
             </span>
@@ -272,7 +272,7 @@ export function AddWorkspaceStep_ConnectRemote({
 
         {/* Old server warning */}
         {testState === 'ok' && !serverVersion && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-xs text-yellow-700 dark:text-yellow-400">
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-sm text-yellow-700 dark:text-yellow-400">
             <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
             <span>{t("workspace.olderServerWarning")}</span>
           </div>
@@ -309,7 +309,7 @@ export function AddWorkspaceStep_ConnectRemote({
               type="button"
               onClick={() => setSelectedValue(CREATE_NEW_VALUE)}
               disabled={isCreating}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <Plus className="h-3 w-3" />
               Create new workspace on server
@@ -332,7 +332,7 @@ export function AddWorkspaceStep_ConnectRemote({
                 className="border-0 bg-transparent shadow-none"
               />
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               A workspace will be created on the remote server with this name.
             </p>
             {isCreateNew && remoteWorkspaces.length > 0 && (
@@ -343,7 +343,7 @@ export function AddWorkspaceStep_ConnectRemote({
                   setNewWorkspaceName('')
                 }}
                 disabled={isCreating}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 <ArrowLeft className="h-3 w-3" />
                 Use existing workspace
