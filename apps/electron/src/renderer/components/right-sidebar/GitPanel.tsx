@@ -7,6 +7,7 @@ import type { GitCommit, GitStatusEntry } from '../../../shared/types'
 import { openCommitTabAtom, openWorkingTreeDiffTabAtom } from '@/atoms/editor-tabs'
 import { gitPanelCacheAtomFamily, type GitPanelCache } from '@/atoms/git-panel-cache'
 import { cn } from '@/lib/utils'
+import { useOptionalAppShellContext } from '@/context/AppShellContext'
 
 const DEFAULT_STATUS_HEIGHT = 42
 const MIN_STATUS_HEIGHT = 22
@@ -248,6 +249,7 @@ function GitHistorySection({
 export function GitPanel({ workspacePath, className }: GitPanelProps) {
   const openWorkingTreeDiffTab = useSetAtom(openWorkingTreeDiffTabAtom)
   const openCommitTab = useSetAtom(openCommitTabAtom)
+  const onEditorPanelOpen = useOptionalAppShellContext()?.onEditorPanelOpen
   const cacheAtom = useMemo(() => gitPanelCacheAtomFamily(workspacePath ?? ''), [workspacePath])
   const [cache, setCache] = useAtom(cacheAtom)
   const [isLoading, setIsLoading] = useState(false)
@@ -315,12 +317,14 @@ export function GitPanel({ workspacePath, className }: GitPanelProps) {
   const handleOpenDiff = useCallback((filePath: string) => {
     if (!workspacePath) return
     void openWorkingTreeDiffTab({ workspacePath, filePath })
-  }, [openWorkingTreeDiffTab, workspacePath])
+    onEditorPanelOpen?.()
+  }, [openWorkingTreeDiffTab, workspacePath, onEditorPanelOpen])
 
   const handleOpenCommit = useCallback((hash: string) => {
     if (!workspacePath) return
     void openCommitTab({ workspacePath, hash })
-  }, [openCommitTab, workspacePath])
+    onEditorPanelOpen?.()
+  }, [openCommitTab, workspacePath, onEditorPanelOpen])
 
   const { t } = useTranslation()
 

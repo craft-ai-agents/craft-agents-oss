@@ -187,9 +187,9 @@ Neither item is nested under a parent group. The previous "Local Skills" sub-ite
 Avoid: Skills Submenu, nesting 市场 under 技能.
 
 ### Editor Panel
-A resizable panel (`EditorDetailPanel`) that renders to the right of the active content panel(s), showing file contents, git diffs, and git-commit details in a tabbed interface. Tabs are opened automatically when session files change during processing.
+A resizable panel (`EditorDetailPanel`) that renders to the right of the active content panel(s), showing file contents, git diffs, and git-commit details in a tabbed interface. Tabs are opened automatically when session files change during processing, but this does **not** auto-open the panel.
 
-Visibility rule: only rendered when a **session is active** (same gate as the Right Sidebar). Within that context, it shows when `isEditorPanelOpen && hasOpenTabs`. Opening a new tab auto-forces `isEditorPanelOpen = true` (overrides a manual collapse). Open state is persisted per workspace via the `editorPanelVisible` storage key.
+Visibility rule: only rendered when a **session is active** (same gate as the Right Sidebar). Within that context, it shows when `isEditorPanelOpen && hasOpenTabs`. **User-initiated** tab opens (clicking a file in the Files tab, clicking a diff or commit in the Git panel) auto-force `isEditorPanelOpen = true`. **Agent-driven** tab opens (files generated during processing) add tabs silently without opening the panel. Open state is persisted per workspace via the `editorPanelVisible` storage key.
 
 Toggle: a `SquareCode` icon button in the TopBar, positioned to the left of the Right Sidebar toggle, conditionally shown under the same `isRightSidebarContextuallyAvailable` gate.
 
