@@ -916,7 +916,7 @@ function PermissionInputToggle({ autoToggle = false, autoToggleInterval = 3000, 
           Show Input
         </Button>
         <div className="flex-1" />
-        <span className="text-xs text-muted-foreground">
+        <span className="text-sm text-muted-foreground">
           Current: <span className="font-medium">{showPermission ? 'Permission Banner' : 'Input View'}</span>
         </span>
       </div>

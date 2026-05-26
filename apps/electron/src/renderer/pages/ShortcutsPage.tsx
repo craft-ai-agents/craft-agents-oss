@@ -112,7 +112,7 @@ export default function ShortcutsPage() {
             {/* Registry-driven sections */}
             {Object.entries(actionsByCategory).map(([category, actions]) => (
               <div key={category}>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 pb-1.5 border-b border-border/50">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2 pb-1.5 border-b border-border/50">
                   {category}
                 </h3>
                 <div className="space-y-0.5">
@@ -126,7 +126,7 @@ export default function ShortcutsPage() {
             {/* Component-specific sections */}
             {componentSpecificSections.map((section) => (
               <div key={section.title}>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 pb-1.5 border-b border-border/50">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2 pb-1.5 border-b border-border/50">
                   {section.title}
                 </h3>
                 <div className="space-y-0.5">

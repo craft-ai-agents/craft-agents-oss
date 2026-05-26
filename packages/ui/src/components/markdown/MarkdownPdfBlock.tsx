@@ -201,8 +201,8 @@ export function MarkdownPdfBlock({ code, className, onCreateRegionAnnotation: _o
             <div className="flex items-start justify-center bg-white p-4">
               <Document
                 file={activeFileObj}
-                loading={<div className="py-8 text-center text-muted-foreground text-[13px]">{t('common.rendering')}</div>}
-                error={<div className="py-6 text-center text-destructive/70 text-[13px]">{t('preview.failedToRenderPdf')}</div>}
+                loading={<div className="py-8 text-center text-muted-foreground text-[14px]">{t('common.rendering')}</div>}
+                error={<div className="py-6 text-center text-destructive/70 text-[14px]">{t('preview.failedToRenderPdf')}</div>}
               >
                 <Page
                   pageNumber={1}
@@ -216,12 +216,12 @@ export function MarkdownPdfBlock({ code, className, onCreateRegionAnnotation: _o
 
           {/* Loading state for uncached active item */}
           {!activePdfData && loading && (
-            <div className="py-8 text-center text-muted-foreground text-[13px]">{t('common.loading')}</div>
+            <div className="py-8 text-center text-muted-foreground text-[14px]">{t('common.loading')}</div>
           )}
 
           {/* Error state for uncached active item */}
           {!activePdfData && !loading && error && (
-            <div className="py-6 text-center text-destructive/70 text-[13px]">{error}</div>
+            <div className="py-6 text-center text-destructive/70 text-[14px]">{error}</div>
           )}
 
           {/* Bottom fade gradient */}

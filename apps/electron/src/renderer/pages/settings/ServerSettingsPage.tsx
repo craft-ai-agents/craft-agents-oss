@@ -184,7 +184,7 @@ export default function ServerSettingsPage() {
             </SettingsCard>
 
             {needsRestart && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-warning/10 border border-warning/20 text-xs text-warning">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-warning/10 border border-warning/20 text-sm text-warning">
                 <RotateCw className="h-3.5 w-3.5 shrink-0" />
                 <span className="flex-1">{t("settings.server.restartRequired")}</span>
                 <Button
@@ -214,7 +214,7 @@ export default function ServerSettingsPage() {
                   <>
                     <SettingsRow label={t("common.url")}>
                       <div className="flex items-center gap-1.5">
-                        <code className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                        <code className="text-sm font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
                           {status.url}
                         </code>
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleCopy(status.url, 'URL')}>
@@ -225,7 +225,7 @@ export default function ServerSettingsPage() {
 
                     <SettingsRow label={t("settings.server.token")}>
                       <div className="flex items-center gap-1.5">
-                        <code className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded max-w-[180px] truncate">
+                        <code className="text-sm font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded max-w-[180px] truncate">
                           {tokenVisible ? status.token : '••••••••••••••••'}
                         </code>
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setTokenVisible(v => !v)}>
@@ -241,7 +241,7 @@ export default function ServerSettingsPage() {
 
                 <SettingsRow label={t("settings.server.certificate")}>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                    <span className="text-sm text-muted-foreground truncate max-w-[200px]">
                       {form.tlsCertPath || 'Not configured'}
                     </span>
                     <Button variant="outline" size="sm" className="h-6 text-[11px] px-2 shrink-0" onClick={handleBrowseCert}>
@@ -252,7 +252,7 @@ export default function ServerSettingsPage() {
 
                 <SettingsRow label={t("settings.server.privateKey")}>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                    <span className="text-sm text-muted-foreground truncate max-w-[200px]">
                       {form.tlsKeyPath || 'Not configured'}
                     </span>
                     <Button variant="outline" size="sm" className="h-6 text-[11px] px-2 shrink-0" onClick={handleBrowseKey}>
@@ -263,7 +263,7 @@ export default function ServerSettingsPage() {
               </SettingsCard>
 
               {form.enabled && !hasTls && (
-                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-warning/10 border border-warning/20 text-xs text-warning">
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-warning/10 border border-warning/20 text-sm text-warning">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                   <span>
                     {status?.insecureWarning
@@ -277,7 +277,7 @@ export default function ServerSettingsPage() {
 
           {/* Save/Reset */}
           {error && (
-            <p className="text-xs text-destructive px-1">{error}</p>
+            <p className="text-sm text-destructive px-1">{error}</p>
           )}
           {(isDirty || error) && (
             <SettingsCardFooter>

@@ -70,7 +70,7 @@ function SonnerPlayground() {
     <div className="flex flex-col gap-6 p-6">
       <div>
         <h2 className="text-sm font-medium text-foreground/80 mb-2">Toast Types</h2>
-        <p className="text-xs text-muted-foreground mb-4">
+        <p className="text-sm text-muted-foreground mb-4">
           Click to trigger different toast styles. Last triggered: <span className="font-medium">{lastType}</span>
         </p>
         <div className="flex flex-wrap gap-2">

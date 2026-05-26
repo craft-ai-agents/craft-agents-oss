@@ -509,7 +509,7 @@ export function ApiKeyInput({
               </button>
             ))}
           </div>
-          <p className="text-xs text-foreground/30">
+          <p className="text-sm text-foreground/30">
             Most third-party APIs (Ollama, vLLM, DashScope) use OpenAI Compatible.
           </p>
         </div>
@@ -552,7 +552,7 @@ export function ApiKeyInput({
           {bedrockAuthMethod === 'iam_credentials' && (
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="aws-access-key-id" className="text-muted-foreground font-normal text-xs">
+                <Label htmlFor="aws-access-key-id" className="text-muted-foreground font-normal text-sm">
                   Access Key ID
                 </Label>
                 <div className={cn("rounded-md shadow-minimal transition-colors", "bg-foreground-2 focus-within:bg-background")}>
@@ -569,7 +569,7 @@ export function ApiKeyInput({
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="aws-secret-key" className="text-muted-foreground font-normal text-xs">
+                <Label htmlFor="aws-secret-key" className="text-muted-foreground font-normal text-sm">
                   Secret Access Key
                 </Label>
                 <div className={cn("relative rounded-md shadow-minimal transition-colors", "bg-foreground-2 focus-within:bg-background")}>
@@ -593,7 +593,7 @@ export function ApiKeyInput({
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="aws-session-token" className="text-muted-foreground font-normal text-xs">
+                <Label htmlFor="aws-session-token" className="text-muted-foreground font-normal text-sm">
                   Session Token <span className="text-foreground/30">· optional</span>
                 </Label>
                 <div className={cn("rounded-md shadow-minimal transition-colors", "bg-foreground-2 focus-within:bg-background")}>
@@ -614,7 +614,7 @@ export function ApiKeyInput({
           {/* Environment info */}
           {bedrockAuthMethod === 'environment' && (
             <div className="rounded-md bg-foreground-2 p-3">
-              <p className="text-xs text-foreground/50">
+              <p className="text-sm text-foreground/50">
                 Uses your existing AWS credential chain — <code className="text-foreground/70">~/.aws/credentials</code>, <code className="text-foreground/70">AWS_PROFILE</code>, IAM roles, SSO sessions, and environment variables.
               </p>
             </div>
@@ -622,7 +622,7 @@ export function ApiKeyInput({
 
           {/* AWS Region */}
           <div className="space-y-1.5">
-            <Label htmlFor="aws-region" className="text-muted-foreground font-normal text-xs">
+            <Label htmlFor="aws-region" className="text-muted-foreground font-normal text-sm">
               AWS Region
             </Label>
             <div className={cn("rounded-md shadow-minimal transition-colors", "bg-foreground-2 focus-within:bg-background")}>
@@ -646,13 +646,13 @@ export function ApiKeyInput({
           {piModelsLoading ? (
             <div className="flex items-center gap-2 py-3 text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin" />
-              <span className="text-xs">{t("apiSetup.loadingModels")}</span>
+              <span className="text-sm">{t("apiSetup.loadingModels")}</span>
             </div>
           ) : (
             <>
               {tierConfigs.map(({ label, desc, value }) => (
                 <div key={label} className="space-y-1.5">
-                  <Label className="text-muted-foreground font-normal text-xs">
+                  <Label className="text-muted-foreground font-normal text-sm">
                     {label}{' '}
                     <span className="text-foreground/30">· {desc}</span>
                   </Label>
@@ -726,7 +726,7 @@ export function ApiKeyInput({
                                 setTierFilter('')
                               }}
                               className={cn(
-                                "flex cursor-pointer select-none items-center justify-between gap-3 rounded-[6px] px-3 py-2 text-[13px]",
+                                "flex cursor-pointer select-none items-center justify-between gap-3 rounded-[6px] px-3 py-2 text-[14px]",
                                 "outline-none data-[selected=true]:bg-foreground/5"
                               )}
                             >
@@ -745,7 +745,7 @@ export function ApiKeyInput({
                 </>
               )}
               {modelError && (
-                <p className="text-xs text-destructive">{modelError}</p>
+                <p className="text-sm text-destructive">{modelError}</p>
               )}
             </>
           )}
@@ -777,13 +777,13 @@ export function ApiKeyInput({
             />
           </div>
           {modelError && (
-            <p className="text-xs text-destructive">{modelError}</p>
+            <p className="text-sm text-destructive">{modelError}</p>
           )}
-          <p className="text-xs text-foreground/30">
+          <p className="text-sm text-foreground/30">
             Comma-separated list. The first model is the default. The last is used for summarization.
           </p>
           {(activePreset === 'custom' || !activePreset) && (
-            <p className="text-xs text-foreground/30">
+            <p className="text-sm text-foreground/30">
             Required for custom endpoints. Use the provider-specific model ID.
           </p>
           )}

@@ -1566,7 +1566,7 @@ export function FreeFormInput({
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -4, scale: 0.98 }}
                           transition={{ duration: 0.16, ease: [0.2, 0, 0.2, 1] }}
-                          className="inline-flex max-w-full items-center gap-1.5 overflow-hidden rounded-[6px] bg-foreground/2 pl-1.5 pr-2 py-1 text-[13px] text-foreground/80 select-none transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          className="inline-flex max-w-full items-center gap-1.5 overflow-hidden rounded-[6px] bg-foreground/2 pl-1.5 pr-2 py-1 text-[14px] text-foreground/80 select-none transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                           onClick={(event) => {
                             const rect = event.currentTarget.getBoundingClientRect()
                             onFollowUpClick?.(item, {
@@ -1601,7 +1601,7 @@ export function FreeFormInput({
                                 {chipIndex}
                               </span>
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-[420px] break-words text-xs">
+                            <TooltipContent side="top" className="max-w-[420px] break-words text-sm">
                               {tooltipText}
                             </TooltipContent>
                           </Tooltip>
@@ -1926,7 +1926,7 @@ export function FreeFormInput({
                   <button
                     type="button"
                     className={cn(
-                      "input-toolbar-btn inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
+                      "input-toolbar-btn inline-flex items-center h-7 px-1.5 gap-0.5 text-[14px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
                       modelDropdownOpen && "bg-foreground/5",
                       connectionUnavailable && "text-destructive",
                     )}
@@ -1956,7 +1956,7 @@ export function FreeFormInput({
                 <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
                   <AlertCircle className="h-8 w-8 text-destructive mb-2" />
                   <div className="font-medium text-sm mb-1">{t('chat.connectionUnavailable')}</div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-sm text-muted-foreground">
                     {t('chat.connectionUnavailableDescription')}
                   </div>
                 </div>
@@ -1976,7 +1976,7 @@ export function FreeFormInput({
                     >
                       <div className="text-left">
                         <div className="font-medium text-sm">{stripPiPrefixForDisplay(connectionDefaultModel)}</div>
-                        <div className="text-xs text-muted-foreground">{t('chat.connectionDefault')}</div>
+                        <div className="text-sm text-muted-foreground">{t('chat.connectionDefault')}</div>
                       </div>
                       <div className="flex items-center gap-1 ml-3 shrink-0">
                         {showVisionToggle && effectiveConnectionDetails && (
@@ -2025,7 +2025,7 @@ export function FreeFormInput({
                 connectionsByProvider.map(([providerName, connections], index) => (
                   <React.Fragment key={providerName}>
                     {/* Provider group label */}
-                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide select-none">
+                    <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground uppercase tracking-wide select-none">
                       {providerName}
                     </div>
                     {connections.map((conn) => {
@@ -2047,7 +2047,7 @@ export function FreeFormInput({
                                 {isCurrentConnection && <Check className="h-3 w-3 text-foreground" />}
                               </div>
                               {!isAuthenticated && (
-                                <div className="text-xs text-muted-foreground">{t('settings.ai.notAuthenticated')}</div>
+                                <div className="text-sm text-muted-foreground">{t('settings.ai.notAuthenticated')}</div>
                               )}
                             </div>
                           </StyledDropdownMenuSubTrigger>
@@ -2136,7 +2136,7 @@ export function FreeFormInput({
                   {/* Indicator showing which connection is being used */}
                   {!isEmptySession && currentConnectionDetails && llmConnections.length > 1 && (
                     <>
-                      <div className="flex items-center gap-2 px-2 py-1.5 text-xs select-none text-muted-foreground">
+                      <div className="flex items-center gap-2 px-2 py-1.5 text-sm select-none text-muted-foreground">
                         <span>{t('chat.usingConnection', { name: currentConnectionDetails.name })}</span>
                       </div>
                       <StyledDropdownMenuSeparator className="my-1" />
@@ -2163,7 +2163,7 @@ export function FreeFormInput({
                         <div className="text-left">
                           <div className="font-medium text-sm">{modelName}</div>
                           {description && (
-                            <div className="text-xs text-muted-foreground">{description}</div>
+                            <div className="text-sm text-muted-foreground">{description}</div>
                           )}
                         </div>
                         <div className="flex items-center gap-1 ml-3 shrink-0">
@@ -2223,7 +2223,7 @@ export function FreeFormInput({
                     <StyledDropdownMenuSubTrigger disabled={thinkingDisabled} className={cn("flex items-center justify-between px-2 py-2 rounded-lg", thinkingDisabled && "opacity-50 cursor-not-allowed")}>
                       <div className="text-left flex-1">
                         <div className="font-medium text-sm">{t(getThinkingLevelNameKey(thinkingLevel))}</div>
-                        <div className="text-xs text-muted-foreground">{thinkingDisabled ? t('thinking.notSupported') : t('thinking.extendedDesc')}</div>
+                        <div className="text-sm text-muted-foreground">{thinkingDisabled ? t('thinking.notSupported') : t('thinking.extendedDesc')}</div>
                       </div>
                     </StyledDropdownMenuSubTrigger>
                     <StyledDropdownMenuSubContent className="min-w-[220px]">
@@ -2237,7 +2237,7 @@ export function FreeFormInput({
                           >
                             <div className="text-left">
                               <div className="font-medium text-sm">{t(nameKey)}</div>
-                              <div className="text-xs text-muted-foreground">{t(descriptionKey)}</div>
+                              <div className="text-sm text-muted-foreground">{t(descriptionKey)}</div>
                             </div>
                             {isSelected && (
                               <Check className="h-3 w-3 text-foreground shrink-0 ml-3" />
@@ -2255,7 +2255,7 @@ export function FreeFormInput({
                 <>
                   <StyledDropdownMenuSeparator className="my-1" />
                   <div className="px-2 py-1.5 select-none">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
                       <span>{t('chat.context')}</span>
                       <span className="flex items-center gap-1.5">
                         {contextStatus.isCompacting && (
@@ -2435,7 +2435,7 @@ function WorkingDirectoryBadge({
   // Styles matching todo-filter-menu.tsx for consistency
   const MENU_CONTAINER_STYLE = 'min-w-[200px] max-w-[400px] overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small p-0'
   const MENU_LIST_STYLE = 'max-h-[200px] overflow-y-auto p-1 [&_[cmdk-list-sizer]]:space-y-px'
-  const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2 rounded-[6px] px-3 py-1.5 text-[13px] outline-none'
+  const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2 rounded-[6px] px-3 py-1.5 text-[14px] outline-none'
 
   return (
     <>
@@ -2453,8 +2453,8 @@ function WorkingDirectoryBadge({
               hasFolder ? (
                 <span className="flex flex-col gap-0.5">
                   <span className="font-medium">{t("chat.workingDirectory")}</span>
-                  <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
-                  {gitBranch && <span className="text-xs opacity-70">{t("chat.onBranch", { branch: gitBranch })}</span>}
+                  <span className="text-sm opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
+                  {gitBranch && <span className="text-sm opacity-70">{t("chat.onBranch", { branch: gitBranch })}</span>}
                 </span>
               ) : t("chat.chooseWorkingDirectory")
             }

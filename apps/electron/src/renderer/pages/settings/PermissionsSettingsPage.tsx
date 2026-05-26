@@ -268,7 +268,7 @@ export default function PermissionsSettingsPage() {
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">
                           <p className="text-sm">{t("settings.permissions.noDefaultPermissions")}</p>
-                          <p className="text-xs mt-1 text-foreground/40">
+                          <p className="text-sm mt-1 text-foreground/40">
                             {t("settings.permissions.noDefaultPermissionsDesc")}
                           </p>
                         </div>
@@ -311,7 +311,7 @@ export default function PermissionsSettingsPage() {
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">
                           <p className="text-sm">{t("settings.permissions.noCustomPermissions")}</p>
-                          <p className="text-xs mt-1 text-foreground/40">
+                          <p className="text-sm mt-1 text-foreground/40">
                             {t("settings.permissions.noCustomPermissionsDesc")}
                           </p>
                         </div>

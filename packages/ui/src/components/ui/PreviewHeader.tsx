@@ -73,7 +73,7 @@ export function PreviewHeaderBadge({
 }: PreviewHeaderBadgeProps) {
   const variantClasses = PREVIEW_BADGE_VARIANTS[variant]
   const baseClasses = cn(
-    'flex items-center gap-1.5 h-[26px] px-2.5 rounded-[6px] font-sans text-[13px] font-medium bg-background shadow-minimal',
+    'flex items-center gap-1.5 h-[26px] px-2.5 rounded-[6px] font-sans text-[14px] font-medium bg-background shadow-minimal',
     variantClasses,
     className
   )

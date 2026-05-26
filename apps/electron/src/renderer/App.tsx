@@ -207,7 +207,7 @@ function SessionLoadErrorScreen({
         <p className="mt-2 text-sm text-foreground/60">
           {t("errors.failedToLoadSessionsDesc")}
         </p>
-        <p className="mt-3 rounded-lg bg-foreground/5 px-3 py-2 text-left text-xs text-foreground/70 break-words">
+        <p className="mt-3 rounded-lg bg-foreground/5 px-3 py-2 text-left text-sm text-foreground/70 break-words">
           {message}
         </p>
         <button
@@ -672,6 +672,9 @@ export default function App() {
         // Get this window's workspace ID (passed via URL query param from main process)
         const wsId = await window.electronAPI.getWindowWorkspace()
         setWindowWorkspaceId(wsId)
+
+        // Auto-install DevOps skills on login (idempotent: already-installed skills are skipped)
+        if (wsId) window.electronAPI.devopsAutoInstall(wsId).catch(() => {})
 
         const needs = await window.electronAPI.getSetupNeeds()
         setSetupNeeds(needs)
@@ -1976,6 +1979,8 @@ export default function App() {
               setSsoLoginResult(null)
               const wsId = await window.electronAPI.getWindowWorkspace()
               setWindowWorkspaceId(wsId)
+              // Auto-install DevOps skills on login (idempotent: already-installed skills are skipped)
+              if (wsId) window.electronAPI.devopsAutoInstall(wsId).catch(() => {})
               const needs = await window.electronAPI.getSetupNeeds()
               setSetupNeeds(needs)
               const nextState = await resolveAuthenticatedStartupState({

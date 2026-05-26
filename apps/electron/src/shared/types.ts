@@ -553,6 +553,7 @@ export interface ElectronAPI {
   fetchMarketSkillContent(skillName: string, version?: string): Promise<{ content: string; extraMetadata?: Record<string, unknown> }>
   checkMarketSkillUpdates(workspaceId: string): Promise<SkillUpdateCheckResult>
   updateMarketSkillsBatch(workspaceId: string, items: SkillUpdateItem[]): Promise<SkillBatchUpdateResult>
+  devopsAutoInstall(workspaceId: string): Promise<{ status: 'done' | 'not-logged-in'; installed: string[]; skipped: string[]; failed: Array<{ slug: string; error: string }> }>
   onSkillUpdateCheck(callback: (reason: string) => void): () => void
 
   // Skills change listener (live updates when skills are added/removed/modified)

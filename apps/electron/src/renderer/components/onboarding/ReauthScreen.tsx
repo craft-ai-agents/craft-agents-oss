@@ -53,7 +53,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
               <br />
               {t("onboarding.reauth.loginAgain")}
               <br />
-              <span className="text-muted-foreground/70 text-xs mt-2 block">
+              <span className="text-muted-foreground/70 text-sm mt-2 block">
                 {t("onboarding.reauth.preserved")}
               </span>
             </>

@@ -86,7 +86,7 @@ function InputErrorFallback({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground">{t('chat.inputFailedTitle')}</p>
-          <p className="mt-1 text-xs text-foreground/60">
+          <p className="mt-1 text-sm text-foreground/60">
             {t('chat.inputFailedDescription')}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">

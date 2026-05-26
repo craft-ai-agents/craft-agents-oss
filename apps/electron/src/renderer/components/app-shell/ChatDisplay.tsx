@@ -406,7 +406,7 @@ function ProcessingIndicator({ startTime, statusMessage }: ProcessingIndicatorPr
   const displayMessage = statusMessage || t(PROCESSING_MESSAGE_KEYS[messageIndex])
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[13px] text-muted-foreground">
+    <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[14px] text-muted-foreground">
       {/* Spinner in same location as TurnCard chevron */}
       <div className="w-3 h-3 flex items-center justify-center shrink-0">
         <Spinner className="text-[10px]" />
@@ -1913,13 +1913,13 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                               >
                                 <AlertTriangle className="mx-auto mb-2 h-4 w-4 text-destructive/70" />
                                 <div className="text-sm font-medium text-destructive">Failed to load conversation</div>
-                                <p className="mt-1 break-words text-xs text-destructive/70">{messagesLoadError}</p>
+                                <p className="mt-1 break-words text-sm text-destructive/70">{messagesLoadError}</p>
                                 {onRetryMessagesLoad && (
                                   <button
                                     type="button"
                                     onClick={onRetryMessagesLoad}
                                     disabled={messagesRetrying}
-                                    className="mt-3 rounded border border-destructive/20 px-2 py-0.5 text-xs text-destructive/70 transition-colors hover:border-destructive/40 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="mt-3 rounded border border-destructive/20 px-2 py-0.5 text-sm text-destructive/70 transition-colors hover:border-destructive/40 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     {messagesRetrying ? 'Retrying…' : 'Retry'}
                                   </button>
@@ -1949,7 +1949,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                               {compactMode && turns.length === 0 && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center select-none gap-1 pointer-events-none">
                                   <span className="text-sm text-muted-foreground">{t("editPopover.whatToChange")}</span>
-                                  <span className="text-xs text-muted-foreground/50">{t("editPopover.justDescribe")}</span>
+                                  <span className="text-sm text-muted-foreground/50">{t("editPopover.justDescribe")}</span>
                                 </div>
                               )}
                               {!compactMode && hasUnrenderedLoadedMessages && (
@@ -1957,13 +1957,13 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                                   <div className="max-w-sm rounded-[8px] border border-border/50 bg-foreground/[0.03] px-4 py-3">
                                     <CircleAlert className="mx-auto mb-2 h-4 w-4 text-foreground/50" />
                                     <div className="text-sm font-medium text-foreground/70">Conversation loaded, but no renderable messages were found.</div>
-                                    <p className="mt-1 text-xs text-foreground/50">Try reloading the session. If this persists, the message history may contain an unsupported format.</p>
+                                    <p className="mt-1 text-sm text-foreground/50">Try reloading the session. If this persists, the message history may contain an unsupported format.</p>
                                   </div>
                                 </div>
                               )}
                               {/* Load more indicator - shown when there are older messages */}
                               {hasMoreAbove && (
-                                <div className="text-center text-muted-foreground/60 text-xs py-3 select-none">
+                                <div className="text-center text-muted-foreground/60 text-sm py-3 select-none">
                                   ↑ {t('chat.scrollUpForEarlier', { count: startIndex })}
                                 </div>
                               )}
@@ -2501,7 +2501,7 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               placeholder="请输入评价，感谢您的建议"
               onChange={(event) => handleDislikeCommentChange(event.target.value)}
             />
-            <div className="text-right text-xs text-muted-foreground">
+            <div className="text-right text-sm text-muted-foreground">
               {(dislikeFeedbackDialog?.comment.length ?? 0)}/255
             </div>
           </div>
@@ -2581,7 +2581,7 @@ function ErrorMessage({ message, onOpenUrl, sessionId, onRetry }: { message: Mes
           '--shadow-color': 'var(--destructive-rgb)',
         } as React.CSSProperties}
       >
-        <div className="text-xs text-destructive/50 mb-0.5 font-semibold">
+        <div className="text-sm text-destructive/50 mb-0.5 font-semibold">
           {message.errorTitle || t('common.error')}
         </div>
         <p className="text-sm text-destructive">{message.content}</p>
@@ -2599,7 +2599,7 @@ function ErrorMessage({ message, onOpenUrl, sessionId, onRetry }: { message: Mes
                     onRetry,
                   })
                 }}
-                className="text-xs px-2 py-0.5 rounded border border-destructive/20 text-destructive/70 hover:text-destructive hover:border-destructive/40 transition-colors"
+                className="text-sm px-2 py-0.5 rounded border border-destructive/20 text-destructive/70 hover:text-destructive hover:border-destructive/40 transition-colors"
               >
                 {action.label}{action.action === 'open_url' ? ' ↗' : ''}
               </button>
@@ -2612,14 +2612,14 @@ function ErrorMessage({ message, onOpenUrl, sessionId, onRetry }: { message: Mes
           <div className="mt-2">
             <button
               onClick={() => setDetailsOpen(!detailsOpen)}
-              className="flex items-center gap-1 text-xs text-destructive/70 hover:text-destructive transition-colors"
+              className="flex items-center gap-1 text-sm text-destructive/70 hover:text-destructive transition-colors"
             >
               {detailsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
               <span>{detailsOpen ? t('chat.hideTechnicalDetails') : t('chat.showTechnicalDetails')}</span>
             </button>
 
             <AnimatedCollapsibleContent isOpen={detailsOpen} className="overflow-hidden">
-              <div className="mt-2 pt-2 border-t border-destructive/20 text-xs text-destructive/60 font-mono space-y-0.5">
+              <div className="mt-2 pt-2 border-t border-destructive/20 text-sm text-destructive/60 font-mono space-y-0.5">
                 {message.errorDetails?.map((detail, i) => (
                   <div key={i}>{detail}</div>
                 ))}
@@ -2715,7 +2715,7 @@ function MessageBubble({
   // === STATUS MESSAGE: Matches ProcessingIndicator layout for visual consistency ===
   if (message.role === 'status') {
     return (
-      <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[13px] text-muted-foreground">
+      <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[14px] text-muted-foreground">
         {/* Spinner in same location as TurnCard chevron */}
         <div className="w-3 h-3 flex items-center justify-center shrink-0">
           <Spinner className="text-[10px]" />
@@ -2751,7 +2751,7 @@ function MessageBubble({
     const Icon = config.icon
 
     return (
-      <div className={cn('flex items-center gap-2 px-3 py-1 text-[13px] select-none', config.className)}>
+      <div className={cn('flex items-center gap-2 px-3 py-1 text-[14px] select-none', config.className)}>
         <div className="w-3 h-3 flex items-center justify-center shrink-0">
           <Icon className="w-3 h-3" />
         </div>
@@ -2765,7 +2765,7 @@ function MessageBubble({
     return (
       <div className="flex justify-start">
         <div className="max-w-[80%] bg-info/10 rounded-[8px] pl-5 pr-4 pt-2 pb-2.5 break-words select-none">
-          <div className="text-xs text-info/50 mb-0.5 font-semibold">
+          <div className="text-sm text-info/50 mb-0.5 font-semibold">
             Warning
           </div>
           <p className="text-sm text-info">{message.content}</p>
