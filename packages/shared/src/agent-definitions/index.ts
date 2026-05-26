@@ -15,7 +15,7 @@ export type {
   ActivatedAgentsManifest,
 } from './types.ts';
 
-export { AGENT_SLUG_REGEX, ORCHESTRATOR_SLUG, CONCIERGE_SLUG } from './types.ts';
+export { AGENT_SLUG_REGEX, ORCHESTRATOR_SLUG, CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG } from './types.ts';
 
 export {
   GLOBAL_AGENTS_DIR,

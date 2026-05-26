@@ -21,7 +21,7 @@ import type {
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync } from '../utils/files.ts';
-import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource } from './builtin-sources.ts';
+import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 import {
@@ -72,7 +72,7 @@ export function loadSourceConfig(
 
     // Expand path variables in local source paths for portability
     if (config.type === 'local' && config.local?.path) {
-      config.local.path = expandPath(config.local.path);
+      config.local.path = expandPath(config.local.path, workspaceRootPath);
     }
 
     return config;
@@ -89,7 +89,7 @@ function loadGlobalSourceConfig(sourceSlug: string): FolderSourceConfig | null {
     const config = readJsonFileSync<FolderSourceConfig>(configPath);
 
     if (config.type === 'local' && config.local?.path) {
-      config.local.path = expandPath(config.local.path);
+      config.local.path = expandPath(config.local.path, getGlobalSourcePath(sourceSlug));
     }
 
     return config;
@@ -503,6 +503,8 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
         sources.push({ ...getComputerUseSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'field-theory') {
         sources.push({ ...getFieldTheorySource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'printing-press-social') {
+        sources.push({ ...getPrintingPressSocialSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'craft-agents-docs') {
         sources.push({ ...getDocsSource(workspaceId, workspaceRootPath), tier: 'project' });
       }
@@ -928,7 +930,7 @@ export function loadGlobalSource(slug: string, workspaceRootPath?: string): Load
   }
 
   if (config.type === 'local' && config.local?.path) {
-    config.local.path = expandPath(config.local.path);
+    config.local.path = expandPath(config.local.path, folderPath);
   }
 
   let guide: SourceGuide | null = null;

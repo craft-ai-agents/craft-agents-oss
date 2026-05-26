@@ -1,0 +1,26 @@
+{
+  "name": "printing-press-youtube-cli",
+  "version": "0.1.0",
+  "license": "UNLICENSED",
+  "description": "Agent-native social CLI harness, starting with YouTube.",
+  "type": "module",
+  "bin": {
+    "youtube-social": "./src/cli.mjs"
+  },
+  "files": [
+    "README.md",
+    "HARNESS.md",
+    "skills",
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "smoke": "node src/cli.mjs --help && node src/cli.mjs profile list --json && node src/cli.mjs post youtube --profile smoke --post-type video --text \"hello\" --media test/fixtures/sample.mp4 --dry-run --json && node src/cli.mjs post youtube --profile smoke --post-type short --text \"short\" --media test/fixtures/sample.mp4 --dry-run --json && node src/cli.mjs comment youtube --profile smoke --url https://www.youtube.com/watch?v=123 --text \"nice\" --dry-run --json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.56.1"
+  }
+}

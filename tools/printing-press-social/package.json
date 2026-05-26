@@ -1,0 +1,45 @@
+{
+  "name": "printing-press-clis",
+  "version": "0.1.0",
+  "license": "UNLICENSED",
+  "description": "CLI-Anything-style social CLI harness workspace.",
+  "type": "module",
+  "bin": {
+    "social": "./src/social.mjs"
+  },
+  "files": [
+    "README.md",
+    "HARNESS.md",
+    "registry.json",
+    "schemas",
+    "skills",
+    "src",
+    "docs",
+    "instagram-cli/HARNESS.md",
+    "instagram-cli/package.json",
+    "instagram-cli/skills",
+    "instagram-cli/src",
+    "tiktok-cli/HARNESS.md",
+    "tiktok-cli/package.json",
+    "tiktok-cli/skills",
+    "tiktok-cli/src",
+    "x-cli/HARNESS.md",
+    "x-cli/package.json",
+    "x-cli/skills",
+    "x-cli/src",
+    "youtube-cli/HARNESS.md",
+    "youtube-cli/package.json",
+    "youtube-cli/skills",
+    "youtube-cli/src"
+  ],
+  "scripts": {
+    "test": "npm test --prefix instagram-cli && npm test --prefix tiktok-cli && npm test --prefix x-cli && npm test --prefix youtube-cli && node --test test/root-dispatcher.test.mjs",
+    "smoke": "npm run smoke --prefix instagram-cli && npm run smoke --prefix tiktok-cli && npm run smoke --prefix x-cli && npm run smoke --prefix youtube-cli && node src/social.mjs registry --json && node src/social.mjs post instagram --profile smoke --text hello --media instagram-cli/test/fixtures/sample.jpg --dry-run --json && node src/social.mjs post tiktok --profile smoke --text hello --media tiktok-cli/test/fixtures/sample.mp4 --dry-run --json && node src/social.mjs post x --profile smoke --text hello --dry-run --json && node src/social.mjs post youtube --profile smoke --post-type short --text hello --media youtube-cli/test/fixtures/sample.mp4 --dry-run --json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.56.1"
+  }
+}

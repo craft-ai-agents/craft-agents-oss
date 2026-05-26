@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://printing-press.local/schemas/action.schema.json",
+  "title": "SocialAction",
+  "type": "object",
+  "required": ["actionId", "verb", "platform", "profile", "mode", "payload", "options"],
+  "properties": {
+    "actionId": { "type": "string", "pattern": "^act_" },
+    "verb": { "type": "string", "enum": ["post", "comment", "dm"] },
+    "platform": { "type": "string", "enum": ["instagram", "tiktok", "x", "youtube"] },
+    "profile": { "type": "string", "minLength": 1 },
+    "mode": { "type": "string", "enum": ["browser"] },
+    "payload": { "type": "object" },
+    "options": {
+      "type": "object",
+      "properties": {
+        "dryRun": { "type": "boolean" },
+        "idempotencyKey": { "type": ["string", "null"] },
+        "headed": { "type": "boolean" }
+      },
+      "required": ["dryRun"]
+    }
+  }
+}

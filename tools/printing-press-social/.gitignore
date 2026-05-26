@@ -1,0 +1,9 @@
+.DS_Store
+node_modules/
+.social/
+*.log
+
+# Browser/session state must never be committed.
+**/.social/
+**/artifacts/
+**/sessions/

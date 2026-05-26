@@ -70,6 +70,22 @@
       "comment": "Convert documents to Markdown (read-only)"
     },
     {
+      "pattern": "^cd\\s+(?:tools/printing-press-social|\"[^\"]*printing-press-social\")\\s+&&\\s+node\\s+src/social\\.mjs\\s+registry\\s+--json$",
+      "comment": "Inspect bundled Printing Press Social CLI registry"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/printing-press-social|\"[^\"]*printing-press-social\")\\s+&&\\s+node\\s+src/social\\.mjs\\s+doctor\\s+(?:--live\\s+)?--json$",
+      "comment": "Check bundled Printing Press Social CLI install and profile readiness"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/printing-press-social|\"[^\"]*printing-press-social\")\\s+&&\\s+node\\s+src/social\\.mjs\\s+(post|comment)\\s+(instagram|tiktok|x|youtube)\\s+.*\\s+--dry-run\\s+--json$",
+      "comment": "Dry-run bundled Printing Press Social post/comment commands"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/printing-press-social|\"[^\"]*printing-press-social\")\\s+&&\\s+node\\s+src/social\\.mjs\\s+dm\\s+(instagram|tiktok|x)\\s+.*\\s+--dry-run\\s+--json$",
+      "comment": "Dry-run bundled Printing Press Social DM commands"
+    },
+    {
       "pattern": "^pdf-tool\\s+(extract|info)\\b",
       "comment": "PDF read operations: extract text/pages, view info"
     },

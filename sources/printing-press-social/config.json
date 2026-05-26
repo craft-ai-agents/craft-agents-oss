@@ -1,0 +1,17 @@
+{
+  "id": "printing-press-social_20260525",
+  "name": "Printing Press Social",
+  "slug": "printing-press-social",
+  "enabled": true,
+  "provider": "printing-press-clis",
+  "type": "local",
+  "icon": "📣",
+  "tagline": "Local Bash-operated social media CLI harness for Instagram, TikTok, X, and YouTube",
+  "local": {
+    "path": "tools/printing-press-social",
+    "format": "cli-tool"
+  },
+  "connectionStatus": "untested",
+  "createdAt": 1779660000000,
+  "updatedAt": 1779660000000
+}

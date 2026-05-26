@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://printing-press.local/schemas/result.schema.json",
+  "title": "SocialResult",
+  "type": "object",
+  "required": ["ok", "status"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "status": { "type": "string", "enum": ["succeeded", "failed", "dry_run"] },
+    "command": { "type": "string" },
+    "actionId": { "type": "string" },
+    "platform": { "type": "string" },
+    "profile": { "type": "string" },
+    "action": { "$ref": "action.schema.json" },
+    "browserPlan": { "type": "object" },
+    "artifacts": { "type": "array" },
+    "error": { "type": "string" },
+    "code": { "type": "string" }
+  }
+}

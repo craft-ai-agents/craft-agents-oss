@@ -10,6 +10,7 @@ import type { LoadedSource, FolderSourceConfig } from './types.ts';
 
 const COMPUTER_USE_SLUG = 'computer-use';
 const FIELD_THEORY_SLUG = 'field-theory';
+const PRINTING_PRESS_SOCIAL_SLUG = 'printing-press-social';
 
 function firstExistingPath(candidates: string[], fallback: string): string {
   for (const candidate of candidates) {
@@ -43,6 +44,20 @@ function getFieldTheoryScriptPath(): string {
   return getResourceScriptPath('field-theory-mcp.ts');
 }
 
+function getPrintingPressSocialPath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'printing-press-social') : '',
+      join(appRoot, 'tools', 'printing-press-social'),
+      join(process.cwd(), 'tools', 'printing-press-social'),
+    ],
+    join('tools', 'printing-press-social')
+  );
+}
+
 /**
  * Get all built-in sources for a workspace.
  *
@@ -54,6 +69,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
   return [
     getComputerUseSource(workspaceId, workspaceRootPath),
     getFieldTheorySource(workspaceId, workspaceRootPath),
+    getPrintingPressSocialSource(workspaceId, workspaceRootPath),
   ];
 }
 
@@ -157,6 +173,60 @@ export function getFieldTheorySource(workspaceId: string, workspaceRootPath: str
 }
 
 /**
+ * Built-in source for bundled direct-browser social media CLIs.
+ *
+ * This is intentionally a local CLI source, not MCP/API. Live account setup
+ * still belongs to the user because Instagram/TikTok/X/YouTube sessions cannot
+ * be pre-shipped.
+ */
+export function getPrintingPressSocialSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getPrintingPressSocialPath();
+  const config: FolderSourceConfig = {
+    id: 'builtin-printing-press-social',
+    name: 'Printing Press Social',
+    slug: PRINTING_PRESS_SOCIAL_SLUG,
+    enabled: true,
+    provider: 'printing-press-clis',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    tagline: 'Direct-browser CLIs for Instagram, TikTok, X, and YouTube channel work.',
+    icon: '📣',
+    isAuthenticated: true,
+    connectionStatus: existsSync(toolPath) ? 'connected' : 'failed',
+    connectionError: existsSync(toolPath) ? undefined : 'Bundled Printing Press Social tool folder not found',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# Printing Press Social',
+        '',
+        'Use this source for agent-operated social channel work through the bundled local CLI harness.',
+        '',
+        'Workflow:',
+        '1. Use the displayed local path as the working directory.',
+        '2. Run `node src/social.mjs doctor --json` before channel work.',
+        '3. Run `node src/social.mjs doctor --live --json` before claiming a profile is ready.',
+        '4. Default engine is `runner-cdp`: use CLI output as the action contract/plan, then execute through Runner native browser tools.',
+        '5. Dry-run posts, comments, and DMs with `--dry-run --json` before live execution.',
+        '6. Ask for explicit approval before any live post, comment, or DM.',
+        '',
+        'Supported platforms: instagram, tiktok, x, youtube.',
+        'Do not use Computer Use for these flows unless the user explicitly asks. Prefer Runner browser/CDP tools; Playwright is fallback-only.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
  * Get the built-in Craft Agents docs source.
  *
  * @deprecated craft-agents-docs is now an always-available MCP server
@@ -200,5 +270,5 @@ export function getDocsSource(workspaceId: string, workspaceRootPath: string): L
  * @returns true when the slug is reserved by a built-in source
  */
 export function isBuiltinSource(slug: string): boolean {
-  return slug === COMPUTER_USE_SLUG || slug === FIELD_THEORY_SLUG;
+  return slug === COMPUTER_USE_SLUG || slug === FIELD_THEORY_SLUG || slug === PRINTING_PRESS_SOCIAL_SLUG;
 }

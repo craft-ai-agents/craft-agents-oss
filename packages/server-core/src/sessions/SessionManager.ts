@@ -2346,6 +2346,7 @@ export class SessionManager implements ISessionManager {
           STARTER_AGENTS,
           ORCHESTRATOR_SLUG,
           CONCIERGE_SLUG,
+          SOCIAL_PUBLISHER_SLUG,
         } = await import('@craft-agent/shared/agent-definitions')
         const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
         if (seeded > 0) {
@@ -2355,7 +2356,7 @@ export class SessionManager implements ISessionManager {
         // (sidebar pin + future Rooms coordinator) and Concierge (top-level
         // Chat nav entry — without it the Chat link goes nowhere).
         const required = STARTER_AGENTS.filter(
-          (a) => a.slug === ORCHESTRATOR_SLUG || a.slug === CONCIERGE_SLUG,
+          (a) => a.slug === ORCHESTRATOR_SLUG || a.slug === CONCIERGE_SLUG || a.slug === SOCIAL_PUBLISHER_SLUG,
         )
         const { ensured } = ensureRequiredAgents(required)
         if (ensured > 0) {

@@ -1,0 +1,64 @@
+{
+  "allowedBashPatterns": [
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+registry\\s+--json$",
+      "comment": "Inspect the root social CLI registry"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+doctor\\s+--json$",
+      "comment": "Check local install and profile metadata without live platform checks"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+doctor\\s+--live\\s+--json$",
+      "comment": "Check live login/session readiness for configured social profiles"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+npm\\s+test$",
+      "comment": "Run Printing Press CLI test suite"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+post\\s+(instagram|tiktok|x|youtube)\\s+.*\\s+--dry-run\\s+--json$",
+      "comment": "Dry-run social post/upload commands only"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+comment\\s+(instagram|tiktok|x|youtube)\\s+.*\\s+--dry-run\\s+--json$",
+      "comment": "Dry-run social comment/reply commands only"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+dm\\s+(instagram|tiktok|x)\\s+.*\\s+--dry-run\\s+--json$",
+      "comment": "Dry-run social DM commands only"
+    }
+  ],
+  "blockedCommandHints": [
+    {
+      "command": "node src/social.mjs post",
+      "whenNotMatching": "--dry-run\\s+--json",
+      "reason": "Live social publishing mutates real channels and may send public posts.",
+      "context": "Run a dry-run first. Ask for explicit approval before live post/upload execution.",
+      "tryInstead": [
+        "Run `node src/social.mjs doctor --json` first",
+        "Run the same post command with `--dry-run --json`"
+      ]
+    },
+    {
+      "command": "node src/social.mjs comment",
+      "whenNotMatching": "--dry-run\\s+--json",
+      "reason": "Live comments/replies mutate real social channels.",
+      "context": "Run a dry-run first. Ask for explicit approval before live comment execution.",
+      "tryInstead": [
+        "Run `node src/social.mjs doctor --json` first",
+        "Run the same comment command with `--dry-run --json`"
+      ]
+    },
+    {
+      "command": "node src/social.mjs dm",
+      "whenNotMatching": "--dry-run\\s+--json",
+      "reason": "Live DMs send real private messages.",
+      "context": "Run a dry-run first. Ask for explicit approval before live DM execution.",
+      "tryInstead": [
+        "Run `node src/social.mjs doctor --json` first",
+        "Run the same DM command with `--dry-run --json`"
+      ]
+    }
+  ]
+}
