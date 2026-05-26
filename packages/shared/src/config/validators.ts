@@ -113,12 +113,31 @@ const LocationSchema = z.object({
   country: z.string().optional(),
 });
 
+const SoundCategorySettingsSchema = z.object({
+  enabled: z.boolean(),
+  overrideFilePath: z.string().optional(),
+  volume: z.number().min(0).max(1).optional(),
+});
+
 export const UserPreferencesSchema = z.object({
   name: z.string().optional(),
   timezone: z.string().optional(),  // TODO: Could validate against IANA timezone list
   location: LocationSchema.optional(),
   language: z.string().optional(),
   notes: z.string().optional(),
+  diffViewer: z.object({
+    diffStyle: z.enum(['unified', 'split']).optional(),
+    disableBackground: z.boolean().optional(),
+  }).optional(),
+  includeCoAuthoredBy: z.boolean().optional(),
+  sound: z.object({
+    enabled: z.boolean().optional(),
+    defaultPack: z.string().optional(),
+    volume: z.number().min(0).max(1).optional(),
+    cooldownMs: z.number().int().min(0).optional(),
+    noRepeat: z.boolean().optional(),
+    categories: z.record(z.string(), SoundCategorySettingsSchema).optional(),
+  }).optional(),
   updatedAt: z.number().int().min(0).optional(),
 });
 

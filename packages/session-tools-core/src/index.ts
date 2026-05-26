@@ -136,6 +136,9 @@ export type {
 
 export { createNodeFileSystem } from './context.ts';
 
+// Utility functions
+export { resolveSessionId } from './utils.ts';
+
 // Handlers
 export {
   // SubmitPlan

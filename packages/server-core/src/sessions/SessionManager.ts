@@ -20,7 +20,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
+import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, getCallLlmModel, getCallLlmThinkingLevel, getCallLlmConnection, resolveMidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -118,14 +118,18 @@ export function setSessionPlatform(platform: PlatformServices): void {
 interface SessionRuntimeHooks {
   updateBadgeCount: (count: number) => void
   captureException: (error: unknown, context?: { errorSource?: string; sessionId?: string }) => void
-  onSessionStarted: () => void
-  onSessionStopped: () => void
+  onSessionStarted: (sessionId: string) => void
+  onSessionStopped: (sessionId: string) => void
+  onSessionCompleted?: (reason: 'complete' | 'interrupted' | 'error' | 'timeout', sessionId: string) => void
+  onAutomationEvent?: (event: string, sessionId?: string) => void
+  onSessionDeleted?: (sessionId: string) => void
 }
 
 const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
   updateBadgeCount: () => {},
   onSessionStarted: () => {},
   onSessionStopped: () => {},
+  onAutomationEvent: () => {},
   captureException: (error, context) => {
     const err = error instanceof Error ? error : new Error(String(error))
     if (_platform?.captureError) {
@@ -836,6 +840,8 @@ interface ManagedSession {
   connectionLocked?: boolean
   // Thinking level for this session ('off', 'think', 'max')
   thinkingLevel?: ThinkingLevel
+  // Sound pack name for this session (overrides global default)
+  soundPack?: string
   // System prompt preset for mini agents ('default' | 'mini')
   systemPromptPreset?: 'default' | 'mini' | string
   // Role/type of the last message (for badge display without loading messages)
@@ -1170,9 +1176,9 @@ export class SessionManager implements ISessionManager {
     const was = managed.isProcessing
     managed.isProcessing = processing
     if (!was && processing) {
-      sessionRuntimeHooks.onSessionStarted()
+      sessionRuntimeHooks.onSessionStarted(managed.id)
     } else if (was && !processing) {
-      sessionRuntimeHooks.onSessionStopped()
+      sessionRuntimeHooks.onSessionStopped(managed.id)
     }
   }
 
@@ -1623,11 +1629,21 @@ export class SessionManager implements ISessionManager {
             }
           }
         },
+        onEvent: (event, _input) => {
+          sessionRuntimeHooks.onAutomationEvent?.(event as string, undefined)
+        },
         onError: (event, error) => {
           sessionLog.error(`Automation failed for ${event}:`, error.message)
         },
       })
       this.automationSystems.set(workspaceRootPath, automationSystem)
+
+      // Bridge automation events to sound notifications via runtime hooks
+      if (sessionRuntimeHooks.onAutomationEvent) {
+        automationSystem.eventBus.onAny((event, payload) => {
+          sessionRuntimeHooks.onAutomationEvent(event, payload.sessionId)
+        })
+      }
       sessionLog.info(`Initialized AutomationSystem for workspace ${workspaceId}`)
     }
   }
@@ -3194,6 +3210,18 @@ export class SessionManager implements ISessionManager {
 
       // Per-session env overrides
       const miniModel = connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined
+
+      // Resolve Secondary Model (call_llm) overrides: workspace config → app-level → unset
+      const callLlmConnectionSlug = workspaceConfig?.defaults?.callLlmConnection
+        ?? getCallLlmConnection()
+        ?? undefined
+      const callLlmModelOverride = workspaceConfig?.defaults?.callLlmModel
+        ?? getCallLlmModel()
+        ?? undefined
+      const callLlmThinkingLevel = workspaceConfig?.defaults?.callLlmThinkingLevel
+        ?? getCallLlmThinkingLevel()
+        ?? undefined
+
       const envOverrides: Record<string, string> = {
         CRAFT_WORKSPACE_PATH: managed.workspace.rootPath,
         // Pass mini model to SDK subprocess so built-in tools like WebFetch
@@ -3328,6 +3356,9 @@ export class SessionManager implements ISessionManager {
         coreConfig: {
         workspace: managed.workspace,
         miniModel,
+        callLlmConnectionSlug,
+        callLlmModelOverride,
+        callLlmThinkingLevel,
         thinkingLevel: managed.thinkingLevel,
         session: sessionConfig,
         onSdkSessionIdUpdate,
@@ -4064,6 +4095,14 @@ export class SessionManager implements ISessionManager {
         },
         setSessionStatusFn: async (sessionId: string | undefined, status: string) => {
           await this.setSessionStatus(sessionId ?? managed.id, status as SessionStatus)
+        },
+        archiveSessionFn: async (sessionId: string | undefined, archive: boolean) => {
+          const targetId = sessionId ?? managed.id
+          if (archive) {
+            await this.archiveSession(targetId)
+          } else {
+            await this.unarchiveSession(targetId)
+          }
         },
         getSessionInfoFn: (sessionId?: string) => {
           const targetId = sessionId ?? managed.id
@@ -4913,6 +4952,18 @@ export class SessionManager implements ISessionManager {
     }
   }
 
+  async updateSessionSoundPack(sessionId: string, soundPack: string | undefined): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.soundPack = soundPack
+      this.persistSession(managed)
+      // Notify renderer of the sound pack change
+      this.sendEvent({ type: 'sound_pack_changed', sessionId, soundPack }, managed.workspace.id)
+      const watcher = this.configWatchers.get(managed.workspace.rootPath)
+      watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
+    }
+  }
+
   /**
    * Regenerate the session title based on recent messages.
    * Uses the last few user messages to capture what the session has evolved into.
@@ -5323,6 +5374,12 @@ export class SessionManager implements ISessionManager {
     // Get workspace slug before deleting
     const workspaceRootPath = managed.workspace.rootPath
 
+    // Fire onSessionDeleted hook early — before any cleanup that could throw.
+    // This ensures session.end sounds always play, even if later cleanup fails.
+    if (sessionRuntimeHooks.onSessionDeleted) {
+      sessionRuntimeHooks.onSessionDeleted(sessionId)
+    }
+
     // If processing is in progress, force-abort via Query.close() and wait for cleanup
     if (managed.isProcessing && managed.agent) {
       managed.agent.forceAbort(AbortReason.UserStop)
@@ -5375,8 +5432,14 @@ export class SessionManager implements ISessionManager {
     this.browserHostByCanvas.delete(sessionId)
 
     // Dispose agent to clean up ConfigWatchers, event listeners, MCP connections
+    // Wrapped in try/catch because dispose() should not prevent session deletion.
+    // The onSessionDeleted hook has already fired at this point.
     if (managed.agent) {
-      managed.agent.dispose()
+      try {
+        managed.agent.dispose()
+      } catch (err) {
+        sessionLog.warn(`Failed to dispose agent for ${sessionId}: ${err instanceof Error ? err.message : err}`)
+      }
     }
 
     // Stop pool server (HTTP MCP server for external SDK subprocesses)
@@ -6206,6 +6269,11 @@ export class SessionManager implements ISessionManager {
     // 1. Cleanup state
     this.setProcessing(managed, false)
     managed.stopRequested = false  // Reset for next turn
+
+    // Notify sound system of completion reason (interrupted already handled by abort/Stop event)
+    if (reason !== 'interrupted') {
+      sessionRuntimeHooks.onSessionCompleted?.(reason, managed.id)
+    }
 
     const turnStartFinalMessageId = managed.turnStartFinalMessageId
     managed.turnStartFinalMessageId = undefined

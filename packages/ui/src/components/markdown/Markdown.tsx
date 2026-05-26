@@ -1,5 +1,5 @@
 import * as React from 'react'
-import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
@@ -37,6 +37,14 @@ export type DisablablePreviewBlock =
   | 'html-preview'
   | 'pdf-preview'
   | 'image-preview'
+
+/**
+ * URL transformation is now handled by `markdownUrlTransform` from
+ * `./url-transform`. The v0.10.0 approach preserves all `<a>` tag hrefs
+ * (including `file://`) so the custom `<a>` component can route clicks
+ * through onFileClick/onUrlClick, while default sanitization applies to
+ * images and other URL-bearing attributes.
+ */
 
 /**
  * Render modes for markdown content:

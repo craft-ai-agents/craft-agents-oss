@@ -84,6 +84,7 @@ export function isModelNotFoundError(message: string): boolean {
     normalized.includes('does not exist') ||
     normalized.includes('no such model') ||
     normalized.includes('is not supported') ||
+    normalized.includes('could not resolve mini model') ||
     (normalized.includes('requested model') && normalized.includes('not') && normalized.includes('exist'))
   );
 }

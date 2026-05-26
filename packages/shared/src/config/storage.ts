@@ -54,6 +54,9 @@ export interface StoredConfig {
   llmConnections?: LlmConnection[];
   defaultLlmConnection?: string;  // Slug of default connection for new sessions
   defaultThinkingLevel?: ThinkingLevel;  // App-level default thinking level for new sessions
+  callLlmConnection?: string;       // Slug of connection for call_llm (undefined = use session's connection)
+  callLlmModel?: string;            // Model ID for call_llm (undefined = auto-select fast model)
+  callLlmThinkingLevel?: ThinkingLevel;  // Thinking level for call_llm (undefined = let agent decide)
 
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
@@ -1721,6 +1724,10 @@ function backfillAllConnectionModels(config: StoredConfig): boolean {
         const currentIds = normalizeModelIds(connection.models);
         if (providerDefaultModelIds.length > 0) {
           const allowedIds = new Set(providerDefaultModelIds);
+          // Canonicalize IDs (resolve pi/ prefix mismatches) but do NOT filter
+          // out unknown models — user-added models (e.g. glm-5-turbo, glm-5.1)
+          // would be stripped on every restart. Only fix up known IDs that need
+          // prefix normalization.
           const canonicalCurrentIds = currentIds.map((id) => {
             if (allowedIds.has(id)) return id;
             if (!id.startsWith('pi/')) {
@@ -1729,29 +1736,17 @@ function backfillAllConnectionModels(config: StoredConfig): boolean {
             }
             return id;
           });
-          const filtered = canonicalCurrentIds.filter(id => allowedIds.has(id));
 
-          if (!modelSetEquals(canonicalCurrentIds, currentIds) || filtered.length !== currentIds.length) {
-            debug('[storage] backfill userDefined filtered', {
+          if (!modelSetEquals(canonicalCurrentIds, currentIds)) {
+            debug('[storage] backfill userDefined canonicalized', {
               slug: connection.slug,
               piAuthProvider: connection.piAuthProvider,
               beforeCount: currentIds.length,
-              canonicalCount: canonicalCurrentIds.length,
-              afterCount: filtered.length,
+              afterCount: canonicalCurrentIds.length,
               beforeFirst5: currentIds.slice(0, 5),
-              afterFirst5: filtered.slice(0, 5),
+              afterFirst5: canonicalCurrentIds.slice(0, 5),
             });
-            connection.models = filtered;
-            changed = true;
-          }
-
-          if (filtered.length === 0) {
-            debug('[storage] backfill userDefined fallback-to-defaults', {
-              slug: connection.slug,
-              piAuthProvider: connection.piAuthProvider,
-              defaultCount: providerDefaultModelIds.length,
-            });
-            connection.models = defaultModels;
+            connection.models = canonicalCurrentIds;
             changed = true;
           }
         }
@@ -2796,6 +2791,85 @@ export function setDefaultThinkingLevel(level: ThinkingLevel): boolean {
   if (!config) return false;
 
   config.defaultThinkingLevel = level;
+  saveConfig(config);
+  return true;
+}
+
+/**
+ * Get the app-level call_llm connection override.
+ * Returns undefined when unset (= use session's connection).
+ */
+export function getCallLlmConnection(): string | undefined {
+  const config = loadStoredConfig();
+  return config?.callLlmConnection ?? undefined;
+}
+
+/**
+ * Set the app-level call_llm connection override.
+ * Pass undefined to clear (revert to auto behavior).
+ */
+export function setCallLlmConnection(slug: string | undefined): boolean {
+  const config = loadStoredConfig();
+  if (!config) return false;
+
+  if (slug) {
+    config.callLlmConnection = slug;
+  } else {
+    delete config.callLlmConnection;
+  }
+  saveConfig(config);
+  return true;
+}
+
+/**
+ * Get the app-level call_llm model override.
+ * Returns undefined when unset (= auto-select fast model).
+ */
+export function getCallLlmModel(): string | undefined {
+  const config = loadStoredConfig();
+  return config?.callLlmModel ?? undefined;
+}
+
+/**
+ * Set the app-level call_llm model override.
+ * Pass undefined to clear (revert to auto behavior).
+ */
+export function setCallLlmModel(model: string | undefined): boolean {
+  const config = loadStoredConfig();
+  if (!config) return false;
+
+  if (model) {
+    config.callLlmModel = model;
+  } else {
+    delete config.callLlmModel;
+  }
+  saveConfig(config);
+  return true;
+}
+
+/**
+ * Get the app-level call_llm thinking level override.
+ * Returns undefined when unset (= let agent decide).
+ */
+export function getCallLlmThinkingLevel(): ThinkingLevel | undefined {
+  const config = loadStoredConfig();
+  if (!config?.callLlmThinkingLevel) return undefined;
+  return normalizeThinkingLevel(config.callLlmThinkingLevel) ?? undefined;
+}
+
+/**
+ * Set the app-level call_llm thinking level override.
+ * Pass undefined to clear (revert to auto behavior).
+ */
+export function setCallLlmThinkingLevel(level: ThinkingLevel | undefined): boolean {
+  const config = loadStoredConfig();
+  if (!config) return false;
+
+  if (level) {
+    config.callLlmThinkingLevel = level;
+  } else {
+    delete config.callLlmThinkingLevel;
+  }
   saveConfig(config);
   return true;
 }

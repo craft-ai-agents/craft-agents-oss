@@ -1,6 +1,7 @@
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
+import { resolveSessionId } from '../utils.ts';
 
 export interface SetSessionLabelsArgs {
   sessionId?: string;
@@ -35,8 +36,9 @@ export async function handleSetSessionLabels(
       labels = resolved;
     }
 
-    await ctx.setSessionLabels(args.sessionId, labels);
-    const target = args.sessionId ? `session ${args.sessionId}` : 'current session';
+    const resolvedId = resolveSessionId(args.sessionId);
+    await ctx.setSessionLabels(resolvedId, labels);
+    const target = resolvedId ? `session ${resolvedId}` : 'current session';
     return successResponse(
       labels.length === 0
         ? `Labels cleared on ${target}.`

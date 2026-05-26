@@ -1946,6 +1946,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               isEmptySession: session.messages.length === 0,
               currentConnection: session.llmConnection,
               onConnectionChange,
+              soundPack: session.soundPack,
               contextStatus: {
                 isCompacting: session.currentStatus?.statusType === 'compacting',
                 inputTokens: session.tokenUsage?.inputTokens,

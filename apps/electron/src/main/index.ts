@@ -206,6 +206,10 @@ let pendingDeepLink: string | null = null
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
 // Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Craft Agents [1]")
 app.setName(process.env.CRAFT_APP_NAME || 'Craft Agents')
+// Allow audio playback in hidden BrowserWindows without user interaction.
+// The sound engine uses a hidden BrowserWindow with HTMLAudioElement.
+// Chrome autoplay policy normally blocks audio until user interaction.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 // Register as default protocol client for craftagents:// URLs
 // This must be done before app.whenReady() on some platforms
@@ -615,16 +619,84 @@ app.whenReady().then(async () => {
         applyPlatformToSubsystems: (p) => {
           setFetcherPlatform(p)
           setSessionPlatform(p)
+
+          // Lazily initialized sound engine reference (avoids top-level Electron import issues)
+          let _soundEngine: import('./audio/index.js').SoundEngine | null = null
+          const getEngine = async () => {
+            if (!_soundEngine) {
+              const { getSoundEngine } = await import('./audio/index.js')
+              _soundEngine = getSoundEngine()
+            }
+            return _soundEngine
+          }
+
           setSessionRuntimeHooks({
             updateBadgeCount,
-            onSessionStarted,
-            onSessionStopped,
+            onSessionStarted: (sessionId) => {
+              onSessionStarted() // power manager
+              // Play session start sound when processing begins
+              getEngine().then(engine => engine.play('session.start', sessionId)).catch(() => {})
+            },
+            onSessionStopped: (_sessionId) => {
+              onSessionStopped() // power manager
+            },
+            onSessionCompleted: (reason, sessionId) => {
+              // Play completion/error sounds (interrupted already handled by Stop event)
+              if (reason === 'complete') {
+                getEngine().then(engine => engine.play('task.complete', sessionId)).catch(() => {})
+              } else if (reason === 'error' || reason === 'timeout') {
+                getEngine().then(engine => engine.play('task.error', sessionId)).catch(() => {})
+              }
+            },
+            onSessionDeleted: (sessionId) => {
+              // Play session.end sound when a session is deleted
+              console.info('[sound] onSessionDeleted hook fired for', sessionId)
+              getEngine().then(async (engine) => {
+                console.info('[sound] Engine acquired, playing session.end for', sessionId)
+                try {
+                  await engine.play('session.end', sessionId)
+                  console.info('[sound] session.end played successfully for', sessionId)
+                } catch (err) {
+                  console.error('[sound] session.end play failed for', sessionId, err)
+                }
+                // Clean up session pack state after sound completes
+                engine.removeSession(sessionId)
+              }).catch((err) => {
+                console.error('[sound] Failed to get engine for session.end:', err)
+              })
+            },
             captureException: (error, context) => {
               Sentry.captureException(error instanceof Error ? error : new Error(String(error)), {
                 tags: {
                   ...(context?.errorSource ? { errorSource: context.errorSource } : {}),
                   ...(context?.sessionId ? { sessionId: context.sessionId } : {}),
                 },
+              })
+            },
+            onAutomationEvent: (event: string, sessionId?: string) => {
+              // Skip events already handled by direct hooks to avoid double-playing sounds.
+              const handledByDirectHooks = new Set(['SessionStart', 'Stop', 'SessionEnd'])
+              if (handledByDirectHooks.has(event)) return
+
+              // Map automation event to sound category and play
+              import('@craft-agent/shared/audio').then(({ mapEventToCategory }) => {
+                const category = mapEventToCategory(event)
+                if (category) {
+                  // When sessionId is not in the automation payload (e.g. UserPromptSubmit),
+                  // try to find the active session for the workspace from the session manager.
+                  // This ensures sounds play from the correct session pack instead of default.
+                  // try to find the active session from the session manager.
+                  const sid = sessionId ?? (() => {
+                    try {
+                      const sessions = sessionManager?.getSessions() ?? []
+                      const processing = sessions.find(s => s.isProcessing)
+                      return processing?.id
+                    } catch { return undefined }
+                  })()
+                  getEngine().then(engine => engine.play(category, sid))
+                }
+              }).catch(() => {
+                // Sound errors must never break automation flow
               })
             },
           })
@@ -711,6 +783,37 @@ app.whenReady().then(async () => {
       oauthFlowStore = instance.oauthFlowStore
       moduleSink = instance.wsServer.push.bind(instance.wsServer)
       moduleClientResolver = resolveClientId
+
+      // Initialize sound engine (non-blocking — sounds available once init completes)
+      if (!isHeadless) {
+        import('./audio/index.js').then(({ initSoundEngine, getSoundEngine }) => {
+          initSoundEngine().then(() => {
+            mainLog.info('[sound] Sound engine initialized')
+
+            // Load per-session sound packs from existing sessions
+            try {
+              const sessions = instance.sessionManager?.getSessions() ?? []
+              const engine = getSoundEngine()
+              let loaded = 0
+              for (const s of sessions) {
+                if (s.soundPack) {
+                  engine.setSessionPack(s.id, s.soundPack)
+                  loaded++
+                }
+              }
+              if (sessions.length > 0) {
+                mainLog.info(
+                  `[sound] Loaded ${loaded}/${sessions.length} session pack overrides`
+                )
+              }
+            } catch (err) {
+              mainLog.warn('[sound] Failed to load session sound packs:', err)
+            }
+          }).catch((err) => {
+            mainLog.warn('[sound] Sound engine init failed:', err)
+          })
+        })
+      }
 
       // -----------------------------------------------------------------------
       // Messaging Gateway — attach the WS publisher, init local workspaces,
@@ -1181,6 +1284,11 @@ app.on('before-quit', async (event) => {
     // Stop all model refresh timers
     getModelRefreshService().stopAll()
 
+    // Dispose sound engine (kills utility process)
+    import('./audio/index.js').then(({ disposeSoundEngine }) => {
+      disposeSoundEngine().catch(() => {})
+    })
+
     // Stop messaging gateways so the WhatsApp worker subprocess exits cleanly.
     if (messagingHandle) {
       try {
@@ -1189,6 +1297,11 @@ app.on('before-quit', async (event) => {
         mainLog.error('[messaging] dispose failed:', err)
       }
     }
+
+    // Dispose sound engine (kills utility process)
+    import('./audio/index.js').then(({ disposeSoundEngine }) => {
+      disposeSoundEngine().catch(() => {})
+    })
 
     // Clean up power manager (release power blocker)
     const { cleanup: cleanupPowerManager } = await import('./power-manager')

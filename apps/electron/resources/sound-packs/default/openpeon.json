@@ -1,0 +1,52 @@
+{
+  "cesp_version": "1.0",
+  "name": "default",
+  "display_name": "Craft Agent",
+  "version": "1.0.0",
+  "description": "Subtle, professional notification tones for Craft Agent. Ships with the app.",
+  "author": {
+    "name": "Craft Agent",
+    "github": "craft-agents"
+  },
+  "license": "MIT",
+  "language": "en",
+  "icon": "icons/craft.svg",
+  "categories": {
+    "session.start": {
+      "sounds": [
+        { "file": "sounds/session-start.mp3", "label": "Ready" }
+      ]
+    },
+    "task.acknowledge": {
+      "sounds": [
+        { "file": "sounds/acknowledge.mp3", "label": "Got it" }
+      ]
+    },
+    "task.complete": {
+      "sounds": [
+        { "file": "sounds/complete.mp3", "label": "Done" },
+        { "file": "sounds/complete-alt.mp3", "label": "Done (alt)" }
+      ]
+    },
+    "task.error": {
+      "sounds": [
+        { "file": "sounds/error.mp3", "label": "Error" }
+      ]
+    },
+    "input.required": {
+      "sounds": [
+        { "file": "sounds/input-required.mp3", "label": "Attention" }
+      ]
+    },
+    "resource.limit": {
+      "sounds": [
+        { "file": "sounds/resource-limit.mp3", "label": "Warning" }
+      ]
+    },
+    "session.end": {
+      "sounds": [
+        { "file": "sounds/session-end.mp3", "label": "Close" }
+      ]
+    }
+  }
+}
