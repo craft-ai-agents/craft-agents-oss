@@ -311,4 +311,44 @@ describe('upgradePromptCacheTtl', () => {
     enableExtendedCache();
     expect(upgradePromptCacheTtl({})).toBe(0);
   });
+
+  // Regression for the screenshot bug: when extendedPromptCache is enabled,
+  // we upgraded system+messages to 1h but left a 5m cache_control on a tool
+  // untouched. Anthropic processes blocks in order `tools → system → messages`
+  // and rejects "1h after 5m", so the tools walk has to keep up.
+  it('upgrades tool cache_control to 1h when enabled', () => {
+    enableExtendedCache();
+    const body = {
+      tools: [
+        { name: 'search', description: 'do a search', cache_control: { type: 'ephemeral' } },
+        { name: 'fetch', description: 'fetch a url', cache_control: { type: 'ephemeral' } },
+      ],
+      system: [
+        { type: 'text', text: 'You are helpful', cache_control: { type: 'ephemeral' } },
+      ],
+      messages: [],
+    };
+
+    const upgraded = upgradePromptCacheTtl(body);
+
+    expect(upgraded).toBe(3);
+    expect((body.tools as any[])[0].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+    expect((body.tools as any[])[1].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+    expect((body.system as any[])[0].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+  });
+
+  it('strips ttl from tool cache_control when disabled', () => {
+    disableExtendedCache();
+    const body = {
+      tools: [
+        { name: 'search', description: 'do a search', cache_control: { type: 'ephemeral', ttl: '1h' } },
+      ],
+      messages: [],
+    };
+
+    const stripped = upgradePromptCacheTtl(body);
+
+    expect(stripped).toBe(1);
+    expect((body.tools as any[])[0].cache_control).toEqual({ type: 'ephemeral' });
+  });
 });

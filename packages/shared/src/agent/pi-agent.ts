@@ -94,7 +94,7 @@ import { parseError, type AgentError } from './errors.ts';
 // Centralized PreToolUse pipeline
 import { runPreToolUseChecks, type PreToolUseCheckResult } from './core/pre-tool-use.ts';
 import { getRtkPath } from './core/rtk-detector.ts';
-import { getRtkEnabled } from '../config/storage.ts';
+import { getRtkEnabled, getBrowserToolEnabled } from '../config/storage.ts';
 import type { RtkContext } from './core/rtk-rewrite.ts';
 
 // Workspace slug extraction for skill qualification
@@ -115,6 +115,38 @@ export const PI_BACKEND_SESSION_TOOL_NAMES = new Set<string>([
   'spawn_session',
   'browser_tool',
 ]);
+
+/**
+ * Map a transport `err.code` to an agent-facing string for `browser_tool` failures.
+ * Returns null for unknown codes so callers can fall back to the raw `err.message`.
+ *
+ * Receiver-side check: keyed on `err.code === 'X'`, never `instanceof CodedError` —
+ * the transport reconstructs a plain `Error` with `.code` attached.
+ */
+function mapBrowserToolErrorCode(code: string): string | null {
+  switch (code) {
+    case 'BROWSER_NO_CAPABLE_CLIENT':
+    case 'CAPABILITY_UNAVAILABLE':
+      return 'No connected desktop client supports browser tools, or no client is currently connected. ' +
+        'Ask the user to open this workspace from the Craft Agent desktop app.';
+    case 'CLIENT_DISCONNECTED':
+      return 'The desktop client that owned this browser session disconnected. ' +
+        'Ask the user to reconnect and retry.';
+    case 'CLIENT_REQUEST_TIMEOUT':
+      return 'Browser operation timed out (>30s). The desktop client may be unresponsive.';
+    case 'BROWSER_INSTANCE_NOT_OWNED':
+      return 'That browser instance ID doesn\'t belong to this session. ' +
+        'Use `windows` to list owned instances, or `open` to create a new one.';
+    case 'BROWSER_REMOTE_UPLOAD_NOT_SUPPORTED':
+      return 'File upload from a remote agent is not supported. ' +
+        'Ask the user to attach the file to the session.';
+    case 'BROWSER_REMOTE_EVALUATE_BLOCKED':
+      return 'JavaScript evaluation is disabled on this desktop client. ' +
+        'Ask the user to enable it in settings.';
+    default:
+      return null;
+  }
+}
 
 /**
  * Backend implementation using the Pi coding agent SDK via subprocess.
@@ -521,7 +553,15 @@ export class PiAgent extends BaseAgent {
     // These tools (SubmitPlan, config_validate, source auth, call_llm, etc.)
     // are executed in the main process when the LLM calls them.
     this.assertBackendSessionToolParity();
-    const sessionToolDefs = getSessionToolProxyDefs();
+    let sessionToolDefs = getSessionToolProxyDefs();
+
+    // Mirror Claude's gate: hide `browser_tool` when the user has disabled
+    // the built-in browser tool. Without this filter, Pi would still advertise
+    // `mcp__session__browser_tool` while Claude doesn't — sessions would behave
+    // inconsistently depending on backend.
+    if (!getBrowserToolEnabled()) {
+      sessionToolDefs = sessionToolDefs.filter(d => d.name !== 'mcp__session__browser_tool');
+    }
 
     // Patch call_llm description with provider-specific model hint
     if (this.config.miniModel) {
@@ -1301,7 +1341,7 @@ export class PiAgent extends BaseAgent {
             this.eventQueue.enqueue({
               type: 'source_activated' as const,
               sourceSlug,
-              originalMessage: '',
+              originalMessage: this.getCurrentTurnUserMessage() ?? '',
             });
           } catch (err) {
             const reason = sourceExists
@@ -1583,8 +1623,14 @@ export class PiAgent extends BaseAgent {
 
           return { content, isError: false };
         } catch (error) {
+          // Branch on `err.code` (string), not `instanceof CodedError` — the
+          // transport reconstructs a plain Error on the receiving side, so
+          // class identity is lost across the wire.
+          const rawCode = (error as { code?: unknown } | null)?.code;
+          const code = typeof rawCode === 'string' ? rawCode : '';
           const msg = error instanceof Error ? error.message : String(error);
-          return { content: msg, isError: true };
+          const friendly = mapBrowserToolErrorCode(code) ?? msg;
+          return { content: friendly, isError: true };
         }
       }
 

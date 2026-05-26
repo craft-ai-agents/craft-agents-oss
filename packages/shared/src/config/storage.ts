@@ -77,6 +77,7 @@ export interface StoredConfig {
   richToolDescriptions?: boolean;  // Add intent/action metadata to all tool calls (default: true)
   // Tools
   browserToolEnabled?: boolean;  // Enable built-in browser tool (default: true). Disable for Playwright/Puppeteer.
+  allowRemoteEvaluate?: boolean;  // Allow remote agents to call `browser_tool evaluate` on local browser (default: true).
   // Prompt caching & context
   extendedPromptCache?: boolean;  // Use 1h prompt cache TTL instead of 5m (default: false)
   enable1MContext?: boolean;  // Enable 1M context window for supported models (default: false — opt-in; requires Anthropic Tier 4+)
@@ -123,6 +124,7 @@ const FALLBACK_CONFIG_DEFAULTS: ConfigDefaults = {
     richToolDescriptions: true,
     extendedPromptCache: false,
     browserToolEnabled: true,
+    allowRemoteEvaluate: true,
   },
   workspaceDefaults: {
     thinkingLevel: 'medium',
@@ -479,6 +481,30 @@ export function setBrowserToolEnabled(enabled: boolean): void {
   // Clear session tool caches so all sessions pick up the change immediately.
   // Lazy import to avoid circular dependency (storage ← session-scoped-tools ← storage).
   import('../agent/session-scoped-tools.ts').then(m => m.invalidateAllSessionToolsCaches()).catch(() => {});
+}
+
+/**
+ * Whether remote agents may call `browser_tool evaluate <expression>` against this
+ * desktop client's local browser. The check is enforced inside the local capability
+ * dispatcher; the remote server cannot override it.
+ *
+ * Defaults to true. Users can flip it off in Settings → AI → Advanced if they don't
+ * trust the remote workspaces they connect to.
+ */
+export function getAllowRemoteEvaluate(): boolean {
+  const config = loadStoredConfig();
+  if (config?.allowRemoteEvaluate !== undefined) {
+    return config.allowRemoteEvaluate;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.allowRemoteEvaluate;
+}
+
+export function setAllowRemoteEvaluate(allowed: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.allowRemoteEvaluate = allowed;
+  saveConfig(config);
 }
 
 /**

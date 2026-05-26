@@ -102,7 +102,7 @@ import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
 import { getPiModelsForAuthProvider, getAllPiModels } from '@craft-agent/shared/config'
 import { initNotificationService, initBadgeIcon, initInstanceBadge, updateBadgeCount } from './notifications'
-import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating } from './auto-update'
+import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating, setBeforeUpdateQuitHook } from './auto-update'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
 
@@ -459,6 +459,7 @@ app.whenReady().then(async () => {
     browserPaneManager = new BrowserPaneManager()
     browserPaneManager.setWindowManager(windowManager)
     browserPaneManager.registerToolbarIpc()
+    browserPaneManager.registerCapabilityIpc()
 
     // Build real PlatformServices from Electron APIs
     const platform: PlatformServices = createElectronPlatform({
@@ -707,6 +708,7 @@ app.whenReady().then(async () => {
           sm.setBrowserPaneManager(browserPaneManager!)
           return sm
         },
+        bindRpcServer: (sm, server) => sm.setRpcServer(server),
         createHandlerDeps: ({ sessionManager: sm, platform: p, oauthFlowStore: ofs }) => {
           // The messaging handle is built here because it needs sessionManager.
           // The WS publisher is attached after bootstrapServer resolves (via
@@ -1146,6 +1148,11 @@ app.whenReady().then(async () => {
     // Initialize auto-update (check immediately on launch)
     // Skip in dev mode to avoid replacing /Applications app and launching it instead
     if (moduleSink) setAutoUpdateEventSink(moduleSink)
+    // Snapshot multi-window state BEFORE quitAndInstall. electron-updater
+    // (Squirrel.Mac) destroys BrowserWindows between quitAndInstall and
+    // before-quit firing; saving from before-quit alone would overwrite
+    // window-state.json with an empty array.
+    setBeforeUpdateQuitHook(() => captureAndSaveWindowState('pre-update'))
     if (app.isPackaged) {
       checkForUpdatesOnLaunch().catch(err => {
         mainLog.error('[auto-update] Launch check failed:', err)
@@ -1201,6 +1208,28 @@ app.on('window-all-closed', () => {
 // Track if we're in the process of quitting (to avoid re-entry)
 let isQuitting = false
 
+/**
+ * Capture the current multi-window state and persist it to disk.
+ * Called from two sites:
+ *   - before-quit (normal quit path, reason='before-quit')
+ *   - installUpdate hook (auto-update path, reason='pre-update'), because
+ *     electron-updater destroys BrowserWindows between quitAndInstall and
+ *     before-quit firing — by the time before-quit runs, getWindowStates()
+ *     returns an empty array and would clobber the on-disk state.
+ * Returns the number of windows saved, or -1 if windowManager isn't ready.
+ */
+function captureAndSaveWindowState(reason: 'before-quit' | 'pre-update'): number {
+  if (!windowManager) return -1
+  const windows = windowManager.getWindowStates()
+  const focusedWindow = BrowserWindow.getFocusedWindow()
+  const lastFocusedWorkspaceId = focusedWindow
+    ? windowManager.getWorkspaceForWindow(focusedWindow.webContents.id) ?? undefined
+    : undefined
+  saveWindowState({ windows, lastFocusedWorkspaceId })
+  mainLog.info('[window-state] saved', { windowCount: windows.length, reason })
+  return windows.length
+}
+
 // Save window state and clean up resources before quitting
 app.on('before-quit', async (event) => {
   // Avoid re-entry when we call app.exit()
@@ -1211,20 +1240,22 @@ app.on('before-quit', async (event) => {
   windowManager?.setAppQuitting(true)
 
   if (windowManager) {
-    // Get full window states (includes bounds, type, and query)
     const windows = windowManager.getWindowStates()
-    // Get the focused window's workspace as last focused
-    const focusedWindow = BrowserWindow.getFocusedWindow()
-    let lastFocusedWorkspaceId: string | undefined
-    if (focusedWindow) {
-      lastFocusedWorkspaceId = windowManager.getWorkspaceForWindow(focusedWindow.webContents.id) ?? undefined
+    // Empty-snapshot guard: during update-quit, electron-updater has already
+    // destroyed all BrowserWindows by the time before-quit fires. The pre-update
+    // hook already saved the real state — don't let this late save overwrite it.
+    if (windows.length === 0 && isUpdating()) {
+      mainLog.warn('[window-state] skip save: empty snapshot during update-quit (pre-update snapshot wins)')
+    } else {
+      captureAndSaveWindowState('before-quit')
     }
-
-    saveWindowState({
-      windows,
-      lastFocusedWorkspaceId,
+    // Diagnostic correlation with installUpdate's [update-flow] log.
+    mainLog.info('[update-flow] before-quit save', {
+      windowCount: windows.length,
+      electronWindowCount: BrowserWindow.getAllWindows().length,
+      isUpdating: isUpdating(),
+      reason: isUpdating() ? 'update-quit' : 'user-quit',
     })
-    mainLog.info('Saved window state:', windows.length, 'windows')
   }
 
   // Flush all pending session writes before quitting

@@ -31,10 +31,16 @@ export interface ServerBootstrapOptions<TSessionManager, THandlerDeps> {
   registerAllRpcHandlers: (server: RpcServer, deps: THandlerDeps, serverCtx: ServerHandlerContext) => void
   initializeSessionManager: (sessionManager: TSessionManager) => Promise<void>
   setSessionEventSink: (sessionManager: TSessionManager, sink: EventSink) => void
+  /**
+   * Optional hook called right after the WS RPC server starts listening. Use
+   * this to plumb the server into the SessionManager (e.g. `sm.setRpcServer(server)`)
+   * so the remote-bridge code path for `client:browser:invoke` activates.
+   */
+  bindRpcServer?: (sessionManager: TSessionManager, server: RpcServer) => void
   initModelRefreshService: () => ModelRefreshServiceLike
   cleanupSessionManager?: (sessionManager: TSessionManager) => Promise<void> | void
   cleanupClientResources?: (clientId: string) => void
-  onClientConnected?: (info: { clientId: string; webContentsId: number | null; workspaceId: string | null }) => void
+  onClientConnected?: (info: { clientId: string; webContentsId: number | null; workspaceId: string | null; capabilities: string[] }) => void
   serverId?: string
   /** App version string, included in handshake_ack for client compatibility checks. */
   serverVersion?: string
@@ -302,10 +308,22 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
     onClientConnected: options.onClientConnected,
     onClientDisconnected: (clientId) => {
       options.cleanupClientResources?.(clientId)
+      // Best-effort: notify SM so it can drop browser-host pins for this client.
+      // Duck-typed because TSessionManager is generic at the bootstrap layer.
+      const smWithDisconnect = sessionManager as unknown as { onClientDisconnected?: (id: string) => void }
+      if (typeof smWithDisconnect.onClientDisconnected === 'function') {
+        try {
+          smWithDisconnect.onClientDisconnected(clientId)
+        } catch {
+          // Cleanup hook failures must not break the transport.
+        }
+      }
     },
   })
 
   await wsServer.listen()
+
+  options.bindRpcServer?.(sessionManager, wsServer)
 
   const oauthFlowStore = new OAuthFlowStore()
 

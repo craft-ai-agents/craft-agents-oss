@@ -833,16 +833,6 @@ export default function App() {
             })
             break
           }
-          case 'auto_retry': {
-            // A source was auto-activated, automatically re-send the original message
-            // Add suffix to indicate the source was activated
-            const messageWithSuffix = `${effect.originalMessage}\n\n[${effect.sourceSlug} activated]`
-            // Use setTimeout to ensure the previous turn has fully completed
-            setTimeout(() => {
-              window.electronAPI.sendMessage(effect.sessionId, messageWithSuffix)
-            }, 100)
-            break
-          }
           case 'restore_input': {
             // Queued messages were removed from chat on abort — restore their text to the input field.
             // Append to existing draft (user may have started typing) rather than overwrite.
@@ -1625,8 +1615,14 @@ export default function App() {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
         console.error('Failed to open URL:', error)
+        // The blocked-URL classifier already explains WHY and (for file:)
+        // points the user at preview blocks. Don't append the generic
+        // "use Open File instead" hint when the message already carries
+        // that guidance.
+        const hasRichGuidance = /URL blocked/.test(message)
+        const tail = hasRichGuidance ? '' : '. If this is a local path, use Open File instead.'
         toast.error(t('toast.failedToOpenLink'), {
-          description: `${message}. If this is a local path, use Open File instead.`,
+          description: `${message}${tail}`,
         })
       }
     },

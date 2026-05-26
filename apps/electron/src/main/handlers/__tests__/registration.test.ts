@@ -49,6 +49,8 @@ function createMockServer(): RpcServer {
     },
     push() {},
     async invokeClient() {},
+    hasClientCapability() { return false },
+    findClientsWithCapability() { return [] },
   }
 }
 

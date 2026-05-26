@@ -584,6 +584,7 @@ Read relevant context files using the Read tool - they contain architecture info
 | HTML Preview | \`${DOC_REFS.htmlPreview}\` | When rendering HTML content (emails, reports) |
 | PDF Preview | \`${DOC_REFS.pdfPreview}\` | When displaying PDF documents inline |
 | Image Preview | \`${DOC_REFS.imagePreview}\` | When displaying local image files inline |
+| Markdown Preview | \`${DOC_REFS.markdownPreview}\` | When displaying rendered .md files inline |
 | Browser Tools | \`${DOC_REFS.browserTools}\` | When using in-app browser tools (\`browser_tool\`) |
 | LLM Tool | \`${DOC_REFS.llmTool}\` | When using \`call_llm\` for subtasks |${FEATURE_FLAGS.craftAgentsCli ? `
 | Craft CLI | \`${DOC_REFS.craftCli}\` | When managing labels/sources/skills/automations via \`craft-agent\` |` : ''}
@@ -1019,9 +1020,36 @@ Formats like HEIC/HEIF/TIFF may not render in-app and should be opened externall
 
 **Reference:** \`${DOC_REFS.imagePreview}\`
 
+## Markdown Preview
+
+You can render \`markdown-preview\` code blocks as inline rendered markdown. Use this to show \`.md\` files you just wrote (specs, plans, READMEs, notes) without dumping the raw source.
+
+\`\`\`markdown-preview
+{
+  "src": "/absolute/path/to/file.md",
+  "title": "Optional display title"
+}
+\`\`\`
+
+**\`src\` field:** References a markdown file on disk. Use an absolute path from tool results (Write, Read, transform_data) or a path the user has referenced.
+
+**Workflow for showing a markdown file you just wrote:**
+1. Write the file via the \`Write\` tool to an allowed path for the current permission mode (in Explore mode, use only \`plansFolderPath\` or \`dataFolderPath\`; in execution modes, use the appropriate workspace/session path).
+2. Output a \`markdown-preview\` block with \`"src"\` pointing to the absolute path you wrote.
+
+**When to use:**
+- **Just wrote a .md file** — show the rendered result, not the raw text
+- **Plan files** — render plan markdown from \`plansFolderPath\` inline
+- **User references a markdown file** — README, spec, notes, design doc
+- **Rich prose with tables/code/headings** that loses fidelity in a chat reply
+
+A \`markdown-preview\` fence nested inside the rendered file falls through to a regular code block (no infinite recursion). Other preview blocks inside the file (mermaid, datatable, …) still render normally.
+
+**Reference:** \`${DOC_REFS.markdownPreview}\`
+
 ## Multiple Items (Tabs)
 
-\`html-preview\`, \`pdf-preview\`, and \`image-preview\` blocks support displaying multiple items with a tab bar for switching between them. Use the \`items\` array instead of \`src\`:
+\`html-preview\`, \`pdf-preview\`, \`image-preview\`, and \`markdown-preview\` blocks support displaying multiple items with a tab bar for switching between them. Use the \`items\` array instead of \`src\`:
 
 \`\`\`html-preview
 {
@@ -1050,6 +1078,16 @@ Formats like HEIC/HEIF/TIFF may not render in-app and should be opened externall
   "items": [
     { "src": "/path/to/before.png", "label": "Before" },
     { "src": "/path/to/after.png", "label": "After" }
+  ]
+}
+\`\`\`
+
+\`\`\`markdown-preview
+{
+  "title": "Spec drafts",
+  "items": [
+    { "src": "/path/to/v1.md", "label": "v1" },
+    { "src": "/path/to/final.md", "label": "Final" }
   ]
 }
 \`\`\`

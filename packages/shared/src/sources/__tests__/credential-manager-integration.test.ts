@@ -49,6 +49,22 @@ describe('getApiCredential with multi-header sources', () => {
     mockGet = mock(() => null);
   });
 
+  test("authType:'none' does not resolve the shared source_apikey credential slot", async () => {
+    const source = createMockSource({
+      api: {
+        baseUrl: 'https://api.example.com/',
+        authType: 'none',
+      },
+    });
+    const idSpy = spyOn(credManager, 'getCredentialId');
+
+    const result = await credManager.load(source);
+
+    expect(result).toBeNull();
+    expect(idSpy).not.toHaveBeenCalled();
+    idSpy.mockRestore();
+  });
+
   test('should return MultiHeaderCredential when source has headerNames and credential is valid JSON', async () => {
     const source = createMockSource({
       api: {

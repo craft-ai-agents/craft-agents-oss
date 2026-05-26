@@ -293,9 +293,25 @@ export function sanitizeEmptyTextCacheControl(body: Record<string, unknown>): nu
  * When extendedPromptCache is disabled, the SDK may still send ttl: "1h"
  * natively (via prompt-caching-scope beta). This function removes the ttl
  * field so blocks fall back to the API default (5 min).
+ *
+ * Walks tools, system, message content, and top-level cache_control. The
+ * Anthropic API processes blocks in order `tools → system → messages` and
+ * rejects requests where a 1h block appears after a 5m block, so the tools
+ * walk must stay in sync with the upgrade path below.
  */
 function stripPromptCacheTtl(body: Record<string, unknown>): number {
   let stripped = 0;
+
+  const tools = body.tools as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(tools)) {
+    for (const tool of tools) {
+      const cc = tool.cache_control as Record<string, unknown> | undefined;
+      if (cc?.type === 'ephemeral' && 'ttl' in cc) {
+        delete cc.ttl;
+        stripped++;
+      }
+    }
+  }
 
   const system = body.system as Array<Record<string, unknown>> | undefined;
   if (Array.isArray(system)) {
@@ -340,9 +356,16 @@ function stripPromptCacheTtl(body: Record<string, unknown>): number {
  * When disabled, actively strips any SDK-injected TTL so blocks
  * fall back to the API default (5 min).
  *
- * Walks system prompt blocks, message content blocks, and the top-level
- * cache_control field (auto-caching mode). Only upgrades blocks with
- * type: "ephemeral" — leaves other types untouched.
+ * Walks tools, system prompt blocks, message content blocks, and the
+ * top-level cache_control field (auto-caching mode). Only upgrades blocks
+ * with type: "ephemeral" — leaves other types untouched.
+ *
+ * The tools walk is required for correctness, not just completeness: the
+ * Anthropic API processes blocks in order `tools → system → messages` and
+ * rejects requests where a 1h cache_control block appears after a 5m one.
+ * If we upgrade only system+messages, a 5m block on a tool (added by the
+ * SDK or user) ahead of a 1h block on system produces a 400 with message
+ * "a ttl='1h' cache_control block must not come after a ttl='5m' cache_control block."
  *
  * Exported for focused unit tests.
  */
@@ -350,6 +373,18 @@ export function upgradePromptCacheTtl(body: Record<string, unknown>): number {
   if (!isExtendedPromptCacheEnabled()) return stripPromptCacheTtl(body);
 
   let upgraded = 0;
+
+  // Upgrade tool cache_control (must run first — tools is processed before
+  // system, and a stale 5m block here would invalidate any later 1h upgrade).
+  const tools = body.tools as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(tools)) {
+    for (const tool of tools) {
+      if (tool.cache_control && (tool.cache_control as Record<string, unknown>).type === 'ephemeral') {
+        (tool.cache_control as Record<string, unknown>).ttl = '1h';
+        upgraded++;
+      }
+    }
+  }
 
   // Upgrade system prompt cache_control
   const system = body.system as Array<Record<string, unknown>> | undefined;
