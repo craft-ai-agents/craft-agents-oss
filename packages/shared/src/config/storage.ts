@@ -42,7 +42,7 @@ import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
 import type { LlmConnection, MidStreamBehavior } from './llm-connections.ts';
-import { ENV_CONNECTION_SLUG, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_HOST_ENV_VAR, OPENLLM_BASE_HOST_ENV_VAR, defaultMidStreamBehavior, isMidStreamBehavior, isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, registerEnvConnectionMidStreamBehaviorResolver, synthesizeEnvConnection, synthesizeOpenLlmEnvConnection, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
+import { ENV_CONNECTION_SLUG, OPENLLM_ENV_CONNECTION_SLUG, defaultMidStreamBehavior, isMidStreamBehavior, isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, registerEnvConnectionMidStreamBehaviorResolver, synthesizeEnvConnection, synthesizeOpenLlmEnvConnection, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
 import {
   getModelProvider,
   getModelById,
