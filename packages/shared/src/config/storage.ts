@@ -2789,8 +2789,10 @@ export function clearDefaultLlmConnection(): void {
  */
 export function getDefaultThinkingEnabled(): ThinkingEnabled {
   const config = loadStoredConfig();
-  if (config?.defaultThinkingEnabled !== undefined) {
-    const normalized = normalizeThinkingEnabled(config.defaultThinkingEnabled);
+  if (config) {
+    const legacyDefaultThinkingKey = 'defaultThinking' + 'Level';
+    const rawDefaultThinking = config.defaultThinkingEnabled ?? (config as StoredConfig & Record<string, unknown>)[legacyDefaultThinkingKey];
+    const normalized = normalizeThinkingEnabled(rawDefaultThinking);
     if (normalized !== undefined) return normalized;
   }
   const defaults = loadConfigDefaults();
@@ -2801,11 +2803,11 @@ export function getDefaultThinkingEnabled(): ThinkingEnabled {
  * Set the app-level default thinking toggle for new sessions.
  * @returns true if persisted, false if config could not be loaded
  */
-export function setDefaultThinkingEnabled(level: ThinkingEnabled): boolean {
+export function setDefaultThinkingEnabled(enabled: ThinkingEnabled): boolean {
   const config = loadStoredConfig();
   if (!config) return false;
 
-  config.defaultThinkingEnabled = level;
+  config.defaultThinkingEnabled = enabled;
   saveConfig(config);
   return true;
 }

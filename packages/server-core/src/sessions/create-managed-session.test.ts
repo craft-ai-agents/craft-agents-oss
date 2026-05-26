@@ -27,6 +27,16 @@ describe('createManagedSession', () => {
 
     expect(managed.thinkingEnabled).toBe(false)
   })
+
+  it('migrates legacy thinkingLevel=off on restore', () => {
+    const managed = createManagedSession({
+      id: 'session_legacy_off',
+      thinkingLevel: 'off',
+    } as any, workspace as any)
+
+    expect(managed.thinkingEnabled).toBe(false)
+    expect((managed as Record<string, unknown>).thinkingLevel).toBeUndefined()
+  })
 })
 
 describe('buildSsoSubprocessEnvOverrides', () => {

@@ -471,7 +471,7 @@ export interface AgentBackend {
   getThinkingEnabled(): ThinkingEnabled;
 
   /** Set thinking toggle */
-  setThinkingEnabled(level: ThinkingEnabled): void;
+  setThinkingEnabled(enabled: ThinkingEnabled): void;
 
   // ============================================================
   // Permission Mode

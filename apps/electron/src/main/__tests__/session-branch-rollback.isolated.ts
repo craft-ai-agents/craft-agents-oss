@@ -62,7 +62,7 @@ mock.module('@craft-agent/shared/config', () => ({
   loadConfigDefaults: () => ({
     workspaceDefaults: {
       permissionMode: 'ask',
-      thinkingEnabled: 'medium',
+      thinkingEnabled: true,
     },
   }),
   getLlmConnection: () => null,
@@ -71,7 +71,7 @@ mock.module('@craft-agent/shared/config', () => ({
   resetManagedAnthropicAuthEnvVars: () => {},
   getToolIconsDir: () => '/tmp/tool-icons',
   getMiniModel: () => 'claude-haiku-4-5-20251001',
-  getDefaultThinkingEnabled: () => 'medium',
+  getDefaultThinkingEnabled: () => true,
   ConfigWatcher: class ConfigWatcher {
     constructor(..._args: unknown[]) {}
     start() {}
@@ -132,7 +132,7 @@ mock.module('@craft-agent/shared/workspaces', () => ({
   loadWorkspaceConfig: () => ({
     defaults: {
       permissionMode: 'ask',
-      thinkingEnabled: 'medium',
+      thinkingEnabled: true,
       defaultLlmConnection: undefined,
     },
   }),

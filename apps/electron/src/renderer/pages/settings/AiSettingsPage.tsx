@@ -960,14 +960,14 @@ export default function AiSettingsPage() {
     await refreshLlmConnections()
   }, [defaultConnection, refreshLlmConnections])
 
-  const handleDefaultThinkingChange = useCallback(async (level: ThinkingEnabled) => {
+  const handleDefaultThinkingChange = useCallback(async (enabled: ThinkingEnabled) => {
     if (!window.electronAPI) return
 
     const previous = defaultThinking
-    setDefaultThinking(level)
+    setDefaultThinking(enabled)
 
     try {
-      const result = await window.electronAPI.setDefaultThinkingEnabled(level)
+      const result = await window.electronAPI.setDefaultThinkingEnabled(enabled)
       if (!result.success) {
         console.error('Failed to set default thinking level:', result.error)
         setDefaultThinking(previous)

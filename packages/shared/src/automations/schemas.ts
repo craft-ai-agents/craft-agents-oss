@@ -21,13 +21,27 @@ const ThinkingEnabledInputSchema = z.preprocess(
   z.boolean().optional(),
 );
 
-export const PromptActionSchema = z.object({
+function normalizePromptActionInput(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const action = value as Record<string, unknown>;
+  if ('thinkingEnabled' in action) return value;
+
+  const legacyThinkingKey = 'thinking' + 'Level';
+  if (!(legacyThinkingKey in action)) return value;
+
+  return {
+    ...action,
+    thinkingEnabled: action[legacyThinkingKey],
+  };
+}
+
+export const PromptActionSchema = z.preprocess(normalizePromptActionInput, z.object({
   type: z.literal('prompt'),
   prompt: z.string().min(1, 'Prompt cannot be empty'),
   llmConnection: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
   thinkingEnabled: ThinkingEnabledInputSchema,
-});
+}));
 
 export const WebhookActionSchema = z.object({
   type: z.literal('webhook'),

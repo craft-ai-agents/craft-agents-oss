@@ -109,14 +109,14 @@ describe('validation', () => {
       expect(result.data?.thinkingEnabled).toBe(true);
     });
 
-    it('should migrate legacy thinkingEnabled "off" to false', () => {
+    it('should migrate legacy thinkingLevel "off" to false', () => {
       // Mirrors the workspace-default migration in config/validators.ts so persisted
       // 'think' values from old configs don't break automation parsing.
       const config = {
         automations: {
           LabelAdd: [{
             matcher: 'review',
-            actions: [{ type: 'prompt', prompt: 'echo', thinkingEnabled: 'off' }],
+            actions: [{ type: 'prompt', prompt: 'echo', thinkingLevel: 'off' }],
           }],
         },
       };

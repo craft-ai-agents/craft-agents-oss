@@ -192,7 +192,7 @@ interface ChatDisplayProps {
   /** Current thinking toggle */
   thinkingEnabled?: ThinkingEnabled
   /** Callback when thinking toggle changes */
-  onThinkingEnabledChange?: (level: ThinkingEnabled) => void
+  onThinkingEnabledChange?: (enabled: ThinkingEnabled) => void
   // Advanced options
   /** Current permission mode */
   permissionMode?: PermissionMode

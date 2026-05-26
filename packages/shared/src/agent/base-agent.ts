@@ -490,9 +490,9 @@ export abstract class BaseAgent implements AgentBackend {
     return this._thinkingEnabled;
   }
 
-  setThinkingEnabled(level: ThinkingEnabled): void {
-    this._thinkingEnabled = level;
-    this.debug(`Thinking toggle set to: ${level}`);
+  setThinkingEnabled(enabled: ThinkingEnabled): void {
+    this._thinkingEnabled = enabled;
+    this.debug(`Thinking toggle set to: ${enabled}`);
   }
 
   // ============================================================

@@ -50,7 +50,7 @@ interface CompactModelSelectorProps {
   onModelChange: (model: string, connection?: string) => void
   onConnectionChange?: (connectionSlug: string) => void
   thinkingEnabled?: ThinkingEnabled
-  onThinkingEnabledChange?: (level: ThinkingEnabled) => void
+  onThinkingEnabledChange?: (enabled: ThinkingEnabled) => void
   isEmptySession?: boolean
   connectionUnavailable?: boolean
   contextStatus?: {

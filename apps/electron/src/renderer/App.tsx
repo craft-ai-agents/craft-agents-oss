@@ -479,7 +479,7 @@ export default function App() {
       const optionsMap = new Map<string, SessionOptions>()
       for (const s of loadedSessions) {
         const hasNonDefaultMode = s.permissionMode && s.permissionMode !== 'ask'
-        const hasNonDefaultThinking = s.thinkingEnabled && s.thinkingEnabled !== DEFAULT_THINKING_ENABLED
+        const hasNonDefaultThinking = s.thinkingEnabled !== undefined && s.thinkingEnabled !== DEFAULT_THINKING_ENABLED
         if (hasNonDefaultMode || hasNonDefaultThinking) {
           optionsMap.set(s.id, {
             permissionMode: s.permissionMode ?? 'ask',

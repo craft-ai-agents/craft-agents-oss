@@ -69,7 +69,7 @@ describe('AutomationSystem', () => {
       await system.dispose();
     });
 
-    it('should preserve thinkingEnabled on prompt actions through load', async () => {
+    it('should migrate legacy thinkingLevel on prompt actions through load', async () => {
       writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
         automations: {
           LabelAdd: [
@@ -80,7 +80,7 @@ describe('AutomationSystem', () => {
                 prompt: 'Audit changes',
                 llmConnection: 'anthropic',
                 model: 'claude-opus-4-7',
-                thinkingEnabled: 'high',
+                thinkingLevel: 'high',
               }],
             },
           ],

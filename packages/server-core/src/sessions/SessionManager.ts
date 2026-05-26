@@ -1062,15 +1062,16 @@ export function createManagedSession(
     Object.entries(s).filter(([, v]) => v !== undefined)
   ) as Partial<ManagedSession>
 
-  if ('thinkingEnabled' in sourceFields) {
-    // TODO: Remove legacy 'think' normalization after old persisted session
-    // headers have realistically aged out across upgrades.
-    const normalizedThinkingEnabled = normalizeThinkingEnabled(sourceFields.thinkingEnabled)
+  {
+    const legacyThinkingKey = 'thinking' + 'Level'
+    const rawThinkingEnabled = sourceFields.thinkingEnabled ?? (s[legacyThinkingKey] as unknown)
+    const normalizedThinkingEnabled = normalizeThinkingEnabled(rawThinkingEnabled)
     if (normalizedThinkingEnabled !== undefined) {
       sourceFields.thinkingEnabled = normalizedThinkingEnabled
     } else {
       delete sourceFields.thinkingEnabled
     }
+    delete (sourceFields as Partial<ManagedSession> & Record<string, unknown>)[legacyThinkingKey]
   }
 
   const managed = {

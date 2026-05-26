@@ -121,7 +121,7 @@ describe('PromptHandler', () => {
             prompt: 'Audit changes',
             llmConnection: 'anthropic',
             model: 'claude-opus-4-7',
-            thinkingEnabled: 'high',
+            thinkingEnabled: true,
           }],
         }],
       });
@@ -140,7 +140,7 @@ describe('PromptHandler', () => {
       expect(prompts[0]).toMatchObject({
         llmConnection: 'anthropic',
         model: 'claude-opus-4-7',
-        thinkingEnabled: 'high',
+        thinkingEnabled: true,
       });
 
       handler.dispose();
