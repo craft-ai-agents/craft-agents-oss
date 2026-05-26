@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { SsoCredentialStore } from '../auth/sso-credential-store.ts';
 import { atomicWriteFileSync, readJsonFileSync } from '../utils/files.ts';
 import { loadWorkspaceConfig } from '../workspaces/storage.ts';
 import type { TeamPublicKnowledgeDocumentConfig } from '../workspaces/types.ts';
@@ -67,6 +68,8 @@ export type TeamPublicKnowledgeFetcher = (document: TeamPublicKnowledgeDocumentC
 export interface RefreshTeamPublicKnowledgeOptions {
   now?: number;
   fetchMarkdown?: TeamPublicKnowledgeFetcher;
+  fetchFn?: typeof fetch;
+  getIdToken?: () => Promise<string | null | undefined>;
 }
 
 /**
@@ -97,7 +100,7 @@ export async function refreshTeamPublicKnowledge(
     return summary;
   }
 
-  const fetchMarkdown = options.fetchMarkdown ?? defaultFetchMarkdown;
+  const fetchMarkdown = options.fetchMarkdown ?? (document => defaultFetchMarkdown(document, options));
   const documents = dedupeDocuments(knowledgeConfig.documents, summary);
   const nextEntries: Record<string, TeamPublicKnowledgeCacheEntry> = {};
   const configuredIds = new Set(documents.map(doc => doc.id));
@@ -261,12 +264,29 @@ function dedupeDocuments(
   return deduped;
 }
 
-async function defaultFetchMarkdown(document: TeamPublicKnowledgeDocumentConfig): Promise<string> {
-  const response = await fetch(document.url);
+async function defaultFetchMarkdown(
+  document: TeamPublicKnowledgeDocumentConfig,
+  options: Pick<RefreshTeamPublicKnowledgeOptions, 'fetchFn' | 'getIdToken'> = {},
+): Promise<string> {
+  const fetchFn = options.fetchFn ?? fetch;
+  const response = await fetchFn(document.url, {
+    headers: await buildIdTokenHeaders(options.getIdToken ?? loadSsoIdToken),
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch ${document.url}: HTTP ${response.status}`);
   }
   return response.text();
+}
+
+async function buildIdTokenHeaders(
+  getIdToken: () => Promise<string | null | undefined>,
+): Promise<Record<string, string> | undefined> {
+  const idToken = await getIdToken().catch(() => null);
+  return idToken ? { idtoken: idToken } : undefined;
+}
+
+async function loadSsoIdToken(): Promise<string | null> {
+  return (await new SsoCredentialStore().load())?.idToken ?? null;
 }
 
 function sha256(content: string): string {

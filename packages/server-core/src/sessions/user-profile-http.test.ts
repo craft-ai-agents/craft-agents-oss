@@ -50,6 +50,23 @@ describe('HttpUserProfileProvider', () => {
     }
   })
 
+  it('adds the SSO idtoken header when fetching user profile', async () => {
+    const requestHeaders: Headers[] = []
+    const provider = new HttpUserProfileProvider({
+      apiUrl: 'http://test/api/user/profile',
+      fetchFn: async (_url, init) => {
+        requestHeaders.push(new Headers(init?.headers))
+        return fakeResponse({ name: 'Ada', oneStopId: 'OS-001', group: 'Eng', department: 'AI' })
+      },
+      getIdToken: async () => 'sso-id-token',
+      profilePath: '/tmp/nonexistent/test-profile.json',
+    })
+
+    await provider.fetchUserProfile()
+
+    expect(requestHeaders[0]?.get('idtoken')).toBe('sso-id-token')
+  })
+
   it('returns null for empty profile response', async () => {
     const provider = new HttpUserProfileProvider({
       apiUrl: 'http://test/api/user/profile',
