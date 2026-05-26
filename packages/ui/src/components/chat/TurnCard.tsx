@@ -199,7 +199,7 @@ function computeEditWriteDiffStats(
 /** Shared size configuration for activity UI - exported for reuse in inline execution */
 export const SIZE_CONFIG = {
   /** Base font size class for all text */
-  fontSize: 'text-[13px]',
+  fontSize: 'text-[14px]',
   /** Icon size class (width and height) */
   iconSize: 'w-3 h-3',
   /** Spinner text size class */
@@ -1501,8 +1501,8 @@ function BranchDropdown({ onBranch }: BranchDropdownProps) {
       <StyledDropdownMenuContent align="end" minWidth="min-w-64" sideOffset={6}>
         <StyledDropdownMenuItem onClick={handleBranchClick} className="items-start py-2">
           <div className="flex flex-col gap-0.5">
-            <span className="text-[13px] leading-tight">{t('chat.branchFromThisMessage')}</span>
-            <span className="max-w-[220px] whitespace-normal text-xs leading-tight text-muted-foreground">
+            <span className="text-[14px] leading-tight">{t('chat.branchFromThisMessage')}</span>
+            <span className="max-w-[220px] whitespace-normal text-sm leading-tight text-muted-foreground">
               {t('chat.branchFromThisMessageDescription')}
             </span>
           </div>
@@ -2499,7 +2499,7 @@ export function ResponseCard({
             data-search-root="response"
             onMouseDown={handleSelectionPointerDown}
             onMouseUp={handleTextSelection}
-            className="pl-[22px] pr-[16px] py-3 text-sm overflow-y-auto scrollbar-hover"
+            className="pl-[22px] pr-[16px] py-3 text-base overflow-y-auto scrollbar-hover"
             style={{
               maxHeight: MAX_HEIGHT,
               // Subtle fade at top and bottom edges (16px) - only in dark mode for better contrast
@@ -2677,7 +2677,7 @@ export function ResponseCard({
           data-search-root="response"
           onMouseDown={handleSelectionPointerDown}
           onMouseUp={handleTextSelection}
-          className="pl-[22px] pr-4 py-3 text-sm overflow-y-auto scrollbar-hover"
+          className="pl-[22px] pr-4 py-3 text-base overflow-y-auto scrollbar-hover"
           style={{
             maxHeight: MAX_HEIGHT,
             // Subtle fade at top and bottom edges (16px) - only in dark mode for better contrast

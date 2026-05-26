@@ -8,7 +8,7 @@ export function SkillIcon({ icon, iconBg }: { icon: string; iconBg?: string }) {
   return (
     <div
       className={cn(
-        'flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white',
+        'flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white',
         iconBg ?? 'bg-foreground',
       )}
     >
@@ -47,7 +47,7 @@ export function SkillRow({
       <SkillIcon icon={skill.icon} iconBg={skill.iconBg} />
 
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-1.5 truncate text-[13px] font-semibold text-foreground">
+        <p className="flex items-center gap-1.5 truncate text-[14px] font-semibold text-foreground">
           <span className="truncate">{skill.name}</span>
           {isNew && (
             <span className="flex-shrink-0 rounded px-1 py-0.5 text-[10px] font-medium leading-none bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">NEW</span>
@@ -60,7 +60,7 @@ export function SkillRow({
                 {skill.description.slice(0, 20)}...
               </p>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-[240px] text-xs">
+            <TooltipContent side="bottom" className="max-w-[240px] text-sm">
               {skill.description}
             </TooltipContent>
           </Tooltip>
@@ -90,7 +90,7 @@ export function SkillRow({
                 <Minus className="h-3.5 w-3.5" />
               </div>
             </TooltipTrigger>
-            <TooltipContent side="left" className="text-xs">删除</TooltipContent>
+            <TooltipContent side="left" className="text-sm">删除</TooltipContent>
           </Tooltip>
         )}
 
@@ -120,7 +120,7 @@ export function SkillRow({
                   : <Plus className="h-3.5 w-3.5" />}
               </div>
             </TooltipTrigger>
-            <TooltipContent side="left" className="text-xs">{isInstalling ? '安装中…' : '安装'}</TooltipContent>
+            <TooltipContent side="left" className="text-sm">{isInstalling ? '安装中…' : '安装'}</TooltipContent>
           </Tooltip>
         )}
       </div>

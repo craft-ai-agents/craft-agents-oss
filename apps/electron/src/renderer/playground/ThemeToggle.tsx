@@ -20,7 +20,7 @@ export function ThemeToggle() {
           key={m}
           onClick={() => setMode(m)}
           className={cn(
-            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
+            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors',
             mode === m
               ? 'bg-background text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground'

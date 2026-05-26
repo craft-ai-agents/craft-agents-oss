@@ -167,11 +167,11 @@ export function MarkdownDocBlock({ code, className, onUrlClick, onFileClick }: M
           )}
 
           {activeContent === undefined && loading && (
-            <div className="py-8 text-center text-muted-foreground text-[13px]">{t('common.loading')}</div>
+            <div className="py-8 text-center text-muted-foreground text-[14px]">{t('common.loading')}</div>
           )}
 
           {activeContent === undefined && !loading && error && (
-            <div className="py-6 text-center text-destructive/70 text-[13px]">{error}</div>
+            <div className="py-6 text-center text-destructive/70 text-[14px]">{error}</div>
           )}
 
           {!isFullscreen && activeContent !== undefined && (

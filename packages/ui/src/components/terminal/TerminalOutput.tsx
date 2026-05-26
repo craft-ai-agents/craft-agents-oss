@@ -96,7 +96,7 @@ export function TerminalOutput({
       {/* Command section */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2 text-xs" style={{ color: mutedColor }}>
+          <div className="flex items-center gap-2 text-sm" style={{ color: mutedColor }}>
             <Terminal className="w-3 h-3" />
             <span>Command</span>
           </div>
@@ -123,7 +123,7 @@ export function TerminalOutput({
       {/* Output section */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2 text-xs" style={{ color: mutedColor }}>
+          <div className="flex items-center gap-2 text-sm" style={{ color: mutedColor }}>
             <Terminal className="w-3 h-3" />
             <span>{t('terminal.output')}</span>
             {exitCode !== undefined && (

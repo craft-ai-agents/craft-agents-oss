@@ -105,7 +105,7 @@ export function AnnotationOverlayLayer({
           return (
             <Tooltip key={`chip-${chip.id}`}>
               <TooltipTrigger asChild>{chipButton}</TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[280px] whitespace-pre-wrap text-xs">
+              <TooltipContent side="top" className="max-w-[280px] whitespace-pre-wrap text-sm">
                 {tooltipText}
               </TooltipContent>
             </Tooltip>

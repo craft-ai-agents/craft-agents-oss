@@ -229,7 +229,7 @@ function ImageCardStackPlayground({
 
   return (
     <div className="h-full w-full p-4 flex flex-col gap-3">
-      <div className="text-xs text-muted-foreground flex items-center justify-between">
+      <div className="text-sm text-muted-foreground flex items-center justify-between">
         <span>Active card: {Math.min(currentIndex + 1, Math.max(parsedItems.length, 1))} / {parsedItems.length}</span>
         <span>Swipe left/right on top card</span>
       </div>

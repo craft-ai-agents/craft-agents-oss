@@ -143,7 +143,7 @@ function Section({
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium">{title}</h3>
-        <span className="text-xs text-foreground/50">
+        <span className="text-sm text-foreground/50">
           {filteredSpecs.length}/{specs.length} items
         </span>
       </div>
@@ -175,12 +175,12 @@ function CustomShadowsAudit() {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-xs text-foreground/60">Filter:</span>
+        <span className="text-sm text-foreground/60">Filter:</span>
         <button
           type="button"
           onClick={() => setShadowOnly(false)}
           className={cn(
-            'h-7 px-2.5 rounded-[6px] text-xs font-medium transition-colors',
+            'h-7 px-2.5 rounded-[6px] text-sm font-medium transition-colors',
             !shadowOnly ? 'bg-background shadow-minimal text-foreground' : 'bg-foreground/5 text-foreground/70 hover:bg-foreground/10'
           )}
         >
@@ -190,7 +190,7 @@ function CustomShadowsAudit() {
           type="button"
           onClick={() => setShadowOnly(true)}
           className={cn(
-            'h-7 px-2.5 rounded-[6px] text-xs font-medium transition-colors',
+            'h-7 px-2.5 rounded-[6px] text-sm font-medium transition-colors',
             shadowOnly ? 'bg-background shadow-minimal text-foreground' : 'bg-foreground/5 text-foreground/70 hover:bg-foreground/10'
           )}
         >

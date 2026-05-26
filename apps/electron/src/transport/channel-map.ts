@@ -253,7 +253,11 @@ export const CHANNEL_MAP = {
   installLocalZip: invoke(RPC_CHANNELS.skills.INSTALL_LOCAL_ZIP),
   deleteMarketSkill: invoke(RPC_CHANNELS.skills.DELETE_MARKET),
   fetchMarketSkillContent: invoke(RPC_CHANNELS.skills.FETCH_MARKET_CONTENT),
+  checkMarketSkillUpdates: invoke(RPC_CHANNELS.skills.CHECK_MARKET_UPDATES),
+  updateMarketSkillsBatch: invoke(RPC_CHANNELS.skills.UPDATE_MARKET_BATCH),
+  devopsAutoInstall: invoke(RPC_CHANNELS.skills.DEVOPS_AUTO_INSTALL),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
+  onSkillUpdateCheck: listener(RPC_CHANNELS.skills.TRIGGER_UPDATE_CHECK),
 
   // Statuses
   listStatuses: invoke(RPC_CHANNELS.statuses.LIST),

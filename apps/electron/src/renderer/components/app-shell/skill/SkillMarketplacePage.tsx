@@ -10,7 +10,7 @@ import type {
 } from '@craft-agent/shared/skills'
 
 import type { MarketplaceApi, MarketplaceSkillListing, MarketplaceInstallState, MarketplaceCatalogFilters, MarketplacePublishResult } from './types'
-import { USE_MOCK_MARKET, MOCK_MARKET_SKILLS, MOCK_LOCAL_SKILLS } from './mock-data'
+import { USE_MOCK_MARKET, MOCK_MARKET_SKILLS, MOCK_LOCAL_SKILLS, USE_MOCK_SKILL_UPDATE, MOCK_SKILL_UPDATE_RESULT } from './mock-data'
 import { mapCopawSkillToListing } from './copaw-mapping'
 import { defaultMarketplaceApi } from './marketplace-api'
 import { ConfirmDialog } from './components/ConfirmDialog'
@@ -24,7 +24,12 @@ import { PublishSkillDialog } from './components/PublishSkillDialog'
 import { CategoryDropdown, LocalOriginDropdown, LocalCreateDropdown } from './components/Dropdowns'
 import type { PageTab, LocalOriginFilter } from './components/Dropdowns'
 import type { Category } from './copaw-mapping'
-import type { LoadedSkill } from '../../../../shared/types'
+import type { LoadedSkill, SkillUpdateCandidate, SkillOrphan, SkillUpdateItem } from '../../../../shared/types'
+import { SkillUpdateBanner } from './components/SkillUpdateBanner'
+import type { UpdateStatus, UpdateProgress, UpdateResult } from './components/SkillUpdateBanner'
+
+// Session-only guard: resets on app restart
+let updateCheckedThisSession = false
 
 // ============================================================================
 // Main Page
@@ -63,31 +68,6 @@ export function SkillMarketplacePage({
   } | null>(null)
   const [uploadError, setUploadError] = React.useState<string | null>(null)
   const uploadZipInputRef = React.useRef<HTMLInputElement>(null)
-
-  // Persist CoPaw market-installed skill slugs across sessions via localStorage.
-  // useState (not useRef) so that updates trigger re-renders and filteredLocal re-classifies immediately.
-  const [copawInstalledSlugs, setCopawInstalledSlugs] = React.useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem('copaw-installed-slugs')
-      return new Set<string>(stored ? JSON.parse(stored) as string[] : [])
-    } catch { return new Set<string>() }
-  })
-  const addCopawInstalledSlug = React.useCallback((slug: string) => {
-    setCopawInstalledSlugs((prev) => {
-      const next = new Set(prev)
-      next.add(slug)
-      try { localStorage.setItem('copaw-installed-slugs', JSON.stringify([...next])) } catch { /* ignore */ }
-      return next
-    })
-  }, [])
-  const removeCopawInstalledSlug = React.useCallback((slug: string) => {
-    setCopawInstalledSlugs((prev) => {
-      const next = new Set(prev)
-      next.delete(slug)
-      try { localStorage.setItem('copaw-installed-slugs', JSON.stringify([...next])) } catch { /* ignore */ }
-      return next
-    })
-  }, [])
 
   const effectiveCurrentUserId = USE_MOCK_MARKET ? 'MOCK_CURRENT_USER' : currentUserId
 
@@ -231,6 +211,136 @@ export function SkillMarketplacePage({
     }
   }, [localSlugs])
 
+  // ── Skill update state ──────────────────────────────────────────────────────
+  const [updateStatus, setUpdateStatus] = React.useState<UpdateStatus>('idle')
+  const [updateProgress, setUpdateProgress] = React.useState<UpdateProgress>({ total: 0, completed: 0, failedCount: 0 })
+  const [updateResult, setUpdateResult] = React.useState<UpdateResult | null>(null)
+  const [updateOrphans, setUpdateOrphans] = React.useState<SkillOrphan[]>([])
+  const updateCandidatesRef = React.useRef<SkillUpdateCandidate[]>([])
+  const isRunningUpdateRef = React.useRef(false)
+
+  const runUpdateCheck = React.useCallback(async () => {
+    if (isRunningUpdateRef.current) return
+    if (!USE_MOCK_SKILL_UPDATE && !currentUserId) return
+    isRunningUpdateRef.current = true
+    updateCheckedThisSession = true  // block re-trigger while in-flight
+    setUpdateStatus('checking')
+    try {
+      if (USE_MOCK_SKILL_UPDATE) {
+        await new Promise((r) => setTimeout(r, 800))
+        const checkResult = MOCK_SKILL_UPDATE_RESULT
+        updateCandidatesRef.current = checkResult.toUpdate
+        setUpdateOrphans(checkResult.orphans)
+        if (checkResult.toUpdate.length === 0 && checkResult.orphans.length === 0) {
+          setUpdateStatus('idle')
+          return
+        }
+        await new Promise((r) => setTimeout(r, 600))
+        setUpdateStatus('updating')
+        setUpdateProgress({ total: checkResult.toUpdate.length, completed: 0, failedCount: 0 })
+        await new Promise((r) => setTimeout(r, 1200))
+        setUpdateResult({ updated: checkResult.toUpdate.map((c) => c.slug), failed: [], orphans: checkResult.orphans })
+        setUpdateProgress({ total: checkResult.toUpdate.length, completed: checkResult.toUpdate.length, failedCount: 0 })
+        setUpdateStatus('done')
+        return
+      }
+      const checkResult = await window.electronAPI.checkMarketSkillUpdates(workspaceId)
+      updateCandidatesRef.current = checkResult.toUpdate
+      setUpdateOrphans(checkResult.orphans)
+      if (checkResult.toUpdate.length === 0 && checkResult.orphans.length === 0) {
+        setUpdateStatus('idle')
+        return
+      }
+      if (checkResult.toUpdate.length === 0) {
+        setUpdateResult({ updated: [], failed: [], orphans: checkResult.orphans })
+        setUpdateStatus('done')
+        return
+      }
+      const items: SkillUpdateItem[] = checkResult.toUpdate.map((c) => ({
+        slug: c.slug, chineseName: c.chineseName, description: c.description,
+        newVersion: c.newVersion, ownerId: c.ownerId, ownerName: c.ownerName,
+      }))
+      setUpdateProgress({ total: items.length, completed: 0, failedCount: 0 })
+      setUpdateStatus('updating')
+      const batchResult = await window.electronAPI.updateMarketSkillsBatch(workspaceId, items)
+      setUpdateResult({ updated: batchResult.updated, failed: batchResult.failed, orphans: checkResult.orphans })
+      setUpdateProgress({ total: items.length, completed: batchResult.updated.length, failedCount: batchResult.failed.length })
+      setUpdateStatus('done')
+      fetchSkills()
+    } catch {
+      setUpdateStatus('idle')
+    } finally {
+      isRunningUpdateRef.current = false
+      updateCheckedThisSession = false  // update finished — allow re-check on next mount
+    }
+  }, [workspaceId, currentUserId, fetchSkills])
+
+  const handleRetry = React.useCallback(async (slugs: string[]) => {
+    if (isRunningUpdateRef.current) return
+    const items: SkillUpdateItem[] = updateCandidatesRef.current
+      .filter((c) => slugs.includes(c.slug))
+      .map((c) => ({ slug: c.slug, chineseName: c.chineseName, description: c.description, newVersion: c.newVersion, ownerId: c.ownerId, ownerName: c.ownerName }))
+    if (items.length === 0) return
+    isRunningUpdateRef.current = true
+    setUpdateStatus('updating')
+    setUpdateProgress({ total: items.length, completed: 0, failedCount: 0 })
+    try {
+      const batchResult = await window.electronAPI.updateMarketSkillsBatch(workspaceId, items)
+      setUpdateResult((prev) => prev
+        ? { ...prev, updated: [...prev.updated, ...batchResult.updated], failed: prev.failed.filter((f) => !batchResult.updated.includes(f.slug)) }
+        : { updated: batchResult.updated, failed: batchResult.failed, orphans: updateOrphans })
+      setUpdateStatus('done')
+      fetchSkills()
+    } catch {
+      setUpdateResult((prev) => prev
+        ? { ...prev, failed: [...prev.failed, ...items.filter((item) => !prev.updated.includes(item.slug)).map((item) => ({ slug: item.slug, error: '网络错误，请稍后重试' }))] }
+        : { updated: [], failed: items.map((item) => ({ slug: item.slug, error: '网络错误，请稍后重试' })), orphans: updateOrphans })
+      setUpdateStatus('done')
+    } finally {
+      isRunningUpdateRef.current = false
+    }
+  }, [workspaceId, updateOrphans, fetchSkills])
+
+  const handleDeleteOrphans = React.useCallback(async (slugs: string[]) => {
+    for (const slug of slugs) {
+      const skill = localSkills.find((s) => s.slug === slug)
+      if (skill) {
+        setLocalSkillSlugs((prev) => new Set([...prev, slug]))
+        await window.electronAPI.deleteSkill(workspaceId, slug, skill.source, skill.path).catch(() => {})
+      }
+    }
+    setUpdateOrphans((prev) => prev.filter((o) => !slugs.includes(o.slug)))
+    setUpdateResult((prev) => prev ? { ...prev, orphans: (prev.orphans ?? []).filter((o) => !slugs.includes(o.slug)) } : prev)
+    fetchSkills()
+  }, [workspaceId, localSkills, fetchSkills])
+
+  const handleDismissBanner = React.useCallback(() => {
+    setUpdateStatus('idle')
+    setUpdateResult(null)
+    setUpdateOrphans([])
+  }, [])
+
+  // Trigger check on mount (= user clicked skills sidebar item), once per session
+  React.useEffect(() => {
+    const alreadyChecked = !USE_MOCK_SKILL_UPDATE && updateCheckedThisSession
+    if (alreadyChecked) return
+    const timer = setTimeout(() => { runUpdateCheck() }, 1000)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Listen for main-process trigger (startup + 10am cron)
+  React.useEffect(() => {
+    if (!window.electronAPI?.onSkillUpdateCheck) return
+    return window.electronAPI.onSkillUpdateCheck(() => {
+      const alreadyChecked = !USE_MOCK_SKILL_UPDATE && updateCheckedThisSession
+      if (!alreadyChecked && !isRunningUpdateRef.current && updateStatus === 'idle') {
+        runUpdateCheck()
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updateStatus, runUpdateCheck])
+
   const [sortOrder, setSortOrder] = React.useState<'hot' | 'new'>('hot')
 
   const filtered = React.useMemo(() => {
@@ -257,8 +367,7 @@ export function SkillMarketplacePage({
 
   const filteredLocal = React.useMemo(() => {
     const q = localSearch.trim().toLowerCase()
-    const isMarketInstalled = (s: LoadedSkill) =>
-      s.marketplaceOrigin != null || copawInstalledSlugs.has(s.slug)
+    const isMarketInstalled = (s: LoadedSkill) => s.marketplaceOrigin != null
     return localSkills.filter((s) => {
       const matchOrigin =
         localOriginFilter === '全部' ||
@@ -272,7 +381,7 @@ export function SkillMarketplacePage({
         (s.metadata?.author ?? '').toLowerCase().includes(q)
       return matchOrigin && matchQ
     })
-  }, [localSkills, localSearch, localOriginFilter, copawInstalledSlugs])
+  }, [localSkills, localSearch, localOriginFilter])
 
   const handleInstall = React.useCallback(async (s: MarketplaceSkillListing, onInstalled?: () => void) => {
     if (installingIds.has(s.id)) return
@@ -292,13 +401,14 @@ export function SkillMarketplacePage({
         s.name,          // chineseName (已由 mapCopawSkillToListing 取 chineseName ?? name)
         s.description,
         s.latestVersion,
+        s.ownerId,
+        s.owner,
       )
       if (result.conflicts.length > 0 && result.count === 0) {
         const conflictNames = result.conflicts.map((c) => c.skill_name).join('、')
         toast.warning(`安装冲突，与本地已有技能冲突：${conflictNames}`)
         return
       }
-      addCopawInstalledSlug(s.slug)
       setInstalledIds((prev) => new Set([...prev, s.id]))
       // Clear from optimistic-hide set in case the user is reinstalling a previously uninstalled skill
       setLocalSkillSlugs((prev) => { const n = new Set(prev); n.delete(s.slug); return n })
@@ -310,7 +420,7 @@ export function SkillMarketplacePage({
     } finally {
       setInstallingIds((prev) => { const n = new Set(prev); n.delete(s.id); return n })
     }
-  }, [workspaceId, installingIds, addCopawInstalledSlug])
+  }, [workspaceId, installingIds])
 
   const handleUninstall = React.useCallback((s: MarketplaceSkillListing) => {
     setConfirmDialog({
@@ -351,7 +461,6 @@ export function SkillMarketplacePage({
         setSelectedLocalSkill(null)
         window.electronAPI.deleteSkill(workspaceId, s.slug, s.source, s.path)
           .then(() => {
-            removeCopawInstalledSlug(s.slug)
             // Clear from installedIds so the market tab shows the skill as not-installed
             setInstalledIds((prev) => { const n = new Set(prev); n.delete(s.slug); return n })
             // Clear from uploadedSkills so it doesn't resurrect via the de-dup logic in localSkills
@@ -365,7 +474,7 @@ export function SkillMarketplacePage({
           })
       },
     })
-  }, [workspaceId, removeCopawInstalledSlug])
+  }, [workspaceId])
 
   const handleMarketRefresh = React.useCallback(() => {
     if (USE_MOCK_MARKET) return
@@ -433,7 +542,7 @@ export function SkillMarketplacePage({
       onClose={() => setSelectedLocalSkill(null)}
       onUninstall={handleLocalUninstall}
       onPublish={(s) => { setSelectedLocalSkill(null); setPublishSourceSkill(s); setPublishOpen(true) }}
-      isFromMarket={selectedLocalSkill ? copawInstalledSlugs.has(selectedLocalSkill.slug) : false}
+      isFromMarket={selectedLocalSkill ? selectedLocalSkill.marketplaceOrigin != null : false}
     />
     <div className="flex h-full flex-col bg-background">
 
@@ -444,7 +553,7 @@ export function SkillMarketplacePage({
             type="button"
             onClick={() => { setTab('market'); fetchSkills() }}
             className={cn(
-              'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors',
+              'rounded-lg px-3 py-1.5 text-[14px] font-medium transition-colors',
               tab === 'market'
                 ? 'bg-foreground/[0.08] text-foreground'
                 : 'text-muted-foreground hover:text-foreground',
@@ -456,7 +565,7 @@ export function SkillMarketplacePage({
             type="button"
             onClick={() => { setTab('local'); fetchSkills() }}
             className={cn(
-              'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors',
+              'rounded-lg px-3 py-1.5 text-[14px] font-medium transition-colors',
               tab === 'local'
                 ? 'bg-foreground/[0.08] text-foreground'
                 : 'text-muted-foreground hover:text-foreground',
@@ -469,7 +578,7 @@ export function SkillMarketplacePage({
           <button
             type="button"
             onClick={() => { setPublishSourceSkill(null); setPublishOpen(true) }}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3.5 py-1.5 text-[13px] font-medium text-foreground shadow-xs transition-colors hover:bg-foreground/[0.04]"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3.5 py-1.5 text-[14px] font-medium text-foreground shadow-xs transition-colors hover:bg-foreground/[0.04]"
           >
             发布技能
           </button>
@@ -489,6 +598,16 @@ export function SkillMarketplacePage({
         {tab === 'local' ? (
           /* ── 本地技能 Tab ── */
           <div>
+            {/* 更新横幅 */}
+            <SkillUpdateBanner
+              status={updateStatus}
+              progress={updateProgress}
+              result={updateResult}
+              orphans={updateOrphans}
+              onRetry={handleRetry}
+              onDeleteOrphans={handleDeleteOrphans}
+              onDismiss={handleDismissBanner}
+            />
             {/* 搜索 */}
             <div className="mb-5 flex items-center gap-2">
               <div className="relative flex-1">
@@ -498,7 +617,7 @@ export function SkillMarketplacePage({
                   value={localSearch}
                   onChange={(e) => setLocalSearch(e.target.value)}
                   placeholder="搜索本地技能"
-                  className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 />
               </div>
               <LocalOriginDropdown value={localOriginFilter} onChange={setLocalOriginFilter} />
@@ -513,7 +632,7 @@ export function SkillMarketplacePage({
                 <button
                   type="button"
                   onClick={() => setTab('market')}
-                  className="mt-1 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-85"
+                  className="mt-1 rounded-lg bg-foreground px-4 py-2 text-[14px] font-medium text-background transition-opacity hover:opacity-85"
                 >
                   前往市场
                 </button>
@@ -527,7 +646,7 @@ export function SkillMarketplacePage({
                 <>
                   {(['本地上传', '市场安装'] as const).map((section) => {
                     const sectionSkills = displayedLocalSkills.filter((s) => {
-                      const fromMarket = s.marketplaceOrigin != null || copawInstalledSlugs.has(s.slug)
+                      const fromMarket = s.marketplaceOrigin != null
                       return section === '市场安装' ? fromMarket : !fromMarket
                     })
                     if (sectionSkills.length === 0) return null
@@ -535,7 +654,7 @@ export function SkillMarketplacePage({
                       <div key={section} className="mb-8">
                         <h2 className="mb-3 text-[15px] font-semibold text-foreground">
                           {section}
-                          <span className="ml-2 text-[13px] font-normal text-muted-foreground">{sectionSkills.length}</span>
+                          <span className="ml-2 text-[14px] font-normal text-muted-foreground">{sectionSkills.length}</span>
                         </h2>
                         <LocalSkillGrid
                           skills={sectionSkills}
@@ -550,7 +669,7 @@ export function SkillMarketplacePage({
                 <>
                   <h2 className="mb-3 text-[15px] font-semibold text-foreground">
                     {localOriginFilter}
-                    <span className="ml-2 text-[13px] font-normal text-muted-foreground">{displayedLocalSkills.length}</span>
+                    <span className="ml-2 text-[14px] font-normal text-muted-foreground">{displayedLocalSkills.length}</span>
                   </h2>
                   <LocalSkillGrid
                     skills={displayedLocalSkills}
@@ -563,7 +682,7 @@ export function SkillMarketplacePage({
 
             {/* 空状态：有技能但当前搜索/筛选无结果 */}
             {displayedLocalSkills.length === 0 && (localSkills.length > 0 || localSearch) && (
-              <div className="py-12 text-center text-[13px] text-muted-foreground">
+              <div className="py-12 text-center text-[14px] text-muted-foreground">
                 {localSearch ? '没有匹配的技能' : '当前分类下没有技能'}
               </div>
             )}
@@ -585,7 +704,7 @@ export function SkillMarketplacePage({
               value={marketSearch}
               onChange={(e) => setMarketSearch(e.target.value)}
               placeholder="搜索技能"
-              className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
           <div className="flex h-9 items-center rounded-lg border border-border bg-background p-0.5">
@@ -613,8 +732,8 @@ export function SkillMarketplacePage({
           <CategoryDropdown value={category} onChange={setCategory} />
         </div>
 
-        {/* 精选推荐 Banner（搜索时隐藏） */}
-        {!marketSearch.trim() && (
+        {/* 精选推荐 Banner（搜索时隐藏，无数据时也隐藏） */}
+        {!marketSearch.trim() && marketSkills.length > 0 && (
           <div className="mb-8">
             <h2 className="mb-3 text-[15px] font-semibold text-foreground">精选推荐</h2>
             <HeroBanner
@@ -628,7 +747,7 @@ export function SkillMarketplacePage({
 
         {/* 技能列表 */}
         {filtered.length === 0 ? (
-          <p className="py-12 text-center text-[13px] text-muted-foreground">
+          <p className="py-12 text-center text-[14px] text-muted-foreground">
             {marketSearch.trim() ? '没有匹配的技能' : '暂无技能'}
           </p>
         ) : category === '全部' ? (
@@ -686,7 +805,7 @@ export function SkillMarketplacePageHeader({
         type="button"
         disabled={!canPublish}
         onClick={onPublishClick}
-        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted disabled:opacity-50"
+        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted disabled:opacity-50"
       >
         <UserCog className="h-3.5 w-3.5" />
         {canPublish ? '发布技能' : '登录后发布'}
@@ -703,7 +822,7 @@ export function MarketplaceEmptyState({ canPublish, onPublishClick }: { canPubli
         type="button"
         disabled={!canPublish}
         onClick={onPublishClick}
-        className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted disabled:opacity-50"
+        className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted disabled:opacity-50"
       >
         <UserCog className="h-3.5 w-3.5" />
         {canPublish ? '发布技能' : '登录后发布'}
@@ -730,12 +849,12 @@ export function MarketplaceListingCard({
         selected ? 'border-foreground/40 bg-muted/60' : 'border-border hover:bg-muted/40',
       )}
     >
-      <div className={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white', listing.iconBg ?? 'bg-foreground')}>
+      <div className={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white', listing.iconBg ?? 'bg-foreground')}>
         {listing.icon}
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{listing.name}</p>
-        <p className="truncate text-xs text-muted-foreground">{listing.description}</p>
+        <p className="truncate text-sm text-muted-foreground">{listing.description}</p>
       </div>
     </button>
   )
@@ -772,12 +891,12 @@ export function LocalSkillMarketplaceStatus({
         <span className="text-muted-foreground">/{metadata.marketplaceSlug}</span>
         <span className="text-muted-foreground">v{metadata.installedVersion}</span>
         {metadata.modified && (
-          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-200">
+          <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-sm text-amber-800 dark:text-amber-200">
             有未发布的改动
           </span>
         )}
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">市场 ID：{metadata.marketplaceId}</p>
+      <p className="mt-2 text-sm text-muted-foreground">市场 ID：{metadata.marketplaceId}</p>
     </div>
   )
 }

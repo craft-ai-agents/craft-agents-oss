@@ -296,7 +296,7 @@ function WorkspaceFileRow({
         doubleActivateWorkspaceEntry(file, { onOpenFile })
       }}
       className={cn(
-        "group flex w-full min-w-0 overflow-hidden items-center gap-2 rounded-[6px] py-[5px] text-[13px] select-none outline-none text-left",
+        "group flex w-full min-w-0 overflow-hidden items-center gap-2 rounded-[6px] py-[5px] text-[14px] select-none outline-none text-left",
         "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
         "hover:bg-sidebar-hover transition-colors px-2"
       )}
@@ -472,12 +472,12 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, cla
   return (
     <div className={cn('flex flex-col h-full min-h-0', className)}>
       <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
-        <span className="text-xs font-medium text-muted-foreground">{t('rightSidebar.workspaceTab')}</span>
+        <span className="text-sm font-medium text-muted-foreground">{t('rightSidebar.workspaceTab')}</span>
         {viewPath && (
           <button
             type="button"
             onClick={() => window.electronAPI.showInFolder(viewPath)}
-            className="text-xs text-foreground/50 hover:text-foreground/80 hover:underline underline-offset-2 transition-colors"
+            className="text-sm text-foreground/50 hover:text-foreground/80 hover:underline underline-offset-2 transition-colors"
           >
             {t('rightSidebar.viewFolder')}
           </button>
@@ -487,7 +487,7 @@ export function WorkspaceFilesSection({ workspaceId, workspacePath, cwdPath, cla
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-2 min-h-0">
         {files.length === 0 ? (
           <div className="px-4 text-muted-foreground select-none">
-            <p className="text-xs">
+            <p className="text-sm">
               {isLoading ? t('common.loading') : !cwdPath ? t('git.noWorkingDirectory') : t('rightSidebar.noWorkspaceFiles')}
             </p>
           </div>

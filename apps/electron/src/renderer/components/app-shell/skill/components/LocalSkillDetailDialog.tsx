@@ -31,7 +31,7 @@ export function LocalSkillMoreMenu({ slug, workspaceId }: { slug: string; worksp
           <button
             type="button"
             onClick={() => { setOpen(false); window.electronAPI.openSkillInEditor(workspaceId, slug) }}
-            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[13px] text-foreground transition-colors hover:bg-foreground/[0.06]"
+            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[14px] text-foreground transition-colors hover:bg-foreground/[0.06]"
           >
             <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
             在编辑器中打开
@@ -39,7 +39,7 @@ export function LocalSkillMoreMenu({ slug, workspaceId }: { slug: string; worksp
           <button
             type="button"
             onClick={() => { setOpen(false); window.electronAPI.openSkillInFinder(workspaceId, slug) }}
-            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[13px] text-foreground transition-colors hover:bg-foreground/[0.06]"
+            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[14px] text-foreground transition-colors hover:bg-foreground/[0.06]"
           >
             <Folder className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
             在文件夹中显示
@@ -64,7 +64,7 @@ export function ExpandableDescription({ text }: { text: string }) {
     <div className="mt-0.5">
       <p
         ref={ref}
-        className={`text-[13px] text-muted-foreground ${expanded ? '' : 'line-clamp-2'}`}
+        className={`text-[14px] text-muted-foreground ${expanded ? '' : 'line-clamp-2'}`}
       >
         {text}
       </p>
@@ -112,9 +112,9 @@ export function LocalSkillDetailDialog({
             <div>
               <div className="flex items-baseline gap-2">
                 <h2 className="text-[18px] font-bold text-foreground">{name}</h2>
-                <span className="text-[13px] font-normal text-muted-foreground">本地</span>
+                <span className="text-[14px] font-normal text-muted-foreground">本地</span>
               </div>
-              {description ? <ExpandableDescription text={description} /> : <p className="mt-0.5 text-[13px] text-muted-foreground">—</p>}
+              {description ? <ExpandableDescription text={description} /> : <p className="mt-0.5 text-[14px] text-muted-foreground">—</p>}
             </div>
           </div>
           <div className="ml-4 flex flex-shrink-0 items-center gap-2 pt-1">
@@ -138,7 +138,7 @@ export function LocalSkillDetailDialog({
         </div>
 
         {/* Markdown 内容区 */}
-        <div className="mx-7 mb-5 min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/20 px-6 py-5 text-[13px] leading-relaxed">
+        <div className="mx-7 mb-5 min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/20 px-6 py-5 text-[14px] leading-relaxed">
           {skill.metadata?.extraMetadata && (
             <div className="mb-4">
               <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">Metadata</p>
@@ -159,7 +159,7 @@ export function LocalSkillDetailDialog({
           <button
             type="button"
             onClick={() => onUninstall(skill)}
-            className="rounded-lg bg-red-50 px-4 py-2 text-[13px] font-medium text-red-500 transition-colors hover:bg-red-100 dark:bg-red-500/15 dark:text-red-400 dark:hover:bg-red-500/25"
+            className="rounded-lg bg-red-50 px-4 py-2 text-[14px] font-medium text-red-500 transition-colors hover:bg-red-100 dark:bg-red-500/15 dark:text-red-400 dark:hover:bg-red-500/25"
           >
             卸载
           </button>
@@ -169,7 +169,7 @@ export function LocalSkillDetailDialog({
               onClose()
               navigate(routes.action.newSession({ input: `[skill:${skill.slug}] ` }))
             }}
-            className="inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-85"
+            className="inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-[14px] font-medium text-background transition-opacity hover:opacity-85"
           >
             <MessageCircle className="h-3.5 w-3.5" />
             在对话中试用

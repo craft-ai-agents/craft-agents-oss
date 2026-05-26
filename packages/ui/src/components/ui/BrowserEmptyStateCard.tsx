@@ -28,7 +28,7 @@ export function BrowserEmptyStateCard({
     <div className="w-full h-full flex items-center justify-center p-8">
       <div className="w-full max-w-[700px] bg-background shadow-minimal rounded-[8px] overflow-hidden border border-border/30">
         <div className="px-4 py-3 border-b border-border/30 flex items-center bg-muted/20 select-none">
-          <h3 className="text-[13px] font-medium text-foreground tracking-tight">
+          <h3 className="text-[14px] font-medium text-foreground tracking-tight">
             {title}
           </h3>
         </div>
@@ -57,7 +57,7 @@ export function BrowserEmptyStateCard({
         </div>
 
         {showSafetyHint && (
-          <div className="px-4 py-2.5 border-t border-border/30 flex items-center gap-2 bg-muted/20 text-[13px] text-foreground/55">
+          <div className="px-4 py-2.5 border-t border-border/30 flex items-center gap-2 bg-muted/20 text-[14px] text-foreground/55">
             <p>
               {t('browser.safetyHint')}
             </p>

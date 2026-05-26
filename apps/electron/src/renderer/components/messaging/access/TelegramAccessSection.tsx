@@ -240,7 +240,7 @@ function AllowedUsersCollapsible({
           <div className="text-sm font-medium">
             {t('settings.messaging.telegram.access.allowedUsersTitle')}
           </div>
-          <div className="mt-0.5 truncate text-xs text-foreground/50">{subtitle}</div>
+          <div className="mt-0.5 truncate text-sm text-foreground/50">{subtitle}</div>
         </div>
         {isExpanded ? (
           <ChevronDown className="h-4 w-4 shrink-0 text-foreground/50" />
@@ -307,10 +307,10 @@ function SectionDivider() {
 function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="px-4 pt-3 pb-1">
-      <div className="text-xs font-medium uppercase tracking-wide text-foreground/50">
+      <div className="text-sm font-medium uppercase tracking-wide text-foreground/50">
         {title}
       </div>
-      <div className="mt-0.5 text-xs text-foreground/50">{subtitle}</div>
+      <div className="mt-0.5 text-sm text-foreground/50">{subtitle}</div>
     </div>
   )
 }

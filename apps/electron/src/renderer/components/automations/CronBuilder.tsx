@@ -104,7 +104,7 @@ function CronField({ field, value, onChange }: CronFieldProps) {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={cn(
-          'w-full px-2 py-1.5 text-xs font-mono text-center rounded-md border border-border/50',
+          'w-full px-2 py-1.5 text-sm font-mono text-center rounded-md border border-border/50',
           'bg-background focus:outline-none focus:ring-1 focus:ring-accent/50',
         )}
         placeholder="*"
@@ -177,7 +177,7 @@ export function CronBuilder({
     <div className={cn('space-y-5', className)}>
       {/* Layer 1: Common Schedules */}
       <div className="space-y-2">
-        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider pl-1">
+        <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider pl-1">
           Common Schedules
         </h4>
         <div className="flex flex-wrap gap-1.5">
@@ -186,7 +186,7 @@ export function CronBuilder({
               key={preset.cron}
               onClick={() => handlePreset(preset.cron)}
               className={cn(
-                'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
+                'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
                 rawInput === preset.cron
                   ? 'bg-foreground/10 text-foreground ring-1 ring-border/50'
                   : 'bg-foreground/[0.03] text-foreground/70 hover:bg-foreground/[0.06] shadow-minimal'
@@ -200,7 +200,7 @@ export function CronBuilder({
 
       {/* Layer 2: Custom Schedule */}
       <div className="space-y-2">
-        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider pl-1">
+        <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider pl-1">
           Custom Schedule
         </h4>
         <div className="grid grid-cols-5 gap-2">
@@ -217,7 +217,7 @@ export function CronBuilder({
 
       {/* Layer 3: Advanced */}
       <div className="space-y-2">
-        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider pl-1">
+        <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider pl-1">
           Advanced
         </h4>
         <input
@@ -234,7 +234,7 @@ export function CronBuilder({
           placeholder="* * * * *"
         />
         {validationError && (
-          <div className="flex items-center gap-1.5 text-xs text-destructive">
+          <div className="flex items-center gap-1.5 text-sm text-destructive">
             <AlertCircle className="h-3 w-3" />
             {validationError}
           </div>
@@ -252,12 +252,12 @@ export function CronBuilder({
         {/* Next runs */}
         {nextRuns.length > 0 && !validationError && (
           <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Next runs:</span>
+            <span className="text-sm text-muted-foreground">Next runs:</span>
             <div className="flex flex-col gap-0.5">
               {(() => {
                 const spansYears = nextRuns.length > 1 && nextRuns[0].getFullYear() !== nextRuns[nextRuns.length - 1].getFullYear()
                 return nextRuns.map((date, i) => (
-                  <span key={i} className="text-xs text-foreground/70 tabular-nums">
+                  <span key={i} className="text-sm text-foreground/70 tabular-nums">
                     {date.toLocaleDateString('en-US', {
                       weekday: 'short',
                       month: 'short',
@@ -276,7 +276,7 @@ export function CronBuilder({
         )}
 
         {/* Timezone */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>{t('automations.labelTimezone')}:</span>
           <span className="font-medium text-foreground/70">{timezone || t('automations.systemDefault')}</span>
         </div>

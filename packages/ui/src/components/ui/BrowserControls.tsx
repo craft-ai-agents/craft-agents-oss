@@ -251,7 +251,7 @@ export function BrowserControls({
           onKeyDown={handleKeyDown}
           placeholder={t('browser.urlPlaceholder')}
           className={cn(
-            'w-full rounded-[8px] bg-transparent px-3 pl-8 text-[13px] text-foreground/70 outline-none transition-all',
+            'w-full rounded-[8px] bg-transparent px-3 pl-8 text-[14px] text-foreground/70 outline-none transition-all',
             compact ? 'h-[28px]' : 'h-[30px]',
             !safeThemeColor && (isFocused
               ? 'bg-background border border-transparent shadow-minimal'

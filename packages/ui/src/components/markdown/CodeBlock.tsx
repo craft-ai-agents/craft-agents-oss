@@ -180,7 +180,7 @@ export function CodeBlock({ code, language = 'text', className, mode = 'full', f
   return (
     <div className={cn('relative group rounded-[8px] overflow-hidden border bg-muted/30', className)}>
       {/* Language label + copy button */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-muted/50 border-b text-xs">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-muted/50 border-b text-sm">
         <span className="text-muted-foreground font-medium uppercase tracking-wide">
           {resolvedLang !== 'text' ? resolvedLang : 'plain text'}
         </span>
@@ -225,7 +225,7 @@ export function CodeBlock({ code, language = 'text', className, mode = 'full', f
 export function InlineCode({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <code className={cn(
-      'pl-1 pr-1 py-0 rounded bg-foreground/[0.04] font-mono text-[13px]',
+      'pl-1 pr-1 py-0 rounded bg-foreground/[0.04] font-mono text-[14px]',
       className
     )}>
       {children}

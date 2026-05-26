@@ -28,12 +28,11 @@ import {
   Columns2,
   CloudUpload,
   RefreshCw,
-  Tag,
   Send,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import type { LabelConfig } from '@craft-agent/shared/labels'
-import { LabelMenuItems, ShareMenuItems } from './SessionMenuParts'
+import { ShareMenuItems } from './SessionMenuParts'
 import { getFileManagerName } from '@/lib/platform'
 import type { SessionMeta } from '@/atoms/sessions'
 import { hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
@@ -85,7 +84,6 @@ export function SessionMenu({
   const isFlagged = item.isFlagged ?? false
   const isArchived = item.isArchived ?? false
   const sharedUrl = item.sharedUrl
-  const sessionLabels = item.labels ?? []
   const _hasMessages = hasMessagesMeta(item)
   const _hasUnread = hasUnreadMeta(item)
 
@@ -129,29 +127,6 @@ export function SessionMenu({
       )}
 
       <Separator />
-
-      {/* Labels submenu - hierarchical label tree with nested sub-menus and toggle checkmarks */}
-      {labels.length > 0 && (
-        <Sub>
-          <SubTrigger className="pr-2">
-            <Tag className="h-3.5 w-3.5" />
-            <span className="flex-1">{t("sessionMenu.labels")}</span>
-            {sessionLabels.length > 0 && (
-              <span className="text-[10px] text-muted-foreground tabular-nums -mr-2.5">
-                {sessionLabels.length}
-              </span>
-            )}
-          </SubTrigger>
-          <SubContent>
-            <LabelMenuItems
-              labels={labels}
-              appliedLabelIds={actions.appliedLabelIds}
-              onToggle={actions.toggleLabel}
-              menu={{ MenuItem, Separator, Sub, SubTrigger, SubContent }}
-            />
-          </SubContent>
-        </Sub>
-      )}
 
       {/* Flag/Unflag */}
       {!isFlagged ? (

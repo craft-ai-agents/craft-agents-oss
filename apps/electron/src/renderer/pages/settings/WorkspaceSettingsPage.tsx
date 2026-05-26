@@ -485,7 +485,7 @@ export default function WorkspaceSettingsPage() {
                     ) : wsIconUrl ? (
                       <img src={wsIconUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <span className="text-xs font-medium text-muted-foreground">
+                      <span className="text-sm font-medium text-muted-foreground">
                         {wsName?.charAt(0)?.toUpperCase() || 'W'}
                       </span>
                     )}
@@ -560,7 +560,7 @@ export default function WorkspaceSettingsPage() {
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
                     transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                    className="text-xs text-destructive mt-1 overflow-hidden"
+                    className="text-sm text-destructive mt-1 overflow-hidden"
                   >
                     {modeCyclingError}
                   </motion.p>
@@ -629,7 +629,7 @@ export default function WorkspaceSettingsPage() {
                         {teamContextPreview.triggerTerms.map((t, i) => (
                           <span
                             key={i}
-                            className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-foreground/5 text-foreground/70 font-mono"
+                            className="inline-flex items-center px-2 py-0.5 text-sm rounded-full bg-foreground/5 text-foreground/70 font-mono"
                           >
                             {t.term}
                             <span className="ml-1 text-foreground/40">({t.kind})</span>
@@ -643,14 +643,14 @@ export default function WorkspaceSettingsPage() {
                   <div className="border-t border-border/50 px-4 py-3">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="text-sm font-medium">Policy Block</h4>
-                      <span className="text-xs text-muted-foreground">{teamContextPreview.documentsCount} document(s)</span>
+                      <span className="text-sm text-muted-foreground">{teamContextPreview.documentsCount} document(s)</span>
                     </div>
                     {teamContextPreview.policyXml ? (
-                      <pre className="text-xs font-mono text-foreground/70 bg-foreground/[0.03] rounded-lg p-3 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto">
+                      <pre className="text-sm font-mono text-foreground/70 bg-foreground/[0.03] rounded-lg p-3 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto">
                         {teamContextPreview.policyXml}
                       </pre>
                     ) : (
-                      <p className="text-xs text-muted-foreground">No policy generated (no valid entries).</p>
+                      <p className="text-sm text-muted-foreground">No policy generated (no valid entries).</p>
                     )}
                   </div>
 
@@ -667,13 +667,13 @@ export default function WorkspaceSettingsPage() {
                     {previewLoading && (
                       <div className="flex items-center gap-2 py-2">
                         <Spinner className="text-muted-foreground text-[8px]" />
-                        <span className="text-xs text-muted-foreground">Matching...</span>
+                        <span className="text-sm text-muted-foreground">Matching...</span>
                       </div>
                     )}
                     {!previewLoading && teamContextPreview.prefetchResults && teamContextPreview.prefetchResults.length > 0 && (
                       <div className="space-y-2 mt-1">
                         {teamContextPreview.prefetchResults.map((r, i) => (
-                          <div key={i} className="text-xs bg-foreground/[0.03] rounded-lg p-3 space-y-1">
+                          <div key={i} className="text-sm bg-foreground/[0.03] rounded-lg p-3 space-y-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-medium">{r.kind}</span>
                               <span className={cn(
@@ -696,7 +696,7 @@ export default function WorkspaceSettingsPage() {
                       </div>
                     )}
                     {!previewLoading && previewSampleMessage && (!teamContextPreview.prefetchResults || teamContextPreview.prefetchResults.length === 0) && (
-                      <p className="text-xs text-muted-foreground">No matching entries found.</p>
+                      <p className="text-sm text-muted-foreground">No matching entries found.</p>
                     )}
                   </div>
                 </SettingsCard>
@@ -746,7 +746,7 @@ export default function WorkspaceSettingsPage() {
                   </div>
                 )}
                 <div className="border-t border-border/50 px-4 py-3 flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-sm text-muted-foreground">
                     {userProfileFetchedAt
                       ? t("settings.workspace.userProfileLastRefresh", { time: new Date(userProfileFetchedAt).toLocaleString() })
                       : t("settings.workspace.userProfileNotConfigured")

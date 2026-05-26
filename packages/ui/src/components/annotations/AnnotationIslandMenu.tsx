@@ -118,7 +118,7 @@ export function AnnotationIslandMenu({
               type="button"
               onClick={onOpenFollowUp}
               className={cn(
-                'h-[30px] px-2.5 rounded-[8px] text-[13px] font-medium inline-flex items-center gap-1.5',
+                'h-[30px] px-2.5 rounded-[8px] text-[14px] font-medium inline-flex items-center gap-1.5',
                 'text-foreground/85 hover:text-foreground hover:bg-foreground/5',
                 'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
               )}

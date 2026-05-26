@@ -85,7 +85,7 @@ export function CodePreviewOverlay({
         <div className="px-6 mb-4">
           <div className="w-full max-w-[850px] mx-auto">
             <div className="bg-background shadow-minimal rounded-[8px] px-4 py-3 font-mono">
-              <div className="text-xs font-semibold text-muted-foreground/70 mb-1">Command</div>
+              <div className="text-sm font-semibold text-muted-foreground/70 mb-1">Command</div>
               <div className="text-sm text-foreground overflow-x-auto">
                 <span className="text-muted-foreground select-none">$ </span>
                 <span>{command}</span>

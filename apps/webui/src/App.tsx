@@ -26,7 +26,7 @@ function LoadingScreen() {
   return (
     <div className="flex flex-col items-center justify-center h-screen font-sans text-foreground/50 gap-3">
       <div className="animate-spin w-6 h-6 border-2 border-current border-t-transparent rounded-full" />
-      <p className="text-[13px]">{t("webui.connectingToServer")}</p>
+      <p className="text-[14px]">{t("webui.connectingToServer")}</p>
     </div>
   )
 }
@@ -37,11 +37,11 @@ function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => voi
   return (
     <div className="flex flex-col items-center justify-center h-screen font-sans text-foreground/50 gap-3">
       <p className="text-base font-medium text-destructive">{t("webui.connectionFailed")}</p>
-      <p className="text-[13px] max-w-md text-center">{message}</p>
+      <p className="text-[14px] max-w-md text-center">{message}</p>
       <div className="flex gap-2 mt-2">
         <button
           onClick={onRetry}
-          className="px-4 py-1.5 rounded-md bg-background shadow-minimal text-[13px] text-foreground/70 cursor-pointer"
+          className="px-4 py-1.5 rounded-md bg-background shadow-minimal text-[14px] text-foreground/70 cursor-pointer"
         >
           {t("common.retry")}
         </button>
@@ -51,7 +51,7 @@ function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => voi
               window.location.href = '/login'
             })
           }}
-          className="px-4 py-1.5 rounded-md bg-background shadow-minimal text-[13px] text-foreground/70 cursor-pointer"
+          className="px-4 py-1.5 rounded-md bg-background shadow-minimal text-[14px] text-foreground/70 cursor-pointer"
         >
           {t("webui.logOut")}
         </button>
