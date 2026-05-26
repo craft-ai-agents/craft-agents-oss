@@ -365,6 +365,9 @@ export function FreeFormInput({
     const model = availableModels.find(m => typeof m !== 'string' && m.id === currentModel)
     return typeof model !== 'string' && model?.supportsThinking === false
   }, [availableModels, currentModel])
+  const thinkingToggleLabel = thinkingDisabled
+    ? t('thinking.notSupported')
+    : t(getThinkingEnabledNameKey(thinkingEnabled))
 
   // Get display name for current model (full name, not short name)
   const currentModelDisplayName = React.useMemo(() => {
@@ -1913,31 +1916,31 @@ export function FreeFormInput({
 
           {/* Right side: Model + Send - never shrink so they're always visible */}
           <div className="flex items-center shrink-0">
-          {onThinkingEnabledChange && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={thinkingDisabled ? t('thinking.notSupported') : t(getThinkingEnabledNameKey(thinkingEnabled))}
-                  aria-pressed={thinkingEnabled}
-                  disabled={thinkingDisabled}
-                  onClick={() => onThinkingEnabledChange(!thinkingEnabled)}
-                  className={cn(
-                    "input-toolbar-btn inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors select-none",
-                    thinkingEnabled && !thinkingDisabled
-                      ? "bg-foreground/10 text-foreground hover:bg-foreground/15"
-                      : "text-foreground/50 hover:bg-foreground/5 hover:text-foreground",
-                    thinkingDisabled && "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-foreground/50",
-                  )}
-                >
-                  <Brain className="h-4 w-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                {thinkingDisabled ? t('thinking.notSupported') : t(getThinkingEnabledNameKey(thinkingEnabled))}
-              </TooltipContent>
-            </Tooltip>
-          )}
+            {onThinkingEnabledChange && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={thinkingToggleLabel}
+                    aria-pressed={thinkingEnabled}
+                    disabled={thinkingDisabled}
+                    onClick={() => onThinkingEnabledChange(!thinkingEnabled)}
+                    className={cn(
+                      "input-toolbar-btn inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors select-none",
+                      thinkingEnabled && !thinkingDisabled
+                        ? "bg-foreground/10 text-foreground hover:bg-foreground/15"
+                        : "text-foreground/50 hover:bg-foreground/5 hover:text-foreground",
+                      thinkingDisabled && "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-foreground/50",
+                    )}
+                  >
+                    <Brain className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {thinkingToggleLabel}
+                </TooltipContent>
+              </Tooltip>
+            )}
 
           {/* 5. Model/Connection Selector - Hidden in compact mode (EditPopover embedding) */}
           {!compactMode && (

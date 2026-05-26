@@ -71,7 +71,9 @@ function PromptActionBadges({ action, t }: { action: PromptAction; t: (key: stri
   const { llmConnection, model, thinkingEnabled } = action
   if (!llmConnection && !model && thinkingEnabled === undefined) return null
 
-  const thinkingLabel = thinkingEnabled !== undefined ? t(getPromptThinkingBadgeKey(thinkingEnabled)) : ''
+  const thinkingLabel = thinkingEnabled === undefined
+    ? undefined
+    : t(getPromptThinkingBadgeKey(thinkingEnabled))
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
@@ -93,7 +95,7 @@ function PromptActionBadges({ action, t }: { action: PromptAction; t: (key: stri
           {model}
         </Badge>
       )}
-      {thinkingEnabled !== undefined && (
+      {thinkingLabel !== undefined && (
         <Badge
           variant="secondary"
           className="text-[10px] px-1.5 py-0 font-normal"
