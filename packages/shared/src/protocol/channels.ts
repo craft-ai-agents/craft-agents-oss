@@ -285,6 +285,7 @@ export const RPC_CHANNELS = {
     FETCH_MARKET_CONTENT: 'skills:fetchMarketContent',
     CHECK_MARKET_UPDATES: 'skills:checkMarketUpdates',
     UPDATE_MARKET_BATCH: 'skills:updateMarketBatch',
+    DEVOPS_AUTO_INSTALL: 'skills:devopsAutoInstall',
     TRIGGER_UPDATE_CHECK: 'skills:triggerUpdateCheck',
     CHANGED: 'skills:changed',
   },

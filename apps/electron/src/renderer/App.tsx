@@ -673,6 +673,9 @@ export default function App() {
         const wsId = await window.electronAPI.getWindowWorkspace()
         setWindowWorkspaceId(wsId)
 
+        // Auto-install DevOps skills on login (idempotent: already-installed skills are skipped)
+        if (wsId) window.electronAPI.devopsAutoInstall(wsId).catch(() => {})
+
         const needs = await window.electronAPI.getSetupNeeds()
         setSetupNeeds(needs)
 
@@ -1976,6 +1979,8 @@ export default function App() {
               setSsoLoginResult(null)
               const wsId = await window.electronAPI.getWindowWorkspace()
               setWindowWorkspaceId(wsId)
+              // Auto-install DevOps skills on login (idempotent: already-installed skills are skipped)
+              if (wsId) window.electronAPI.devopsAutoInstall(wsId).catch(() => {})
               const needs = await window.electronAPI.getSetupNeeds()
               setSetupNeeds(needs)
               const nextState = await resolveAuthenticatedStartupState({

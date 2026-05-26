@@ -255,6 +255,7 @@ export const CHANNEL_MAP = {
   fetchMarketSkillContent: invoke(RPC_CHANNELS.skills.FETCH_MARKET_CONTENT),
   checkMarketSkillUpdates: invoke(RPC_CHANNELS.skills.CHECK_MARKET_UPDATES),
   updateMarketSkillsBatch: invoke(RPC_CHANNELS.skills.UPDATE_MARKET_BATCH),
+  devopsAutoInstall: invoke(RPC_CHANNELS.skills.DEVOPS_AUTO_INSTALL),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
   onSkillUpdateCheck: listener(RPC_CHANNELS.skills.TRIGGER_UPDATE_CHECK),
 
