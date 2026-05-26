@@ -75,8 +75,30 @@ export type { ContextDocDTO, ContextDocMetadata, ContextDocRouting };
 
 // Memory — DTOs are plain JSON entries. Import from the browser-safe type
 // module, not the memory barrel, because the barrel also exports file storage.
-import type { LoadedMemoryFile as LoadedMemoryFileDTO, MemoryEntry as MemoryEntryDTO, MemoryEntryType, MemoryScope } from '@craft-agent/shared/memory/types';
-export type { LoadedMemoryFileDTO, MemoryEntryDTO, MemoryEntryType, MemoryScope };
+import type {
+  EnqueueMemoryReviewInput,
+  LoadedMemoryFile as LoadedMemoryFileDTO,
+  MemoryEntry as MemoryEntryDTO,
+  MemoryEvent as MemoryEventDTO,
+  MemoryEntryType,
+  MemoryRecallResult,
+  MemoryReviewItem,
+  MemoryScope,
+  RecallMemoryInput,
+  ResolveMemoryReviewInput,
+} from '@craft-agent/shared/memory/types';
+export type {
+  EnqueueMemoryReviewInput,
+  LoadedMemoryFileDTO,
+  MemoryEntryDTO,
+  MemoryEventDTO,
+  MemoryEntryType,
+  MemoryRecallResult,
+  MemoryReviewItem,
+  MemoryScope,
+  RecallMemoryInput,
+  ResolveMemoryReviewInput,
+};
 
 // Workflows — DTOs match the shared LoadedWorkflow / WorkflowRunSnapshot.
 import type {
@@ -90,6 +112,13 @@ import type {
   WorkflowRunStepState,
 } from '@craft-agent/shared/workflows/run-types';
 export type { WorkflowDTO, WorkflowMetadataDTO, WorkflowRunDTO, WorkflowRunState, WorkflowRunStep, WorkflowRunStepState };
+
+import type {
+  DeepResearchRunSnapshot as DeepResearchRunDTO,
+  ReviseDeepResearchPlanInput,
+  StartDeepResearchRunInput,
+} from '@craft-agent/shared/deep-research';
+export type { DeepResearchRunDTO, ReviseDeepResearchPlanInput, StartDeepResearchRunInput };
 
 // Outputs — DTOs match shared output manifests/summaries.
 import type { OutputManifest as OutputManifestDTO, OutputSummary as OutputSummaryDTO } from '@craft-agent/shared/outputs';
@@ -752,6 +781,14 @@ export interface ElectronAPI {
   // Memory (global USER.md + per-agent MEMORY.md)
   listAgentMemory(agentSlug: string): Promise<LoadedMemoryFileDTO>
   listUserMemory(): Promise<LoadedMemoryFileDTO>
+  recallMemory(payload: RecallMemoryInput): Promise<MemoryRecallResult[]>
+  listMemoryEvents(payload: {
+    scope: MemoryScope
+    agentSlug?: string | null
+  }): Promise<MemoryEventDTO[]>
+  listMemoryReviewQueue(): Promise<MemoryReviewItem[]>
+  enqueueMemoryReview(payload: EnqueueMemoryReviewInput): Promise<MemoryReviewItem>
+  resolveMemoryReview(payload: ResolveMemoryReviewInput): Promise<MemoryReviewItem | null>
   upsertMemory(payload: {
     scope: MemoryScope
     agentSlug?: string | null
@@ -810,6 +847,18 @@ export interface ElectronAPI {
   deleteWorkflowRun(workspaceId: string, runId: string): Promise<boolean>
   onWorkflowRunUpdated(
     callback: (workspaceId: string, run: WorkflowRunDTO, eventType: 'created' | 'updated' | 'completed') => void,
+  ): () => void
+
+  // Deep Research runs
+  startDeepResearchRun(workspaceId: string, input: StartDeepResearchRunInput): Promise<DeepResearchRunDTO>
+  getDeepResearchRun(workspaceId: string, runId: string): Promise<DeepResearchRunDTO | null>
+  listDeepResearchRuns(workspaceId: string): Promise<DeepResearchRunDTO[]>
+  approveDeepResearchPlan(workspaceId: string, runId: string): Promise<DeepResearchRunDTO>
+  reviseDeepResearchPlan(workspaceId: string, runId: string, input: ReviseDeepResearchPlanInput): Promise<DeepResearchRunDTO>
+  cancelDeepResearchRun(workspaceId: string, runId: string): Promise<DeepResearchRunDTO>
+  deleteDeepResearchRun(workspaceId: string, runId: string): Promise<boolean>
+  onDeepResearchRunUpdated(
+    callback: (workspaceId: string, run: DeepResearchRunDTO, eventType: 'created' | 'updated' | 'completed') => void,
   ): () => void
 
   // Outputs
@@ -1062,6 +1111,12 @@ export interface WorkflowRunNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export interface DeepResearchRunNavigationState {
+  navigator: 'deepResearchRun'
+  runId: string
+  rightSidebar?: RightSidebarPanel
+}
+
 export interface OutputsNavigationState {
   navigator: 'outputs'
   outputId?: string
@@ -1081,6 +1136,7 @@ export type NavigationState =
   | WorkspaceContextNavigationState
   | WorkflowsNavigationState
   | WorkflowRunNavigationState
+  | DeepResearchRunNavigationState
   | OutputsNavigationState
 
 export const isSessionsNavigation = (
@@ -1118,6 +1174,10 @@ export const isWorkflowsNavigation = (
 export const isWorkflowRunNavigation = (
   state: NavigationState
 ): state is WorkflowRunNavigationState => state.navigator === 'workflowRun'
+
+export const isDeepResearchRunNavigation = (
+  state: NavigationState
+): state is DeepResearchRunNavigationState => state.navigator === 'deepResearchRun'
 
 export const isOutputsNavigation = (
   state: NavigationState
@@ -1167,6 +1227,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'workflowRun') {
     return `runs/${state.runId}`
+  }
+  if (state.navigator === 'deepResearchRun') {
+    return `deep-research/${state.runId}`
   }
   if (state.navigator === 'outputs') {
     return state.outputId ? `outputs/${state.outputId}` : 'outputs'
@@ -1246,6 +1309,10 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   if (key.startsWith('runs/')) {
     const runId = key.slice('runs/'.length)
     if (runId) return { navigator: 'workflowRun', runId }
+  }
+  if (key.startsWith('deep-research/')) {
+    const runId = key.slice('deep-research/'.length)
+    if (runId) return { navigator: 'deepResearchRun', runId }
   }
 
   // Handle outputs

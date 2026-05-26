@@ -1034,7 +1034,7 @@ export function EditPopover({
             {/* Container */}
             <div
               ref={popoverRef}
-              className="relative flex h-full w-full flex-col overflow-hidden border border-white/[0.09] bg-[#08080a] shadow-[0_28px_90px_rgba(0,0,0,0.58)]"
+              className="relative flex h-full w-full flex-col overflow-hidden border border-white/[0.09] bg-[#08080a] shadow-middle"
               style={{
                 transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
                 borderRadius: 22,

@@ -1785,7 +1785,7 @@ export function FreeFormInput({
                             {displaySources.map((source, index) => (
                               <div
                                 key={source.config.slug}
-                                className={cn("relative h-5 w-5 rounded-[4px] border border-white/[0.08] bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] flex items-center justify-center", index > 0 && "-ml-1")}
+                                className={cn("relative h-5 w-5 rounded-[4px] border border-white/[0.08] bg-white/[0.06] shadow-middle flex items-center justify-center", index > 0 && "-ml-1")}
                                 style={{ zIndex: index + 1 }}
                               >
                                 <SourceAvatar source={source} size="xs" />
@@ -1793,7 +1793,7 @@ export function FreeFormInput({
                             ))}
                             {remainingCount > 0 && (
                               <div
-                                className="-ml-1 h-5 w-5 rounded-[4px] border border-white/[0.08] bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] flex items-center justify-center text-[8px] font-medium text-white/55"
+                                className="-ml-1 h-5 w-5 rounded-[4px] border border-white/[0.08] bg-white/[0.06] shadow-middle flex items-center justify-center text-[8px] font-medium text-white/55"
                                 style={{ zIndex: displaySources.length + 1 }}
                               >
                                 +{remainingCount}
@@ -1888,7 +1888,7 @@ export function FreeFormInput({
                             {displaySources.map((source, index) => (
                               <div
                                 key={source.config.slug}
-                                className={cn("relative h-5 w-5 rounded-[4px] border border-white/[0.08] bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] flex items-center justify-center", index > 0 && "-ml-1")}
+                                className={cn("relative h-5 w-5 rounded-[4px] border border-white/[0.08] bg-white/[0.06] shadow-middle flex items-center justify-center", index > 0 && "-ml-1")}
                                 style={{ zIndex: index + 1 }}
                               >
                                 <SourceAvatar source={source} size="xs" />
@@ -1896,7 +1896,7 @@ export function FreeFormInput({
                             ))}
                             {remainingCount > 0 && (
                               <div
-                                className="-ml-1 h-5 w-5 rounded-[4px] border border-white/[0.08] bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] flex items-center justify-center text-[8px] font-medium text-white/55"
+                                className="-ml-1 h-5 w-5 rounded-[4px] border border-white/[0.08] bg-white/[0.06] shadow-middle flex items-center justify-center text-[8px] font-medium text-white/55"
                                 style={{ zIndex: displaySources.length + 1 }}
                               >
                                 +{remainingCount}

@@ -25,11 +25,35 @@ export interface ForgetMemoryToolInput {
   name: string;
 }
 
+export interface RecallMemoryToolInput {
+  query: string;
+  scopes?: MemoryScope[];
+  limit?: number;
+}
+
 export interface MemoryMutationResult {
   ok: boolean;
   scope?: MemoryScope;
   name?: string;
   file?: string;
+  error?: string;
+}
+
+export interface RecalledMemoryEntry {
+  scope: MemoryScope;
+  agentSlug?: string;
+  name: string;
+  type: MemoryType;
+  content: string;
+  score: number;
+  reason: string;
+  excerpt: string;
+}
+
+export interface RecallMemoryResult {
+  ok: boolean;
+  query?: string;
+  results?: RecalledMemoryEntry[];
   error?: string;
 }
 
@@ -43,6 +67,18 @@ function normalizeScope(scope: MemoryScope | undefined): MemoryScope {
 function validateScope(scope: unknown): string | null {
   if (scope === undefined || scope === 'agent' || scope === 'user') return null;
   return 'scope must be "agent" or "user".';
+}
+
+function validateScopes(scopes: unknown): string | null {
+  if (scopes === undefined) return null;
+  if (!Array.isArray(scopes) || scopes.length === 0) {
+    return 'scopes must be a non-empty array of "agent" and/or "user".';
+  }
+  for (const scope of scopes) {
+    const error = validateScope(scope);
+    if (error) return error;
+  }
+  return null;
 }
 
 function validateName(name: unknown): string | null {
@@ -83,6 +119,12 @@ function memoryPayload(result: {
   return result.file
     ? { ok: result.ok, scope: result.scope, name: result.name, file: result.file }
     : { ok: result.ok, scope: result.scope, name: result.name };
+}
+
+function normalizeLimit(limit: unknown): number | undefined {
+  if (limit === undefined) return undefined;
+  if (typeof limit !== 'number' || !Number.isFinite(limit)) return Number.NaN;
+  return Math.floor(limit);
 }
 
 export async function handleSaveMemory(
@@ -195,5 +237,51 @@ export async function handleForgetMemory(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return errorResponse(`Failed to forget memory: ${message}`);
+  }
+}
+
+export async function handleRecallMemory(
+  ctx: SessionToolContext,
+  args: RecallMemoryToolInput,
+): Promise<ToolResult> {
+  if (!ctx.recallMemory) {
+    return errorResponse('recall_memory is not available in this context.');
+  }
+
+  if (typeof args.query !== 'string' || args.query.trim().length === 0) {
+    return errorResponse('query is required and cannot be empty.');
+  }
+  const scopesError = validateScopes(args.scopes);
+  if (scopesError) return errorResponse(scopesError);
+  const limit = normalizeLimit(args.limit);
+  if (Number.isNaN(limit) || (limit !== undefined && (limit < 1 || limit > 25))) {
+    return errorResponse('limit must be a number between 1 and 25.');
+  }
+
+  const input: RecallMemoryToolInput = {
+    query: args.query.trim(),
+    scopes: args.scopes,
+    limit,
+  };
+
+  try {
+    const result = await ctx.recallMemory(input);
+    if (!result.ok) {
+      return errorResponse(result.error ?? 'Failed to recall memory.');
+    }
+    const entries = result.results ?? [];
+    return memorySuccess(
+      entries.length === 0
+        ? `No matching memories for "${input.query}".`
+        : `Recalled ${entries.length} memories for "${input.query}".`,
+      {
+        ok: true,
+        query: result.query ?? input.query,
+        results: entries,
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return errorResponse(`Failed to recall memory: ${message}`);
   }
 }

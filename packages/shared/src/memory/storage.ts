@@ -7,6 +7,7 @@
  */
 
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -21,6 +22,7 @@ import matter from 'gray-matter';
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import {
   DELETED_MEMORIES_FILE,
+  MEMORY_EVENTS_FILE,
   MEMORY_ENTRY_TYPES,
   MEMORY_FILE,
   MEMORY_SCHEMA_VERSION,
@@ -30,8 +32,11 @@ import {
   type DeletedMemoryTombstones,
   type LoadedMemoryFile,
   type MemoryEntry,
+  type MemoryEvent,
   type MemoryEntryType,
+  type MemoryEventAction,
   type MemoryFileEnvelope,
+  type MemoryMutationEventMetadata,
   type MemoryParseWarning,
   type MemoryScope,
   type MemoryStorageOptions,
@@ -73,6 +78,14 @@ export function getMemoryFilePath(
 
 function getDeletedMemoriesFile(filePath: string): string {
   return join(dirname(filePath), DELETED_MEMORIES_FILE);
+}
+
+export function getMemoryEventsFile(
+  scope: MemoryScope,
+  agentSlug?: string,
+  options?: MemoryStorageOptions,
+): string {
+  return join(dirname(getMemoryFilePath(scope, agentSlug, options)), MEMORY_EVENTS_FILE);
 }
 
 // ============================================================================
@@ -519,6 +532,100 @@ export function isMemoryNameDeleted(
   return readDeletedMemoryNames(scope, agentSlug, options).has(normalizeName(name));
 }
 
+// ============================================================================
+// Event log
+// ============================================================================
+
+function sanitizeOptionalString(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function createMemoryEvent(
+  action: MemoryEventAction,
+  scope: MemoryScope,
+  agentSlug: string | undefined,
+  entryName: string | undefined,
+  metadata?: MemoryMutationEventMetadata,
+): MemoryEvent {
+  return {
+    id: randomUUID(),
+    action,
+    scope,
+    agentSlug: scope === 'agent' ? agentSlug : undefined,
+    entryName: sanitizeOptionalString(entryName),
+    source: metadata?.source ?? 'system',
+    runId: sanitizeOptionalString(metadata?.runId),
+    evidence: sanitizeOptionalString(metadata?.evidence),
+    actor: sanitizeOptionalString(metadata?.actor),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function appendMemoryEventUnlocked(
+  action: MemoryEventAction,
+  scope: MemoryScope,
+  agentSlug: string | undefined,
+  entryName: string | undefined,
+  options?: MemoryStorageOptions,
+  metadata?: MemoryMutationEventMetadata,
+): MemoryEvent {
+  const event = createMemoryEvent(action, scope, agentSlug, entryName, metadata);
+  const eventFile = getMemoryEventsFile(scope, agentSlug, options);
+  mkdirSync(dirname(eventFile), { recursive: true });
+  appendFileSync(eventFile, `${JSON.stringify(event)}\n`, 'utf-8');
+  return event;
+}
+
+export async function appendMemoryEvent(
+  action: MemoryEventAction,
+  scope: MemoryScope,
+  agentSlug: string | undefined,
+  entryName: string | undefined,
+  options?: MemoryStorageOptions,
+  metadata?: MemoryMutationEventMetadata,
+): Promise<MemoryEvent> {
+  const filePath = getMemoryFilePath(scope, agentSlug, options);
+  return withMemoryFileMutex(filePath, async () => appendMemoryEventUnlocked(
+    action,
+    scope,
+    agentSlug,
+    entryName,
+    options,
+    metadata,
+  ));
+}
+
+export function listMemoryEvents(
+  scope: MemoryScope,
+  agentSlug?: string,
+  options?: MemoryStorageOptions,
+): MemoryEvent[] {
+  const eventFile = getMemoryEventsFile(scope, agentSlug, options);
+  if (!existsSync(eventFile)) return [];
+  return readFileSync(eventFile, 'utf-8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line): MemoryEvent[] => {
+      try {
+        const parsed = JSON.parse(line) as Partial<MemoryEvent>;
+        if (
+          typeof parsed.id !== 'string' ||
+          typeof parsed.action !== 'string' ||
+          typeof parsed.scope !== 'string' ||
+          typeof parsed.source !== 'string' ||
+          typeof parsed.createdAt !== 'string'
+        ) {
+          return [];
+        }
+        return [parsed as MemoryEvent];
+      } catch {
+        return [];
+      }
+    });
+}
+
 export async function rememberDeletedMemoryName(
   scope: MemoryScope,
   name: string,
@@ -657,6 +764,7 @@ export async function saveMemoryEntry(
     };
     loaded.entries.push(entry);
     writeMemoryFile(loaded);
+    appendMemoryEventUnlocked('save', input.scope, input.agentSlug, entry.name, options, input.event);
 
     // Only clear the tombstone when this was an explicit user-forced
     // overwrite. A normal save that didn't conflict with a tombstone
@@ -694,6 +802,7 @@ export async function updateMemoryEntry(
     if (!next.body.trim()) throw new Error('Memory entry body is required');
     loaded.entries[index] = next;
     writeMemoryFile(loaded);
+    appendMemoryEventUnlocked('update', input.scope, input.agentSlug, next.name, options, input.event);
     return next;
   });
 }
@@ -724,6 +833,7 @@ export async function deleteMemoryEntry(
       // agent gets blocked until the user explicitly forces or
       // un-tombstones. Only tombstone names that were actually present.
       rememberDeletedMemoryNameUnlocked(filePath, name);
+      appendMemoryEventUnlocked('forget', input.scope, input.agentSlug, name, options, input.event);
     }
     return deleted;
   });

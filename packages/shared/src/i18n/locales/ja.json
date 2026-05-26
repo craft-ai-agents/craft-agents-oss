@@ -918,6 +918,8 @@
   "settings.server.connectionSection": "接続",
   "settings.server.copiedToClipboard": "{{label}}をクリップボードにコピーしました",
   "settings.server.description": "リモートサーバーアクセス",
+  "settings.memory.description": "Memory review, activity, and durable user facts",
+  "settings.memory.title": "Memory",
   "settings.server.enableServerMode": "サーバーモードを有効にする",
   "settings.server.failedToSave": "保存に失敗しました：{{message}}",
   "settings.server.insecureWarning": "サーバーはTLSなしで実行されています。認証トークンは平文で送信されます。",

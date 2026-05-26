@@ -1,7 +1,8 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { DatabaseZap, FileText, GitBranch, Plus, Pencil, Trash2, Upload } from 'lucide-react'
+import { DatabaseZap, FileText, GitBranch, Megaphone, Plus, Pencil, Trash2, Upload } from 'lucide-react'
+import { SOCIAL_PUBLISHER_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,7 @@ type GoalStatus = 'active' | 'blocked' | 'paused' | 'done'
 type GoalPriority = 'low' | 'normal' | 'high'
 
 type ContextFilter = 'all' | 'goals'
+const SOCIAL_DEFAULTS_SLUG = 'social-publisher-defaults'
 
 interface WorkspaceContextPageProps {
   workspaceId: string
@@ -47,6 +49,8 @@ interface ImportDraft {
   name: string
   description: string
   body: string
+  routingMode?: 'broadcast' | 'targeted'
+  agents?: string[]
 }
 
 export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPageProps) {
@@ -169,6 +173,73 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
     setDialogOpen(true)
   }
 
+  const handleSocialDefaults = () => {
+    const existing = docs.find((doc) => doc.slug === SOCIAL_DEFAULTS_SLUG)
+    if (existing) {
+      handleEdit(existing)
+      return
+    }
+    setEditingDoc(null)
+    setImportDraft({
+      slug: SOCIAL_DEFAULTS_SLUG,
+      name: 'Social Publisher Defaults',
+      description: 'Workspace-specific profiles, tone, and posting defaults for @social-publisher.',
+      routingMode: 'targeted',
+      agents: [SOCIAL_PUBLISHER_SLUG],
+      body: [
+        'This context is routed only to @social-publisher.',
+        '',
+        'Never store passwords, tokens, cookies, recovery codes, or 2FA secrets here. Login sessions belong in the platform browser profile or encrypted credential storage.',
+        '',
+        'How this works: create named profiles here, log each profile in once through the browser/CLI setup flow, then @social-publisher reuses that saved local session. If a session expires, the agent should ask for re-login for that profile only.',
+        '',
+        '## Profiles',
+        '',
+        '- platform: tiktok',
+        '  profile: main',
+        '  handle:',
+        '  channel_url:',
+        '  session: saved-browser-profile',
+        '  default_visibility: public',
+        '  notes:',
+        '- platform: instagram',
+        '  profile: main',
+        '  handle:',
+        '  channel_url:',
+        '  session: saved-browser-profile',
+        '  default_visibility: public',
+        '  notes:',
+        '- platform: youtube',
+        '  profile: main',
+        '  handle:',
+        '  channel_url:',
+        '  session: saved-browser-profile',
+        '  default_visibility: public',
+        '  notes:',
+        '',
+        '## Voice and Tone',
+        '',
+        'Default to clear, native-feeling posts. If the user gives campaign-specific voice, use that instead.',
+        '',
+        '## Posting Defaults',
+        '',
+        '- Always dry-run every platform action first.',
+        '- Run live doctor before claiming a profile is ready.',
+        '- Verify the visible logged-in account matches the requested profile before final publish.',
+        '- Ask before live publish, comment, DM, upload, or schedule.',
+        '- Prefer vertical 9:16 video for short-form cross-posting.',
+        '- Return one combined receipt for multi-platform campaigns.',
+        '',
+        '## Do Not',
+        '',
+        '- Do not publish without exact user approval.',
+        '- Do not switch accounts unless the requested profile is confirmed.',
+        '- Do not infer credentials from context.',
+      ].join('\n'),
+    })
+    setDialogOpen(true)
+  }
+
   const handleEdit = (doc: ContextDocDTO) => {
     setEditingDoc(doc)
     setImportDraft(null)
@@ -252,6 +323,14 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
             </button>
             <button
               type="button"
+              onClick={handleSocialDefaults}
+              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] font-medium text-white/72 transition-colors hover:bg-white/[0.08] hover:text-white"
+            >
+              <Megaphone className="h-3 w-3" />
+              Social defaults
+            </button>
+            <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
               className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] font-medium text-white/72 transition-colors hover:bg-white/[0.08] hover:text-white"
             >
@@ -268,7 +347,7 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
             <button
               type="button"
               onClick={handleNew}
-              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 shadow-[0_0_18px_rgba(249,115,22,0.16)] transition-colors hover:bg-[#f97316]/24"
+              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 shadow-middle transition-colors hover:bg-[#f97316]/24"
             >
             <Plus className="h-3 w-3" />
             New
@@ -290,6 +369,10 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
               </div>
               <button type="button" onClick={handleNew} className="inline-flex h-7 items-center rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 hover:bg-[#f97316]/24">
                 Create context doc
+              </button>
+              <button type="button" onClick={handleSocialDefaults} className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] font-medium text-white/72 hover:bg-white/[0.08] hover:text-white">
+                <Megaphone className="h-3 w-3" />
+                Social defaults
               </button>
             </div>
             <ConnectedRepoCard
@@ -323,7 +406,7 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
             </div>
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
               {visibleDocs.map((doc) => (
-                <div key={doc.slug} className="group relative overflow-hidden rounded-[13px] border border-white/[0.07] bg-white/[0.035] p-3 text-left shadow-[0_2px_8px_rgb(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.13] hover:bg-white/[0.055] hover:shadow-[0_8px_24px_rgba(0,0,0,0.24)]">
+                <div key={doc.slug} className="group relative overflow-hidden rounded-[13px] border border-white/[0.07] bg-white/[0.035] p-3 text-left shadow-middle transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.13] hover:bg-white/[0.055] hover:shadow-middle">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-white">{doc.metadata.name}</div>
@@ -445,7 +528,7 @@ function ConnectedRepoCard({
 }) {
   const selfEditStatus = getSelfEditStatus(selfEditTarget)
   return (
-    <div className="mt-5 flex items-stretch justify-between gap-3 rounded-[13px] border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+    <div className="mt-5 flex items-stretch justify-between gap-3 rounded-[13px] border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 shadow-middle">
       <div className="grid min-w-0 flex-1 gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
@@ -790,8 +873,8 @@ function buildInitialState(doc: ContextDocDTO | null, importDraft?: ImportDraft 
       name: importDraft.name,
       description: importDraft.description,
       body: importDraft.body,
-      routingMode: 'broadcast',
-      agents: [],
+      routingMode: importDraft.routingMode ?? 'broadcast',
+      agents: importDraft.agents ?? [],
       enabled: true,
       goalEnabled: false,
       status: 'active',

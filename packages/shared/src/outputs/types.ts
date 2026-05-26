@@ -64,7 +64,8 @@ export interface OutputReceipt {
 }
 
 export interface OutputOrigin {
-  source: 'workflow' | 'session' | 'automation' | 'manual';
+  source: 'workflow' | 'session' | 'automation' | 'manual' | 'deep-research';
+  deepResearchRunId?: string;
   workflowRunId?: string;
   workflowSlug?: string;
   workflowName?: string;

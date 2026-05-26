@@ -11,6 +11,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { MemoryEditDialog } from './MemoryEditDialog'
+import { MemoryActivityPanel } from './MemoryActivityPanel'
+import { MemoryReviewQueuePanel } from './MemoryReviewQueuePanel'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 
 interface UserProfileDialogProps {
@@ -110,6 +112,9 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
                 )}
               </>
             )}
+
+            <MemoryReviewQueuePanel scope="user" />
+            <MemoryActivityPanel scope="user" />
           </div>
         </DialogContent>
       </Dialog>

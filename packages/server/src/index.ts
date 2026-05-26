@@ -253,6 +253,8 @@ const instance = await (async () => {
           platform,
           oauthFlowStore,
           messagingRegistry: messagingHandle.registry,
+          getWorkflowRunner: () => sessionManager.getWorkflowRunner(),
+          getDeepResearchRunner: () => sessionManager.getDeepResearchRunner(),
           // Closure: trigger server starts after bootstrapServer resolves.
           getTriggerServerInfo: () => ({
             enabled: triggerServer != null,

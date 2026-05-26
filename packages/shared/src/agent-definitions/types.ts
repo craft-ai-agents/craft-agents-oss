@@ -165,3 +165,6 @@ export const ORCHESTRATOR_SLUG = 'orchestrator';
  *     bypass narrow targeting for it
  */
 export const CONCIERGE_SLUG = 'concierge';
+
+/** Built-in social channel execution agent slug. */
+export const SOCIAL_PUBLISHER_SLUG = 'social-publisher';

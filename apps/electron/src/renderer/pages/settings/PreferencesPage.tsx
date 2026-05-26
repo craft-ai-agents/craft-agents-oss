@@ -20,6 +20,7 @@ import {
   SettingsSection,
   SettingsCard,
   SettingsInput,
+  SettingsSelectRow,
   SettingsTextarea,
 } from '@/components/settings'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
@@ -36,6 +37,8 @@ interface PreferencesFormState {
   city: string
   country: string
   notes: string
+  memorySidecarMode: 'manual' | 'review'
+  passthrough: Record<string, unknown>
 }
 
 const emptyFormState: PreferencesFormState = {
@@ -44,18 +47,24 @@ const emptyFormState: PreferencesFormState = {
   city: '',
   country: '',
   notes: '',
+  memorySidecarMode: 'review',
+  passthrough: {},
 }
 
 // Parse JSON to form state
 function parsePreferences(json: string): PreferencesFormState {
   try {
-    const prefs = JSON.parse(json)
+    const prefs = JSON.parse(json) as Record<string, unknown>
+    const location = isRecord(prefs.location) ? prefs.location : {}
+    const memory = isRecord(prefs.memory) ? prefs.memory : {}
     return {
-      name: prefs.name || '',
-      timezone: prefs.timezone || '',
-      city: prefs.location?.city || '',
-      country: prefs.location?.country || '',
-      notes: prefs.notes || '',
+      name: typeof prefs.name === 'string' ? prefs.name : '',
+      timezone: typeof prefs.timezone === 'string' ? prefs.timezone : '',
+      city: typeof location.city === 'string' ? location.city : '',
+      country: typeof location.country === 'string' ? location.country : '',
+      notes: typeof prefs.notes === 'string' ? prefs.notes : '',
+      memorySidecarMode: memory.sidecarMode === 'manual' ? 'manual' : 'review',
+      passthrough: stripKnownPreferences(prefs),
     }
   } catch {
     return emptyFormState
@@ -64,7 +73,7 @@ function parsePreferences(json: string): PreferencesFormState {
 
 // Serialize form state to JSON
 function serializePreferences(state: PreferencesFormState): string {
-  const prefs: Record<string, unknown> = {}
+  const prefs: Record<string, unknown> = { ...state.passthrough }
 
   if (state.name) prefs.name = state.name
   if (state.timezone) prefs.timezone = state.timezone
@@ -77,9 +86,29 @@ function serializePreferences(state: PreferencesFormState): string {
   }
 
   if (state.notes) prefs.notes = state.notes
+  const existingMemory = isRecord(state.passthrough.memory) ? state.passthrough.memory : {}
+  const memory = { ...existingMemory, sidecarMode: state.memorySidecarMode }
+  delete prefs.memory
+  if (Object.keys(memory).length > 1 || state.memorySidecarMode !== 'review') {
+    prefs.memory = memory
+  }
   prefs.updatedAt = Date.now()
 
   return JSON.stringify(prefs, null, 2)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function stripKnownPreferences(prefs: Record<string, unknown>): Record<string, unknown> {
+  const rest = { ...prefs }
+  delete rest.name
+  delete rest.timezone
+  delete rest.location
+  delete rest.notes
+  delete rest.updatedAt
+  return rest
 }
 
 export default function PreferencesPage() {
@@ -266,6 +295,25 @@ export default function PreferencesPage() {
                 onChange={(v) => updateField('notes', v)}
                 placeholder={t("settings.preferences.notesPlaceholder")}
                 rows={5}
+                inCard
+              />
+            </SettingsCard>
+          </SettingsSection>
+
+          <SettingsSection
+            title="Memory"
+            description="Control how RunnerOS proposes durable memories."
+          >
+            <SettingsCard divided>
+              <SettingsSelectRow
+                label="Memory sidecar"
+                description="Review queues suggestions for approval. Manual disables background review."
+                value={formState.memorySidecarMode}
+                onValueChange={(value) => updateField('memorySidecarMode', value === 'manual' ? 'manual' : 'review')}
+                options={[
+                  { value: 'review', label: 'Review' },
+                  { value: 'manual', label: 'Manual' },
+                ]}
                 inCard
               />
             </SettingsCard>

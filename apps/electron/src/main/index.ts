@@ -721,6 +721,7 @@ app.whenReady().then(async () => {
               url: triggerServerHandle?.url ?? null,
             }),
             getWorkflowRunner: () => sm.getWorkflowRunner(),
+            getDeepResearchRunner: () => sm.getDeepResearchRunner(),
             getNotificationService: () => sm.getNotificationService(),
           }
         },

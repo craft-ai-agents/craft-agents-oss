@@ -35,6 +35,7 @@ const {
   loadAllSources,
   getSourcesBySlugs,
   isSourceUsable,
+  loadSourceConfig,
   markLoadedSourceAuthenticated,
   markLoadedSourceNeedsReauth,
   writeGlobalSourcesManifest,
@@ -141,6 +142,26 @@ describe('global tier paths', () => {
     const ws = makeWorkspace();
     const path = getWorkspaceGlobalSourcesManifestPath(ws);
     expect(path).toBe(join(ws, 'sources', WORKSPACE_GLOBAL_SOURCES_MANIFEST));
+  });
+});
+
+describe('workspace local source paths', () => {
+  test('loadSourceConfig resolves relative local paths from the workspace root', () => {
+    const ws = makeWorkspace();
+    const dir = join(ws, 'sources', 'local-cli');
+    mkdirSync(dir, { recursive: true });
+    const config: FolderSourceConfig = {
+      id: 'local-cli_test',
+      name: 'Local CLI',
+      slug: 'local-cli',
+      enabled: true,
+      provider: 'custom',
+      type: 'local',
+      local: { path: 'tools/local-cli', format: 'cli-tool' },
+    };
+    writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
+
+    expect(loadSourceConfig(ws, 'local-cli')?.local?.path).toBe(join(ws, 'tools/local-cli'));
   });
 });
 
@@ -345,6 +366,17 @@ describe('loadAllSources', () => {
     expect(found!.config.mcp?.transport).toBe('stdio');
     expect(found!.config.mcp?.authType).toBe('none');
   });
+
+  test('includes printing-press-social as a project local source', () => {
+    const ws = makeWorkspace();
+    const all = loadAllSources(ws);
+    const found = all.find((s: LoadedSource) => s.config.slug === 'printing-press-social');
+
+    expect(found).toBeDefined();
+    expect(found!.tier).toBe('project');
+    expect(found!.config.type).toBe('local');
+    expect(found!.config.local?.format).toBe('cli-tool');
+  });
 });
 
 describe('getSourcesBySlugs', () => {
@@ -395,6 +427,17 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.slug).toBe('field-theory');
     expect(sources[0]!.config.enabled).toBe(true);
     expect(sources[0]!.config.mcp?.transport).toBe('stdio');
+  });
+
+  test('resolves printing-press-social by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['printing-press-social']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('printing-press-social');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.type).toBe('local');
   });
 });
 

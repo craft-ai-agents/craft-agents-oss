@@ -430,6 +430,11 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // memory — global USER.md + per-agent MEMORY.md on the owning server
   RPC_CHANNELS.memory.LIST_AGENT,
   RPC_CHANNELS.memory.LIST_USER,
+  RPC_CHANNELS.memory.RECALL,
+  RPC_CHANNELS.memory.LIST_EVENTS,
+  RPC_CHANNELS.memory.LIST_REVIEW_QUEUE,
+  RPC_CHANNELS.memory.ENQUEUE_REVIEW,
+  RPC_CHANNELS.memory.RESOLVE_REVIEW,
   RPC_CHANNELS.memory.UPSERT,
   RPC_CHANNELS.memory.SAVE,
   RPC_CHANNELS.memory.UPDATE,
@@ -462,6 +467,16 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workflowRuns.RESUME,
   RPC_CHANNELS.workflowRuns.DELETE,
   RPC_CHANNELS.workflowRuns.UPDATED,
+
+  // deep research — workspace-local research runs
+  RPC_CHANNELS.deepResearch.START,
+  RPC_CHANNELS.deepResearch.GET,
+  RPC_CHANNELS.deepResearch.LIST,
+  RPC_CHANNELS.deepResearch.APPROVE,
+  RPC_CHANNELS.deepResearch.REVISE,
+  RPC_CHANNELS.deepResearch.CANCEL,
+  RPC_CHANNELS.deepResearch.DELETE,
+  RPC_CHANNELS.deepResearch.UPDATED,
 
   // pulses — tick history lives on the workspace server
   RPC_CHANNELS.pulses.LIST_TICKS,

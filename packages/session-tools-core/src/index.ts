@@ -196,6 +196,7 @@ export {
   handleSaveMemory,
   handleUpdateMemory,
   handleForgetMemory,
+  handleRecallMemory,
   // Outputs
   handleCreateOutput,
   // Visual surface
@@ -261,7 +262,10 @@ export type {
   SaveMemoryToolInput,
   UpdateMemoryToolInput,
   ForgetMemoryToolInput,
+  RecallMemoryToolInput,
   MemoryMutationResult,
+  RecalledMemoryEntry,
+  RecallMemoryResult,
   MemoryScope,
   MemoryType,
   CreateOutputToolInput,
@@ -307,6 +311,7 @@ export {
   SaveMemorySchema,
   UpdateMemorySchema,
   ForgetMemorySchema,
+  RecallMemorySchema,
   CreateOutputSchema,
   VisualSurfaceSchema,
   VisualSurfaceStateSchema,

@@ -918,6 +918,8 @@
   "settings.server.connectionSection": "Kapcsolat",
   "settings.server.copiedToClipboard": "{{label}} vágólapra másolva",
   "settings.server.description": "Távoli szerver-hozzáférés",
+  "settings.memory.description": "Memory review, activity, and durable user facts",
+  "settings.memory.title": "Memory",
   "settings.server.enableServerMode": "Szervermód engedélyezése",
   "settings.server.failedToSave": "Mentés sikertelen: {{message}}",
   "settings.server.insecureWarning": "A szerver TLS nélkül fut. A hitelesítési tokenek titkosítatlanul kerülnek elküldésre.",

@@ -206,6 +206,7 @@ export const SETTINGS_ICONS: Record<SettingsSubpage, React.ComponentType<IconPro
   labels: LabelsIcon,
   messaging: MessagingSettingsIcon,
   server: ServerSettingsIcon,
+  memory: PreferencesIcon,
   shortcuts: ShortcutsIcon,
   preferences: PreferencesIcon,
 }

@@ -2,10 +2,13 @@ import { describe, it, expect } from 'bun:test';
 import type { SessionToolContext } from '../context.ts';
 import {
   handleForgetMemory,
+  handleRecallMemory,
   handleSaveMemory,
   handleUpdateMemory,
   type ForgetMemoryToolInput,
   type MemoryMutationResult,
+  type RecallMemoryResult,
+  type RecallMemoryToolInput,
   type SaveMemoryToolInput,
   type UpdateMemoryToolInput,
 } from './memory.ts';
@@ -14,6 +17,7 @@ function makeCtx(opts?: {
   saveMemory?: (input: SaveMemoryToolInput) => Promise<MemoryMutationResult>;
   updateMemory?: (input: UpdateMemoryToolInput) => Promise<MemoryMutationResult>;
   forgetMemory?: (input: ForgetMemoryToolInput) => Promise<MemoryMutationResult>;
+  recallMemory?: (input: RecallMemoryToolInput) => Promise<RecallMemoryResult>;
 }): SessionToolContext {
   const ctx: Partial<SessionToolContext> = {
     sessionId: 't',
@@ -36,6 +40,7 @@ function makeCtx(opts?: {
   if (opts?.saveMemory) ctx.saveMemory = opts.saveMemory;
   if (opts?.updateMemory) ctx.updateMemory = opts.updateMemory;
   if (opts?.forgetMemory) ctx.forgetMemory = opts.forgetMemory;
+  if (opts?.recallMemory) ctx.recallMemory = opts.recallMemory;
   return ctx as SessionToolContext;
 }
 
@@ -250,5 +255,69 @@ describe('memory handlers', () => {
       name: 'old-preference',
       file: '/USER.md',
     });
+  });
+
+  it('recall_memory validates input before calling capability', async () => {
+    let called = false;
+    const ctx = makeCtx({
+      recallMemory: async () => {
+        called = true;
+        return { ok: true, results: [] };
+      },
+    });
+
+    const emptyQuery = await handleRecallMemory(ctx, { query: '   ' });
+    const badScopes = await handleRecallMemory(ctx, { query: 'style', scopes: ['workspace' as never] });
+    const badLimit = await handleRecallMemory(ctx, { query: 'style', limit: 99 });
+
+    expect(emptyQuery.isError).toBe(true);
+    expect(badScopes.isError).toBe(true);
+    expect(badLimit.isError).toBe(true);
+    expect(called).toBe(false);
+  });
+
+  it('recall_memory returns matched memories as structured content', async () => {
+    let captured: RecallMemoryToolInput | undefined;
+    const ctx = makeCtx({
+      recallMemory: async (input) => {
+        captured = input;
+        return {
+          ok: true,
+          query: input.query,
+          results: [{
+            scope: 'user',
+            name: 'Preferred writing style',
+            type: 'feedback',
+            content: 'Use direct language.',
+            score: 7,
+            reason: 'Matched writing',
+            excerpt: 'Use direct language.',
+          }],
+        };
+      },
+    });
+
+    const result = await handleRecallMemory(ctx, {
+      query: ' writing style ',
+      scopes: ['user'],
+      limit: 5,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(captured).toEqual({ query: 'writing style', scopes: ['user'], limit: 5 });
+    expect(result.structuredContent).toEqual({
+      ok: true,
+      query: 'writing style',
+      results: [{
+        scope: 'user',
+        name: 'Preferred writing style',
+        type: 'feedback',
+        content: 'Use direct language.',
+        score: 7,
+        reason: 'Matched writing',
+        excerpt: 'Use direct language.',
+      }],
+    });
+    expect((result.content[0] as any).text).toContain('Recalled 1 memories');
   });
 });

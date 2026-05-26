@@ -395,6 +395,12 @@ export interface SessionToolContext {
   forgetMemory?(input: import('./handlers/memory.ts').ForgetMemoryToolInput): Promise<import('./handlers/memory.ts').MemoryMutationResult>;
 
   /**
+   * Recall relevant memory entries from USER.md and/or current agent MEMORY.md.
+   * Backend owns scope resolution and audit event logging.
+   */
+  recallMemory?(input: import('./handlers/memory.ts').RecallMemoryToolInput): Promise<import('./handlers/memory.ts').RecallMemoryResult>;
+
+  /**
    * Publish a first-class user-facing output from the current session.
    * Backend owns output storage, provenance, asset validation, and route creation.
    */

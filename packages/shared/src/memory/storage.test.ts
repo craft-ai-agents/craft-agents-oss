@@ -3,10 +3,13 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  appendMemoryEvent,
   deleteMemoryEntry,
   getAgentMemoryFile,
+  getMemoryEventsFile,
   getUserMemoryFile,
   isMemoryNameDeleted,
+  listMemoryEvents,
   listAgentMemoryEntries,
   listUserMemoryEntries,
   loadAgentMemory,
@@ -420,5 +423,80 @@ describe('CRUD', () => {
     expect(removed).toBe(false);
     expect(existsSync(tombstoneFile)).toBe(false);
     expect(isMemoryNameDeleted('user', 'ghost', undefined, options)).toBe(false);
+  });
+
+  test('save update and delete append an audit event log', async () => {
+    const saved = await saveMemoryEntry({
+      scope: 'agent',
+      agentSlug: 'researcher',
+      name: 'primary sources',
+      type: 'feedback',
+      body: 'Prefer primary sources.',
+      event: {
+        source: 'agent_tool',
+        runId: 'run_123',
+        evidence: 'User asked for primary sources.',
+      },
+    }, options);
+
+    await updateMemoryEntry({
+      scope: 'agent',
+      agentSlug: 'researcher',
+      name: saved.name,
+      body: 'Prefer primary sources and quote uncertainty.',
+      event: { source: 'sidecar', actor: 'memory-sidecar' },
+    }, options);
+
+    await deleteMemoryEntry({
+      scope: 'agent',
+      agentSlug: 'researcher',
+      name: saved.name,
+      event: { source: 'user', evidence: 'User clicked forget.' },
+    }, options);
+
+    const events = listMemoryEvents('agent', 'researcher', options);
+    expect(events.map((event) => event.action)).toEqual(['save', 'update', 'forget']);
+    expect(events.map((event) => event.entryName)).toEqual(['primary sources', 'primary sources', 'primary sources']);
+    expect(events[0]!.source).toBe('agent_tool');
+    expect(events[0]!.runId).toBe('run_123');
+    expect(events[1]!.source).toBe('sidecar');
+    expect(events[1]!.actor).toBe('memory-sidecar');
+    expect(events[2]!.source).toBe('user');
+    expect(readFileSync(getMemoryEventsFile('agent', 'researcher', options), 'utf-8')).toContain('"action":"forget"');
+  });
+
+  test('missing delete does not append an audit event', async () => {
+    await deleteMemoryEntry({ scope: 'user', name: 'ghost' }, options);
+    expect(listMemoryEvents('user', undefined, options)).toEqual([]);
+    expect(existsSync(getMemoryEventsFile('user', undefined, options))).toBe(false);
+  });
+
+  test('appendMemoryEvent records injected memory usage', async () => {
+    await appendMemoryEvent('inject', 'user', undefined, 'primary sources', options, {
+      source: 'system',
+      runId: 'session_123',
+      actor: 'researcher',
+      evidence: 'agent launch injected memory',
+    });
+
+    const [event] = listMemoryEvents('user', undefined, options);
+    expect(event).toMatchObject({
+      action: 'inject',
+      scope: 'user',
+      entryName: 'primary sources',
+      source: 'system',
+      runId: 'session_123',
+      actor: 'researcher',
+      evidence: 'agent launch injected memory',
+    });
+  });
+
+  test('listMemoryEvents skips malformed jsonl lines', async () => {
+    await saveMemoryEntry({ scope: 'user', name: 'identity', type: 'user', body: 'Mikey.' }, options);
+    writeFileSync(getMemoryEventsFile('user', undefined, options), 'not json\n', { flag: 'a' });
+
+    const events = listMemoryEvents('user', undefined, options);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.action).toBe('save');
   });
 });

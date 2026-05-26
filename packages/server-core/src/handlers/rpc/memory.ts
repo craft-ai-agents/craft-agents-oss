@@ -5,17 +5,30 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
   deleteMemoryEntry,
+  enqueueMemoryReviewItem,
+  appendMemoryEvent,
+  listMemoryReviewItems,
+  listMemoryEvents,
   listAgentMemoryEntries,
   listUserMemoryEntries,
   loadAgentMemory,
   loadUserMemory,
+  recallMemoryEntries,
+  resolveMemoryReviewItem,
   saveMemoryEntry,
   updateMemoryEntry,
   type DeleteMemoryInput,
+  type EnqueueMemoryReviewInput,
   type LoadedMemoryFile,
   type MemoryEntry,
+  type MemoryEvent,
   type MemoryEntryType,
+  type MemoryMutationEventMetadata,
+  type MemoryRecallResult,
+  type MemoryReviewItem,
   type MemoryScope,
+  type RecallMemoryInput,
+  type ResolveMemoryReviewInput,
   type SaveMemoryInput,
   type UpdateMemoryInput,
 } from '@craft-agent/shared/memory'
@@ -25,6 +38,11 @@ import type { HandlerDeps } from '../handler-deps'
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.memory.LIST_AGENT,
   RPC_CHANNELS.memory.LIST_USER,
+  RPC_CHANNELS.memory.RECALL,
+  RPC_CHANNELS.memory.LIST_EVENTS,
+  RPC_CHANNELS.memory.LIST_REVIEW_QUEUE,
+  RPC_CHANNELS.memory.ENQUEUE_REVIEW,
+  RPC_CHANNELS.memory.RESOLVE_REVIEW,
   RPC_CHANNELS.memory.UPSERT,
   RPC_CHANNELS.memory.SAVE,
   RPC_CHANNELS.memory.UPDATE,
@@ -41,6 +59,11 @@ export interface MemoryMutationPayload {
   metadata?: Record<string, unknown>
   expires?: string | null
   force?: boolean
+}
+
+export interface ListMemoryEventsPayload {
+  scope: MemoryScope
+  agentSlug?: string | null
 }
 
 function broadcastChanged(server: RpcServer, scope: MemoryScope, agentSlug: string | null): void {
@@ -71,6 +94,16 @@ function requireBody(payload: MemoryMutationPayload): string {
   return body
 }
 
+function rpcMemoryEvent(payload: MemoryMutationPayload): MemoryMutationEventMetadata {
+  const metadata = payload.metadata ?? {}
+  return {
+    source: 'rpc',
+    runId: typeof metadata.runId === 'string' ? metadata.runId : undefined,
+    evidence: typeof metadata.evidence === 'string' ? metadata.evidence : undefined,
+    actor: typeof metadata.actor === 'string' ? metadata.actor : undefined,
+  }
+}
+
 async function saveMemory(payload: MemoryMutationPayload): Promise<MemoryEntry> {
   const agentSlug = requireAgentSlug(payload.scope, payload.agentSlug)
   const input: SaveMemoryInput = {
@@ -81,6 +114,7 @@ async function saveMemory(payload: MemoryMutationPayload): Promise<MemoryEntry> 
     body: requireBody(payload),
     expires: typeof payload.expires === 'string' ? payload.expires : undefined,
     force: payload.force === true,
+    event: rpcMemoryEvent(payload),
   }
   return saveMemoryEntry(input)
 }
@@ -111,6 +145,7 @@ async function updateMemory(payload: MemoryMutationPayload): Promise<MemoryEntry
     name: requireName(payload),
     body: payload.body ?? payload.content,
     expires: payload.expires,
+    event: rpcMemoryEvent(payload),
   }
   return updateMemoryEntry(input)
 }
@@ -121,6 +156,7 @@ async function deleteMemory(payload: MemoryMutationPayload): Promise<boolean> {
     scope: payload.scope,
     agentSlug,
     name: requireName(payload),
+    event: rpcMemoryEvent(payload),
   }
   return deleteMemoryEntry(input)
 }
@@ -138,6 +174,36 @@ export function registerMemoryHandlers(server: RpcServer, deps: HandlerDeps): vo
     const loaded = loadUserMemory()
     if (!loaded) throw new Error('USER.md is invalid or unreadable')
     return loaded
+  })
+
+  server.handle(RPC_CHANNELS.memory.RECALL, async (_ctx, payload: RecallMemoryInput): Promise<MemoryRecallResult[]> => {
+    const results = recallMemoryEntries(payload)
+    if (results.length > 0) {
+      await Promise.all(results.map((result) => {
+        return appendMemoryEvent('recall', result.scope, result.agentSlug, result.entry.name, undefined, {
+          source: 'rpc',
+          evidence: payload.query,
+        })
+      }))
+    }
+    return results
+  })
+
+  server.handle(RPC_CHANNELS.memory.LIST_EVENTS, async (_ctx, payload: ListMemoryEventsPayload): Promise<MemoryEvent[]> => {
+    const agentSlug = requireAgentSlug(payload.scope, payload.agentSlug)
+    return listMemoryEvents(payload.scope, agentSlug)
+  })
+
+  server.handle(RPC_CHANNELS.memory.LIST_REVIEW_QUEUE, async (): Promise<MemoryReviewItem[]> => {
+    return listMemoryReviewItems()
+  })
+
+  server.handle(RPC_CHANNELS.memory.ENQUEUE_REVIEW, async (_ctx, payload: EnqueueMemoryReviewInput): Promise<MemoryReviewItem> => {
+    return enqueueMemoryReviewItem(payload)
+  })
+
+  server.handle(RPC_CHANNELS.memory.RESOLVE_REVIEW, async (_ctx, payload: ResolveMemoryReviewInput): Promise<MemoryReviewItem | null> => {
+    return resolveMemoryReviewItem(payload)
   })
 
   server.handle(RPC_CHANNELS.memory.UPSERT, async (_ctx, payload: MemoryMutationPayload): Promise<unknown> => {

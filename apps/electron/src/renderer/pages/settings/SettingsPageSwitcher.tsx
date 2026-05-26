@@ -17,6 +17,7 @@ const PRIMARY_ORDER: SettingsSubpage[] = [
   'input',
   'labels',
   'messaging',
+  'memory',
   'shortcuts',
   'preferences',
   'server',
@@ -29,7 +30,7 @@ export function SettingsPageSwitcher({ activeSubpage }: SettingsPageSwitcherProp
   })
 
   return (
-    <div className="w-full max-w-[760px] rounded-[15px] border border-white/[0.075] bg-[#0b0b0d]/92 p-1 shadow-[0_18px_55px_rgba(0,0,0,0.32)] backdrop-blur-xl">
+    <div className="w-full max-w-[760px] rounded-[15px] border border-white/[0.075] bg-[#0b0b0d]/92 p-1 shadow-middle backdrop-blur-xl">
       <div className="flex flex-wrap items-center gap-1">
         {orderedItems.map((item) => {
           const selected = item.id === activeSubpage

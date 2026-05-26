@@ -146,6 +146,42 @@ describe('attachSessionSelfManagementBindings', () => {
     expect(ctx.setSessionLabels).toBeDefined();
   });
 
+  it('recallMemory resolves through the lazy session callback registry', async () => {
+    const ctx = createBaseContext(sessionId);
+    attachSessionSelfManagementBindings(ctx, sessionId);
+
+    expect(ctx.recallMemory).toBeUndefined();
+
+    let receivedQuery: string | undefined;
+    registerSessionScopedToolCallbacks(sessionId, {
+      recallMemoryFn: async (input) => {
+        receivedQuery = input.query;
+        return {
+          ok: true,
+          query: input.query,
+          results: [{
+            scope: 'user',
+            name: 'preferred-style',
+            type: 'feedback',
+            content: 'Use direct language.',
+            score: 8,
+            reason: 'Matched style preference',
+            excerpt: 'Use direct language.',
+          }],
+        };
+      },
+    });
+
+    const result = await ctx.recallMemory!({ query: 'direct language', scopes: ['user'], limit: 3 });
+
+    expect(receivedQuery).toBe('direct language');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    const results = result.results ?? [];
+    expect(results).toHaveLength(1);
+    expect(results[0]!.name).toBe('preferred-style');
+  });
+
   it('callback replacement is visible without recreating the context', () => {
     const ctx = createBaseContext(sessionId);
     attachSessionSelfManagementBindings(ctx, sessionId);

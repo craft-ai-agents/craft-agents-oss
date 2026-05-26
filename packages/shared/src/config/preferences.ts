@@ -23,6 +23,13 @@ export interface DiffViewerPreferences {
   disableBackground?: boolean;
 }
 
+export type MemorySidecarMode = 'manual' | 'review';
+
+export interface MemoryPreferences {
+  /** manual: never run sidecar review; review: enqueue proposals for approval */
+  sidecarMode?: MemorySidecarMode;
+}
+
 export interface UserPreferences {
   name?: string;
   timezone?: string;
@@ -32,6 +39,8 @@ export interface UserPreferences {
   notes?: string;
   // Diff viewer display preferences
   diffViewer?: DiffViewerPreferences;
+  // Memory OS behavior preferences
+  memory?: MemoryPreferences;
   // Whether to include Co-Authored-By trailer on git commits (default: true)
   includeCoAuthoredBy?: boolean;
   // When the preferences were last updated
@@ -70,6 +79,9 @@ export function updatePreferences(updates: Partial<UserPreferences>): UserPrefer
     diffViewer: updates.diffViewer
       ? { ...current.diffViewer, ...updates.diffViewer }
       : current.diffViewer,
+    memory: updates.memory
+      ? { ...current.memory, ...updates.memory }
+      : current.memory,
   };
   savePreferences(updated);
   return updated;

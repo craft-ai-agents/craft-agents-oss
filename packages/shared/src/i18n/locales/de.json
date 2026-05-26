@@ -918,6 +918,8 @@
   "settings.server.connectionSection": "Verbindung",
   "settings.server.copiedToClipboard": "{{label}} in die Zwischenablage kopiert",
   "settings.server.description": "Fernzugriff auf den Server",
+  "settings.memory.description": "Memory review, activity, and durable user facts",
+  "settings.memory.title": "Memory",
   "settings.server.enableServerMode": "Servermodus aktivieren",
   "settings.server.failedToSave": "Speichern fehlgeschlagen: {{message}}",
   "settings.server.insecureWarning": "Server läuft ohne TLS. Auth-Token werden im Klartext übertragen.",

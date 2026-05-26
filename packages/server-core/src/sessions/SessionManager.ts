@@ -37,7 +37,7 @@ import {
   type WorkspaceInfo,
 } from '@craft-agent/shared/config'
 import type { ActiveSessionInfo, SessionProcessingStatus } from '@craft-agent/core/types'
-import type { MemoryMutationResult } from '@craft-agent/session-tools-core'
+import type { MemoryMutationResult, RecalledMemoryEntry, RecallMemoryResult, RecallMemoryToolInput } from '@craft-agent/session-tools-core'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import {
   // Session persistence functions
@@ -86,6 +86,7 @@ import { type Session, type SessionEvent, type FileAttachment, type SendMessageO
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
 import { loadAllSkills, loadGlobalSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
+import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { assertOutputAssetPath, readOutput } from '@craft-agent/shared/outputs'
@@ -93,6 +94,9 @@ import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
+import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
+import { createMemorySidecarReviewer, MemorySidecarService } from '../memory/MemorySidecarService'
+import { profileDeepResearchSource } from '@craft-agent/shared/deep-research'
 import { OutputService } from '../outputs/OutputService'
 import {
   loadAllGlobalWorkflows,
@@ -104,9 +108,12 @@ import {
   writeGlobalWorkflow,
 } from '@craft-agent/shared/workflows'
 import {
+  appendMemoryEvent,
   deleteMemoryEntry,
   listAgentMemoryEntries,
+  listMemoryEvents,
   listUserMemoryEntries,
+  recallMemoryEntries,
   saveMemoryEntry,
   updateMemoryEntry,
   buildMemorySectionsText,
@@ -114,6 +121,8 @@ import {
   type DeleteMemoryInput,
   type MemoryEntry as StoredMemoryEntry,
   type MemoryEntryType,
+  type MemoryMutationEventMetadata,
+  type MemoryRecallResult,
   type MemoryScope,
   type SaveMemoryInput,
   type UpdateMemoryInput,
@@ -128,7 +137,7 @@ import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntr
 import type { PulseAction } from '@craft-agent/shared/pulses'
 import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
-import { CONCIERGE_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
+import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { filterAttachmentsForModelInput } from './runtime-config'
 
 // Import from server-core domain utilities
@@ -224,6 +233,7 @@ async function mutateMemory(
   scope: MemoryScope,
   input: Record<string, unknown>,
   agentSlug?: string,
+  event?: MemoryMutationEventMetadata,
 ): Promise<MemoryMutationResult> {
   if (scope === 'agent' && !agentSlug) throw new Error('agentSlug is required for agent memory')
   const name = typeof input.name === 'string' ? input.name.trim() : ''
@@ -240,6 +250,7 @@ async function mutateMemory(
       type,
       body,
       expires: typeof input.expires === 'string' ? input.expires : undefined,
+      event,
     } satisfies SaveMemoryInput)
     return { ok: true, scope, name: saved.name, file: undefined }
   }
@@ -250,11 +261,81 @@ async function mutateMemory(
       name,
       body: typeof input.content === 'string' ? input.content : undefined,
       expires: input.expires === null || typeof input.expires === 'string' ? input.expires : undefined,
+      event,
     } satisfies UpdateMemoryInput)
     return updated ? { ok: true, scope, name: updated.name } : { ok: false, scope, name, error: `Memory not found: ${name}` }
   }
-  const deleted = await deleteMemoryEntry({ scope, agentSlug, name } satisfies DeleteMemoryInput)
+  const deleted = await deleteMemoryEntry({ scope, agentSlug, name, event } satisfies DeleteMemoryInput)
   return deleted ? { ok: true, scope, name } : { ok: false, scope, name, error: `Memory not found: ${name}` }
+}
+
+async function recallSessionMemory(
+  input: RecallMemoryToolInput,
+  sessionId: string,
+  activeAgentSlug?: string,
+): Promise<RecallMemoryResult> {
+  const scopes: MemoryScope[] = input.scopes?.length ? input.scopes : (activeAgentSlug ? ['user', 'agent'] : ['user'])
+  if (scopes.includes('agent') && !activeAgentSlug) {
+    return { ok: false, error: 'agent scope recall requires an active agent for this session.' }
+  }
+
+  const results = recallMemoryEntries({
+    query: input.query,
+    scopes,
+    agentSlug: activeAgentSlug,
+    limit: input.limit,
+  })
+
+  if (results.length > 0) {
+    await Promise.all(results.map((result) => appendMemoryEvent(
+      'recall',
+      result.scope,
+      result.agentSlug,
+      result.entry.name,
+      undefined,
+      {
+        source: 'agent_tool',
+        runId: sessionId,
+        actor: activeAgentSlug ?? 'session',
+        evidence: input.query,
+      },
+    )))
+  }
+
+  return {
+    ok: true,
+    query: input.query,
+    results: results.map(toSessionRecallResult),
+  }
+}
+
+function toSessionRecallResult(result: MemoryRecallResult): RecalledMemoryEntry {
+  return {
+    scope: result.scope,
+    agentSlug: result.agentSlug,
+    name: result.entry.name,
+    type: result.entry.type,
+    content: result.entry.body,
+    score: result.score,
+    reason: result.reason,
+    excerpt: result.excerpt,
+  }
+}
+
+function countMemoryMutationsSince(sinceIso: string): number {
+  const sinceTime = Date.parse(sinceIso)
+  if (!Number.isFinite(sinceTime)) return 0
+  const isWrite = (action: string) => action === 'save' || action === 'update' || action === 'forget' || action === 'consolidate'
+  const afterSince = (createdAt: string) => {
+    const eventTime = Date.parse(createdAt)
+    return Number.isFinite(eventTime) && eventTime >= sinceTime
+  }
+
+  let count = listMemoryEvents('user').filter((event) => isWrite(event.action) && afterSince(event.createdAt)).length
+  for (const agent of loadAllGlobalAgents()) {
+    count += listMemoryEvents('agent', agent.slug).filter((event) => isWrite(event.action) && afterSince(event.createdAt)).length
+  }
+  return count
 }
 
 function memoryEntryTitle(entry: WorkflowMemoryEntry): string {
@@ -272,6 +353,20 @@ function memoryEntryTitle(entry: WorkflowMemoryEntry): string {
  */
 function buildWorkflowMemoryText(memory?: WorkflowMemoryInputs): string {
   return buildMemorySectionsText(memory?.userEntries ?? [], memory?.agentEntries ?? [])
+}
+
+function findPreviousUserMessage(messages: Message[], beforeIndex: number): Message | undefined {
+  for (let index = beforeIndex - 1; index >= 0; index--) {
+    const message = messages[index]
+    if (message.role === 'user') return message
+  }
+  return undefined
+}
+
+function truncateMemorySidecarText(value: string, maxLength = 8000): string {
+  const normalized = value.trim()
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, maxLength)}\n[truncated]`
 }
 
 function formatWorkflowBundleBullet(slug: string, name: string | undefined, description: string | undefined): string {
@@ -370,6 +465,35 @@ function completeLaunchReceipt(
     },
     routing: receipt?.routing,
   }
+}
+
+async function recordInjectedMemoryFromLaunchReceipt(
+  receipt: SessionLaunchReceipt,
+  sessionId: string,
+): Promise<void> {
+  const userEntries = receipt.injected.memory?.user ?? []
+  const agentEntries = receipt.injected.memory?.agent ?? []
+  if (userEntries.length === 0 && agentEntries.length === 0) return
+
+  const actor = receipt.agent?.slug ?? receipt.origin
+  const evidence = `${receipt.origin} launch injected memory`
+  const writes = userEntries.map((entry) => appendMemoryEvent('inject', 'user', undefined, entry.name, undefined, {
+    source: 'system',
+    runId: sessionId,
+    actor,
+    evidence,
+  }))
+
+  if (receipt.agent?.slug) {
+    writes.push(...agentEntries.map((entry) => appendMemoryEvent('inject', 'agent', receipt.agent!.slug, entry.name, undefined, {
+      source: 'system',
+      runId: sessionId,
+      actor,
+      evidence,
+    })))
+  }
+
+  await Promise.all(writes)
 }
 
 const automationConfigMutexes = new Map<string, Promise<void>>()
@@ -1319,6 +1443,8 @@ export class SessionManager implements ISessionManager {
   private lastTimestamp = 0
   /** Workflow runner — bootstrapped during `initialize()`. */
   private workflowRunner!: WorkflowRunner
+  /** Deep Research runner — bootstrapped during `initialize()`. */
+  private deepResearchRunner!: DeepResearchRunner
 
   /**
    * Centralized setter for session processing state.
@@ -1788,6 +1914,7 @@ export class SessionManager implements ISessionManager {
               entry,
             )
           },
+          countMemoryWritesSince: (_workspaceRootPath, sinceIso) => countMemoryMutationsSince(sinceIso),
         })
 
         try {
@@ -1845,7 +1972,9 @@ export class SessionManager implements ISessionManager {
   async resolveAgentSessionOptions(
     workspaceId: string,
     agentSlug: string,
+    options: { referenceMode?: 'strict' | 'lenient' } = {},
   ): Promise<Partial<CreateSessionOptions>> {
+    const strict = options.referenceMode !== 'lenient'
     const ws = getWorkspaceByNameOrId(workspaceId)
     if (!ws) throw new Error(`Workspace not found: ${workspaceId}`)
     const { loadActiveContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
@@ -1854,9 +1983,12 @@ export class SessionManager implements ISessionManager {
     const skills = loadAllSkills(ws.rootPath)
     const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
     const declaredSkillSlugs = agent.metadata.skills ?? []
-    const resolvedSkillSlugs = declaredSkillSlugs.filter((slug) => skillBySlug.has(slug))
-    const missingSkillSlugs = declaredSkillSlugs.filter((slug) => !skillBySlug.has(slug))
-    if (missingSkillSlugs.length > 0) {
+    const canUseSystemSkills = agent.slug === CONCIERGE_SLUG || agent.slug === ORCHESTRATOR_SLUG
+    const resolvedSkillSlugs = declaredSkillSlugs.filter((slug) => (
+      skillBySlug.has(slug) || (canUseSystemSkills && isSystemGlobalSkillSlug(slug))
+    ))
+    const missingSkillSlugs = declaredSkillSlugs.filter((slug) => !resolvedSkillSlugs.includes(slug))
+    if (strict && missingSkillSlugs.length > 0) {
       throw new Error(`Agent "${agentSlug}" references unavailable skills in this workspace: ${missingSkillSlugs.join(', ')}`)
     }
     const sources = getSourcesBySlugs(ws.rootPath, agent.metadata.sources ?? [])
@@ -1871,7 +2003,7 @@ export class SessionManager implements ISessionManager {
       ...missingSourceSlugs.map((slug) => `${slug} (not active in this workspace)`),
       ...unusableSourceSlugs.map((slug) => `${slug} (disabled or unauthenticated)`),
     ]
-    if (sourceProblems.length > 0) {
+    if (strict && sourceProblems.length > 0) {
       throw new Error(`Agent "${agentSlug}" references unavailable sources in this workspace: ${sourceProblems.join(', ')}`)
     }
     const usableSources = sources.filter(isSourceUsable)
@@ -2048,6 +2180,31 @@ export class SessionManager implements ISessionManager {
     return this.workflowRunner
   }
 
+  private broadcastDeepResearchRunUpdated(event: DeepResearchRunnerEvent): void {
+    if (!this.eventSink) return
+    if (event.type === 'outputs.updated') {
+      this.eventSink(
+        RPC_CHANNELS.outputs.UPDATED,
+        { to: 'workspace', workspaceId: event.workspaceId },
+        event.workspaceId,
+      )
+      return
+    }
+    const eventType: 'created' | 'updated' | 'completed' =
+      event.type === 'run.created' ? 'created' : event.type === 'run.completed' ? 'completed' : 'updated'
+    this.eventSink(
+      RPC_CHANNELS.deepResearch.UPDATED,
+      { to: 'workspace', workspaceId: event.run.workspaceId },
+      event.run.workspaceId,
+      event.run,
+      eventType,
+    )
+  }
+
+  getDeepResearchRunner(): DeepResearchRunner {
+    return this.deepResearchRunner
+  }
+
   private notificationServiceInstance?: import('../notifications/NotificationService').NotificationService
 
   /**
@@ -2192,6 +2349,7 @@ export class SessionManager implements ISessionManager {
           STARTER_AGENTS,
           ORCHESTRATOR_SLUG,
           CONCIERGE_SLUG,
+          SOCIAL_PUBLISHER_SLUG,
         } = await import('@craft-agent/shared/agent-definitions')
         const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
         if (seeded > 0) {
@@ -2201,7 +2359,7 @@ export class SessionManager implements ISessionManager {
         // (sidebar pin + future Rooms coordinator) and Concierge (top-level
         // Chat nav entry — without it the Chat link goes nowhere).
         const required = STARTER_AGENTS.filter(
-          (a) => a.slug === ORCHESTRATOR_SLUG || a.slug === CONCIERGE_SLUG,
+          (a) => a.slug === ORCHESTRATOR_SLUG || a.slug === CONCIERGE_SLUG || a.slug === SOCIAL_PUBLISHER_SLUG,
         )
         const { ensured } = ensureRequiredAgents(required)
         if (ensured > 0) {
@@ -2401,6 +2559,76 @@ user a clickable link to where the thing now lives.`
       )
       if (recoveredWorkflowRuns.length > 0) {
         sessionLog.info(`Recovered ${recoveredWorkflowRuns.length} interrupted workflow run(s)`)
+      }
+
+      this.deepResearchRunner = new DeepResearchRunner({
+        createSession: (wsId, opts) => this.createSession(wsId, opts).then((s) => ({ id: s.id })),
+        sendMessage: (sessionId, prompt) => this.sendMessage(sessionId, prompt),
+        getLastAssistantText: (sessionId) => this.getLastAssistantTextForSession(sessionId),
+        getSessionToolUseSummary: (sessionId) => {
+          const managed = this.sessions.get(sessionId)
+          if (!managed) return { count: 0, names: [] }
+          const names = managed.messages
+            .filter((message) => (
+              message.role === 'tool' &&
+              message.toolStatus === 'completed' &&
+              message.isError !== true &&
+              typeof message.toolName === 'string' &&
+              message.toolName.length > 0
+            ))
+            .map((message) => message.toolName!)
+          return { count: names.length, names: Array.from(new Set(names)).sort() }
+        },
+        abortSession: async (sessionId) => {
+          const managed = this.sessions.get(sessionId)
+          if (!managed) return
+          managed.agent?.forceAbort(AbortReason.UserStop)
+        },
+        getWorkspaceRootPath: (wsId) => {
+          const ws = getWorkspaceByNameOrId(wsId)
+          if (!ws) throw new Error(`Workspace not found: ${wsId}`)
+          return ws.rootPath
+        },
+        resolveSourceReadiness: (wsId, requestedSlugs) => {
+          const ws = getWorkspaceByNameOrId(wsId)
+          if (!ws) throw new Error(`Workspace not found: ${wsId}`)
+          const sources = loadAllSources(ws.rootPath)
+          if (requestedSlugs.length === 0) {
+            const usable = sources.filter(isSourceUsable).map((source) => source.config.slug).sort()
+            return { requested: usable, usable, missing: [], unusable: [] }
+          }
+          const bySlug = new Map(sources.map((source) => [source.config.slug, source]))
+          const missing: string[] = []
+          const unusable: string[] = []
+          const usable: string[] = []
+          for (const slug of requestedSlugs) {
+            const source = bySlug.get(slug)
+            if (!source) {
+              missing.push(slug)
+            } else if (!isSourceUsable(source)) {
+              unusable.push(slug)
+            } else {
+              usable.push(slug)
+            }
+          }
+          return { requested: requestedSlugs, usable, missing, unusable }
+        },
+        resolveSourceProfiles: (wsId, sourceSlugs) => {
+          const ws = getWorkspaceByNameOrId(wsId)
+          if (!ws) throw new Error(`Workspace not found: ${wsId}`)
+          const bySlug = new Map(loadAllSources(ws.rootPath).map((source) => [source.config.slug, source]))
+          return sourceSlugs
+            .map((slug) => bySlug.get(slug))
+            .filter((source): source is LoadedSource => Boolean(source && isSourceUsable(source)))
+            .map(profileDeepResearchSource)
+        },
+        emit: (event) => this.broadcastDeepResearchRunUpdated(event),
+      })
+      const recoveredDeepResearchRuns = this.deepResearchRunner.recoverInterruptedRuns(
+        workspaces.map((workspace) => ({ id: workspace.id, rootPath: workspace.rootPath })),
+      )
+      if (recoveredDeepResearchRuns.length > 0) {
+        sessionLog.info(`Recovered ${recoveredDeepResearchRuns.length} interrupted deep research run(s)`)
       }
 
       // Signal that initialization is complete — IPC handlers waiting on initGate will proceed
@@ -3262,6 +3490,12 @@ user a clickable link to where the thing now lives.`
       spawnedFromAgent: options?.spawnedFromAgent,
       launchReceipt,
     })
+
+    try {
+      await recordInjectedMemoryFromLaunchReceipt(launchReceipt, storedSession.id)
+    } catch (error) {
+      sessionLog.warn(`[memory] Failed to record injected memory for session ${storedSession.id}:`, error)
+    }
 
     // Branch: copy messages from source session up to and including the branch point
     if (validatedBranch) {
@@ -4353,23 +4587,38 @@ user a clickable link to where the thing now lives.`
         saveMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
-          const result = await mutateMemory('save', scope, { ...input }, agentSlug)
+          const result = await mutateMemory('save', scope, { ...input }, agentSlug, {
+            source: 'agent_tool',
+            runId: managed.id,
+            actor: managed.spawnedFromAgent?.agentSlug ?? 'session',
+          })
           this.broadcastMemoryChanged(scope, scope === 'agent' ? agentSlug ?? null : null)
           return result
         },
         updateMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
-          const result = await mutateMemory('update', scope, { ...input }, agentSlug)
+          const result = await mutateMemory('update', scope, { ...input }, agentSlug, {
+            source: 'agent_tool',
+            runId: managed.id,
+            actor: managed.spawnedFromAgent?.agentSlug ?? 'session',
+          })
           this.broadcastMemoryChanged(scope, scope === 'agent' ? agentSlug ?? null : null)
           return result
         },
         forgetMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
-          const result = await mutateMemory('delete', scope, { ...input }, agentSlug)
+          const result = await mutateMemory('delete', scope, { ...input }, agentSlug, {
+            source: 'agent_tool',
+            runId: managed.id,
+            actor: managed.spawnedFromAgent?.agentSlug ?? 'session',
+          })
           this.broadcastMemoryChanged(scope, scope === 'agent' ? agentSlug ?? null : null)
           return result
+        },
+        recallMemoryFn: async (input) => {
+          return recallSessionMemory(input, managed.id, managed.spawnedFromAgent?.agentSlug)
         },
         createOutputFn: async (input) => {
           const workflow = managed.launchReceipt?.workflow
@@ -5565,6 +5814,82 @@ user a clickable link to where the thing now lives.`
       }
     }
     return undefined
+  }
+
+  private scheduleMemorySidecarReview(managed: ManagedSession, finalMessageId: string | undefined): void {
+    if (!finalMessageId) return
+    if (!managed.agent) return
+    if (managed.hidden || managed.systemPromptPreset === 'mini') return
+    if ((loadPreferences().memory?.sidecarMode ?? 'review') === 'manual') return
+
+    const assistantIndex = managed.messages.findIndex((message) => message.id === finalMessageId)
+    if (assistantIndex < 0) return
+
+    const assistantMessage = managed.messages[assistantIndex]
+    const userMessage = findPreviousUserMessage(managed.messages, assistantIndex)
+    if (!userMessage?.content.trim() || !assistantMessage.content.trim()) return
+
+    const activeAgentSlug = managed.spawnedFromAgent?.agentSlug
+    const service = new MemorySidecarService({
+      reviewer: createMemorySidecarReviewer(managed.agent.runMiniCompletion.bind(managed.agent)),
+    })
+
+    void service.reviewTurn({
+      userMessage: truncateMemorySidecarText(userMessage.content),
+      assistantResponse: truncateMemorySidecarText(assistantMessage.content),
+      activeAgentSlug,
+      runId: managed.id,
+      existingMemoryIndex: this.buildMemorySidecarIndex(activeAgentSlug),
+    }).then((result) => {
+      if (!result.queued || !result.scope) return
+      this.broadcastMemoryChanged(result.scope, result.scope === 'agent' ? result.agentSlug ?? null : null)
+      sessionLog.info(`[memory] Sidecar queued review item ${result.itemId ?? '(unknown)'} for session ${managed.id}`)
+    }).catch((error) => {
+      sessionLog.warn(`[memory] Sidecar review failed for session ${managed.id}:`, error)
+    })
+  }
+
+  private buildMemorySidecarIndex(activeAgentSlug?: string): Array<{
+    scope: MemoryScope
+    agentSlug?: string
+    name: string
+    type: MemoryEntryType
+    body: string
+  }> {
+    const entries: Array<{
+      scope: MemoryScope
+      agentSlug?: string
+      name: string
+      type: MemoryEntryType
+      body: string
+    }> = []
+
+    try {
+      entries.push(...listUserMemoryEntries().map((entry) => ({
+        scope: 'user' as const,
+        name: entry.name,
+        type: entry.type,
+        body: truncateMemorySidecarText(entry.body, 1000),
+      })))
+    } catch (error) {
+      sessionLog.warn('[memory] Failed to load user memory for sidecar index:', error)
+    }
+
+    if (activeAgentSlug) {
+      try {
+        entries.push(...listAgentMemoryEntries(activeAgentSlug).map((entry) => ({
+          scope: 'agent' as const,
+          agentSlug: activeAgentSlug,
+          name: entry.name,
+          type: entry.type,
+          body: truncateMemorySidecarText(entry.body, 1000),
+        })))
+      } catch (error) {
+        sessionLog.warn(`[memory] Failed to load agent memory for sidecar index (${activeAgentSlug}):`, error)
+      }
+    }
+
+    return entries
   }
 
   /**
@@ -7055,6 +7380,10 @@ user a clickable link to where the thing now lives.`
         this.browserPaneManager.unbindAllForSession(sessionId)
       }
 
+      if (reason === 'complete' && didReceiveNewFinalMessage) {
+        this.scheduleMemorySidecarReview(managed, currentFinalMessageId)
+      }
+
       // No queue - emit complete to UI (include tokenUsage and hasUnread for state updates)
       this.sendEvent({
         type: 'complete',
@@ -8317,9 +8646,10 @@ user a clickable link to where the thing now lives.`
         },
         config: {},
         injected: {
-          skills: resolved?.skillSlugs ?? [],
-          sources: resolved?.sourceSlugs ?? [],
-          contextDocs: [],
+          ...(agentOptions?.launchReceipt?.injected ?? {}),
+          skills: agentSkillSlugs ?? [],
+          sources: enabledSourceSlugs ?? [],
+          contextDocs: agentOptions?.launchReceipt?.injected.contextDocs ?? [],
         },
       },
     })

@@ -26,6 +26,8 @@
     "./docs/doc-links": "./src/docs/doc-links.ts",
     "./config/types": "./src/config/types.ts",
     "./credentials": "./src/credentials/index.ts",
+    "./deep-research": "./src/deep-research/index.ts",
+    "./deep-research/source-profile": "./src/deep-research/source-profile.ts",
     "./memory": "./src/memory/index.ts",
     "./memory/render": "./src/memory/render.ts",
     "./memory/types": "./src/memory/types.ts",

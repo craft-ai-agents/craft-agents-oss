@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useAtom } from 'jotai'
 import { agentsStateAtomFamily, type AgentsState } from '@/atoms/agents'
-import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
+import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SOCIAL_PUBLISHER_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO } from '../../shared/types'
 
 export interface UseAgentsResult {
@@ -41,7 +41,7 @@ export interface UseAgentsResult {
 }
 
 const NULL_WORKSPACE_KEY = '__no_workspace__'
-const SYSTEM_AGENT_SLUGS = [CONCIERGE_SLUG, ORCHESTRATOR_SLUG] as const
+const SYSTEM_AGENT_SLUGS = [CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SOCIAL_PUBLISHER_SLUG] as const
 const inFlightRefreshes = new Map<string, Promise<void>>()
 const mountedWorkspaceKeys = new Map<string, number>()
 let globalDefinitionsCleanup: (() => void) | null = null

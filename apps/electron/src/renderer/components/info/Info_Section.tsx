@@ -40,7 +40,7 @@ export function Info_Section({
         </div>
         {actions}
       </div>
-      <div className="overflow-hidden rounded-[14px] border border-white/[0.075] bg-white/[0.035] shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
+      <div className="overflow-hidden rounded-[14px] border border-white/[0.075] bg-white/[0.035] shadow-middle">
         {children}
       </div>
     </section>

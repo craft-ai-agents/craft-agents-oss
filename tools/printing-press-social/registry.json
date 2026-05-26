@@ -1,0 +1,57 @@
+{
+  "name": "printing-press-social",
+  "version": "0.1.0",
+  "model": "CLI-Anything",
+  "platforms": {
+    "instagram": {
+      "path": "instagram-cli",
+      "entrypoint": "src/cli.mjs",
+      "skill": "skills/SKILL.md",
+      "harness": "HARNESS.md"
+    },
+    "tiktok": {
+      "path": "tiktok-cli",
+      "entrypoint": "src/cli.mjs",
+      "skill": "skills/SKILL.md",
+      "harness": "HARNESS.md"
+    },
+    "x": {
+      "path": "x-cli",
+      "entrypoint": "src/cli.mjs",
+      "skill": "skills/SKILL.md",
+      "harness": "HARNESS.md"
+    },
+    "youtube": {
+      "path": "youtube-cli",
+      "entrypoint": "src/cli.mjs",
+      "skill": "skills/SKILL.md",
+      "harness": "HARNESS.md"
+    }
+  },
+  "commands": [
+    { "verb": "doctor", "platform": "*" },
+    { "verb": "profile", "platform": "instagram" },
+    { "verb": "post", "platform": "instagram" },
+    { "verb": "comment", "platform": "instagram" },
+    { "verb": "dm", "platform": "instagram" },
+    { "verb": "profile", "platform": "tiktok" },
+    { "verb": "post", "platform": "tiktok" },
+    { "verb": "comment", "platform": "tiktok" },
+    { "verb": "dm", "platform": "tiktok" },
+    { "verb": "profile", "platform": "x" },
+    { "verb": "post", "platform": "x" },
+    { "verb": "comment", "platform": "x" },
+    { "verb": "dm", "platform": "x" },
+    { "verb": "profile", "platform": "youtube" },
+    { "verb": "post", "platform": "youtube" },
+    { "verb": "comment", "platform": "youtube" }
+  ],
+  "schemas": {
+    "action": "schemas/action.schema.json",
+    "result": "schemas/result.schema.json"
+  },
+  "repl": {
+    "command": "social repl",
+    "description": "Interactive command loop for the root dispatcher"
+  }
+}

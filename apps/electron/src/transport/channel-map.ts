@@ -410,6 +410,11 @@ export const CHANNEL_MAP = {
   // Memory (global USER.md + per-agent MEMORY.md)
   listAgentMemory: invoke(RPC_CHANNELS.memory.LIST_AGENT),
   listUserMemory: invoke(RPC_CHANNELS.memory.LIST_USER),
+  recallMemory: invoke(RPC_CHANNELS.memory.RECALL),
+  listMemoryEvents: invoke(RPC_CHANNELS.memory.LIST_EVENTS),
+  listMemoryReviewQueue: invoke(RPC_CHANNELS.memory.LIST_REVIEW_QUEUE),
+  enqueueMemoryReview: invoke(RPC_CHANNELS.memory.ENQUEUE_REVIEW),
+  resolveMemoryReview: invoke(RPC_CHANNELS.memory.RESOLVE_REVIEW),
   upsertMemory: invoke(RPC_CHANNELS.memory.UPSERT),
   saveMemory: invoke(RPC_CHANNELS.memory.SAVE),
   updateMemory: invoke(RPC_CHANNELS.memory.UPDATE),
@@ -433,6 +438,16 @@ export const CHANNEL_MAP = {
   resumeWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.RESUME),
   deleteWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.DELETE),
   onWorkflowRunUpdated: listener(RPC_CHANNELS.workflowRuns.UPDATED),
+
+  // Deep Research runs
+  startDeepResearchRun: invoke(RPC_CHANNELS.deepResearch.START),
+  getDeepResearchRun: invoke(RPC_CHANNELS.deepResearch.GET),
+  listDeepResearchRuns: invoke(RPC_CHANNELS.deepResearch.LIST),
+  approveDeepResearchPlan: invoke(RPC_CHANNELS.deepResearch.APPROVE),
+  reviseDeepResearchPlan: invoke(RPC_CHANNELS.deepResearch.REVISE),
+  cancelDeepResearchRun: invoke(RPC_CHANNELS.deepResearch.CANCEL),
+  deleteDeepResearchRun: invoke(RPC_CHANNELS.deepResearch.DELETE),
+  onDeepResearchRunUpdated: listener(RPC_CHANNELS.deepResearch.UPDATED),
 
   // Notifications (bell entries — pulse + system)
   listNotifications: invoke(RPC_CHANNELS.notifications.LIST),

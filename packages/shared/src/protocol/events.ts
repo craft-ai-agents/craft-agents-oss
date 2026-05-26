@@ -7,6 +7,7 @@ import type { ThemeOverrides } from '../config/index'
 import type { NotificationEntry } from '../notifications/types'
 import type { OutputSummary } from '../outputs'
 import type { PulseTickEntry } from '../pulses/types'
+import type { DeepResearchRunSnapshot } from '../deep-research'
 import type { LoadedSource } from '../sources/types'
 import type { LoadedSkill } from '../skills/types'
 import type { LoadedContextDoc } from '../workspace-context/types'
@@ -41,6 +42,11 @@ export interface BroadcastEventMap {
   [RPC_CHANNELS.workflowRuns.UPDATED]: [
     workspaceId: string,
     run: WorkflowRunSnapshot,
+    eventType: 'created' | 'updated' | 'completed',
+  ]
+  [RPC_CHANNELS.deepResearch.UPDATED]: [
+    workspaceId: string,
+    run: DeepResearchRunSnapshot,
     eventType: 'created' | 'updated' | 'completed',
   ]
   [RPC_CHANNELS.outputs.UPDATED]: [workspaceId: string, outputs?: OutputSummary[]]

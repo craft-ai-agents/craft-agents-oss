@@ -18,7 +18,7 @@ export { type SessionStatusId, type SessionStatus, getStateIcon, getStateColor }
 // Shared Styles (matching slash-command-menu)
 // ============================================================================
 
-const MENU_CONTAINER_STYLE = 'min-w-[180px] overflow-hidden rounded-[12px] border border-white/[0.08] bg-[#0a0a0c]/95 text-white/78 shadow-[0_24px_70px_rgba(0,0,0,0.48)]'
+const MENU_CONTAINER_STYLE = 'min-w-[180px] overflow-hidden rounded-[12px] border border-white/[0.08] bg-[#0a0a0c]/95 text-white/78 shadow-middle'
 const MENU_LIST_STYLE = 'max-h-[240px] overflow-y-auto p-1 [&_[cmdk-list-sizer]]:space-y-px'
 const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-3 rounded-[6px] px-3 py-1.5 text-[13px]'
 

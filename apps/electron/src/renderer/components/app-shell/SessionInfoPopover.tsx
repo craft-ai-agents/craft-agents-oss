@@ -173,6 +173,20 @@ function LaunchReceiptSection({ receipt }: { receipt: SessionLaunchReceipt }) {
   const skills = injected.skills ?? []
   const sources = injected.sources ?? []
   const agentCatalog = injected.agentCatalog ?? []
+  const userMemory = injected.memory?.user ?? []
+  const agentMemory = injected.memory?.agent ?? []
+  const memoryItems = [
+    ...userMemory.map((entry) => ({
+      key: `user:${entry.name}`,
+      name: entry.name,
+      slug: 'USER.md',
+    })),
+    ...agentMemory.map((entry) => ({
+      key: `agent:${entry.name}`,
+      name: entry.name,
+      slug: 'MEMORY.md',
+    })),
+  ]
   const configItems = [
     ['Model', receipt.config.model],
     ['Connection', receipt.config.llmConnection],
@@ -233,6 +247,13 @@ function LaunchReceiptSection({ receipt }: { receipt: SessionLaunchReceipt }) {
               slug: doc.slug,
             }))}
             emptyLabel="No context docs"
+          />
+        </ReceiptGroup>
+
+        <ReceiptGroup title="Memory" summary={formatCount(memoryItems.length, 'entry')}>
+          <ReceiptEntityList
+            items={memoryItems}
+            emptyLabel="No memory injected"
           />
         </ReceiptGroup>
 

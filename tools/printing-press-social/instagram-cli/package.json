@@ -1,0 +1,26 @@
+{
+  "name": "printing-press-instagram-cli",
+  "version": "0.1.0",
+  "license": "UNLICENSED",
+  "description": "Agent-native social CLI harness, starting with Instagram.",
+  "type": "module",
+  "bin": {
+    "instagram-social": "./src/cli.mjs"
+  },
+  "files": [
+    "README.md",
+    "HARNESS.md",
+    "skills",
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "smoke": "node src/cli.mjs --help && node src/cli.mjs profile list --json && node src/cli.mjs post instagram --profile smoke --text \"hello\" --media test/fixtures/sample.jpg --dry-run --json && node src/cli.mjs comment instagram --profile smoke --url https://www.instagram.com/p/test/ --text \"nice\" --dry-run --json && node src/cli.mjs dm instagram --profile smoke --to testuser --text \"hello\" --dry-run --json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.56.1"
+  }
+}

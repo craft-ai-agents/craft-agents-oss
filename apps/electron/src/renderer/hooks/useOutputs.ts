@@ -57,7 +57,8 @@ export interface OutputLinkDTO {
 }
 
 export interface OutputOriginDTO {
-  source: 'workflow' | 'session' | 'automation' | 'manual'
+  source: 'workflow' | 'session' | 'automation' | 'manual' | 'deep-research'
+  deepResearchRunId?: string
   workflowRunId?: string
   workflowSlug?: string
   workflowName?: string

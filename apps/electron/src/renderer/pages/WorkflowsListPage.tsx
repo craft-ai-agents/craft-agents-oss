@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
-import { CircleMinus, History, Pencil, Play, Plus, Trash2, X, Workflow as WorkflowIcon } from 'lucide-react'
+import { CircleMinus, History, Pencil, Play, Plus, Search, Trash2, X, Workflow as WorkflowIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,10 +12,15 @@ import {
 } from '@/components/ui/dialog'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
+import { sourcesAtom } from '@/atoms/sources'
+import { deriveConnectionStatus } from '@/components/ui/source-status-indicator'
+import { hasDeepResearchDiscoveryCapability, inferDeepResearchSourceCapabilities } from '@craft-agent/shared/deep-research/source-profile'
 import { useWorkflows } from '@/hooks/useWorkflows'
 import { useWorkflowRuns } from '@/hooks/useWorkflowRuns'
+import { useDeepResearchRuns } from '@/hooks/useDeepResearchRuns'
+import { useAtomValue } from 'jotai'
 import { WorkflowRunInputDialog } from './WorkflowRunInputDialog'
-import type { WorkflowDTO, WorkflowRunDTO, WorkflowRunState } from '../../shared/types'
+import type { LoadedSource, WorkflowDTO, WorkflowRunDTO, WorkflowRunState } from '../../shared/types'
 
 interface WorkflowsListPageProps {
   workspaceId: string
@@ -49,12 +54,33 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   const { navigate } = useNavigation()
   const { allWorkflows, activeWorkflows, activeSlugs, loading, error, remove, setActive } = useWorkflows(workspaceId)
   const { runs } = useWorkflowRuns(workspaceId)
+  const { start: startDeepResearch } = useDeepResearchRuns(workspaceId)
+  const sources = useAtomValue(sourcesAtom)
+  const usableSources = React.useMemo(() => sources.filter(isUsableSource), [sources])
   const [runDialogWorkflow, setRunDialogWorkflow] = React.useState<WorkflowDTO | null>(null)
   const [detailWorkflow, setDetailWorkflow] = React.useState<WorkflowDTO | null>(null)
+  const [deepResearchOpen, setDeepResearchOpen] = React.useState(false)
+  const [deepResearchTopic, setDeepResearchTopic] = React.useState('')
+  const [deepResearchPolicy, setDeepResearchPolicy] = React.useState<'approve' | 'auto'>('approve')
+  const [deepResearchDepth, setDeepResearchDepth] = React.useState<'quick' | 'standard' | 'deep'>('standard')
+  const [deepResearchSourceSlugs, setDeepResearchSourceSlugs] = React.useState<string[]>([])
+  const [deepResearchStarting, setDeepResearchStarting] = React.useState(false)
+  const rankedDeepResearchSources = React.useMemo(
+    () => rankDeepResearchSources(usableSources, deepResearchTopic),
+    [deepResearchTopic, usableSources],
+  )
   const activeSlugSet = React.useMemo(() => new Set(activeSlugs), [activeSlugs])
   const inactiveWorkflows = React.useMemo(
     () => allWorkflows.filter((wf) => !activeSlugSet.has(wf.slug)),
     [activeSlugSet, allWorkflows],
+  )
+  const selectedDeepResearchSources = React.useMemo(
+    () => rankedDeepResearchSources.filter((source) => deepResearchSourceSlugs.includes(source.config.slug)),
+    [deepResearchSourceSlugs, rankedDeepResearchSources],
+  )
+  const hasDeepResearchDiscoverySource = React.useMemo(
+    () => selectedDeepResearchSources.some(hasDeepResearchDiscoveryCapability),
+    [selectedDeepResearchSources],
   )
 
   const lastRunBySlug = React.useMemo(() => {
@@ -122,6 +148,47 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
     }
   }
 
+  const handleStartDeepResearch = async () => {
+    if (deepResearchStarting || !hasDeepResearchDiscoverySource) return
+    setDeepResearchStarting(true)
+    try {
+      const created = await startDeepResearch({
+        topic: deepResearchTopic,
+        planPolicy: deepResearchPolicy,
+        sourceSlugs: deepResearchSourceSlugs,
+        depth: deepResearchDepth,
+        reportFormat: 'standard',
+      })
+      setDeepResearchOpen(false)
+      setDeepResearchTopic('')
+      setDeepResearchPolicy('approve')
+      setDeepResearchDepth('standard')
+      setDeepResearchSourceSlugs([])
+      navigate(routes.view.deepResearchRun(created.id))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDeepResearchStarting(false)
+    }
+  }
+
+  React.useEffect(() => {
+    if (!deepResearchOpen) return
+      setDeepResearchSourceSlugs((current) => {
+      const usableSlugs = new Set(rankedDeepResearchSources.map((source) => source.config.slug))
+      const kept = current.filter((slug) => usableSlugs.has(slug))
+      return kept.length > 0 ? kept : rankedDeepResearchSources.filter(isDefaultDeepResearchTool).map((source) => source.config.slug)
+    })
+  }, [deepResearchOpen, rankedDeepResearchSources])
+
+  const toggleDeepResearchSource = (slug: string) => {
+    setDeepResearchSourceSlugs((current) => (
+      current.includes(slug)
+        ? current.filter((item) => item !== slug)
+        : [...current, slug].sort()
+    ))
+  }
+
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
       <div className="mx-auto max-w-6xl px-7 py-7">
@@ -133,6 +200,14 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
           <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
+              onClick={() => setDeepResearchOpen(true)}
+              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] font-medium text-white/72 transition-colors hover:bg-white/[0.08] hover:text-white"
+            >
+              <Search className="h-3 w-3" />
+              Deep Research
+            </button>
+            <button
+              type="button"
               onClick={() => navigate(routes.view.recentRuns())}
               className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] font-medium text-white/72 transition-colors hover:bg-white/[0.08] hover:text-white"
             >
@@ -142,7 +217,7 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
             <button
               type="button"
               onClick={handleNew}
-              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 shadow-[0_0_18px_rgba(249,115,22,0.16)] transition-colors hover:bg-[#f97316]/24"
+              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 shadow-tinted transition-colors hover:bg-[#f97316]/24"
             >
               <Plus className="h-3 w-3" />
               {t('workflows.list.new')}
@@ -216,6 +291,106 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
           workspaceId={workspaceId}
         />
       )}
+      <Dialog open={deepResearchOpen} onOpenChange={setDeepResearchOpen}>
+        <DialogContent className="border-white/[0.08] bg-[#111113] text-white">
+          <DialogHeader>
+            <DialogTitle>Deep Research</DialogTitle>
+            <DialogDescription>Choose a topic, autonomy level, depth, and the installed Runner tools this run may use.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <textarea
+              value={deepResearchTopic}
+              onChange={(event) => setDeepResearchTopic(event.target.value)}
+              placeholder="What should RunnerOS research?"
+              className="min-h-[110px] w-full rounded-[10px] border border-white/[0.08] bg-black/20 px-3 py-2 text-sm text-white outline-none placeholder:text-white/32 focus:border-white/20"
+            />
+            <div className="rounded-[10px] border border-white/[0.08] bg-white/[0.035] p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-white/78">Tools</div>
+                  <div className="mt-0.5 text-xs leading-5 text-white/42">Workspace tools, activated global tools, and built-in Runner tools. Computer Use is manual-only.</div>
+                </div>
+                <div className="text-xs text-white/42">{deepResearchSourceSlugs.length} selected</div>
+              </div>
+              {rankedDeepResearchSources.length === 0 ? (
+                <div className="text-xs leading-5 text-red-300">No usable tools are active. Authenticate or enable a tool before starting Deep Research.</div>
+              ) : (
+                <div className="grid max-h-44 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+                  {rankedDeepResearchSources.map((source) => {
+                    const slug = source.config.slug
+                    const selected = deepResearchSourceSlugs.includes(slug)
+                    const capabilities = inferDeepResearchSourceCapabilities(source)
+                    const researchCaps = capabilities.filter((cap) => cap === 'search' || cap === 'browser')
+                    const role = deepResearchToolRoleLabel(source, capabilities)
+                    const scope = deepResearchToolScopeLabel(source)
+                    const rankLabel = deepResearchToolRankLabel(source, deepResearchTopic)
+                    return (
+                      <button
+                        key={slug}
+                        type="button"
+                        onClick={() => toggleDeepResearchSource(slug)}
+                        className={`rounded-[8px] border px-2.5 py-2 text-left text-xs ${selected ? 'border-orange-400/40 bg-orange-400/15 text-white' : 'border-white/[0.08] bg-black/10 text-white/58 hover:bg-white/[0.05]'}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="truncate font-medium">{source.config.name}</div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {rankLabel && <div className="rounded-full border border-orange-300/20 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-orange-200/58">{rankLabel}</div>}
+                            <div className="rounded-full border border-white/[0.08] px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-white/38">{scope}</div>
+                          </div>
+                        </div>
+                        <div className="mt-1 truncate text-[11px] text-white/44">{role}</div>
+                        <div className="mt-0.5 truncate font-mono text-[10px] text-white/34">
+                          {slug}{researchCaps.length > 0 ? ` · ${researchCaps.join('/')}` : ''}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              {rankedDeepResearchSources.length > 0 && !hasDeepResearchDiscoverySource && (
+                <div className="mt-2 text-xs leading-5 text-amber-200/80">Select at least one web search or browser tool. Runner's built-in browser can inspect pages; Computer Use is only for desktop app control.</div>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setDeepResearchPolicy('approve')}
+                className={`rounded-[10px] border px-3 py-2 text-left text-sm ${deepResearchPolicy === 'approve' ? 'border-orange-400/40 bg-orange-400/15 text-white' : 'border-white/[0.08] bg-white/[0.035] text-white/64'}`}
+              >
+                Approve mode
+                <div className="mt-1 text-xs text-white/45">Review plan first.</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeepResearchPolicy('auto')}
+                className={`rounded-[10px] border px-3 py-2 text-left text-sm ${deepResearchPolicy === 'auto' ? 'border-orange-400/40 bg-orange-400/15 text-white' : 'border-white/[0.08] bg-white/[0.035] text-white/64'}`}
+              >
+                Auto mode
+                <div className="mt-1 text-xs text-white/45">Plan and run now.</div>
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {(['quick', 'standard', 'deep'] as const).map((depth) => (
+                <button
+                  key={depth}
+                  type="button"
+                  onClick={() => setDeepResearchDepth(depth)}
+                  className={`rounded-[10px] border px-3 py-2 text-left text-sm capitalize ${deepResearchDepth === depth ? 'border-orange-400/40 bg-orange-400/15 text-white' : 'border-white/[0.08] bg-white/[0.035] text-white/64'}`}
+                >
+                  {depth}
+                  <div className="mt-1 text-xs normal-case text-white/45">{deepResearchDepthLabel(depth)}</div>
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" className="border-white/[0.08] bg-white/[0.035] text-white/70 hover:bg-white/[0.08]" onClick={() => setDeepResearchOpen(false)}>Cancel</Button>
+              <Button onClick={handleStartDeepResearch} disabled={deepResearchStarting || !deepResearchTopic.trim() || deepResearchSourceSlugs.length === 0 || !hasDeepResearchDiscoverySource}>
+                {deepResearchStarting ? 'Starting...' : 'Start'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       {detailWorkflow && (
         <WorkflowDetailDialog
           workflow={detailWorkflow}
@@ -231,6 +406,103 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
       )}
     </div>
   )
+}
+
+function isUsableSource(source: LoadedSource): boolean {
+  if (!source.config.enabled) return false
+  const status = deriveConnectionStatus(source)
+  return status !== 'needs_auth' && status !== 'failed' && status !== 'local_disabled'
+}
+
+function isDesktopControlSource(source: LoadedSource): boolean {
+  const text = [
+    source.config.slug,
+    source.config.name,
+    source.config.provider,
+    source.config.tagline,
+  ].filter(Boolean).join(' ').toLowerCase()
+  return /\b(computer-use|background-computer-use|desktop control|macos app windows)\b/.test(text)
+}
+
+function isDefaultDeepResearchTool(source: LoadedSource): boolean {
+  if (isDesktopControlSource(source)) return false
+  const capabilities = inferDeepResearchSourceCapabilities(source)
+  return capabilities.includes('search') || capabilities.includes('knowledge')
+}
+
+function rankDeepResearchSources(sources: LoadedSource[], topic: string): LoadedSource[] {
+  return [...sources].sort((a, b) => {
+    const scoreDelta = scoreDeepResearchSource(b, topic) - scoreDeepResearchSource(a, topic)
+    if (scoreDelta !== 0) return scoreDelta
+    return a.config.name.localeCompare(b.config.name)
+  })
+}
+
+function scoreDeepResearchSource(source: LoadedSource, topic: string): number {
+  if (isDesktopControlSource(source)) return -100
+  const capabilities = inferDeepResearchSourceCapabilities(source)
+  let score = 0
+  if (capabilities.includes('search')) score += 100
+  if (capabilities.includes('knowledge')) score += 45
+  if (capabilities.includes('browser')) score += 30
+  if (capabilities.includes('api')) score += 25
+  if (capabilities.includes('mcp')) score += 10
+  if (capabilities.includes('local')) score += 5
+  if (source.tier === 'workspace') score += 8
+  if (source.tier === 'global') score += 5
+  if (source.isBuiltin || source.tier === 'project') score += 3
+
+  const normalizedTopic = topic.toLowerCase()
+  if (normalizedTopic) {
+    const sourceText = [
+      source.config.slug,
+      source.config.name,
+      source.config.provider,
+      source.config.tagline,
+    ].filter(Boolean).join(' ').toLowerCase()
+    const topicTokens = normalizedTopic.split(/[^a-z0-9]+/).filter((token) => token.length >= 4)
+    for (const token of topicTokens) {
+      if (sourceText.includes(token)) score += 12
+    }
+    if (/\b(market|competitor|ads?|growth|startup|customer|positioning)\b/.test(normalizedTopic)) {
+      if (/\b(meta|ads?|exa|search|web|field-theory)\b/.test(sourceText)) score += 18
+    }
+  }
+
+  return score
+}
+
+function deepResearchToolRankLabel(source: LoadedSource, topic: string): string | null {
+  const score = scoreDeepResearchSource(source, topic)
+  if (score >= 110) return 'best'
+  if (score >= 55) return 'useful'
+  if (isDesktopControlSource(source)) return 'manual'
+  return null
+}
+
+function deepResearchDepthLabel(depth: 'quick' | 'standard' | 'deep'): string {
+  if (depth === 'quick') return '2 searches / 5 pages'
+  if (depth === 'deep') return '5 searches / 16 pages'
+  return '3 searches / 10 pages'
+}
+
+function deepResearchToolRoleLabel(source: LoadedSource, capabilities: ReturnType<typeof inferDeepResearchSourceCapabilities>): string {
+  if (isDesktopControlSource(source)) return 'desktop control'
+  const roles: string[] = []
+  if (capabilities.includes('search')) roles.push('web search')
+  if (capabilities.includes('browser')) roles.push('page inspection')
+  if (capabilities.includes('knowledge')) roles.push('local knowledge')
+  if (roles.length === 0 && capabilities.includes('api')) roles.push('API data')
+  if (roles.length === 0 && capabilities.includes('local')) roles.push('local tool')
+  if (roles.length === 0 && capabilities.includes('mcp')) roles.push('MCP tool')
+  return roles.join(' + ') || 'general tool'
+}
+
+function deepResearchToolScopeLabel(source: LoadedSource): string {
+  if (source.tier === 'project' || source.isBuiltin) return 'built-in'
+  if (source.tier === 'global') return 'global'
+  if (source.tier === 'workspace') return 'workspace'
+  return source.tier ?? 'tool'
 }
 
 function WorkflowSection({ title, count, suffix, children }: { title: string; count: number; suffix?: string; children: React.ReactNode }) {
@@ -271,7 +543,7 @@ function WorkflowCard({
         event.preventDefault()
         onOpen()
       }}
-      className="group relative overflow-hidden rounded-[13px] border border-white/[0.07] bg-white/[0.035] p-3 text-left shadow-[0_2px_8px_rgb(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.13] hover:bg-white/[0.055] hover:shadow-[0_8px_24px_rgba(0,0,0,0.24)]"
+      className="group relative overflow-hidden rounded-[13px] border border-white/[0.07] bg-white/[0.035] p-3 text-left shadow-thin transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.13] hover:bg-white/[0.055] hover:shadow-middle"
     >
       <div className="flex items-start gap-2">
         <button
@@ -280,7 +552,7 @@ function WorkflowCard({
             event.stopPropagation()
             onOpen()
           }}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.08] bg-gradient-to-br from-white/[0.10] to-white/[0.035] font-mono text-[8px] font-semibold uppercase tracking-[0.08em] text-[#fed7aa] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.08] bg-gradient-to-br from-white/[0.10] to-white/[0.035] font-mono text-[8px] font-semibold uppercase tracking-[0.08em] text-[#fed7aa] shadow-xs"
           aria-label={`Open ${workflow.metadata.name}`}
         >
           {getWorkflowInitials(workflow)}
@@ -346,7 +618,7 @@ function WorkflowDetailDialog({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton={false} className="max-h-[86vh] max-w-3xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_28px_90px_rgba(0,0,0,0.62)]">
+      <DialogContent showCloseButton={false} className="max-h-[86vh] max-w-3xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-modal-small">
         <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
@@ -515,9 +787,9 @@ function IconAction({ label, onClick, danger, children }: { label: string; onCli
 export function RunStateDot({ state }: { state: WorkflowRunState }) {
   const color = (() => {
     switch (state) {
-      case 'running': return 'bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.45)] animate-pulse'
-      case 'succeeded': return 'bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.35)]'
-      case 'failed': return 'bg-red-400 shadow-[0_0_12px_rgba(248,113,113,0.35)]'
+      case 'running': return 'bg-amber-400 shadow-tinted animate-pulse'
+      case 'succeeded': return 'bg-emerald-400 shadow-tinted'
+      case 'failed': return 'bg-red-400 shadow-tinted'
       case 'interrupted': return 'bg-orange-400'
       case 'cancelled': return 'bg-zinc-400'
       case 'paused': return 'bg-blue-400'

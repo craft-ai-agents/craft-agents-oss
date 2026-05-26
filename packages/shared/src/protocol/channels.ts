@@ -409,6 +409,16 @@ export const RPC_CHANNELS = {
     LIST_AGENT: 'memory:listAgent',
     /** List shared USER.md entries. */
     LIST_USER: 'memory:listUser',
+    /** Recall relevant USER.md / MEMORY.md entries for a query. */
+    RECALL: 'memory:recall',
+    /** List memory mutation/recall audit events. */
+    LIST_EVENTS: 'memory:listEvents',
+    /** List pending and resolved memory review proposals. */
+    LIST_REVIEW_QUEUE: 'memory:listReviewQueue',
+    /** Add a memory proposal to the review queue. */
+    ENQUEUE_REVIEW: 'memory:enqueueReview',
+    /** Mark a memory proposal approved/rejected/applied. */
+    RESOLVE_REVIEW: 'memory:resolveReview',
     /** Create or replace a memory entry. */
     UPSERT: 'memory:upsert',
     /** Create a new memory entry. */
@@ -461,6 +471,16 @@ export const RPC_CHANNELS = {
     DELETE: 'workflow-runs:delete',
     /** Single push event covering created / updated / completed transitions. */
     UPDATED: 'workflow-runs:updated',
+  },
+  deepResearch: {
+    START: 'deep-research:start',
+    GET: 'deep-research:get',
+    LIST: 'deep-research:list',
+    APPROVE: 'deep-research:approve',
+    REVISE: 'deep-research:revise',
+    CANCEL: 'deep-research:cancel',
+    DELETE: 'deep-research:delete',
+    UPDATED: 'deep-research:updated',
   },
   outputs: {
     LIST: 'outputs:list',

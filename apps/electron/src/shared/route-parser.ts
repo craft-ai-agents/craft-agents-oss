@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'workflows' | 'workflowRun' | 'outputs' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -67,7 +67,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'workflows', 'runs', 'outputs', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'workflows', 'runs', 'deep-research', 'outputs', 'settings'
 ]
 
 /**
@@ -254,6 +254,12 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return { navigator: 'workflowRun', runId, details: null }
   }
 
+  if (first === 'deep-research') {
+    const runId = segments[1]
+    if (!runId) return null
+    return { navigator: 'deepResearchRun', runId, details: null }
+  }
+
   // Outputs navigator
   if (first === 'outputs') {
     const outputId = segments[1]
@@ -383,6 +389,10 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
 
   if (parsed.navigator === 'workflowRun') {
     return parsed.runId ? `runs/${parsed.runId}` : 'workflows/runs'
+  }
+
+  if (parsed.navigator === 'deepResearchRun') {
+    return parsed.runId ? `deep-research/${parsed.runId}` : 'workflows/runs'
   }
 
   if (parsed.navigator === 'outputs') {
@@ -539,6 +549,10 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
 
   if (compound.navigator === 'workflowRun') {
     return { type: 'view', name: 'workflow-run', id: compound.runId, params: {} }
+  }
+
+  if (compound.navigator === 'deepResearchRun') {
+    return { type: 'view', name: 'deep-research-run', id: compound.runId, params: {} }
   }
 
   if (compound.navigator === 'outputs') {
@@ -713,6 +727,10 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     return { navigator: 'workflowRun', runId: compound.runId ?? '' }
   }
 
+  if (compound.navigator === 'deepResearchRun') {
+    return { navigator: 'deepResearchRun', runId: compound.runId ?? '' }
+  }
+
   if (compound.navigator === 'outputs') {
     return compound.outputId
       ? { navigator: 'outputs', outputId: compound.outputId }
@@ -753,6 +771,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'settings', subpage: 'permissions' }
     case 'labels':
       return { navigator: 'settings', subpage: 'labels' }
+    case 'memory':
+      return { navigator: 'settings', subpage: 'memory' }
     case 'shortcuts':
       return { navigator: 'settings', subpage: 'shortcuts' }
     case 'preferences':
@@ -823,6 +843,9 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'workflows', details: { type: 'list' } }
     case 'workflow-run':
       if (parsed.id) return { navigator: 'workflowRun', runId: parsed.id }
+      return { navigator: 'workflows', details: { type: 'recent-runs' } }
+    case 'deep-research-run':
+      if (parsed.id) return { navigator: 'deepResearchRun', runId: parsed.id }
       return { navigator: 'workflows', details: { type: 'recent-runs' } }
     case 'outputs':
       return { navigator: 'outputs' }
@@ -963,6 +986,10 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
 
   if (state.navigator === 'workflowRun') {
     return { navigator: 'workflowRun', runId: state.runId, details: null }
+  }
+
+  if (state.navigator === 'deepResearchRun') {
+    return { navigator: 'deepResearchRun', runId: state.runId, details: null }
   }
 
   if (state.navigator === 'outputs') {

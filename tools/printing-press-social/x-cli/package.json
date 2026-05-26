@@ -1,0 +1,26 @@
+{
+  "name": "printing-press-x-cli",
+  "version": "0.1.0",
+  "license": "UNLICENSED",
+  "description": "Agent-native social CLI harness, starting with X.",
+  "type": "module",
+  "bin": {
+    "x-social": "./src/cli.mjs"
+  },
+  "files": [
+    "README.md",
+    "HARNESS.md",
+    "skills",
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "smoke": "node src/cli.mjs --help && node src/cli.mjs profile list --json && node src/cli.mjs post x --profile smoke --text \"hello\" --dry-run --json && node src/cli.mjs post x --profile smoke --text \"hello\" --media test/fixtures/sample.mp4 --dry-run --json && node src/cli.mjs comment x --profile smoke --url https://x.com/user/status/123 --text \"nice\" --dry-run --json && node src/cli.mjs dm x --profile smoke --to testuser --text \"hello\" --dry-run --json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.56.1"
+  }
+}

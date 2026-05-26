@@ -259,7 +259,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-3xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_28px_90px_rgba(0,0,0,0.62)]">
+      <DialogContent className="max-h-[88vh] max-w-3xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-modal-small">
         <DialogHeader className="border-b border-white/[0.06] bg-[radial-gradient(circle_at_18%_0%,rgba(249,115,22,0.20),transparent_34%),#0b0b0f] px-5 pb-3 pt-4">
           <DialogTitle className="text-[20px] font-semibold leading-tight text-white">
             {isEditing ? `Edit ${agent!.metadata.name}` : 'New agent'}
@@ -717,7 +717,7 @@ function BundlePickerDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[76vh] max-w-2xl overflow-hidden !rounded-[16px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-[0_24px_80px_rgba(0,0,0,0.62)]">
+      <DialogContent className="max-h-[76vh] max-w-2xl overflow-hidden !rounded-[16px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-modal-small">
         <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
           <DialogTitle className="text-lg font-semibold text-white">{title}</DialogTitle>
           <DialogDescription className="text-sm text-white/48">

@@ -22,6 +22,8 @@ import {
   replaceBuiltInAgentPromptText,
   removeBuiltInAgentSkills,
 } from './storage.ts'
+import { STARTER_AGENTS } from './starter-templates.ts'
+import { SOCIAL_PUBLISHER_SLUG } from './types.ts'
 
 function tmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), 'craft-agent-defs-test-'))
@@ -470,6 +472,15 @@ body
     expect(ensureRequiredAgents(required, { globalAgentsDir }).ensured).toBe(1)
     expect(ensureRequiredAgents(required, { globalAgentsDir }).ensured).toBe(0)
     expect(loadGlobalAgent('orchestrator', { globalAgentsDir })!.metadata.name).toBe('Orchestrator')
+  })
+
+  test('starter library includes the social publisher with the Printing Press source', () => {
+    const socialPublisher = STARTER_AGENTS.find((agent) => agent.slug === SOCIAL_PUBLISHER_SLUG)
+
+    expect(socialPublisher?.metadata.skills).toEqual(['social-publishing'])
+    expect(socialPublisher?.metadata.sources).toEqual(['printing-press-social'])
+    expect(socialPublisher?.systemPrompt).toContain('browser_tool')
+    expect(socialPublisher?.systemPrompt).toContain('not Playwright')
   })
 
   test('ensureRequiredAgents does not recreate an app-deleted required agent', () => {
