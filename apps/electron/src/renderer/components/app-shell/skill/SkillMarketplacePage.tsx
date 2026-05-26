@@ -292,6 +292,9 @@ export function SkillMarketplacePage({
       setUpdateStatus('done')
       fetchSkills()
     } catch {
+      setUpdateResult((prev) => prev
+        ? { ...prev, failed: [...prev.failed, ...items.filter((item) => !prev.updated.includes(item.slug)).map((item) => ({ slug: item.slug, error: '网络错误，请稍后重试' }))] }
+        : { updated: [], failed: items.map((item) => ({ slug: item.slug, error: '网络错误，请稍后重试' })), orphans: updateOrphans })
       setUpdateStatus('done')
     } finally {
       isRunningUpdateRef.current = false
@@ -315,7 +318,6 @@ export function SkillMarketplacePage({
     setUpdateStatus('idle')
     setUpdateResult(null)
     setUpdateOrphans([])
-    updateCheckedThisSession = true
   }, [])
 
   // Trigger check on mount (= user clicked skills sidebar item), once per session
@@ -337,7 +339,7 @@ export function SkillMarketplacePage({
       }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [updateStatus])
+  }, [updateStatus, runUpdateCheck])
 
   const [sortOrder, setSortOrder] = React.useState<'hot' | 'new'>('hot')
 

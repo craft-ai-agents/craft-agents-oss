@@ -211,7 +211,7 @@ ${skill.slug} config export --format json --output ./backup/
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="flex max-h-[85vh] w-full max-w-[660px] sm:max-w-[660px] flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[85vh] w-full max-w-[660px] sm:max-w-[660px] flex-col gap-0 overflow-hidden p-0">
 
         {/* 图标 + 标题行 */}
         <div className="flex items-start justify-between px-7 pt-7 pb-1">
