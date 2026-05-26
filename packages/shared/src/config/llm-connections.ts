@@ -61,9 +61,6 @@ export const OPENLLM_PI_AUTH_PROVIDER = 'openai';
 /** Reserved slug for the synthesized OpenLLM environment connection. */
 export const OPENLLM_ENV_CONNECTION_SLUG = 'openllm-env';
 
-export const OPENLLM_HOST_ENV_VAR = 'OPENLLM_HOST';
-export const OPENLLM_BASE_HOST_ENV_VAR = 'OPENLLM_BASE_HOST';
-
 
 /**
  * Build the per-model OpenLLM endpoint URL.
@@ -71,7 +68,7 @@ export const OPENLLM_BASE_HOST_ENV_VAR = 'OPENLLM_BASE_HOST';
  *                    false for user-configured connections (reads OPENLLM_HOST).
  */
 export function buildOpenLlmBaseUrl(modelName: string, env: NodeJS.ProcessEnv = process.env, isBuiltIn = false): string {
-  const envVarName = isBuiltIn ? OPENLLM_BASE_HOST_ENV_VAR : OPENLLM_HOST_ENV_VAR;
+  const envVarName = isBuiltIn ? 'OPENLLM_BASE_HOST' : 'OPENLLM_HOST';
   const host = env[envVarName]?.trim();
   if (!host) {
     throw new Error(`${envVarName} is required for OpenLLM connections`);
