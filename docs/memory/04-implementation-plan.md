@@ -4,6 +4,32 @@ A fresh agent should be able to ship Phase 1 from this doc + [`01-spec.md`](./01
 
 `bun` is at `~/.bun/bin/bun` (not on PATH).
 
+## Current implementation status
+
+Branch: `codex/memory-os-hardening`
+
+Phase 1 is implemented and hardened enough for internal use:
+
+- Markdown-backed `USER.md` and per-agent `MEMORY.md` remain the source of truth.
+- Agent memory tools can save, update, forget, recall, and audit memory.
+- Ordinary spawned agents cannot directly mutate `USER.md`; only manual sessions and top-level system agents can.
+- Review proposals apply through one backend RPC path, so approval cannot half-write memory and then fail to mark the queue item.
+- The post-turn memory sidecar exists.
+- Memory sidecar modes exist in Settings:
+  - `Auto`: quietly saves safe new agent-scoped memory.
+  - `Review`: queues every proposal for approval.
+  - `Manual`: disables the sidecar.
+- Auto mode rejects obvious secrets, provider tokens, env assignments, transient workspace facts, localhost/runtime facts, and test-result junk.
+- Auto mode serializes per-agent writes and re-checks existing memory immediately before writing, preventing duplicate `-v2` sidecar saves under concurrent runs.
+
+Remaining before calling Memory OS foundation fully done:
+
+- Electron smoke for Settings `Auto / Review / Manual`.
+- Electron smoke for review queue apply/reject UX.
+- Decide whether auto-saved memories need a subtle activity indicator or whether audit log visibility is enough.
+- Add broader secret-detection tests over realistic credential samples if this gets used with more providers.
+- Merge plan from `codex/memory-os-hardening` after one clean app smoke.
+
 ## Phase 1 — File-based memory (~5-7 days)
 
 ### Scope
@@ -117,17 +143,20 @@ apps/electron/src/renderer/pages/AgentInfoPage.tsx                         # Run
 - Tests: shared + session-tools + at least one renderer test for the compose change.
 - No `SESSIONS.md`, semantic recall, inline chip UI, or advanced filtering is included in this phase.
 
-### What to skip in Phase 1 (resist the temptation)
+### What to skip in Phase 1 (historical guidance)
 
 - **Don't add semantic recall.** Even if you think you'll need it. The injected file is fine until you've earned the upgrade.
-- **Don't deduplicate at write time.** Two similar entries are not a bug; they're useful redundancy. Manual hygiene happens through the UI.
+- **Don't add fuzzy consolidation.** Exact duplicate prevention exists for sidecar auto-save, but broader semantic merging still belongs later.
 - **Don't add automatic memory consolidation** ("merge these similar entries"). The agent is not a database optimizer.
-- **Don't gate behind a feature flag.** Ship it as default-on. If it breaks, fix it; flags rot.
+- **Don't hide behavior behind a vague feature flag.** The shipped control is a user-facing mode: `Auto / Review / Manual`.
 
 ---
 
 ## Phase 1.5 — Polish (~2-3 days, optional)
 
+- Electron smoke for memory sidecar mode switching.
+- Electron smoke for the review queue.
+- Small audit/activity affordance for quiet auto-saves, if audit log alone feels too hidden.
 - Recent-activity hint chip on Concierge chat header (depends on `SESSIONS.md` from [`05-sessions-log.md`](./05-sessions-log.md))
 - Memory tool-call inline chip in chat transcript (the 📝 affordance)
 - Empty-state copy on the Memory tab guiding users to chat first
@@ -177,7 +206,7 @@ Memory injection adds tokens to every prompt. Models with small context windows 
 ## Hard rules during implementation
 
 - **Mirror existing patterns.** No new architectural decisions. Workspace Context + agent-creator are the templates.
-- **Explicit writes only.** Every memory mutation is a tool call the user sees in the transcript.
+- **Visible and inspectable writes.** Manual memory mutations are tool calls. Sidecar auto-writes are limited to safe new agent-scoped memories and must remain visible through audit/event surfaces.
 - **Markdown is canonical.** Even when Tier 2 sqlite-vec lands, the markdown file remains the source of truth.
 - **Server-side memory injection MUST be kept in sync with renderer-side.** Add a comment at both render paths citing each other.
 - **Do NOT add comments that just restate code.** Only "why" comments.

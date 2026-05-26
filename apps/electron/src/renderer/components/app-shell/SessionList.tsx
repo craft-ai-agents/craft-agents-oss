@@ -7,6 +7,7 @@ import { useAction } from "@/actions"
 import { Inbox, Archive } from "lucide-react"
 
 import { getSessionStatus } from "@/utils/session"
+import { formatProjectLabel, GENERAL_PROJECT_KEY, getSessionProjectInfo } from "@/utils/session-project"
 import * as storage from "@/lib/local-storage"
 import { KEYS } from "@/lib/local-storage"
 import type { LabelConfig } from "@craft-agent/shared/labels"
@@ -18,7 +19,7 @@ import { EntityList, type EntityListGroup } from "@/components/ui/entity-list"
 import { RenameDialog } from "@/components/ui/rename-dialog"
 import { SessionSearchHeader } from "./SessionSearchHeader"
 import { SessionItem } from "./SessionItem"
-import { SessionListProvider, type SessionListContextValue } from "@/context/SessionListContext"
+import { SessionListProvider, type SessionListContextValue, type SessionProjectOption } from "@/context/SessionListContext"
 import { useSessionSelection, useSessionSelectionStore } from "@/hooks/useSession"
 import { useSessionSearch, type FilterMode } from "@/hooks/useSessionSearch"
 import { useSessionActions } from "@/hooks/useSessionActions"
@@ -37,7 +38,7 @@ export interface SessionListRow {
 }
 
 /** Grouping mode for chat list */
-export type ChatGroupingMode = 'date' | 'status'
+export type ChatGroupingMode = 'project' | 'date' | 'status'
 
 interface SessionListProps {
   items: SessionMeta[]
@@ -133,7 +134,7 @@ export function SessionList({
   evaluateViews,
   labels = [],
   onLabelsChange,
-  groupingMode = 'date',
+  groupingMode = 'project',
   workspaceId,
   statusFilter,
   labelFilterMap,
@@ -282,6 +283,55 @@ export function SessionList({
     // can insert header-only placeholder groups in the correct position.
     const rows: SessionListRow[] = flatItems.map(item => ({ item }))
 
+    if (groupingMode === 'project') {
+      const groupsByKey = new Map<string, EntityListGroup<SessionListRow>>()
+
+      for (const row of rows) {
+        const project = getSessionProjectInfo(row.item)
+        if (!groupsByKey.has(project.key)) {
+          groupsByKey.set(project.key, {
+            key: project.key,
+            label: project.label,
+            items: [],
+            collapsible: true,
+          })
+        }
+        groupsByKey.get(project.key)!.items.push(row)
+      }
+
+      if (rows.length > 0 && !groupsByKey.has(GENERAL_PROJECT_KEY)) {
+        groupsByKey.set(GENERAL_PROJECT_KEY, {
+          key: GENERAL_PROJECT_KEY,
+          label: 'General',
+          items: [],
+          collapsible: true,
+        })
+      }
+
+      for (const meta of collapsedGroupsMeta) {
+        if (!groupsByKey.has(meta.key)) {
+          groupsByKey.set(meta.key, {
+            key: meta.key,
+            label: meta.key === GENERAL_PROJECT_KEY ? 'General' : formatProjectLabel(meta.key.replace(/^project:/, '')),
+            items: [],
+            collapsible: true,
+            collapsedCount: meta.count,
+          })
+        }
+      }
+
+      const orderedGroups = Array.from(groupsByKey.values()).sort((a, b) => {
+        if (a.key === GENERAL_PROJECT_KEY) return -1
+        if (b.key === GENERAL_PROJECT_KEY) return 1
+        return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+      })
+
+      return {
+        rows,
+        groups: orderedGroups,
+      }
+    }
+
     if (groupingMode === 'status') {
       const statusOrder = new Map<string, number>()
       sessionStatuses.forEach((state, index) => statusOrder.set(state.id, index))
@@ -389,8 +439,22 @@ export function SessionList({
 
   const flatRows = rowData.rows
 
+  const projectOptions = useMemo((): SessionProjectOption[] => {
+    const bySlug = new Map<string, string>()
+    for (const item of items) {
+      const project = getSessionProjectInfo(item)
+      if (project.value) bySlug.set(project.value, project.label)
+    }
+    return Array.from(bySlug.entries())
+      .map(([slug, label]) => ({ slug, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
+  }, [items])
+
   const collapseAllGroups = useCallback(() => {
-    if (groupingMode === 'status') {
+    if (groupingMode === 'project') {
+      const allKeys = new Set(items.map(item => getSessionProjectInfo(item).key))
+      setCollapsedGroups(allKeys)
+    } else if (groupingMode === 'status') {
       const allKeys = new Set(items.map(item => `status-${getSessionStatus(item)}`))
       setCollapsedGroups(allKeys)
     } else {
@@ -573,6 +637,7 @@ export function SessionList({
     onMarkUnread,
     onDelete: handleDeleteWithToast,
     onLabelsChange,
+    projectOptions,
     onSelectSessionById: handleSelectSessionById,
     onOpenInNewWindow: handleOpenInNewWindow,
     onSendToWorkspace: (ids: string[]) => setSendToWorkspace(ids),
@@ -594,7 +659,7 @@ export function SessionList({
     onArchive, handleArchiveWithToast, onUnarchive, handleUnarchiveWithToast,
     onMarkUnread, handleDeleteWithToast, onLabelsChange,
     handleSelectSessionById, handleOpenInNewWindow, setSendToWorkspace, handleFocusZone, handleKeyDown,
-    sessionStatuses, flatLabels, labels, resolvedSearchQuery,
+    sessionStatuses, flatLabels, labels, projectOptions, resolvedSearchQuery,
     focusedSessionId, selectionStore.state.selected, isMultiSelectActive,
     sessionOptions, contentSearchResults, activeChatMatchInfo, hasPendingPrompt,
   ])

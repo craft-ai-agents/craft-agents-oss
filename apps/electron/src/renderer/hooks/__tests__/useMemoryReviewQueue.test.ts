@@ -3,6 +3,30 @@ import { applyMemoryReviewItem, type MemoryReviewApi } from '../useMemoryReviewQ
 import type { MemoryReviewItem } from '@craft-agent/shared/memory/types'
 
 describe('applyMemoryReviewItem', () => {
+  test('uses atomic backend apply when available', async () => {
+    const applyMemoryReview = mock(async () => reviewItem({ status: 'applied' }))
+    const saveMemory = mock(async () => ({
+      name: 'stale preference',
+      type: 'feedback' as const,
+      body: 'Saved body',
+      created: '2026-05-24',
+    }))
+    const api: MemoryReviewApi = {
+      applyMemoryReview,
+      saveMemory,
+      resolveMemoryReview: mock(async () => null),
+    }
+
+    await applyMemoryReviewItem(api, reviewItem({
+      action: 'save',
+      body: 'Saved body',
+      type: 'feedback',
+    }))
+
+    expect(applyMemoryReview).toHaveBeenCalledWith({ id: 'review_1' })
+    expect(saveMemory).not.toHaveBeenCalled()
+  })
+
   test('does not mark stale update proposals as applied', async () => {
     const resolveMemoryReview = mock(async () => null)
     const api: MemoryReviewApi = {

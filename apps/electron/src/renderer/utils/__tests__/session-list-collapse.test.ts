@@ -32,6 +32,12 @@ describe('buildCollapsedGroupsScopeSuffix', () => {
       groupingMode: 'status',
     })
 
+    const inProgressProject = buildCollapsedGroupsScopeSuffix({
+      workspaceId: 'ws-1',
+      currentFilter: { kind: 'state', stateId: 'in-progress' },
+      groupingMode: 'project',
+    })
+
     const doneDate = buildCollapsedGroupsScopeSuffix({
       workspaceId: 'ws-1',
       currentFilter: { kind: 'state', stateId: 'done' },
@@ -39,6 +45,7 @@ describe('buildCollapsedGroupsScopeSuffix', () => {
     })
 
     expect(inProgressDate).not.toBe(inProgressStatus)
+    expect(inProgressProject).not.toBe(inProgressStatus)
     expect(inProgressDate).not.toBe(doneDate)
   })
 

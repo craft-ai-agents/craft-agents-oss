@@ -1,9 +1,13 @@
 import {
   enqueueMemoryReviewItem,
+  listAgentMemoryEntries,
+  saveMemoryEntry,
   type EnqueueMemoryReviewInput,
   type MemoryEntryType,
+  type MemoryMutationEventMetadata,
   type MemoryScope,
   type MemoryStorageOptions,
+  type SaveMemoryInput,
 } from '@craft-agent/shared/memory'
 
 export interface MemorySidecarTurnInput {
@@ -41,33 +45,71 @@ export interface MemorySidecarReviewer {
 export interface MemorySidecarServiceOptions {
   reviewer: MemorySidecarReviewer
   minConfidence?: number
+  autoApplyAgentConfidence?: number
   storage?: MemoryStorageOptions
+  applyMemory?: (proposal: EnqueueMemoryReviewInput) => Promise<MemorySidecarApplyResult>
 }
 
 export interface MemorySidecarResult {
   queued: boolean
+  applied?: boolean
   reason?: string
   itemId?: string
   scope?: MemoryScope
   agentSlug?: string
+  name?: string
+}
+
+export interface MemorySidecarApplyResult {
+  ok: boolean
+  name?: string
+  error?: string
+}
+
+export interface AgentMemorySidecarApplyOptions {
+  activeAgentSlug?: string
+  runId?: string
+  storage?: MemoryStorageOptions
 }
 
 const DEFAULT_MIN_CONFIDENCE = 0.85
+const DEFAULT_AUTO_APPLY_AGENT_CONFIDENCE = 0.9
+const agentMemoryAutoApplyLocks = new Map<string, Promise<void>>()
 const SECRET_PATTERNS = [
   /\b(api[_-]?key|secret|token|password|private[_-]?key)\b/i,
   /\b(sk-[a-z0-9_-]{12,})\b/i,
+  /\b(bearer|authorization)\s+[a-z0-9._~+/=-]{16,}/i,
+  /\b(ghp|gho|ghu|ghs|ghr)_[a-z0-9_]{20,}\b/i,
+  /\bgithub_pat_[a-z0-9_]{20,}\b/i,
+  /\bnpm_[a-z0-9]{20,}\b/i,
+  /\bxox[baprs]-[a-z0-9-]{20,}\b/i,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\b[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{16,}\b/,
+  /\b[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*=\s*\S+/i,
   /-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----/,
+]
+const TRANSIENT_TASK_PATTERNS = [
+  /\b(?:branch|worktree|commit|sha|pr|pull request)\b.*\b[a-f0-9]{7,40}\b/i,
+  /\b(?:current|active)\s+(?:branch|worktree|cwd|repo|repository)\b/i,
+  /\b(?:cwd|repo|repository|worktree)\s*(?:is|=|:)\s*\/[^\s]+/i,
+  /\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d{2,5}\b/i,
+  /\b(?:tests?|typechecks?|lint|build)\s+(?:passed|failed|is passing|is failing)\b/i,
+  /\b(?:server|runner|electron|dev server)\s+(?:is\s+)?(?:running|open|launched|frozen|stopped)\b/i,
 ]
 
 export class MemorySidecarService {
   private readonly reviewer: MemorySidecarReviewer
   private readonly minConfidence: number
+  private readonly autoApplyAgentConfidence: number
   private readonly storage: MemoryStorageOptions | undefined
+  private readonly applyMemory: MemorySidecarServiceOptions['applyMemory']
 
   constructor(options: MemorySidecarServiceOptions) {
     this.reviewer = options.reviewer
     this.minConfidence = options.minConfidence ?? DEFAULT_MIN_CONFIDENCE
+    this.autoApplyAgentConfidence = options.autoApplyAgentConfidence ?? DEFAULT_AUTO_APPLY_AGENT_CONFIDENCE
     this.storage = options.storage
+    this.applyMemory = options.applyMemory
   }
 
   async reviewTurn(input: MemorySidecarTurnInput): Promise<MemorySidecarResult> {
@@ -80,8 +122,29 @@ export class MemorySidecarService {
       }
     }
 
+    if (this.applyMemory && shouldAutoApplyAgentSave(proposal, this.autoApplyAgentConfidence)) {
+      const applied = await this.tryApplyMemory(proposal)
+      if (applied.ok) {
+        return {
+          queued: false,
+          applied: true,
+          scope: proposal.scope,
+          agentSlug: proposal.agentSlug,
+          name: applied.name ?? proposal.name,
+        }
+      }
+    }
+
     const item = enqueueMemoryReviewItem(proposal, this.storage)
     return { queued: true, itemId: item.id, scope: item.scope, agentSlug: item.agentSlug }
+  }
+
+  private async tryApplyMemory(proposal: EnqueueMemoryReviewInput): Promise<MemorySidecarApplyResult> {
+    try {
+      return await this.applyMemory!(proposal)
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
   }
 
   private normalizeDecision(
@@ -103,6 +166,7 @@ export class MemorySidecarService {
       if (!decision.type) return null
       if (!decision.content?.trim()) return null
       if (containsSecret(decision.content)) return null
+      if (containsTransientTaskFact(decision.name) || containsTransientTaskFact(decision.content)) return null
     }
 
     if (isDuplicate({
@@ -129,6 +193,18 @@ export class MemorySidecarService {
   }
 }
 
+function shouldAutoApplyAgentSave(
+  proposal: EnqueueMemoryReviewInput,
+  minConfidence: number,
+): boolean {
+  return proposal.action === 'save' &&
+    proposal.scope === 'agent' &&
+    proposal.confidence >= minConfidence &&
+    Boolean(proposal.agentSlug) &&
+    Boolean(proposal.type) &&
+    Boolean(proposal.body?.trim())
+}
+
 export function createMemorySidecarReviewer(
   runMiniCompletion: (prompt: string) => Promise<string | null>,
 ): MemorySidecarReviewer {
@@ -141,6 +217,76 @@ export function createMemorySidecarReviewer(
       return parseMemorySidecarDecision(response)
     },
   }
+}
+
+export function createAgentMemorySidecarApplyMemory(
+  options: AgentMemorySidecarApplyOptions,
+): MemorySidecarServiceOptions['applyMemory'] {
+  return async (proposal) => {
+    if (proposal.action !== 'save') return { ok: false, error: 'only save proposals can auto-apply' }
+    if (proposal.scope !== 'agent') return { ok: false, error: 'only agent memory can auto-apply' }
+    const agentSlug = proposal.agentSlug ?? options.activeAgentSlug
+    if (!agentSlug) return { ok: false, error: 'agentSlug is required' }
+    if (!proposal.type || !proposal.body?.trim()) return { ok: false, error: 'type and body are required' }
+    const type = proposal.type
+    const body = proposal.body
+
+    return withAgentMemoryAutoApplyLock(agentSlug, async () => {
+      const existing = listAgentMemoryEntries(agentSlug, options.storage)
+      const duplicate = existing.find((entry) => isSameMemorySave(entry.name, entry.body, proposal.name, body))
+      if (duplicate) return { ok: true, name: duplicate.name }
+
+      const event: MemoryMutationEventMetadata = {
+        source: 'sidecar',
+        runId: options.runId,
+        actor: agentSlug,
+        evidence: proposal.evidence,
+      }
+      const saved = await saveMemoryEntry({
+        scope: 'agent',
+        agentSlug,
+        name: proposal.name,
+        type,
+        body,
+        expires: typeof proposal.expires === 'string' ? proposal.expires : undefined,
+        event,
+      } satisfies SaveMemoryInput, options.storage)
+
+      return { ok: true, name: saved.name }
+    })
+  }
+}
+
+async function withAgentMemoryAutoApplyLock<T>(agentSlug: string, work: () => Promise<T>): Promise<T> {
+  const previous = agentMemoryAutoApplyLocks.get(agentSlug) ?? Promise.resolve()
+  let release!: () => void
+  const current = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const chained = previous.then(() => current, () => current)
+  agentMemoryAutoApplyLocks.set(agentSlug, chained)
+
+  await previous
+  try {
+    return await work()
+  } finally {
+    release()
+    if (agentMemoryAutoApplyLocks.get(agentSlug) === chained) {
+      agentMemoryAutoApplyLocks.delete(agentSlug)
+    }
+  }
+}
+
+function isSameMemorySave(
+  existingName: string,
+  existingBody: string,
+  proposalName: string,
+  proposalBody: string | undefined,
+): boolean {
+  const body = proposalBody?.trim().toLowerCase()
+  if (!body) return false
+  return existingName.trim().toLowerCase() === proposalName.trim().toLowerCase() ||
+    existingBody.trim().toLowerCase() === body
 }
 
 export function buildMemorySidecarPrompt(input: MemorySidecarTurnInput): string {
@@ -230,6 +376,11 @@ export function parseMemorySidecarDecision(text: string): MemorySidecarDecision 
 function containsSecret(value: string | undefined): boolean {
   if (!value) return false
   return SECRET_PATTERNS.some((pattern) => pattern.test(value))
+}
+
+function containsTransientTaskFact(value: string | undefined): boolean {
+  if (!value) return false
+  return TRANSIENT_TASK_PATTERNS.some((pattern) => pattern.test(value))
 }
 
 function isDuplicate(

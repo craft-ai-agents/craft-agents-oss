@@ -122,6 +122,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { PanelHeader } from "./PanelHeader"
 import { SendToWorkspaceDialog } from "./SendToWorkspaceDialog"
 import { MessagingDialogHost } from "@/components/messaging/MessagingDialogHost"
+import { SessionProjectDialogHost } from "./SessionProjectDialogHost"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import {
@@ -721,7 +722,7 @@ function AppShellContent({
 
   const chatGroupingMode: ChatGroupingMode = isStateSubView
     ? 'date'
-    : (viewFiltersMap[sessionFilterKey ?? '']?.groupingMode ?? 'date')
+    : (viewFiltersMap[sessionFilterKey ?? '']?.groupingMode ?? 'project')
 
   const setChatGroupingMode = useCallback((mode: ChatGroupingMode) => {
     setViewFiltersMap(prev => {
@@ -2756,6 +2757,11 @@ function AppShellContent({
                                     <span className="flex-1">{t("sidebar.group")}</span>
                                   </StyledDropdownMenuSubTrigger>
                                   <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
+                                    <StyledDropdownMenuItem onClick={() => setChatGroupingMode('project')}>
+                                      <FolderOpen className="h-3.5 w-3.5" />
+                                      <span className="flex-1">Projects</span>
+                                      {chatGroupingMode === 'project' && <Check className="h-3 w-3 text-muted-foreground" />}
+                                    </StyledDropdownMenuItem>
                                     <StyledDropdownMenuItem onClick={() => setChatGroupingMode('date')}>
                                       <Calendar className="h-3.5 w-3.5" />
                                       <span className="flex-1">{t("sidebar.groupByDate")}</span>
@@ -3426,6 +3432,7 @@ function AppShellContent({
       {/* Messaging dialogs (pairing-code + WA connect) — driven by messagingDialogAtom.
           Mounted here so they survive context-menu / dropdown close. */}
       <MessagingDialogHost />
+      <SessionProjectDialogHost onLabelsChange={handleSessionLabelsChange} />
 
     </AppShellProvider>
   )

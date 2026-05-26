@@ -125,6 +125,7 @@ const EXPECTED_CHANNELS: string[] = [
   "labels:delete",
   "labels:list",
   "logo:getUrl",
+  "memory:applyReview",
   "memory:changed",
   "memory:delete",
   "memory:enqueueReview",

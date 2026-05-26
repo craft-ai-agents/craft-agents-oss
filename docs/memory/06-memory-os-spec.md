@@ -516,21 +516,34 @@ Avoid at first:
 
 ### Phase 1 - Audit trail and sidecar
 
+Status: implemented on `codex/memory-os-hardening`; pending Electron smoke and merge.
+
 Goal: memory starts compounding safely.
 
 Build:
-- `memory_events` audit log
-- sidecar reviewer service
-- review queue UI
-- activity feed
-- source run/evidence metadata on memory entries
-- tests for safety rejection and update-over-duplicate behavior
+- `memory_events` audit log: implemented.
+- sidecar reviewer service: implemented.
+- review queue UI/backend: implemented, with atomic backend apply.
+- source run/evidence metadata on memory entries: implemented.
+- direct user-memory write protection for spawned agents: implemented.
+- sidecar modes: `Auto`, `Review`, `Manual`: implemented.
+- auto-save guardrails for secrets and transient task facts: implemented.
+- per-agent auto-save lock and final duplicate re-check: implemented.
+- activity feed / subtle user-visible auto-save affordance: still open.
 
 Acceptance:
-- user can see every memory mutation
-- sidecar never writes secrets
-- explicit "remember/forget" works reliably
-- auto suggestions are easy to approve/reject
+- user can see every memory mutation in the audit/event surfaces.
+- sidecar rejects obvious secrets, provider tokens, env assignments, and private keys.
+- explicit "remember/forget" works through memory tools.
+- `Review` mode keeps suggestions approval-gated.
+- `Auto` mode quietly saves only new agent-scoped memory that passes validation.
+- concurrent duplicate auto-saves do not create suffixed duplicate memories.
+
+Still open:
+- Electron smoke for Settings mode changes.
+- Electron smoke for review queue apply/reject.
+- decide whether quiet auto-saves need a small visible activity indicator.
+- harden secret detection over a broader provider-token fixture set.
 
 ### Phase 2 - Local recall index
 

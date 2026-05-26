@@ -200,6 +200,11 @@ export interface ResolveMemoryReviewInput {
   decisionReason?: string;
 }
 
+export interface ApplyMemoryReviewInput {
+  id: string;
+  decisionReason?: string;
+}
+
 export type MemoryParseWarningCode =
   | 'missing-entry-frontmatter'
   | 'invalid-entry-frontmatter'

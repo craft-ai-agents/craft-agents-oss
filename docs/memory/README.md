@@ -54,7 +54,7 @@ This is the auto-memory pattern Claude Code itself uses. Battle-tested at scale.
 - Graph extraction
 - Cloud sync
 - Cross-user shared memory
-- Implicit auto-write (every memory write is an explicit tool call the user sees in the transcript)
+- Broad implicit summarization. The shipped auto path is intentionally narrow: safe new agent-scoped memories only, with `Review` and `Manual` modes available.
 
 ## How these docs are organized
 

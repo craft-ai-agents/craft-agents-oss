@@ -2,7 +2,24 @@
 
 ## Status
 
-Backlog proposal.
+Implemented on `codex/memory-os-hardening`; pending Electron smoke and merge.
+
+Shipped shape:
+
+- post-turn `MemorySidecarService`
+- compact existing-memory index
+- review queue for user-scope, update, forget, uncertain, or failed proposals
+- `Auto / Review / Manual` memory sidecar setting
+- quiet auto-save only for safe new agent-scoped memories
+- secret and transient-task rejection guards
+- per-agent auto-save lock plus final duplicate re-check before write
+
+Still open:
+
+- Electron smoke for Settings mode switching
+- Electron smoke for review queue apply/reject
+- decide whether quiet auto-saves need a small visible activity/audit indicator
+- broaden credential fixture coverage before treating secret rejection as mature
 
 ## Problem
 

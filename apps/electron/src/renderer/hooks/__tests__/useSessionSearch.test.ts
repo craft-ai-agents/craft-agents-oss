@@ -66,4 +66,23 @@ describe('computeCollapsedPagination', () => {
     expect(result.paginatedItems.map(s => s.id)).toEqual(['a', 'b'])
     expect(result.collapsedGroupsMeta).toEqual([])
   })
+
+  it('collapses project groups by project label', () => {
+    const sessions = [
+      makeSession('general'),
+      makeSession('ltr-1', { labels: ['project::ltr-os'] }),
+      makeSession('ltr-2', { labels: ['project::ltr-os'] }),
+      makeSession('runneros', { labels: ['project::runneros-launch'] }),
+    ]
+
+    const result = computeCollapsedPagination(
+      sessions,
+      50,
+      new Set(['project:ltr-os']),
+      'project'
+    )
+
+    expect(result.paginatedItems.map(s => s.id)).toEqual(['general', 'runneros'])
+    expect(result.collapsedGroupsMeta).toEqual([{ key: 'project:ltr-os', count: 2 }])
+  })
 })

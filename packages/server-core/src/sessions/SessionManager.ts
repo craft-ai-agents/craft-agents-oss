@@ -95,7 +95,11 @@ import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
-import { createMemorySidecarReviewer, MemorySidecarService } from '../memory/MemorySidecarService'
+import {
+  createAgentMemorySidecarApplyMemory,
+  createMemorySidecarReviewer,
+  MemorySidecarService,
+} from '../memory/MemorySidecarService'
 import { profileDeepResearchSource } from '@craft-agent/shared/deep-research'
 import { OutputService } from '../outputs/OutputService'
 import {
@@ -195,6 +199,19 @@ type WorkflowMemoryEntry = StoredMemoryEntry
 type WorkflowMemoryInputs = {
   userEntries?: WorkflowMemoryEntry[]
   agentEntries?: WorkflowMemoryEntry[]
+}
+type SpawnedAgentRef = { agentSlug: string; agentName?: string; timestamp?: number }
+
+const DIRECT_USER_MEMORY_AGENT_SLUGS = new Set([CONCIERGE_SLUG, ORCHESTRATOR_SLUG])
+
+export function canDirectlyMutateUserMemory(spawnedFromAgent?: SpawnedAgentRef): boolean {
+  if (!spawnedFromAgent) return true
+  return DIRECT_USER_MEMORY_AGENT_SLUGS.has(spawnedFromAgent.agentSlug)
+}
+
+export function directUserMemoryPolicyError(spawnedFromAgent?: SpawnedAgentRef): string {
+  const actor = spawnedFromAgent?.agentSlug ? `Agent "${spawnedFromAgent.agentSlug}"` : 'This session'
+  return `${actor} cannot directly write USER.md. Save agent-scoped memory instead, or let the memory review queue propose the user-level change for approval.`
 }
 
 function isPrerequisiteRetryResult(result: string): boolean {
@@ -4586,6 +4603,9 @@ user a clickable link to where the thing now lives.`
         },
         saveMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
+          if (scope === 'user' && !canDirectlyMutateUserMemory(managed.spawnedFromAgent)) {
+            return { ok: false, scope, name: input.name, error: directUserMemoryPolicyError(managed.spawnedFromAgent) }
+          }
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
           const result = await mutateMemory('save', scope, { ...input }, agentSlug, {
             source: 'agent_tool',
@@ -4597,6 +4617,9 @@ user a clickable link to where the thing now lives.`
         },
         updateMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
+          if (scope === 'user' && !canDirectlyMutateUserMemory(managed.spawnedFromAgent)) {
+            return { ok: false, scope, name: input.name, error: directUserMemoryPolicyError(managed.spawnedFromAgent) }
+          }
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
           const result = await mutateMemory('update', scope, { ...input }, agentSlug, {
             source: 'agent_tool',
@@ -4608,6 +4631,9 @@ user a clickable link to where the thing now lives.`
         },
         forgetMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
+          if (scope === 'user' && !canDirectlyMutateUserMemory(managed.spawnedFromAgent)) {
+            return { ok: false, scope, name: input.name, error: directUserMemoryPolicyError(managed.spawnedFromAgent) }
+          }
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
           const result = await mutateMemory('delete', scope, { ...input }, agentSlug, {
             source: 'agent_tool',
@@ -5820,7 +5846,8 @@ user a clickable link to where the thing now lives.`
     if (!finalMessageId) return
     if (!managed.agent) return
     if (managed.hidden || managed.systemPromptPreset === 'mini') return
-    if ((loadPreferences().memory?.sidecarMode ?? 'review') === 'manual') return
+    const sidecarMode = loadPreferences().memory?.sidecarMode ?? 'auto'
+    if (sidecarMode === 'manual') return
 
     const assistantIndex = managed.messages.findIndex((message) => message.id === finalMessageId)
     if (assistantIndex < 0) return
@@ -5832,6 +5859,9 @@ user a clickable link to where the thing now lives.`
     const activeAgentSlug = managed.spawnedFromAgent?.agentSlug
     const service = new MemorySidecarService({
       reviewer: createMemorySidecarReviewer(managed.agent.runMiniCompletion.bind(managed.agent)),
+      applyMemory: sidecarMode === 'auto'
+        ? createAgentMemorySidecarApplyMemory({ activeAgentSlug, runId: managed.id })
+        : undefined,
     })
 
     void service.reviewTurn({
@@ -5841,9 +5871,13 @@ user a clickable link to where the thing now lives.`
       runId: managed.id,
       existingMemoryIndex: this.buildMemorySidecarIndex(activeAgentSlug),
     }).then((result) => {
-      if (!result.queued || !result.scope) return
+      if ((!result.queued && !result.applied) || !result.scope) return
       this.broadcastMemoryChanged(result.scope, result.scope === 'agent' ? result.agentSlug ?? null : null)
-      sessionLog.info(`[memory] Sidecar queued review item ${result.itemId ?? '(unknown)'} for session ${managed.id}`)
+      if (result.applied) {
+        sessionLog.info(`[memory] Sidecar auto-saved ${result.scope} memory ${result.name ?? '(unknown)'} for session ${managed.id}`)
+      } else {
+        sessionLog.info(`[memory] Sidecar queued review item ${result.itemId ?? '(unknown)'} for session ${managed.id}`)
+      }
     }).catch((error) => {
       sessionLog.warn(`[memory] Sidecar review failed for session ${managed.id}:`, error)
     })
