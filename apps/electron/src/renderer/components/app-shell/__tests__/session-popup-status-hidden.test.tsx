@@ -14,10 +14,12 @@ const navigateMock = mock(() => {})
 let latestEntityRowMouseDown: ((event: React.MouseEvent) => void) | undefined
 
 mock.module('@/lib/navigate', () => ({
+  NAVIGATE_EVENT: 'craft-agent-navigate',
   navigate: navigateMock,
   routes: {
     view: {
       allSessions: (sessionId?: string) => sessionId ? `allSessions/session/${sessionId}` : 'allSessions',
+      archived: (sessionId?: string) => sessionId ? `archived/session/${sessionId}` : 'archived',
     },
   },
 }))
