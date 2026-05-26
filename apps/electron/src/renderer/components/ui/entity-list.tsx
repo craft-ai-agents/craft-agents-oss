@@ -185,10 +185,10 @@ export function EntityList<T>({
   return (
     <div className={cn('flex flex-col min-h-0', heightBehavior === 'fill' && 'flex-1', className)}>
       {header}
-      <ScrollArea className={cn(heightBehavior === 'fill' && 'flex-1', scrollAreaClassName)} viewportRef={viewportRef}>
+      <ScrollArea className={cn(heightBehavior === 'fill' && 'flex-1', scrollAreaClassName)} viewportRef={viewportRef} viewportClassName="overflow-x-hidden">
         <div
           ref={containerRef}
-          className="flex flex-col pb-2"
+          className="flex min-w-0 flex-col overflow-x-hidden pb-2"
           {...containerProps}
         >
           <div className="pt-1">

@@ -195,7 +195,7 @@ export function ActiveOptionBadges({
       </div>
 
       {/* Right side: Files popover button */}
-      <div className="shrink-0">
+      <div className="shrink-0 hidden">
         <FilesPopoverButton sessionId={sessionId} sessionFolderPath={sessionFolderPath} />
       </div>
     </div>
