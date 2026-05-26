@@ -11,7 +11,7 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { THINKING_ENABLEDS } from '@craft-agent/shared/agent/thinking-toggle'
+import type { ThinkingEnabled } from '@craft-agent/shared/agent/thinking-toggle'
 import type { AutomationAction, PromptAction } from './types'
 import { ActionTypeIcon } from './ActionTypeIcon'
 import { DEFAULT_WEBHOOK_METHOD } from './constants'
@@ -54,6 +54,10 @@ function WebhookText({ action }: { action: Extract<AutomationAction, { type: 'we
   )
 }
 
+export function getPromptThinkingBadgeKey(thinkingEnabled: ThinkingEnabled): string {
+  return thinkingEnabled ? 'automations.thinkingEnabled' : 'automations.thinkingDisabled'
+}
+
 /**
  * Render the per-action override chips (connection / model / thinking toggle).
  * Each chip is conditional on its field being set on the action.
@@ -67,8 +71,7 @@ function PromptActionBadges({ action, t }: { action: PromptAction; t: (key: stri
   const { llmConnection, model, thinkingEnabled } = action
   if (!llmConnection && !model && thinkingEnabled === undefined) return null
 
-  const thinkingDef = thinkingEnabled !== undefined ? THINKING_ENABLEDS.find((l) => l.id === thinkingEnabled) : undefined
-  const thinkingLabel = thinkingDef ? t(thinkingDef.nameKey) : String(thinkingEnabled)
+  const thinkingLabel = thinkingEnabled !== undefined ? t(getPromptThinkingBadgeKey(thinkingEnabled)) : ''
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
