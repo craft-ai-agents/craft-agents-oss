@@ -470,9 +470,9 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
     updateSetting('model', model === 'global' ? undefined : model)
   }, [updateSetting])
 
-  const handleThinkingChange = useCallback((level: string) => {
+  const handleThinkingChange = useCallback((value: string) => {
     // 'global' means use app default (clear workspace override)
-    updateSetting('thinkingEnabled', level === 'global' ? undefined : level === 'true')
+    updateSetting('thinkingEnabled', value === 'global' ? undefined : value === 'true')
   }, [updateSetting])
 
   // Determine if workspace has any overrides

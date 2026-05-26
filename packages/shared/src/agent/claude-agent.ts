@@ -71,7 +71,7 @@ import {
 import { getRtkPath } from './core/rtk-detector.ts';
 import { getRtkEnabled } from '../config/storage.ts';
 import type { RtkContext } from './core/rtk-rewrite.ts';
-import { type ThinkingEnabled, DEFAULT_THINKING_ENABLED } from './thinking-toggle.ts';
+import type { ThinkingEnabled } from './thinking-toggle.ts';
 import { generateConversationSummary } from './conversation-summary.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { sourceNeedsAuthentication } from '../sources/credential-manager.ts';

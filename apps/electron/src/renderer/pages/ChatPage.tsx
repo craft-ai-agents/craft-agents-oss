@@ -705,7 +705,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 pendingCredential={undefined}
                 onRespondToCredential={onRespondToCredential}
                 thinkingEnabled={sessionOpts.thinkingEnabled}
-                onThinkingEnabledChange={(level) => setOption('thinkingEnabled', level)}
+                onThinkingEnabledChange={(enabled) => setOption('thinkingEnabled', enabled)}
                 permissionMode={sessionOpts.permissionMode}
                 onPermissionModeChange={setPermissionMode}
                 enabledModes={enabledModes}
@@ -783,7 +783,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             pendingCredential={pendingCredential}
             onRespondToCredential={onRespondToCredential}
             thinkingEnabled={sessionOpts.thinkingEnabled}
-            onThinkingEnabledChange={(level) => setOption('thinkingEnabled', level)}
+            onThinkingEnabledChange={(enabled) => setOption('thinkingEnabled', enabled)}
             permissionMode={sessionOpts.permissionMode}
             onPermissionModeChange={setPermissionMode}
             enabledModes={enabledModes}
