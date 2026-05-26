@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { deriveTurnPhase, shouldShowThinkingIndicator, type TurnPhase, type AssistantTurn } from '../turn-utils'
+import { deriveTurnPhase, getThinkingBlockExpanded, type TurnPhase, type AssistantTurn } from '../turn-utils'
 import type { ActivityItem, ResponseContent } from '../TurnCard'
 
 // ============================================================================
@@ -388,35 +388,39 @@ describe('activity type filtering', () => {
 })
 
 // ============================================================================
-// shouldShowThinkingIndicator Tests
+// getThinkingBlockExpanded Tests
 // ============================================================================
 
-describe('shouldShowThinkingIndicator', () => {
-  it('returns true for pending phase', () => {
-    expect(shouldShowThinkingIndicator('pending', false)).toBe(true)
-    expect(shouldShowThinkingIndicator('pending', true)).toBe(true)
+describe('getThinkingBlockExpanded', () => {
+  describe('auto-expand phases (reasoning in progress)', () => {
+    it('returns true for pending phase', () => {
+      expect(getThinkingBlockExpanded('pending', false)).toBe(true)
+      expect(getThinkingBlockExpanded('pending', true)).toBe(true)
+    })
+
+    it('returns true for awaiting phase (the gap)', () => {
+      expect(getThinkingBlockExpanded('awaiting', false)).toBe(true)
+      expect(getThinkingBlockExpanded('awaiting', true)).toBe(true)
+    })
+
+    it('returns true for streaming when buffering (response text not yet shown)', () => {
+      expect(getThinkingBlockExpanded('streaming', true)).toBe(true)
+    })
   })
 
-  it('returns true for awaiting phase (the gap)', () => {
-    expect(shouldShowThinkingIndicator('awaiting', false)).toBe(true)
-    expect(shouldShowThinkingIndicator('awaiting', true)).toBe(true)
-  })
+  describe('auto-collapse phases (response content visible)', () => {
+    it('returns false for tool_active phase (tools are visible, not a reasoning phase)', () => {
+      expect(getThinkingBlockExpanded('tool_active', false)).toBe(false)
+      expect(getThinkingBlockExpanded('tool_active', true)).toBe(false)
+    })
 
-  it('returns false for tool_active phase (tools are visible)', () => {
-    expect(shouldShowThinkingIndicator('tool_active', false)).toBe(false)
-    expect(shouldShowThinkingIndicator('tool_active', true)).toBe(false)
-  })
+    it('returns false for streaming when not buffering (first response text token arrived)', () => {
+      expect(getThinkingBlockExpanded('streaming', false)).toBe(false)
+    })
 
-  it('returns true for streaming when buffering', () => {
-    expect(shouldShowThinkingIndicator('streaming', true)).toBe(true)
-  })
-
-  it('returns false for streaming when not buffering', () => {
-    expect(shouldShowThinkingIndicator('streaming', false)).toBe(false)
-  })
-
-  it('returns false for complete phase', () => {
-    expect(shouldShowThinkingIndicator('complete', false)).toBe(false)
-    expect(shouldShowThinkingIndicator('complete', true)).toBe(false)
+    it('returns false for complete phase', () => {
+      expect(getThinkingBlockExpanded('complete', false)).toBe(false)
+      expect(getThinkingBlockExpanded('complete', true)).toBe(false)
+    })
   })
 })

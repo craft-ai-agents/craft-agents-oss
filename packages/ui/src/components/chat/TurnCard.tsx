@@ -40,7 +40,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '../tooltip'
 import { parseDiffFromFile, type FileContents } from '@pierre/diffs'
 import { getDiffStats, getUnifiedDiffStats } from '../code-viewer'
 import { TurnCardActionsMenu } from './TurnCardActionsMenu'
-import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, shouldShowThinkingIndicator, type ActivityGroup, type AssistantTurn } from './turn-utils'
+import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, getThinkingBlockExpanded, type TurnPhase, type ActivityGroup, type AssistantTurn } from './turn-utils'
 import { extractAnnotationSelectedText } from './follow-up-helpers'
 import {
   formatAnnotationFollowUpTooltipText,
@@ -304,6 +304,8 @@ export interface ResponseContent {
   messageId?: string
   /** Persisted annotations attached to the response message */
   annotations?: AnnotationV1[]
+  /** Reasoning text extracted from thinking blocks or <think> tags, or null when absent */
+  reasoningText?: string | null
 }
 
 // ============================================================================
@@ -2795,6 +2797,74 @@ function TodoList({ todos }: TodoListProps) {
 }
 
 // ============================================================================
+// ThinkingBlock Component
+// ============================================================================
+
+/**
+ * Displays the model's reasoning text with expand/collapse behaviour.
+ *
+ * - Auto-expands while the turn is in a pre-response phase (pending / awaiting /
+ *   buffering-stream) so the user gets live feedback that reasoning is in progress.
+ * - Auto-collapses the moment the first non-reasoning response token arrives.
+ * - After collapse a "Show reasoning" toggle lets the user re-expand.
+ */
+function ThinkingBlock({
+  reasoningText,
+  phase,
+  isBuffering,
+}: {
+  reasoningText: string | null
+  phase: TurnPhase
+  isBuffering: boolean
+}) {
+  const shouldAutoExpand = getThinkingBlockExpanded(phase, isBuffering)
+  const [expanded, setExpanded] = useState(shouldAutoExpand)
+
+  const prevAutoExpandRef = useRef(shouldAutoExpand)
+  useEffect(() => {
+    if (prevAutoExpandRef.current && !shouldAutoExpand) {
+      setExpanded(false)
+    }
+    prevAutoExpandRef.current = shouldAutoExpand
+  }, [shouldAutoExpand])
+
+  if (!reasoningText) return null
+
+  return (
+    <div className={cn("rounded-[8px] border border-border/50 overflow-hidden", SIZE_CONFIG.fontSize)}>
+      {expanded ? (
+        <>
+          <button
+            onClick={() => setExpanded(false)}
+            className="flex items-center gap-1.5 w-full px-3 py-1.5 text-left text-muted-foreground hover:bg-muted/40 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <motion.div
+              initial={false}
+              animate={{ rotate: 90 }}
+              className="flex items-center justify-center shrink-0"
+            >
+              <ChevronRight className={SIZE_CONFIG.iconSize} />
+            </motion.div>
+            <span>Reasoning</span>
+          </button>
+          <div className="px-3 pb-3 pt-0.5 text-muted-foreground/80 whitespace-pre-wrap break-words">
+            {reasoningText}
+          </div>
+        </>
+      ) : (
+        <button
+          onClick={() => setExpanded(true)}
+          className="flex items-center gap-1.5 w-full px-3 py-1.5 text-left text-muted-foreground hover:bg-muted/40 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          <ChevronRight className={SIZE_CONFIG.iconSize} />
+          <span>Show reasoning</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
 // Main Component
 // ============================================================================
 
@@ -2998,11 +3068,6 @@ export const TurnCard = React.memo(function TurnCard({
   // Only count non-plan activities for the collapsible section
   const hasActivities = sortedActivities.length > 0
 
-  // Determine if thinking indicator should show using the phase-based state machine.
-  // This properly handles the "gap" state (awaiting) between tool completion and next action,
-  // which was previously causing the turn card to "disappear".
-  const isThinking = shouldShowThinkingIndicator(turnPhase, isBuffering)
-
   return (
     <div className="space-y-1">
       {/* Activity Section - excluded from search highlighting (matches ripgrep behavior) */}
@@ -3146,23 +3211,6 @@ export const TurnCard = React.memo(function TurnCard({
                       </motion.div>
                     ))
                   )}
-                  {/* Thinking/Buffering indicator - shown while waiting for response */}
-                  {isThinking && !animateResponse && (
-                    <motion.div
-                      key="thinking"
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{
-                        delay: Math.min(sortedActivities.length, SIZE_CONFIG.staggeredAnimationLimit) * 0.03,
-                        duration: 0.3,
-                        ease: "easeOut"
-                      }}
-                      className={cn("flex items-center gap-2 py-0.5 text-muted-foreground/70", SIZE_CONFIG.fontSize)}
-                    >
-                      <Spinner className={SIZE_CONFIG.spinnerSize} />
-                      <span>{isBuffering ? 'Preparing response...' : 'Thinking...'}</span>
-                    </motion.div>
-                  )}
                   </AnimatePresence>
                 </div>
                 {/* TodoList - inside expanded section */}
@@ -3175,12 +3223,13 @@ export const TurnCard = React.memo(function TurnCard({
         </div>
       )}
 
-      {/* Standalone thinking indicator - when no activities but still working */}
-      {!hasActivities && isThinking && !animateResponse && (
-        <div className={cn("flex items-center gap-2 px-3 py-1.5 text-muted-foreground", SIZE_CONFIG.fontSize)}>
-          <Spinner className={SIZE_CONFIG.spinnerSize} />
-          <span>{isBuffering ? 'Preparing response...' : 'Thinking...'}</span>
-        </div>
+      {/* ThinkingBlock - reasoning display when model produces reasoning text */}
+      {!animateResponse && (
+        <ThinkingBlock
+          reasoningText={response?.reasoningText ?? null}
+          phase={turnPhase}
+          isBuffering={isBuffering}
+        />
       )}
 
       {/* Plan Activities - rendered as full ResponseCards, time-sorted with other activities */}

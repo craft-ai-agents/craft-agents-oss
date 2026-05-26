@@ -7,6 +7,7 @@
 
 import type { Message, StoredMessage, MessageRole } from '@craft-agent/core'
 import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
+import { extractReasoningContent } from '@craft-agent/shared/reasoning'
 import { storedToMessage } from '@craft-agent/core'
 
 export { storedToMessage }
@@ -171,20 +172,16 @@ export function deriveTurnPhase(turn: AssistantTurn): TurnPhase {
 }
 
 /**
- * Determines if the "Thinking..." indicator should be shown.
+ * Whether the Thinking Block should be auto-expanded for the current turn state.
  *
- * The thinking indicator appears when the turn is active but there's
- * nothing visible to show the user (no running tools, no streaming response).
- * This covers both the initial pending state and the gap after tools complete.
+ * The block auto-expands while reasoning is in progress (no visible response yet).
+ * It auto-collapses the moment the first non-reasoning response text becomes visible
+ * (transition from buffering to non-buffering streaming, or streaming → complete).
  *
  * @param phase - The current turn phase
  * @param isBuffering - Whether response text is still being buffered
  */
-export function shouldShowThinkingIndicator(phase: TurnPhase, isBuffering: boolean): boolean {
-  // Show thinking indicator during:
-  // - pending: waiting for first activity
-  // - awaiting: gap between tool completion and next action
-  // - streaming but buffering: text started but not ready to display
+export function getThinkingBlockExpanded(phase: TurnPhase, isBuffering: boolean): boolean {
   return phase === 'pending' || phase === 'awaiting' || (phase === 'streaming' && isBuffering)
 }
 
@@ -408,8 +405,10 @@ export function groupMessagesByTurn(messages: Message[], options: GroupTurnsOpti
           .find(a => a.type === 'intermediate' && a.content)
 
         if (lastTextActivity?.content) {
+          const { reasoningText, cleanContent } = extractReasoningContent({ content: lastTextActivity.content })
           currentTurn.response = {
-            text: lastTextActivity.content,
+            text: cleanContent,
+            reasoningText,
             isStreaming: false,
             messageId: lastTextActivity.id,
           }
@@ -629,8 +628,10 @@ export function groupMessagesByTurn(messages: Message[], options: GroupTurnsOpti
       }
 
       // Set as response on current turn (ignoring turnId differences)
+      const { reasoningText, cleanContent } = extractReasoningContent({ content: message.content })
       currentTurn.response = {
-        text: message.content,
+        text: cleanContent,
+        reasoningText,
         isStreaming: !!message.isStreaming,
         streamStartTime: message.isStreaming ? message.timestamp : undefined,
         messageId: message.id,
