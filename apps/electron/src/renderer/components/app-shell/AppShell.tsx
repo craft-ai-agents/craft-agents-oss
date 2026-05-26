@@ -59,7 +59,7 @@ import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/ato
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
 import { panelStackAtom, panelCountAtom, focusedPanelIdAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom } from "@/atoms/panel-stack"
-import { openFileTabAtom, hasOpenTabsAtom } from "@/atoms/editor-tabs"
+import { openFileTabAtom } from "@/atoms/editor-tabs"
 import { type SessionStatus, statusConfigsToSessionStatuses } from "@/config/session-status-config"
 import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
@@ -341,14 +341,6 @@ function AppShellContent({
     activeSessionId: focusedSessionId,
     navState,
   })
-  const hasOpenTabs = useAtomValue(hasOpenTabsAtom)
-  const prevHasOpenTabsRef = React.useRef(hasOpenTabs)
-  useEffect(() => {
-    if (hasOpenTabs && !prevHasOpenTabsRef.current) {
-      setIsEditorPanelOpen(true)
-    }
-    prevHasOpenTabsRef.current = hasOpenTabs
-  }, [hasOpenTabs])
   const isPanelStackRightSidebarVisible = resolvePanelStackRightSidebarVisible(
     areContextualPanelsAvailable,
     isRightSidebarOpen,
@@ -1061,11 +1053,19 @@ function AppShellContent({
     return onDeleteSession(sessionId, skipConfirmation)
   }, [session.selected, setSession, onDeleteSession])
 
+  const handleOpenEditorPanel = useCallback(() => setIsEditorPanelOpen(true), [])
+
+  const handleOpenFile = useCallback((path: string) => {
+    void openFileTab(path)
+    setIsEditorPanelOpen(true)
+  }, [openFileTab])
+
   // Extend context value with local overrides (wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveSessionStatuses)
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
     ...contextValue,
     onDeleteSession: handleDeleteSession,
-    onOpenFile: openFileTab,
+    onOpenFile: handleOpenFile,
+    onEditorPanelOpen: handleOpenEditorPanel,
     enabledSources: sources,
     skills,
     activeSessionWorkingDirectory,
@@ -1088,7 +1088,7 @@ function AppShellContent({
     automationTestResults,
     getAutomationHistory,
     onReplayAutomation: handleReplayAutomation,
-  }), [contextValue, handleDeleteSession, openFileTab, sources, skills, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
+  }), [contextValue, handleDeleteSession, handleOpenFile, handleOpenEditorPanel, sources, skills, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {
@@ -1633,7 +1633,7 @@ function AppShellContent({
             <TooltipTrigger asChild>
               <span className="flex items-center"><LabelValueTypeIcon valueType={node.label.valueType} size={10} /></span>
             </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
+            <TooltipContent side="top" className="text-sm">
               {t("sidebar.labelValueTypeTooltip", { valueType: t(`sidebar.labelValueType.${node.label.valueType}`) })}
             </TooltipContent>
           </Tooltip>
@@ -1803,7 +1803,7 @@ function AppShellContent({
                             <Button
                               variant="ghost"
                               onClick={(e) => handleNewChat(e.metaKey || e.ctrlKey)}
-                              className="w-full justify-start gap-2 py-[5px] px-2 mr-2 text-sm font-normal rounded-[6px] bg-background"
+                              className="w-full justify-start gap-2 py-[7px] px-2 text-[14px] font-normal rounded-[6px] shadow-minimal bg-background"
                               data-tutorial="new-chat-button"
                             >
                               <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />

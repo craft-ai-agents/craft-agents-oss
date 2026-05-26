@@ -528,14 +528,14 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
             {iconUrl ? (
               <img src={iconUrl} alt="" className="w-full h-full object-cover" />
             ) : (
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-sm font-medium text-muted-foreground">
                 {workspace.name?.charAt(0)?.toUpperCase() || 'W'}
               </span>
             )}
           </div>
           <div className="text-left">
             <div className="text-sm font-medium">{workspace.name}</div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-sm text-muted-foreground">
               {isLoading ? t("common.loading") : getSummary()}
             </div>
           </div>
@@ -1196,7 +1196,7 @@ export default function AiSettingsPage() {
                       />
                       {rtkEnabled && rtkGain && rtkGain.totalCommands > 0 && (
                         <div className="px-4 pb-4 -mt-1">
-                          <div className="flex items-center justify-between text-xs text-foreground/60">
+                          <div className="flex items-center justify-between text-sm text-foreground/60">
                             <span>
                               {t("settings.ai.rtk.gainSummary", {
                                 saved: formatTokenCount(rtkGain.totalSaved),
@@ -1282,7 +1282,7 @@ export default function AiSettingsPage() {
                             setGitBashError(undefined)
                           }}
                           placeholder={t("onboarding.gitBash.pathPlaceholder")}
-                          className="text-xs"
+                          className="text-sm"
                         />
                         <Button
                           size="sm"
@@ -1293,7 +1293,7 @@ export default function AiSettingsPage() {
                           {t("settings.ai.gitBash.useThisPath")}
                         </Button>
                         {gitBashError && (
-                          <p className="text-xs text-red-500">{gitBashError}</p>
+                          <p className="text-sm text-red-500">{gitBashError}</p>
                         )}
                       </div>
                     )}

@@ -84,7 +84,7 @@ function Info_PageRoot({
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground p-4">
           <AlertCircle className="h-10 w-10 text-destructive" />
           <p className="text-sm font-medium">{t('common.errorLoadingContent')}</p>
-          <p className="text-xs text-center max-w-md">{error}</p>
+          <p className="text-sm text-center max-w-md">{error}</p>
         </div>
       </div>
     )

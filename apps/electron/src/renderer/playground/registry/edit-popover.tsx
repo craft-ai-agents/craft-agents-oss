@@ -331,7 +331,7 @@ function EditPopoverPreview({
               example={example}
               inlineExecution={inlineExecution}
             />
-            <p className="text-xs text-muted-foreground">Click the button to open the popover</p>
+            <p className="text-sm text-muted-foreground">Click the button to open the popover</p>
           </div>
         </EscapeInterruptProvider>
       </FocusProvider>

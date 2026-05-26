@@ -160,13 +160,13 @@ export function GenericOverlay({
             // Side-by-side diff view
             <div className="flex gap-4 h-full p-4">
               <div className="flex-1 flex flex-col min-w-0">
-                <div className="text-xs text-muted-foreground mb-2 font-medium">Original</div>
+                <div className="text-sm text-muted-foreground mb-2 font-medium">Original</div>
                 <div className="flex-1 overflow-auto p-4">
                   <CodeBlock code={originalContent} language={detectedLanguage} mode="minimal" forcedTheme={theme} />
                 </div>
               </div>
               <div className="flex-1 flex flex-col min-w-0">
-                <div className="text-xs text-muted-foreground mb-2 font-medium">Modified</div>
+                <div className="text-sm text-muted-foreground mb-2 font-medium">Modified</div>
                 <div className="flex-1 overflow-auto p-4">
                   <CodeBlock code={modifiedContent} language={detectedLanguage} mode="minimal" forcedTheme={theme} />
                 </div>

@@ -118,7 +118,7 @@ function getColumns(t: TFunction): ColumnDef<AutoRuleRow>[] {
       accessorFn: (row) => row.rule.flags ?? 'gi',
       cell: ({ row }) => (
         <div className="p-1.5 pl-2.5">
-          <span className="text-xs text-muted-foreground font-mono">
+          <span className="text-sm text-muted-foreground font-mono">
             {row.original.rule.flags ?? 'gi'}
           </span>
         </div>

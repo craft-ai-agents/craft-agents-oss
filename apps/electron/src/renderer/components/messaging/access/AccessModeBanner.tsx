@@ -24,7 +24,7 @@ export function AccessModeBanner({ onLockDown, description }: Props) {
         <div className="text-sm font-medium">
           {t('settings.messaging.telegram.access.banner.title')}
         </div>
-        <div className="mt-0.5 text-xs text-foreground/60">
+        <div className="mt-0.5 text-sm text-foreground/60">
           {description ?? t('settings.messaging.telegram.access.banner.description')}
         </div>
       </div>

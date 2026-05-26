@@ -148,7 +148,7 @@ export function TelegramSupergroupPairingDialog({ open, onOpenChange, botUsernam
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-accent"
+                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-accent"
                   title={t('common.copy')}
                 >
                   <Copy className="h-3.5 w-3.5" />
@@ -175,7 +175,7 @@ export function TelegramSupergroupPairingDialog({ open, onOpenChange, botUsernam
               )}
 
               {secondsLeft > 0 && (
-                <p className="text-center text-xs text-muted-foreground">
+                <p className="text-center text-sm text-muted-foreground">
                   {t('dialog.pairingCode.expiresIn', {
                     minutes,
                     seconds: String(seconds).padStart(2, '0'),

@@ -161,7 +161,7 @@ export function SessionItem({
         </div>
       }
       title={ctx.searchQuery ? highlightMatch(title, ctx.searchQuery) : title}
-      titleClassName={cn("text-[13px]", item.isAsyncOperationOngoing && "animate-shimmer-text")}
+      titleClassName={cn("text-[14px]", item.isAsyncOperationOngoing && "animate-shimmer-text")}
       subtitle={previewText}
       titleTrailing={hasMatch ? (
         <span

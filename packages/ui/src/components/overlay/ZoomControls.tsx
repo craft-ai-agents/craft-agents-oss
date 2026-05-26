@@ -62,7 +62,7 @@ function ZoomDropdown({
     <div ref={dropdownRef} className="relative">
       <button
         onClick={() => setIsOpen(prev => !prev)}
-        className="flex items-center gap-0.5 px-1 py-1 hover:bg-foreground/5 text-[13px] tabular-nums min-w-[4rem] justify-center transition-colors"
+        className="flex items-center gap-0.5 px-1 py-1 hover:bg-foreground/5 text-[14px] tabular-nums min-w-[4rem] justify-center transition-colors"
         title={t('overlay.zoomPresets')}
       >
         {zoomPercent}%
@@ -79,7 +79,7 @@ function ZoomDropdown({
           <button
             type="button"
             onClick={() => { onZoomToFit(); setIsOpen(false) }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-[13px] rounded-[4px] hover:bg-foreground/[0.05] transition-colors"
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-[14px] rounded-[4px] hover:bg-foreground/[0.05] transition-colors"
           >
             {t('overlay.zoomToFit')}
           </button>
@@ -89,7 +89,7 @@ function ZoomDropdown({
               key={preset}
               type="button"
               onClick={() => { onZoomToPreset(preset); setIsOpen(false) }}
-              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-[13px] rounded-[4px] hover:bg-foreground/[0.05] transition-colors"
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-[14px] rounded-[4px] hover:bg-foreground/[0.05] transition-colors"
             >
               <span className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
                 {activePreset === preset && <Check className="w-3.5 h-3.5" />}

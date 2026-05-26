@@ -237,7 +237,7 @@ function TiptapCodeBlockView({ node, updateAttributes }: TiptapCodeBlockViewProp
 
           <div className="max-h-[240px] overflow-y-auto p-1">
             {filteredLanguageOptions.length === 0 ? (
-              <div className="px-2.5 py-2 text-xs text-foreground/50 select-none">No languages found</div>
+              <div className="px-2.5 py-2 text-sm text-foreground/50 select-none">No languages found</div>
             ) : (
               filteredLanguageOptions.map((option, index) => {
                 const isActive = option.value === currentLanguage

@@ -60,7 +60,7 @@ function IslandOptions({
         <button
           type="button"
           onClick={() => navigation.reset('compact')}
-          className="group inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-foreground/60 hover:bg-foreground/5 hover:text-foreground"
+          className="group inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-foreground/60 hover:bg-foreground/5 hover:text-foreground"
         >
           Reset
           <RefreshCcw className="size-3.5 transition-transform duration-300 group-hover:rotate-90" />
@@ -71,21 +71,21 @@ function IslandOptions({
         <button
           type="button"
           onClick={() => navigation.replace('compact')}
-          className={cn('rounded-lg px-2.5 py-1.5 text-xs', view === 'compact' ? 'bg-foreground/10' : 'bg-foreground/5 hover:bg-foreground/10')}
+          className={cn('rounded-lg px-2.5 py-1.5 text-sm', view === 'compact' ? 'bg-foreground/10' : 'bg-foreground/5 hover:bg-foreground/10')}
         >
           Compact
         </button>
         <button
           type="button"
           onClick={() => navigation.replace('confirm-follow-up')}
-          className={cn('rounded-lg px-2.5 py-1.5 text-xs', view === 'confirm-follow-up' ? 'bg-foreground/10' : 'bg-foreground/5 hover:bg-foreground/10')}
+          className={cn('rounded-lg px-2.5 py-1.5 text-sm', view === 'confirm-follow-up' ? 'bg-foreground/10' : 'bg-foreground/5 hover:bg-foreground/10')}
         >
           Follow up
         </button>
         <button
           type="button"
           onClick={() => navigation.replace('confirm-ask-inline')}
-          className={cn('rounded-lg px-2.5 py-1.5 text-xs col-span-2', view === 'confirm-ask-inline' ? 'bg-foreground/10' : 'bg-foreground/5 hover:bg-foreground/10')}
+          className={cn('rounded-lg px-2.5 py-1.5 text-sm col-span-2', view === 'confirm-ask-inline' ? 'bg-foreground/10' : 'bg-foreground/5 hover:bg-foreground/10')}
         >
           Ask inline
         </button>
@@ -95,7 +95,7 @@ function IslandOptions({
         type="button"
         onClick={onToggleMorph}
         className={cn(
-          'rounded-lg px-2.5 py-1.5 text-xs text-left',
+          'rounded-lg px-2.5 py-1.5 text-sm text-left',
           useMorph ? 'bg-foreground/10' : 'bg-foreground/5 hover:bg-foreground/10'
         )}
       >
@@ -151,7 +151,7 @@ function IslandOptions({
         onClick={onClearIsland}
         disabled={!isIslandMounted}
         className={cn(
-          'inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs',
+          'inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm',
           isIslandMounted
             ? 'bg-foreground/5 hover:bg-foreground/10 text-foreground/75'
             : 'bg-foreground/3 text-foreground/35 cursor-not-allowed'
@@ -263,7 +263,7 @@ function ToolbarToConfirmTransitionDemo({ initialView = 'compact' }: ToolbarToCo
                       type="button"
                       onClick={() => navigation.push('confirm-follow-up')}
                       className={cn(
-                        'h-[30px] px-2.5 rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5',
+                        'h-[30px] px-2.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5',
                         'text-foreground/85 hover:text-foreground hover:bg-foreground/5',
                         'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
                       )}
@@ -276,7 +276,7 @@ function ToolbarToConfirmTransitionDemo({ initialView = 'compact' }: ToolbarToCo
                       type="button"
                       onClick={() => navigation.push('confirm-ask-inline')}
                       className={cn(
-                        'h-[30px] px-2.5 rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5',
+                        'h-[30px] px-2.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5',
                         'text-foreground/85 hover:text-foreground hover:bg-foreground/5',
                         'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
                       )}
@@ -302,7 +302,7 @@ function ToolbarToConfirmTransitionDemo({ initialView = 'compact' }: ToolbarToCo
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm font-medium">Ask inline</div>
-                        <div className="text-xs text-foreground/60 mt-0.5">Ask a targeted question on selected content</div>
+                        <div className="text-sm text-foreground/60 mt-0.5">Ask a targeted question on selected content</div>
                       </div>
                       <button
                         type="button"
@@ -316,7 +316,7 @@ function ToolbarToConfirmTransitionDemo({ initialView = 'compact' }: ToolbarToCo
 
                     <div className="rounded-[8px] border border-border/70 bg-foreground/3 px-3 py-2">
                       <div className="text-[11px] uppercase tracking-wide text-foreground/50 mb-1">Selection preview</div>
-                      <div className="text-xs text-foreground/75 line-clamp-2">
+                      <div className="text-sm text-foreground/75 line-clamp-2">
                         “...requestAnimationFrame + intersectsNode checks with diff-style add/remove...”
                       </div>
                     </div>
@@ -326,7 +326,7 @@ function ToolbarToConfirmTransitionDemo({ initialView = 'compact' }: ToolbarToCo
                         type="button"
                         onClick={() => setAskScope('selection')}
                         className={cn(
-                          'h-7 px-2.5 rounded-[6px] text-xs font-medium transition-colors',
+                          'h-7 px-2.5 rounded-[6px] text-sm font-medium transition-colors',
                           askScope === 'selection' ? 'bg-background text-foreground shadow-minimal' : 'text-foreground/65 hover:bg-foreground/5'
                         )}
                       >
@@ -336,7 +336,7 @@ function ToolbarToConfirmTransitionDemo({ initialView = 'compact' }: ToolbarToCo
                         type="button"
                         onClick={() => setAskScope('full')}
                         className={cn(
-                          'h-7 px-2.5 rounded-[6px] text-xs font-medium transition-colors',
+                          'h-7 px-2.5 rounded-[6px] text-sm font-medium transition-colors',
                           askScope === 'full' ? 'bg-background text-foreground shadow-minimal' : 'text-foreground/65 hover:bg-foreground/5'
                         )}
                       >
@@ -384,7 +384,7 @@ function ToolbarToConfirmTransitionDemo({ initialView = 'compact' }: ToolbarToCo
                 </IslandContentView>
               </Island>
             ) : (
-              <div className="min-w-[280px] rounded-[10px] border border-border/50 bg-background/80 px-4 py-3 text-xs text-foreground/65 text-center">
+              <div className="min-w-[280px] rounded-[10px] border border-border/50 bg-background/80 px-4 py-3 text-sm text-foreground/65 text-center">
                 Island cleared.
                 <button
                   type="button"
@@ -415,7 +415,7 @@ function ToolbarToConfirmTransitionDemo({ initialView = 'compact' }: ToolbarToCo
         />
       </div>
 
-      <div className="rounded-[10px] bg-foreground/3 border border-border/40 px-3 py-2 text-xs text-foreground/70">
+      <div className="rounded-[10px] bg-foreground/3 border border-border/40 px-3 py-2 text-sm text-foreground/70">
         {lastConfirmed ? `Last confirmed: ${lastConfirmed}` : 'No confirmation submitted yet.'}
       </div>
     </div>

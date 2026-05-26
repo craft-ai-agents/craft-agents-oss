@@ -121,7 +121,7 @@ export default function LabelsSettingsPage() {
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">
                           <p className="text-sm">{t("settings.labels.noLabels")}</p>
-                          <p className="text-xs mt-1 text-foreground/40">
+                          <p className="text-sm mt-1 text-foreground/40">
                             {t("settings.labels.noLabelsDesc")}
                           </p>
                         </div>

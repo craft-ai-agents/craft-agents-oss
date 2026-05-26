@@ -379,7 +379,7 @@ export function EntityRow({
 
           {/* Badges / metadata row */}
           {(badges || trailing) && (
-            <div className="flex items-center gap-[10px] text-xs text-foreground/70 w-full -mb-[2px] min-w-0">
+            <div className="flex items-center gap-[10px] text-sm text-foreground/70 w-full -mb-[2px] min-w-0">
               {/* Invisible spacer matching icon container width */}
               {icon && (
                 <div className="shrink-0 flex items-center gap-[10px] [&>*]:w-3 [&>*]:h-3 invisible" aria-hidden="true">

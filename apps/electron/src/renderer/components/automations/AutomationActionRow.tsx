@@ -111,7 +111,7 @@ export function AutomationActionRow({ action, index, className }: AutomationActi
     <div className={cn('flex items-start gap-3 px-4 py-3', className)}>
       {/* Index + icon — h-5 matches the first line height of text-sm content */}
       <div className="flex items-center gap-2 shrink-0 h-5 mt-[3px]">
-        <span className="text-xs text-muted-foreground tabular-nums w-4 text-right">
+        <span className="text-sm text-muted-foreground tabular-nums w-4 text-right">
           {index + 1}.
         </span>
         <ActionTypeIcon type={action.type} className="h-3.5 w-3.5" />

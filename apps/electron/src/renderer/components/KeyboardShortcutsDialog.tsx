@@ -106,7 +106,7 @@ function ActionShortcutRow({ actionId }: { actionId: ActionId }) {
 function RegistrySection({ category, actionIds }: { category: string; actionIds: ActionId[] }) {
   return (
     <div>
-      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
         {category}
       </h3>
       <div className="space-y-1.5">
@@ -124,7 +124,7 @@ function RegistrySection({ category, actionIds }: { category: string; actionIds:
 function StaticSection({ section }: { section: ShortcutSection }) {
   return (
     <div>
-      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
         {section.title}
       </h3>
       <div className="space-y-1.5">

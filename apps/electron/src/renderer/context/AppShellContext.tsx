@@ -106,6 +106,8 @@ export interface AppShellContextType {
   // File/URL handlers - these can open in tabs or external apps
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
+  /** Called by user-initiated tab opens (file click, diff click, commit click) to auto-open the editor panel. */
+  onEditorPanelOpen?: () => void
 
   // Workspace
   onSelectWorkspace: (id: string, openInNewWindow?: boolean) => void | Promise<void>

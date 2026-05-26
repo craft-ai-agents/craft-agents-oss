@@ -62,7 +62,7 @@ function WorkingTreeDiffContent({ tab }: { tab: Extract<EditorTab, { type: 'git-
       <UnifiedDiffViewer
         unifiedDiff={tab.patch}
         filePath={tab.filePath}
-        className="min-h-full text-xs"
+        className="min-h-full text-sm"
       />
     </div>
   )
@@ -72,7 +72,7 @@ function CommitDetailContent({ tab }: { tab: Extract<EditorTab, { type: 'git-com
   return (
     <div className="h-full min-h-0 overflow-auto">
       <div className="border-b border-border/50 px-4 py-3">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span className="font-mono">{tab.commit.shortHash}</span>
           <span>{tab.commit.author}</span>
         </div>
@@ -81,7 +81,7 @@ function CommitDetailContent({ tab }: { tab: Extract<EditorTab, { type: 'git-com
       <div className="divide-y divide-border/50">
         {tab.commit.filesChanged.map((file) => (
           <details key={`${tab.commit.hash}:${file.path}`} open className="group">
-            <summary className="sticky top-0 z-10 flex cursor-pointer select-none items-center gap-2 bg-background px-4 py-2 text-xs">
+            <summary className="sticky top-0 z-10 flex cursor-pointer select-none items-center gap-2 bg-background px-4 py-2 text-sm">
               <span className="min-w-0 flex-1 truncate" title={file.path}>{file.path}</span>
               <span className="font-mono text-emerald-500">+{file.additions}</span>
               <span className="font-mono text-rose-500">-{file.deletions}</span>
@@ -90,10 +90,10 @@ function CommitDetailContent({ tab }: { tab: Extract<EditorTab, { type: 'git-com
               <UnifiedDiffViewer
                 unifiedDiff={file.diff}
                 filePath={file.path}
-                className="text-xs"
+                className="text-sm"
               />
             ) : (
-              <div className="px-4 py-3 text-xs text-muted-foreground">No diff available</div>
+              <div className="px-4 py-3 text-sm text-muted-foreground">No diff available</div>
             )}
           </details>
         ))}
@@ -109,7 +109,7 @@ function renderTabContent(tab: EditorTab, onLineComment: (comment: LineComment) 
         <LineAnnotatableViewer
           code={tab.content}
           filePath={tab.filePath}
-          className="h-full text-xs"
+          className="h-full text-sm"
           onComment={onLineComment}
         />
       )
@@ -289,7 +289,7 @@ export function EditorDetailPanel({ workspaceId, sessionId, isOpen = true }: Edi
                     key={tab.id}
                     className={cn(
                       'group flex items-center gap-1.5 px-3 py-1.5 border-r border-border/30 shrink-0',
-                      'cursor-pointer select-none text-xs transition-colors',
+                      'cursor-pointer select-none text-sm transition-colors',
                       tab.id === activeTabId
                         ? 'bg-background text-foreground'
                         : 'bg-muted/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground'

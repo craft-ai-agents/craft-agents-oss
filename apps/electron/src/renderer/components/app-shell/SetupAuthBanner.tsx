@@ -84,7 +84,7 @@ export function SetupAuthBanner({
           <h3 className="text-sm font-semibold text-foreground flex items-center justify-center gap-2">
             {getTitle()}
           </h3>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-foreground">
             {getDescription()}
           </p>
           <Button
@@ -108,7 +108,7 @@ export function SetupAuthBanner({
       <Button
         onClick={onAction}
         size="sm"
-        className="shrink-0 text-xs rounded-[8px]"
+        className="shrink-0 text-sm rounded-[8px]"
       >
         {getButtonText()}
       </Button>
