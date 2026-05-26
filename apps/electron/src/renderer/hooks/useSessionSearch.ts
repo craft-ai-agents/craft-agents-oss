@@ -5,6 +5,7 @@ import { searchLog } from "@/lib/logger"
 import { parseLabelEntry } from "@craft-agent/shared/labels"
 import { fuzzyScore } from "@craft-agent/shared/search"
 import { getSessionTitle, getSessionStatus } from "@/utils/session"
+import { getSessionProjectInfo } from "@/utils/session-project"
 import type { SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@craft-agent/shared/views"
 import type { SessionFilter } from "@/contexts/NavigationContext"
@@ -53,7 +54,7 @@ export interface UseSessionSearchOptions {
   /** Collapsed group keys — collapsed items are excluded from pagination and flatItems */
   collapsedGroups?: Set<string>
   /** Grouping mode — needed to compute group keys for collapse-aware pagination */
-  groupingMode?: 'date' | 'status'
+  groupingMode?: 'date' | 'status' | 'project'
   /** Ref to the ScrollArea viewport element — used for scroll-based pagination */
   scrollViewportRef?: React.RefObject<HTMLDivElement>
 }
@@ -119,10 +120,10 @@ function groupSessionsByDate(sessions: SessionMeta[]): DateGroup[] {
     }))
 }
 
-function getCollapseGroupKey(item: SessionMeta, groupingMode?: 'date' | 'status'): string {
-  return groupingMode === 'status'
-    ? `status-${getSessionStatus(item)}`
-    : startOfDay(new Date(item.lastMessageAt || 0)).toISOString()
+function getCollapseGroupKey(item: SessionMeta, groupingMode?: 'date' | 'status' | 'project'): string {
+  if (groupingMode === 'status') return `status-${getSessionStatus(item)}`
+  if (groupingMode === 'project') return getSessionProjectInfo(item).key
+  return startOfDay(new Date(item.lastMessageAt || 0)).toISOString()
 }
 
 export interface CollapsedPaginationResult {
@@ -135,7 +136,7 @@ export function computeCollapsedPagination(
   items: SessionMeta[],
   displayLimit: number,
   collapsedGroups?: Set<string>,
-  groupingMode?: 'date' | 'status',
+  groupingMode?: 'date' | 'status' | 'project',
 ): CollapsedPaginationResult {
   // Fast path: no collapse state → original slice
   if (!collapsedGroups || collapsedGroups.size === 0) {

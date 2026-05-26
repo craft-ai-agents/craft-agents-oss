@@ -721,7 +721,7 @@ function AppShellContent({
 
   const chatGroupingMode: ChatGroupingMode = isStateSubView
     ? 'date'
-    : (viewFiltersMap[sessionFilterKey ?? '']?.groupingMode ?? 'date')
+    : (viewFiltersMap[sessionFilterKey ?? '']?.groupingMode ?? 'project')
 
   const setChatGroupingMode = useCallback((mode: ChatGroupingMode) => {
     setViewFiltersMap(prev => {
@@ -2756,6 +2756,11 @@ function AppShellContent({
                                     <span className="flex-1">{t("sidebar.group")}</span>
                                   </StyledDropdownMenuSubTrigger>
                                   <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
+                                    <StyledDropdownMenuItem onClick={() => setChatGroupingMode('project')}>
+                                      <FolderOpen className="h-3.5 w-3.5" />
+                                      <span className="flex-1">Projects</span>
+                                      {chatGroupingMode === 'project' && <Check className="h-3 w-3 text-muted-foreground" />}
+                                    </StyledDropdownMenuItem>
                                     <StyledDropdownMenuItem onClick={() => setChatGroupingMode('date')}>
                                       <Calendar className="h-3.5 w-3.5" />
                                       <span className="flex-1">{t("sidebar.groupByDate")}</span>
