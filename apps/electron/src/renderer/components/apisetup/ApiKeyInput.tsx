@@ -32,16 +32,19 @@ import {
 } from "./submit-helpers"
 
 import type { CustomEndpointApi, CustomEndpointConfig } from '@config/llm-connections'
+import type { ModelDefinition } from '@config/models'
 
 export type ApiKeyStatus = 'idle' | 'validating' | 'success' | 'error'
 
 export type { CustomEndpointApi }
 
+export type CustomEndpointModelInput = string | ModelDefinition
+
 export interface ApiKeySubmitData {
   apiKey: string
   baseUrl?: string
   connectionDefaultModel?: string
-  models?: string[]
+  models?: CustomEndpointModelInput[]
   piAuthProvider?: string
   modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
   /** Custom endpoint protocol — set when user configures an arbitrary API endpoint */
@@ -77,7 +80,7 @@ export interface ApiKeyInputProps {
     baseUrl?: string
     connectionDefaultModel?: string
     activePreset?: string
-    models?: string[]
+    models?: CustomEndpointModelInput[]
     /** Pre-fill the protocol toggle for custom endpoints */
     customApi?: CustomEndpointApi
   }
@@ -164,11 +167,85 @@ function getPresetForUrl(url: string, presets: Preset[]): PresetKey {
   return match?.key ?? 'custom'
 }
 
-function parseModelList(value: string): string[] {
+export function getModelId(model: CustomEndpointModelInput): string {
+  return typeof model === 'string' ? model : model.id
+}
+
+export function formatModelList(models: CustomEndpointModelInput[] | undefined, fallback: string): string {
+  if (!models?.length) return fallback
+  return models.map(getModelId).join(', ')
+}
+
+export function parseModelList(value: string): CustomEndpointModelInput[] {
   return value
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean)
+}
+
+export function makeCustomModelDefinition(values: Partial<ModelDefinition> & { id: string }): ModelDefinition {
+  return {
+    id: values.id,
+    name: values.name || values.id,
+    shortName: values.shortName || values.name || values.id,
+    description: values.description || '',
+    provider: values.provider || 'pi',
+    contextWindow: values.contextWindow ?? 131_072,
+    ...(values.supportsImages !== undefined ? { supportsImages: values.supportsImages } : {}),
+    ...(values.supportsThinking !== undefined ? { supportsThinking: values.supportsThinking } : {}),
+  }
+}
+
+export function parseCustomModelsJson(value: string): { models?: CustomEndpointModelInput[]; error?: string } {
+  const trimmed = value.trim()
+  if (!trimmed) return {}
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch (error) {
+    return { error: `Invalid JSON: ${error instanceof Error ? error.message : 'Unable to parse model metadata.'}` }
+  }
+
+  if (!Array.isArray(parsed)) {
+    return { error: 'Model metadata must be a JSON array.' }
+  }
+
+  const models: CustomEndpointModelInput[] = []
+  for (const [index, item] of parsed.entries()) {
+    if (typeof item === 'string') {
+      const id = item.trim()
+      if (!id) return { error: `Model metadata entry ${index + 1} is empty.` }
+      models.push(id)
+      continue
+    }
+
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return { error: `Model metadata entry ${index + 1} must be a string or object.` }
+    }
+
+    const raw = item as Record<string, unknown>
+    if (typeof raw.id !== 'string' || !raw.id.trim()) {
+      return { error: `Model metadata entry ${index + 1} must include a non-empty string id.` }
+    }
+
+    const model: Partial<ModelDefinition> & { id: string } = { id: raw.id.trim() }
+    if (typeof raw.name === 'string' && raw.name.trim()) model.name = raw.name.trim()
+    if (typeof raw.shortName === 'string' && raw.shortName.trim()) model.shortName = raw.shortName.trim()
+    if (typeof raw.description === 'string') model.description = raw.description
+    if (typeof raw.contextWindow === 'number' && Number.isFinite(raw.contextWindow)) model.contextWindow = raw.contextWindow
+    if (typeof raw.supportsImages === 'boolean') model.supportsImages = raw.supportsImages
+    if (typeof raw.supportsThinking === 'boolean') model.supportsThinking = raw.supportsThinking
+    models.push(makeCustomModelDefinition(model))
+  }
+
+  return { models }
+}
+
+export function formatCustomModelsJson(models: CustomEndpointModelInput[] | undefined): string {
+  const objectModels = models?.filter((model) => typeof model !== 'string')
+  if (!objectModels?.length) return ''
+  return JSON.stringify(objectModels, null, 2)
 }
 
 // ============================================================
@@ -200,8 +277,9 @@ export function ApiKeyInput({
   const [lastNonCustomPreset, setLastNonCustomPreset] = useState<PresetKey | null>(
     initialPreset !== 'custom' ? initialPreset : defaultPreset.key
   )
-  const [connectionDefaultModel, setConnectionDefaultModel] = useState(initialValues?.connectionDefaultModel ?? '')
+  const [connectionDefaultModel, setConnectionDefaultModel] = useState(formatModelList(initialValues?.models, initialValues?.connectionDefaultModel ?? ''))
   const [customApi, setCustomApi] = useState<CustomEndpointApi>(initialValues?.customApi ?? 'openai-completions')
+  const [customModelsJson, setCustomModelsJson] = useState(formatCustomModelsJson(initialValues?.models))
   const [modelError, setModelError] = useState<string | null>(null)
 
   // Bedrock auth state
@@ -252,7 +330,7 @@ export function ApiKeyInput({
       setPiModels(result.models)
 
       if (hydratedTierProviderRef.current !== provider) {
-        const tiers = resolveTierModels(result.models, provider === initialPreset ? initialValues?.models : undefined)
+        const tiers = resolveTierModels(result.models, provider === initialPreset ? initialValues?.models?.map(getModelId) : undefined)
         setBestModel(tiers.best)
         setDefaultModel(tiers.default_)
         setCheapModel(tiers.cheap)
@@ -380,7 +458,7 @@ export function ApiKeyInput({
             ...(awsSessionToken.trim() ? { sessionToken: awsSessionToken.trim() } : {}),
           },
         } : {}),
-        connectionDefaultModel: parsedModels[0],
+        connectionDefaultModel: parsedModels[0] ? getModelId(parsedModels[0]) : undefined,
         models: parsedModels.length > 0 ? parsedModels : undefined,
       })
       return
@@ -389,10 +467,20 @@ export function ApiKeyInput({
     const effectiveBaseUrl = baseUrl.trim()
 
     const parsedModels = parseModelList(connectionDefaultModel)
+    const parsedModelIds = parsedModels.map(getModelId)
+    const metadataParse = parseCustomModelsJson(customModelsJson)
+    if (metadataParse.error) {
+      setModelError(metadataParse.error)
+      return
+    }
+    const metadataById = new Map((metadataParse.models ?? []).map((model) => [getModelId(model), model]))
+    const modelsWithMetadata = parsedModels.map((model) => metadataById.get(getModelId(model)) ?? model)
+    const extraMetadataModels = (metadataParse.models ?? []).filter((model) => !parsedModelIds.includes(getModelId(model)))
+    const submittedModels = [...modelsWithMetadata, ...extraMetadataModels]
 
     const isUsingDefaultEndpoint = isDefaultProviderPreset || !effectiveBaseUrl
     const requiresModel = !isDefaultProviderPreset && !!effectiveBaseUrl
-    if (requiresModel && parsedModels.length === 0) {
+    if (requiresModel && submittedModels.length === 0) {
       setModelError('Default model is required for custom endpoints.')
       return
     }
@@ -411,8 +499,8 @@ export function ApiKeyInput({
     onSubmit({
       apiKey: apiKey.trim(),
       baseUrl: isUsingDefaultEndpoint ? undefined : effectiveBaseUrl,
-      connectionDefaultModel: parsedModels[0],
-      models: parsedModels.length > 0 ? parsedModels : undefined,
+      connectionDefaultModel: submittedModels[0] ? getModelId(submittedModels[0]) : undefined,
+      models: submittedModels.length > 0 ? submittedModels : undefined,
       piAuthProvider: resolvedPiAuthProvider,
       modelSelectionMode: isPiApiKeyFlow
         ? (parsedModels.length > 0 ? 'userDefined3Tier' : 'automaticallySyncedFromProvider')
@@ -522,8 +610,9 @@ export function ApiKeyInput({
             isDisabled && "opacity-50 pointer-events-none"
           )}>
             {([
-              { value: 'openai-completions' as const, label: 'OpenAI Compatible' },
-              { value: 'anthropic-messages' as const, label: 'Anthropic Compatible' },
+              { value: 'openai-completions' as const, label: 'OpenAI Chat' },
+              { value: 'openai-responses' as const, label: 'OpenAI Responses' },
+              { value: 'anthropic-messages' as const, label: 'Anthropic' },
             ]).map(({ value, label }) => (
               <button
                 key={value}
@@ -542,7 +631,7 @@ export function ApiKeyInput({
             ))}
           </div>
           <p className="text-xs text-foreground/30">
-            Most third-party APIs (Ollama, vLLM, DashScope) use OpenAI Compatible.
+            Use OpenAI Responses for OpenAI-compatible reasoning models that require /v1/responses.
           </p>
         </div>
       )}
@@ -818,6 +907,32 @@ export function ApiKeyInput({
             <p className="text-xs text-foreground/30">
               Required for custom endpoints. Use the provider-specific model ID.
             </p>
+          )}
+          {activePreset === 'custom' && (
+            <div className="space-y-1.5 pt-2">
+              <Label htmlFor="custom-model-metadata" className="text-muted-foreground font-normal text-xs">
+                Advanced model metadata <span className="text-foreground/30">· optional JSON</span>
+              </Label>
+              <textarea
+                id="custom-model-metadata"
+                value={customModelsJson}
+                onChange={(e) => {
+                  setCustomModelsJson(e.target.value)
+                  setModelError(null)
+                }}
+                placeholder={'[{\n  "id": "gpt-5.5",\n  "name": "GPT 5.5",\n  "shortName": "GPT 5.5",\n  "supportsImages": true,\n  "contextWindow": 131072\n}]'}
+                className={cn(
+                  "min-h-[120px] w-full resize-y rounded-md border-0 bg-foreground-2 px-3 py-2 font-mono text-xs shadow-minimal outline-none transition-colors",
+                  "focus:bg-background focus:ring-1 focus:ring-ring/30",
+                  isDisabled && "opacity-50 pointer-events-none",
+                  modelError && "ring-1 ring-destructive/40"
+                )}
+                disabled={isDisabled}
+              />
+              <p className="text-xs text-foreground/30">
+                Add objects here to set friendly names or capabilities. Entries are matched by id and merged with the model list above.
+              </p>
+            </div>
           )}
         </div>
       )}

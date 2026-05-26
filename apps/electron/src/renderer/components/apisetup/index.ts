@@ -1,4 +1,4 @@
-export { ApiKeyInput, type ApiKeyInputProps, type ApiKeyStatus, type ApiKeySubmitData } from './ApiKeyInput'
+export { ApiKeyInput, type ApiKeyInputProps, type ApiKeyStatus, type ApiKeySubmitData, type CustomEndpointModelInput } from './ApiKeyInput'
 export {
   OAuthConnect,
   type OAuthConnectProps,
