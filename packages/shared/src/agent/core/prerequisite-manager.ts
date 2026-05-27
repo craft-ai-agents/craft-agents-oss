@@ -45,9 +45,6 @@ export interface PrerequisiteManagerConfig {
 // Constants
 // ============================================================
 
-/** Slugs that are exempt from prerequisite checks (internal sources) */
-const EXEMPT_SLUGS = new Set(['session', 'craft-agents-docs']);
-
 /** Global browser tools docs path required before browser tool usage. */
 const BROWSER_TOOLS_DOC_PATH = resolve(join(homedir(), '.mdp-agent', 'docs', 'browser-tools.md'));
 
@@ -78,25 +75,6 @@ function isBrowserPrerequisiteEnabled(): boolean {
  * - What message to show when blocking
  */
 const RULES: PrerequisiteRule[] = [
-  // MCP source tools: mcp__{slug}__* format
-  {
-    toolMatcher: (toolName: string) => {
-      if (!toolName.startsWith('mcp__')) return false;
-      const parts = toolName.split('__');
-      if (parts.length < 3) return false;
-      const slug = parts[1]!;
-      return !EXEMPT_SLUGS.has(slug);
-    },
-    resolveRequiredPath: (toolName: string, workspaceRootPath: string) => {
-      const parts = toolName.split('__');
-      const slug = parts[1]!;
-      const guidePath = resolve(workspaceRootPath, 'sources', slug, 'guide.md');
-      return existsSync(guidePath) ? guidePath : null;
-    },
-    blockMessage:
-      'You must read the source guide before using this tool. Please read the file at {filePath} first, then retry.',
-  },
-
   // API source tools: api_{slug} format
   {
     toolMatcher: (toolName: string) => {
