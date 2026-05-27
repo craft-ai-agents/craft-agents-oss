@@ -56,7 +56,9 @@ export interface McpToolResult {
 }
 
 export interface McpClientPoolCallOptions {
+  /** Session storage path used for binary response downloads and large-response files. */
   sessionPath?: string;
+  /** Optional summarizer used when a successful tool response exceeds inline limits. */
   summarize?: (prompt: string) => Promise<string | null>;
 }
 
@@ -130,16 +132,23 @@ export class McpClientPool {
     this.workspaceRootPath = options?.workspaceRootPath;
   }
 
-  addToolsChangedListener(fn: () => void): void {
-    this.toolsChangedListeners.add(fn);
+  /**
+   * Subscribe to tool-list changes emitted after each sync reconciliation.
+   */
+  addToolsChangedListener(listener: () => void): void {
+    this.toolsChangedListeners.add(listener);
   }
 
-  removeToolsChangedListener(fn: () => void): void {
-    this.toolsChangedListeners.delete(fn);
+  /**
+   * Remove a previously registered tool-list change listener.
+   */
+  removeToolsChangedListener(listener: () => void): void {
+    this.toolsChangedListeners.delete(listener);
   }
 
   private notifyToolsChanged(): void {
-    for (const listener of this.toolsChangedListeners) {
+    const listeners = Array.from(this.toolsChangedListeners);
+    for (const listener of listeners) {
       listener();
     }
   }
@@ -367,6 +376,9 @@ export class McpClientPool {
 
   /**
    * Execute an MCP tool by its proxy name (mcp__{slug}__{toolName}).
+   * Per-call options decide where binary/large responses are saved and which
+   * session-specific summarizer is used.
+   *
    * Returns a result matching the subprocess protocol format.
    */
   async callTool(
