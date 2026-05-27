@@ -2995,10 +2995,13 @@ export const TurnCard = React.memo(function TurnCard({
 
   // Check if response is in buffering state
   // No polling needed - parent updates trigger re-evaluation naturally
-  const isBuffering = useMemo(
-    () => isResponseBuffering(response),
-    [response]
-  )
+  const isBuffering = useMemo(() => {
+    if (!isResponseBuffering(response)) return false
+    // When thinking has finished and response text arrived, skip buffering entirely.
+    // The ThinkingBlock was the visual placeholder; ResponseCard should appear immediately.
+    if (response?.reasoningText && response?.text) return false
+    return true
+  }, [response])
 
 
   // Compute preview text with cross-fade animation
