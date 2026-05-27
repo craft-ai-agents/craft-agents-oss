@@ -115,6 +115,8 @@ export interface McpPostCreateConnectionTestResult {
   error?: string;
   /** Failure classification used to choose the persisted connection status. */
   errorType?: 'failed' | 'needs-auth' | 'pending' | 'invalid-schema' | 'disabled' | 'unknown';
+  /** Tool names discovered during connection testing, when available. */
+  tools?: string[];
 }
 
 /** Context passed to post-create MCP connection testers. */
@@ -129,6 +131,23 @@ export interface McpPostCreateConnectionTestContext {
 export type McpPostCreateConnectionTester = (
   context: McpPostCreateConnectionTestContext
 ) => Promise<McpPostCreateConnectionTestResult>;
+
+/** Context available to AI/documentation generators for MCP source guides. */
+export interface McpSourceGuideGenerationContext {
+  /** Persisted source config without credential-store secret values. */
+  config: FolderSourceConfig;
+  /** User/import supplied description, if any. */
+  description?: string;
+  /** Tool names discovered from the MCP server, if available. */
+  tools?: string[];
+  /** Deterministic fallback guide that must remain safe to use. */
+  fallbackGuide: SourceGuide;
+}
+
+/** Optional AI/custom guide generator used by app hosts. */
+export type McpSourceGuideGenerator = (
+  context: McpSourceGuideGenerationContext
+) => Promise<SourceGuide | null | undefined> | SourceGuide | null | undefined;
 
 /**
  * Tests a newly-created MCP source using the same validators as explicit
@@ -157,8 +176,11 @@ export const defaultMcpPostCreateConnectionTester: McpPostCreateConnectionTester
   }
 
   const credentialHeaders = parseCredentialHeaders(credentialValue);
+  const ssoIdToken = mcp.authType === 'bearer' ? await loadSsoIdentityToken() : null;
   let accessToken: string | undefined;
-  if (!credentialHeaders && (mcp.authType === 'bearer' || mcp.authType === 'oauth')) {
+  if (mcp.authType === 'bearer') {
+    accessToken = ssoIdToken ?? (!credentialHeaders ? credentialValue : undefined);
+  } else if (!credentialHeaders && mcp.authType === 'oauth') {
     accessToken = credentialValue;
   }
 
@@ -172,6 +194,15 @@ export const defaultMcpPostCreateConnectionTester: McpPostCreateConnectionTester
     mcpAccessToken: accessToken,
   });
 };
+
+async function loadSsoIdentityToken(): Promise<string | null> {
+  try {
+    const { SsoCredentialStore } = await import('../auth/sso-credential-store.ts');
+    return (await new SsoCredentialStore().load())?.idToken ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Compute a stable fingerprint for a stdio command + args combination.
@@ -204,6 +235,11 @@ export interface McpImportCreateOptions {
    * environments where workspace config may not exist. Defaults to false.
    */
   skipLocalMcpEnabledCheck?: boolean;
+  /**
+   * Optional AI/custom guide generator. When it fails or returns invalid
+   * content, creation still succeeds with the deterministic fallback guide.
+   */
+  guideGenerator?: McpSourceGuideGenerator;
 }
 
 /** Manual form input for creating a single MCP source. */
@@ -240,6 +276,7 @@ interface McpSourceCreationOptions {
   connectionTester?: McpPostCreateConnectionTester;
   confirmedStdioCommands?: Record<string, true>;
   skipLocalMcpEnabledCheck?: boolean;
+  guideGenerator?: McpSourceGuideGenerator;
 }
 
 interface ManualCandidateBuildState {
@@ -347,6 +384,7 @@ export async function createMcpSourcesFromCandidates(
         connectionTester: options.connectionTester,
         confirmedStdioCommands: options.confirmedStdioCommands,
         skipLocalMcpEnabledCheck: options.skipLocalMcpEnabledCheck,
+        guideGenerator: options.guideGenerator,
       });
       results.push({ key: candidate.key, success: true, sourceSlug: created.slug });
     } catch (error) {
@@ -423,9 +461,9 @@ function buildManualCandidate(input: McpManualSourceInput): McpImportCandidate {
     errors.push({ field: 'provider', message: 'MCP source provider is required.' });
   }
 
-  // Normalize legacy transport values (http/sse → streamable_http) for backward compatibility
+  // Normalize legacy transport values for backward compatibility.
   const rawTransport: string | undefined = input.mcp.transport;
-  const transport: McpTransport = rawTransport === 'http' || rawTransport === 'sse' || rawTransport === undefined
+  const transport: McpTransport = rawTransport === 'http' || rawTransport === 'sse' || rawTransport === 'streamable-http' || rawTransport === undefined
     ? 'streamable_http'
     : (rawTransport as McpTransport);
   const state: ManualCandidateBuildState = {
@@ -439,7 +477,7 @@ function buildManualCandidate(input: McpManualSourceInput): McpImportCandidate {
   } else if (transport === 'streamable_http') {
     addManualRemoteFields(input.mcp, input.authCredential, provider, state);
   } else {
-    errors.push({ field: 'transport', message: 'Transport must be one of: streamable_http, stdio.' });
+    errors.push({ field: 'transport', message: 'Transport must be one of: streamable_http, streamable-http, stdio.' });
   }
 
   const candidate: McpImportCandidate = {
@@ -765,8 +803,8 @@ async function createMcpSourceFromCandidate(
     config.tagline = description;
   }
 
-  const guide = buildImportedGuide(candidate.input.name, description);
-  const source = buildLoadedSource(workspaceRootPath, config, guide);
+  const fallbackGuide = buildImportedGuide(candidate.input.name, description, config);
+  const source = buildLoadedSource(workspaceRootPath, config, fallbackGuide);
   const credentialValue = buildCredentialStoreValue(candidate);
   if (credentialValue) {
     await credentialManager.save(source, { value: credentialValue });
@@ -776,8 +814,12 @@ async function createMcpSourceFromCandidate(
     deleteSource(workspaceRootPath, replacementSlug);
   }
   saveSourceConfig(workspaceRootPath, config);
-  saveSourceGuide(workspaceRootPath, slug, guide);
-  await testCreatedMcpSource(workspaceRootPath, slug, guide, credentialValue, options);
+  saveSourceGuide(workspaceRootPath, slug, fallbackGuide);
+  const connectionResult = await testCreatedMcpSource(workspaceRootPath, slug, fallbackGuide, credentialValue, options);
+  const generatedGuide = await generateCreatedMcpSourceGuide(config, description, fallbackGuide, options.guideGenerator, connectionResult?.tools);
+  if (generatedGuide.raw !== fallbackGuide.raw) {
+    saveSourceGuide(workspaceRootPath, slug, generatedGuide);
+  }
   return config;
 }
 
@@ -787,12 +829,12 @@ async function testCreatedMcpSource(
   guide: SourceGuide,
   credentialValue: string | null,
   options: McpSourceCreationOptions,
-): Promise<void> {
+): Promise<McpPostCreateConnectionTestResult | null> {
   const { connectionTester, confirmedStdioCommands, skipLocalMcpEnabledCheck } = options;
-  if (!connectionTester) return;
+  if (!connectionTester) return null;
 
   const config = loadSourceConfig(workspaceRootPath, sourceSlug);
-  if (!config) return;
+  if (!config) return null;
 
   const isStdio = config.type === 'mcp' && config.mcp?.transport === 'stdio';
   if (isStdio) {
@@ -800,13 +842,13 @@ async function testCreatedMcpSource(
       config.connectionStatus = 'local_disabled';
       config.lastTestedAt = Date.now();
       saveSourceConfig(workspaceRootPath, config);
-      return;
+      return { success: false, error: 'Local MCP servers are disabled for this workspace.', errorType: 'disabled' };
     }
 
     if (config.mcp?.command && confirmedStdioCommands !== undefined) {
       const fingerprint = stdioCommandFingerprint(config.mcp.command, config.mcp.args);
       if (!confirmedStdioCommands[fingerprint]) {
-        return;
+        return null;
       }
     }
   }
@@ -819,12 +861,15 @@ async function testCreatedMcpSource(
       ...(credentialValue ? { credentialValue } : {}),
     });
     persistConnectionTestResult(workspaceRootPath, sourceSlug, result, startedAt);
+    return result;
   } catch (error) {
-    persistConnectionTestResult(workspaceRootPath, sourceSlug, {
+    const result: McpPostCreateConnectionTestResult = {
       success: false,
       error: error instanceof Error ? error.message : String(error),
       errorType: 'failed',
-    }, startedAt);
+    };
+    persistConnectionTestResult(workspaceRootPath, sourceSlug, result, startedAt);
+    return result;
   }
 }
 
@@ -951,28 +996,92 @@ function buildLoadedSource(workspaceRootPath: string, config: FolderSourceConfig
   };
 }
 
-function buildImportedGuide(name: string, description: string | undefined): SourceGuide {
-  let context = '(Add context about this source)';
-  if (description && !isShortDescription(description)) {
-    context = description;
+async function generateCreatedMcpSourceGuide(
+  config: FolderSourceConfig,
+  description: string | undefined,
+  fallbackGuide: SourceGuide,
+  guideGenerator: McpSourceGuideGenerator | undefined,
+  tools: string[] | undefined,
+): Promise<SourceGuide> {
+  if (!guideGenerator) return fallbackGuide;
+  try {
+    const generated = await guideGenerator({
+      config,
+      ...(description?.trim() ? { description: description.trim() } : {}),
+      ...(tools?.length ? { tools } : {}),
+      fallbackGuide,
+    });
+    if (generated?.raw?.trim()) {
+      return generated;
+    }
+  } catch {
+    // Source creation should not fail just because optional AI documentation failed.
   }
+  return fallbackGuide;
+}
+
+export function generateMcpSourceGuide(config: FolderSourceConfig, description?: string): SourceGuide {
+  const sourceName = config.name || config.slug;
+  const provider = config.provider || config.slug;
+  const mcp = config.mcp;
+  const transport = mcp?.transport === 'stdio' ? 'local stdio command' : 'Streamable HTTP';
+  const endpoint = mcp?.transport === 'stdio'
+    ? [mcp.command, ...(mcp.args ?? [])].filter(Boolean).join(' ')
+    : mcp?.url;
+  const authSummary = getMcpGuideAuthSummary(config);
+  const context = description?.trim()
+    || `${sourceName} is an MCP Source for ${provider}. It exposes tools discovered from its MCP server and should be used when the user asks for work related to ${provider}.`;
 
   return {
-    raw: `# ${name}
+    raw: `# ${sourceName}
 
 ## Guidelines
 
-(Add usage guidelines here)
+- Use this MCP Source when the user asks for ${provider}-related data or actions.
+- Prefer read, search, list, and lookup tools before mutation tools unless the user explicitly asks to change something.
+- Follow each MCP tool schema exactly. Ask for missing required identifiers instead of guessing.
+- If a tool fails because authentication or connectivity changed, refresh this MCP Source and retry once after the refresh succeeds.
 
 ## Context
 
 ${context}
 
+Transport: ${transport}
+${endpoint ? `Endpoint: ${endpoint}` : 'Endpoint: Not configured'}
+Authentication: ${authSummary}
+
 ## API Notes
 
-(Add API notes here)
+- Tool names and descriptions come from live MCP tool discovery.
+- Refresh this MCP Source after editing connection details so the available tools and connection status stay current.
+- Do not place secrets in this guide; credentials belong in the credential store or source configuration fields designed for secrets.
 `,
   };
+}
+
+function buildImportedGuide(name: string, description: string | undefined, config?: FolderSourceConfig): SourceGuide {
+  if (config) {
+    return generateMcpSourceGuide(config, description);
+  }
+  return generateMcpSourceGuide({
+    id: name,
+    name,
+    slug: name,
+    enabled: true,
+    provider: name,
+    type: 'mcp',
+    mcp: { transport: 'streamable_http' },
+  }, description);
+}
+
+function getMcpGuideAuthSummary(config: FolderSourceConfig): string {
+  const mcp = config.mcp;
+  if (!mcp || mcp.transport === 'stdio') return 'Local command environment';
+  if (mcp.headerNames?.length) return `Header credential (${mcp.headerNames.join(', ')})`;
+  if (mcp.authType === 'oauth') return 'OAuth';
+  if (mcp.authType === 'bearer') return 'Bearer token or SSO Identity Token';
+  if (mcp.authType === 'none') return 'None';
+  return 'Not specified';
 }
 
 function isShortDescription(description: string): boolean {
@@ -1023,12 +1132,12 @@ function inferTransport(server: Record<string, unknown>, errors: McpImportFieldE
   if (explicitTransport === 'stdio') {
     return 'stdio';
   }
-  if (explicitTransport === 'streamable_http' || explicitTransport === 'http' || explicitTransport === 'sse') {
+  if (explicitTransport === 'streamable_http' || explicitTransport === 'streamable-http' || explicitTransport === 'http' || explicitTransport === 'sse') {
     return 'streamable_http';
   }
   if (explicitTransport !== undefined) {
     const field = server.transport !== undefined ? 'transport' : 'type';
-    errors.push({ field, message: 'Transport must be one of: streamable_http, stdio.' });
+    errors.push({ field, message: 'Transport must be one of: streamable_http, streamable-http, stdio.' });
   }
   if (server.command) {
     return 'stdio';

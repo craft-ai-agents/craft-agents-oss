@@ -83,6 +83,24 @@ describe('team public knowledge refresh', () => {
     ]);
   });
 
+  it('adds the SSO idToken bearer authorization header when fetching configured Markdown', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'team-knowledge-idtoken-'));
+    tempDirs.push(workspaceRoot);
+    writeWorkspaceConfig(workspaceRoot);
+
+    const requestHeaders: Headers[] = [];
+    await refreshTeamPublicKnowledge(workspaceRoot, {
+      now: 1_000,
+      getIdToken: async () => 'sso-id-token',
+      fetchFn: async (_url, init) => {
+        requestHeaders.push(new Headers(init?.headers));
+        return new Response('# Slang', { status: 200 });
+      },
+    });
+
+    expect(requestHeaders[0]?.get('Authorization')).toBe('Bearer sso-id-token');
+  });
+
   it('marks prior documents stale on refresh failure and excludes them from trigger results', async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'team-knowledge-stale-'));
     tempDirs.push(workspaceRoot);

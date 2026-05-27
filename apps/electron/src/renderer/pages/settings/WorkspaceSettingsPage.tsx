@@ -713,30 +713,32 @@ export default function WorkspaceSettingsPage() {
                   <>
                     <SettingsRow
                       label={t("settings.workspace.userProfileName")}
-                      description={userProfile.name || t("settings.workspace.userProfileNotConfigured")}
+                      description={userProfile.userName || t("settings.workspace.userProfileNotConfigured")}
                     />
                     <SettingsRow
-                      label={t("settings.workspace.userProfileOneStopId")}
-                      description={userProfile.oneStopId || t("settings.workspace.userProfileNotConfigured")}
+                      label={t("settings.workspace.userProfileYstId")}
+                      description={userProfile.ystId || t("settings.workspace.userProfileNotConfigured")}
                     />
                     <SettingsRow
-                      label={t("settings.workspace.userProfileGroup")}
-                      description={userProfile.group || t("settings.workspace.userProfileNotConfigured")}
+                      label={t("settings.workspace.userProfilePosition")}
+                      description={userProfile.positon || t("settings.workspace.userProfileNotConfigured")}
                     />
                     <SettingsRow
-                      label={t("settings.workspace.userProfileDepartment")}
-                      description={userProfile.department || t("settings.workspace.userProfileNotConfigured")}
+                      label={t("settings.workspace.userProfileZuName")}
+                      description={userProfile.zuName || t("settings.workspace.userProfileNotConfigured")}
                     />
-                    {userProfile.ownedModules && userProfile.ownedModules.length > 0 && (
+                    <SettingsRow
+                      label={t("settings.workspace.userProfileShiName")}
+                      description={userProfile.shiName || t("settings.workspace.userProfileNotConfigured")}
+                    />
+                    <SettingsRow
+                      label={t("settings.workspace.userProfileLeader")}
+                      description={userProfile.leaderUserInfo || t("settings.workspace.userProfileNotConfigured")}
+                    />
+                    {userProfile.chargeModule && userProfile.chargeModule.length > 0 && (
                       <SettingsRow
-                        label={t("settings.workspace.userProfileOwnedModules")}
-                        description={userProfile.ownedModules.join(', ')}
-                      />
-                    )}
-                    {userProfile.ownedTopics && userProfile.ownedTopics.length > 0 && (
-                      <SettingsRow
-                        label={t("settings.workspace.userProfileOwnedTopics")}
-                        description={userProfile.ownedTopics.join(', ')}
+                        label={t("settings.workspace.userProfileChargeModule")}
+                        description={userProfile.chargeModule.map(module => module.appName || module.appCode).filter(Boolean).join(', ')}
                       />
                     )}
                   </>

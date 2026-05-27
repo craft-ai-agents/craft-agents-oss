@@ -35,7 +35,7 @@ interface Props {
 export function SkillUpdateBanner({ status, progress, result, orphans, onRetry, onDeleteOrphans, onDismiss }: Props) {
   const [detailOpen, setDetailOpen] = React.useState(false)
 
-  if (status === 'idle') return null
+  if (status === 'idle' || status === 'checking') return null
 
   const hasOrphans = orphans.length > 0
   const hasFailed = (result?.failed.length ?? 0) > 0

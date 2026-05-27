@@ -58,9 +58,9 @@ import type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIss
 export type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType };
 
 // Source types for session source selection
-import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@craft-agent/shared/sources/types';
+import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, SourceGuide } from '@craft-agent/shared/sources/types';
 import type { McpImportBatchCreateResult, McpImportCandidate, McpImportParseResult } from '@craft-agent/shared/sources';
-export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, McpImportBatchCreateResult, McpImportCandidate, McpImportParseResult };
+export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, SourceGuide, McpImportBatchCreateResult, McpImportCandidate, McpImportParseResult };
 
 // Skill types
 import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult } from '@craft-agent/shared/skills';
@@ -141,12 +141,22 @@ export interface ToolIconMapping {
 
 /** User profile data shown in workspace settings. */
 export interface UserProfile {
-  name?: string
-  oneStopId?: string
-  group?: string
-  department?: string
-  ownedModules?: string[]
-  ownedTopics?: string[]
+  zhaohuOpenId?: string
+  userName?: string
+  ystId?: string
+  positon?: string
+  zuName?: string
+  leaderUserInfo?: string
+  shiName?: string
+  pathName?: string
+  sex?: string
+  ip?: string
+  chargeModule?: Array<{
+    appCode?: string
+    appName?: string
+  }>
+  ingProjectInfo?: unknown[]
+  onlineInfo?: unknown[]
 }
 
 /**
@@ -516,6 +526,8 @@ export interface ElectronAPI {
   getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
   getDefaultPermissionsConfig(): Promise<{ config: import('@craft-agent/shared/agent').PermissionsConfigFile | null; path: string }>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
+  refreshMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
+  generateSourceGuide(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string; guide?: SourceGuide }>
 
   // OAuth (server-owned credentials, client-orchestrated flow)
   performOAuth(args: { sourceSlug: string; sessionId?: string; authRequestId?: string }): Promise<{ success: boolean; error?: string; email?: string }>

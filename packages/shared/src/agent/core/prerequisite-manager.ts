@@ -6,7 +6,7 @@
  *
  * Key responsibilities:
  * - Track which files have been read via the Read tool
- * - Check prerequisites before tool execution (e.g., guide.md for sources)
+ * - Check prerequisites before tool execution
  * - Reset state on context compaction
  */
 
@@ -75,20 +75,6 @@ function isBrowserPrerequisiteEnabled(): boolean {
  * - What message to show when blocking
  */
 const RULES: PrerequisiteRule[] = [
-  // API source tools: api_{slug} format
-  {
-    toolMatcher: (toolName: string) => {
-      return toolName.startsWith('api_');
-    },
-    resolveRequiredPath: (toolName: string, workspaceRootPath: string) => {
-      const slug = toolName.slice(4); // Remove 'api_' prefix
-      const guidePath = resolve(workspaceRootPath, 'sources', slug, 'guide.md');
-      return existsSync(guidePath) ? guidePath : null;
-    },
-    blockMessage:
-      'You must read the source guide before using this tool. Please read the file at {filePath} first, then retry.',
-  },
-
   // Built-in browser tool: require browser-tools.md first.
   // Only matches the session-scoped tool (not external MCP browser tools like mcp__playwright__*),
   // and skipped entirely when the built-in browser tool is disabled.

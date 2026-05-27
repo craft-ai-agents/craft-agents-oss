@@ -51,6 +51,8 @@ export interface EntityRowProps {
   title: React.ReactNode
   /** Additional className on the title wrapper (e.g. shimmer animation) */
   titleClassName?: string
+  /** Allow title text to wrap fully instead of truncating/clamping */
+  wrapTitle?: boolean
   /** Content rendered inline after the title (e.g. timestamp). On hover, swapped with the more button.
    *  When set, the title row becomes single-line (truncated) and the absolute more button is hidden. */
   titleTrailing?: React.ReactNode
@@ -119,6 +121,7 @@ export function EntityRow({
   icon,
   title,
   titleClassName,
+  wrapTitle = false,
   titleTrailing,
   titleSuffix,
   subtitle,
@@ -259,8 +262,12 @@ export function EntityRow({
     : contextMenuContent ?? menuContent
 
   // Build the inner content (shared between with-context-menu and without)
+  const titleTextClassName = wrapTitle
+    ? "min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere] leading-[1.25]"
+    : "min-w-0"
+
   const innerContent = (
-    <div className="relative group select-none pl-2">
+    <div className="relative group min-w-0 overflow-x-hidden select-none pl-2">
       {/* Selection indicator bar */}
       {(isSelected || isInMultiSelect) && (
         <div className="absolute left-0 inset-y-0 w-[2px] bg-accent" />
@@ -270,7 +277,7 @@ export function EntityRow({
       <button
         {...(buttonProps as React.ButtonHTMLAttributes<HTMLButtonElement>)}
         className={cn(
-          "entity-row-btn flex w-full items-start gap-2 pl-2 pr-4 py-2 text-left text-sm outline-none rounded-[8px]",
+          "entity-row-btn flex w-full min-w-0 items-start gap-2 overflow-x-hidden pl-2 pr-4 py-2 text-left text-sm outline-none rounded-[8px]",
           "transition-[background-color] duration-75",
           (isSelected || isInMultiSelect)
             ? "bg-foreground/3"
@@ -290,13 +297,13 @@ export function EntityRow({
         <div className="flex flex-col gap-1.5 min-w-0 flex-1">
           {/* Title */}
           {titleTrailing ? (
-            <div className="flex items-center gap-[10px] w-full min-w-0">
+            <div className={cn("flex gap-[10px] w-full min-w-0", wrapTitle ? "items-start" : "items-center")}>
               {icon && (
                 <div className="shrink-0 flex items-center gap-[10px] [&>*]:w-3 [&>*]:h-3">
                   {icon}
                 </div>
               )}
-              <div className={cn("font-sans truncate min-w-0", titleClassName)}>
+              <div className={cn("font-sans", wrapTitle ? titleTextClassName : "truncate min-w-0", titleClassName)}>
                 {title}
               </div>
               {titleSuffix && <div className="shrink-0 flex items-center">{titleSuffix}</div>}
@@ -350,13 +357,13 @@ export function EntityRow({
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-[10px] w-full pr-6 min-w-0">
+            <div className={cn("flex gap-[10px] w-full pr-6 min-w-0", wrapTitle ? "items-start" : "items-center")}>
               {icon && (
                 <div className="shrink-0 flex items-center gap-[10px] [&>*]:w-3 [&>*]:h-3">
                   {icon}
                 </div>
               )}
-              <div className={cn("font-medium font-sans line-clamp-2 min-w-0 -mb-[2px]", titleClassName)}>
+              <div className={cn("font-medium font-sans -mb-[2px]", wrapTitle ? titleTextClassName : "line-clamp-2 min-w-0", titleClassName)}>
                 {title}
               </div>
               {titleSuffix && <div className="shrink-0 self-center flex items-center">{titleSuffix}</div>}

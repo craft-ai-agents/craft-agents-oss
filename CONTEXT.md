@@ -15,6 +15,11 @@ Note: `workspace.rootPath` is an internal metadata directory (`labels/`, `sessio
 ### Workspace File Browser
 The `WorkspaceFilesSection` panel rendered in the right sidebar's `workspace` tab. Provides a lazy-loaded, per-folder tree view rooted at the active session's **CWD Root**. Shows an empty state ("No working directory set") when no valid CWD Root exists. Shares icon/thumbnail helpers with `SessionFilesSection` but manages its own loading-state machine for per-node fetching.
 
+### User Profile
+The authenticated user's enterprise identity and organization metadata as returned by the user profile API.
+
+Avoid: normalized profile, one-stop profile.
+
 ### CWD Root
 The effective root directory shown in the Workspace File Browser. Resolved from the focused session's `workingDirectory`: returned as-is if it is a real path (not `undefined`, `'none'`, or `'user_default'`); `undefined` otherwise. No workspace-containment check — `workingDirectory` is always outside `workspace.rootPath`.
 
@@ -228,7 +233,19 @@ Avoid: JWT, id token, Session Token, access token.
 ### MCP Source Bearer Default
 New Streamable HTTP MCP Sources default to Bearer authentication when no authentication type is specified. Explicit authentication choices remain authoritative: public MCP Sources use `none`, OAuth MCP Sources use `oauth`, and local stdio MCP Sources do not use HTTP bearer authentication.
 
+For Bearer-authenticated MCP Sources, MCP connection setup, tool discovery, and tool calls all authenticate as the same source identity.
+
 Avoid: default token, default auth.
+
+### MCP Source Refresh
+An explicit retry of an MCP Source's connection and tool discovery. Used after MCP Source connection details change, or when the user manually refreshes the MCP Source detail page.
+
+MCP Source Refresh updates the source's connection status and available tools. It is distinct from re-reading source documentation; source guide files are optional reference material, not a prerequisite for using a configured MCP Source.
+
+### MCP Source Guide Generation
+Creation-time or user-triggered generation of an MCP Source's `guide.md`. The generated guide gives the agent source-specific context, usage guidelines, and API notes derived from MCP Source metadata, connection shape, and discovered tool names when the server can be reached.
+
+MCP Source Guide Generation uses the configured mini-completion model to produce concrete, operational content instead of placeholder text. If AI generation is unavailable or returns an invalid guide, source creation still succeeds with a deterministic fallback guide. It runs once when an MCP Source is created from manual input, JSON import, or skill metadata, and can be run again from the MCP Source detail page when the user wants to refresh the guide.
 
 ### SSO Login Flow
 The browser-based OIDC authorization code flow used to establish an SSO Session. The OIDC provider only accepts `http/https` redirect URIs, so the app routes through the shared OAuth relay instead of using the `mdp://` scheme directly as `redirect_uri`.

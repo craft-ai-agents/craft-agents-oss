@@ -110,6 +110,23 @@ describe('saveSourceConfig orphan credential cleanup', () => {
     saveSourceConfig(workspaceRoot, config);
 
     expect(deleteCalls).toHaveLength(0);
+    expect(loadSourceConfig(workspaceRoot, 'some-mcp')?.mcp?.transport).toBe('streamable_http');
+  });
+
+  test('normalizes dashed Streamable HTTP transport when saving MCP config', () => {
+    const config: FolderSourceConfig = {
+      id: 'mcp_dashed',
+      name: 'Dashed MCP',
+      slug: 'dashed-mcp',
+      enabled: true,
+      provider: 'custom',
+      type: 'mcp',
+      mcp: { transport: 'streamable-http', url: 'https://example.com/mcp', authType: 'none' },
+    };
+
+    saveSourceConfig(workspaceRoot, config);
+
+    expect(loadSourceConfig(workspaceRoot, 'dashed-mcp')?.mcp?.transport).toBe('streamable_http');
   });
 
   test("saving authType:'none' when nothing is stored is a safe no-op", () => {

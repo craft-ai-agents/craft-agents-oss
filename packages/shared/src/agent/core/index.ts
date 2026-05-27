@@ -13,7 +13,7 @@
  * - ConfigWatcherManager: Hot-reload config file watching
  * - SessionLifecycleManager: Session state and abort handling
  * - UsageTracker: Token usage and context window tracking
- * - PrerequisiteManager: Prerequisite reading enforcement (guide.md before source tools)
+ * - PrerequisiteManager: prerequisite reading enforcement
  */
 
 // Types

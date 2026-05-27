@@ -61,6 +61,10 @@ const BLOCKED_ENV_VARS = [
 ];
 
 const log = createLogger('mcp-client');
+const STANDALONE_SSE_DISABLED_RESPONSE = new Response(null, {
+  status: 405,
+  statusText: 'Method Not Allowed',
+});
 
 /**
  * 将 HeadersInit 统一转换为普通对象，便于完整打印请求头与响应头。
@@ -108,6 +112,12 @@ function stringifyBodyForLog(body: RequestInit['body'] | null | undefined): stri
   return `[${Object.prototype.toString.call(body)}]`;
 }
 
+function isStandaloneSseGet(method: string, headers: Record<string, string>): boolean {
+  if (method.toUpperCase() !== 'GET') return false;
+  const accept = Object.entries(headers).find(([key]) => key.toLowerCase() === 'accept')?.[1];
+  return accept?.toLowerCase().includes('text/event-stream') ?? false;
+}
+
 /**
  * 生成 MCP HTTP transport 的日志包装 fetch，打印完整请求与响应头信息。
  *
@@ -132,6 +142,20 @@ function createMcpLoggingFetch(label: string): FetchLike {
       headers: requestHeaders,
       body: requestBody,
     });
+
+    // The MCP Streamable HTTP standalone GET/SSE channel is optional. Some
+    // servers return 200 text/event-stream and immediately close it, which makes
+    // the SDK reconnect repeatedly. Returning 405 tells the SDK to use POST-only
+    // request/response transport without changing tool-call behavior.
+    if (isStandaloneSseGet(method, requestHeaders)) {
+      log.debug(`[http] <= 405 Method Not Allowed ${requestUrl}`, {
+        server: label,
+        durationMs: Date.now() - startedAt,
+        headers: {},
+        body: 'Standalone SSE disabled by client',
+      });
+      return STANDALONE_SSE_DISABLED_RESPONSE.clone();
+    }
 
     const response = await fetch(input, init);
     const durationMs = Date.now() - startedAt;
