@@ -79,7 +79,7 @@ import { getPermissionModeDiagnostics } from './mode-manager.ts';
 // call_llm pre-execution pipeline
 
 // McpClientPool for source tool proxying (centralized pool from main process)
-import type { McpClientPool } from '../mcp/mcp-pool.ts';
+import type { McpClientPool, McpClientPoolCallOptions } from '../mcp/mcp-pool.ts';
 
 // Path utilities
 import { join } from 'path';
@@ -1411,13 +1411,21 @@ export class PiAgent extends BaseAgent {
 
     // MCP source tools — route through centralized pool
     if (this.mcpPool?.isProxyTool(toolName)) {
-      return this.mcpPool.callTool(toolName, args);
+      return this.mcpPool.callTool(toolName, args, this.getMcpCallOptions());
     }
 
     // Unknown tool
     return {
       content: `Unknown proxy tool: ${toolName}`,
       isError: true,
+    };
+  }
+
+  private getMcpCallOptions(): McpClientPoolCallOptions {
+    const sessionId = this.config.session?.id;
+    return {
+      ...(sessionId ? { sessionPath: getSessionPath(this.config.workspace.rootPath, sessionId) } : {}),
+      summarize: this.getSummarizeCallback(),
     };
   }
 

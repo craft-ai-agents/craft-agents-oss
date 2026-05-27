@@ -27,7 +27,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { McpClientPool } from './mcp-pool.ts';
+import type { McpClientPool, McpClientPoolCallOptions } from './mcp-pool.ts';
 
 export class McpPoolServer {
   private pool: McpClientPool;
@@ -35,11 +35,16 @@ export class McpPoolServer {
   private mcpServer: Server | null = null;
   private transport: StreamableHTTPServerTransport | null = null;
   private debugFn: ((msg: string) => void) | undefined;
+  private getCallToolOptions: (() => McpClientPoolCallOptions) | undefined;
   private _port = 0;
 
-  constructor(pool: McpClientPool, options?: { debug?: (msg: string) => void }) {
+  constructor(pool: McpClientPool, options?: {
+    debug?: (msg: string) => void;
+    getCallToolOptions?: () => McpClientPoolCallOptions;
+  }) {
     this.pool = pool;
     this.debugFn = options?.debug;
+    this.getCallToolOptions = options?.getCallToolOptions;
   }
 
   private debug(msg: string): void {
@@ -131,7 +136,7 @@ export class McpPoolServer {
       const internalName = `mcp__${name}`;
       this.debug(`Tool call: ${name} → ${internalName}`);
 
-      const result = await this.pool.callTool(internalName, args || {});
+      const result = await this.pool.callTool(internalName, args || {}, this.getCallToolOptions?.());
 
       return {
         content: [{ type: 'text' as const, text: result.content }],

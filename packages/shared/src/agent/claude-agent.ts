@@ -20,7 +20,7 @@ import {
   clearClaudeBedrockRoutingEnvVars,
   resolveAuthEnvVars,
 } from '../config/llm-connections.ts';
-import type { McpClientPool } from '../mcp/mcp-pool.ts';
+import type { McpClientPool, McpClientPoolCallOptions } from '../mcp/mcp-pool.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
 import { DEFAULT_MODEL, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
@@ -408,7 +408,10 @@ function jsonSchemaToZodShape(schema: Record<string, unknown>, depth = 0): Recor
  * as the server key and original tool names to get the correct final names
  * (e.g., `mcp__linear__createIssue`).
  */
-function createSourceProxyServers(pool: McpClientPool): Record<string, ReturnType<typeof createSdkMcpServer>> {
+function createSourceProxyServers(
+  pool: McpClientPool,
+  options: McpClientPoolCallOptions
+): Record<string, ReturnType<typeof createSdkMcpServer>> {
   const servers: Record<string, ReturnType<typeof createSdkMcpServer>> = {};
 
   for (const slug of pool.getConnectedSlugs()) {
@@ -425,7 +428,7 @@ function createSourceProxyServers(pool: McpClientPool): Record<string, ReturnTyp
           ...z.object({}).catchall(z.unknown()).shape,
         },
         async (args: Record<string, unknown>) => {
-          const result = await pool.callTool(proxyName, args);
+          const result = await pool.callTool(proxyName, args, options);
           return {
             content: [{ type: 'text' as const, text: result.content }],
             ...(result.isError ? { isError: true } : {}),
@@ -859,7 +862,12 @@ export class ClaudeAgent extends BaseAgent {
       // Regular agents: full set including preferences, docs, and user sources
 
       // Build per-source proxy servers from centralized MCP pool (if available)
-      const sourceProxies = this.config.mcpPool ? createSourceProxyServers(this.config.mcpPool) : {};
+      const sourceProxies = this.config.mcpPool
+        ? createSourceProxyServers(this.config.mcpPool, {
+            sessionPath: getSessionPath(this.workspaceRootPath, sessionId),
+            summarize: this.getSummarizeCallback(),
+          })
+        : {};
       const sourceProxyCount = Object.keys(sourceProxies).length;
       if (sourceProxyCount > 0) {
         debug('[chat] Source proxy servers created for', sourceProxyCount, 'sources');

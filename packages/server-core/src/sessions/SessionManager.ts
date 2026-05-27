@@ -3150,13 +3150,19 @@ export class SessionManager implements ISessionManager {
       const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath, managed.tokenRefreshManager)
 
       // Create centralized MCP client pool (all backends use it)
-      managed.mcpPool = new McpClientPool({ debug: (msg) => sessionLog.debug(msg), workspaceRootPath: managed.workspace.rootPath, sessionPath })
+      managed.mcpPool = new McpClientPool({ debug: (msg) => sessionLog.debug(msg), workspaceRootPath: managed.workspace.rootPath })
 
       // Backends that run as external subprocesses need an HTTP pool server
       let poolServerUrl: string | undefined
       if (backendContext.capabilities.needsHttpPoolServer) {
-        managed.poolServer = new McpPoolServer(managed.mcpPool, { debug: (msg) => sessionLog.debug(msg) })
-        managed.mcpPool.onToolsChanged = () => managed.poolServer?.notifyToolsChanged()
+        managed.poolServer = new McpPoolServer(managed.mcpPool, {
+          debug: (msg) => sessionLog.debug(msg),
+          getCallToolOptions: () => ({
+            sessionPath,
+            summarize: managed.agent?.getSummarizeCallback(),
+          }),
+        })
+        managed.mcpPool.addToolsChangedListener(() => managed.poolServer?.notifyToolsChanged())
         poolServerUrl = await managed.poolServer.start()
         await managed.mcpPool.sync(mcpServers) // Ensure pool has tools before SDK connects
       }
@@ -3402,11 +3408,6 @@ export class SessionManager implements ISessionManager {
           message: postInitResult.authWarning,
           level: postInitResult.authWarningLevel || 'error',
         }, managed.workspace.id)
-      }
-
-      // Wire up large response handling in the MCP pool (all backends)
-      if (managed.mcpPool && managed.agent) {
-        managed.mcpPool.setSummarizeCallback(managed.agent.getSummarizeCallback())
       }
 
       // Wire up browser pane tools — merge BrowserPaneFns into session callbacks
