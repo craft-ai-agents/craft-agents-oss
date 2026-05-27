@@ -1680,6 +1680,15 @@ export class SessionManager implements ISessionManager {
     await this.syncWorkspaceMcpPool(workspaceRootPath, pool, tokenRefreshManager)
   }
 
+  private updateSessionPoolServerSources(managed: ManagedSession, sourceSlugs: string[]): void {
+    managed.poolServer?.setSlugFilter(sourceSlugs)
+  }
+
+  private notifySessionPoolServerSourcesChanged(managed: ManagedSession, sourceSlugs: string[]): void {
+    this.updateSessionPoolServerSources(managed, sourceSlugs)
+    managed.poolServer?.notifyToolsChanged()
+  }
+
   /**
    * Tear down workspace-scoped infrastructure initialized by setupConfigWatcher().
    */
@@ -1811,8 +1820,7 @@ export class SessionManager implements ISessionManager {
     const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
     const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath, managed.tokenRefreshManager, managed.agent?.getSummarizeCallback())
     const intendedSlugs = enabledSources.map(s => s.config.slug)
-    managed.poolServer?.setSlugFilter(enabledSlugs)
-    managed.poolServer?.notifyToolsChanged()
+    this.notifySessionPoolServerSourcesChanged(managed, enabledSlugs)
 
     // Update bridge-mcp-server config/credentials for backends that need it
     await applyBridgeUpdates(managed.agent, sessionPath, enabledSources, mcpServers, managed.id, workspaceRootPath, 'source reload', managed.poolServer?.url)
@@ -2206,8 +2214,7 @@ export class SessionManager implements ISessionManager {
       const { mcpServers } = await buildServersFromSources(
         enabledSources, sessionPath, managed.tokenRefreshManager
       )
-      managed.poolServer?.setSlugFilter(enabledSlugs)
-      managed.poolServer?.notifyToolsChanged()
+      this.notifySessionPoolServerSourcesChanged(managed, enabledSlugs)
       await applyBridgeUpdates(managed.agent, sessionPath, enabledSources, mcpServers, managed.id, workspaceRootPath, 'source auth', managed.poolServer?.url)
     }
 
@@ -4311,8 +4318,7 @@ export class SessionManager implements ISessionManager {
         const intendedSlugs = allEnabledSources
           .filter(isSourceUsable)
           .map(s => s.config.slug)
-        managed.poolServer?.setSlugFilter(managed.enabledSourceSlugs || [])
-        managed.poolServer?.notifyToolsChanged()
+        this.notifySessionPoolServerSourcesChanged(managed, managed.enabledSourceSlugs || [])
 
         // Update bridge-mcp-server config/credentials for backends that need it
         await applyBridgeUpdates(managed.agent!, sessionPath, allEnabledSources, mcpServers, managed.id, workspaceRootPath, 'source enable', managed.poolServer?.url)
@@ -4790,8 +4796,7 @@ export class SessionManager implements ISessionManager {
 
       // Set active source servers (tools are only available from these)
       const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
-      managed.poolServer?.setSlugFilter(sourceSlugs)
-      managed.poolServer?.notifyToolsChanged()
+      this.notifySessionPoolServerSourcesChanged(managed, sourceSlugs)
 
       // Update bridge-mcp-server config/credentials for backends that need it
       const usableSources = sources.filter(isSourceUsable)
@@ -5834,7 +5839,7 @@ export class SessionManager implements ISessionManager {
       if (mcpCount > 0 || apiCount > 0 || enabledSlugs.length > 0) {
         const usableSources = sources.filter(isSourceUsable)
         const intendedSlugs = usableSources.map(s => s.config.slug)
-        managed.poolServer?.setSlugFilter(enabledSlugs)
+        this.updateSessionPoolServerSources(managed, enabledSlugs)
         await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
         await applyBridgeUpdates(agent, sessionPath, usableSources, mcpServers, sessionId, workspaceRootPath, 'send message', managed.poolServer?.url)
         sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
