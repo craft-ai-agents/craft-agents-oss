@@ -342,6 +342,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.sources.GET_PERMISSIONS,
   RPC_CHANNELS.sources.GET_MCP_TOOLS,
   RPC_CHANNELS.sources.REFRESH_MCP_TOOLS,
+  RPC_CHANNELS.sources.GENERATE_GUIDE,
 
   // oauth — OAuth state management
   RPC_CHANNELS.oauth.START,

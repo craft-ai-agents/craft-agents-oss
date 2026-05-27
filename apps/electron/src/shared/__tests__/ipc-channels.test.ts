@@ -270,6 +270,7 @@ const EXPECTED_CHANNELS: string[] = [
   'sources:changed',
   'sources:create',
   'sources:delete',
+  'sources:generateGuide',
   'sources:get',
   'sources:getMcpTools',
   'sources:getPermissions',

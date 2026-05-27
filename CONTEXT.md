@@ -242,6 +242,11 @@ An explicit retry of an MCP Source's connection and tool discovery. Used after M
 
 MCP Source Refresh updates the source's connection status and available tools. It is distinct from re-reading source documentation; source guide files are optional reference material, not a prerequisite for using a configured MCP Source.
 
+### MCP Source Guide Generation
+Creation-time or user-triggered generation of an MCP Source's `guide.md`. The generated guide gives the agent source-specific context, usage guidelines, and API notes derived from MCP Source metadata, connection shape, and discovered tool names when the server can be reached.
+
+MCP Source Guide Generation uses the configured mini-completion model to produce concrete, operational content instead of placeholder text. If AI generation is unavailable or returns an invalid guide, source creation still succeeds with a deterministic fallback guide. It runs once when an MCP Source is created from manual input, JSON import, or skill metadata, and can be run again from the MCP Source detail page when the user wants to refresh the guide.
+
 ### SSO Login Flow
 The browser-based OIDC authorization code flow used to establish an SSO Session. The OIDC provider only accepts `http/https` redirect URIs, so the app routes through the shared OAuth relay instead of using the `mdp://` scheme directly as `redirect_uri`.
 

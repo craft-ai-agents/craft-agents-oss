@@ -8,7 +8,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
-import { AlertCircle, Loader2, RefreshCw } from 'lucide-react'
+import { AlertCircle, Loader2, RefreshCw, Sparkles } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { Button } from '@/components/ui/button'
@@ -198,6 +198,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
   const [mcpToolsLoading, setMcpToolsLoading] = useState(false)
   const [mcpToolsError, setMcpToolsError] = useState<string | null>(null)
   const [mcpToolsRefreshing, setMcpToolsRefreshing] = useState(false)
+  const [sourceGuideGenerating, setSourceGuideGenerating] = useState(false)
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
   const mcpConnectionSignatureRef = useRef<string | null>(null)
 
@@ -413,6 +414,29 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     void loadMcpTools({ refresh: true })
   }, [loadMcpTools, mcpToolsRefreshing, source])
 
+  const handleGenerateSourceGuide = useCallback(async () => {
+    if (!source || source.config.type !== 'mcp' || sourceGuideGenerating) return
+
+    setSourceGuideGenerating(true)
+    try {
+      const result = await window.electronAPI.generateSourceGuide(workspaceId, sourceSlug)
+      if (!result.success || !result.guide) {
+        toast.error('Failed to generate source guide', {
+          description: result.error,
+        })
+        return
+      }
+      setSource((current) => current ? { ...current, guide: result.guide ?? current.guide } : current)
+      toast.success('Source guide generated')
+    } catch (err) {
+      toast.error('Failed to generate source guide', {
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setSourceGuideGenerating(false)
+    }
+  }, [source, sourceGuideGenerating, sourceSlug, workspaceId])
+
   // Get source name for header
   const sourceName = source?.config.name || sourceSlug
 
@@ -582,25 +606,48 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
           )}
 
           {/* Documentation */}
-          {source.guide?.raw && (
+          {(source.guide?.raw || source.config.type === 'mcp') && (
             <Info_Section
               title={t('sourceInfo.documentation')}
               description={t('sourceInfo.documentationDesc')}
               actions={
-                // EditPopover for AI-assisted guide.md editing with "Edit File" as secondary action
-                <EditPopover
-                  trigger={<EditButton />}
-                  {...getEditConfig('source-guide', source.folderPath)}
-                  secondaryAction={{
-                    label: t('common.editFile'),
-                    filePath: `${source.folderPath}/guide.md`,
-                  }}
-                />
+                <div className="flex items-center gap-1.5">
+                  {source.config.type === 'mcp' && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleGenerateSourceGuide}
+                          disabled={sourceGuideGenerating}
+                          aria-label="Generate source guide"
+                          className="h-8 px-3 rounded-[6px] bg-background shadow-minimal text-foreground/70 hover:text-foreground"
+                        >
+                          {sourceGuideGenerating
+                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : <Sparkles className="h-4 w-4" />}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Generate source guide</TooltipContent>
+                    </Tooltip>
+                  )}
+                  <EditPopover
+                    trigger={<EditButton />}
+                    {...getEditConfig('source-guide', source.folderPath)}
+                    secondaryAction={{
+                      label: t('common.editFile'),
+                      filePath: `${source.folderPath}/guide.md`,
+                    }}
+                  />
+                </div>
               }
             >
-              <Info_Markdown maxHeight={540} fullscreen>
-                {source.guide.raw}
-              </Info_Markdown>
+              {source.guide?.raw && (
+                <Info_Markdown maxHeight={540} fullscreen>
+                  {source.guide.raw}
+                </Info_Markdown>
+              )}
             </Info_Section>
           )}
         </Info_Page.Content>

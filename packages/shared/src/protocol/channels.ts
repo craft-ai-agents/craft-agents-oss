@@ -235,6 +235,7 @@ export const RPC_CHANNELS = {
     GET_PERMISSIONS: 'sources:getPermissions',
     GET_MCP_TOOLS: 'sources:getMcpTools',
     REFRESH_MCP_TOOLS: 'sources:refreshMcpTools',
+    GENERATE_GUIDE: 'sources:generateGuide',
   },
   oauth: {
     START: 'oauth:start',

@@ -84,6 +84,7 @@ export {
   createMcpSourcesFromCandidates,
   defaultMcpPostCreateConnectionTester,
   detectDuplicateMcpImportCandidates,
+  generateMcpSourceGuide,
   parseMcpJsonImportCandidates,
   stdioCommandFingerprint,
 } from './mcp-import.ts';
@@ -107,6 +108,8 @@ export type {
   McpPostCreateConnectionTestContext,
   McpPostCreateConnectionTester,
   McpPostCreateConnectionTestResult,
+  McpSourceGuideGenerationContext,
+  McpSourceGuideGenerator,
 } from './mcp-import.ts';
 
 // Server Builder (builds MCP/API servers from sources)

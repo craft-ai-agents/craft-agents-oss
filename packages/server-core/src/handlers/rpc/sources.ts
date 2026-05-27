@@ -1,11 +1,15 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import { getDefaultLlmConnection, getLlmConnection, getMiniModel, getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import { createBackendFromConnection } from '@craft-agent/shared/agent/backend'
 import { loadWorkspaceSources } from '@craft-agent/shared/sources'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
-import type { McpImportCandidate } from '@craft-agent/shared/sources'
-import type { LoadedSource, SourceConnectionStatus } from '@craft-agent/shared/sources/types'
+import { buildBackendHostRuntimeContext } from '../utils'
+import type { Workspace } from '@craft-agent/shared/config'
+import type { AgentBackend } from '@craft-agent/shared/agent/backend'
+import type { McpImportCandidate, McpSourceGuideGenerationContext, McpSourceGuideGenerator } from '@craft-agent/shared/sources'
+import type { FolderSourceConfig, LoadedSource, SourceConnectionStatus, SourceGuide } from '@craft-agent/shared/sources/types'
 import type { McpToolsResult } from '@craft-agent/shared/protocol'
 
 export const HANDLED_CHANNELS = [
@@ -22,6 +26,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.permissions.GET_DEFAULTS,
   RPC_CHANNELS.sources.GET_MCP_TOOLS,
   RPC_CHANNELS.sources.REFRESH_MCP_TOOLS,
+  RPC_CHANNELS.sources.GENERATE_GUIDE,
 ] as const
 
 export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -60,6 +65,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       }, {
         connectionTester: defaultMcpPostCreateConnectionTester,
         confirmedStdioCommands,
+        guideGenerator: createMcpSourceGuideGenerator(deps, workspace),
       })
       if (enableInWorkspace) {
         addSlugToWorkspaceDefaults(workspace.rootPath, created.slug)
@@ -144,6 +150,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     const result = await createMcpSourcesFromCandidates(workspace.rootPath, candidates, {
       connectionTester: defaultMcpPostCreateConnectionTester,
       confirmedStdioCommands: Object.keys(confirmedStdioCommands).length > 0 ? confirmedStdioCommands : undefined,
+      guideGenerator: createMcpSourceGuideGenerator(deps, workspace),
     })
     // Add successfully created sources with enableInWorkspace to workspace defaults
     for (const r of result.results) {
@@ -309,6 +316,133 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     if (!source) return { success: false, error: 'Source not found after refresh' }
     return listMcpToolsForSource(workspace.rootPath, source)
   })
+
+  server.handle(RPC_CHANNELS.sources.GENERATE_GUIDE, async (_ctx, workspaceId: string, sourceSlug: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return { success: false, error: 'Workspace not found' }
+
+    const { generateMcpSourceGuide, loadSource, saveSourceGuide } = await import('@craft-agent/shared/sources')
+    const source = loadSource(workspace.rootPath, sourceSlug)
+    if (!source) return { success: false, error: 'Source not found' }
+    if (source.config.type !== 'mcp') return { success: false, error: 'Source is not an MCP server' }
+
+    const existingContext = source.guide?.context?.split(/\n\n?Transport:/)[0]?.trim()
+    const fallbackGuide = generateMcpSourceGuide(source.config, existingContext || source.config.tagline)
+    const tools = await getMcpToolNamesForGuide(workspace.rootPath, source)
+    const generatedGuide = await createMcpSourceGuideGenerator(deps, workspace)({
+      config: source.config,
+      description: existingContext || source.config.tagline,
+      ...(tools.length ? { tools } : {}),
+      fallbackGuide,
+    })
+    const guide = generatedGuide ?? fallbackGuide
+    saveSourceGuide(workspace.rootPath, sourceSlug, guide)
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
+    return { success: true, guide }
+  })
+}
+
+export function createMcpSourceGuideGenerator(deps: HandlerDeps, workspace: Workspace): McpSourceGuideGenerator {
+  return async (context) => {
+    const prompt = buildMcpSourceGuidePrompt(context)
+    const text = await runMcpGuideMiniCompletion(deps, workspace, prompt)
+    return normalizeAiSourceGuide(text, context.fallbackGuide)
+  }
+}
+
+function buildMcpSourceGuidePrompt(context: McpSourceGuideGenerationContext): string {
+  const { config, description, tools } = context
+  const mcp = config.mcp
+  const endpoint = mcp?.transport === 'stdio'
+    ? [mcp.command, ...(mcp.args ?? [])].filter(Boolean).join(' ')
+    : mcp?.url
+  const auth = mcp?.transport === 'stdio'
+    ? 'local command environment'
+    : mcp?.headerNames?.length
+      ? `header credential names: ${mcp.headerNames.join(', ')}`
+      : mcp?.authType ?? 'not specified'
+
+  return `Generate a useful source guide for an agent that can use this MCP server.
+
+Return only Markdown. Do not wrap it in code fences. Do not invent secrets, credentials, or unsupported endpoints.
+The guide must have exactly these sections:
+# ${config.name}
+## Guidelines
+## Context
+## API Notes
+
+Make it concrete and operational:
+- Explain when the agent should choose this MCP source.
+- Infer likely workflows from the source name, provider, description, endpoint, and discovered tools.
+- Mention useful tool categories or exact tool names when provided.
+- Include retry/auth/refresh guidance only when relevant.
+- Keep it concise: 6-10 bullets total plus a short context paragraph.
+
+Source:
+- Name: ${config.name}
+- Slug: ${config.slug}
+- Provider: ${config.provider}
+- Description: ${description?.trim() || config.tagline || 'Not provided'}
+- Transport: ${mcp?.transport ?? 'not configured'}
+- Endpoint or command: ${endpoint || 'not configured'}
+- Authentication: ${auth}
+- Discovered tools: ${tools?.length ? tools.slice(0, 80).join(', ') : 'Not available yet'}
+
+Fallback guide for safety:
+${context.fallbackGuide.raw}`
+}
+
+async function runMcpGuideMiniCompletion(deps: HandlerDeps, workspace: Workspace, prompt: string): Promise<string | null> {
+  const connectionSlug = getDefaultLlmConnection()
+  if (!connectionSlug) return null
+  const connection = getLlmConnection(connectionSlug)
+  if (!connection) return null
+
+  let agent: AgentBackend | null = null
+  try {
+    agent = createBackendFromConnection(connectionSlug, {
+      workspace,
+      miniModel: getMiniModel(connection) ?? connection.defaultModel,
+      session: {
+        id: `source-guide-${Date.now()}`,
+        workspaceRootPath: workspace.rootPath,
+        llmConnection: connectionSlug,
+        createdAt: Date.now(),
+        lastUsedAt: Date.now(),
+      },
+      isHeadless: true,
+    }, buildBackendHostRuntimeContext(deps.platform))
+    await agent.postInit()
+    return await agent.runMiniCompletion(prompt)
+  } catch (error) {
+    deps.platform.logger.warn('Failed to generate MCP source guide with AI:', error)
+    return null
+  } finally {
+    agent?.destroy()
+  }
+}
+
+function normalizeAiSourceGuide(text: string | null | undefined, fallbackGuide: SourceGuide): SourceGuide | null {
+  if (!text?.trim()) return null
+  let raw = text.trim()
+  const fenced = raw.match(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i)
+  if (fenced?.[1]) raw = fenced[1].trim()
+  if (!/^#\s+.+/m.test(raw)) raw = `${fallbackGuide.raw.split('\n')[0]}\n\n${raw}`
+  const hasRequiredSections = ['## Guidelines', '## Context', '## API Notes'].every(section => raw.includes(section))
+  if (!hasRequiredSections) return null
+  if (/\b(sk-[A-Za-z0-9]|api[_-]?key\s*[:=]\s*['"]?[A-Za-z0-9_-]{16,})/i.test(raw)) return null
+  return { raw: `${raw.replace(/\s+$/g, '')}\n` }
+}
+
+async function getMcpToolNamesForGuide(workspaceRootPath: string, source: LoadedSource): Promise<string[]> {
+  try {
+    if (source.config.connectionStatus && source.config.connectionStatus !== 'connected') return []
+    const result = await listMcpToolsForSource(workspaceRootPath, source)
+    if (!result.success) return []
+    return (result.tools ?? []).map(tool => tool.name)
+  } catch {
+    return []
+  }
 }
 
 async function refreshMcpSourceConnection(workspaceRootPath: string, sourceSlug: string): Promise<{ success: boolean; error?: string }> {

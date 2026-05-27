@@ -544,7 +544,10 @@ describe('createMcpSourcesFromCandidates', () => {
 
       const guide = loadSourceGuide(workspaceRootPath, 'linear');
       expect(guide?.raw).toContain('# Linear');
+      expect(guide?.raw).toContain('Use this MCP Source when the user asks for linear-related data or actions.');
       expect(guide?.raw).toContain('## Context');
+      expect(guide?.raw).toContain('Transport: Streamable HTTP');
+      expect(guide?.raw).toContain('Authentication: Bearer token or SSO Identity Token');
       expect(readFileSync(join(workspaceRootPath, 'sources', 'linear', 'config.json'), 'utf-8')).not.toContain('lin_secret');
     } finally {
       rmSync(workspaceRootPath, { recursive: true, force: true });
@@ -576,6 +579,76 @@ describe('createMcpSourcesFromCandidates', () => {
       });
       expect(config?.connectionError).toBeUndefined();
       expect(config?.lastTestedAt).toBeGreaterThan(0);
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('uses an injected guide generator with discovered MCP tools after creation', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          linear: {
+            url: 'https://mcp.linear.app/mcp',
+            description: 'Issue tracking for product work.',
+          },
+        },
+      }));
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, parsed.candidates, {
+        connectionTester: async () => ({ success: true, tools: ['list_issues', 'create_issue'] }),
+        guideGenerator: async ({ config, description, tools, fallbackGuide }) => ({
+          raw: `# ${config.name}
+
+## Guidelines
+
+- Use exact tools: ${tools?.join(', ')}.
+
+## Context
+
+${description}
+
+## API Notes
+
+- Fallback started with ${fallbackGuide.raw.split('\n')[0]}.
+`,
+        }),
+      });
+
+      expect(result.results).toEqual([
+        { key: 'linear', success: true, sourceSlug: 'linear' },
+      ]);
+      const guide = loadSourceGuide(workspaceRootPath, 'linear');
+      expect(guide?.raw).toContain('Use exact tools: list_issues, create_issue.');
+      expect(guide?.raw).toContain('Issue tracking for product work.');
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('keeps the fallback guide when an injected guide generator fails', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      const parsed = parseMcpJsonImportCandidates(JSON.stringify({
+        mcpServers: {
+          linear: {
+            url: 'https://mcp.linear.app/mcp',
+          },
+        },
+      }));
+
+      const result = await createMcpSourcesFromCandidates(workspaceRootPath, parsed.candidates, {
+        guideGenerator: async () => {
+          throw new Error('model unavailable');
+        },
+      });
+
+      expect(result.results).toEqual([
+        { key: 'linear', success: true, sourceSlug: 'linear' },
+      ]);
+      const guide = loadSourceGuide(workspaceRootPath, 'linear');
+      expect(guide?.raw).toContain('Use this MCP Source when the user asks for linear-related data or actions.');
     } finally {
       rmSync(workspaceRootPath, { recursive: true, force: true });
     }
@@ -747,7 +820,8 @@ describe('createMcpSourcesFromCandidates', () => {
       ]);
       expect(loadSourceConfig(workspaceRootPath, 'support')?.tagline).toBeUndefined();
       const guide = loadSourceGuide(workspaceRootPath, 'support');
-      expect(guide?.context).toBe(longDescription);
+      expect(guide?.context).toContain(longDescription);
+      expect(guide?.context).toContain('Transport: Streamable HTTP');
     } finally {
       rmSync(workspaceRootPath, { recursive: true, force: true });
     }
