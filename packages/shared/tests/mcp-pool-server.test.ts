@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { McpPoolServer } from '../src/mcp/pool-server.ts';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import type { McpClientPool, McpClientPoolCallOptions, McpToolResult, ProxyToolDef } from '../src/mcp/mcp-pool.ts';
 
 class StubPool {
@@ -38,17 +39,24 @@ class StubPool {
   }
 }
 
-function createMcpServer(poolServer: McpPoolServer): Server {
-  return (poolServer as unknown as { createMcpServer(): Server }).createMcpServer();
-}
+async function withMcpClient<T>(
+  poolServer: McpPoolServer,
+  fn: (client: Client) => Promise<T>,
+): Promise<T> {
+  const url = await poolServer.start();
+  const client = new Client(
+    { name: 'mcp-pool-server-test', version: '1.0.0' },
+    { capabilities: {} },
+  );
+  const transport = new StreamableHTTPClientTransport(new URL(url));
 
-async function callHandler(server: Server, method: string, params: Record<string, unknown> = {}): Promise<unknown> {
-  const handlers = (server as unknown as {
-    _requestHandlers: Map<string, (request: { method: string; params: Record<string, unknown> }) => Promise<unknown>>;
-  })._requestHandlers;
-  const handler = handlers.get(method);
-  if (!handler) throw new Error(`Missing MCP handler for ${method}`);
-  return handler({ method, params });
+  try {
+    await client.connect(transport);
+    return await fn(client);
+  } finally {
+    await client.close().catch(() => {});
+    await poolServer.stop();
+  }
 }
 
 describe('McpPoolServer', () => {
@@ -58,9 +66,7 @@ describe('McpPoolServer', () => {
       sessionPath: '/tmp/session-a',
     });
 
-    const result = await callHandler(createMcpServer(poolServer), 'tools/list') as {
-      tools: Array<{ name: string }>;
-    };
+    const result = await withMcpClient(poolServer, client => client.listTools());
 
     expect(result.tools.map(tool => tool.name)).toEqual(['craft__search']);
   });
@@ -72,12 +78,10 @@ describe('McpPoolServer', () => {
       sessionPath: '/tmp/session-b',
     });
 
-    const result = await callHandler(createMcpServer(poolServer), 'tools/call', {
+    const result = await withMcpClient(poolServer, client => client.callTool({
       name: 'craft__search',
       arguments: { query: 'alpha' },
-    }) as {
-      content: Array<{ type: string; text: string }>;
-    };
+    }));
 
     expect(result.content[0]?.text).toBe('ok');
     expect(pool.callToolCalls).toEqual([{
@@ -85,5 +89,27 @@ describe('McpPoolServer', () => {
       args: { query: 'alpha' },
       options: { sessionPath: '/tmp/session-b' },
     }]);
+  });
+
+  it('preserves dynamic call options while applying the fixed sessionPath', async () => {
+    const pool = new StubPool();
+    const summarize = async () => 'summary';
+    const poolServer = new McpPoolServer(pool as unknown as McpClientPool, {
+      sessionPath: '/tmp/session-c',
+      getCallToolOptions: () => ({
+        sessionPath: '/tmp/stale-session',
+        summarize,
+      }),
+    });
+
+    await withMcpClient(poolServer, client => client.callTool({
+      name: 'craft__search',
+      arguments: {},
+    }));
+
+    expect(pool.callToolCalls[0]?.options).toEqual({
+      sessionPath: '/tmp/session-c',
+      summarize,
+    });
   });
 });

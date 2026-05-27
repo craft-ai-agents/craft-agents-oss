@@ -29,23 +29,28 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { McpClientPool, McpClientPoolCallOptions } from './mcp-pool.ts';
 
+/** Constructor options for {@link McpPoolServer}. */
+export interface McpPoolServerOptions {
+  /** Optional debug logger. Messages are prefixed with `[McpPoolServer]`. */
+  debug?: (msg: string) => void;
+  /** Source slugs whose tools should be exposed by tools/list. */
+  slugFilter?: string[];
+  /** Session storage path used for binary response downloads and large-response files. */
+  sessionPath?: string;
+  /** Returns additional per-call options, such as the active session summarizer. */
+  getCallToolOptions?: () => McpClientPoolCallOptions;
+}
+
 export class McpPoolServer {
   private pool: McpClientPool;
   private httpServer: HttpServer | null = null;
-  private mcpServer: Server | null = null;
-  private transport: StreamableHTTPServerTransport | null = null;
   private debugFn: ((msg: string) => void) | undefined;
   private slugFilter: string[] | undefined;
   private sessionPath: string | undefined;
   private getCallToolOptions: (() => McpClientPoolCallOptions) | undefined;
   private _port = 0;
 
-  constructor(pool: McpClientPool, options?: {
-    debug?: (msg: string) => void;
-    slugFilter?: string[];
-    sessionPath?: string;
-    getCallToolOptions?: () => McpClientPoolCallOptions;
-  }) {
+  constructor(pool: McpClientPool, options?: McpPoolServerOptions) {
     this.pool = pool;
     this.debugFn = options?.debug;
     this.slugFilter = options?.slugFilter;
@@ -55,6 +60,13 @@ export class McpPoolServer {
 
   private debug(msg: string): void {
     this.debugFn?.(`[McpPoolServer] ${msg}`);
+  }
+
+  private getMergedCallToolOptions(): McpClientPoolCallOptions {
+    return {
+      ...this.getCallToolOptions?.(),
+      ...(this.sessionPath ? { sessionPath: this.sessionPath } : {}),
+    };
   }
 
   get port(): number {
@@ -74,13 +86,6 @@ export class McpPoolServer {
       return this.url;
     }
 
-    // Create a single MCP Server + Streamable HTTP transport pair (stateless mode)
-    this.transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined, // Stateless — no session tracking
-    });
-    this.mcpServer = this.createMcpServer();
-    await this.mcpServer.connect(this.transport);
-
     this.httpServer = createServer(async (req, res) => {
       const url = new URL(req.url || '/', `http://127.0.0.1`);
       if (url.pathname !== '/mcp') {
@@ -89,8 +94,19 @@ export class McpPoolServer {
         return;
       }
 
-      // Route all methods (POST, GET, DELETE) through the Streamable HTTP transport
-      await this.transport!.handleRequest(req, res);
+      // The MCP SDK requires a fresh transport for every request in stateless mode.
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+      });
+      const mcpServer = this.createMcpServer();
+
+      try {
+        await mcpServer.connect(transport);
+        await transport.handleRequest(req, res);
+      } finally {
+        await transport.close().catch(() => {});
+        await mcpServer.close().catch(() => {});
+      }
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -142,10 +158,7 @@ export class McpPoolServer {
       const internalName = `mcp__${name}`;
       this.debug(`Tool call: ${name} → ${internalName}`);
 
-      const result = await this.pool.callTool(internalName, args || {}, {
-        ...this.getCallToolOptions?.(),
-        ...(this.sessionPath ? { sessionPath: this.sessionPath } : {}),
-      });
+      const result = await this.pool.callTool(internalName, args || {}, this.getMergedCallToolOptions());
 
       return {
         content: [{ type: 'text' as const, text: result.content }],
@@ -167,19 +180,9 @@ export class McpPoolServer {
   }
 
   /**
-   * Stop the HTTP server and close the transport.
+   * Stop the HTTP server.
    */
   async stop(): Promise<void> {
-    if (this.transport) {
-      await this.transport.close().catch(() => {});
-      this.transport = null;
-    }
-
-    if (this.mcpServer) {
-      await this.mcpServer.close().catch(() => {});
-      this.mcpServer = null;
-    }
-
     if (this.httpServer) {
       await new Promise<void>((resolve) => {
         this.httpServer!.close(() => resolve());
