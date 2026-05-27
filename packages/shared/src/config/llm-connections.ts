@@ -449,7 +449,7 @@ function findSmallModel(
     const match = connection.models.find(m => {
       if (!isAllowedModel(m)) return false;
       const searchStr = toSearchStr(m);
-      return keywords.some(k => searchStr.includes(k));
+      return keywords.some(k => new RegExp(`\\b${k}\\b`).test(searchStr));
     });
     if (match) {
       return toId(match);
