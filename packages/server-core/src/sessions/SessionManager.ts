@@ -1648,16 +1648,17 @@ export class SessionManager implements ISessionManager {
     tokenRefreshManager: TokenRefreshManager,
   ): Promise<void> {
     try {
-      const allWorkspaceSources = loadAllSources(workspaceRootPath).filter(isSourceUsable)
-      const { mcpServers, apiServers } = await buildServersFromSources(
-        allWorkspaceSources,
+      const allWorkspaceMcpSources = loadAllSources(workspaceRootPath)
+        .filter(source => source.config.type === 'mcp' && isSourceUsable(source))
+      const { mcpServers } = await buildServersFromSources(
+        allWorkspaceMcpSources,
         undefined,
         tokenRefreshManager,
       )
       if (this.workspaceMcpPools.get(workspaceRootPath) !== pool) {
         return
       }
-      await pool.sync(mcpServers, apiServers)
+      await pool.sync(mcpServers)
       if (this.workspaceMcpPools.get(workspaceRootPath) !== pool) {
         await pool.disconnectAll()
       }

@@ -16,6 +16,7 @@ type PoolMaps = {
 type SyncCall = {
   pool: McpClientPool
   mcpServers: Record<string, McpServerConfig>
+  apiServers: Record<string, unknown>
 }
 
 describe('SessionManager workspace MCP pool bootstrap', () => {
@@ -39,8 +40,9 @@ describe('SessionManager workspace MCP pool bootstrap', () => {
     McpClientPool.prototype.sync = async function (
       this: McpClientPool,
       mcpServers: Record<string, McpServerConfig>,
+      apiServers: Record<string, unknown> = {},
     ) {
-      syncCalls.push({ pool: this, mcpServers })
+      syncCalls.push({ pool: this, mcpServers, apiServers })
       return []
     }
 
@@ -95,6 +97,27 @@ describe('SessionManager workspace MCP pool bootstrap', () => {
     writeFileSync(join(dir, 'guide.md'), `# ${slug}\n`)
   }
 
+  function writeApiSource(workspaceRoot: string, slug: string): void {
+    const dir = join(workspaceRoot, 'sources', slug)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      join(dir, 'config.json'),
+      JSON.stringify({
+        id: slug,
+        slug,
+        name: slug,
+        type: 'api',
+        enabled: true,
+        provider: 'custom',
+        api: {
+          baseUrl: `https://${slug}.example.com`,
+          authType: 'none',
+        },
+      }),
+    )
+    writeFileSync(join(dir, 'guide.md'), `# ${slug}\n`)
+  }
+
   async function waitForSyncCalls(count: number): Promise<void> {
     for (let i = 0; i < 20; i += 1) {
       if (syncCalls.length >= count) return
@@ -119,6 +142,18 @@ describe('SessionManager workspace MCP pool bootstrap', () => {
     expect(workspacePool).toBeDefined()
     expect(syncCalls[0]!.pool).toBe(workspacePool!)
     expect(Object.keys(syncCalls[0]!.mcpServers).sort()).toEqual(['github', 'linear'])
+  })
+
+  it('does not move API sources into the workspace pool', async () => {
+    const workspaceRoot = makeWorkspaceRoot('sm-workspace-api-boundary-')
+    writeMcpSource(workspaceRoot, 'linear')
+    writeApiSource(workspaceRoot, 'weather')
+
+    sm.setupConfigWatcher(workspaceRoot, 'ws_api_boundary')
+    await waitForSyncCalls(1)
+
+    expect(Object.keys(syncCalls[0]!.mcpServers)).toEqual(['linear'])
+    expect(Object.keys(syncCalls[0]!.apiServers)).toEqual([])
   })
 
   it('keeps separate pool instances for sessions in different workspaces', async () => {
