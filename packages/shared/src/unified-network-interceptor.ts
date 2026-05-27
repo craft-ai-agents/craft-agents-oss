@@ -1879,12 +1879,7 @@ function getPiThinkingEnabledHint(): boolean | undefined {
 export function applyPiThinkingChatTemplateKwargs(body: Record<string, unknown>, thinkingEnabled: boolean | undefined): void {
   if (thinkingEnabled === undefined) return;
 
-  if (thinkingEnabled) {
-    body.chat_template_kwargs = { enable_thinking: true };
-    return;
-  }
-
-  delete body.chat_template_kwargs;
+  body.chat_template_kwargs = { enable_thinking: Boolean(thinkingEnabled) };
 }
 
 /**
