@@ -369,6 +369,114 @@ async function cmdSessionDelete(client: CliRpcClient, args: CliArgs): Promise<vo
   out(args.json ? { deleted: sessionId } : `Deleted session: ${sessionId}`, args.json)
 }
 
+async function cmdSessionArchive(client: CliRpcClient, args: CliArgs): Promise<void> {
+  const sessionId = args.rest[0]
+  if (!sessionId) {
+    err('Usage: session archive <session-id>')
+    process.exit(1)
+  }
+  await client.connect()
+  await client.invoke('sessions:command', sessionId, { type: 'archive' })
+  out(args.json ? { archived: sessionId } : `Archived session: ${sessionId}`, args.json)
+}
+
+async function cmdSessionUnarchive(client: CliRpcClient, args: CliArgs): Promise<void> {
+  const sessionId = args.rest[0]
+  if (!sessionId) {
+    err('Usage: session unarchive <session-id>')
+    process.exit(1)
+  }
+  await client.connect()
+  await client.invoke('sessions:command', sessionId, { type: 'unarchive' })
+  out(args.json ? { unarchived: sessionId } : `Unarchived session: ${sessionId}`, args.json)
+}
+
+async function cmdSessionCleanup(client: CliRpcClient, args: CliArgs): Promise<void> {
+  // Parse flags: --archive-days <n>, --delete-days <n>, --execute
+  let archiveDays: number | undefined
+  let deleteDays: number | undefined
+  let execute = false
+  for (let i = 0; i < args.rest.length; i++) {
+    if (args.rest[i] === '--archive-days') archiveDays = parseInt(args.rest[++i], 10)
+    else if (args.rest[i] === '--delete-days') deleteDays = parseInt(args.rest[++i], 10)
+    else if (args.rest[i] === '--execute') execute = true
+  }
+
+  await client.connect()
+  const workspaceId = await resolveWorkspace(client, args.workspace)
+  if (!workspaceId) {
+    err('No workspace available. Use --workspace <id>')
+    process.exit(1)
+  }
+
+  // List sessions to calculate what would be affected
+  const sessions = (await client.invoke('sessions:get', workspaceId)) as any[]
+  const now = Date.now()
+
+  // Determine which sessions would be archived
+  const toArchive: any[] = []
+  if (archiveDays) {
+    const cutoff = now - (archiveDays * 24 * 60 * 60 * 1000)
+    for (const s of sessions) {
+      if (s.isArchived) continue
+      if (s.isFlagged) continue
+      const lastActivity = s.lastMessageAt ?? s.lastUsedAt
+      if (lastActivity < cutoff) toArchive.push(s)
+    }
+  }
+
+  // Determine which archived sessions would be deleted
+  const toDelete: any[] = []
+  if (deleteDays) {
+    const cutoff = now - (deleteDays * 24 * 60 * 60 * 1000)
+    for (const s of sessions) {
+      if (!s.isArchived) continue
+      const archiveTime = s.archivedAt ?? s.lastUsedAt
+      if (archiveTime < cutoff) toDelete.push(s)
+    }
+  }
+
+  if (!execute) {
+    // Dry run — show what would happen
+    const result = {
+      dryRun: true,
+      wouldArchive: toArchive.length,
+      wouldDelete: toDelete.length,
+      archiveSessions: toArchive.map((s: any) => ({ id: s.id, name: s.name })),
+      deleteSessions: toDelete.map((s: any) => ({ id: s.id, name: s.name })),
+    }
+    if (args.json) {
+      out(result, true)
+    } else {
+      out(`Dry run (pass --execute to apply):`, false)
+      out(`  Would archive: ${toArchive.length} sessions`, false)
+      for (const s of toArchive) out(`    ${s.id}  ${s.name ?? '(unnamed)'}`, false)
+      out(`  Would delete: ${toDelete.length} sessions`, false)
+      for (const s of toDelete) out(`    ${s.id}  ${s.name ?? '(unnamed)'}`, false)
+    }
+    return
+  }
+
+  // Execute: archive then delete
+  let archived = 0
+  for (const s of toArchive) {
+    await client.invoke('sessions:command', s.id, { type: 'archive' })
+    archived++
+  }
+  let deleted = 0
+  for (const s of toDelete) {
+    await client.invoke('sessions:delete', s.id)
+    deleted++
+  }
+
+  out(
+    args.json
+      ? { archived, deleted }
+      : `Cleanup complete: ${archived} archived, ${deleted} deleted`,
+    args.json,
+  )
+}
+
 /**
  * Read prompt text from positional args + stdin.
  * If there are positional words, they become the base message.
@@ -2036,6 +2144,15 @@ export async function main(argv: string[] = process.argv): Promise<void> {
             break
           case 'delete':
             await cmdSessionDelete(client, args)
+            break
+          case 'archive':
+            await cmdSessionArchive(client, args)
+            break
+          case 'unarchive':
+            await cmdSessionUnarchive(client, args)
+            break
+          case 'cleanup':
+            await cmdSessionCleanup(client, args)
             break
           default:
             err(`Unknown session subcommand: ${subCmd}`)

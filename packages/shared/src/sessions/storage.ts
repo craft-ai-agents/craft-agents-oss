@@ -784,6 +784,36 @@ export function deleteOldArchivedSessions(workspaceRootPath: string, retentionDa
   return deletedCount;
 }
 
+/**
+ * Archive active sessions that have been idle longer than the specified number of days.
+ * Skips flagged sessions and any explicitly excluded session IDs (e.g. currently active sessions).
+ * Returns the number of sessions archived.
+ */
+export async function archiveIdleSessions(
+  workspaceRootPath: string,
+  idleDays: number,
+  options?: { excludeSessionIds?: string[] }
+): Promise<number> {
+  const cutoffTime = Date.now() - (idleDays * 24 * 60 * 60 * 1000);
+  const activeSessions = listActiveSessions(workspaceRootPath);
+  let archivedCount = 0;
+
+  for (const session of activeSessions) {
+    // Skip excluded sessions (e.g. currently open in the UI)
+    if (options?.excludeSessionIds?.includes(session.id)) continue;
+    // Skip flagged sessions — user explicitly marked them as important
+    if (session.isFlagged) continue;
+
+    const lastActivity = session.lastMessageAt ?? session.lastUsedAt;
+    if (lastActivity < cutoffTime) {
+      await archiveSession(workspaceRootPath, session.id);
+      archivedCount++;
+    }
+  }
+
+  return archivedCount;
+}
+
 // ============================================================
 // Plan Storage (Session-Scoped)
 // ============================================================
