@@ -76,6 +76,12 @@ export class McpPoolServer {
     };
   }
 
+  private isToolAllowed(exposedName: string): boolean {
+    if (!this.slugFilter) return true;
+    const sourceSlug = exposedName.split('__')[0];
+    return sourceSlug !== undefined && this.slugFilter.includes(sourceSlug);
+  }
+
   get port(): number {
     return this._port;
   }
@@ -162,6 +168,13 @@ export class McpPoolServer {
     // Call tool — add `mcp__` prefix back before routing through pool
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
+      if (!this.isToolAllowed(name)) {
+        return {
+          content: [{ type: 'text' as const, text: `MCP source is not enabled for this session: ${name}` }],
+          isError: true,
+        };
+      }
+
       const internalName = `mcp__${name}`;
       this.debug(`Tool call: ${name} → ${internalName}`);
 

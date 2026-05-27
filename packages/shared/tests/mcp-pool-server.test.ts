@@ -91,6 +91,23 @@ describe('McpPoolServer', () => {
     }]);
   });
 
+  it('rejects direct calls to tools outside the configured slug filter', async () => {
+    const pool = new StubPool();
+    const poolServer = new McpPoolServer(pool as unknown as McpClientPool, {
+      slugFilter: ['craft'],
+      sessionPath: '/tmp/session-b',
+    });
+
+    const result = await withMcpClient(poolServer, client => client.callTool({
+      name: 'linear__list_issues',
+      arguments: {},
+    }));
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('not enabled');
+    expect(pool.callToolCalls).toEqual([]);
+  });
+
   it('preserves dynamic call options while applying the fixed sessionPath', async () => {
     const pool = new StubPool();
     const summarize = async () => 'summary';
