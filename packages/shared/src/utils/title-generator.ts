@@ -43,10 +43,10 @@ export function sanitizeLanguage(language?: string): string | undefined {
 }
 
 /**
- * Build a language instruction for title prompts.
+ * Build a language instruction for title prompts or system prompts.
  * Explicit preference takes priority; otherwise auto-detect from message content.
  */
-function buildLanguageInstruction(language?: string): string {
+export function buildLanguageInstruction(language?: string): string {
   const safe = sanitizeLanguage(language);
   if (safe) {
     return `Reply in ${safe}.`;

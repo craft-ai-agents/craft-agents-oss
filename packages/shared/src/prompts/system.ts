@@ -1,4 +1,7 @@
 import { formatPreferencesForPrompt, getCoAuthorPreference } from '../config/preferences.ts';
+import i18n from 'i18next';
+import { LOCALE_REGISTRY, type LanguageCode } from '../i18n/registry.ts';
+import { buildLanguageInstruction } from '../utils/title-generator.ts';
 import { getBrowserToolEnabled } from '../config/storage.ts';
 import { debug } from '../utils/debug.ts';
 import { existsSync, readFileSync, readdirSync } from 'fs';
@@ -372,8 +375,12 @@ export function getSystemPrompt(
   // Note: Date/time context is now added to user messages instead of system prompt
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
+  const langCode = (i18n.resolvedLanguage ?? 'en') as LanguageCode;
+  const langName = LOCALE_REGISTRY[langCode]?.nativeName;
+  const languageInstruction = buildLanguageInstruction(langName);
+
   const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName, resolvedIncludeCoAuthoredBy);
-  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}`;
+  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}\n${languageInstruction}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
 
