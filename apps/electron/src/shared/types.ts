@@ -27,10 +27,10 @@ import type { PermissionMode } from '@craft-agent/shared/agent/modes';
 export type { PermissionMode };
 export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 
-// Thinking level types
-import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
-export type { ThinkingLevel };
-export { THINKING_LEVELS, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels';
+// Thinking toggle types
+import type { ThinkingEnabled } from '@craft-agent/shared/agent/thinking-toggle';
+export type { ThinkingEnabled };
+export { DEFAULT_THINKING_ENABLED } from '@craft-agent/shared/agent/thinking-toggle';
 
 export type {
   CoreMessage as Message,
@@ -731,8 +731,8 @@ export interface ElectronAPI {
   testLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   setDefaultLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   setEnvConnectionMidStreamBehavior(behavior: MidStreamBehavior): Promise<{ success: boolean; error?: string }>
-  getDefaultThinkingLevel(): Promise<ThinkingLevel>
-  setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>
+  getDefaultThinkingEnabled(): Promise<ThinkingEnabled>
+  setDefaultThinkingEnabled(enabled: ThinkingEnabled): Promise<{ success: boolean; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
 
   // Automations

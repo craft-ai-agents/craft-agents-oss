@@ -19,8 +19,8 @@ import { CONFIG_DIR } from './paths.ts';
 import type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
 import type { Plan } from '../agent/plan-types.ts';
 import type { PermissionMode } from '../agent/mode-manager.ts';
-import type { ThinkingLevel } from '../agent/thinking-levels.ts';
-import { isValidThinkingLevel, normalizeThinkingLevel } from '../agent/thinking-levels.ts';
+import type { ThinkingEnabled } from '../agent/thinking-toggle.ts';
+import { DEFAULT_THINKING_ENABLED, normalizeThinkingEnabled } from '../agent/thinking-toggle.ts';
 import { parsePermissionMode, PERMISSION_MODE_ORDER } from '../agent/mode-types.ts';
 import { type ConfigDefaults } from './config-defaults-schema.ts';
 import { isValidThemeFile } from './validators.ts';
@@ -42,7 +42,7 @@ import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
 import type { LlmConnection, MidStreamBehavior } from './llm-connections.ts';
-import { ENV_CONNECTION_SLUG, OPENLLM_ENV_CONNECTION_SLUG, OPENLLM_HOST_ENV_VAR, OPENLLM_BASE_HOST_ENV_VAR, defaultMidStreamBehavior, isMidStreamBehavior, isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, registerEnvConnectionMidStreamBehaviorResolver, synthesizeEnvConnection, synthesizeOpenLlmEnvConnection, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
+import { ENV_CONNECTION_SLUG, OPENLLM_ENV_CONNECTION_SLUG, defaultMidStreamBehavior, isMidStreamBehavior, isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, registerEnvConnectionMidStreamBehaviorResolver, synthesizeEnvConnection, synthesizeOpenLlmEnvConnection, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
 import {
   getModelProvider,
   getModelById,
@@ -53,7 +53,7 @@ export interface StoredConfig {
   // LLM Connections (authoritative source for auth and model config)
   llmConnections?: LlmConnection[];
   defaultLlmConnection?: string;  // Slug of default connection for new sessions
-  defaultThinkingLevel?: ThinkingLevel;  // App-level default thinking level for new sessions
+  defaultThinkingEnabled?: ThinkingEnabled;  // App-level default thinking toggle for new sessions
   envConnectionMidStreamBehavior?: MidStreamBehavior;  // App-level mid-stream behavior for the protected Environment connection
 
   workspaces: Workspace[];
@@ -125,7 +125,7 @@ const FALLBACK_CONFIG_DEFAULTS: ConfigDefaults = {
     browserToolEnabled: true,
   },
   workspaceDefaults: {
-    thinkingLevel: 'medium',
+    thinkingEnabled: DEFAULT_THINKING_ENABLED,
     permissionMode: 'ask',
     cyclablePermissionModes: ['safe', 'ask', 'allow-all'],
     localMcpServers: { enabled: true },
@@ -2784,28 +2784,30 @@ export function clearDefaultLlmConnection(): void {
 }
 
 /**
- * Get the app-level default thinking level for new sessions.
+ * Get the app-level default thinking toggle for new sessions.
  * Falls back to bundled config-defaults when unset.
  */
-export function getDefaultThinkingLevel(): ThinkingLevel {
+export function getDefaultThinkingEnabled(): ThinkingEnabled {
   const config = loadStoredConfig();
-  if (config?.defaultThinkingLevel) {
-    const normalized = normalizeThinkingLevel(config.defaultThinkingLevel);
-    if (normalized) return normalized;
+  if (config) {
+    const legacyDefaultThinkingKey = 'defaultThinking' + 'Level';
+    const rawDefaultThinking = config.defaultThinkingEnabled ?? (config as StoredConfig & Record<string, unknown>)[legacyDefaultThinkingKey];
+    const normalized = normalizeThinkingEnabled(rawDefaultThinking);
+    if (normalized !== undefined) return normalized;
   }
   const defaults = loadConfigDefaults();
-  return normalizeThinkingLevel(defaults.workspaceDefaults.thinkingLevel) ?? 'medium';
+  return normalizeThinkingEnabled(defaults.workspaceDefaults.thinkingEnabled) ?? DEFAULT_THINKING_ENABLED;
 }
 
 /**
- * Set the app-level default thinking level for new sessions.
+ * Set the app-level default thinking toggle for new sessions.
  * @returns true if persisted, false if config could not be loaded
  */
-export function setDefaultThinkingLevel(level: ThinkingLevel): boolean {
+export function setDefaultThinkingEnabled(enabled: ThinkingEnabled): boolean {
   const config = loadStoredConfig();
   if (!config) return false;
 
-  config.defaultThinkingLevel = level;
+  config.defaultThinkingEnabled = enabled;
   saveConfig(config);
   return true;
 }

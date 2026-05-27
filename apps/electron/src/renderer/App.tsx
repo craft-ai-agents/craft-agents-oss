@@ -33,7 +33,7 @@ import { coerceInputText } from './lib/input-text'
 import { getSessionsToRefreshAfterStaleReconnect } from './lib/reconnect-recovery'
 import { formatSessionLoadFailure, shouldTreatSessionLoadFailureAsTransportFallback } from './lib/session-load'
 import { extractWorkspaceSlugFromPath } from '@craft-agent/shared/utils/workspace-slug'
-import { DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
+import { DEFAULT_THINKING_ENABLED } from '@craft-agent/shared/agent/thinking-toggle'
 import { initRendererPerf } from './lib/perf'
 import {
   initializeSessionsAtom,
@@ -427,11 +427,11 @@ export default function App() {
         ...defaultSessionOptions,
         ...current,
         permissionMode: session.permissionMode ?? defaultSessionOptions.permissionMode,
-        thinkingLevel: session.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
+        thinkingEnabled: session.thinkingEnabled ?? DEFAULT_THINKING_ENABLED,
       }
 
       const hasNonDefaultMode = merged.permissionMode !== defaultSessionOptions.permissionMode
-      const hasNonDefaultThinking = merged.thinkingLevel !== DEFAULT_THINKING_LEVEL
+      const hasNonDefaultThinking = merged.thinkingEnabled !== DEFAULT_THINKING_ENABLED
 
       if (!hasNonDefaultMode && !hasNonDefaultThinking && merged.permissionModeVersion == null) {
         next.delete(session.id)
@@ -479,11 +479,11 @@ export default function App() {
       const optionsMap = new Map<string, SessionOptions>()
       for (const s of loadedSessions) {
         const hasNonDefaultMode = s.permissionMode && s.permissionMode !== 'ask'
-        const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== DEFAULT_THINKING_LEVEL
+        const hasNonDefaultThinking = s.thinkingEnabled !== undefined && s.thinkingEnabled !== DEFAULT_THINKING_ENABLED
         if (hasNonDefaultMode || hasNonDefaultThinking) {
           optionsMap.set(s.id, {
             permissionMode: s.permissionMode ?? 'ask',
-            thinkingLevel: s.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
+            thinkingEnabled: s.thinkingEnabled ?? DEFAULT_THINKING_ENABLED,
           })
         }
       }
@@ -1399,9 +1399,9 @@ export default function App() {
       // Sync permission mode change with backend
       window.electronAPI.sessionCommand(sessionId, { type: 'setPermissionMode', mode: updates.permissionMode })
     }
-    if (updates.thinkingLevel !== undefined) {
-      // Sync thinking level change with backend (session-level, persisted)
-      window.electronAPI.sessionCommand(sessionId, { type: 'setThinkingLevel', level: updates.thinkingLevel })
+    if (updates.thinkingEnabled !== undefined) {
+      // Sync thinking toggle change with backend (session-level, persisted)
+      window.electronAPI.sessionCommand(sessionId, { type: 'setThinkingEnabled', enabled: updates.thinkingEnabled })
     }
   }, [sessionOptions])
 

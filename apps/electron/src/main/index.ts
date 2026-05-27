@@ -755,7 +755,11 @@ app.whenReady().then(async () => {
 
       // Remove workspace from config (cleanup stale entries)
       ipcMain.handle('workspace:remove', async (_event, workspaceId: string) => {
-        const { removeWorkspace: remove } = await import('@craft-agent/shared/config')
+        const { getWorkspaceByNameOrId, removeWorkspace: remove } = await import('@craft-agent/shared/config')
+        const workspace = getWorkspaceByNameOrId(workspaceId)
+        if (workspace) {
+          await instance.sessionManager.closeWorkspace(workspace.rootPath)
+        }
         return remove(workspaceId)
       })
 

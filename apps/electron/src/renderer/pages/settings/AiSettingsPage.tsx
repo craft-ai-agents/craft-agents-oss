@@ -23,8 +23,8 @@ import { Spinner, FullscreenOverlayBase } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 import { motion, AnimatePresence } from 'motion/react'
-import type { LlmConnectionWithStatus, ThinkingLevel, WorkspaceSettings, Workspace } from '../../../shared/types'
-import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
+import type { LlmConnectionWithStatus, ThinkingEnabled, WorkspaceSettings, Workspace } from '../../../shared/types'
+import { DEFAULT_THINKING_ENABLED, THINKING_ENABLEDS } from '@craft-agent/shared/agent/thinking-toggle'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import {
   DropdownMenu,
@@ -406,7 +406,7 @@ interface WorkspaceOverrideCardProps {
 const WORKSPACE_SETTING_LABELS: Partial<Record<keyof WorkspaceSettings, string>> = {
   defaultLlmConnection: 'workspace connection override',
   model: 'workspace model override',
-  thinkingLevel: 'workspace thinking override',
+  thinkingEnabled: 'workspace thinking override',
 }
 
 function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: WorkspaceOverrideCardProps) {
@@ -470,22 +470,22 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
     updateSetting('model', model === 'global' ? undefined : model)
   }, [updateSetting])
 
-  const handleThinkingChange = useCallback((level: string) => {
+  const handleThinkingChange = useCallback((value: string) => {
     // 'global' means use app default (clear workspace override)
-    updateSetting('thinkingLevel', level === 'global' ? undefined : level as ThinkingLevel)
+    updateSetting('thinkingEnabled', value === 'global' ? undefined : value === 'true')
   }, [updateSetting])
 
   // Determine if workspace has any overrides
   const hasOverrides = settings && (
     settings.defaultLlmConnection ||
     settings.model ||
-    settings.thinkingLevel
+    settings.thinkingEnabled !== undefined
   )
 
   // Get display values
   const currentConnection = settings?.defaultLlmConnection || 'global'
   const currentModel = settings?.model || 'global'
-  const currentThinking = settings?.thinkingLevel || 'global'
+  const currentThinking = settings?.thinkingEnabled === undefined ? 'global' : String(settings.thinkingEnabled)
 
   // Derive workspace's effective connection (override or default)
   const workspaceEffectiveConnection = useMemo(() => {
@@ -504,9 +504,9 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
     if (settings?.model) {
       parts.push(getModelShortName(settings.model))
     }
-    if (settings?.thinkingLevel) {
-      const level = THINKING_LEVELS.find(l => l.id === settings.thinkingLevel)
-      parts.push(level ? t(level.nameKey) : settings.thinkingLevel)
+    if (settings?.thinkingEnabled !== undefined) {
+      const level = THINKING_ENABLEDS.find(l => l.id === settings.thinkingEnabled)
+      parts.push(level ? t(level.nameKey) : String(settings.thinkingEnabled))
     }
     return parts.join(' · ')
   }
@@ -593,8 +593,8 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
                 onValueChange={handleThinkingChange}
                 options={[
                   { value: 'global', label: t("settings.ai.useDefault"), description: t("settings.ai.inheritFromApp") },
-                  ...THINKING_LEVELS.map(({ id, nameKey, descriptionKey }) => ({
-                    value: id,
+                  ...THINKING_ENABLEDS.map(({ id, nameKey, descriptionKey }) => ({
+                    value: String(id),
                     label: t(nameKey),
                     description: t(descriptionKey),
                   })),
@@ -645,7 +645,7 @@ export default function AiSettingsPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
 
   // Default settings state (app-level)
-  const [defaultThinking, setDefaultThinking] = useState<ThinkingLevel>(DEFAULT_THINKING_LEVEL)
+  const [defaultThinking, setDefaultThinking] = useState<ThinkingEnabled>(DEFAULT_THINKING_ENABLED)
   const [extendedPromptCache, setExtendedPromptCache] = useState(false)
   const [enable1MContext, setEnable1MContext] = useState(false)
   const [rtkEnabled, setRtkEnabled] = useState(false)
@@ -682,8 +682,8 @@ export default function AiSettingsPage() {
         const ws = await window.electronAPI.getWorkspaces()
         setWorkspaces(ws)
 
-        const defaultThinkingLevel = await window.electronAPI.getDefaultThinkingLevel()
-        setDefaultThinking(defaultThinkingLevel)
+        const defaultThinkingEnabled = await window.electronAPI.getDefaultThinkingEnabled()
+        setDefaultThinking(defaultThinkingEnabled)
 
         const extendedCache = await window.electronAPI.getExtendedPromptCache()
         setExtendedPromptCache(extendedCache)
@@ -960,14 +960,14 @@ export default function AiSettingsPage() {
     await refreshLlmConnections()
   }, [defaultConnection, refreshLlmConnections])
 
-  const handleDefaultThinkingChange = useCallback(async (level: ThinkingLevel) => {
+  const handleDefaultThinkingChange = useCallback(async (enabled: ThinkingEnabled) => {
     if (!window.electronAPI) return
 
     const previous = defaultThinking
-    setDefaultThinking(level)
+    setDefaultThinking(enabled)
 
     try {
-      const result = await window.electronAPI.setDefaultThinkingLevel(level)
+      const result = await window.electronAPI.setDefaultThinkingEnabled(enabled)
       if (!result.success) {
         console.error('Failed to set default thinking level:', result.error)
         setDefaultThinking(previous)
@@ -1107,10 +1107,10 @@ export default function AiSettingsPage() {
                   <SettingsMenuSelectRow
                     label={t("settings.ai.thinking")}
                     description={t("settings.ai.thinkingDesc")}
-                    value={defaultThinking}
-                    onValueChange={(v) => handleDefaultThinkingChange(v as ThinkingLevel)}
-                    options={THINKING_LEVELS.map(({ id, nameKey, descriptionKey }) => ({
-                      value: id,
+                    value={String(defaultThinking)}
+                    onValueChange={(v) => handleDefaultThinkingChange(v === 'true')}
+                    options={THINKING_ENABLEDS.map(({ id, nameKey, descriptionKey }) => ({
+                      value: String(id),
                       label: t(nameKey),
                       description: t(descriptionKey),
                     }))}

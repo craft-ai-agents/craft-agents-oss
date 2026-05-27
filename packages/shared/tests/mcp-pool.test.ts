@@ -7,6 +7,9 @@
  * tokens were refreshed but never applied to existing transports.
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { McpClientPool } from '../src/mcp/mcp-pool.ts';
 import type { SdkMcpServerConfig } from '../src/agent/backend/types.ts';
 import type { PoolClient } from '../src/mcp/client.ts';
@@ -28,6 +31,35 @@ function makeMockClient(): PoolClient {
   return {
     listTools: async () => mockTools,
     callTool: async () => ({ content: [{ type: 'text', text: 'ok' }] }),
+    close: async () => {},
+  };
+}
+
+function makeBinaryClient(): PoolClient {
+  return {
+    listTools: async () => mockTools,
+    callTool: async (_name, args) => {
+      if (args.delayMs) {
+        await new Promise(resolve => setTimeout(resolve, Number(args.delayMs)));
+      }
+      return {
+        content: [{
+          type: 'image',
+          data: Buffer.from(String(args.payload)).toString('base64'),
+          mimeType: 'application/octet-stream',
+        }],
+      };
+    },
+    close: async () => {},
+  };
+}
+
+function makeLargeTextClient(): PoolClient {
+  return {
+    listTools: async () => mockTools,
+    callTool: async () => ({
+      content: [{ type: 'text', text: 'large response text '.repeat(3_000) }],
+    }),
     close: async () => {},
   };
 }
@@ -59,6 +91,20 @@ class TestablePool extends McpClientPool {
   resetTracking(): void {
     this.connectCalls = [];
     this.disconnectCalls = [];
+  }
+}
+
+class BinaryPool extends McpClientPool {
+  async connect(slug: string, config: SdkMcpServerConfig): Promise<void> {
+    await this.registerClient(slug, makeBinaryClient());
+    this.activeConfigs.set(slug, config);
+  }
+}
+
+class LargeTextPool extends McpClientPool {
+  async connect(slug: string, config: SdkMcpServerConfig): Promise<void> {
+    await this.registerClient(slug, makeLargeTextClient());
+    this.activeConfigs.set(slug, config);
   }
 }
 
@@ -182,5 +228,77 @@ describe('McpClientPool.sync — config change detection', () => {
 
     expect(failures).toContain('craft');
     expect(failPool.isConnected('craft')).toBe(false);
+  });
+});
+
+describe('McpClientPool.callTool — per-call options', () => {
+  it('saves concurrent binary responses to each call sessionPath', async () => {
+    const sessionA = mkdtempSync(join(tmpdir(), 'mcp-pool-session-a-'));
+    const sessionB = mkdtempSync(join(tmpdir(), 'mcp-pool-session-b-'));
+    const pool = new BinaryPool();
+
+    try {
+      await pool.sync({ craft: httpConfig('token') });
+
+      await Promise.all([
+        pool.callTool('mcp__craft__test-tool', { payload: 'alpha', delayMs: 10 }, { sessionPath: sessionA }),
+        pool.callTool('mcp__craft__test-tool', { payload: 'bravo', delayMs: 1 }, { sessionPath: sessionB }),
+      ]);
+
+      const filesA = readdirSync(join(sessionA, 'downloads'));
+      const filesB = readdirSync(join(sessionB, 'downloads'));
+
+      expect(filesA).toHaveLength(1);
+      expect(filesB).toHaveLength(1);
+      expect(readFileSync(join(sessionA, 'downloads', filesA[0]!), 'utf8')).toBe('alpha');
+      expect(readFileSync(join(sessionB, 'downloads', filesB[0]!), 'utf8')).toBe('bravo');
+    } finally {
+      rmSync(sessionA, { recursive: true, force: true });
+      rmSync(sessionB, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the per-call summarize callback for large responses', async () => {
+    const sessionPath = mkdtempSync(join(tmpdir(), 'mcp-pool-large-response-'));
+    const pool = new LargeTextPool();
+    const prompts: string[] = [];
+
+    try {
+      await pool.sync({ craft: httpConfig('token') });
+
+      const result = await pool.callTool('mcp__craft__test-tool', {}, {
+        sessionPath,
+        summarize: async (prompt) => {
+          prompts.push(prompt);
+          return 'mock summary';
+        },
+      });
+
+      expect(result.isError).toBe(false);
+      expect(prompts).toHaveLength(1);
+      expect(result.content).toContain('mock summary');
+      expect(readdirSync(join(sessionPath, 'long_responses')).length).toBeGreaterThan(0);
+    } finally {
+      rmSync(sessionPath, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('McpClientPool.sync — tools changed listeners', () => {
+  it('notifies all registered listeners except listeners removed before sync', async () => {
+    const pool = new TestablePool();
+    const calls: string[] = [];
+    const first = () => calls.push('first');
+    const second = () => calls.push('second');
+    const removed = () => calls.push('removed');
+
+    pool.addToolsChangedListener(first);
+    pool.addToolsChangedListener(second);
+    pool.addToolsChangedListener(removed);
+    pool.removeToolsChangedListener(removed);
+
+    await pool.sync({});
+
+    expect(calls).toEqual(['first', 'second']);
   });
 });

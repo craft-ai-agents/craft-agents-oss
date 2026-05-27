@@ -1,8 +1,6 @@
 import { useEffect } from 'react'
-import { useAtomValue, useSetAtom } from 'jotai'
 import { useModalRegistry } from '@/context/ModalContext'
 import { useDismissibleLayerRegistry } from '@/context/DismissibleLayerContext'
-import { panelStackAtom, closePanelAtom, focusedPanelIdAtom } from '@/atoms/panel-stack'
 import type { WindowCloseRequest } from '../../shared/types'
 
 /**
@@ -11,8 +9,7 @@ import type { WindowCloseRequest } from '../../shared/types'
  * - `window-button` closes the window directly.
  * - `keyboard-shortcut` (Cmd/Ctrl+W) uses layered dismissal:
  *   1. Close top modal
- *   2. Else close focused panel
- *   3. Else close window
+ *   2. Else close window
  * - `unknown` follows layered dismissal as a safe fallback.
  *
  * The main process starts a fallback timeout on each close request.
@@ -24,9 +21,6 @@ import type { WindowCloseRequest } from '../../shared/types'
 export function useWindowCloseHandler() {
   const { hasOpenLayers, closeTop } = useDismissibleLayerRegistry()
   const { hasOpenModals, closeTopModal } = useModalRegistry()
-  const panelStack = useAtomValue(panelStackAtom)
-  const focusedPanelId = useAtomValue(focusedPanelIdAtom)
-  const closePanel = useSetAtom(closePanelAtom)
 
   useEffect(() => {
     const cleanup = window.electronAPI.onCloseRequested((request: WindowCloseRequest) => {
@@ -48,19 +42,9 @@ export function useWindowCloseHandler() {
         return
       }
 
-      // Close the focused panel (or last if no focus tracked)
-      const target = focusedPanelId
-        ? panelStack.find(p => p.id === focusedPanelId)
-        : panelStack[panelStack.length - 1]
-      if (target) {
-        closePanel(target.id)
-        window.electronAPI.cancelCloseWindow()
-      } else {
-        // No panels, no modals — close the window
-        window.electronAPI.confirmCloseWindow()
-      }
+      window.electronAPI.confirmCloseWindow()
     })
 
     return cleanup
-  }, [hasOpenLayers, closeTop, hasOpenModals, closeTopModal, panelStack, focusedPanelId, closePanel])
+  }, [hasOpenLayers, closeTop, hasOpenModals, closeTopModal])
 }

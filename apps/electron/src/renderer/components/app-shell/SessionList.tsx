@@ -53,8 +53,6 @@ interface SessionListProps {
   onRename: (sessionId: string, name: string) => void
   /** Called when Enter is pressed to focus chat input for a specific session */
   onFocusChatInput?: (sessionId?: string) => void
-  /** Called when a session is selected */
-  onSessionSelect?: (session: SessionMeta) => void
   /** Called when user wants to open a session in a new window */
   onOpenInNewWindow?: (session: SessionMeta) => void
   /** Called to navigate to a specific view (e.g., 'allSessions', 'flagged') */

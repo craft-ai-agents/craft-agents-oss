@@ -25,12 +25,17 @@ export const HANDLED_CHANNELS = [
 let pendingSsoNonce: string | null = null
 
 /** Register local-only SSO startup session and refresh handlers. */
-export function registerSsoHandlers(server: RpcServer, deps: Pick<HandlerDeps, 'platform'>): void {
+export function registerSsoHandlers(server: RpcServer, deps: Pick<HandlerDeps, 'platform' | 'sessionManager'>): void {
   server.handle(RPC_CHANNELS.sso.GET_SESSION, async () => {
-    return handleSsoStartupSession({
+    const result = await handleSsoStartupSession({
       ...createSsoSessionDeps(),
       isPackaged: deps.platform.isPackaged,
     })
+    if (result.authenticated) {
+      // Session already valid (persisted login or dev SSO bypass) — warm MCP pools now.
+      void deps.sessionManager.syncAllWorkspaceMcpPools().catch(() => {})
+    }
+    return result
   })
 
   server.handle(RPC_CHANNELS.sso.REFRESH, async () => {
@@ -43,7 +48,13 @@ export function registerSsoHandlers(server: RpcServer, deps: Pick<HandlerDeps, '
   })
 
   server.handle(RPC_CHANNELS.sso.HANDLE_CALLBACK, async (_ctx, payload: { code?: string; state?: string }) => {
-    return handleSsoCallback(payload, createSsoSessionDeps())
+    const result = await handleSsoCallback(payload, createSsoSessionDeps())
+    if (result.success) {
+      // Re-sync all workspace MCP pools so sources using the SSO Identity Token
+      // as Bearer auth pick up the fresh token from the just-completed login.
+      void deps.sessionManager.syncAllWorkspaceMcpPools().catch(() => {})
+    }
+    return result
   })
 
   server.handle(RPC_CHANNELS.sso.LOGOUT, async () => {
@@ -89,7 +100,6 @@ export async function handleSsoStartupSession({
     return {
       authenticated: true,
       employeeId: session.employeeId,
-      token: session.token,
       userName: session.userName,
       department: session.department,
     }
@@ -121,9 +131,9 @@ export interface SsoLogoutDeps {
 }
 
 /** Build the OIDC authorization URL used to start system-browser SSO login. */
-export function buildSsoLoginUrl(): { authUrl: string; nonce: string | null } {
-  const authUrl = process.env.MDP_AUTH_URL
-  const clientId = process.env.MDP_CLIENT_ID
+export function buildSsoLoginUrl(env: NodeJS.ProcessEnv = process.env): { authUrl: string; nonce: string | null } {
+  const authUrl = env.MDP_AUTH_URL
+  const clientId = env.MDP_CLIENT_ID
 
   if (!authUrl) {
     throw new Error('MDP_AUTH_URL is required to start SSO login')
@@ -133,7 +143,7 @@ export function buildSsoLoginUrl(): { authUrl: string; nonce: string | null } {
     throw new Error('MDP_CLIENT_ID is required to start SSO login')
   }
 
-  const relayUrl = process.env.MDP_RELAY_URL
+  const relayUrl = env.MDP_RELAY_URL
   if (!relayUrl) {
     throw new Error('MDP_RELAY_URL is required to start SSO login')
   }
@@ -144,7 +154,7 @@ export function buildSsoLoginUrl(): { authUrl: string; nonce: string | null } {
   url.searchParams.set('response_type', 'code')
 
   let nonce: string | null = null
-  if (process.env.MDP_ENABLE_SSO_STATE_CHECK === '1') {
+  if (env.MDP_ENABLE_SSO_STATE_CHECK === '1') {
     nonce = randomBytes(16).toString('hex')
     url.searchParams.set('state', encodeOAuthRelayState(DEFAULT_SSO_CALLBACK_URL, nonce))
   }
@@ -153,8 +163,8 @@ export function buildSsoLoginUrl(): { authUrl: string; nonce: string | null } {
 }
 
 /** Start an SSO login and remember the one pending callback nonce. */
-export function startSsoLogin(): string {
-  const { authUrl, nonce } = buildSsoLoginUrl()
+export function startSsoLogin(env: NodeJS.ProcessEnv = process.env): string {
+  const { authUrl, nonce } = buildSsoLoginUrl(env)
   pendingSsoNonce = nonce
   return authUrl
 }

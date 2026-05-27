@@ -196,8 +196,8 @@ export const RPC_CHANNELS = {
   settings: {
     SETUP_LLM_CONNECTION: 'settings:setupLlmConnection',
     TEST_LLM_CONNECTION_SETUP: 'settings:testLlmConnectionSetup',
-    GET_DEFAULT_THINKING_LEVEL: 'settings:getDefaultThinkingLevel',
-    SET_DEFAULT_THINKING_LEVEL: 'settings:setDefaultThinkingLevel',
+    GET_DEFAULT_THINKING_ENABLED: 'settings:getDefaultThinkingEnabled',
+    SET_DEFAULT_THINKING_ENABLED: 'settings:setDefaultThinkingEnabled',
     GET_NETWORK_PROXY: 'settings:getNetworkProxy',
     SET_NETWORK_PROXY: 'settings:setNetworkProxy',
     GET_SERVER_CONFIG: 'settings:getServerConfig',

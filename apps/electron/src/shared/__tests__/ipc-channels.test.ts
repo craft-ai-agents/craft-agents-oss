@@ -231,11 +231,11 @@ const EXPECTED_CHANNELS: string[] = [
   'sessions:unreadSummaryChanged',
   'sessions:unwatchFiles',
   'sessions:watchFiles',
-  'settings:getDefaultThinkingLevel',
+  'settings:getDefaultThinkingEnabled',
   'settings:getNetworkProxy',
   'settings:getServerConfig',
   'settings:getServerStatus',
-  'settings:setDefaultThinkingLevel',
+  'settings:setDefaultThinkingEnabled',
   'settings:setNetworkProxy',
   'settings:setServerConfig',
   'settings:setupLlmConnection',
@@ -362,7 +362,7 @@ const EXPECTED_CHANNELS: string[] = [
   'workspaces:checkSlug',
   'workspaces:create',
   'workspaces:get',
-  'workspaces:updateRemote',
+  'workspaces:updateRemote'
 ]
 
 const EXPECTED_COUNT = EXPECTED_CHANNELS.length

@@ -151,7 +151,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
           mentions: references.mentions,
           llmConnection: action.llmConnection,
           model: action.model,
-          thinkingLevel: action.thinkingLevel,
+          thinkingEnabled: action.thinkingEnabled,
           automationName: payload.automationName,
           telegramTopic: payload.telegramTopic,
         })

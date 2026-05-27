@@ -12,6 +12,7 @@ import {
   ChevronUp,
   AlertCircle,
   Image as ImageIcon,
+  Brain,
   X,
 } from 'lucide-react'
 import { Icon_Home, Icon_Folder, Spinner } from '@craft-agent/ui'
@@ -38,7 +39,6 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuSub,
-  DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu'
 import {
   StyledDropdownMenuContent,
@@ -70,7 +70,7 @@ import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import { derivePickerMode } from './picker-mode'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
-import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelNameKey } from '@craft-agent/shared/agent/thinking-levels'
+import { type ThinkingEnabled, getThinkingEnabledNameKey } from '@craft-agent/shared/agent/thinking-toggle'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { ToolbarStatusSlot } from './ToolbarStatusSlot'
@@ -145,11 +145,11 @@ export interface FreeFormInputProps {
   currentModel: string
   /** Callback when model changes (includes connection slug for proper persistence) */
   onModelChange: (model: string, connection?: string) => void
-  // Thinking level (session-level setting)
-  /** Current thinking level ('off', 'think', 'max') */
-  thinkingLevel?: ThinkingLevel
-  /** Callback when thinking level changes */
-  onThinkingLevelChange?: (level: ThinkingLevel) => void
+  // Thinking toggle (session-level setting)
+  /** Current thinking toggle */
+  thinkingEnabled?: ThinkingEnabled
+  /** Callback when thinking toggle changes */
+  onThinkingEnabledChange?: (enabled: ThinkingEnabled) => void
   // Advanced options
   permissionMode?: PermissionMode
   onPermissionModeChange?: (mode: PermissionMode) => void
@@ -259,8 +259,8 @@ export function FreeFormInput({
   inputRef: externalInputRef,
   currentModel,
   onModelChange,
-  thinkingLevel = 'medium',
-  onThinkingLevelChange,
+  thinkingEnabled = true,
+  onThinkingEnabledChange,
   permissionMode = 'ask',
   onPermissionModeChange,
   enabledModes = ['safe', 'ask', 'allow-all'],
@@ -360,13 +360,14 @@ export function FreeFormInput({
     return connection.models || ANTHROPIC_MODELS
   }, [llmConnections, currentConnection, workspaceDefaultConnection, connectionUnavailable])
 
-  const availableThinkingLevels = THINKING_LEVELS
-
-  // Disable thinking selector when the current model explicitly doesn't support it
+  // Disable thinking toggle when the current model explicitly doesn't support it
   const thinkingDisabled = React.useMemo(() => {
     const model = availableModels.find(m => typeof m !== 'string' && m.id === currentModel)
     return typeof model !== 'string' && model?.supportsThinking === false
   }, [availableModels, currentModel])
+  const thinkingToggleLabel = thinkingDisabled
+    ? t('thinking.notSupported')
+    : t(getThinkingEnabledNameKey(thinkingEnabled))
 
   // Get display name for current model (full name, not short name)
   const currentModelDisplayName = React.useMemo(() => {
@@ -1687,8 +1688,6 @@ export function FreeFormInput({
               currentConnection={currentConnection}
               onModelChange={onModelChange}
               onConnectionChange={onConnectionChange}
-              thinkingLevel={thinkingLevel}
-              onThinkingLevelChange={onThinkingLevelChange}
               isEmptySession={isEmptySession}
               connectionUnavailable={connectionUnavailable}
               contextStatus={contextStatus}
@@ -1917,6 +1916,32 @@ export function FreeFormInput({
 
           {/* Right side: Model + Send - never shrink so they're always visible */}
           <div className="flex items-center shrink-0">
+            {onThinkingEnabledChange && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={thinkingToggleLabel}
+                    aria-pressed={thinkingEnabled}
+                    disabled={thinkingDisabled}
+                    onClick={() => onThinkingEnabledChange(!thinkingEnabled)}
+                    className={cn(
+                      "input-toolbar-btn inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors select-none",
+                      thinkingEnabled && !thinkingDisabled
+                        ? "bg-foreground/10 text-foreground hover:bg-foreground/15"
+                        : "text-foreground/50 hover:bg-foreground/5 hover:text-foreground",
+                      thinkingDisabled && "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-foreground/50",
+                    )}
+                  >
+                    <Brain className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {thinkingToggleLabel}
+                </TooltipContent>
+              </Tooltip>
+            )}
+
           {/* 5. Model/Connection Selector - Hidden in compact mode (EditPopover embedding) */}
           {!compactMode && (
           <DropdownMenu open={modelDropdownOpen} onOpenChange={setModelDropdownOpen}>
@@ -2210,43 +2235,6 @@ export function FreeFormInput({
                       </StyledDropdownMenuItem>
                     )
                   })}
-                </>
-              )}
-
-              {/* Thinking level selector — only shown when thinking levels are available
-                  (Claude supports extended thinking, OpenAI backends may not) */}
-              {availableThinkingLevels.length > 0 && (
-                <>
-                  <StyledDropdownMenuSeparator className="my-1" />
-
-                  <DropdownMenuSub>
-                    <StyledDropdownMenuSubTrigger disabled={thinkingDisabled} className={cn("flex items-center justify-between px-2 py-2 rounded-lg", thinkingDisabled && "opacity-50 cursor-not-allowed")}>
-                      <div className="text-left flex-1">
-                        <div className="font-medium text-sm">{t(getThinkingLevelNameKey(thinkingLevel))}</div>
-                        <div className="text-sm text-muted-foreground">{thinkingDisabled ? t('thinking.notSupported') : t('thinking.extendedDesc')}</div>
-                      </div>
-                    </StyledDropdownMenuSubTrigger>
-                    <StyledDropdownMenuSubContent className="min-w-[220px]">
-                      {availableThinkingLevels.map(({ id, nameKey, descriptionKey }) => {
-                        const isSelected = thinkingLevel === id
-                        return (
-                          <StyledDropdownMenuItem
-                            key={id}
-                            onSelect={() => onThinkingLevelChange?.(id)}
-                            className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
-                          >
-                            <div className="text-left">
-                              <div className="font-medium text-sm">{t(nameKey)}</div>
-                              <div className="text-sm text-muted-foreground">{t(descriptionKey)}</div>
-                            </div>
-                            {isSelected && (
-                              <Check className="h-3 w-3 text-foreground shrink-0 ml-3" />
-                            )}
-                          </StyledDropdownMenuItem>
-                        )
-                      })}
-                    </StyledDropdownMenuSubContent>
-                  </DropdownMenuSub>
                 </>
               )}
 

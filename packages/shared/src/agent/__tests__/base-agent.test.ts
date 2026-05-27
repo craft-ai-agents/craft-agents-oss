@@ -32,14 +32,14 @@ describe('BaseAgent', () => {
     });
   });
 
-  describe('Thinking Level Configuration', () => {
-    it('should initialize with config thinking level', () => {
-      expect(agent.getThinkingLevel()).toBe('medium');
+  describe('Thinking Toggle Configuration', () => {
+    it('should initialize with config thinking toggle', () => {
+      expect(agent.getThinkingEnabled()).toBe(true);
     });
 
-    it('should allow setting thinking level', () => {
-      agent.setThinkingLevel('max');
-      expect(agent.getThinkingLevel()).toBe('max');
+    it('should allow setting thinking toggle', () => {
+      agent.setThinkingEnabled(false);
+      expect(agent.getThinkingEnabled()).toBe(false);
     });
 
   });
@@ -224,9 +224,9 @@ describe('BaseAgent', () => {
       let message = '';
       agent.onDebug = (msg) => { message = msg; };
 
-      // Trigger a debug message by setting thinking level
-      agent.setThinkingLevel('off');
-      expect(message).toContain('Thinking level');
+      // Trigger a debug message by setting thinking toggle
+      agent.setThinkingEnabled(false);
+      expect(message).toContain('Thinking toggle');
     });
 
     it('should support permission mode change callback', () => {

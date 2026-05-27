@@ -3,7 +3,7 @@ import { setupI18n } from '@craft-agent/shared/i18n/setupI18n'
 
 // Bootstrap i18next with bundled English resources before importing the
 // component-under-test so its top-level i18n.t() calls return real strings.
-setupI18n()
+setupI18n().changeLanguage('en')
 
 import {
   getTransportBannerCopy,

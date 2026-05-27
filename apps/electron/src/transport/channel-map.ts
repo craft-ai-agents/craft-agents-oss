@@ -147,8 +147,8 @@ export const CHANNEL_MAP = {
   // Settings - API Setup
   setupLlmConnection: invoke(RPC_CHANNELS.settings.SETUP_LLM_CONNECTION),
   testLlmConnectionSetup: invoke(RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP),
-  getDefaultThinkingLevel: invoke(RPC_CHANNELS.settings.GET_DEFAULT_THINKING_LEVEL),
-  setDefaultThinkingLevel: invoke(RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL),
+  getDefaultThinkingEnabled: invoke(RPC_CHANNELS.settings.GET_DEFAULT_THINKING_ENABLED),
+  setDefaultThinkingEnabled: invoke(RPC_CHANNELS.settings.SET_DEFAULT_THINKING_ENABLED),
   getNetworkProxySettings: invoke(RPC_CHANNELS.settings.GET_NETWORK_PROXY),
   setNetworkProxySettings: invoke(RPC_CHANNELS.settings.SET_NETWORK_PROXY),
 

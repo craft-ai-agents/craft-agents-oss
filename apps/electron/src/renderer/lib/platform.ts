@@ -59,5 +59,5 @@ export const PATH_SEP = isWindows ? '\\' : '/'
  * Handles both Unix (/) and Windows (\) separators based on current OS.
  */
 export function getPathBasename(path: string): string {
-  return path.split(PATH_SEP).pop() || ''
+  return path.split(/[\\/]/).pop() || ''
 }
