@@ -747,16 +747,13 @@ export class PiEventAdapter extends BaseEventAdapter {
   /**
    * Extract text content from a Pi AgentMessage.
    * Pi messages use the pi-ai Message format with content arrays.
-   * Thinking blocks (from delta.reasoning on OpenAI-compat endpoints) are
-   * wrapped in <think>...</think> so extractReasoningContent() can surface
-   * them to the UI without protocol changes.
    */
   private extractTextFromMessage(message: unknown): string | null {
     if (!message || typeof message !== 'object') return null;
 
     const msg = message as {
       role?: string;
-      content?: string | Array<{ type: string; text?: string; thinking?: string }>;
+      content?: string | Array<{ type: string; text?: string }>;
     };
 
     if (typeof msg.content === 'string') {
@@ -764,17 +761,10 @@ export class PiEventAdapter extends BaseEventAdapter {
     }
 
     if (Array.isArray(msg.content)) {
-      const parts: string[] = [];
-
-      for (const c of msg.content) {
-        if (c.type === 'thinking' && c.thinking) {
-          parts.push(`<think>\n${c.thinking}\n</think>`);
-        } else if (c.type === 'text' && c.text) {
-          parts.push(c.text);
-        }
-      }
-
-      return parts.length > 0 ? parts.join('') : null;
+      const textParts = msg.content
+        .filter((c) => c.type === 'text' && c.text)
+        .map((c) => c.text!);
+      return textParts.length > 0 ? textParts.join('') : null;
     }
 
     return null;
