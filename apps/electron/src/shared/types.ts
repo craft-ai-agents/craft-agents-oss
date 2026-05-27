@@ -98,6 +98,8 @@ export interface ToolIconMapping {
   displayName: string
   /** Data URL of the icon (e.g., data:image/png;base64,...) */
   iconDataUrl: string
+  /** Sanitized raw SVG for inline rendering (SVG icons only) */
+  rawSvg?: string
   commands: string[]
 }
 

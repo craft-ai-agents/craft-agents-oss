@@ -598,7 +598,7 @@ export function useEntityIcon(opts: UseEntityIconOptions): ResolvedEntityIcon {
     let cancelled = false
 
     async function loadIcon() {
-      let result: { dataUrl: string; colorable: boolean; rawSvg?: string } | null = null
+      let result: ResolvedEntityIcon | null = null
 
       if (iconPath) {
         // Known path - extract relative portion and load directly
@@ -618,19 +618,14 @@ export function useEntityIcon(opts: UseEntityIconOptions): ResolvedEntityIcon {
 
       if (result) {
         // Cache the loaded icon and its colorability/rawSvg
-        iconCache.set(cacheKey, result.dataUrl)
+        iconCache.set(cacheKey, result.value!)
         if (result.colorable) {
           colorableCache.add(cacheKey)
         }
         if (result.rawSvg) {
           rawSvgCache.set(cacheKey, result.rawSvg)
         }
-        setResolved({
-          kind: 'file',
-          value: result.dataUrl,
-          colorable: result.colorable,
-          rawSvg: result.rawSvg,
-        })
+        setResolved(result)
       } else {
         setResolved({ kind: 'fallback', colorable: false })
       }
@@ -670,31 +665,18 @@ const rawSvgCache = new Map<string, string>()
 async function loadIconFile(
   workspaceId: string,
   relativePath: string
-): Promise<{ dataUrl: string; colorable: boolean; rawSvg?: string } | null> {
+): Promise<ResolvedEntityIcon | null> {
   try {
     const content = await window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
     // IPC returns null for missing files (silent fallback)
-    if (!content) {
-      return null
-    }
+    if (!content) return null
 
     if (relativePath.endsWith('.svg')) {
-      // Detect if SVG uses currentColor (colorable)
-      const colorable = content.includes('currentColor')
-      // Theme SVG: inject foreground color for data URL usage
-      const dataUrl = svgToThemedDataUrl(content)
-
-      if (colorable) {
-        // Sanitize SVG for inline rendering (XSS prevention)
-        const rawSvg = sanitizeSvgForInline(content)
-        return { dataUrl, colorable, rawSvg }
-      }
-
-      return { dataUrl, colorable }
+      return resolveRawSvgIcon(content, svgToThemedDataUrl(content))
     }
 
     // Raster image (PNG, JPG) - not colorable
-    return { dataUrl: content, colorable: false }
+    return { kind: 'file', value: content, colorable: false }
   } catch {
     // File doesn't exist or failed to load
     return null
@@ -717,6 +699,25 @@ function sanitizeSvgForInline(svg: string): string {
 }
 
 /**
+ * Resolve raw SVG content into a ResolvedEntityIcon.
+ * Determines colorability, sanitizes for inline rendering, and returns a ready-to-render icon.
+ */
+export function resolveRawSvgIcon(rawSvg: string, dataUrl: string): ResolvedEntityIcon {
+  // Normalize to currentColor for theme-aware inline rendering:
+  // strip <style> blocks and replace all hardcoded fill colors with currentColor
+  let svg = rawSvg.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+  svg = svg.replace(/\bfill="(?!none|currentColor)[^"]*"/gi, 'fill="currentColor"')
+
+  const colorable = svg.includes('currentColor')
+  return {
+    kind: 'file',
+    value: dataUrl,
+    colorable,
+    rawSvg: colorable ? sanitizeSvgForInline(svg) : undefined,
+  }
+}
+
+/**
  * Auto-discover an icon file in a workspace directory.
  * Probes all extensions (.svg, .png, .jpg, .jpeg) in parallel via IPC,
  * then returns the first successful result by priority order.
@@ -727,7 +728,7 @@ async function discoverIconFile(
   workspaceId: string,
   iconDir: string,
   fileName?: string
-): Promise<{ dataUrl: string; colorable: boolean; rawSvg?: string } | null> {
+): Promise<ResolvedEntityIcon | null> {
   const name = fileName ?? 'icon'
 
   // Probe all extensions in parallel — reduces round-trips from N to 1

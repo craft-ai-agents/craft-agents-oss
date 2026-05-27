@@ -375,9 +375,11 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   // for display in the Appearance settings page
   server.handle(RPC_CHANNELS.toolIcons.GET_MAPPINGS, async () => {
     const { getToolIconsDir } = await import('@craft-agent/shared/config/storage')
-    const { loadToolIconConfig } = await import('@craft-agent/shared/utils/cli-icon-resolver')
+    const { loadToolIconConfig, findToolIconFile } = await import('@craft-agent/shared/utils/cli-icon-resolver')
     const { encodeIconToDataUrl } = await import('@craft-agent/shared/utils/icon-encoder')
-    const { join } = await import('path')
+    const { isIconUrl } = await import('@craft-agent/shared/utils/icon-constants')
+    const { join, extname } = await import('path')
+    const { readFileSync } = await import('fs')
 
     const toolIconsDir = getToolIconsDir()
     const config = loadToolIconConfig(toolIconsDir)
@@ -385,13 +387,24 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
 
     return config.tools
       .map(tool => {
-        const iconPath = join(toolIconsDir, tool.icon)
+        // URL icons are cached locally by ensureToolIcons/ConfigWatcher
+        const iconPath = isIconUrl(tool.icon)
+          ? findToolIconFile(toolIconsDir, tool.id)
+          : join(toolIconsDir, tool.icon)
         const iconDataUrl = encodeIconToDataUrl(iconPath)
         if (!iconDataUrl) return null
+
+        // For SVGs, include raw content — renderer sanitizes for inline rendering
+        let rawSvg: string | undefined
+        if (iconPath && extname(iconPath).toLowerCase() === '.svg') {
+          try { rawSvg = readFileSync(iconPath, 'utf-8') } catch {}
+        }
+
         return {
           id: tool.id,
           displayName: tool.displayName,
           iconDataUrl,
+          rawSvg,
           commands: tool.commands,
         }
       })
