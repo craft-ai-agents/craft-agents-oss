@@ -12,10 +12,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.0"
-  },
   "devDependencies": {
+    "@whiskeysockets/baileys": "^6.7.0",
     "typescript": "^5.8.2",
     "@types/node": "^22.0.0"
   }

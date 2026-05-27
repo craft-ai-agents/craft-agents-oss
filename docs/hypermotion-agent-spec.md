@@ -21,6 +21,7 @@ The agent should choose the right production lane without making the user unders
 Managed local tool:
 
 - `tools/hypermotion`
+- Built-in local source slug: `hypermotion`
 - Root command: `bun run hypermotion doctor`
 - Direct command: `node tools/hypermotion/bin/hypermotion.mjs doctor`
 - Owns pinned HyperFrames and Remotion CLI deps outside the RunnerOS app dependency graph.

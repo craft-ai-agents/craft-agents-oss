@@ -109,6 +109,15 @@ mac:
         - "!vendor/ripgrep/arm64-linux/**"
         - "!vendor/ripgrep/x64-linux/**"
         - "!vendor/ripgrep/x64-win32/**"
+    # Managed local motion/video tool with its own node_modules.
+    - from: ../../tools/hypermotion
+      to: app/tools/hypermotion
+      filter:
+        - "**/*"
+    - from: ../../tools/hypermotion/node_modules
+      to: app/tools/hypermotion/node_modules
+      filter:
+        - "**/*"
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
@@ -182,6 +191,15 @@ win:
         - "!vendor/ripgrep/x64-darwin/**"
         - "!vendor/ripgrep/arm64-linux/**"
         - "!vendor/ripgrep/x64-linux/**"
+    # Managed local motion/video tool with its own node_modules.
+    - from: ../../tools/hypermotion
+      to: app/tools/hypermotion
+      filter:
+        - "**/*"
+    - from: ../../tools/hypermotion/node_modules
+      to: app/tools/hypermotion/node_modules
+      filter:
+        - "**/*"
     - from: vendor/bun/bun.exe
       to: vendor/bun/bun.exe
     - from: vendor/codex/win32-x64
@@ -218,6 +236,15 @@ linux:
         - "!vendor/ripgrep/arm64-darwin/**"
         - "!vendor/ripgrep/x64-darwin/**"
         - "!vendor/ripgrep/x64-win32/**"
+    # Managed local motion/video tool with its own node_modules.
+    - from: ../../tools/hypermotion
+      to: app/tools/hypermotion
+      filter:
+        - "**/*"
+    - from: ../../tools/hypermotion/node_modules
+      to: app/tools/hypermotion/node_modules
+      filter:
+        - "**/*"
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs

@@ -377,6 +377,17 @@ describe('loadAllSources', () => {
     expect(found!.config.type).toBe('local');
     expect(found!.config.local?.format).toBe('cli-tool');
   });
+
+  test('includes hypermotion as a project local source', () => {
+    const ws = makeWorkspace();
+    const all = loadAllSources(ws);
+    const found = all.find((s: LoadedSource) => s.config.slug === 'hypermotion');
+
+    expect(found).toBeDefined();
+    expect(found!.tier).toBe('project');
+    expect(found!.config.type).toBe('local');
+    expect(found!.config.local?.format).toBe('cli-tool');
+  });
 });
 
 describe('getSourcesBySlugs', () => {
@@ -436,6 +447,17 @@ describe('getSourcesBySlugs', () => {
     expect(sources.length).toBe(1);
     expect(sources[0]!.tier).toBe('project');
     expect(sources[0]!.config.slug).toBe('printing-press-social');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.type).toBe('local');
+  });
+
+  test('resolves hypermotion by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['hypermotion']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('hypermotion');
     expect(sources[0]!.config.enabled).toBe(true);
     expect(sources[0]!.config.type).toBe('local');
   });

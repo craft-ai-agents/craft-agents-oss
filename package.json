@@ -23,11 +23,9 @@
     "@hono/node-server": "^2.0.1",
     "@isaacs/brace-expansion": "^5.0.1",
     "@anthropic-ai/sdk": "0.91.1",
-    "@xmldom/xmldom": "^0.9.10",
     "ajv": "^6.15.0",
     "axios": "^1.16.0",
-    "basic-ftp": "^6.0.1",
-    "diff": "^8.0.4",
+    "basic-ftp": "^5.3.1",
     "exiftool-vendored": "^35.19.0",
     "fast-xml-parser": "^5.7.3",
     "file-type": "^21.3.4",
@@ -43,8 +41,7 @@
     "qs": "^6.15.1",
     "rollup": "^4.60.3",
     "underscore": "^1.13.8",
-    "undici": "^8.2.0",
-    "uuid": "^13.0.2",
+    "undici": "^7.26.0",
     "yaml": "^2.8.4"
   },
   "scripts": {

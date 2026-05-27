@@ -11,6 +11,7 @@ import type { LoadedSource, FolderSourceConfig } from './types.ts';
 const COMPUTER_USE_SLUG = 'computer-use';
 const FIELD_THEORY_SLUG = 'field-theory';
 const PRINTING_PRESS_SOCIAL_SLUG = 'printing-press-social';
+const HYPERMOTION_SLUG = 'hypermotion';
 
 function firstExistingPath(candidates: string[], fallback: string): string {
   for (const candidate of candidates) {
@@ -58,6 +59,20 @@ function getPrintingPressSocialPath(): string {
   );
 }
 
+function getHypermotionPath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'hypermotion') : '',
+      join(appRoot, 'tools', 'hypermotion'),
+      join(process.cwd(), 'tools', 'hypermotion'),
+    ],
+    join('tools', 'hypermotion')
+  );
+}
+
 /**
  * Get all built-in sources for a workspace.
  *
@@ -70,6 +85,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getComputerUseSource(workspaceId, workspaceRootPath),
     getFieldTheorySource(workspaceId, workspaceRootPath),
     getPrintingPressSocialSource(workspaceId, workspaceRootPath),
+    getHypermotionSource(workspaceId, workspaceRootPath),
   ];
 }
 
@@ -227,6 +243,57 @@ export function getPrintingPressSocialSource(workspaceId: string, workspaceRootP
 }
 
 /**
+ * Built-in source for the managed Hypermotion wrapper.
+ *
+ * This is a local CLI source that gives agents a portable path to the bundled
+ * HyperFrames/Remotion toolchain in dev and packaged Electron builds.
+ */
+export function getHypermotionSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getHypermotionPath();
+  const config: FolderSourceConfig = {
+    id: 'builtin-hypermotion',
+    name: 'Hypermotion',
+    slug: HYPERMOTION_SLUG,
+    enabled: true,
+    provider: 'hypermotion',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    tagline: 'Managed HyperFrames and Remotion CLI wrapper for motion/video artifacts.',
+    icon: '🎬',
+    isAuthenticated: true,
+    connectionStatus: existsSync(toolPath) ? 'connected' : 'failed',
+    connectionError: existsSync(toolPath) ? undefined : 'Bundled Hypermotion tool folder not found',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# Hypermotion',
+        '',
+        'Use this source for motion graphics, HyperFrames HTML/GSAP compositions, Remotion/React video, and Canvas-ready MP4 artifacts.',
+        '',
+        'Workflow:',
+        '1. Use the displayed local path as the tool directory.',
+        '2. Run `node bin/hypermotion.mjs doctor` before production work.',
+        '3. Create isolated project folders with `node bin/hypermotion.mjs init <workspace-local-dir> --engine hyperframes|remotion`.',
+        '4. Render with `node bin/hypermotion.mjs render <dir> --engine hyperframes|remotion --out out/<name>.mp4`.',
+        '5. Publish generated HTML previews, poster frames, MP4s, and receipts as Canvas-visible outputs when useful.',
+        '',
+        'Do not claim a render succeeded until the output file exists. Confirm before paid API/provider calls or long renders.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
  * Get the built-in Craft Agents docs source.
  *
  * @deprecated craft-agents-docs is now an always-available MCP server
@@ -270,5 +337,8 @@ export function getDocsSource(workspaceId: string, workspaceRootPath: string): L
  * @returns true when the slug is reserved by a built-in source
  */
 export function isBuiltinSource(slug: string): boolean {
-  return slug === COMPUTER_USE_SLUG || slug === FIELD_THEORY_SLUG || slug === PRINTING_PRESS_SOCIAL_SLUG;
+  return slug === COMPUTER_USE_SLUG
+    || slug === FIELD_THEORY_SLUG
+    || slug === PRINTING_PRESS_SOCIAL_SLUG
+    || slug === HYPERMOTION_SLUG;
 }
