@@ -952,8 +952,10 @@ function AppShellContent({
     try {
       await window.electronAPI.sessionCommand(sessionId, { type: 'setLabels', labels })
       // Session will emit a 'labels_changed' event that updates the session state
+      return true
     } catch (err) {
       console.error('[Chat] Failed to set session labels:', err)
+      return false
     }
   }, [])
 
@@ -1666,14 +1668,14 @@ function AppShellContent({
   }, [navState])
 
   const handleNewProjectClick = useCallback(() => {
-    const targetSessionId = focusedSessionId ?? session.selected ?? filteredSessionMetas[0]?.id ?? workspaceSessionMetas[0]?.id
+    const targetSessionId = focusedSessionId ?? (isSessionsNavigation(navState) ? session.selected : undefined)
     if (!targetSessionId) {
-      toast.error('Create a session first, then move it into a project.')
+      toast.error('Open a session first, then create a project from it.')
       return
     }
     setSessionsNavExpanded(true)
     setSessionProjectDialog({ kind: 'new_project', sessionId: targetSessionId })
-  }, [filteredSessionMetas, focusedSessionId, session.selected, setSessionProjectDialog, workspaceSessionMetas])
+  }, [focusedSessionId, navState, session.selected, setSessionProjectDialog])
 
   const handleFlaggedClick = useCallback(() => {
     navigate(routes.view.flagged())
@@ -2412,7 +2414,7 @@ function AppShellContent({
                       className="flex w-full items-center gap-1.5 rounded-[7px] px-2 py-1.5 text-left text-[11px] font-medium text-white/45 transition-colors hover:bg-white/[0.035] hover:text-white/75"
                     >
                       <Plus className="h-3 w-3" />
-                      <span className="min-w-0 truncate">New Project</span>
+                      <span className="min-w-0 truncate">New from Current</span>
                     </button>
                     {sidebarProjectGroups.map((project) => {
                       const projectCollapseKey = `session-project:${project.key}`
@@ -2450,7 +2452,7 @@ function AppShellContent({
                                   <StyledDropdownMenuItem
                                     onClick={() => setSessionProjectDialog({
                                       kind: 'rename_project',
-                                      projectSlug: project.value!,
+                                      projectKey: project.key,
                                       projectLabel: project.label,
                                     })}
                                   >
@@ -2460,7 +2462,7 @@ function AppShellContent({
                                   <StyledDropdownMenuItem
                                     onClick={() => setSessionProjectDialog({
                                       kind: 'delete_project',
-                                      projectSlug: project.value!,
+                                      projectKey: project.key,
                                       projectLabel: project.label,
                                     })}
                                     className="text-destructive focus:text-destructive"

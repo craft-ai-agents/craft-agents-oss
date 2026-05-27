@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { getSessionProjectInfo, setSessionProjectLabel, slugifyProjectName } from '@/utils/session-project'
 
 interface SessionProjectDialogHostProps {
-  onLabelsChange: (sessionId: string, labels: string[]) => void
+  onLabelsChange: (sessionId: string, labels: string[]) => Promise<boolean>
 }
 
 export function SessionProjectDialogHost({ onLabelsChange }: SessionProjectDialogHostProps) {
@@ -31,18 +31,19 @@ export function SessionProjectDialogHost({ onLabelsChange }: SessionProjectDialo
     setState({ kind: 'closed' })
   }, [setState])
 
-  const handleSubmit = React.useCallback(() => {
+  const handleSubmit = React.useCallback(async () => {
     if (!session || state.kind !== 'new_project') return
     const slug = slugifyProjectName(projectName)
     if (!slug) {
       toast.error('Project name needs at least one letter or number.')
       return
     }
-    onLabelsChange(state.sessionId, setSessionProjectLabel(session.labels ?? [], slug))
-    close()
+    const ok = await onLabelsChange(state.sessionId, setSessionProjectLabel(session.labels ?? [], slug))
+    if (ok) close()
+    else toast.error('Failed to create project.')
   }, [close, onLabelsChange, projectName, session, state])
 
-  const handleRenameProject = React.useCallback(() => {
+  const handleRenameProject = React.useCallback(async () => {
     if (state.kind !== 'rename_project') return
     const nextSlug = slugifyProjectName(projectName)
     if (!nextSlug) {
@@ -50,31 +51,55 @@ export function SessionProjectDialogHost({ onLabelsChange }: SessionProjectDialo
       return
     }
 
-    let changed = 0
+    const updates: Array<Promise<boolean>> = []
     for (const item of sessionMetaMap.values()) {
       const project = getSessionProjectInfo(item)
-      if (project.value !== state.projectSlug) continue
-      onLabelsChange(item.id, setSessionProjectLabel(item.labels ?? [], nextSlug))
-      changed += 1
+      if (project.key !== state.projectKey) continue
+      updates.push(onLabelsChange(item.id, setSessionProjectLabel(item.labels ?? [], nextSlug)))
+    }
+    if (updates.length === 0) {
+      toast.error('No sessions found for this project.')
+      close()
+      return
     }
 
-    toast.success(`Renamed project`, { description: `${changed} session${changed === 1 ? '' : 's'} moved.` })
-    close()
+    const results = await Promise.all(updates)
+    const changed = results.filter(Boolean).length
+    const failed = results.length - changed
+    if (failed > 0) {
+      toast.error('Project rename incomplete.', { description: `${changed} moved, ${failed} failed.` })
+      return
+    }
+
+    toast.success('Renamed project', { description: `${changed} session${changed === 1 ? '' : 's'} moved.` })
+    if (changed > 0) close()
   }, [close, onLabelsChange, projectName, sessionMetaMap, state])
 
-  const handleDeleteProject = React.useCallback(() => {
+  const handleDeleteProject = React.useCallback(async () => {
     if (state.kind !== 'delete_project') return
 
-    let changed = 0
+    const updates: Array<Promise<boolean>> = []
     for (const item of sessionMetaMap.values()) {
       const project = getSessionProjectInfo(item)
-      if (project.value !== state.projectSlug) continue
-      onLabelsChange(item.id, setSessionProjectLabel(item.labels ?? [], undefined))
-      changed += 1
+      if (project.key !== state.projectKey) continue
+      updates.push(onLabelsChange(item.id, setSessionProjectLabel(item.labels ?? [], undefined)))
+    }
+    if (updates.length === 0) {
+      toast.error('No sessions found for this project.')
+      close()
+      return
     }
 
-    toast.success(`Deleted project`, { description: `${changed} session${changed === 1 ? '' : 's'} moved to General.` })
-    close()
+    const results = await Promise.all(updates)
+    const changed = results.filter(Boolean).length
+    const failed = results.length - changed
+    if (failed > 0) {
+      toast.error('Project delete incomplete.', { description: `${changed} moved, ${failed} failed.` })
+      return
+    }
+
+    toast.success('Deleted project', { description: `${changed} session${changed === 1 ? '' : 's'} moved to General.` })
+    if (changed > 0) close()
   }, [close, onLabelsChange, sessionMetaMap, state])
 
   return (

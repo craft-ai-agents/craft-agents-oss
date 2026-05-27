@@ -22,6 +22,10 @@ describe('getSessionProjectInfo', () => {
       value: 'ltr-os',
     })
   })
+
+  it('uses a normalized key for legacy mixed-case project labels', () => {
+    expect(getSessionProjectInfo({ labels: ['project::LTR-OS'] }).key).toBe('project:ltr-os')
+  })
 })
 
 describe('formatProjectLabel', () => {
