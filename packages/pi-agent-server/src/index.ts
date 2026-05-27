@@ -26,6 +26,8 @@ import {
   SessionManager as PiSessionManager,
   AuthStorage as PiAuthStorage,
   ModelRegistry as PiModelRegistry,
+  DefaultResourceLoader,
+  SettingsManager as PiSettingsManager,
   createReadToolDefinition,
   createBashToolDefinition,
   createEditToolDefinition,
@@ -40,6 +42,7 @@ import type {
   AgentToolResult,
   AuthCredential,
   CreateAgentSessionOptions,
+  ExtensionFactory,
   ToolDefinition,
 } from '@mariozechner/pi-coding-agent';
 
@@ -241,6 +244,19 @@ let piSession: AgentSession | null = null;
 let piModelRegistry: PiModelRegistry | null = null;
 let moduleAuthStorage: PiAuthStorage | null = null;
 let unsubscribeEvents: (() => void) | null = null;
+
+// System prompt sent from main process; injected via before_agent_start hook
+// because session.prompt() resets agent.state.systemPrompt every turn.
+let currentMainSystemPrompt: string | null = null;
+
+const mainSystemPromptInjector: ExtensionFactory = (pi) => {
+  pi.on('before_agent_start', () => {
+    if (currentMainSystemPrompt) {
+      return { systemPrompt: currentMainSystemPrompt };
+    }
+    return undefined;
+  });
+};
 
 // Init config (set on 'init' message)
 let initConfig: Extract<InboundMessage, { type: 'init' }> | null = null;
@@ -586,7 +602,6 @@ async function ensureSession(): Promise<AgentSession> {
     const agentDir = initConfig.agentDir || join(initConfig.sessionPath, '.pi-agent');
     mkdirSync(agentDir, { recursive: true });
     sessionOptions.agentDir = agentDir;
-
     // Session resume: use a per-Craft-session directory so the Pi SDK can
     // persist and resume its own session across subprocess restarts.
     // continueRecent() loads the existing session if one exists, otherwise
@@ -659,6 +674,22 @@ async function ensureSession(): Promise<AgentSession> {
   const piThinkingLevel = THINKING_TO_PI[initConfig.thinkingLevel as keyof typeof THINKING_TO_PI];
   if (piThinkingLevel) {
     sessionOptions.thinkingLevel = piThinkingLevel;
+  }
+
+  // Inject the main-session system-prompt extension via a custom ResourceLoader.
+  // This wires up the before_agent_start hook that supplies currentMainSystemPrompt
+  // on every prompt() turn (Pi SDK wipes state.systemPrompt each turn — see
+  // mainSystemPromptInjector for details).
+  if (sessionOptions.agentDir) {
+    const settingsManager = PiSettingsManager.create(cwd, sessionOptions.agentDir);
+    sessionOptions.settingsManager = settingsManager;
+    sessionOptions.resourceLoader = new DefaultResourceLoader({
+      cwd,
+      agentDir: sessionOptions.agentDir,
+      settingsManager,
+      extensionFactories: [mainSystemPromptInjector],
+    });
+    await sessionOptions.resourceLoader.reload();
   }
 
   // Create the session — tools flow through customTools + allowlist (see comment above).
@@ -1314,11 +1345,10 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
 
     const session = await ensureSession();
 
-    // Force the Craft-built system prompt onto the Pi session. Direct assignment
-    // to `state.systemPrompt` is wiped on every `session.prompt()` call by the Pi
-    // SDK (see system-prompt-override.ts).
+    // System prompt is injected via the before_agent_start extension hook;
+    // writing agent.state.systemPrompt here would be overwritten inside prompt().
     if (msg.systemPrompt) {
-      applySystemPromptOverride(session, msg.systemPrompt);
+      currentMainSystemPrompt = msg.systemPrompt;
     }
 
     // Wire up event handler
