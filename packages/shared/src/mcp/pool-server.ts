@@ -35,15 +35,21 @@ export class McpPoolServer {
   private mcpServer: Server | null = null;
   private transport: StreamableHTTPServerTransport | null = null;
   private debugFn: ((msg: string) => void) | undefined;
+  private slugFilter: string[] | undefined;
+  private sessionPath: string | undefined;
   private getCallToolOptions: (() => McpClientPoolCallOptions) | undefined;
   private _port = 0;
 
   constructor(pool: McpClientPool, options?: {
     debug?: (msg: string) => void;
+    slugFilter?: string[];
+    sessionPath?: string;
     getCallToolOptions?: () => McpClientPoolCallOptions;
   }) {
     this.pool = pool;
     this.debugFn = options?.debug;
+    this.slugFilter = options?.slugFilter;
+    this.sessionPath = options?.sessionPath;
     this.getCallToolOptions = options?.getCallToolOptions;
   }
 
@@ -117,7 +123,7 @@ export class McpPoolServer {
 
     // List tools — proxy from pool, strip `mcp__` prefix
     server.setRequestHandler(ListToolsRequestSchema, async () => {
-      const proxyDefs = this.pool.getProxyToolDefs();
+      const proxyDefs = this.pool.getProxyToolDefs(this.slugFilter);
       return {
         tools: proxyDefs.map(def => ({
           name: def.name.replace(/^mcp__/, ''),
@@ -136,7 +142,10 @@ export class McpPoolServer {
       const internalName = `mcp__${name}`;
       this.debug(`Tool call: ${name} → ${internalName}`);
 
-      const result = await this.pool.callTool(internalName, args || {}, this.getCallToolOptions?.());
+      const result = await this.pool.callTool(internalName, args || {}, {
+        ...this.getCallToolOptions?.(),
+        ...(this.sessionPath ? { sessionPath: this.sessionPath } : {}),
+      });
 
       return {
         content: [{ type: 'text' as const, text: result.content }],

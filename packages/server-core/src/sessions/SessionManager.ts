@@ -3238,8 +3238,9 @@ export class SessionManager implements ISessionManager {
       if (backendContext.capabilities.needsHttpPoolServer) {
         managed.poolServer = new McpPoolServer(managed.mcpPool, {
           debug: (msg) => sessionLog.debug(msg),
+          slugFilter: enabledSlugs,
+          sessionPath,
           getCallToolOptions: () => ({
-            sessionPath,
             summarize: managed.agent?.getSummarizeCallback(),
           }),
         })
