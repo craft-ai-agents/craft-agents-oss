@@ -92,6 +92,9 @@ describe('SSO RPC handlers', () => {
       MDP_ENABLE_SSO_STATE_CHECK: process.env.MDP_ENABLE_SSO_STATE_CHECK,
     }
     const handlers = new Map<string, (ctx: unknown, ...args: unknown[]) => unknown>()
+    const sessionManager = {
+      syncAllWorkspaceMcpPools: async () => {},
+    }
     const server = {
       handle: (channel: string, handler: (ctx: unknown, ...args: unknown[]) => unknown) => {
         handlers.set(channel, handler)
@@ -105,7 +108,10 @@ describe('SSO RPC handlers', () => {
       process.env.MDP_CLIENT_ID = 'desktop-client'
       process.env.MDP_RELAY_URL = RELAY_URL
       process.env.MDP_ENABLE_SSO_STATE_CHECK = '1'
-      registerSsoHandlers(server as never, { platform: { isPackaged: false } } as never)
+      registerSsoHandlers(server as never, {
+        platform: { isPackaged: false },
+        sessionManager,
+      } as never)
 
       const authUrl = await handlers.get(RPC_CHANNELS.sso.START_LOGIN)?.({
         clientId: 'client-1',
