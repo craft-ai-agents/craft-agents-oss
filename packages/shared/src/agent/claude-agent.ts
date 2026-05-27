@@ -410,11 +410,12 @@ function jsonSchemaToZodShape(schema: Record<string, unknown>, depth = 0): Recor
  */
 function createSourceProxyServers(
   pool: McpClientPool,
-  options: McpClientPoolCallOptions
+  options: McpClientPoolCallOptions,
+  slugFilter?: string[]
 ): Record<string, ReturnType<typeof createSdkMcpServer>> {
   const servers: Record<string, ReturnType<typeof createSdkMcpServer>> = {};
 
-  for (const slug of pool.getConnectedSlugs()) {
+  for (const slug of slugFilter ?? pool.getConnectedSlugs()) {
     const mcpTools = pool.getTools(slug);
     if (mcpTools.length === 0) continue;
 
@@ -866,7 +867,7 @@ export class ClaudeAgent extends BaseAgent {
         ? createSourceProxyServers(this.config.mcpPool, {
             sessionPath: getSessionPath(this.workspaceRootPath, sessionId),
             summarize: this.getSummarizeCallback(),
-          })
+          }, this.getActiveSourceSlugs())
         : {};
       const sourceProxyCount = Object.keys(sourceProxies).length;
       if (sourceProxyCount > 0) {

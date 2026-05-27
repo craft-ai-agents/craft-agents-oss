@@ -58,6 +58,13 @@ export class McpPoolServer {
     this.getCallToolOptions = options?.getCallToolOptions;
   }
 
+  /**
+   * Replace the source slug allowlist used when clients list available tools.
+   */
+  setSlugFilter(slugFilter: string[] | undefined): void {
+    this.slugFilter = slugFilter;
+  }
+
   private debug(msg: string): void {
     this.debugFn?.(`[McpPoolServer] ${msg}`);
   }

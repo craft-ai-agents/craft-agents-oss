@@ -79,7 +79,7 @@ import { toolMetadataStore, getLastApiError } from '@craft-agent/shared/intercep
 import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
 import { restoreFiles } from '@craft-agent/shared/utils/bundle-files'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
+import { McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
@@ -410,7 +410,7 @@ async function saveClaudeTurnAnchor(
  * @param sources - Sources to build servers for
  * @param sessionPath - Optional path to session folder for saving large API responses
  * @param tokenRefreshManager - Optional TokenRefreshManager for OAuth token refresh
- * @param summarize - Optional summarizer for large API responses
+ * @param summarize - Optional summarizer for large API responses from API sources
  */
 async function buildServersFromSources(
   sources: LoadedSource[],
@@ -847,10 +847,10 @@ interface ManagedSession {
   permissionMode?: PermissionMode
   /** Previous permission mode (preserved across restarts for session_state modeTransition context) */
   previousPermissionMode?: PermissionMode
-  /** Centralized MCP client pool for this session's source connections */
-  mcpPool?: McpClientPool
   /** HTTP MCP server exposing pool tools to external SDK subprocesses */
   poolServer?: McpPoolServer
+  /** Listener registered on the workspace MCP pool while this session has a pool server. */
+  mcpToolsChangedListener?: () => void
   // SDK session ID for conversation continuity
   sdkSessionId?: string
   // Token usage for display
@@ -1666,6 +1666,29 @@ export class SessionManager implements ISessionManager {
     }
   }
 
+  private async syncWorkspaceMcpPoolFromDisk(workspaceRootPath: string): Promise<void> {
+    const pool = this.workspaceMcpPools.get(workspaceRootPath)
+    if (!pool) return
+
+    const tokenRefreshManager = this.workspaceTokenRefreshManagers.get(workspaceRootPath) ?? new TokenRefreshManager(getSourceCredentialManager(), {
+      log: (msg) => sessionLog.debug(msg),
+    })
+    if (!this.workspaceTokenRefreshManagers.has(workspaceRootPath)) {
+      this.workspaceTokenRefreshManagers.set(workspaceRootPath, tokenRefreshManager)
+    }
+
+    await this.syncWorkspaceMcpPool(workspaceRootPath, pool, tokenRefreshManager)
+  }
+
+  private updateSessionPoolServerSources(managed: ManagedSession, sourceSlugs: string[]): void {
+    managed.poolServer?.setSlugFilter(sourceSlugs)
+  }
+
+  private notifySessionPoolServerSourcesChanged(managed: ManagedSession, sourceSlugs: string[]): void {
+    this.updateSessionPoolServerSources(managed, sourceSlugs)
+    managed.poolServer?.notifyToolsChanged()
+  }
+
   /**
    * Tear down workspace-scoped infrastructure initialized by setupConfigWatcher().
    */
@@ -1786,6 +1809,8 @@ export class SessionManager implements ISessionManager {
     const allSources = loadAllSources(workspaceRootPath)
     managed.agent.setAllSources(allSources)
 
+    await this.syncWorkspaceMcpPoolFromDisk(workspaceRootPath)
+
     // Rebuild MCP and API servers for session's enabled sources
     const enabledSlugs = managed.enabledSourceSlugs || []
     const enabledSources = allSources.filter(s =>
@@ -1795,6 +1820,7 @@ export class SessionManager implements ISessionManager {
     const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
     const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath, managed.tokenRefreshManager, managed.agent?.getSummarizeCallback())
     const intendedSlugs = enabledSources.map(s => s.config.slug)
+    this.notifySessionPoolServerSourcesChanged(managed, enabledSlugs)
 
     // Update bridge-mcp-server config/credentials for backends that need it
     await applyBridgeUpdates(managed.agent, sessionPath, enabledSources, mcpServers, managed.id, workspaceRootPath, 'source reload', managed.poolServer?.url)
@@ -2188,6 +2214,7 @@ export class SessionManager implements ISessionManager {
       const { mcpServers } = await buildServersFromSources(
         enabledSources, sessionPath, managed.tokenRefreshManager
       )
+      this.notifySessionPoolServerSourcesChanged(managed, enabledSlugs)
       await applyBridgeUpdates(managed.agent, sessionPath, enabledSources, mcpServers, managed.id, workspaceRootPath, 'source auth', managed.poolServer?.url)
     }
 
@@ -2987,17 +3014,14 @@ export class SessionManager implements ISessionManager {
       }
     }
 
-    if (managed.mcpPool) {
-      try {
-        await managed.mcpPool.disconnectAll()
-      } catch (error) {
-        sessionLog.warn(`Failed to disconnect MCP pool for ${sessionId} during ${reason}: ${error instanceof Error ? error.message : error}`)
-      }
+    if (managed.mcpToolsChangedListener) {
+      const workspacePool = this.workspaceMcpPools.get(managed.workspace.rootPath)
+      workspacePool?.removeToolsChangedListener(managed.mcpToolsChangedListener)
     }
 
     managed.agent = null
     managed.poolServer = undefined
-    managed.mcpPool = undefined
+    managed.mcpToolsChangedListener = undefined
     managed.envOverrides = undefined
     managed.agentReady = undefined
     managed.agentReadyResolve = undefined
@@ -3230,13 +3254,20 @@ export class SessionManager implements ISessionManager {
       // Build server configs for enabled sources
       const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath, managed.tokenRefreshManager)
 
-      // Create centralized MCP client pool (all backends use it)
-      managed.mcpPool = new McpClientPool({ debug: (msg) => sessionLog.debug(msg), workspaceRootPath: managed.workspace.rootPath })
+      let workspacePool = this.workspaceMcpPools.get(managed.workspace.rootPath)
+      if (!workspacePool) {
+        this.setupWorkspaceMcpPool(managed.workspace.rootPath)
+        workspacePool = this.workspaceMcpPools.get(managed.workspace.rootPath)
+      }
+      if (!workspacePool) {
+        throw new Error(`Workspace MCP pool not initialized for ${managed.workspace.rootPath}`)
+      }
+      await this.syncWorkspaceMcpPoolFromDisk(managed.workspace.rootPath)
 
       // Backends that run as external subprocesses need an HTTP pool server
       let poolServerUrl: string | undefined
       if (backendContext.capabilities.needsHttpPoolServer) {
-        managed.poolServer = new McpPoolServer(managed.mcpPool, {
+        managed.poolServer = new McpPoolServer(workspacePool, {
           debug: (msg) => sessionLog.debug(msg),
           slugFilter: enabledSlugs,
           sessionPath,
@@ -3244,9 +3275,9 @@ export class SessionManager implements ISessionManager {
             summarize: managed.agent?.getSummarizeCallback(),
           }),
         })
-        managed.mcpPool.addToolsChangedListener(() => managed.poolServer?.notifyToolsChanged())
+        managed.mcpToolsChangedListener = () => managed.poolServer?.notifyToolsChanged()
+        workspacePool.addToolsChangedListener(managed.mcpToolsChangedListener)
         poolServerUrl = await managed.poolServer.start()
-        await managed.mcpPool.sync(mcpServers) // Ensure pool has tools before SDK connects
       }
 
       // Per-session env overrides
@@ -3397,7 +3428,7 @@ export class SessionManager implements ISessionManager {
         markBranchSeedApplied,
         getTransferredSessionSummary,
         markTransferredSessionSummaryApplied,
-        mcpPool: managed.mcpPool,
+        mcpPool: workspacePool,
         poolServerUrl,
         envOverrides,
         // Claude-specific
@@ -4287,6 +4318,7 @@ export class SessionManager implements ISessionManager {
         const intendedSlugs = allEnabledSources
           .filter(isSourceUsable)
           .map(s => s.config.slug)
+        this.notifySessionPoolServerSourcesChanged(managed, managed.enabledSourceSlugs || [])
 
         // Update bridge-mcp-server config/credentials for backends that need it
         await applyBridgeUpdates(managed.agent!, sessionPath, allEnabledSources, mcpServers, managed.id, workspaceRootPath, 'source enable', managed.poolServer?.url)
@@ -4764,6 +4796,7 @@ export class SessionManager implements ISessionManager {
 
       // Set active source servers (tools are only available from these)
       const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
+      this.notifySessionPoolServerSourcesChanged(managed, sourceSlugs)
 
       // Update bridge-mcp-server config/credentials for backends that need it
       const usableSources = sources.filter(isSourceUsable)
@@ -5424,6 +5457,10 @@ export class SessionManager implements ISessionManager {
         sessionLog.warn(`Failed to stop pool server for ${sessionId}: ${err instanceof Error ? err.message : err}`)
       })
     }
+    if (managed.mcpToolsChangedListener) {
+      this.workspaceMcpPools.get(workspaceRootPath)?.removeToolsChangedListener(managed.mcpToolsChangedListener)
+      managed.mcpToolsChangedListener = undefined
+    }
 
     // Cancel any pending source-activation auto-retry timer (craft-agents-oss#804).
     if (managed.autoRetryTimer) {
@@ -5802,6 +5839,7 @@ export class SessionManager implements ISessionManager {
       if (mcpCount > 0 || apiCount > 0 || enabledSlugs.length > 0) {
         const usableSources = sources.filter(isSourceUsable)
         const intendedSlugs = usableSources.map(s => s.config.slug)
+        this.updateSessionPoolServerSources(managed, enabledSlugs)
         await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
         await applyBridgeUpdates(agent, sessionPath, usableSources, mcpServers, sessionId, workspaceRootPath, 'send message', managed.poolServer?.url)
         sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
