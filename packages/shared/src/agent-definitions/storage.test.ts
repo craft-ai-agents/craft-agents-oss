@@ -499,6 +499,15 @@ body
     expect(youtubeAgent?.systemPrompt).toContain('You do not publish')
   })
 
+  test('starter library includes the Update System Agent as read-only maintenance', () => {
+    const updateAgent = STARTER_AGENTS.find((agent) => agent.slug === 'update-system-agent')
+
+    expect(updateAgent).toBeDefined()
+    expect(updateAgent?.metadata.permissionMode).toBe('safe')
+    expect(updateAgent?.metadata.tags).toContain('maintenance')
+    expect(updateAgent?.systemPrompt).toContain('update_system_audit.py')
+  })
+
   test('ensureRequiredAgents does not recreate an app-deleted required agent', () => {
     const required = [
       {
