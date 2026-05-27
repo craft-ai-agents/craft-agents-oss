@@ -68,6 +68,9 @@ export class PiEventAdapter extends BaseEventAdapter {
   // Track whether streaming deltas have been received for the current message
   private hasStreamedDeltas: boolean = false;
 
+  // Track whether we are inside an open <think> block (thinking_start fired but thinking_end has not)
+  private inThinkingBlock: boolean = false;
+
   // Track whether a final (non-intermediate) text_complete has been emitted this turn
   private hasEmittedFinalText: boolean = false;
 
@@ -296,6 +299,7 @@ export class PiEventAdapter extends BaseEventAdapter {
         this.currentTurnId = null;
         this.hasStreamedDeltas = false;
         this.hasEmittedFinalText = false;
+        this.inThinkingBlock = false;
         this.subTurnCounter = 0;
         this.messageSubTurnId = null;
         break;
@@ -315,12 +319,20 @@ export class PiEventAdapter extends BaseEventAdapter {
           this.messageSubTurnId = this.nextSubTurnId('m');
         }
         if (amEvent.type === 'thinking_start') {
+          this.inThinkingBlock = true;
           yield { type: 'text_delta', text: '<think>\n', turnId: this.messageSubTurnId };
         } else if (amEvent.type === 'thinking_delta' && amEvent.delta) {
           yield { type: 'text_delta', text: amEvent.delta, turnId: this.messageSubTurnId };
         } else if (amEvent.type === 'thinking_end') {
+          this.inThinkingBlock = false;
           yield { type: 'text_delta', text: '\n</think>', turnId: this.messageSubTurnId };
         } else if (amEvent.type === 'text_delta' && amEvent.delta) {
+          // Some models fire text_delta before thinking_end — auto-close the block so
+          // extractThinkTags can separate reasoning from response text during streaming.
+          if (this.inThinkingBlock) {
+            this.inThinkingBlock = false;
+            yield { type: 'text_delta', text: '\n</think>', turnId: this.messageSubTurnId };
+          }
           this.hasStreamedDeltas = true;
           yield { type: 'text_delta', text: amEvent.delta, turnId: this.messageSubTurnId };
         }
