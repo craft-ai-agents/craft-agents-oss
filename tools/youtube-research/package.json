@@ -1,0 +1,13 @@
+{
+  "name": "@runneros/youtube-research-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "runner-youtube-research": "bin/youtube-research.mjs"
+  },
+  "scripts": {
+    "doctor": "node bin/youtube-research.mjs doctor",
+    "version": "node bin/youtube-research.mjs version"
+  }
+}

@@ -61,8 +61,8 @@ Cases:
 - collapse hides panel without clearing surface
 - focus from receipt reopens panel
 - ultra-wide mode preserves chat max width
-- medium mode uses roll-up above composer
-- small mode keeps composer visible
+- medium mode uses overlay
+- small mode uses tabs
 - missing media renders error state
 
 ## Integration Tests
@@ -72,10 +72,6 @@ Target:
 - session creates visual surface
 - visual event bridge
 - chat receipt rendering
-
-Status: the current Phase 3 implementation is specified in
-`docs/visual-agent-os/11-phase-3-agent-surface-events-spec.md`. It uses the
-single `visual_surface` tool with `open_board`, `add_note`, and `pin_output`.
 
 Cases:
 

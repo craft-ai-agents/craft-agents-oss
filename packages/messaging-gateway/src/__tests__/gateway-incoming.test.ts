@@ -107,4 +107,30 @@ describe('MessagingGateway incoming hook', () => {
     expect(sessionManager.sendMessage).not.toHaveBeenCalled()
     await gateway.stop()
   })
+
+  it('emits incoming hook metadata when a pre-route handler consumes the message', async () => {
+    const events: IncomingMessageEvent[] = []
+    const sessionManager = makeSessionManager()
+    const gateway = new MessagingGateway({
+      sessionManager: sessionManager as any,
+      workspaceId: 'ws-1',
+      storageDir: storeDir,
+      onBeforeRouteMessage: () => true,
+      onIncomingMessage: (event) => {
+        events.push(event)
+      },
+    })
+    const { adapter, emitMessage } = makeAdapter()
+
+    gateway.registerAdapter(adapter)
+    await gateway.start()
+    await emitMessage(baseMsg({ text: 'start hnic' }))
+
+    expect(events).toHaveLength(1)
+    expect(events[0]!.handledByGateway).toBe(true)
+    expect(events[0]!.bound).toBe(false)
+    expect(events[0]!.boundAfterRoute).toBe(false)
+    expect(sessionManager.sendMessage).not.toHaveBeenCalled()
+    await gateway.stop()
+  })
 })

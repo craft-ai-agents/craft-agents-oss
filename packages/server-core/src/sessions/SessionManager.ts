@@ -2372,11 +2372,14 @@ export class SessionManager implements ISessionManager {
         if (seeded > 0) {
           sessionLog.info(`[agent-definitions] Seeded ${seeded} starter agent(s) into global library`)
         }
-        // Two load-bearing agents must exist on every startup: Orchestrator
-        // (sidebar pin + future Rooms coordinator) and Concierge (top-level
-        // Chat nav entry — without it the Chat link goes nowhere).
+        // Load-bearing agents must exist on every startup: Orchestrator
+        // (sidebar pin + future Rooms coordinator), Concierge (top-level
+        // Chat nav entry), Social Publisher, and Update System Agent.
         const required = STARTER_AGENTS.filter(
-          (a) => a.slug === ORCHESTRATOR_SLUG || a.slug === CONCIERGE_SLUG || a.slug === SOCIAL_PUBLISHER_SLUG,
+          (a) => a.slug === ORCHESTRATOR_SLUG
+            || a.slug === CONCIERGE_SLUG
+            || a.slug === SOCIAL_PUBLISHER_SLUG
+            || a.slug === 'update-system-agent',
         )
         const { ensured } = ensureRequiredAgents(required)
         if (ensured > 0) {

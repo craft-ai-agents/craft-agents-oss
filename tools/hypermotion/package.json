@@ -1,0 +1,20 @@
+{
+  "name": "@runneros/hypermotion-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "hypermotion": "./bin/hypermotion.mjs"
+  },
+  "scripts": {
+    "doctor": "node ./bin/hypermotion.mjs doctor",
+    "init": "node ./bin/hypermotion.mjs init",
+    "preview": "node ./bin/hypermotion.mjs preview",
+    "render": "node ./bin/hypermotion.mjs render"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.467",
+    "hyperframes": "0.6.47",
+    "zod": "4.3.6"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "allowedBashPatterns": [
+    {
+      "pattern": "^cd\\s+tools/youtube-research\\s+&&\\s+node\\s+bin/youtube-research\\.mjs\\s+doctor$",
+      "comment": "Check bundled YouTube Research CLI health"
+    },
+    {
+      "pattern": "^cd\\s+tools/youtube-research\\s+&&\\s+node\\s+bin/youtube-research\\.mjs\\s+which\\s+.+$",
+      "comment": "Resolve a YouTube research capability to a command"
+    },
+    {
+      "pattern": "^cd\\s+tools/youtube-research\\s+&&\\s+node\\s+bin/youtube-research\\.mjs\\s+youtube\\s+(channels-list|comment-threads-list|playlist-items-list|playlists-list|search-list|videos-list|search-bulk|videos-transcript|videos-embed|videos-related|videos-comments|channel-uploads|playlist-enrich)\\s+.*$",
+      "comment": "Run read-only YouTube Data API research commands"
+    }
+  ]
+}

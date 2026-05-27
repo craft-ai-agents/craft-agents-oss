@@ -449,6 +449,10 @@ export interface SourceCredentialScopeResult {
   canRevert: boolean
   canAuthenticate: boolean
   usesOAuth: boolean
+  metadata?: {
+    googleAdsDeveloperTokenConfigured?: boolean
+    googleAdsLoginCustomerIdConfigured?: boolean
+  }
 }
 
 // ---------------------------------------------------------------------------

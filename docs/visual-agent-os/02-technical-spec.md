@@ -89,11 +89,6 @@ export interface VisualSurfaceEventRecord {
 
 Agents and runtime code should talk to the visual layer through structured events, not direct UI calls.
 
-Status: superseded for the current implementation by
-`docs/visual-agent-os/11-phase-3-agent-surface-events-spec.md`. The shipped
-Phase 3 surface uses one session-scoped `visual_surface` tool with
-`open_board`, `add_note`, and `pin_output` actions backed by Outputs.
-
 Initial event names:
 
 ```ts
@@ -157,7 +152,8 @@ Use app/container width, not fixed split.
 ```ts
 if (width >= 1600) mode = 'sidecar-no-chat-compression'
 else if (width >= 1150) mode = 'split'
-else mode = 'rollup'
+else if (width >= 800) mode = 'overlay'
+else mode = 'tabs'
 ```
 
 ## Persistence
@@ -193,11 +189,6 @@ Deletion policy:
 ## Agent Tooling
 
 MVP should expose a session-scoped tool or internal command:
-
-Current implementation note: Phase 3 shipped this as one `visual_surface` tool
-instead of separate tool names. See
-`docs/visual-agent-os/11-phase-3-agent-surface-events-spec.md` for the active
-contract.
 
 - `visual_surface_open`
 - `visual_surface_add_note`

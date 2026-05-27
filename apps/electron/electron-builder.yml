@@ -60,6 +60,8 @@ files:
   - vendor/copilot/**/*
   # Include bundled local CLI tools
   - tools/printing-press-social/**/*
+  - tools/hypermotion/**/*
+  - tools/google-ads/**/*
   # Exclude everything from node_modules (will use extraResources for SDK)
   - "!node_modules/**/*"
 
@@ -108,6 +110,25 @@ mac:
         - "!vendor/ripgrep/arm64-linux/**"
         - "!vendor/ripgrep/x64-linux/**"
         - "!vendor/ripgrep/x64-win32/**"
+    # Managed local motion/video tool with its own node_modules.
+    - from: ../../tools/hypermotion
+      to: app/tools/hypermotion
+      filter:
+        - "**/*"
+    - from: ../../tools/hypermotion/node_modules
+      to: app/tools/hypermotion/node_modules
+      filter:
+        - "**/*"
+    # Managed local Google Ads CLI wrapper and bundled platform binary.
+    - from: ../../tools/google-ads
+      to: app/tools/google-ads
+      filter:
+        - "**/*"
+    # Managed local YouTube Research CLI wrapper and bundled platform binary.
+    - from: ../../tools/youtube-research
+      to: app/tools/youtube-research
+      filter:
+        - "**/*"
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
@@ -181,6 +202,25 @@ win:
         - "!vendor/ripgrep/x64-darwin/**"
         - "!vendor/ripgrep/arm64-linux/**"
         - "!vendor/ripgrep/x64-linux/**"
+    # Managed local motion/video tool with its own node_modules.
+    - from: ../../tools/hypermotion
+      to: app/tools/hypermotion
+      filter:
+        - "**/*"
+    - from: ../../tools/hypermotion/node_modules
+      to: app/tools/hypermotion/node_modules
+      filter:
+        - "**/*"
+    # Managed local Google Ads CLI wrapper and bundled platform binary.
+    - from: ../../tools/google-ads
+      to: app/tools/google-ads
+      filter:
+        - "**/*"
+    # Managed local YouTube Research CLI wrapper and bundled platform binary.
+    - from: ../../tools/youtube-research
+      to: app/tools/youtube-research
+      filter:
+        - "**/*"
     - from: vendor/bun/bun.exe
       to: vendor/bun/bun.exe
     - from: vendor/codex/win32-x64
@@ -217,6 +257,25 @@ linux:
         - "!vendor/ripgrep/arm64-darwin/**"
         - "!vendor/ripgrep/x64-darwin/**"
         - "!vendor/ripgrep/x64-win32/**"
+    # Managed local motion/video tool with its own node_modules.
+    - from: ../../tools/hypermotion
+      to: app/tools/hypermotion
+      filter:
+        - "**/*"
+    - from: ../../tools/hypermotion/node_modules
+      to: app/tools/hypermotion/node_modules
+      filter:
+        - "**/*"
+    # Managed local Google Ads CLI wrapper and bundled platform binary.
+    - from: ../../tools/google-ads
+      to: app/tools/google-ads
+      filter:
+        - "**/*"
+    # Managed local YouTube Research CLI wrapper and bundled platform binary.
+    - from: ../../tools/youtube-research
+      to: app/tools/youtube-research
+      filter:
+        - "**/*"
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs

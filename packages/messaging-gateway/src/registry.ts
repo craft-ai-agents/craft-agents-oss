@@ -12,11 +12,13 @@
  * gateways via initializeWorkspace() for every workspace that has messaging enabled.
  */
 
-import { existsSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import type { PushTarget } from '@craft-agent/shared/protocol'
+import type { FileAttachment, PushTarget } from '@craft-agent/shared/protocol'
 import type { CredentialManager } from '@craft-agent/shared/credentials'
+import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
+import { readFileAttachment } from '@craft-agent/shared/utils'
 import type {
   ISessionManager,
   IMessagingGatewayRegistry,
@@ -33,8 +35,10 @@ import type { SessionEvent } from './renderer'
 import type { EventSinkFn } from './event-fanout'
 import type {
   ChannelBinding,
+  IncomingMessage,
   MessagingLogger,
   MessagingPlatformRuntimeInfo,
+  PlatformAdapter,
   PlatformType,
 } from './types'
 
@@ -88,6 +92,10 @@ interface WorkspaceState {
   whatsapp: WhatsAppAdapter | null
   whatsappOffEvent?: () => void
   runtime: Record<PlatformType, MessagingPlatformRuntimeInfo>
+}
+
+interface WhatsAppHomeRouteMap {
+  routes: Record<string, string>
 }
 
 export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
@@ -312,18 +320,27 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
   // -------------------------------------------------------------------------
 
   getBindings(workspaceId: string): MessagingBindingInfo[] {
-    const state = this.workspaces.get(workspaceId)
-    if (!state) return []
-    return state.gateway.getBindingStore().getAll().map(toBindingInfo)
+    return this.getBindingScanStates(workspaceId)
+      .flatMap((state) => state.gateway.getBindingStore().getAll())
+      .filter((binding) => binding.workspaceId === workspaceId)
+      .map(toBindingInfo)
   }
 
   unbindSession(workspaceId: string, sessionId: string, platform?: string): void {
-    const state = this.workspaces.get(workspaceId)
-    if (!state) return
-    const removed = state.gateway
-      .getBindingStore()
-      .unbindSession(sessionId, platform as PlatformType | undefined)
-    if (removed > 0) this.emitBindingChanged(workspaceId)
+    const workspaceIds = new Set([
+      workspaceId,
+      ...this.opts.sessionManager.getWorkspaces().map((workspace) => workspace.id),
+      ...this.workspaces.keys(),
+    ])
+    for (const candidateWorkspaceId of workspaceIds) {
+      const state = this.workspaces.get(candidateWorkspaceId) ?? this.bootstrapWorkspace(candidateWorkspaceId)
+      const removed = state.gateway
+        .getBindingStore()
+        .unbindSession(sessionId, platform as PlatformType | undefined)
+      if (removed > 0) {
+        this.emitBindingChanged(candidateWorkspaceId)
+      }
+    }
   }
 
   bindSession(
@@ -343,11 +360,17 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
   }
 
   unbindBinding(workspaceId: string, bindingId: string): boolean {
-    const state = this.workspaces.get(workspaceId)
-    if (!state) return false
-    const removed = state.gateway.getBindingStore().unbindById(bindingId)
-    if (removed) this.emitBindingChanged(workspaceId)
-    return removed
+    for (const [ownerWorkspaceId, state] of this.getBindingScanEntries(workspaceId)) {
+      const binding = state.gateway.getBindingStore().getAll().find((candidate) => candidate.id === bindingId)
+      if (!binding || binding.workspaceId !== workspaceId) continue
+      const removed = state.gateway.getBindingStore().unbindById(bindingId)
+      if (removed) {
+        this.emitBindingChanged(ownerWorkspaceId)
+        if (ownerWorkspaceId !== workspaceId) this.emitBindingChanged(workspaceId)
+      }
+      return removed
+    }
+    return false
   }
 
   // -------------------------------------------------------------------------
@@ -674,8 +697,17 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       return
     }
 
+    const states = new Set<WorkspaceState>()
     const state = this.workspaces.get(workspaceId)
-    if (state) state.gateway.onSessionEvent(channel, target, ...args)
+    if (state) states.add(state)
+    for (const candidate of this.workspaces.values()) {
+      if (candidate.gateway.getBindingStore().findBySession(event.sessionId).length > 0) {
+        states.add(candidate)
+      }
+    }
+    for (const candidate of states) {
+      candidate.gateway.onSessionEvent(channel, target, ...args)
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -715,6 +747,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       onIncomingMessage: onIncomingMessage
         ? (event) => onIncomingMessage(workspaceId, event)
         : undefined,
+      onBeforeRouteMessage: (event) => this.handleWhatsAppHomeMessage(workspaceId, event.adapter, event.message, event.wasBound),
     })
 
     const state: WorkspaceState = {
@@ -847,6 +880,201 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
 
   private getWhatsAppAuthStateDir(workspaceId: string): string {
     return join(this.opts.getMessagingDir(workspaceId), 'whatsapp-auth')
+  }
+
+  private getBindingScanEntries(workspaceId: string): Array<[string, WorkspaceState]> {
+    const workspaceIds = new Set([
+      workspaceId,
+      ...this.opts.sessionManager.getWorkspaces().map((workspace) => workspace.id),
+      ...this.workspaces.keys(),
+    ])
+    return Array.from(workspaceIds, (candidateWorkspaceId) => [
+      candidateWorkspaceId,
+      this.workspaces.get(candidateWorkspaceId) ?? this.bootstrapWorkspace(candidateWorkspaceId),
+    ])
+  }
+
+  private getBindingScanStates(workspaceId: string): WorkspaceState[] {
+    return this.getBindingScanEntries(workspaceId).map(([, state]) => state)
+  }
+
+  private async handleWhatsAppHomeMessage(
+    homeWorkspaceId: string,
+    adapter: PlatformAdapter,
+    msg: IncomingMessage,
+    wasBound: boolean,
+  ): Promise<boolean> {
+    if (msg.platform !== 'whatsapp') return false
+
+    const text = msg.text.trim()
+    const command = text.split(/\s+/)[0]?.toLowerCase()
+    const isHomeCommand = command === '/workspaces' || command === '/where' || command === '/use'
+    if (!this.isWhatsAppHomeGatewayEnabled(homeWorkspaceId)) {
+      if (isHomeCommand) {
+        await adapter.sendText(
+          msg.channelId,
+          'Home Gateway commands require WhatsApp self-chat mode. Turn it on in Settings > Messaging.',
+        )
+        return true
+      }
+      return false
+    }
+
+    if (command === '/workspaces') {
+      await adapter.sendText(msg.channelId, this.formatWorkspaceList(homeWorkspaceId, msg.channelId))
+      return true
+    }
+    if (command === '/where') {
+      await adapter.sendText(msg.channelId, this.formatCurrentWhatsAppWorkspace(homeWorkspaceId, msg.channelId))
+      return true
+    }
+    if (command === '/use') {
+      await this.handleWhatsAppUseWorkspace(homeWorkspaceId, adapter, msg)
+      return true
+    }
+
+    if (wasBound || text.startsWith('/')) return false
+
+    await this.startWhatsAppHomeSession(homeWorkspaceId, adapter, msg)
+    return true
+  }
+
+  private async handleWhatsAppUseWorkspace(
+    homeWorkspaceId: string,
+    adapter: PlatformAdapter,
+    msg: IncomingMessage,
+  ): Promise<void> {
+    const query = msg.text.replace(/^\/use\s*/i, '').trim()
+    if (!query) {
+      await adapter.sendText(msg.channelId, 'Use: /use <workspace name>')
+      return
+    }
+    const workspace = this.resolveWorkspace(query)
+    if (!workspace) {
+      await adapter.sendText(msg.channelId, `Workspace not found: ${query}\n\n${this.formatWorkspaceList(homeWorkspaceId, msg.channelId)}`)
+      return
+    }
+    this.saveWhatsAppRoute(homeWorkspaceId, msg.channelId, workspace.id)
+
+    const homeState = this.workspaces.get(homeWorkspaceId) ?? this.bootstrapWorkspace(homeWorkspaceId)
+    homeState.gateway.getBindingStore().unbind('whatsapp', msg.channelId)
+    this.emitBindingChanged(homeWorkspaceId)
+
+    await adapter.sendText(msg.channelId, `Routing this WhatsApp chat to ${workspace.name}. Send a message to start HNIC there.`)
+  }
+
+  private async startWhatsAppHomeSession(
+    homeWorkspaceId: string,
+    adapter: PlatformAdapter,
+    msg: IncomingMessage,
+  ): Promise<void> {
+    const workspace = this.resolveWorkspace(this.loadWhatsAppRoute(homeWorkspaceId).routes[msg.channelId] ?? homeWorkspaceId)
+      ?? this.resolveWorkspace(homeWorkspaceId)
+    if (!workspace) {
+      await adapter.sendText(msg.channelId, 'Could not resolve the target workspace.')
+      return
+    }
+
+    try {
+      const agentOptions = await this.opts.sessionManager.resolveAgentSessionOptions(workspace.id, CONCIERGE_SLUG)
+      const session = await this.opts.sessionManager.createSession(workspace.id, {
+        ...agentOptions,
+        name: `WhatsApp - ${msg.senderName ?? msg.senderId}`,
+      })
+
+      const homeState = this.workspaces.get(homeWorkspaceId) ?? this.bootstrapWorkspace(homeWorkspaceId)
+      homeState.gateway.getBindingStore().bind(
+        workspace.id,
+        session.id,
+        'whatsapp',
+        msg.channelId,
+        msg.senderName,
+      )
+      this.emitBindingChanged(homeWorkspaceId)
+
+      await this.opts.sessionManager.sendMessage(
+        session.id,
+        msg.text,
+        this.resolveAttachments(msg),
+        undefined,
+        undefined,
+      )
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err)
+      this.log.error('failed to start WhatsApp home session', {
+        event: 'whatsapp_home_session_failed',
+        homeWorkspaceId,
+        channelId: msg.channelId,
+        error: err,
+      })
+      await adapter.sendText(msg.channelId, `Could not start HNIC: ${errorMsg}`)
+    }
+  }
+
+  private formatWorkspaceList(homeWorkspaceId: string, channelId: string): string {
+    const currentId = this.loadWhatsAppRoute(homeWorkspaceId).routes[channelId] ?? homeWorkspaceId
+    const workspaces = this.opts.sessionManager.getWorkspaces()
+    const lines = workspaces.map((workspace) => {
+      const marker = workspace.id === currentId ? '*' : '-'
+      return `${marker} ${workspace.name}`
+    })
+    return `Workspaces:\n${lines.join('\n')}\n\nSwitch with: /use <workspace name>`
+  }
+
+  private formatCurrentWhatsAppWorkspace(homeWorkspaceId: string, channelId: string): string {
+    const workspaceId = this.loadWhatsAppRoute(homeWorkspaceId).routes[channelId] ?? homeWorkspaceId
+    const workspace = this.resolveWorkspace(workspaceId)
+    return `Current WhatsApp workspace: ${workspace?.name ?? workspaceId}`
+  }
+
+  private resolveWorkspace(query: string): ReturnType<ISessionManager['getWorkspaces']>[number] | null {
+    const normalized = query.trim().toLowerCase()
+    const workspaces = this.opts.sessionManager.getWorkspaces()
+    return workspaces.find((ws) => ws.id === query || ws.name === query)
+      ?? workspaces.find((ws) => ws.name.toLowerCase() === normalized)
+      ?? workspaces.find((ws) => ws.name.toLowerCase().includes(normalized))
+      ?? null
+  }
+
+  private loadWhatsAppRoute(homeWorkspaceId: string): WhatsAppHomeRouteMap {
+    const file = this.getWhatsAppRoutesFile(homeWorkspaceId)
+    try {
+      if (!existsSync(file)) return { routes: {} }
+      const parsed = JSON.parse(readFileSync(file, 'utf-8')) as Partial<WhatsAppHomeRouteMap>
+      return { routes: parsed.routes && typeof parsed.routes === 'object' ? parsed.routes : {} }
+    } catch {
+      return { routes: {} }
+    }
+  }
+
+  private saveWhatsAppRoute(homeWorkspaceId: string, channelId: string, workspaceId: string): void {
+    const file = this.getWhatsAppRoutesFile(homeWorkspaceId)
+    const current = this.loadWhatsAppRoute(homeWorkspaceId)
+    current.routes[channelId] = workspaceId
+    mkdirSync(join(this.opts.getMessagingDir(homeWorkspaceId)), { recursive: true })
+    writeFileSync(file, JSON.stringify(current, null, 2), 'utf-8')
+  }
+
+  private getWhatsAppRoutesFile(homeWorkspaceId: string): string {
+    return join(this.opts.getMessagingDir(homeWorkspaceId), 'whatsapp-routes.json')
+  }
+
+  private isWhatsAppHomeGatewayEnabled(homeWorkspaceId: string): boolean {
+    const state = this.workspaces.get(homeWorkspaceId) ?? this.bootstrapWorkspace(homeWorkspaceId)
+    return state.configStore.get().platforms.whatsapp?.selfChatMode ?? true
+  }
+
+  private resolveAttachments(msg: IncomingMessage): FileAttachment[] | undefined {
+    if (!msg.attachments?.length) return undefined
+    const built: FileAttachment[] = []
+    for (const attachment of msg.attachments) {
+      if (!attachment.localPath) continue
+      const file = readFileAttachment(attachment.localPath) as FileAttachment | null
+      if (!file) continue
+      if (attachment.fileName) file.name = attachment.fileName
+      built.push(file)
+    }
+    return built.length > 0 ? built : undefined
   }
 }
 

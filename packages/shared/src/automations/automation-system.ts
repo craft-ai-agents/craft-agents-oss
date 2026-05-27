@@ -292,6 +292,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
     bound: boolean;
     wasBound?: boolean;
     boundAfterRoute?: boolean;
+    handledByGateway?: boolean;
     attachmentCount: number;
     sentAt: number;
   }): Promise<void> {
@@ -308,6 +309,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
       bound: input.bound,
       wasBound: input.wasBound ?? input.bound,
       boundAfterRoute: input.boundAfterRoute ?? input.bound,
+      handledByGateway: input.handledByGateway,
       attachmentCount: input.attachmentCount,
       hasAttachment: input.attachmentCount > 0,
       sentAt: input.sentAt,

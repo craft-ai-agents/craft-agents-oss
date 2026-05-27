@@ -346,6 +346,11 @@ export class Commands {
     const bindLine = adapter.platform === 'whatsapp'
       ? '/bind — list recent sessions (then use /bind <number>)\n'
       : '/bind — pick from recent sessions\n'
+    const whatsappHomeLines = adapter.platform === 'whatsapp'
+      ? '/workspaces — list Home Gateway workspaces\n' +
+        '/where — show current Home Gateway workspace\n' +
+        '/use <workspace> — route this WhatsApp chat to a workspace\n'
+      : ''
 
     await adapter.sendText(
       msg.channelId,
@@ -355,6 +360,7 @@ export class Commands {
       '/bind <id> — bind to specific session\n' +
       '/pair <code> — redeem an app-generated pairing code\n' +
       '/unbind — disconnect this chat\n' +
+      whatsappHomeLines +
       '/status — show current binding\n' +
       '/stop — abort current agent run\n' +
       '/help — show this message',

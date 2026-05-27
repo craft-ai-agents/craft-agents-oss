@@ -1,0 +1,25 @@
+{
+  "id": "google-ads_20260527",
+  "name": "Google Ads",
+  "slug": "google-ads",
+  "enabled": true,
+  "provider": "google",
+  "type": "local",
+  "icon": "G",
+  "tagline": "Bundled Google Ads CLI for account discovery, GAQL reporting, diagnostics, and approval-gated operations.",
+  "local": {
+    "path": "tools/google-ads",
+    "format": "cli-tool"
+  },
+  "api": {
+    "baseUrl": "https://googleads.googleapis.com",
+    "authType": "oauth",
+    "googleScopes": [
+      "https://www.googleapis.com/auth/adwords",
+      "https://www.googleapis.com/auth/userinfo.email"
+    ]
+  },
+  "connectionStatus": "untested",
+  "createdAt": 1780000000000,
+  "updatedAt": 1780000000000
+}

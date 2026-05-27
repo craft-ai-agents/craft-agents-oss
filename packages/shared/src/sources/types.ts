@@ -198,6 +198,10 @@ export function isApiOAuthProvider(provider: string | undefined): provider is Ap
  * - API sources with OAuth providers (google, slack, microsoft)
  */
 export function isOAuthSource(source: LoadedSource): boolean {
+  if (source.config.slug === 'google-ads') {
+    return source.config.provider === 'google' && source.config.api?.authType === 'oauth';
+  }
+
   // MCP OAuth sources
   if (source.config.type === 'mcp') {
     return source.config.mcp?.authType === 'oauth';

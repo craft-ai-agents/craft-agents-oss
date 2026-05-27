@@ -67,3 +67,4 @@ Stop and regroup if:
 - chat layout has hidden width assumptions that make adaptive sidecar unsafe
 - implementing Phase 1 requires broad router/session persistence changes
 - any proposed change touches unrelated messaging/automation dirty work
+

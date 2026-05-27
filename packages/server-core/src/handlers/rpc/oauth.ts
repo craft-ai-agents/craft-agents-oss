@@ -5,6 +5,7 @@ import { loadAllSources, loadGlobalSource, getSourceCredentialManager, getSource
 import { createPendingFlow } from '@craft-agent/shared/auth'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { syncGoogleAdsCredentialCache } from './google-ads-credential-cache'
 
 async function reloadSourcesForWorkspace(deps: HandlerDeps, workspaceRootPath: string, log: HandlerDeps['platform']['logger'], label: string): Promise<void> {
   try {
@@ -199,6 +200,8 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
 
         const workspace = getWorkspaceByNameOrId(flow.workspaceId)
         if (!workspace) return
+        const [source] = getSourcesBySlugs(workspace.rootPath, [flow.sourceSlug])
+        if (source) await syncGoogleAdsCredentialCache(source)
         await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'OAUTH_SOURCE_CREDENTIALS_CHANGED')
         pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId: flow.workspaceId }, flow.workspaceId, loadAllSources(workspace.rootPath))
       },
@@ -242,6 +245,7 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     }
 
     await credManager.delete(source)
+    await syncGoogleAdsCredentialCache(source)
     credManager.markSourceNeedsReauth(source, 'Signed out by user')
 
     // Push source status update

@@ -83,6 +83,7 @@ export interface WorkflowRunnerDeps {
   resolveAgentSessionOptions?: (
     workspaceId: string,
     agentSlug: string,
+    options?: { referenceMode?: 'strict' | 'lenient' },
   ) => Promise<Partial<CreateSessionOptions>>;
   /** Cheap preflight for step agent availability before a run is persisted. */
   preflightStepAgent?: (

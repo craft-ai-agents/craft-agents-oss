@@ -32,29 +32,7 @@ Verification:
 - Sidecar can open/collapse/focus without changing sessions.
 - No persistent storage yet unless needed for the panel state.
 
-## Phase 2A: Output-Backed Canvas Viewer
-
-Goal: the Canvas panel renders real session-linked outputs.
-
-Tasks:
-
-1. Reuse existing Outputs manifests as visual artifacts.
-2. Load outputs where `origin.sessionId` matches the active session.
-3. Open the newest visual output from the Canvas toggle.
-4. Render image, video, markdown/text/json, receipt, and link previews.
-5. Add a compact output selector when multiple outputs exist.
-6. Keep placeholder canvas only when no session output exists.
-
-Detailed execution spec: [08 Phase 2 Execution Spec](./08-phase-2-execution-spec.md).
-
-Verification:
-
-- Session-linked output opens in Canvas.
-- Multiple session outputs can be selected.
-- Reload rediscovers output manifests.
-- Roll-up and sidecar layouts preserve chat usability.
-
-## Phase 2B: tldraw Canvas MVP
+## Phase 2: tldraw Canvas MVP
 
 Goal: one session can own a persistent canvas.
 
@@ -135,8 +113,6 @@ Verification:
 ## Phase 5: Additional Surface Types
 
 Goal: extend the protocol without changing chat.
-
-Detailed first execution spec: [13 Phase 5A Adapter Registry Spec](./13-phase-5a-adapter-registry-spec.md).
 
 Candidates:
 

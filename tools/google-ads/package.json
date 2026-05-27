@@ -1,0 +1,12 @@
+{
+  "name": "@runneros/google-ads-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "runner-google-ads": "bin/google-ads.mjs"
+  },
+  "scripts": {
+    "doctor": "node bin/google-ads.mjs doctor --agent"
+  }
+}

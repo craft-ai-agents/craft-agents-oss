@@ -46,6 +46,11 @@ export interface ISessionManager {
   getSessions(workspaceId?: string): Session[]
   getSession(sessionId: string): Promise<Session | null>
   createSession(workspaceId: string, options?: CreateSessionOptions): Promise<Session>
+  resolveAgentSessionOptions(
+    workspaceId: string,
+    agentSlug: string,
+    options?: { referenceMode?: 'strict' | 'lenient' },
+  ): Promise<Partial<CreateSessionOptions>>
   deleteSession(sessionId: string): Promise<void>
 
   // ---------------------------------------------------------------------------

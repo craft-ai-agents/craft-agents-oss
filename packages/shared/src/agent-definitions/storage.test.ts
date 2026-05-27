@@ -480,7 +480,37 @@ body
     expect(socialPublisher?.metadata.skills).toEqual(['social-publishing'])
     expect(socialPublisher?.metadata.sources).toEqual(['printing-press-social'])
     expect(socialPublisher?.systemPrompt).toContain('browser_tool')
+    expect(socialPublisher?.systemPrompt).toContain('chrome-cdp')
     expect(socialPublisher?.systemPrompt).toContain('not Playwright')
+  })
+
+  test('starter library includes the Ads Agent with bundled Google Ads source', () => {
+    const adsAgent = STARTER_AGENTS.find((agent) => agent.slug === 'ads-agent')
+
+    expect(adsAgent?.metadata.skills).toContain('google-ads')
+    expect(adsAgent?.metadata.skills).toContain('ad-creative')
+    expect(adsAgent?.metadata.sources).toContain('google-ads')
+    expect(adsAgent?.metadata.sources).toContain('meta-ads')
+    expect(adsAgent?.systemPrompt).toContain('node bin/google-ads.mjs')
+    expect(adsAgent?.systemPrompt).toContain('explicit user approval')
+  })
+
+  test('starter library includes the YouTube Research Agent as read-only', () => {
+    const youtubeAgent = STARTER_AGENTS.find((agent) => agent.slug === 'youtube-research-agent')
+
+    expect(youtubeAgent?.metadata.skills).toContain('youtube-research')
+    expect(youtubeAgent?.metadata.sources).toContain('youtube-research')
+    expect(youtubeAgent?.systemPrompt).toContain('node bin/youtube-research.mjs')
+    expect(youtubeAgent?.systemPrompt).toContain('You do not publish')
+  })
+
+  test('starter library includes the Update System Agent as read-only maintenance', () => {
+    const updateAgent = STARTER_AGENTS.find((agent) => agent.slug === 'update-system-agent')
+
+    expect(updateAgent).toBeDefined()
+    expect(updateAgent?.metadata.permissionMode).toBe('safe')
+    expect(updateAgent?.metadata.tags).toContain('maintenance')
+    expect(updateAgent?.systemPrompt).toContain('update_system_audit.py')
   })
 
   test('ensureRequiredAgents does not recreate an app-deleted required agent', () => {
