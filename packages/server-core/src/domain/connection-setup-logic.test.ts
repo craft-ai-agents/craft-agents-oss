@@ -80,7 +80,7 @@ describe('resolveCustomEndpointSetup', () => {
       customEndpointApi: 'anthropic-messages',
     })
 
-    expect(result).toEqual({ authType: 'api_key_with_endpoint', piAuthProvider: 'anthropic' })
+    expect(result).toEqual({ authType: 'api_key_with_endpoint' })
   })
 
   it('treats remote endpoints with a credential as keyed custom endpoints', () => {
@@ -139,9 +139,10 @@ describe('createBuiltInConnection seeds midStreamBehavior', () => {
     expect(conn.midStreamBehavior).toBe('steer')
   })
 
-  it("anthropic-api with custom endpoint becomes pi_compat → 'steer'", () => {
+  it("anthropic-api with custom endpoint becomes anthropic_compat and uses Claude-style 'queue'", () => {
     const conn = createBuiltInConnection('anthropic-api', 'http://localhost:11434/v1')
-    expect(conn.providerType).toBe('pi_compat')
-    expect(conn.midStreamBehavior).toBe('steer')
+    expect(conn.providerType).toBe('anthropic_compat')
+    expect(conn.customEndpoint).toEqual({ api: 'anthropic-messages' })
+    expect(conn.midStreamBehavior).toBe('queue')
   })
 })

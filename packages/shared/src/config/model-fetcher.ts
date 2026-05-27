@@ -7,7 +7,7 @@
  * has a registered fetcher — adding a new LlmProviderType without a fetcher
  * causes a type error.
  *
- * Compat providers (pi_compat) are excluded —
+ * Compat providers (pi_compat, anthropic_compat) are excluded —
  * they point to arbitrary endpoints where users configure models manually.
  */
 
@@ -28,6 +28,7 @@ import type { LlmProviderType, LlmConnection } from './llm-connections';
  */
 export type FetchableProvider = Exclude<LlmProviderType,
   | 'pi_compat'
+  | 'anthropic_compat'
 >;
 
 /**

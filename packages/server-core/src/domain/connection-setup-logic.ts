@@ -11,7 +11,7 @@ import {
   type CustomEndpointApi,
   getDefaultModelsForConnection,
   getDefaultModelForConnection,
-  defaultMidStreamBehavior,
+  resolveMidStreamBehavior,
 } from '@craft-agent/shared/config'
 
 // ============================================================
@@ -111,7 +111,7 @@ export function resolveCustomEndpointSetup(input: {
 }): {
   authType: Extract<LlmConnection['authType'], 'none' | 'api_key_with_endpoint'>
   name?: 'Local Model'
-  piAuthProvider?: 'openai' | 'anthropic'
+  piAuthProvider?: 'openai'
 } {
   const isKeylessLoopback = isLoopbackBaseUrl(input.baseUrl) && !input.credential
   if (isKeylessLoopback) {
@@ -119,7 +119,7 @@ export function resolveCustomEndpointSetup(input: {
   }
   return {
     authType: 'api_key_with_endpoint',
-    piAuthProvider: input.customEndpointApi === 'anthropic-messages' ? 'anthropic' : 'openai',
+    piAuthProvider: input.customEndpointApi === 'openai-completions' ? 'openai' : undefined,
   }
 }
 
@@ -139,7 +139,7 @@ export const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
 }> = {
   'anthropic-api': {
     name: (h) => h ? 'Custom Anthropic-Compatible' : 'Anthropic (API Key)',
-    providerType: (h) => h ? 'pi_compat' : 'anthropic',
+    providerType: (h) => h ? 'anthropic_compat' : 'anthropic',
     authType: (h) => h ? 'api_key_with_endpoint' : 'api_key',
   },
   'claude-max': {
@@ -230,7 +230,7 @@ export function createBuiltInConnection(slug: string, baseUrl?: string | null): 
     name = `${name} ${suffixMatch[1]}`
   }
 
-  return {
+  const connection: LlmConnection = {
     slug,
     name,
     providerType,
@@ -239,9 +239,16 @@ export function createBuiltInConnection(slug: string, baseUrl?: string | null): 
     defaultModel: getDefaultModelForConnection(providerType, template.piAuthProvider),
     modelSelectionMode: providerType === 'pi' ? 'automaticallySyncedFromProvider' : undefined,
     piAuthProvider: template.piAuthProvider,
-    midStreamBehavior: defaultMidStreamBehavior(providerType),
     createdAt: Date.now(),
   }
+
+  if (baseSlug === 'anthropic-api' && hasCustomEndpoint) {
+    connection.customEndpoint = { api: 'anthropic-messages' }
+  }
+
+  connection.midStreamBehavior = resolveMidStreamBehavior(connection)
+
+  return connection
 }
 
 // ============================================================

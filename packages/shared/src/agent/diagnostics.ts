@@ -135,6 +135,7 @@ function getProviderLabelFromType(providerType?: LlmProviderType, baseUrl?: stri
   if (providerType) {
     switch (providerType) {
       case 'anthropic': return 'Anthropic';
+      case 'anthropic_compat': return 'Anthropic-Compatible';
       case 'pi':
       case 'pi_compat': return 'Craft Agents Backend';
     }
