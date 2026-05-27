@@ -12,18 +12,22 @@
 
 import { inflateSync } from 'fflate'
 
+function byteAt(buf: Uint8Array, off: number): number {
+  return buf[off] ?? 0
+}
+
 function readU16LE(buf: Uint8Array, off: number): number {
-  return buf[off] | (buf[off + 1] << 8)
+  return byteAt(buf, off) | (byteAt(buf, off + 1) << 8)
 }
 
 function readU32LE(buf: Uint8Array, off: number): number {
-  return ((buf[off] | (buf[off + 1] << 8) | (buf[off + 2] << 16) | (buf[off + 3] << 24)) >>> 0)
+  return ((byteAt(buf, off) | (byteAt(buf, off + 1) << 8) | (byteAt(buf, off + 2) << 16) | (byteAt(buf, off + 3) << 24)) >>> 0)
 }
 
 const utf8 = new TextDecoder('utf-8')
 let gbk: TextDecoder | null = null
 function getGbkDecoder(): TextDecoder {
-  if (!gbk) gbk = new TextDecoder('gbk')
+  if (!gbk) gbk = new TextDecoder('gbk' as unknown as 'utf-8')
   return gbk
 }
 
@@ -53,8 +57,8 @@ export function unzipSyncEncoding(zipBytes: Uint8Array): Record<string, Uint8Arr
   let eocdPos = -1
   for (let i = len - 22; i >= Math.max(0, len - 65558); i--) {
     if (
-      zipBytes[i] === 0x50 && zipBytes[i + 1] === 0x4B &&
-      zipBytes[i + 2] === 0x05 && zipBytes[i + 3] === 0x06
+      byteAt(zipBytes, i) === 0x50 && byteAt(zipBytes, i + 1) === 0x4B &&
+      byteAt(zipBytes, i + 2) === 0x05 && byteAt(zipBytes, i + 3) === 0x06
     ) {
       eocdPos = i
       break
@@ -71,8 +75,8 @@ export function unzipSyncEncoding(zipBytes: Uint8Array): Record<string, Uint8Arr
   for (let i = 0; i < numEntries; i++) {
     // Central Directory Entry signature: PK\x01\x02
     if (
-      zipBytes[pos] !== 0x50 || zipBytes[pos + 1] !== 0x4B ||
-      zipBytes[pos + 2] !== 0x01 || zipBytes[pos + 3] !== 0x02
+      byteAt(zipBytes, pos) !== 0x50 || byteAt(zipBytes, pos + 1) !== 0x4B ||
+      byteAt(zipBytes, pos + 2) !== 0x01 || byteAt(zipBytes, pos + 3) !== 0x02
     ) break
 
     const gpFlag         = readU16LE(zipBytes, pos + 8)

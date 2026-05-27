@@ -32,6 +32,16 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
+
+// Expand a leading ~ to the home directory. On Windows the shell does not expand
+// tildes, so a portable path like ~/.mdp-agent/workspaces/ws passed via CLI arg
+// or environment variable would be used literally, creating a "~" directory.
+function expandTildePath(p: string): string {
+  if (p === '~') return homedir();
+  if (p.startsWith('~/') || p.startsWith('~\\')) return join(homedir(), p.slice(2));
+  return p;
+}
 import { isDeveloperFeedbackEnabled } from '@craft-agent/shared/feature-flags';
 // Import from session-tools-core
 import {
@@ -242,7 +252,10 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
 
     // Developer feedback: write one JSON file per entry to {configDir}/feedback/
     submitFeedback: (feedback) => {
-      const configDir = process.env.CRAFT_CONFIG_DIR || join(workspaceRootPath, '..', '..');
+      const rawCraftConfigDir = process.env.CRAFT_CONFIG_DIR;
+      const configDir = rawCraftConfigDir
+        ? expandTildePath(rawCraftConfigDir)
+        : join(workspaceRootPath, '..', '..');
       const feedbackDir = join(configDir, 'feedback');
       mkdirSync(feedbackDir, { recursive: true });
       const filePath = join(feedbackDir, `${feedback.id}.json`);
@@ -493,6 +506,9 @@ async function main() {
     console.error('Usage: session-mcp-server --session-id <id> --workspace-root <path> --plans-folder <path>');
     process.exit(1);
   }
+
+  workspaceRootPath = expandTildePath(workspaceRootPath);
+  plansFolderPath = expandTildePath(plansFolderPath);
 
   const config: SessionConfig = {
     sessionId,

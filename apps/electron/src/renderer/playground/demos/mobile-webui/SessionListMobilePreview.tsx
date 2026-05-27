@@ -61,7 +61,6 @@ export function SessionListMobilePreview({
             onSessionStatusChange={log('onSessionStatusChange')}
             onRename={log('onRename')}
             onFocusChatInput={log('onFocusChatInput')}
-            onSessionSelect={log('onSessionSelect')}
             onOpenInNewWindow={log('onOpenInNewWindow')}
             onNavigateToView={log('onNavigateToView')}
             searchActive={searchActive}

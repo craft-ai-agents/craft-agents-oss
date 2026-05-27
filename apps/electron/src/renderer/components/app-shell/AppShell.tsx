@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useTranslation, Trans } from "react-i18next"
 import { useRef, useState, useEffect, useCallback, useMemo } from "react"
-import { useAtomValue, useStore } from "jotai"
+import { useAtomValue } from "jotai"
 import {
   Archive,
   Settings,
@@ -58,8 +58,8 @@ import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSourc
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
-import { panelStackAtom, panelCountAtom, focusedPanelIdAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom } from "@/atoms/panel-stack"
-import { openFileTabAtom } from "@/atoms/editor-tabs"
+import { focusedSessionIdAtom } from "@/atoms/panel-stack"
+import { hasOpenTabsAtom, openFileTabAtom } from "@/atoms/editor-tabs"
 import { type SessionStatus, statusConfigsToSessionStatuses } from "@/config/session-status-config"
 import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
@@ -130,7 +130,7 @@ import {
   loadEditorPanelOpenPreference,
   persistEditorPanelOpenPreference,
 } from "./editor-panel-state"
-import { resolveSessionPanelNavigation } from "./session-panel-routing"
+import { getSessionClickRoute } from "./session-click-route"
 import { createAllSessionsSidebarItem } from "./all-sessions-sidebar-item"
 import { createArchivedSidebarItem, ARCHIVED_NAV_ID } from "./archived-sidebar-item"
 import {
@@ -265,13 +265,13 @@ function AppShellContent({
   const resizeHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
   const { resolvedMode, isDark, setMode } = useTheme()
-  const { canGoBack, canGoForward, goBack, goForward, navigateToSource, navigateToSession } = useNavigation()
+  const { canGoBack, canGoForward, goBack, goForward, navigateToSource } = useNavigation()
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
   const { handleEscapePress } = useEscapeInterrupt()
 
   // UNIFIED NAVIGATION STATE - single source of truth from NavigationContext
-  // Derived from focused panel's route — all panels are peers
+  // Derived from the single content panel's route.
   const navState = useNavigationState()
   const isLocalSkillsNav = isLocalSkillsNavigation(navState)
   const isSkillMarketplaceNav = isSkillMarketplaceNavigation(navState)
@@ -327,9 +327,6 @@ function AppShellContent({
     setCollapsedItems(prev => toggleCollapsedSidebarItem(prev, id))
   }, [])
   const isAllSessionsExpanded = isExpanded(ALL_SESSIONS_NAV_ITEM_ID)
-  const store = useStore()
-  const panelStack = useAtomValue(panelStackAtom)
-  const panelCount = useAtomValue(panelCountAtom)
   const focusedSessionId = useAtomValue(focusedSessionIdAtom)
   const sidebarLayout = resolveSidebarLayout({
     navState,
@@ -341,36 +338,26 @@ function AppShellContent({
     activeSessionId: focusedSessionId,
     navState,
   })
+  const hasOpenTabs = useAtomValue(hasOpenTabsAtom)
+  const prevHasOpenTabsRef = React.useRef(hasOpenTabs)
+  useEffect(() => {
+    if (hasOpenTabs && !prevHasOpenTabsRef.current) {
+      setIsEditorPanelOpen(true)
+    }
+    prevHasOpenTabsRef.current = hasOpenTabs
+  }, [hasOpenTabs])
   const isPanelStackRightSidebarVisible = resolvePanelStackRightSidebarVisible(
     areContextualPanelsAvailable,
     isRightSidebarOpen,
   )
 
-  // Navigate the focused panel to a session.
-  // If the session is already open in another panel, focus that panel unless
-  // the current navigator needs a route-specific session view.
-  const setFocusedPanel = useSetAtom(focusedPanelIdAtom)
   const openFileTab = useSetAtom(openFileTabAtom)
   const navigateToSessionInPanel = useCallback((sessionId: string) => {
-    const result = resolveSessionPanelNavigation({
+    navigate(getSessionClickRoute({
       navState,
-      panelStack: store.get(panelStackAtom),
       sessionId,
-    })
-
-    if (result.type === 'focus') {
-      setFocusedPanel(result.panelId)
-      return
-    }
-
-    if (result.type === 'navigate-route') {
-      navigate(result.route)
-      return
-    }
-
-    // Not open in any panel — navigate() updates the focused panel
-    navigateToSession(sessionId)
-  }, [navState, store, setFocusedPanel, navigateToSession])
+    }))
+  }, [navState])
 
   const sessionsContext = React.useMemo(() => {
     if (isSessionsNavigation(navState)) {
@@ -652,10 +639,9 @@ function AppShellContent({
   }, { enabled: () => !document.querySelector('[role="dialog"]') })
 
   // Shift+Tab cycles permission mode through enabled modes (textarea handles its own, this handles when focus is elsewhere)
-  // In multi-panel, targets the focused panel's session
   const effectiveSessionId = focusedSessionId ?? session.selected
 
-  // Focus chat input for the target session only (multi-panel safe).
+  // Focus chat input for the target session only.
   const focusChatInputForSession = useCallback((targetSessionId?: string | null) => {
     if (!targetSessionId) return
     dispatchFocusInputEvent({ sessionId: targetSessionId })
@@ -689,15 +675,8 @@ function AppShellContent({
   // Focus mode toggle (CMD+.) - hides both sidebars
   useAction('view.toggleFocusMode', () => setIsSidebarAndNavigatorHidden(v => !v))
 
-  // Panel focus navigation (CMD+SHIFT+[ / ])
-  const focusNextPanel = useSetAtom(focusNextPanelAtom)
-  const focusPrevPanel = useSetAtom(focusPrevPanelAtom)
-  useAction('panel.focusNext', focusNextPanel, { enabled: () => panelCount > 1 })
-  useAction('panel.focusPrev', focusPrevPanel, { enabled: () => panelCount > 1 })
-
   // New chat
   useAction('app.newChat', () => handleNewChat())
-  useAction('app.newChatInPanel', () => handleNewChat(true))
 
   // Settings
   useAction('app.settings', onOpenSettings)
@@ -729,7 +708,6 @@ function AppShellContent({
 
   // ESC to stop processing - requires double-press within 1 second
   // First press shows warning overlay, second press interrupts
-  // In multi-panel, targets the focused panel's session
   useAction('chat.stopProcessing', () => {
     if (effectiveSessionId) {
       const meta = sessionMetaMap.get(effectiveSessionId)
@@ -1357,7 +1335,7 @@ function AppShellContent({
   }, [captureContextMenuPosition])
 
   // Create a new chat and select it
-  const handleNewChat = useCallback((newPanel: boolean = false) => {
+  const handleNewChat = useCallback(() => {
     if (!activeWorkspace) return
 
     // Exit search mode and switch to All Sessions
@@ -1365,10 +1343,7 @@ function AppShellContent({
     setSearchQuery('')
 
     // Delegate to NavigationContext which handles session creation
-    navigate(
-      routes.action.newSession(),
-      newPanel ? { newPanel: true, targetLaneId: 'main' } : undefined
-    )
+    navigate(routes.action.newSession())
 
     // Focus the chat input after navigation completes
     setTimeout(() => focusZone('chat', { intent: 'programmatic' }), 50)
@@ -1670,14 +1645,7 @@ function AppShellContent({
     })
   }, [sessionFilter, labelCounts, activeWorkspace?.id, handleLabelClick, isExpanded, toggleExpanded, openConfigureLabels, handleAddLabel, handleDeleteLabel])
 
-  let sessionListFocusedSessionId: string | null | undefined
-  if (panelCount === 0) {
-    sessionListFocusedSessionId = null
-  } else if (panelCount > 1) {
-    sessionListFocusedSessionId = focusedSessionId
-  }
-
-  const sessionListNavigateToSession = panelCount > 1 ? navigateToSessionInPanel : undefined
+  const sessionListNavigateToSession = navigateToSessionInPanel
 
   const renderSessionList = (key: string, items: SessionMeta[], heightBehavior?: SessionListHeightBehavior) => (
     <SessionList
@@ -1693,9 +1661,6 @@ function AppShellContent({
       onRename={onRenameSession}
       onFocusChatInput={(targetSessionId) => {
         focusChatInputForSession(targetSessionId ?? focusedSessionId ?? session.selected)
-      }}
-      onSessionSelect={(selectedMeta) => {
-        navigateToSession(selectedMeta.id)
       }}
       onOpenInNewWindow={(selectedMeta) => {
         if (activeWorkspaceId) {
@@ -1714,7 +1679,7 @@ function AppShellContent({
       sessionStatuses={effectiveSessionStatuses}
       evaluateViews={evaluateViews}
       workspaceId={activeWorkspaceId ?? undefined}
-      focusedSessionId={sessionListFocusedSessionId}
+      focusedSessionId={undefined}
       onNavigateToSession={sessionListNavigateToSession}
       hasPendingPrompt={hasPendingPrompt}
       activeChatMatchInfo={chatMatchInfo}
@@ -1759,7 +1724,6 @@ function AppShellContent({
           onToggleSidebar={handleToggleSidebar}
           onToggleRightSidebar={handleToggleRightSidebar}
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
-          onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
           isRightSidebarToggleVisible={areContextualPanelsAvailable}
           isEditorPanelToggleVisible={areContextualPanelsAvailable}
@@ -1802,7 +1766,7 @@ function AppShellContent({
                           <ContextMenuTrigger asChild>
                             <Button
                               variant="ghost"
-                              onClick={(e) => handleNewChat(e.metaKey || e.ctrlKey)}
+                              onClick={() => handleNewChat()}
                               className="w-full justify-start gap-2 py-[7px] px-2 text-[14px] font-normal rounded-[6px] shadow-minimal bg-background"
                               data-tutorial="new-chat-button"
                             >

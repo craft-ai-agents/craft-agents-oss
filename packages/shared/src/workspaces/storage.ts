@@ -24,7 +24,7 @@ import { getDefaultStatusConfig, saveStatusConfig, ensureDefaultIconFiles } from
 import { getDefaultLabelConfig, saveLabelConfig } from '../labels/storage.ts';
 import { loadConfigDefaults } from '../config/storage.ts';
 import { parsePermissionMode, PERMISSION_MODE_ORDER } from '../agent/mode-types.ts';
-import { normalizeThinkingLevel } from '../agent/thinking-levels.ts';
+import { normalizeThinkingEnabled } from '../agent/thinking-toggle.ts';
 import type {
   WorkspaceConfig,
   CreateWorkspaceInput,
@@ -126,10 +126,14 @@ export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
         : [...PERMISSION_MODE_ORDER];
     }
 
-    if (config.defaults && 'thinkingLevel' in config.defaults) {
-      // TODO: Remove legacy 'think' normalization after old persisted workspace configs
-      // have realistically aged out across upgrades.
-      config.defaults.thinkingLevel = normalizeThinkingLevel(config.defaults.thinkingLevel);
+    if (config.defaults) {
+      const legacyThinkingKey = 'thinking' + 'Level';
+      const defaults = config.defaults as typeof config.defaults & Record<string, unknown>;
+      const rawThinkingEnabled = defaults.thinkingEnabled ?? defaults[legacyThinkingKey];
+      if (rawThinkingEnabled !== undefined) {
+        defaults.thinkingEnabled = normalizeThinkingEnabled(rawThinkingEnabled);
+      }
+      delete defaults[legacyThinkingKey];
     }
 
     if (config.teamPublicKnowledge) {
@@ -316,11 +320,11 @@ export function createWorkspaceAtPath(
   const globalDefaults = loadConfigDefaults();
 
   // Merge global defaults with provided defaults
-  // AI settings (model, thinkingLevel, defaultLlmConnection) are left undefined
+  // AI settings (model, thinkingEnabled, defaultLlmConnection) are left undefined
   // so they fall back to app-level defaults
   const workspaceDefaults: WorkspaceConfig['defaults'] = {
     model: undefined,
-    thinkingLevel: undefined,
+    thinkingEnabled: undefined,
     // defaultLlmConnection: undefined - falls back to app default
     permissionMode: globalDefaults.workspaceDefaults.permissionMode,
     cyclablePermissionModes: globalDefaults.workspaceDefaults.cyclablePermissionModes,

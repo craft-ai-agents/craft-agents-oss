@@ -39,12 +39,12 @@ describe('openllmDriver.buildRuntime', () => {
     else process.env.OPENLLM_HOST = savedOpenLlmHost;
   });
 
-  it('constructs baseUrl from OPENLLM_HOST and the active model', () => {
-    expect(buildRuntime('llama-3').baseUrl).toBe('http://myserver:8000/llm/llama-3/v1');
+  it('constructs baseUrl from OPENLLM_HOST using the unified /v1 endpoint', () => {
+    expect(buildRuntime('llama-3').baseUrl).toBe('http://myserver:8000/v1');
   });
 
-  it('changes baseUrl when the model changes', () => {
-    expect(buildRuntime('mistral-7b').baseUrl).toBe('http://myserver:8000/llm/mistral-7b/v1');
+  it('uses the same baseUrl regardless of model (model is passed in request body)', () => {
+    expect(buildRuntime('mistral-7b').baseUrl).toBe('http://myserver:8000/v1');
   });
 
   it('throws a clear error when OPENLLM_HOST is missing', () => {

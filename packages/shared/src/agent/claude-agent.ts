@@ -20,9 +20,9 @@ import {
   clearClaudeBedrockRoutingEnvVars,
   resolveAuthEnvVars,
 } from '../config/llm-connections.ts';
-import type { McpClientPool } from '../mcp/mcp-pool.ts';
+import type { McpClientPool, McpClientPoolCallOptions } from '../mcp/mcp-pool.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
-import { DEFAULT_MODEL, isClaudeModel, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
+import { DEFAULT_MODEL, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { loadPreferences, formatPreferencesForPrompt, getCoAuthorPreference } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
@@ -71,7 +71,7 @@ import {
 import { getRtkPath } from './core/rtk-detector.ts';
 import { getRtkEnabled } from '../config/storage.ts';
 import type { RtkContext } from './core/rtk-rewrite.ts';
-import { type ThinkingLevel, THINKING_TO_EFFORT, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
+import type { ThinkingEnabled } from './thinking-toggle.ts';
 import { generateConversationSummary } from './conversation-summary.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { sourceNeedsAuthentication } from '../sources/credential-manager.ts';
@@ -143,33 +143,13 @@ const CONVERTIBLE_FILE_HINTS: Record<string, string> = {
 };
 
 export function resolveClaudeThinkingOptions(args: {
-  thinkingLevel: ThinkingLevel;
-  model: string;
-  providerType?: BackendConfig['providerType'];
+  thinkingEnabled: ThinkingEnabled;
   minimizeThinking: boolean;
 }): Partial<Options> {
-  const { thinkingLevel, model, providerType, minimizeThinking } = args;
-  const isClaude = isClaudeModel(model);
-  const effort = THINKING_TO_EFFORT[thinkingLevel];
-  const isHaiku = model.toLowerCase().includes('haiku');
-  const supportsAdaptiveThinking = isClaude && !isHaiku;
-
-  if (minimizeThinking || !isClaude || !effort) {
-    return supportsAdaptiveThinking
-      ? { thinking: { type: 'disabled' as const } }
-      : { maxThinkingTokens: 0 };
+  if (args.minimizeThinking || !args.thinkingEnabled) {
+    return { thinking: { type: 'disabled' as const } };
   }
-
-  if (supportsAdaptiveThinking) {
-    return {
-      thinking: { type: 'adaptive' as const },
-      effort,
-    };
-  }
-
-  return {
-    maxThinkingTokens: getThinkingTokens(thinkingLevel, model),
-  };
+  return { thinking: { type: 'adaptive' as const }, effort: 'xhigh' };
 }
 
 export interface ClaudeAgentConfig {
@@ -177,7 +157,7 @@ export interface ClaudeAgentConfig {
   session?: Session;           // Current session (primary isolation boundary)
   mcpToken?: string;           // Override token (for testing)
   model?: string;
-  thinkingLevel?: ThinkingLevel; // Initial thinking level (defaults to 'medium')
+  thinkingEnabled?: ThinkingEnabled; // Initial thinking toggle (defaults to true)
   onSdkSessionIdUpdate?: (sdkSessionId: string) => void;  // Callback when SDK session ID is captured
   onSdkSessionIdCleared?: () => void;  // Callback when SDK session ID is cleared (e.g., after failed resume)
   /**
@@ -428,10 +408,14 @@ function jsonSchemaToZodShape(schema: Record<string, unknown>, depth = 0): Recor
  * as the server key and original tool names to get the correct final names
  * (e.g., `mcp__linear__createIssue`).
  */
-function createSourceProxyServers(pool: McpClientPool): Record<string, ReturnType<typeof createSdkMcpServer>> {
+function createSourceProxyServers(
+  pool: McpClientPool,
+  options: McpClientPoolCallOptions,
+  slugFilter?: string[]
+): Record<string, ReturnType<typeof createSdkMcpServer>> {
   const servers: Record<string, ReturnType<typeof createSdkMcpServer>> = {};
 
-  for (const slug of pool.getConnectedSlugs()) {
+  for (const slug of slugFilter ?? pool.getConnectedSlugs()) {
     const mcpTools = pool.getTools(slug);
     if (mcpTools.length === 0) continue;
 
@@ -445,7 +429,7 @@ function createSourceProxyServers(pool: McpClientPool): Record<string, ReturnTyp
           ...z.object({}).catchall(z.unknown()).shape,
         },
         async (args: Record<string, unknown>) => {
-          const result = await pool.callTool(proxyName, args);
+          const result = await pool.callTool(proxyName, args, options);
           return {
             content: [{ type: 'text' as const, text: result.content }],
             ...(result.isError ? { isError: true } : {}),
@@ -491,7 +475,7 @@ export class ClaudeAgent extends BaseAgent {
   private safeMode: boolean = false;
   // Event adapter for SDK message → AgentEvent conversion (testable, pluggable)
   private eventAdapter!: ClaudeEventAdapter;
-  // Thinking level is managed by BaseAgent
+  // Thinking toggle is managed by BaseAgent
   // Pinned system prompt components (captured on first chat, used for consistency after compaction)
   private pinnedPreferencesPrompt: string | null = null;
   private pinnedIncludeCoAuthoredBy: boolean | null = null;
@@ -572,7 +556,7 @@ export class ClaudeAgent extends BaseAgent {
       workspace: config.workspace,
       session: config.session,
       model,
-      thinkingLevel: config.thinkingLevel,
+      thinkingEnabled: config.thinkingEnabled,
       mcpToken: config.mcpToken,
       isHeadless: config.isHeadless,
       skipConfigWatcher: config.skipConfigWatcher,
@@ -594,7 +578,7 @@ export class ClaudeAgent extends BaseAgent {
       automationSystem: config.automationSystem,
     };
 
-    // Call BaseAgent constructor - initializes model, thinkingLevel, permissionManager, sourceManager, etc.
+    // Call BaseAgent constructor - initializes model, thinkingEnabled, permissionManager, sourceManager, etc.
     // The inherited this.config is set by super() and compatible with ClaudeAgentConfig
     super(backendConfig, DEFAULT_MODEL, CLAUDE_CONTEXT_WINDOW);
 
@@ -706,7 +690,7 @@ export class ClaudeAgent extends BaseAgent {
   }
 
   // Config watcher methods (startConfigWatcher, stopConfigWatcher) are now inherited from BaseAgent
-  // Thinking level methods (setThinkingLevel, getThinkingLevel) are inherited from BaseAgent
+  // Thinking toggle methods (setThinkingEnabled, getThinkingEnabled) are inherited from BaseAgent
 
   // Permission command utilities (getBaseCommand, isDangerousCommand, extractDomainFromNetworkCommand)
   // are now available via this.permissionManager
@@ -879,7 +863,12 @@ export class ClaudeAgent extends BaseAgent {
       // Regular agents: full set including preferences, docs, and user sources
 
       // Build per-source proxy servers from centralized MCP pool (if available)
-      const sourceProxies = this.config.mcpPool ? createSourceProxyServers(this.config.mcpPool) : {};
+      const sourceProxies = this.config.mcpPool
+        ? createSourceProxyServers(this.config.mcpPool, {
+            sessionPath: getSessionPath(this.workspaceRootPath, sessionId),
+            summarize: this.getSummarizeCallback(),
+          }, this.getActiveSourceSlugs())
+        : {};
       const sourceProxyCount = Object.keys(sourceProxies).length;
       if (sourceProxyCount > 0) {
         debug('[chat] Source proxy servers created for', sourceProxyCount, 'sources');
@@ -920,17 +909,13 @@ export class ClaudeAgent extends BaseAgent {
       }
 
       const thinkingOptions = resolveClaudeThinkingOptions({
-        thinkingLevel: this._thinkingLevel,
-        model,
-        providerType: this.config.providerType,
+        thinkingEnabled: this._thinkingEnabled,
         minimizeThinking: miniConfig.minimizeThinking,
       });
       if ('effort' in thinkingOptions && thinkingOptions.effort) {
-        debug(`[chat] Thinking: level=${this._thinkingLevel}, effort=${thinkingOptions.effort}`);
-      } else if ('maxThinkingTokens' in thinkingOptions) {
-        debug(`[chat] Thinking: level=${this._thinkingLevel}, tokens=${thinkingOptions.maxThinkingTokens}`);
+        debug(`[chat] Thinking: enabled=${this._thinkingEnabled}, effort=${thinkingOptions.effort}`);
       } else {
-        debug(`[chat] Thinking: level=${this._thinkingLevel}, disabled`);
+        debug(`[chat] Thinking: enabled=${this._thinkingEnabled}, disabled`);
       }
 
       // NOTE: Parent-child tracking for subagents is documented below (search for

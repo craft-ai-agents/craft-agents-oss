@@ -25,7 +25,6 @@ import {
   FolderOpen,
   Copy,
   AppWindow,
-  Columns2,
   CloudUpload,
   RefreshCw,
   Send,
@@ -177,12 +176,6 @@ export function SessionMenu({
       </MenuItem>
 
       <Separator />
-
-      {/* Open in New Panel */}
-      <MenuItem onClick={actions.openInNewPanel}>
-        <Columns2 className="h-3.5 w-3.5" />
-        <span className="flex-1">{t("sessionMenu.openInNewPanel")}</span>
-      </MenuItem>
 
       {/* Open in New Window */}
       <MenuItem onClick={onOpenInNewWindow}>

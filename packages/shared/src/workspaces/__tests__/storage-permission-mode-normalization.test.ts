@@ -65,7 +65,7 @@ describe('workspace storage: config normalization', () => {
     expect(loaded?.defaults?.cyclablePermissionModes).toEqual(['safe', 'ask', 'allow-all']);
   });
 
-  it('normalizes legacy defaults.thinkingLevel=think on read', () => {
+  it('normalizes legacy defaults.thinkingLevel=off on read', () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'ws-thinking-legacy-'));
     tempDirs.push(workspaceRoot);
 
@@ -74,7 +74,7 @@ describe('workspace storage: config normalization', () => {
       name: 'Legacy Thinking',
       slug: 'legacy-thinking',
       defaults: {
-        thinkingLevel: 'think',
+        thinkingLevel: 'off',
       },
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -84,6 +84,6 @@ describe('workspace storage: config normalization', () => {
 
     const loaded = loadWorkspaceConfig(workspaceRoot);
     expect(loaded).not.toBeNull();
-    expect(loaded?.defaults?.thinkingLevel).toBe('medium');
+    expect(loaded?.defaults?.thinkingEnabled).toBe(false);
   });
 });
