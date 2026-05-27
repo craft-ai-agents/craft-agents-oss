@@ -18,6 +18,13 @@ The agent should choose the right production lane without making the user unders
 
 ## Installed Capability
 
+Managed local tool:
+
+- `tools/hypermotion`
+- Root command: `bun run hypermotion doctor`
+- Direct command: `node tools/hypermotion/bin/hypermotion.mjs doctor`
+- Owns pinned HyperFrames and Remotion CLI deps outside the RunnerOS app dependency graph.
+
 Installed from SkillsMP:
 
 - `remotion-production` from `DojoCodingLabs/remotion-superpowers`
@@ -45,4 +52,5 @@ Existing useful local skills:
 
 - Confirm the Remotion skill exists in global skill catalogs.
 - Confirm `Hypermotion Agent` is indexed in both RunnerOS-style `.agents` and Codex standalone agent catalogs.
+- Confirm `tools/hypermotion` can render both HyperFrames and Remotion smoke MP4s.
 - Do not touch unrelated dirty RunnerOS work.
