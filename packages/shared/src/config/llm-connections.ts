@@ -63,18 +63,19 @@ export const OPENLLM_ENV_CONNECTION_SLUG = 'openllm-env';
 
 
 /**
- * Build the per-model OpenLLM endpoint URL.
+ * Build the OpenLLM base URL for the OpenAI-compatible unified endpoint.
+ * The model is passed in the request body, not the URL path.
  * @param isBuiltIn - true for the built-in env connection (reads OPENLLM_BASE_HOST);
  *                    false for user-configured connections (reads OPENLLM_HOST).
  */
-export function buildOpenLlmBaseUrl(modelName: string, env: NodeJS.ProcessEnv = process.env, isBuiltIn = false): string {
+export function buildOpenLlmBaseUrl(env: NodeJS.ProcessEnv = process.env, isBuiltIn = false): string {
   const envVarName = isBuiltIn ? 'OPENLLM_BASE_HOST' : 'OPENLLM_HOST';
   const host = env[envVarName]?.trim();
   if (!host) {
     throw new Error(`${envVarName} is required for OpenLLM connections`);
   }
 
-  return `${host.replace(/\/+$/, '')}/llm/${encodeURIComponent(modelName)}/v1`;
+  return `${host.replace(/\/+$/, '')}/v1`;
 }
 
 /**
@@ -350,6 +351,7 @@ export function synthesizeOpenLlmEnvConnection(): LlmConnection | null {
     authType: 'none',
     piAuthProvider: OPENLLM_PI_AUTH_PROVIDER,
     customEndpoint: OPENLLM_CUSTOM_ENDPOINT,
+    baseUrl: buildOpenLlmBaseUrl(process.env, true),
     models,
     defaultModel,
     createdAt: 0,

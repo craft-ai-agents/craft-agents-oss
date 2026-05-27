@@ -58,7 +58,7 @@ describe('buildBackendRuntimeSignature', () => {
     expect(sig({ ...baseCompat, lastUsedAt: 1 })).toBe(sig({ ...baseCompat, lastUsedAt: 2 }))
   })
 
-  it('supports in-place OpenLLM model switches by changing runtime baseUrl without changing restart signature', () => {
+  it('supports in-place OpenLLM model switches via a fixed baseUrl (model passed in request body)', () => {
     const previousHost = process.env.OPENLLM_HOST
     process.env.OPENLLM_HOST = 'http://myserver:8000'
     const connection: LlmConnection = {
@@ -86,11 +86,11 @@ describe('buildBackendRuntimeSignature', () => {
       expect(buildRuntimeConfigUpdate({
         ...llama,
         capabilities: { needsHttpPoolServer: false },
-      }).runtime?.baseUrl).toBe('http://myserver:8000/llm/llama-3/v1')
+      }).runtime?.baseUrl).toBe('http://myserver:8000/v1')
       expect(buildRuntimeConfigUpdate({
         ...mistral,
         capabilities: { needsHttpPoolServer: false },
-      }).runtime?.baseUrl).toBe('http://myserver:8000/llm/mistral-7b/v1')
+      }).runtime?.baseUrl).toBe('http://myserver:8000/v1')
       expect(buildRuntimeConfigUpdate({
         ...mistral,
         capabilities: { needsHttpPoolServer: false },
