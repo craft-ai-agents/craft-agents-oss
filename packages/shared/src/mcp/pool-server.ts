@@ -58,6 +58,10 @@ export class McpPoolServer {
     this.getCallToolOptions = options?.getCallToolOptions;
   }
 
+  setSlugFilter(slugFilter: string[] | undefined): void {
+    this.slugFilter = slugFilter;
+  }
+
   private debug(msg: string): void {
     this.debugFn?.(`[McpPoolServer] ${msg}`);
   }

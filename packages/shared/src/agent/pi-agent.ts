@@ -537,7 +537,7 @@ export class PiAgent extends BaseAgent {
    */
   private registerPoolToolsWithSubprocess(): void {
     if (!this.mcpPool) return;
-    const proxyDefs = this.mcpPool.getProxyToolDefs();
+    const proxyDefs = this.mcpPool.getProxyToolDefs(this.getActiveSourceSlugs());
     if (proxyDefs.length > 0) {
       this.send({
         type: 'register_tools',

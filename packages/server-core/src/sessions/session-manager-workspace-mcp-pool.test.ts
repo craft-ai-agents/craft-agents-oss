@@ -21,16 +21,19 @@ type SyncCall = {
 describe('SessionManager workspace MCP pool bootstrap', () => {
   const originalSync = McpClientPool.prototype.sync
   const originalDisconnectAll = McpClientPool.prototype.disconnectAll
+  const originalRemoveToolsChangedListener = McpClientPool.prototype.removeToolsChangedListener
 
   let roots: string[]
   let sm: SessionManager
   let syncCalls: SyncCall[]
   let disconnectCalls: McpClientPool[]
+  let removedListeners: Array<{ pool: McpClientPool; listener: () => void }>
 
   beforeEach(() => {
     roots = []
     syncCalls = []
     disconnectCalls = []
+    removedListeners = []
     sm = new SessionManager()
 
     McpClientPool.prototype.sync = async function (
@@ -44,12 +47,21 @@ describe('SessionManager workspace MCP pool bootstrap', () => {
     McpClientPool.prototype.disconnectAll = async function (this: McpClientPool) {
       disconnectCalls.push(this)
     }
+
+    McpClientPool.prototype.removeToolsChangedListener = function (
+      this: McpClientPool,
+      listener: () => void,
+    ) {
+      removedListeners.push({ pool: this, listener })
+      originalRemoveToolsChangedListener.call(this, listener)
+    }
   })
 
   afterEach(async () => {
     await Promise.all(roots.map((root) => sm.closeWorkspace(root)))
     McpClientPool.prototype.sync = originalSync
     McpClientPool.prototype.disconnectAll = originalDisconnectAll
+    McpClientPool.prototype.removeToolsChangedListener = originalRemoveToolsChangedListener
     for (const root of roots) {
       rmSync(root, { recursive: true, force: true })
     }
@@ -150,5 +162,79 @@ describe('SessionManager workspace MCP pool bootstrap', () => {
     expect(disconnectCalls).toEqual([pool])
     expect(internals.workspaceMcpPools.has(workspaceRoot)).toBe(false)
     expect(internals.workspaceTokenRefreshManagers.has(workspaceRoot)).toBe(false)
+  })
+
+  it('reloads active sessions by syncing the workspace pool with all usable workspace sources', async () => {
+    const workspaceRoot = makeWorkspaceRoot('sm-workspace-reload-')
+    writeMcpSource(workspaceRoot, 'linear')
+    writeMcpSource(workspaceRoot, 'github')
+
+    sm.setupConfigWatcher(workspaceRoot, 'ws_reload')
+    await waitForSyncCalls(1)
+    syncCalls = []
+
+    const workspace = { id: 'ws_reload', slug: 'ws-reload', name: 'Reload', rootPath: workspaceRoot, createdAt: Date.now() }
+    const managed = createManagedSession({ id: 'session-reload' }, workspace, { messagesLoaded: true })
+    managed.enabledSourceSlugs = ['linear']
+
+    const setSourceServersCalls: Array<{
+      mcpServers: Record<string, unknown>
+      apiServers: Record<string, unknown>
+      intendedSlugs?: string[]
+    }> = []
+    managed.agent = {
+      setAllSources: () => {},
+      setSourceServers: async (mcpServers: Record<string, unknown>, apiServers: Record<string, unknown>, intendedSlugs?: string[]) => {
+        setSourceServersCalls.push({ mcpServers, apiServers, intendedSlugs })
+      },
+      applyBridgeUpdates: async () => {},
+      getSummarizeCallback: () => undefined,
+    } as never
+
+    ;(sm as unknown as { sessions: Map<string, unknown> }).sessions.set(managed.id, managed)
+    await (sm as unknown as { reloadSessionSources: (session: typeof managed) => Promise<void> }).reloadSessionSources(managed)
+
+    const workspacePool = (sm as unknown as PoolMaps).workspaceMcpPools.get(workspaceRoot)!
+    expect(syncCalls).toHaveLength(1)
+    expect(syncCalls[0]!.pool).toBe(workspacePool)
+    expect(Object.keys(syncCalls[0]!.mcpServers).sort()).toEqual(['github', 'linear'])
+    expect(Object.keys(setSourceServersCalls[0]!.mcpServers)).toEqual(['linear'])
+    expect(setSourceServersCalls[0]!.intendedSlugs).toEqual(['linear'])
+  })
+
+  it('disposes a session runtime without disconnecting the workspace pool', async () => {
+    const workspaceRoot = makeWorkspaceRoot('sm-workspace-dispose-')
+    writeMcpSource(workspaceRoot, 'linear')
+
+    sm.setupConfigWatcher(workspaceRoot, 'ws_dispose')
+    await waitForSyncCalls(1)
+    disconnectCalls = []
+
+    const workspace = { id: 'ws_dispose', slug: 'ws-dispose', name: 'Dispose', rootPath: workspaceRoot, createdAt: Date.now() }
+    const managed = createManagedSession({ id: 'session-dispose' }, workspace, { messagesLoaded: true })
+    const listener = () => {}
+    let agentDisposed = false
+    let serverStopped = false
+    managed.agent = {
+      disposeForRestart: async () => { agentDisposed = true },
+    } as never
+    managed.poolServer = {
+      stop: async () => { serverStopped = true },
+    } as never
+    managed.mcpToolsChangedListener = listener
+
+    ;(sm as unknown as { sessions: Map<string, unknown> }).sessions.set(managed.id, managed)
+    await (sm as unknown as { disposeManagedAgentRuntime: (session: typeof managed, reason: string) => Promise<void> })
+      .disposeManagedAgentRuntime(managed, 'test')
+
+    const workspacePool = (sm as unknown as PoolMaps).workspaceMcpPools.get(workspaceRoot)!
+    expect(agentDisposed).toBe(true)
+    expect(serverStopped).toBe(true)
+    expect(removedListeners).toEqual([{ pool: workspacePool, listener }])
+    expect(disconnectCalls).toEqual([])
+    expect(managed.agent).toBeNull()
+    expect(managed.poolServer).toBeUndefined()
+    expect(managed.mcpToolsChangedListener).toBeUndefined()
+    expect('mcpPool' in managed).toBe(false)
   })
 })
