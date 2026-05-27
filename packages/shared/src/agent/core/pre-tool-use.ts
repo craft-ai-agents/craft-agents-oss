@@ -677,7 +677,7 @@ const FILE_WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
  * Pipeline:
  * 1. Permission mode check (shouldAllowToolInMode)
  * 2. Source blocking (inactive MCP sources)
- * 3. Prerequisite check (guide.md before source tools)
+ * 3. Prerequisite check
  * 4. call_llm interception
  * 5. Input transforms (paths, config validation, skills, metadata)
  * 6. Ask-mode prompt decision
@@ -772,7 +772,7 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
   }
 
   // ============================================================
-  // 3. PREREQUISITE CHECK (guide.md before source tools)
+  // 3. PREREQUISITE CHECK
   // ============================================================
   if (prerequisiteManager) {
     // Allow Bash through if it's reading a pending skill file (clears the prerequisite)

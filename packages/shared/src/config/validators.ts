@@ -379,7 +379,7 @@ const SourceTypeSchema = z.enum(['mcp', 'api', 'local']);
 const McpSourceConfigSchema = z.object({
   transport: z.preprocess(
     (val) => {
-      if (val === 'http' || val === 'sse') return 'streamable_http';
+      if (val === 'http' || val === 'sse' || val === 'streamable-http') return 'streamable_http';
       return val;
     },
     z.enum(['streamable_http', 'stdio']).optional()
