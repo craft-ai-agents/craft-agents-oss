@@ -1,0 +1,42 @@
+{
+  "allowedBashPatterns": [
+    {
+      "pattern": "^cd\\s+tools/google-ads\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+doctor\\s+--agent$",
+      "comment": "Check bundled Google Ads CLI health"
+    },
+    {
+      "pattern": "^cd\\s+tools/google-ads\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+auth\\s+status\\s+--agent$",
+      "comment": "Check Google Ads authentication state"
+    },
+    {
+      "pattern": "^cd\\s+tools/google-ads\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+customers\\s+list-accessible-customers\\s+--agent$",
+      "comment": "List accessible Google Ads customers"
+    },
+    {
+      "pattern": "^cd\\s+tools/google-ads\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+google-ads-fields\\s+search\\s+--agent\\s+--query\\s+.+$",
+      "comment": "Search Google Ads field metadata"
+    },
+    {
+      "pattern": "^cd\\s+tools/google-ads\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+customers-google-ads\\s+search\\s+[^\\s]+\\s+--agent\\s+--query\\s+.+$",
+      "comment": "Run read-only GAQL search"
+    }
+  ],
+  "blockedCommandHints": [
+    {
+      "command": "node bin/google-ads.mjs customers-google-ads mutate",
+      "reason": "Google Ads mutation changes live account resources.",
+      "context": "Ask for explicit approval before live account changes.",
+      "tryInstead": [
+        "Run `node bin/google-ads.mjs customers-google-ads search <customerId> --agent --query \"<GAQL>\"` first"
+      ]
+    },
+    {
+      "command": "node bin/google-ads.mjs customers-campaign-budgets",
+      "reason": "Budget operations can change spend.",
+      "context": "Preview and ask for explicit approval before budget mutations.",
+      "tryInstead": [
+        "Use read-only GAQL reporting first"
+      ]
+    }
+  ]
+}

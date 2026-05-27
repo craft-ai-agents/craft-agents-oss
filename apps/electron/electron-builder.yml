@@ -61,6 +61,7 @@ files:
   # Include bundled local CLI tools
   - tools/printing-press-social/**/*
   - tools/hypermotion/**/*
+  - tools/google-ads/**/*
   # Exclude everything from node_modules (will use extraResources for SDK)
   - "!node_modules/**/*"
 
@@ -116,6 +117,16 @@ mac:
         - "**/*"
     - from: ../../tools/hypermotion/node_modules
       to: app/tools/hypermotion/node_modules
+      filter:
+        - "**/*"
+    # Managed local Google Ads CLI wrapper and bundled platform binary.
+    - from: ../../tools/google-ads
+      to: app/tools/google-ads
+      filter:
+        - "**/*"
+    # Managed local YouTube Research CLI wrapper and bundled platform binary.
+    - from: ../../tools/youtube-research
+      to: app/tools/youtube-research
       filter:
         - "**/*"
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
@@ -200,6 +211,16 @@ win:
       to: app/tools/hypermotion/node_modules
       filter:
         - "**/*"
+    # Managed local Google Ads CLI wrapper and bundled platform binary.
+    - from: ../../tools/google-ads
+      to: app/tools/google-ads
+      filter:
+        - "**/*"
+    # Managed local YouTube Research CLI wrapper and bundled platform binary.
+    - from: ../../tools/youtube-research
+      to: app/tools/youtube-research
+      filter:
+        - "**/*"
     - from: vendor/bun/bun.exe
       to: vendor/bun/bun.exe
     - from: vendor/codex/win32-x64
@@ -243,6 +264,16 @@ linux:
         - "**/*"
     - from: ../../tools/hypermotion/node_modules
       to: app/tools/hypermotion/node_modules
+      filter:
+        - "**/*"
+    # Managed local Google Ads CLI wrapper and bundled platform binary.
+    - from: ../../tools/google-ads
+      to: app/tools/google-ads
+      filter:
+        - "**/*"
+    # Managed local YouTube Research CLI wrapper and bundled platform binary.
+    - from: ../../tools/youtube-research
+      to: app/tools/youtube-research
       filter:
         - "**/*"
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).

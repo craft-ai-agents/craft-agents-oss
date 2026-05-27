@@ -228,7 +228,7 @@ function getCredentialScopeLabel(
   }
 }
 
-type CredentialDialogMode = 'global' | 'override' | 'revert'
+type CredentialDialogMode = 'workspace' | 'global' | 'override' | 'revert'
 
 interface SourceCredentialDialogProps {
   open: boolean
@@ -253,19 +253,38 @@ function SourceCredentialDialog({
 }: SourceCredentialDialogProps) {
   const { t } = useTranslation()
   const [credential, setCredential] = useState('')
+  const [googleAdsDeveloperToken, setGoogleAdsDeveloperToken] = useState('')
+  const [googleAdsLoginCustomerId, setGoogleAdsLoginCustomerId] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const usesOAuth = Boolean(credentialScope?.usesOAuth)
+  const isGoogleAds = source.config.slug === 'google-ads'
+  const hasStoredGoogleAdsDeveloperToken = Boolean(credentialScope?.metadata?.googleAdsDeveloperTokenConfigured)
 
   useEffect(() => {
-    if (!open) setCredential('')
+    if (!open) {
+      setCredential('')
+      setGoogleAdsDeveloperToken('')
+      setGoogleAdsLoginCustomerId('')
+    }
   }, [open])
 
   const close = useCallback(() => onOpenChange(false), [onOpenChange])
 
   const handleOverride = useCallback(async () => {
     if (!usesOAuth && !credential.trim()) return
+    if (isGoogleAds && !googleAdsDeveloperToken.trim() && !hasStoredGoogleAdsDeveloperToken) {
+      toast.error('Developer token is required for Google Ads')
+      return
+    }
     setSubmitting(true)
     try {
+      if (isGoogleAds) {
+        await window.electronAPI.saveSourceCredentials(workspaceId, sourceSlug, JSON.stringify({
+          ...(googleAdsDeveloperToken.trim() ? { developerToken: googleAdsDeveloperToken.trim() } : {}),
+          ...(googleAdsLoginCustomerId.trim() ? { loginCustomerId: googleAdsLoginCustomerId.trim() } : {}),
+        }))
+      }
+
       if (mode === 'global') {
         if (usesOAuth) {
           const result = await window.electronAPI.performOAuth({ sourceSlug, credentialScope: 'global' })
@@ -274,6 +293,15 @@ function SourceCredentialDialog({
           }
         } else {
           await window.electronAPI.saveSourceGlobalCredentials(workspaceId, sourceSlug, credential.trim())
+        }
+      } else if (mode === 'workspace') {
+        if (usesOAuth) {
+          const result = await window.electronAPI.performOAuth({ sourceSlug, credentialScope: 'workspace' })
+          if (!result.success) {
+            throw new Error(result.error || t('sourceInfo.credentialDialog.oauthFailed'))
+          }
+        } else {
+          await window.electronAPI.saveSourceCredentials(workspaceId, sourceSlug, credential.trim())
         }
       } else if (usesOAuth) {
         const result = await window.electronAPI.performOAuth({ sourceSlug, credentialScope: 'workspace-override' })
@@ -293,7 +321,7 @@ function SourceCredentialDialog({
     } finally {
       setSubmitting(false)
     }
-  }, [close, credential, mode, onComplete, sourceSlug, t, usesOAuth, workspaceId])
+  }, [close, credential, googleAdsDeveloperToken, googleAdsLoginCustomerId, hasStoredGoogleAdsDeveloperToken, isGoogleAds, mode, onComplete, sourceSlug, t, usesOAuth, workspaceId])
 
   const handleRevert = useCallback(async () => {
     setSubmitting(true)
@@ -312,12 +340,15 @@ function SourceCredentialDialog({
   }, [close, onComplete, sourceSlug, t, workspaceId])
 
   const isGlobal = mode === 'global'
+  const isWorkspace = mode === 'workspace'
   const isRevert = mode === 'revert'
   const title = isRevert
     ? t('sourceInfo.credentialDialog.revertTitle')
     : isGlobal
       ? t('sourceInfo.credentialDialog.globalTitle', { name: source.config.name })
-      : t('sourceInfo.credentialDialog.overrideTitle', { name: source.config.name })
+      : isWorkspace
+        ? `Connect ${source.config.name}`
+        : t('sourceInfo.credentialDialog.overrideTitle', { name: source.config.name })
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -337,7 +368,34 @@ function SourceCredentialDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {!isRevert && !usesOAuth && (
+        {!isRevert && isGoogleAds && (
+          <div className="grid gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="google-ads-developer-token" className="text-white/64">Developer token</Label>
+              <Input
+                id="google-ads-developer-token"
+                type="password"
+                value={googleAdsDeveloperToken}
+                onChange={(event) => setGoogleAdsDeveloperToken(event.target.value)}
+                placeholder="Required for Google Ads API"
+                className="border-white/[0.09] bg-white/[0.045] text-white placeholder:text-white/24"
+                autoFocus
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="google-ads-login-customer-id" className="text-white/64">Login customer ID</Label>
+              <Input
+                id="google-ads-login-customer-id"
+                value={googleAdsLoginCustomerId}
+                onChange={(event) => setGoogleAdsLoginCustomerId(event.target.value)}
+                placeholder="Optional manager account ID"
+                className="border-white/[0.09] bg-white/[0.045] text-white placeholder:text-white/24"
+              />
+            </div>
+          </div>
+        )}
+
+        {!isRevert && !usesOAuth && !isGoogleAds && (
           <div className="grid gap-2">
             <Label htmlFor="source-credential" className="text-white/64">{t('sourceInfo.credentialDialog.credentialLabel')}</Label>
             <Input
@@ -602,6 +660,16 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
         onClick: () => setCredentialDialogMode('global' as const),
       }
     }
+    if (credentialScope.canAuthenticate) {
+      return {
+        label: source.config.slug === 'google-ads'
+          ? 'Connect Google Ads'
+          : source.config.slug === 'youtube-research'
+            ? 'Connect YouTube Research'
+            : 'Set credentials',
+        onClick: () => setCredentialDialogMode('workspace' as const),
+      }
+    }
     if (credentialScope.canRevert) {
       return {
         label: t("sourceInfo.revertGlobalCredentials"),
@@ -627,7 +695,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
             onShowInFinder={source?.folderPath ? handleOpenSourceFolder : undefined}
             onDelete={handleDelete}
             onSetGlobalCredentials={credentialScope?.canAuthenticate && source?.tier === 'global' ? () => setCredentialDialogMode('global') : undefined}
-            onUseWorkspaceCredentials={credentialScope?.canOverride ? () => setCredentialDialogMode('override') : undefined}
+            onUseWorkspaceCredentials={credentialScope?.canAuthenticate && source?.tier !== 'global' ? () => setCredentialDialogMode('workspace') : credentialScope?.canOverride ? () => setCredentialDialogMode('override') : undefined}
             onRevertGlobalCredentials={credentialScope?.canRevert ? () => setCredentialDialogMode('revert') : undefined}
             canDelete={(source?.tier ?? 'workspace') === 'workspace'}
             deleteLabel={(source?.tier ?? 'workspace') === 'workspace' ? undefined : t('sourcesList.managedSource')}

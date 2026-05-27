@@ -99,6 +99,12 @@ export class PromptHandler implements AutomationHandler {
 
     for (const { matcherId, automationName, prompts } of matcherPrompts) {
       for (const { prompt, labels, permissionMode } of prompts) {
+        const gatewayAlreadyHandled =
+          event === 'MessageReceive' &&
+          prompt.bindMessagingChannel === true &&
+          (payload as unknown as Record<string, unknown>).handledByGateway === true;
+        if (gatewayAlreadyHandled) continue;
+
         // Expand environment variables in the prompt
         const expandedPrompt = expandEnvVars(prompt.prompt, env);
 

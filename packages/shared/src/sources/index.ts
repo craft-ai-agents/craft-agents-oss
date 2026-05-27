@@ -98,6 +98,7 @@ export {
   SourceCredentialManager,
   getSourceCredentialManager,
   getSourcesNeedingAuth,
+  readGoogleAdsCredentialValue,
 } from './credential-manager.ts';
 export type {
   AuthResult,

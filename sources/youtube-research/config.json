@@ -1,0 +1,22 @@
+{
+  "id": "youtube-research_20260527",
+  "name": "YouTube Research",
+  "slug": "youtube-research",
+  "enabled": true,
+  "provider": "youtube-data-api",
+  "type": "local",
+  "icon": "Y",
+  "tagline": "Read-only YouTube search, transcripts, embeds, comments, related videos, and channel uploads.",
+  "local": {
+    "path": "tools/youtube-research",
+    "format": "cli-tool"
+  },
+  "api": {
+    "baseUrl": "https://www.googleapis.com/youtube/v3",
+    "authType": "header",
+    "headerName": "X-Goog-Api-Key"
+  },
+  "connectionStatus": "untested",
+  "createdAt": 1780000000000,
+  "updatedAt": 1780000000000
+}

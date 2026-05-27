@@ -12,12 +12,15 @@ import {
   loadGlobalSource,
   GLOBAL_WORKSPACE_ID,
   isOAuthSource,
+  readGoogleAdsCredentialValue,
   type LoadedSource,
   type MirrorSourceOptions,
 } from '@craft-agent/shared/sources'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { syncGoogleAdsCredentialCache } from './google-ads-credential-cache'
+import { syncYouTubeResearchCredentialCache } from './youtube-research-credential-cache'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.GET,
@@ -118,6 +121,8 @@ function resolveWorkspaceSource(workspaceId: string, sourceSlug: string): { work
 function sourceNeedsCredentials(source: LoadedSource): boolean {
   const { type, mcp, api } = source.config
 
+  if (source.config.slug === 'google-ads') return true
+  if (source.config.slug === 'youtube-research') return true
   if (type === 'local') return false
   if (type === 'mcp') {
     if (mcp?.transport === 'stdio') return false
@@ -133,6 +138,8 @@ function sourceNeedsCredentials(source: LoadedSource): boolean {
 }
 
 function getSourceAuthType(source: LoadedSource): string | null {
+  if (source.config.slug === 'google-ads') return 'oauth'
+  if (source.config.slug === 'youtube-research') return 'header'
   if (source.config.type === 'mcp') {
     if (source.config.mcp?.headerNames?.length) return 'headers'
     return source.config.mcp?.authType ?? null
@@ -182,6 +189,9 @@ async function buildCredentialScopeResult(source: LoadedSource): Promise<SourceC
   const hasWorkspaceCredential = Boolean(workspaceCredential?.value)
   const hasGlobalCredential = Boolean(globalCredential?.value)
   const hasEffectiveCredential = Boolean(effectiveCredential?.value)
+  const googleAdsCredential = source.config.slug === 'google-ads'
+    ? readGoogleAdsCredentialValue(effectiveCredential?.value)
+    : null
 
   let scope: SourceCredentialScopeResult['scope'] = 'none'
   if (source.tier === 'global' && workspaceCredential?.override === true && !workspaceCredential.value) {
@@ -204,6 +214,12 @@ async function buildCredentialScopeResult(source: LoadedSource): Promise<SourceC
     canRevert: source.tier === 'global' && Boolean(workspaceCredential),
     canAuthenticate: true,
     usesOAuth: isOAuthSource(source),
+    metadata: googleAdsCredential
+      ? {
+        googleAdsDeveloperTokenConfigured: Boolean(googleAdsCredential.developerToken?.trim()),
+        googleAdsLoginCustomerIdConfigured: Boolean(googleAdsCredential.loginCustomerId?.trim()),
+      }
+      : undefined,
   }
 }
 
@@ -269,6 +285,8 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     // SourceCredentialManager handles credential type resolution
     const credManager = getSourceCredentialManager()
     await credManager.save(source, { value: credential })
+    await syncGoogleAdsCredentialCache(source)
+    await syncYouTubeResearchCredentialCache(source)
     await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'SAVE_CREDENTIALS')
     broadcastSourcesChanged(deps, workspaceId, workspace.rootPath)
 
@@ -289,6 +307,8 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
 
     const credManager = getSourceCredentialManager()
     await credManager.save(source, { value: credential, override: true })
+    await syncGoogleAdsCredentialCache(source)
+    await syncYouTubeResearchCredentialCache(source)
     await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'SAVE_CREDENTIAL_OVERRIDE')
     broadcastSourcesChanged(deps, workspaceId, workspace.rootPath)
     log.info(`Saved workspace credential override for global source: ${sourceSlug}`)
@@ -305,6 +325,8 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     }
 
     await getSourceCredentialManager().save(source, { value: credential })
+    await syncGoogleAdsCredentialCache(source)
+    await syncYouTubeResearchCredentialCache(source)
     await reloadAndBroadcastGlobalCredentialChange(deps, sourceSlug, workspaceId, log)
     log.info(`Saved global credentials for source: ${sourceSlug}`)
   })
@@ -331,6 +353,8 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     }
 
     await getSourceCredentialManager().clearOverride(source)
+    await syncGoogleAdsCredentialCache(source)
+    await syncYouTubeResearchCredentialCache(source)
     await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'CLEAR_CREDENTIAL_OVERRIDE')
     broadcastSourcesChanged(deps, workspaceId, workspace.rootPath)
     log.info(`Cleared workspace credential override for global source: ${sourceSlug}`)

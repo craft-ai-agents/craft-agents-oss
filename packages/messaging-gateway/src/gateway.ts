@@ -55,6 +55,18 @@ export interface GatewayOptions {
    * swallowed — automation failures must not block message routing.
    */
   onIncomingMessage?: (event: IncomingMessageEvent) => void | Promise<void>
+  /**
+   * Optional pre-route hook for platform-specific gateway behavior.
+   * Return true when the message was fully handled and normal routing should stop.
+   */
+  onBeforeRouteMessage?: (event: BeforeRouteMessageEvent) => boolean | Promise<boolean>
+}
+
+export interface BeforeRouteMessageEvent {
+  adapter: PlatformAdapter
+  message: IncomingMessage
+  wasBound: boolean
+  isCommand: boolean
 }
 
 /**
@@ -75,6 +87,8 @@ export interface IncomingMessageEvent {
   wasBound: boolean
   /** True when the channel is bound after command handling and routing complete. */
   boundAfterRoute: boolean
+  /** True when a gateway-level handler consumed the message before normal routing. */
+  handledByGateway: boolean
   /** Number of attachments present on the message. */
   attachmentCount: number
   /** Timestamp from the platform (epoch ms). */
@@ -118,12 +132,14 @@ export class MessagingGateway {
   private readonly adapters = new Map<PlatformType, PlatformAdapter>()
   private readonly log: MessagingLogger
   private readonly onIncomingMessage?: (event: IncomingMessageEvent) => void | Promise<void>
+  private readonly onBeforeRouteMessage?: (event: BeforeRouteMessageEvent) => boolean | Promise<boolean>
   private started = false
 
   constructor(opts: GatewayOptions) {
     this.sessionManager = opts.sessionManager
     this.workspaceId = opts.workspaceId
     this.onIncomingMessage = opts.onIncomingMessage
+    this.onBeforeRouteMessage = opts.onBeforeRouteMessage
     this.log = (opts.logger ?? consoleLogger).child({
       component: 'gateway',
       workspaceId: opts.workspaceId,
@@ -254,6 +270,10 @@ export class MessagingGateway {
     adapter.onMessage(async (msg: IncomingMessage) => {
       const wasBound = !!this.bindingStore.findByChannel(msg.platform, msg.channelId)
       const isCommand = msg.text.trim().startsWith('/')
+      if (await this.handleBeforeRoute(adapter, msg, wasBound, isCommand)) {
+        await this.emitIncomingMessageHook(msg, wasBound, true)
+        return
+      }
       if (isCommand) {
         const handled = await this.commands.handleCommand(adapter, msg)
         if (handled) {
@@ -281,7 +301,31 @@ export class MessagingGateway {
     })
   }
 
-  private async emitIncomingMessageHook(msg: IncomingMessage, wasBound: boolean): Promise<void> {
+  private async handleBeforeRoute(
+    adapter: PlatformAdapter,
+    message: IncomingMessage,
+    wasBound: boolean,
+    isCommand: boolean,
+  ): Promise<boolean> {
+    if (!this.onBeforeRouteMessage) return false
+    try {
+      return await this.onBeforeRouteMessage({ adapter, message, wasBound, isCommand })
+    } catch (err) {
+      this.log.warn('onBeforeRouteMessage hook threw', {
+        event: 'before_route_message_failed',
+        platform: message.platform,
+        channelId: message.channelId,
+        error: err,
+      })
+      return false
+    }
+  }
+
+  private async emitIncomingMessageHook(
+    msg: IncomingMessage,
+    wasBound: boolean,
+    handledByGateway = false,
+  ): Promise<void> {
     if (!this.onIncomingMessage) return
 
     try {
@@ -296,6 +340,7 @@ export class MessagingGateway {
         bound: wasBound,
         wasBound,
         boundAfterRoute,
+        handledByGateway,
         attachmentCount: msg.attachments?.length ?? 0,
         sentAt: msg.timestamp,
       })

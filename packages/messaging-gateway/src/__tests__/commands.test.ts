@@ -122,4 +122,16 @@ describe('Commands', () => {
     expect(adapter.sent[0]).toContain('1. Beta (sess-2)')
     expect(adapter.sent[0]).toContain('/bind <number>')
   })
+
+  it('lists WhatsApp Home Gateway commands in help', async () => {
+    const store = makeStore()
+    const commands = new Commands(makeSessionManager([]), store, 'ws1')
+    const adapter = makeAdapter('whatsapp', false)
+
+    await commands.handleCommand(adapter, makeMessage('/help'))
+
+    expect(adapter.sent[0]).toContain('/workspaces')
+    expect(adapter.sent[0]).toContain('/where')
+    expect(adapter.sent[0]).toContain('/use <workspace>')
+  })
 })

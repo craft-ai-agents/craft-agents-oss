@@ -95,6 +95,47 @@ export type MultiHeaderCredential = Record<string, string>;
 
 export type ApiCredential = string | BasicAuthCredential | MultiHeaderCredential;
 
+const GOOGLE_ADS_SOURCE_SLUG = 'google-ads';
+
+interface GoogleAdsCredentialValue {
+  accessToken?: string;
+  developerToken?: string;
+  loginCustomerId?: string;
+}
+
+function isGoogleAdsSource(source: LoadedSource): boolean {
+  return source.config.slug === GOOGLE_ADS_SOURCE_SLUG;
+}
+
+function parseGoogleAdsCredentialValue(value: string | null | undefined): GoogleAdsCredentialValue {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === 'object') {
+      return {
+        accessToken: typeof parsed.accessToken === 'string' ? parsed.accessToken : undefined,
+        developerToken: typeof parsed.developerToken === 'string' ? parsed.developerToken : undefined,
+        loginCustomerId: typeof parsed.loginCustomerId === 'string' ? parsed.loginCustomerId : undefined,
+      };
+    }
+  } catch {
+    // Older/simple credentials stored the OAuth token directly.
+  }
+  return { accessToken: value };
+}
+
+function stringifyGoogleAdsCredentialValue(value: GoogleAdsCredentialValue): string {
+  return JSON.stringify({
+    accessToken: value.accessToken,
+    developerToken: value.developerToken,
+    loginCustomerId: value.loginCustomerId,
+  });
+}
+
+export function readGoogleAdsCredentialValue(value: string | null | undefined): GoogleAdsCredentialValue {
+  return parseGoogleAdsCredentialValue(value);
+}
+
 /**
  * Type guard to check if credential is a MultiHeaderCredential.
  * Returns true for Record<string, string> objects that are NOT BasicAuthCredential.
@@ -142,7 +183,31 @@ export class SourceCredentialManager {
   async save(source: LoadedSource, credential: StoredCredential): Promise<void> {
     const credentialId = this.getCredentialId(source);
     const manager = getCredentialManager();
-    await manager.set(credentialId, credential);
+    let nextCredential = credential;
+
+    if (isGoogleAdsSource(source) && credential.value) {
+      try {
+        const incoming = JSON.parse(credential.value) as Partial<GoogleAdsCredentialValue>;
+        if (incoming && typeof incoming === 'object' && !incoming.accessToken) {
+          const existing = await manager.get(credentialId);
+          nextCredential = {
+            ...credential,
+            refreshToken: credential.refreshToken ?? existing?.refreshToken,
+            expiresAt: credential.expiresAt ?? existing?.expiresAt,
+            clientId: credential.clientId ?? existing?.clientId,
+            clientSecret: credential.clientSecret ?? existing?.clientSecret,
+            value: stringifyGoogleAdsCredentialValue({
+              ...parseGoogleAdsCredentialValue(existing?.value),
+              ...incoming,
+            }),
+          };
+        }
+      } catch {
+        // Non-JSON saves are legacy access-token values; store as provided.
+      }
+    }
+
+    await manager.set(credentialId, nextCredential);
     debug(`[SourceCredentialManager] Saved ${credentialId.type} for ${source.config.slug}`);
   }
 
@@ -305,6 +370,10 @@ export class SourceCredentialManager {
       return null;
     }
 
+    if (isGoogleAdsSource(source)) {
+      return parseGoogleAdsCredentialValue(cred.value).accessToken ?? null;
+    }
+
     return cred.value;
   }
 
@@ -317,6 +386,15 @@ export class SourceCredentialManager {
     const headerNames = source.config.api?.headerNames || source.config.mcp?.headerNames;
     debug(`[SourceCredentialManager] getApiCredential for ${source.config.slug}: cred.value exists=${!!cred?.value}, headerNames=${JSON.stringify(headerNames)}`);
     if (!cred?.value) return null;
+
+    if (isGoogleAdsSource(source)) {
+      const parsed = parseGoogleAdsCredentialValue(cred.value);
+      return {
+        ...(parsed.accessToken ? { accessToken: parsed.accessToken } : {}),
+        ...(parsed.developerToken ? { developerToken: parsed.developerToken } : {}),
+        ...(parsed.loginCustomerId ? { loginCustomerId: parsed.loginCustomerId } : {}),
+      };
+    }
 
     // Check for multi-header auth (JSON with header names as keys)
     // Works for both API sources (api.headerNames) and MCP sources (mcp.headerNames)
@@ -649,8 +727,15 @@ export class SourceCredentialManager {
     }
 
     const existing = await this.load(source);
+    const value = isGoogleAdsSource(source)
+      ? stringifyGoogleAdsCredentialValue({
+        ...parseGoogleAdsCredentialValue(existing?.value),
+        accessToken: result.accessToken!,
+      })
+      : result.accessToken!;
+
     await this.save(source, {
-      value: result.accessToken!,
+      value,
       refreshToken: result.refreshToken,
       expiresAt: result.expiresAt,
       clientId: result.oauthClientId,
@@ -1163,9 +1248,16 @@ export class SourceCredentialManager {
       );
 
       // Update stored credentials
+      const value = isGoogleAdsSource(source)
+        ? stringifyGoogleAdsCredentialValue({
+          ...parseGoogleAdsCredentialValue(cred.value),
+          accessToken: result.accessToken,
+        })
+        : result.accessToken;
+
       await this.save(source, {
         ...cred,
-        value: result.accessToken,
+        value,
         expiresAt: result.expiresAt,
       });
 

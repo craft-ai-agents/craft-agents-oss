@@ -4,7 +4,8 @@
  * Project-level sources that ship with RunnerOS.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { LoadedSource, FolderSourceConfig } from './types.ts';
 
@@ -12,6 +13,8 @@ const COMPUTER_USE_SLUG = 'computer-use';
 const FIELD_THEORY_SLUG = 'field-theory';
 const PRINTING_PRESS_SOCIAL_SLUG = 'printing-press-social';
 const HYPERMOTION_SLUG = 'hypermotion';
+const GOOGLE_ADS_SLUG = 'google-ads';
+const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
 
 function firstExistingPath(candidates: string[], fallback: string): string {
   for (const candidate of candidates) {
@@ -73,6 +76,65 @@ function getHypermotionPath(): string {
   );
 }
 
+function getGoogleAdsPath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'google-ads') : '',
+      join(appRoot, 'tools', 'google-ads'),
+      join(process.cwd(), 'tools', 'google-ads'),
+    ],
+    join('tools', 'google-ads')
+  );
+}
+
+function getYouTubeResearchPath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'youtube-research') : '',
+      join(appRoot, 'tools', 'youtube-research'),
+      join(process.cwd(), 'tools', 'youtube-research'),
+    ],
+    join('tools', 'youtube-research')
+  );
+}
+
+function getGoogleAdsCachedAuthState(): { configured: boolean; expired: boolean } {
+  const cachePath = join(homedir(), '.config', 'runneros', 'google-ads', 'credentials.json');
+  if (!existsSync(cachePath)) return { configured: false, expired: false };
+
+  try {
+    const parsed = JSON.parse(readFileSync(cachePath, 'utf8')) as Record<string, unknown>;
+    const configured = Boolean(
+      typeof parsed.accessToken === 'string' && parsed.accessToken.trim()
+      && typeof parsed.developerToken === 'string' && parsed.developerToken.trim()
+    );
+    const expired = typeof parsed.expiresAt === 'number' && Date.now() > parsed.expiresAt;
+    return { configured, expired };
+  } catch {
+    return { configured: false, expired: false };
+  }
+}
+
+function getYouTubeResearchCachedAuthState(): { configured: boolean } {
+  const cachePath = join(homedir(), '.config', 'runneros', 'youtube-research', 'credentials.json');
+  if (!existsSync(cachePath)) return { configured: false };
+
+  try {
+    const parsed = JSON.parse(readFileSync(cachePath, 'utf8')) as Record<string, unknown>;
+    return {
+      configured: Boolean(typeof parsed.apiKey === 'string' && parsed.apiKey.trim()),
+    };
+  } catch {
+    return { configured: false };
+  }
+}
+
 /**
  * Get all built-in sources for a workspace.
  *
@@ -86,6 +148,8 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getFieldTheorySource(workspaceId, workspaceRootPath),
     getPrintingPressSocialSource(workspaceId, workspaceRootPath),
     getHypermotionSource(workspaceId, workspaceRootPath),
+    getGoogleAdsSource(workspaceId, workspaceRootPath),
+    getYouTubeResearchSource(workspaceId, workspaceRootPath),
   ];
 }
 
@@ -294,6 +358,135 @@ export function getHypermotionSource(workspaceId: string, workspaceRootPath: str
 }
 
 /**
+ * Built-in source for the bundled Google Ads CLI wrapper.
+ *
+ * The wrapper resolves the packaged google-ads-pp-cli binary from app
+ * resources, so agents do not depend on a developer-machine global install.
+ */
+export function getGoogleAdsSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getGoogleAdsPath();
+  const authState = getGoogleAdsCachedAuthState();
+  const isAuthenticated = authState.configured && !authState.expired;
+  const config: FolderSourceConfig = {
+    id: 'builtin-google-ads',
+    name: 'Google Ads',
+    slug: GOOGLE_ADS_SLUG,
+    enabled: true,
+    provider: 'google',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    api: {
+      baseUrl: 'https://googleads.googleapis.com',
+      authType: 'oauth',
+      googleScopes: [
+        'https://www.googleapis.com/auth/adwords',
+        'https://www.googleapis.com/auth/userinfo.email',
+      ],
+    },
+    tagline: 'Bundled Google Ads CLI for account discovery, GAQL reporting, diagnostics, and approval-gated operations.',
+    icon: 'G',
+    isAuthenticated,
+    connectionStatus: !existsSync(toolPath) ? 'failed' : isAuthenticated ? 'connected' : 'needs_auth',
+    connectionError: !existsSync(toolPath)
+      ? 'Bundled Google Ads tool folder not found'
+      : authState.expired
+        ? 'Google Ads OAuth token is expired. Reconnect Google Ads.'
+        : undefined,
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# Google Ads',
+        '',
+        'Use this source for Google Ads account discovery, GAQL reporting, field lookup, diagnostics, and planning through the bundled local CLI wrapper.',
+        '',
+        'Workflow:',
+        '1. Use the displayed local path as the working directory.',
+        '2. Run `node bin/google-ads.mjs doctor --agent` before account work.',
+        '3. Run `node bin/google-ads.mjs auth status --agent` to check auth.',
+        '4. Use read-only commands first: `customers list-accessible-customers`, `google-ads-fields search`, and `customers-google-ads search`.',
+        '5. Use real hyphenated command names. Convert any upstream underscore examples to hyphen form before executing.',
+        '6. Ask for explicit approval before any live mutation to campaigns, budgets, keywords, audiences, conversions, billing, or status.',
+        '',
+        'Google Ads auth is separate from Meta Ads auth. If auth is missing, tell the user it needs OAuth login or configured Google Ads credentials.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
+ * Built-in source for the bundled YouTube Research CLI wrapper.
+ */
+export function getYouTubeResearchSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getYouTubeResearchPath();
+  const authState = getYouTubeResearchCachedAuthState();
+  const config: FolderSourceConfig = {
+    id: 'builtin-youtube-research',
+    name: 'YouTube Research',
+    slug: YOUTUBE_RESEARCH_SLUG,
+    enabled: true,
+    provider: 'youtube-data-api',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    api: {
+      baseUrl: 'https://www.googleapis.com/youtube/v3',
+      authType: 'header',
+      headerName: 'X-Goog-Api-Key',
+    },
+    tagline: 'Read-only YouTube search, transcripts, embeds, comments, related videos, and channel uploads.',
+    icon: 'Y',
+    isAuthenticated: authState.configured,
+    connectionStatus: !existsSync(toolPath) ? 'failed' : authState.configured ? 'untested' : 'needs_auth',
+    connectionError: existsSync(toolPath)
+      ? authState.configured
+        ? 'YouTube Data API key is saved but not validated. Run `node bin/youtube-research.mjs doctor` before research.'
+        : undefined
+      : 'Bundled YouTube Research tool folder not found',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# YouTube Research',
+        '',
+        'Use this source for read-only YouTube discovery and analysis through the bundled youtube-pp-cli wrapper.',
+        '',
+        'Workflow:',
+        '1. Open Tools -> YouTube Research and save a YouTube Data API key.',
+        '2. Run `node bin/youtube-research.mjs doctor` before research work.',
+        '3. Use `--agent` for compact JSON and `--select` to keep output tight.',
+        '4. Use Social Publisher instead for uploads, posting, or live comments.',
+        '',
+        'Core commands:',
+        '- `node bin/youtube-research.mjs youtube search-list --q "<query>" --max-results 5 --agent`',
+        '- `node bin/youtube-research.mjs youtube search-bulk "<query one>" "<query two>" --top 3 --agent`',
+        '- `node bin/youtube-research.mjs youtube videos-transcript <videoId> --lang en --agent`',
+        '- `node bin/youtube-research.mjs youtube videos-embed <videoId> --format markdown`',
+        '- `node bin/youtube-research.mjs youtube videos-comments <videoId> --top 10 --agent`',
+        '- `node bin/youtube-research.mjs youtube channel-uploads @handle --top 10 --agent`',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
  * Get the built-in Craft Agents docs source.
  *
  * @deprecated craft-agents-docs is now an always-available MCP server
@@ -340,5 +533,7 @@ export function isBuiltinSource(slug: string): boolean {
   return slug === COMPUTER_USE_SLUG
     || slug === FIELD_THEORY_SLUG
     || slug === PRINTING_PRESS_SOCIAL_SLUG
-    || slug === HYPERMOTION_SLUG;
+    || slug === HYPERMOTION_SLUG
+    || slug === GOOGLE_ADS_SLUG
+    || slug === YOUTUBE_RESEARCH_SLUG;
 }

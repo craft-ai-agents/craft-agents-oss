@@ -143,6 +143,8 @@ export interface MessageReceivePayload extends BaseEventPayload {
   wasBound: boolean;
   /** True when the channel is bound after command handling and routing complete */
   boundAfterRoute: boolean;
+  /** True when a gateway-level handler consumed the message before normal routing */
+  handledByGateway?: boolean;
   /** Number of attachments in the message */
   attachmentCount: number;
   /** True when at least one attachment is present */
