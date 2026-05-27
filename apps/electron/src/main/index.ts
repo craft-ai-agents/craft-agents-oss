@@ -415,7 +415,9 @@ app.whenReady().then(async () => {
     ].find(p => existsSync(p))
 
     if (dockIconPath) {
-      app.dock.setIcon(dockIconPath)
+      if (!app.isPackaged) {
+        app.dock.setIcon(dockIconPath)
+      }
       // Initialize badge icon for canvas-based badge overlay
       initBadgeIcon(dockIconPath)
     }
