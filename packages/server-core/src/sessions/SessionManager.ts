@@ -1169,6 +1169,8 @@ export class SessionManager implements ISessionManager {
   private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
   // Config watchers for live updates (sources, etc.) - one per workspace
   private configWatchers: Map<string, ConfigWatcher> = new Map()
+  private workspaceMcpPools: Map<string, McpClientPool> = new Map()
+  private workspaceTokenRefreshManagers: Map<string, TokenRefreshManager> = new Map()
   // Automation systems for workspace event automations - one per workspace (includes scheduler, diffing, and handlers)
   private automationSystems: Map<string, AutomationSystem> = new Map()
   // Pending credential request resolvers (keyed by requestId)
@@ -1428,6 +1430,7 @@ export class SessionManager implements ISessionManager {
     }
 
     sessionLog.info(`Setting up ConfigWatcher for workspace: ${workspaceId} (${workspaceRootPath})`)
+    this.setupWorkspaceMcpPool(workspaceRootPath)
 
     const callbacks: ConfigWatcherCallbacks = {
       onSourcesListChange: async (sources: LoadedSource[]) => {
@@ -1616,6 +1619,80 @@ export class SessionManager implements ISessionManager {
       })
       this.automationSystems.set(workspaceRootPath, automationSystem)
       sessionLog.info(`Initialized AutomationSystem for workspace ${workspaceId}`)
+    }
+  }
+
+  private setupWorkspaceMcpPool(workspaceRootPath: string): void {
+    if (this.workspaceMcpPools.has(workspaceRootPath)) {
+      return
+    }
+
+    const tokenRefreshManager = new TokenRefreshManager(getSourceCredentialManager(), {
+      log: (msg) => sessionLog.debug(msg),
+    })
+    const pool = new McpClientPool({
+      debug: (msg) => sessionLog.debug(msg),
+      workspaceRootPath,
+    })
+
+    this.workspaceTokenRefreshManagers.set(workspaceRootPath, tokenRefreshManager)
+    this.workspaceMcpPools.set(workspaceRootPath, pool)
+
+    void this.syncWorkspaceMcpPool(workspaceRootPath, pool, tokenRefreshManager)
+  }
+
+  private async syncWorkspaceMcpPool(
+    workspaceRootPath: string,
+    pool: McpClientPool,
+    tokenRefreshManager: TokenRefreshManager,
+  ): Promise<void> {
+    try {
+      const allWorkspaceSources = loadAllSources(workspaceRootPath).filter(isSourceUsable)
+      const { mcpServers, apiServers } = await buildServersFromSources(
+        allWorkspaceSources,
+        undefined,
+        tokenRefreshManager,
+      )
+      if (this.workspaceMcpPools.get(workspaceRootPath) !== pool) {
+        return
+      }
+      await pool.sync(mcpServers, apiServers)
+      if (this.workspaceMcpPools.get(workspaceRootPath) !== pool) {
+        await pool.disconnectAll()
+      }
+    } catch (error) {
+      sessionLog.warn(`Failed to bootstrap workspace MCP pool for ${workspaceRootPath}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  async closeWorkspace(workspaceRootPath: string): Promise<void> {
+    const watcher = this.configWatchers.get(workspaceRootPath)
+    if (watcher) {
+      watcher.stop()
+      this.configWatchers.delete(workspaceRootPath)
+      sessionLog.info(`Stopped config watcher for ${workspaceRootPath}`)
+    }
+
+    const pool = this.workspaceMcpPools.get(workspaceRootPath)
+    if (pool) {
+      this.workspaceMcpPools.delete(workspaceRootPath)
+      try {
+        await pool.disconnectAll()
+      } catch (error) {
+        sessionLog.warn(`Failed to disconnect workspace MCP pool for ${workspaceRootPath}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    this.workspaceTokenRefreshManagers.delete(workspaceRootPath)
+
+    const automationSystem = this.automationSystems.get(workspaceRootPath)
+    if (automationSystem) {
+      try {
+        automationSystem.dispose()
+        sessionLog.info(`Disposed AutomationSystem for ${workspaceRootPath}`)
+      } catch (error) {
+        sessionLog.error(`Failed to dispose AutomationSystem for ${workspaceRootPath}:`, error)
+      }
+      this.automationSystems.delete(workspaceRootPath)
     }
   }
 
@@ -8011,23 +8088,15 @@ export class SessionManager implements ISessionManager {
   cleanup(): void {
     sessionLog.info('Cleaning up resources...')
 
-    // Stop all ConfigWatchers (file system watchers)
-    for (const [path, watcher] of this.configWatchers) {
-      watcher.stop()
-      sessionLog.info(`Stopped config watcher for ${path}`)
+    // Stop workspace-scoped infrastructure (ConfigWatchers, MCP pools, automations)
+    const workspacePaths = new Set([
+      ...this.configWatchers.keys(),
+      ...this.workspaceMcpPools.keys(),
+      ...this.automationSystems.keys(),
+    ])
+    for (const workspacePath of workspacePaths) {
+      void this.closeWorkspace(workspacePath)
     }
-    this.configWatchers.clear()
-
-    // Dispose all AutomationSystems (includes scheduler, handlers, and event loggers)
-    for (const [workspacePath, automationSystem] of this.automationSystems) {
-      try {
-        automationSystem.dispose()
-        sessionLog.info(`Disposed AutomationSystem for ${workspacePath}`)
-      } catch (error) {
-        sessionLog.error(`Failed to dispose AutomationSystem for ${workspacePath}:`, error)
-      }
-    }
-    this.automationSystems.clear()
 
     // Clear all pending delta flush timers
     for (const [sessionId, timer] of this.deltaFlushTimers) {
