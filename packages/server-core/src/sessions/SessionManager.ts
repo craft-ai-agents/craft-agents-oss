@@ -410,6 +410,7 @@ async function saveClaudeTurnAnchor(
  * @param sources - Sources to build servers for
  * @param sessionPath - Optional path to session folder for saving large API responses
  * @param tokenRefreshManager - Optional TokenRefreshManager for OAuth token refresh
+ * @param summarize - Optional summarizer for large API responses
  */
 async function buildServersFromSources(
   sources: LoadedSource[],
@@ -1665,6 +1666,9 @@ export class SessionManager implements ISessionManager {
     }
   }
 
+  /**
+   * Tear down workspace-scoped infrastructure initialized by setupConfigWatcher().
+   */
   async closeWorkspace(workspaceRootPath: string): Promise<void> {
     const watcher = this.configWatchers.get(workspaceRootPath)
     if (watcher) {

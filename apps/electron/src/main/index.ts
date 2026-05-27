@@ -758,8 +758,7 @@ app.whenReady().then(async () => {
         const { getWorkspaceByNameOrId, removeWorkspace: remove } = await import('@craft-agent/shared/config')
         const workspace = getWorkspaceByNameOrId(workspaceId)
         if (workspace) {
-          await (instance.sessionManager as unknown as { closeWorkspace?: (workspaceRootPath: string) => Promise<void> })
-            .closeWorkspace?.(workspace.rootPath)
+          await instance.sessionManager.closeWorkspace(workspace.rootPath)
         }
         return remove(workspaceId)
       })
