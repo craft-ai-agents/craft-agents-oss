@@ -475,6 +475,7 @@ body
     expect(socialPublisher?.metadata.skills).toEqual(['social-publishing'])
     expect(socialPublisher?.metadata.sources).toEqual(['printing-press-social'])
     expect(socialPublisher?.systemPrompt).toContain('browser_tool')
+    expect(socialPublisher?.systemPrompt).toContain('chrome-cdp')
     expect(socialPublisher?.systemPrompt).toContain('not Playwright')
   })
 

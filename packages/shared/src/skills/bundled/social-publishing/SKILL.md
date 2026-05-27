@@ -9,7 +9,7 @@ metadata:
 
 # Social Publishing
 
-Use this skill to run social channel work through RunnerOS with the bundled Printing Press Social CLI and `browser_tool`.
+Use this skill to run social channel work through RunnerOS with the bundled Printing Press Social CLI and `browser_tool`. If the user asks to use an already-open Chrome browser/profile/tab, use the global `chrome-cdp` skill instead of launching a fresh browser surface.
 
 ## Core Flow
 
@@ -20,6 +20,16 @@ Use this skill to run social channel work through RunnerOS with the bundled Prin
 5. Ask for explicit approval before any live publish/send action.
 6. Execute through Runner `browser_tool` using the dry-run JSON as the action contract.
 7. Return a receipt with platform, profile, action, payload summary, media path, target, timestamp, and observed result.
+
+## Existing Chrome Sessions
+
+Use `chrome-cdp` when the user explicitly wants the agent to inspect or operate a page already open in Chrome, such as a logged-in social profile, a preloaded draft, or a browser window they are actively using.
+
+- First list open tabs and select the matching target.
+- If Chrome is not reachable, tell the user to enable remote debugging from `chrome://inspect/#remote-debugging`.
+- Use CDP for inspection, screenshots, snapshots, navigation, typing, clicking, and evidence capture.
+- Keep the approval gate exactly the same: no live publish/send/comment/DM/upload/schedule action without explicit approval of the final details.
+- Prefer Runner `browser_tool` for normal fresh sessions; prefer `chrome-cdp` only for existing Chrome context.
 
 ## Profile Sessions
 
