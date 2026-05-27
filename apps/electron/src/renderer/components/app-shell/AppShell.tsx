@@ -14,6 +14,7 @@ import {
   Tag,
   Check,
   X,
+  Pencil,
   Search,
   Plus,
   Trash2,
@@ -2050,12 +2051,12 @@ function AppShellContent({
   }, [handleChatClick, handleAgentsClick, handleAutomationsClick, handleSessionsNavClick, handleSettingsClick])
 
   const sidebarProjectGroups = React.useMemo(() => {
-    const groups = new Map<string, { key: string; label: string; items: SessionMeta[] }>()
+    const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
     const visibleSessions = searchActive ? workspaceSessionMetas : filteredSessionMetas
 
     for (const item of visibleSessions) {
       const project = getSessionProjectInfo(item)
-      const group = groups.get(project.key) ?? { key: project.key, label: project.label, items: [] }
+      const group = groups.get(project.key) ?? { key: project.key, label: project.label, value: project.value, items: [] }
       group.items.push(item)
       groups.set(project.key, group)
     }
@@ -2419,20 +2420,58 @@ function AppShellContent({
 
                       return (
                         <div key={project.key} className="space-y-0.5">
-                          <button
-                            type="button"
-                            onClick={() => toggleExpanded(projectCollapseKey)}
-                            aria-expanded={projectExpanded}
-                            className="flex w-full items-center gap-1.5 rounded-[7px] bg-white/[0.035] px-2 py-1 text-left text-[11px] font-semibold text-white/70 transition-colors hover:bg-white/[0.055] hover:text-white/85"
-                          >
-                            {projectExpanded ? (
-                              <ChevronDown className="h-3 w-3 shrink-0 text-white/45" />
-                            ) : (
-                              <ChevronRight className="h-3 w-3 shrink-0 text-white/45" />
+                          <div className="flex items-center rounded-[7px] bg-white/[0.035] text-[11px] font-semibold text-white/70 transition-colors hover:bg-white/[0.055] hover:text-white/85">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpanded(projectCollapseKey)}
+                              aria-expanded={projectExpanded}
+                              className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1 text-left"
+                            >
+                              {projectExpanded ? (
+                                <ChevronDown className="h-3 w-3 shrink-0 text-white/45" />
+                              ) : (
+                                <ChevronRight className="h-3 w-3 shrink-0 text-white/45" />
+                              )}
+                              <span className="min-w-0 flex-1 truncate">{project.label}</span>
+                              <span className="text-[10px] tabular-nums text-white/35">{project.items.length}</span>
+                            </button>
+                            {project.value && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="mr-1 flex h-5 w-5 items-center justify-center rounded-[5px] text-white/35 transition-colors hover:bg-white/[0.06] hover:text-white/70"
+                                    aria-label={`Project options for ${project.label}`}
+                                  >
+                                    <MoreHorizontal className="h-3 w-3" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <StyledDropdownMenuContent align="end" className="w-40">
+                                  <StyledDropdownMenuItem
+                                    onClick={() => setSessionProjectDialog({
+                                      kind: 'rename_project',
+                                      projectSlug: project.value!,
+                                      projectLabel: project.label,
+                                    })}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    <span>Rename</span>
+                                  </StyledDropdownMenuItem>
+                                  <StyledDropdownMenuItem
+                                    onClick={() => setSessionProjectDialog({
+                                      kind: 'delete_project',
+                                      projectSlug: project.value!,
+                                      projectLabel: project.label,
+                                    })}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    <span>Delete</span>
+                                  </StyledDropdownMenuItem>
+                                </StyledDropdownMenuContent>
+                              </DropdownMenu>
                             )}
-                            <span className="min-w-0 flex-1 truncate">{project.label}</span>
-                            <span className="text-[10px] tabular-nums text-white/35">{project.items.length}</span>
-                          </button>
+                          </div>
                           {projectExpanded && (
                             <div className="space-y-0.5 pl-3">
                               {project.items.map((item) => {
