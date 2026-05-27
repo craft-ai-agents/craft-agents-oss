@@ -27,10 +27,15 @@ let pendingSsoNonce: string | null = null
 /** Register local-only SSO startup session and refresh handlers. */
 export function registerSsoHandlers(server: RpcServer, deps: Pick<HandlerDeps, 'platform' | 'sessionManager'>): void {
   server.handle(RPC_CHANNELS.sso.GET_SESSION, async () => {
-    return handleSsoStartupSession({
+    const result = await handleSsoStartupSession({
       ...createSsoSessionDeps(),
       isPackaged: deps.platform.isPackaged,
     })
+    if (result.authenticated) {
+      // Session already valid (persisted login or dev SSO bypass) — warm MCP pools now.
+      void deps.sessionManager.syncAllWorkspaceMcpPools().catch(() => {})
+    }
+    return result
   })
 
   server.handle(RPC_CHANNELS.sso.REFRESH, async () => {

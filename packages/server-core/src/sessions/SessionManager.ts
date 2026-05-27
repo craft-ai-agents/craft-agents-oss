@@ -1641,7 +1641,16 @@ export class SessionManager implements ISessionManager {
     this.workspaceTokenRefreshManagers.set(workspaceRootPath, tokenRefreshManager)
     this.workspaceMcpPools.set(workspaceRootPath, pool)
 
-    const bootstrapPromise = this.syncWorkspaceMcpPool(workspaceRootPath, pool, tokenRefreshManager)
+    // Only bootstrap eagerly when an SSO session is already persisted (headless
+    // with a prior login, or SSO bypass mode active). If no session exists the
+    // login page is about to be shown — defer to syncAllWorkspaceMcpPools(),
+    // which is called from the SSO callback / GET_SESSION handlers after auth.
+    const bootstrapPromise = new SsoCredentialStore().load()
+      .then(session => {
+        if (!session) return
+        return this.syncWorkspaceMcpPool(workspaceRootPath, pool, tokenRefreshManager)
+      })
+      .catch(() => {})
     this.workspaceMcpPoolBootstrapPromises.set(workspaceRootPath, bootstrapPromise)
   }
 
