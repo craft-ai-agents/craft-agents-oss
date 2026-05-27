@@ -224,6 +224,7 @@
   "chat.processing.zipping": "Zipping...",
   "chat.processing.zooming": "Zooming...",
   "chat.queuedBadge": "Queued",
+  "chat.reasoning": "Thinking",
   "chat.renameSession": "Rename Session",
   "chat.scrollUpForEarlier": "Scroll up for earlier messages ({{count}} more)",
   "chat.selectedText": "Selected text",

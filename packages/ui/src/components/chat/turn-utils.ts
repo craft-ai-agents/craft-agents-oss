@@ -572,7 +572,6 @@ export function groupMessagesByTurn(messages: Message[], options: GroupTurnsOpti
       // until text_complete arrives with the definitive isIntermediate flag
       if (message.isIntermediate || message.isPending) {
         if (!currentTurn) {
-          // Start a new turn for this intermediate message
           currentTurn = {
             type: 'assistant',
             turnId: message.turnId || message.id,
@@ -584,28 +583,53 @@ export function groupMessagesByTurn(messages: Message[], options: GroupTurnsOpti
             timestamp: message.timestamp,
           }
         }
-        // Always add to current turn as activity (ignoring turnId differences)
-        // Pending messages show as 'running' until we know they're complete
-        // Include parentId for intermediate messages to support nesting within subagents
-        const intermediateActivity: ActivityItem = {
-          id: message.id,
-          type: 'intermediate',
-          status: message.isPending ? 'running' : 'completed',
-          content: message.content,
-          timestamp: message.timestamp,
-          parentId: message.parentToolUseId,
-        }
-        // Calculate depth for intermediate messages too
-        if (intermediateActivity.parentId) {
-          const parent = currentTurn.activities.find(a => a.toolUseId === intermediateActivity.parentId)
-          intermediateActivity.depth = parent ? (parent.depth || 0) + 1 : 1
+
+        if (message.isPending) {
+          // Pending: we don't yet know if this is intermediate or final.
+          // Once thinking or response text is present, drive ThinkingBlock + ResponseCard
+          // directly and suppress the activity spinner — showing both simultaneously
+          // creates a confusing "Thinking..." + reasoning panel overlap.
+          // Before any content arrives, fall back to the spinner as an initial indicator.
+          const { reasoningText, cleanContent } = extractReasoningContent({ content: message.content ?? '' })
+          if (reasoningText !== null || cleanContent !== '') {
+            currentTurn.response = {
+              text: cleanContent,
+              reasoningText,
+              isStreaming: true,
+              streamStartTime: message.timestamp,
+            }
+          } else {
+            const spinnerActivity: ActivityItem = {
+              id: message.id,
+              type: 'intermediate',
+              status: 'running',
+              content: message.content,
+              timestamp: message.timestamp,
+              parentId: message.parentToolUseId,
+            }
+            spinnerActivity.depth = 0
+            currentTurn.activities.push(spinnerActivity)
+          }
         } else {
-          intermediateActivity.depth = 0
+          // isIntermediate: completed — always show as activity row with optional inline ThinkingBlock
+          const intermediateActivity: ActivityItem = {
+            id: message.id,
+            type: 'intermediate',
+            status: 'completed',
+            content: message.content,
+            timestamp: message.timestamp,
+            parentId: message.parentToolUseId,
+          }
+          if (intermediateActivity.parentId) {
+            const parent = currentTurn.activities.find(a => a.toolUseId === intermediateActivity.parentId)
+            intermediateActivity.depth = parent ? (parent.depth || 0) + 1 : 1
+          } else {
+            intermediateActivity.depth = 0
+          }
+          currentTurn.activities.push(intermediateActivity)
         }
-        currentTurn.activities.push(intermediateActivity)
 
         // Update turn streaming state based on this message
-        // If message is no longer pending/streaming, update turn state accordingly
         if (!message.isPending && !message.isStreaming) {
           currentTurn.isStreaming = false
         }

@@ -4,6 +4,7 @@ import i18n from 'i18next'
 import { useTranslation } from 'react-i18next'
 import type { ToolDisplayMeta, AnnotationV1 } from '@craft-agent/core'
 import { normalizePath, pathStartsWith, stripPathPrefix } from '@craft-agent/core/utils'
+import { extractReasoningContent } from '@craft-agent/shared/reasoning'
 import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
 import { motion, AnimatePresence } from 'motion/react'
 import {
@@ -422,7 +423,7 @@ const BUFFER_CONFIG = {
   MAX_BUFFER_MS: 2500,         // Never buffer longer than 2.5s
   TIMEOUT_MIN_WORDS: 5,        // Show on timeout if at least this many words
   HIGH_WORD_COUNT: 60,         // Show regardless of structure at this count
-  CONTENT_THROTTLE_MS: 300,    // Throttle content updates during streaming (perf optimization)
+  CONTENT_THROTTLE_MS: 50,     // Throttle content updates during streaming (perf optimization)
 } as const
 
 type BufferReason =
@@ -940,50 +941,60 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
   const depth = activity.depth || 0
 
   // Intermediate messages (LLM commentary) - render with dashed circle icon
-  // Show "Thinking" while streaming, stripped markdown content when complete
+  // Show spinner while streaming; strip <think> tags and show inline ThinkingBlock when complete
   if (activity.type === 'intermediate') {
     const isThinking = activity.status === 'running'
-    const displayContent = isThinking ? 'Thinking...' : stripMarkdown(activity.content || '')
     const isComplete = activity.status === 'completed'
+    const { reasoningText, cleanContent } = isThinking
+      ? { reasoningText: null, cleanContent: '' }
+      : extractReasoningContent({ content: activity.content || '' })
+    const displayContent = isThinking ? 'Thinking...' : stripMarkdown(cleanContent)
     return (
       <div className="flex items-stretch">
         <TreeViewConnector depth={depth} isLastChild={isLastChild} />
-        <div
-          className={cn(
-            "group/row flex items-center gap-2 py-0.5 text-foreground/75 flex-1 min-w-0",
-            SIZE_CONFIG.fontSize
-          )}
-          onClick={onOpenDetails && isComplete ? onOpenDetails : undefined}
-        >
-          {isThinking ? (
-            <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center shrink-0")}>
-              <Spinner className={SIZE_CONFIG.spinnerSize} />
-            </div>
-          ) : (
-            <MessageCircleDashed className={cn(SIZE_CONFIG.iconSize, "shrink-0")} />
-          )}
-          <span className={cn("truncate flex-1", onOpenDetails && isComplete && "group-hover/row:underline")}>{displayContent}</span>
-          {/* Open details button */}
-          {onOpenDetails && isComplete && (
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpenDetails()
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+        <div className="flex flex-col flex-1 min-w-0">
+          <div
+            className={cn(
+              "group/row flex items-center gap-2 py-0.5 text-foreground/75",
+              SIZE_CONFIG.fontSize
+            )}
+            onClick={onOpenDetails && isComplete ? onOpenDetails : undefined}
+          >
+            {isThinking ? (
+              <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center shrink-0")}>
+                <Spinner className={SIZE_CONFIG.spinnerSize} />
+              </div>
+            ) : (
+              <MessageCircleDashed className={cn(SIZE_CONFIG.iconSize, "shrink-0")} />
+            )}
+            <span className={cn("truncate flex-1", onOpenDetails && isComplete && "group-hover/row:underline")}>{displayContent}</span>
+            {/* Open details button */}
+            {onOpenDetails && isComplete && (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
                   e.stopPropagation()
                   onOpenDetails()
-                }
-              }}
-              className={cn(
-                "p-0.5 rounded-[3px] opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0",
-                "hover:bg-muted/80 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              )}
-            >
-              <ArrowUpRight className={SIZE_CONFIG.iconSize} />
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation()
+                    onOpenDetails()
+                  }
+                }}
+                className={cn(
+                  "p-0.5 rounded-[3px] opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0",
+                  "hover:bg-muted/80 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                )}
+              >
+                <ArrowUpRight className={SIZE_CONFIG.iconSize} />
+              </div>
+            )}
+          </div>
+          {isComplete && reasoningText && (
+            <div className="pb-1">
+              <ThinkingBlock reasoningText={reasoningText} />
             </div>
           )}
         </div>
@@ -2803,10 +2814,10 @@ function TodoList({ todos }: TodoListProps) {
 /**
  * Displays the model's reasoning text with expand/collapse behaviour.
  *
- * - Auto-expands while the turn is in a pre-response phase (pending / awaiting /
- *   buffering-stream) so the user gets live feedback that reasoning is in progress.
- * - Auto-collapses the moment the first non-reasoning response token arrives.
- * - After collapse a "Show reasoning" toggle lets the user re-expand.
+ * - When phase/isBuffering are provided (turn-level): auto-expands while reasoning is
+ *   in progress, auto-collapses when the first response text becomes visible.
+ * - When phase/isBuffering are omitted (intermediate activity inline use): starts collapsed.
+ * - Stays mounted once reasoning text first appears to prevent flicker across streaming ticks.
  */
 function ThinkingBlock({
   reasoningText,
@@ -2814,11 +2825,16 @@ function ThinkingBlock({
   isBuffering,
 }: {
   reasoningText: string | null
-  phase: TurnPhase
-  isBuffering: boolean
+  phase?: TurnPhase
+  isBuffering?: boolean
 }) {
-  const shouldAutoExpand = getThinkingBlockExpanded(phase, isBuffering)
+  const { t } = useTranslation()
+  const shouldAutoExpand = phase !== undefined ? getThinkingBlockExpanded(phase, isBuffering ?? false) : false
   const [expanded, setExpanded] = useState(shouldAutoExpand)
+
+  // Track whether we've ever had reasoning text so we don't unmount once shown
+  const hasEverHadReasoningRef = useRef(false)
+  if (reasoningText) hasEverHadReasoningRef.current = true
 
   const prevAutoExpandRef = useRef(shouldAutoExpand)
   useEffect(() => {
@@ -2828,7 +2844,7 @@ function ThinkingBlock({
     prevAutoExpandRef.current = shouldAutoExpand
   }, [shouldAutoExpand])
 
-  if (!reasoningText) return null
+  if (!reasoningText && !hasEverHadReasoningRef.current) return null
 
   const headerButtonClass = "flex items-center gap-1.5 w-full px-3 py-1.5 text-left text-muted-foreground hover:bg-muted/40 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 
@@ -2845,7 +2861,7 @@ function ThinkingBlock({
         >
           <ChevronRight className={SIZE_CONFIG.iconSize} />
         </motion.div>
-        <span>{expanded ? 'Reasoning' : 'Show reasoning'}</span>
+        <span>{t('chat.reasoning')}</span>
       </button>
       {expanded && (
         <div className="px-3 pb-3 pt-0.5 text-muted-foreground/80 whitespace-pre-wrap break-words">

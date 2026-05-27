@@ -285,3 +285,23 @@ Required env var: `OPENLLM_BASE_HOST` (deployment-owned base host for the OpenLL
 Distinct from `OPENLLM_HOST`: `OPENLLM_BASE_HOST` is deployment-owned and triggers the built-in virtual connection; `OPENLLM_HOST` is user-owned and powers user-configured OpenLLM Connections. Neither falls back to the other.
 
 Avoid: OpenLLM env provider, synthesized OpenLLM connection.
+
+### Thinking Toggle
+A per-session on/off control that enables or disables extended reasoning for the active session. Replaces the former six-tier think level system. Persisted as a boolean (`thinkingEnabled`); workspace settings provide the default. The toggle appears as an icon button in the `FreeFormInput` toolbar.
+
+Migration: legacy `thinkingLevel: 'off'` maps to `false`; any other persisted value maps to `true`.
+
+Avoid: think level, thinking level, reasoning level.
+
+### Thinking Block
+The collapsible UI element that shows the model's raw reasoning text when the **Thinking Toggle** is on. Labelled **"Thinking"** in the UI (i18n key `chat.reasoning`); the chevron communicates expand/collapse state — no second label variant.
+
+Appears in two places:
+- **Turn level** — below the activities section, for the final response. Streams expanded while the model is actively reasoning (pending phase); auto-collapses the moment the first response text becomes visible. After collapse, the user can re-expand via the "Reasoning" toggle.
+- **Intermediate activity level** — inline inside any intermediate activity row (pre-tool-call commentary) that carries reasoning content. Collapsed by default once complete.
+
+Supports three extraction formats via `extractReasoningContent`: Anthropic-style `thinking` content blocks, a top-level `reasoning_content` field, and `<think>…</think>` tags embedded in the message content string. `<think>` tags are always stripped before any content is shown in an activity row or the ResponseCard.
+
+Streaming behaviour: the pending message (while `isPending: true`) drives both the intermediate activity spinner **and** `currentTurn.response`. This dual-path is what allows the ThinkingBlock and ResponseCard to stream progressively in parallel, rather than appearing all at once after `text_complete`.
+
+Avoid: thinking panel, reasoning panel, reasoning block.

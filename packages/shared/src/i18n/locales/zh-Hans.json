@@ -224,6 +224,7 @@
   "chat.processing.zipping": "飞速中...",
   "chat.processing.zooming": "疾驰中...",
   "chat.queuedBadge": "已排队",
+  "chat.reasoning": "思考",
   "chat.renameSession": "重命名会话",
   "chat.scrollUpForEarlier": "向上滚动查看更早的消息 (还有 {{count}} 条)",
   "chat.selectedText": "选中文本",
