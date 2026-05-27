@@ -69,10 +69,10 @@ export const OPENLLM_ENV_CONNECTION_SLUG = 'openllm-env';
  *                    false for user-configured connections (reads OPENLLM_HOST).
  */
 export function buildOpenLlmBaseUrl(env: NodeJS.ProcessEnv = process.env, isBuiltIn = false): string {
-  const envVarName = isBuiltIn ? 'OPENLLM_BASE_HOST' : 'OPENLLM_HOST';
-  const host = env[envVarName]?.trim();
+  const envVal = isBuiltIn ? process.env.OPENLLM_BASE_HOST : process.env.OPENLLM_HOST;
+  const host = envVal?.trim();
   if (!host) {
-    throw new Error(`${envVarName} is required for OpenLLM connections`);
+    throw new Error(`${envVal} is required for OpenLLM connections`);
   }
 
   return `${host.replace(/\/+$/, '')}/v1`;
