@@ -60,6 +60,7 @@ files:
   - vendor/copilot/**/*
   # Include bundled local CLI tools
   - tools/printing-press-social/**/*
+  - tools/hypermotion/**/*
   # Exclude everything from node_modules (will use extraResources for SDK)
   - "!node_modules/**/*"
 

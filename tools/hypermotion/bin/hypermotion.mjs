@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -74,6 +74,10 @@ Run:
   cd ${toolRoot}
   npm install`);
   }
+}
+
+function toolPackage() {
+  return JSON.parse(readFileSync(join(toolRoot, 'package.json'), 'utf-8'));
 }
 
 function write(path, content) {
@@ -257,6 +261,7 @@ if (command === 'help' || command === '--help' || command === '-h') {
 }
 
 if (command === 'doctor') {
+  const pkg = toolPackage();
   const node = capture(process.execPath, ['--version']);
   const npm = capture('npm', ['--version']);
   const hyperframes = existsSync(hyperframesBin) ? capture(hyperframesBin, ['--version'], { cwd: toolRoot }) : { ok: false, stdout: '', stderr: 'not installed' };
@@ -267,7 +272,7 @@ if (command === 'doctor') {
     node: node.stdout,
     npm: npm.stdout,
     hyperframes: hyperframes.ok ? hyperframes.stdout : hyperframes.stderr,
-    remotion: remotion.ok ? '4.0.467' : (remotion.stderr || remotion.stdout),
+    remotion: remotion.ok ? pkg.dependencies['@remotion/cli'] : (remotion.stderr || remotion.stdout),
   }, null, 2));
   process.exit(node.ok && npm.ok && hyperframes.ok && remotion.ok ? 0 : 1);
 }
