@@ -205,6 +205,23 @@ describe('SourceManager', () => {
       expect(formatted).toContain('GitHub integration');
     });
 
+    it('should not require guide reads for sources with guide files', () => {
+      sourceManager.setAllSources([
+        {
+          ...createMockSource('github', { enabled: true, tagline: 'GitHub integration' }),
+          guide: { raw: '# GitHub\n\nUsage notes.' },
+        },
+      ]);
+      sourceManager.updateActiveState(['github'], [], ['github']);
+
+      const formatted = sourceManager.formatSourceState();
+
+      expect(formatted).toContain('github');
+      expect(formatted).not.toContain('Guide:');
+      expect(formatted).not.toContain('guide.md');
+      expect(formatted).not.toContain('WILL BE REJECTED');
+    });
+
     it('should mark sources with failed builds', () => {
       // github is intended but not actually active (build failed)
       sourceManager.updateActiveState([], [], ['github']);

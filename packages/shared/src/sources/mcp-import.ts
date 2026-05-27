@@ -435,9 +435,9 @@ function buildManualCandidate(input: McpManualSourceInput): McpImportCandidate {
     errors.push({ field: 'provider', message: 'MCP source provider is required.' });
   }
 
-  // Normalize legacy transport values (http/sse → streamable_http) for backward compatibility
+  // Normalize legacy transport values for backward compatibility.
   const rawTransport: string | undefined = input.mcp.transport;
-  const transport: McpTransport = rawTransport === 'http' || rawTransport === 'sse' || rawTransport === undefined
+  const transport: McpTransport = rawTransport === 'http' || rawTransport === 'sse' || rawTransport === 'streamable-http' || rawTransport === undefined
     ? 'streamable_http'
     : (rawTransport as McpTransport);
   const state: ManualCandidateBuildState = {
@@ -451,7 +451,7 @@ function buildManualCandidate(input: McpManualSourceInput): McpImportCandidate {
   } else if (transport === 'streamable_http') {
     addManualRemoteFields(input.mcp, input.authCredential, provider, state);
   } else {
-    errors.push({ field: 'transport', message: 'Transport must be one of: streamable_http, stdio.' });
+    errors.push({ field: 'transport', message: 'Transport must be one of: streamable_http, streamable-http, stdio.' });
   }
 
   const candidate: McpImportCandidate = {
@@ -1035,12 +1035,12 @@ function inferTransport(server: Record<string, unknown>, errors: McpImportFieldE
   if (explicitTransport === 'stdio') {
     return 'stdio';
   }
-  if (explicitTransport === 'streamable_http' || explicitTransport === 'http' || explicitTransport === 'sse') {
+  if (explicitTransport === 'streamable_http' || explicitTransport === 'streamable-http' || explicitTransport === 'http' || explicitTransport === 'sse') {
     return 'streamable_http';
   }
   if (explicitTransport !== undefined) {
     const field = server.transport !== undefined ? 'transport' : 'type';
-    errors.push({ field, message: 'Transport must be one of: streamable_http, stdio.' });
+    errors.push({ field, message: 'Transport must be one of: streamable_http, streamable-http, stdio.' });
   }
   if (server.command) {
     return 'stdio';

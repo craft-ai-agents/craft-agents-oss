@@ -2,10 +2,11 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { loadWorkspaceSources } from '@craft-agent/shared/sources'
 import { safeJsonParse } from '@craft-agent/shared/utils/files'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import type { McpImportCandidate } from '@craft-agent/shared/sources'
+import type { LoadedSource, SourceConnectionStatus } from '@craft-agent/shared/sources/types'
+import type { McpToolsResult } from '@craft-agent/shared/protocol'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.GET,
@@ -20,6 +21,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.GET_PERMISSIONS,
   RPC_CHANNELS.permissions.GET_DEFAULTS,
   RPC_CHANNELS.sources.GET_MCP_TOOLS,
+  RPC_CHANNELS.sources.REFRESH_MCP_TOOLS,
 ] as const
 
 export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -107,8 +109,13 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     }
 
     saveSourceConfig(workspace.rootPath, updated)
+
+    if (updated.type === 'mcp') {
+      await refreshMcpSourceConnection(workspace.rootPath, sourceSlug)
+    }
+
     pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
-    return updated
+    return loadSourceConfig(workspace.rootPath, sourceSlug) ?? updated
   })
 
   server.handle(RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT, async (_ctx, workspaceId: string, json: string) => {
@@ -274,68 +281,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
         return { success: false, error: 'Source has not been tested yet' }
       }
 
-      const { CraftMcpClient } = await import('@craft-agent/shared/mcp')
-      let client: InstanceType<typeof CraftMcpClient>
-
-      if (source.config.mcp.transport === 'stdio') {
-        if (!source.config.mcp.command) {
-          return { success: false, error: 'Stdio MCP source is missing required "command" field' }
-        }
-        log.info(`Fetching MCP tools via stdio: ${source.config.mcp.command}`)
-        client = new CraftMcpClient({
-          transport: 'stdio',
-          command: source.config.mcp.command,
-          args: source.config.mcp.args,
-          env: source.config.mcp.env,
-        })
-      } else {
-        if (!source.config.mcp.url) {
-          return { success: false, error: 'MCP source URL is required for Streamable HTTP transport' }
-        }
-
-        let accessToken: string | undefined
-        if (source.config.mcp.authType === 'oauth' || source.config.mcp.authType === 'bearer') {
-          const credentialManager = getCredentialManager()
-          const credentialId = source.config.mcp.authType === 'oauth'
-            ? { type: 'source_oauth' as const, workspaceId: source.workspaceId, sourceId: sourceSlug }
-            : { type: 'source_bearer' as const, workspaceId: source.workspaceId, sourceId: sourceSlug }
-          const credential = await credentialManager.get(credentialId)
-          accessToken = credential?.value
-          if (source.config.mcp.authType === 'bearer') {
-            const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
-            accessToken = (await new SsoCredentialStore().load().catch(() => null))?.idToken ?? accessToken
-          }
-        }
-
-        log.info(`Fetching MCP tools from ${source.config.mcp.url}`)
-        client = new CraftMcpClient({
-          transport: 'streamable_http',
-          url: source.config.mcp.url,
-          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-        })
-      }
-
-      const tools = await client.listTools()
-      await client.close()
-
-      const { loadSourcePermissionsConfig, permissionsConfigCache } = await import('@craft-agent/shared/agent')
-      const permissionsConfig = loadSourcePermissionsConfig(workspace.rootPath, sourceSlug)
-
-      const mergedConfig = permissionsConfigCache.getMergedConfig({
-        workspaceRootPath: workspace.rootPath,
-        activeSourceSlugs: [sourceSlug],
-      })
-
-      const toolsWithPermission = tools.map(tool => {
-        const allowed = mergedConfig.readOnlyMcpPatterns.some((pattern: RegExp) => pattern.test(tool.name))
-        return {
-          name: tool.name,
-          description: tool.description,
-          allowed,
-        }
-      })
-
-      return { success: true, tools: toolsWithPermission }
+      return await listMcpToolsForSource(workspace.rootPath, source)
     } catch (error) {
       log.error('Failed to get MCP tools:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch tools'
@@ -348,6 +294,141 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       return { success: false, error: errorMessage }
     }
   })
+
+  server.handle(RPC_CHANNELS.sources.REFRESH_MCP_TOOLS, async (_ctx, workspaceId: string, sourceSlug: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return { success: false, error: 'Workspace not found' }
+
+    const refreshResult = await refreshMcpSourceConnection(workspace.rootPath, sourceSlug)
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
+    if (!refreshResult.success) {
+      return { success: false, error: refreshResult.error }
+    }
+
+    const source = loadWorkspaceSources(workspace.rootPath).find(s => s.config.slug === sourceSlug)
+    if (!source) return { success: false, error: 'Source not found after refresh' }
+    return listMcpToolsForSource(workspace.rootPath, source)
+  })
+}
+
+async function refreshMcpSourceConnection(workspaceRootPath: string, sourceSlug: string): Promise<{ success: boolean; error?: string }> {
+  const { defaultMcpPostCreateConnectionTester, getSourceCredentialManager, loadSource, loadSourceConfig, saveSourceConfig } = await import('@craft-agent/shared/sources')
+  const source = loadSource(workspaceRootPath, sourceSlug)
+  if (!source) return { success: false, error: 'Source not found' }
+  if (source.config.type !== 'mcp') return { success: false, error: 'Source is not an MCP server' }
+
+  const startedAt = Date.now()
+  try {
+    const credential = await getSourceCredentialManager().load(source)
+    const result = await defaultMcpPostCreateConnectionTester({
+      source,
+      ...(credential?.value ? { credentialValue: credential.value } : {}),
+    })
+    const config = loadSourceConfig(workspaceRootPath, sourceSlug)
+    if (config) {
+      config.lastTestedAt = startedAt
+      if (result.success) {
+        config.isAuthenticated = true
+        config.connectionStatus = 'connected'
+        config.connectionError = undefined
+      } else {
+        config.isAuthenticated = false
+        config.connectionStatus = getFailedConnectionStatus(result.errorType)
+        config.connectionError = result.error || 'Connection test failed'
+      }
+      saveSourceConfig(workspaceRootPath, config)
+    }
+    return result.success
+      ? { success: true }
+      : { success: false, error: result.error || 'Connection test failed' }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const config = loadSourceConfig(workspaceRootPath, sourceSlug)
+    if (config) {
+      config.lastTestedAt = startedAt
+      config.isAuthenticated = false
+      config.connectionStatus = 'failed'
+      config.connectionError = message
+      saveSourceConfig(workspaceRootPath, config)
+    }
+    return { success: false, error: message }
+  }
+}
+
+function getFailedConnectionStatus(errorType: 'failed' | 'needs-auth' | 'pending' | 'invalid-schema' | 'disabled' | 'unknown' | undefined): SourceConnectionStatus {
+  return errorType === 'needs-auth' ? 'needs_auth' : 'failed'
+}
+
+async function listMcpToolsForSource(workspaceRootPath: string, source: LoadedSource): Promise<McpToolsResult> {
+  if (source.config.type !== 'mcp') return { success: false, error: 'Source is not an MCP server' }
+  if (!source.config.mcp) return { success: false, error: 'MCP config not found' }
+
+  const { CraftMcpClient } = await import('@craft-agent/shared/mcp')
+  let client: InstanceType<typeof CraftMcpClient>
+
+  if (source.config.mcp.transport === 'stdio') {
+    if (!source.config.mcp.command) {
+      return { success: false, error: 'Stdio MCP source is missing required "command" field' }
+    }
+    client = new CraftMcpClient({
+      transport: 'stdio',
+      command: source.config.mcp.command,
+      args: source.config.mcp.args,
+      env: source.config.mcp.env,
+    })
+  } else {
+    if (!source.config.mcp.url) {
+      return { success: false, error: 'MCP source URL is required for Streamable HTTP transport' }
+    }
+
+    const headers: Record<string, string> = { ...(source.config.mcp.headers ?? {}) }
+    const { getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const credential = await getSourceCredentialManager().load(source)
+    if (credential?.value) {
+      try {
+        Object.assign(headers, JSON.parse(credential.value))
+      } catch {
+        if (source.config.mcp.authType === 'oauth' || source.config.mcp.authType === 'bearer') {
+          headers.Authorization = `Bearer ${credential.value}`
+        }
+      }
+    }
+    if (source.config.mcp.authType === 'bearer') {
+      const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+      const idToken = (await new SsoCredentialStore().load().catch(() => null))?.idToken
+      if (idToken) {
+        headers.Authorization = `Bearer ${idToken}`
+      }
+    }
+
+    client = new CraftMcpClient({
+      transport: 'streamable_http',
+      url: source.config.mcp.url,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+    })
+  }
+
+  try {
+    const tools = await client.listTools()
+    const { permissionsConfigCache } = await import('@craft-agent/shared/agent')
+    const mergedConfig = permissionsConfigCache.getMergedConfig({
+      workspaceRootPath,
+      activeSourceSlugs: [source.config.slug],
+    })
+
+    const toolsWithPermission = tools.map(tool => {
+      const allowed = mergedConfig.readOnlyMcpPatterns.some((pattern: RegExp) => pattern.test(tool.name))
+      return {
+        name: tool.name,
+        description: tool.description,
+        allowed,
+      }
+    })
+
+    return { success: true, tools: toolsWithPermission }
+  } finally {
+    await client.close()
+  }
 }
 
 async function addSlugToWorkspaceDefaults(workspaceRootPath: string, slug: string): Promise<void> {

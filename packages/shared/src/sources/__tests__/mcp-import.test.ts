@@ -84,12 +84,13 @@ describe('parseMcpJsonImportCandidates', () => {
     ]);
   });
 
-  test('infers stdio, SSE, and HTTP transports from server fields', () => {
+  test('infers stdio, SSE, HTTP, and dashed Streamable HTTP transports from server fields', () => {
     const result = parseMcpJsonImportCandidates(JSON.stringify({
       mcpServers: {
         local: { command: 'bun', args: ['server.ts'] },
         events: { transport: 'sse', url: 'https://example.com/sse' },
         streamable: { type: 'http', url: 'https://example.com/mcp' },
+        dashed: { transport: 'streamable-http', url: 'https://example.com/dashed' },
       },
     }));
 
@@ -97,6 +98,7 @@ describe('parseMcpJsonImportCandidates', () => {
       { transport: 'stdio', command: 'bun', args: ['server.ts'] },
       { transport: 'streamable_http', url: 'https://example.com/sse', authType: 'bearer' },
       { transport: 'streamable_http', url: 'https://example.com/mcp', authType: 'bearer' },
+      { transport: 'streamable_http', url: 'https://example.com/dashed', authType: 'bearer' },
     ]);
     expect(result.candidates.every((candidate) => candidate.errors.length === 0)).toBe(true);
   });
@@ -165,7 +167,7 @@ describe('parseMcpJsonImportCandidates', () => {
       {
         key: 'badTransport',
         mcp: { transport: 'streamable_http', url: 'https://example.com/mcp', authType: 'bearer' },
-        errors: [{ field: 'transport', message: 'Transport must be one of: streamable_http, stdio.' }],
+        errors: [{ field: 'transport', message: 'Transport must be one of: streamable_http, streamable-http, stdio.' }],
       },
       {
         key: 'badArgs',
@@ -1024,6 +1026,27 @@ describe('createMcpSourceFromManualInput', () => {
         url: 'https://manual.example.com/mcp',
         authType: 'bearer',
       });
+    } finally {
+      rmSync(workspaceRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('normalizes manual dashed Streamable HTTP transport spelling', async () => {
+    const workspaceRootPath = makeTempWorkspace();
+    try {
+      const created = await createMcpSourceFromManualInput(workspaceRootPath, {
+        name: 'Manual Dashed',
+        provider: 'manual-dashed',
+        mcp: {
+          transport: 'streamable-http',
+          url: 'https://manual.example.com/mcp',
+          authType: 'none',
+        },
+      }, {
+        connectionTester: async () => ({ success: true }),
+      });
+
+      expect(created.mcp?.transport).toBe('streamable_http');
     } finally {
       rmSync(workspaceRootPath, { recursive: true, force: true });
     }

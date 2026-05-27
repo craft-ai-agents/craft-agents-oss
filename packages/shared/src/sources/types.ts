@@ -238,9 +238,11 @@ export function isRefreshableSource(source: LoadedSource): boolean {
 /**
  * MCP transport type for sources
  * - 'streamable_http': Streamable HTTP MCP server (URL endpoint)
+ * - 'streamable-http', 'http', 'sse': legacy import/config spellings accepted
+ *   for compatibility and normalized to 'streamable_http' by save paths.
  * - 'stdio': Local subprocess MCP server (spawned command)
  */
-export type McpTransport = 'streamable_http' | 'stdio';
+export type McpTransport = 'streamable_http' | 'streamable-http' | 'http' | 'sse' | 'stdio';
 
 /**
  * MCP-specific configuration

@@ -237,6 +237,11 @@ For Bearer-authenticated MCP Sources, MCP connection setup, tool discovery, and 
 
 Avoid: default token, default auth.
 
+### MCP Source Refresh
+An explicit retry of an MCP Source's connection and tool discovery. Used after MCP Source connection details change, or when the user manually refreshes the MCP Source detail page.
+
+MCP Source Refresh updates the source's connection status and available tools. It is distinct from re-reading source documentation; source guide files are optional reference material, not a prerequisite for using a configured MCP Source.
+
 ### SSO Login Flow
 The browser-based OIDC authorization code flow used to establish an SSO Session. The OIDC provider only accepts `http/https` redirect URIs, so the app routes through the shared OAuth relay instead of using the `mdp://` scheme directly as `redirect_uri`.
 
