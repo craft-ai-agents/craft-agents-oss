@@ -5,49 +5,56 @@ import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
 export const HANDLED_CHANNELS = [
-  RPC_CHANNELS.teamKnowledge.GET_CONFIG,
-  RPC_CHANNELS.teamKnowledge.UPDATE_CONFIG,
-  RPC_CHANNELS.teamKnowledge.REFRESH,
-  RPC_CHANNELS.teamKnowledge.GET_PREVIEW,
+  RPC_CHANNELS.teamPublicKnowledge.GET_CONFIG,
+  RPC_CHANNELS.teamPublicKnowledge.UPDATE_CONFIG,
+  RPC_CHANNELS.teamPublicKnowledge.REFRESH,
+  RPC_CHANNELS.teamPublicKnowledge.GET_PREVIEW,
 ] as const
 
-export function registerTeamKnowledgeHandlers(server: RpcServer, _deps: HandlerDeps): void {
-  // Get the current team knowledge config for a workspace
-  server.handle(RPC_CHANNELS.teamKnowledge.GET_CONFIG, async (_ctx, workspaceId: string) => {
+export function registerTeamPublicKnowledgeHandlers(server: RpcServer, _deps: HandlerDeps): void {
+  server.handle(RPC_CHANNELS.teamPublicKnowledge.GET_CONFIG, async (_ctx, workspaceId: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { loadTeamKnowledgeConfig } = await import('@craft-agent/shared/teamKnowledge/storage')
-    return loadTeamKnowledgeConfig(workspace.rootPath)
+    const {
+      DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH,
+      loadWorkspaceConfig,
+    } = await import('@craft-agent/shared/workspaces')
+    const config = loadWorkspaceConfig(workspace.rootPath)
+    return config?.teamPublicKnowledge ?? {
+      enabled: false,
+      manifestPath: DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH,
+      documents: [],
+    }
   })
 
-  // Update the team knowledge config (full overwrite)
-  server.handle(RPC_CHANNELS.teamKnowledge.UPDATE_CONFIG, async (
+  server.handle(RPC_CHANNELS.teamPublicKnowledge.UPDATE_CONFIG, async (
     _ctx,
     workspaceId: string,
-    config: import('@craft-agent/shared/teamKnowledge/types').TeamKnowledgeConfig,
+    teamPublicKnowledge: import('@craft-agent/shared/workspaces').TeamPublicKnowledgeConfig,
   ) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { saveTeamKnowledgeConfig } = await import('@craft-agent/shared/teamKnowledge/storage')
-    saveTeamKnowledgeConfig(workspace.rootPath, config)
-    pushTyped(server, RPC_CHANNELS.teamKnowledge.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
+    const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
+    const config = loadWorkspaceConfig(workspace.rootPath)
+    if (!config) throw new Error('Workspace config not found')
+    config.teamPublicKnowledge = teamPublicKnowledge
+    saveWorkspaceConfig(workspace.rootPath, config)
+    pushTyped(server, RPC_CHANNELS.teamPublicKnowledge.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
   })
 
-  // Trigger an immediate refresh of all configured docs
-  server.handle(RPC_CHANNELS.teamKnowledge.REFRESH, async (_ctx, workspaceId: string) => {
+  server.handle(RPC_CHANNELS.teamPublicKnowledge.REFRESH, async (_ctx, workspaceId: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { refreshTeamKnowledge } = await import('@craft-agent/shared/teamKnowledge/refresh')
-    const summary = await refreshTeamKnowledge(workspace.rootPath)
-    pushTyped(server, RPC_CHANNELS.teamKnowledge.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
+    const { refreshTeamPublicKnowledge } = await import('@craft-agent/shared/team-public-knowledge')
+    const summary = await refreshTeamPublicKnowledge(workspace.rootPath)
+    pushTyped(server, RPC_CHANNELS.teamPublicKnowledge.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
     return summary
   })
 
-  // Get team context preview for debug/preview surface
-  server.handle(RPC_CHANNELS.teamKnowledge.GET_PREVIEW, async (
+  server.handle(RPC_CHANNELS.teamPublicKnowledge.GET_PREVIEW, async (
     _ctx,
     workspaceId: string,
     sampleMessage?: string,
@@ -75,7 +82,6 @@ export function registerTeamKnowledgeHandlers(server: RpcServer, _deps: HandlerD
 
     const policyXml = formatTeamKnowledgePolicy(workspace.rootPath)
 
-    // Extract trigger terms from the policy XML
     const triggerTerms: TeamContextPreviewTriggerTerm[] = []
     if (policyXml) {
       const termRegex = /^\d+\.\s+"([^"]+)"\s+\((\w+)\)/gm
@@ -85,7 +91,6 @@ export function registerTeamKnowledgeHandlers(server: RpcServer, _deps: HandlerD
       }
     }
 
-    // Compute prefetch preview if a sample message was provided
     let prefetchResults
     if (sampleMessage) {
       const results = prefetchTeamKnowledge(workspace.rootPath, sampleMessage)
