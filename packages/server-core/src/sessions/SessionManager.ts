@@ -1172,6 +1172,8 @@ export class SessionManager implements ISessionManager {
   private configWatchers: Map<string, ConfigWatcher> = new Map()
   private workspaceMcpPools: Map<string, McpClientPool> = new Map()
   private workspaceTokenRefreshManagers: Map<string, TokenRefreshManager> = new Map()
+  // Bootstrap sync promises keyed by workspaceRootPath — awaited in getOrCreateAgent to avoid re-syncing
+  private workspaceMcpPoolBootstrapPromises: Map<string, Promise<void>> = new Map()
   // Automation systems for workspace event automations - one per workspace (includes scheduler, diffing, and handlers)
   private automationSystems: Map<string, AutomationSystem> = new Map()
   // Pending credential request resolvers (keyed by requestId)
@@ -1639,7 +1641,8 @@ export class SessionManager implements ISessionManager {
     this.workspaceTokenRefreshManagers.set(workspaceRootPath, tokenRefreshManager)
     this.workspaceMcpPools.set(workspaceRootPath, pool)
 
-    void this.syncWorkspaceMcpPool(workspaceRootPath, pool, tokenRefreshManager)
+    const bootstrapPromise = this.syncWorkspaceMcpPool(workspaceRootPath, pool, tokenRefreshManager)
+    this.workspaceMcpPoolBootstrapPromises.set(workspaceRootPath, bootstrapPromise)
   }
 
   private async syncWorkspaceMcpPool(
@@ -1711,6 +1714,7 @@ export class SessionManager implements ISessionManager {
       }
     }
     this.workspaceTokenRefreshManagers.delete(workspaceRootPath)
+    this.workspaceMcpPoolBootstrapPromises.delete(workspaceRootPath)
 
     const automationSystem = this.automationSystems.get(workspaceRootPath)
     if (automationSystem) {
@@ -3263,7 +3267,9 @@ export class SessionManager implements ISessionManager {
       if (!workspacePool) {
         throw new Error(`Workspace MCP pool not initialized for ${managed.workspace.rootPath}`)
       }
-      await this.syncWorkspaceMcpPoolFromDisk(managed.workspace.rootPath)
+      // Await the in-progress bootstrap sync rather than triggering a redundant re-sync.
+      // If bootstrap already completed the promise resolves immediately.
+      await this.workspaceMcpPoolBootstrapPromises.get(managed.workspace.rootPath)?.catch(() => {})
 
       // Backends that run as external subprocesses need an HTTP pool server
       let poolServerUrl: string | undefined
