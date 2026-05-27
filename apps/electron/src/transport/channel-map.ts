@@ -266,12 +266,12 @@ export const CHANNEL_MAP = {
   reorderStatuses: invoke(RPC_CHANNELS.statuses.REORDER),
   onStatusesChanged: listener(RPC_CHANNELS.statuses.CHANGED),
 
-  // Team Knowledge
-  getTeamKnowledgeConfig: invoke(RPC_CHANNELS.teamKnowledge.GET_CONFIG),
-  updateTeamKnowledgeConfig: invoke(RPC_CHANNELS.teamKnowledge.UPDATE_CONFIG),
-  refreshTeamKnowledge: invoke(RPC_CHANNELS.teamKnowledge.REFRESH),
-  onTeamKnowledgeChanged: listener(RPC_CHANNELS.teamKnowledge.CHANGED),
-  getTeamContextPreview: invoke(RPC_CHANNELS.teamKnowledge.GET_PREVIEW),
+  // Team Public Knowledge
+  getTeamPublicKnowledgeConfig: invoke(RPC_CHANNELS.teamPublicKnowledge.GET_CONFIG),
+  updateTeamPublicKnowledgeConfig: invoke(RPC_CHANNELS.teamPublicKnowledge.UPDATE_CONFIG),
+  refreshTeamPublicKnowledge: invoke(RPC_CHANNELS.teamPublicKnowledge.REFRESH),
+  onTeamPublicKnowledgeChanged: listener(RPC_CHANNELS.teamPublicKnowledge.CHANGED),
+  getTeamContextPreview: invoke(RPC_CHANNELS.teamPublicKnowledge.GET_PREVIEW),
 
   // Labels
   listLabels: invoke(RPC_CHANNELS.labels.LIST),

@@ -99,13 +99,13 @@ export class PromptBuilder {
     }
 
     // Add team public knowledge policy (reference data, not instructions)
-    if (options.teamKnowledgePolicy) {
-      parts.push(options.teamKnowledgePolicy);
+    if (options.teamPublicKnowledgePolicy) {
+      parts.push(options.teamPublicKnowledgePolicy);
     }
 
     // Add team public knowledge prefetch results (reference data)
-    if (options.teamKnowledgePrefetchBlock) {
-      parts.push(options.teamKnowledgePrefetchBlock);
+    if (options.teamPublicKnowledgePrefetchBlock) {
+      parts.push(options.teamPublicKnowledgePrefetchBlock);
     }
 
     // Add workspace capabilities

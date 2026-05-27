@@ -123,7 +123,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       defaultLlmConnection: config?.defaults?.defaultLlmConnection,
       enabledSourceSlugs: config?.defaults?.enabledSourceSlugs ?? [],
       teamPublicKnowledgeEnabled: config?.teamPublicKnowledge?.enabled ?? false,
-      teamKnowledgeDocumentsCount: config?.teamPublicKnowledge?.documents?.length ?? 0,
+      teamPublicKnowledgeDocumentsCount: config?.teamPublicKnowledge?.documents?.length ?? 0,
     }
   })
 
@@ -170,7 +170,13 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       config.localMcpServers.enabled = Boolean(normalizedValue)
     } else if (key === 'teamPublicKnowledgeEnabled') {
       // Store in teamPublicKnowledge.enabled (top-level, not in defaults)
-      config.teamPublicKnowledge = config.teamPublicKnowledge || { enabled: false, documents: [] }
+      const { DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH } = await import('@craft-agent/shared/workspaces')
+      config.teamPublicKnowledge = config.teamPublicKnowledge || {
+        enabled: false,
+        manifestPath: DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH,
+        documents: [],
+      }
+      config.teamPublicKnowledge.manifestPath ||= DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH
       config.teamPublicKnowledge.enabled = Boolean(normalizedValue)
     } else {
       // Update the setting in defaults

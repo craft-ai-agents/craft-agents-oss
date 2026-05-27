@@ -242,6 +242,11 @@ An explicit retry of an MCP Source's connection and tool discovery. Used after M
 
 MCP Source Refresh updates the source's connection status and available tools. It is distinct from re-reading source documentation; source guide files are optional reference material, not a prerequisite for using a configured MCP Source.
 
+### Team Public Knowledge
+Workspace-scoped, team-maintained public Markdown reference data that can be cached and surfaced to the agent as untrusted context.
+
+Avoid: teamknowledge, Team Knowledge, teamKnowledge.
+
 ### MCP Source Guide Generation
 Creation-time or user-triggered generation of an MCP Source's `guide.md`. The generated guide gives the agent source-specific context, usage guidelines, and API notes derived from MCP Source metadata, connection shape, and discovered tool names when the server can be reached.
 

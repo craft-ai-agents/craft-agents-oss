@@ -2167,15 +2167,15 @@ This is a branched conversation. All prior messages in this conversation are par
 
     // Compute team public knowledge policy and prefetch for this turn
     const teamContextDisabled = this.config.session?.teamContextDisabled;
-    const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.workspaceRootPath, teamContextDisabled);
+    const teamPublicKnowledgePolicy = formatTeamKnowledgePolicy(this.workspaceRootPath, teamContextDisabled);
     const prefetchResults = teamContextDisabled ? [] : prefetchTeamKnowledge(this.workspaceRootPath, text);
-    const teamKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
+    const teamPublicKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
 
     const contextParts = this.promptBuilder.buildContextParts(
       {
         plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId),
-        teamKnowledgePolicy,
-        teamKnowledgePrefetchBlock,
+        teamPublicKnowledgePolicy,
+        teamPublicKnowledgePrefetchBlock,
       },
       this.sourceManager.formatSourceState()
     );
@@ -2224,15 +2224,15 @@ This is a branched conversation. All prior messages in this conversation are par
 
     // Compute team public knowledge policy and prefetch for this turn
     const teamContextDisabled = this.config.session?.teamContextDisabled;
-    const teamKnowledgePolicy = formatTeamKnowledgePolicy(this.workspaceRootPath, teamContextDisabled);
+    const teamPublicKnowledgePolicy = formatTeamKnowledgePolicy(this.workspaceRootPath, teamContextDisabled);
     const prefetchResults = teamContextDisabled ? [] : prefetchTeamKnowledge(this.workspaceRootPath, text);
-    const teamKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
+    const teamPublicKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
 
     const contextParts = this.promptBuilder.buildContextParts(
       {
         plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId),
-        teamKnowledgePolicy,
-        teamKnowledgePrefetchBlock,
+        teamPublicKnowledgePolicy,
+        teamPublicKnowledgePrefetchBlock,
       },
       this.sourceManager.formatSourceState()
     );

@@ -31,6 +31,7 @@ import type {
   LoadedWorkspace,
   WorkspaceSummary,
 } from './types.ts';
+import { DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH } from './types.ts';
 
 const CONFIG_DIR = join(homedir(), '.mdp-agent');
 const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
@@ -138,6 +139,9 @@ export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
 
       config.teamPublicKnowledge = {
         enabled: config.teamPublicKnowledge.enabled === true,
+        manifestPath: typeof config.teamPublicKnowledge.manifestPath === 'string' && config.teamPublicKnowledge.manifestPath.trim()
+          ? config.teamPublicKnowledge.manifestPath.trim()
+          : DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH,
         documents,
       };
     }

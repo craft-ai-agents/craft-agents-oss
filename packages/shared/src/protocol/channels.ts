@@ -405,12 +405,12 @@ export const RPC_CHANNELS = {
     REPLAY: 'automations:replay',
     CHANGED: 'automations:changed',
   },
-  teamKnowledge: {
-    GET_CONFIG: 'teamKnowledge:getConfig',
-    UPDATE_CONFIG: 'teamKnowledge:updateConfig',
-    REFRESH: 'teamKnowledge:refresh',
-    CHANGED: 'teamKnowledge:changed',
-    GET_PREVIEW: 'teamKnowledge:getPreview',
+  teamPublicKnowledge: {
+    GET_CONFIG: 'teamPublicKnowledge:getConfig',
+    UPDATE_CONFIG: 'teamPublicKnowledge:updateConfig',
+    REFRESH: 'teamPublicKnowledge:refresh',
+    CHANGED: 'teamPublicKnowledge:changed',
+    GET_PREVIEW: 'teamPublicKnowledge:getPreview',
   },
   userProfile: {
     REFRESH: 'userProfile:refresh',

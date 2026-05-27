@@ -37,11 +37,14 @@ export interface TeamPublicKnowledgeDocumentConfig {
   priority: number;
 }
 
+export const DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH = '/api/team/knowledge';
+
 /**
  * Workspace configuration for team public knowledge refresh and lookup.
  */
 export interface TeamPublicKnowledgeConfig {
   enabled: boolean;
+  manifestPath?: string;
   documents: TeamPublicKnowledgeDocumentConfig[];
 }
 

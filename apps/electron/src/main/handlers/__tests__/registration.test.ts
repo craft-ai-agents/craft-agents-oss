@@ -105,7 +105,7 @@ async function getExpectedChannels(): Promise<Set<string>> {
     workspaceFiles,
     onboarding,
     resources,
-    teamKnowledge,
+    teamPublicKnowledge,
     transfer,
     userProfile,
   ] = await Promise.all([
@@ -127,7 +127,7 @@ async function getExpectedChannels(): Promise<Set<string>> {
     import('@craft-agent/server-core/handlers/rpc/workspace-files'),
     import('@craft-agent/server-core/handlers/rpc/onboarding'),
     import('@craft-agent/server-core/handlers/rpc/resources'),
-    import('@craft-agent/server-core/handlers/rpc/teamKnowledge'),
+    import('@craft-agent/server-core/handlers/rpc/teamPublicKnowledge'),
     import('@craft-agent/server-core/handlers/rpc/transfer'),
     import('@craft-agent/server-core/handlers/rpc/userProfile'),
   ])
@@ -159,7 +159,7 @@ async function getExpectedChannels(): Promise<Set<string>> {
     ...workspaceFiles.HANDLED_CHANNELS,
     ...onboarding.HANDLED_CHANNELS,
     ...resources.HANDLED_CHANNELS,
-    ...teamKnowledge.HANDLED_CHANNELS,
+    ...teamPublicKnowledge.HANDLED_CHANNELS,
     ...transfer.HANDLED_CHANNELS,
     ...userProfile.HANDLED_CHANNELS,
     ...browser.HANDLED_CHANNELS,
