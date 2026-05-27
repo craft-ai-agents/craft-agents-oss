@@ -63,6 +63,18 @@ function streamToText(stream: NodeJS.ReadableStream | null): Promise<string> {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+// Suppress esbuild "The service was stopped" unhandled rejections during shutdown.
+// esbuild watch contexts have pending async callbacks that throw this error when
+// the service subprocess is closed. It is expected and harmless.
+let isShuttingDown = false;
+process.on("unhandledRejection", (reason) => {
+  if (isShuttingDown && reason instanceof Error && reason.message === "The service was stopped") {
+    return;
+  }
+  console.error("❌ Unhandled rejection:", reason);
+  process.exit(1);
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 const __filename = fileURLToPath(import.meta.url);
@@ -733,6 +745,7 @@ async function main(): Promise<void> {
   processes.push(electronProc);
 
   const cleanup = async () => {
+    isShuttingDown = true;
     console.log("\n🛑 Shutting down...");
     for (const ctx of esbuildContexts) {
       try { await ctx.dispose(); } catch { /* already disposed */ }
