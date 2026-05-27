@@ -70,6 +70,7 @@
     "electron:build": "bun run electron:build:main && bun run electron:build:preload && bun run electron:build:renderer && bun run electron:build:resources && bun run electron:build:assets",
     "electron:start": "bun run electron:build && electron apps/electron",
     "electron:dev": "bun run scripts/electron-dev.ts",
+    "electron:dev:win": "tsx scripts/electron-dev-node.ts",
     "electron:dev:terminal": "bun run scripts/electron-dev.ts --terminal",
     "electron:dev:menu": "bash scripts/electron-dev.sh",
     "electron:dev:logs": "pgrep -f 'tail -f.*@craft-agent/electron/main.log' > /dev/null || osascript -e \"tell application \\\"Terminal\\\" to do script \\\"$PWD/scripts/tail-electron-logs.sh\\\"\"",

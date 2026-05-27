@@ -13,7 +13,6 @@
  */
 
 import { join } from 'node:path';
-import { existsSync } from 'node:fs';
 import { isLocalMcpEnabled } from '../../workspaces/storage.ts';
 import { formatPreferencesForPrompt } from '../../config/preferences.ts';
 import { formatSessionState } from '../mode-manager.ts';
@@ -133,9 +132,8 @@ export class PromptBuilder {
     if (skills.length === 0) return '';
 
     const lines = skills.map(s => {
-      const desc = s.metadata.description ? `: ${s.metadata.description}` : '';
-      const skillMdPath = join(s.path, 'SKILL.md');
-      return `- ${s.metadata.name} (slug: ${s.slug})${desc}\n  SKILL.md: ${existsSync(skillMdPath) ? skillMdPath : s.path}`;
+      const desc = s.metadata.description ? `\n  description: ${s.metadata.description}` : '';
+      return `- slug: ${s.slug}\n  name: ${s.metadata.name}${desc}`;
     });
 
     return `<available_skills>\n${lines.join('\n')}\n</available_skills>`;
