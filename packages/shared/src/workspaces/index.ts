@@ -13,6 +13,7 @@ export type {
   LoadedWorkspace,
   WorkspaceSummary,
 } from './types.ts';
+export { DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH } from './types.ts';
 
 // Storage functions
 export {

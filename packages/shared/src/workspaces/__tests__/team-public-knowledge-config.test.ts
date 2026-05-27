@@ -49,6 +49,7 @@ describe('workspace storage: team public knowledge config', () => {
     const loaded = loadWorkspaceConfig(workspaceRoot);
 
     expect(loaded?.teamPublicKnowledge?.enabled).toBe(true);
+    expect(loaded?.teamPublicKnowledge?.manifestPath).toBe('/api/team/knowledge');
     expect(loaded?.teamPublicKnowledge?.documents.map(doc => doc.id)).toEqual([
       'team-slang',
       'deploy-rules',

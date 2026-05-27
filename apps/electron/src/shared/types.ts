@@ -272,6 +272,8 @@ import type {
   ImportRemoteSessionTransferResult,
   TeamContextPreview,
 } from '@craft-agent/shared/protocol'
+import type { TeamPublicKnowledgeRefreshSummary } from '@craft-agent/shared/team-public-knowledge'
+import type { TeamPublicKnowledgeConfig } from '@craft-agent/shared/workspaces'
 
 export interface ElectronAPI {
   // Session management
@@ -477,6 +479,10 @@ export interface ElectronAPI {
 
   // Team context debug/preview
   getTeamContextPreview(workspaceId: string, sampleMessage?: string): Promise<TeamContextPreview>
+  refreshTeamPublicKnowledge(workspaceId: string): Promise<TeamPublicKnowledgeRefreshSummary>
+  getTeamPublicKnowledgeConfig(workspaceId: string): Promise<TeamPublicKnowledgeConfig>
+  updateTeamPublicKnowledgeConfig(workspaceId: string, config: TeamPublicKnowledgeConfig): Promise<void>
+  onTeamPublicKnowledgeChanged(callback: (workspaceId: string) => void): () => void
 
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>

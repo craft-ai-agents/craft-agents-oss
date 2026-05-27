@@ -181,7 +181,7 @@
   --step-actions-margin: 2rem;
 
   /* Fonts - System fonts as default, Inter via data-font="inter" */
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-default: var(--font-sans);
@@ -373,7 +373,7 @@ html[data-scenic] {
 /* Inter Font - Opt-in via data-font="inter" attribute
    Loaded from Google Fonts in index.html with optical sizing (opsz) axis */
 html[data-font="inter"] {
-  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-default: var(--font-sans);
   font-optical-sizing: auto;
   font-feature-settings: "cv01", "cv02", "cv03", "cv04", "case";

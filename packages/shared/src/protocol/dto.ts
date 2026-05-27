@@ -541,7 +541,7 @@ export interface WorkspaceSettings {
   /** Whether team public knowledge is enabled for this workspace. */
   teamPublicKnowledgeEnabled?: boolean
   /** Number of configured team public knowledge documents. */
-  teamKnowledgeDocumentsCount?: number
+  teamPublicKnowledgeDocumentsCount?: number
 }
 
 // ---------------------------------------------------------------------------

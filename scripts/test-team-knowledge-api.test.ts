@@ -8,7 +8,8 @@ import {
 describe('test team knowledge API fixture', () => {
   it('serves a four-document index for the new team knowledge kinds', async () => {
     const response = handleTeamKnowledgeApiRequest(new Request('http://localhost:3100/api/team/knowledge'));
-    const index = await response.json() as Array<{ id: string; title: string; priority: number; url: string }>;
+    const body = await response.json() as { documents: Array<{ id: string; title: string; url: string; priority: number }> };
+    const index = body.documents;
 
     expect(response.status).toBe(200);
     expect(index.map(document => document.id)).toEqual([
@@ -18,7 +19,7 @@ describe('test team knowledge API fixture', () => {
       'constraints',
     ]);
     expect(index.map(document => document.priority)).toEqual([1, 2, 3, 4]);
-    expect(index.every(document => document.url.startsWith('http://localhost:3100/api/team/knowledge/'))).toBe(true);
+    expect(index.every(document => document.url === `/api/team/knowledge/${document.id}`)).toBe(true);
   });
 
   it('uses the new marker kinds and limits trigger names to term entries', () => {

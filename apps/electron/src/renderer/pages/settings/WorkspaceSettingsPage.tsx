@@ -30,6 +30,8 @@ import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { RefreshCw } from 'lucide-react'
 
 import {
   SettingsSection,
@@ -69,7 +71,8 @@ export default function WorkspaceSettingsPage() {
 
   // Team public knowledge state
   const [teamPublicKnowledgeEnabled, setTeamPublicKnowledgeEnabled] = useState(false)
-  const [teamKnowledgeDocumentsCount, setTeamKnowledgeDocumentsCount] = useState(0)
+  const [teamPublicKnowledgeDocumentsCount, setTeamPublicKnowledgeDocumentsCount] = useState(0)
+  const [teamPublicKnowledgeRefreshing, setTeamPublicKnowledgeRefreshing] = useState(false)
 
   // Team context preview state
   const [teamContextPreview, setTeamContextPreview] = useState<TeamContextPreview | null>(null)
@@ -117,7 +120,7 @@ export default function WorkspaceSettingsPage() {
 
           // Load team public knowledge config
           setTeamPublicKnowledgeEnabled(settings.teamPublicKnowledgeEnabled ?? false)
-          setTeamKnowledgeDocumentsCount(settings.teamKnowledgeDocumentsCount ?? 0)
+          setTeamPublicKnowledgeDocumentsCount(settings.teamPublicKnowledgeDocumentsCount ?? 0)
 
           // Load available sources and auto-heal stale slugs
           const sources = await window.electronAPI.getSources(activeWorkspaceId)
@@ -347,6 +350,27 @@ export default function WorkspaceSettingsPage() {
     },
     [updateWorkspaceSetting]
   )
+
+  const handleTeamPublicKnowledgeRefresh = useCallback(async () => {
+    if (!window.electronAPI || !activeWorkspaceId) return
+    setTeamPublicKnowledgeRefreshing(true)
+    try {
+      const summary = await window.electronAPI.refreshTeamPublicKnowledge(activeWorkspaceId)
+      const settings = await window.electronAPI.getWorkspaceSettings(activeWorkspaceId)
+      setTeamPublicKnowledgeDocumentsCount(settings?.teamPublicKnowledgeDocumentsCount ?? 0)
+      const preview = await window.electronAPI.getTeamContextPreview(activeWorkspaceId, previewSampleMessage || undefined)
+      setTeamContextPreview(preview)
+      const description = summary?.manifestError
+        ? summary.manifestError
+        : `Added ${summary?.added ?? 0}, updated ${summary?.updated ?? 0}, removed ${summary?.removed ?? 0}, stale ${summary?.stale ?? 0}`
+      toast.success('Team knowledge refreshed', { description })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      toast.error('Failed to refresh team knowledge', { description: message })
+    } finally {
+      setTeamPublicKnowledgeRefreshing(false)
+    }
+  }, [activeWorkspaceId, previewSampleMessage])
 
   const handleSourceToggle = useCallback(
     async (slug: string, checked: boolean) => {
@@ -604,13 +628,35 @@ export default function WorkspaceSettingsPage() {
                 <SettingsToggle
                   label={t("settings.workspace.teamPublicKnowledgeToggle")}
                   description={
-                    teamKnowledgeDocumentsCount > 0
-                      ? t("settings.workspace.teamPublicKnowledgeDocsCount", { count: teamKnowledgeDocumentsCount })
+                    teamPublicKnowledgeDocumentsCount > 0
+                      ? t("settings.workspace.teamPublicKnowledgeDocsCount", { count: teamPublicKnowledgeDocumentsCount })
                       : t("settings.workspace.teamPublicKnowledgeNoDocs")
                   }
                   checked={teamPublicKnowledgeEnabled}
                   onCheckedChange={handleTeamPublicKnowledgeEnabledChange}
                 />
+                {teamPublicKnowledgeEnabled && (
+                  <SettingsRow
+                    label="Refresh"
+                    description="Fetch the team knowledge manifest and update all documents."
+                    action={
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-2"
+                        disabled={teamPublicKnowledgeRefreshing}
+                        onClick={handleTeamPublicKnowledgeRefresh}
+                      >
+                        {teamPublicKnowledgeRefreshing ? (
+                          <Spinner className="h-4 w-4" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                        Refresh now
+                      </Button>
+                    }
+                  />
+                )}
               </SettingsCard>
             </SettingsSection>
 
