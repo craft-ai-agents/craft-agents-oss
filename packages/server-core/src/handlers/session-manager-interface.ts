@@ -203,6 +203,8 @@ export interface ISessionManager {
   setupConfigWatcher(workspaceRootPath: string, workspaceId: string): void
   /** Tear down workspace-scoped infrastructure such as config watchers, MCP pools, and automations. */
   closeWorkspace(workspaceRootPath: string): Promise<void>
+  /** Re-sync all workspace MCP pools from disk — call after SSO login to pick up the fresh identity token. */
+  syncAllWorkspaceMcpPools(): Promise<void>
   /**
    * Manually notify the ConfigWatcher of a file change.
    * Workaround for Bun's fs.watch on Linux not detecting atomic renames.

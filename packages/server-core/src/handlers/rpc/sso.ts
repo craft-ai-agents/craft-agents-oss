@@ -25,7 +25,7 @@ export const HANDLED_CHANNELS = [
 let pendingSsoNonce: string | null = null
 
 /** Register local-only SSO startup session and refresh handlers. */
-export function registerSsoHandlers(server: RpcServer, deps: Pick<HandlerDeps, 'platform'>): void {
+export function registerSsoHandlers(server: RpcServer, deps: Pick<HandlerDeps, 'platform' | 'sessionManager'>): void {
   server.handle(RPC_CHANNELS.sso.GET_SESSION, async () => {
     return handleSsoStartupSession({
       ...createSsoSessionDeps(),
@@ -43,7 +43,13 @@ export function registerSsoHandlers(server: RpcServer, deps: Pick<HandlerDeps, '
   })
 
   server.handle(RPC_CHANNELS.sso.HANDLE_CALLBACK, async (_ctx, payload: { code?: string; state?: string }) => {
-    return handleSsoCallback(payload, createSsoSessionDeps())
+    const result = await handleSsoCallback(payload, createSsoSessionDeps())
+    if (result.success) {
+      // Re-sync all workspace MCP pools so sources using the SSO Identity Token
+      // as Bearer auth pick up the fresh token from the just-completed login.
+      void deps.sessionManager.syncAllWorkspaceMcpPools().catch(() => {})
+    }
+    return result
   })
 
   server.handle(RPC_CHANNELS.sso.LOGOUT, async () => {

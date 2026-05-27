@@ -1670,6 +1670,12 @@ export class SessionManager implements ISessionManager {
     }
   }
 
+  async syncAllWorkspaceMcpPools(): Promise<void> {
+    await Promise.all(
+      Array.from(this.workspaceMcpPools.keys()).map(rootPath => this.syncWorkspaceMcpPoolFromDisk(rootPath))
+    )
+  }
+
   private async syncWorkspaceMcpPoolFromDisk(workspaceRootPath: string): Promise<void> {
     const pool = this.workspaceMcpPools.get(workspaceRootPath)
     if (!pool) return
