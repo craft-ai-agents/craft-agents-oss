@@ -109,12 +109,14 @@ export function handleTeamKnowledgeApiRequest(request: Request): Response {
   }
 
   if (url.pathname === '/api/team/knowledge') {
-    return jsonResponse(TEAM_KNOWLEDGE_DOCUMENTS.map(document => ({
-      id: document.id,
-      title: document.title,
-      priority: document.priority,
-      url: `http://localhost:${TEAM_KNOWLEDGE_API_PORT}/api/team/knowledge/${document.id}`,
-    })));
+    return jsonResponse({
+      documents: TEAM_KNOWLEDGE_DOCUMENTS.map(document => ({
+        id: document.id,
+        title: document.title,
+        url: `/api/team/knowledge/${document.id}`,
+        priority: document.priority,
+      })),
+    });
   }
 
   const match = url.pathname.match(/^\/api\/team\/knowledge\/([^/]+)$/);
