@@ -530,6 +530,7 @@ export interface ElectronAPI {
   saveSourceCredentials(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
   getSourcePermissionsConfig(workspaceId: string, sourceSlug: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
   getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
+  checkAdminPermission(): Promise<boolean>
   getDefaultPermissionsConfig(): Promise<{ config: import('@craft-agent/shared/agent').PermissionsConfigFile | null; path: string }>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
   refreshMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>

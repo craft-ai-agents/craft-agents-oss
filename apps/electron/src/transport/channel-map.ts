@@ -220,6 +220,7 @@ export const CHANNEL_MAP = {
   saveSourceCredentials: invoke(RPC_CHANNELS.sources.SAVE_CREDENTIALS),
   getSourcePermissionsConfig: invoke(RPC_CHANNELS.sources.GET_PERMISSIONS),
   getWorkspacePermissionsConfig: invoke(RPC_CHANNELS.workspace.GET_PERMISSIONS),
+  checkAdminPermission: invoke(RPC_CHANNELS.permissions.CHECK_ADMIN),
   getDefaultPermissionsConfig: invoke(RPC_CHANNELS.permissions.GET_DEFAULTS),
   onDefaultPermissionsChanged: listener(RPC_CHANNELS.permissions.DEFAULTS_CHANGED),
   getMcpTools: invoke(RPC_CHANNELS.sources.GET_MCP_TOOLS),
