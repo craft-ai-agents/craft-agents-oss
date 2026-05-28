@@ -68,7 +68,7 @@ export interface LoadingIndicatorProps {
   showElapsed?: boolean | number
   /** Additional className for the container */
   className?: string
-  /** Additional className for the spinner (e.g., "text-xs" to make it smaller) */
+  /** Additional className for the spinner (e.g., "text-sm" to make it smaller) */
   spinnerClassName?: string
 }
 

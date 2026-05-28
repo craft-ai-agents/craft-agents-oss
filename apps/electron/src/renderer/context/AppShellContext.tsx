@@ -106,16 +106,22 @@ export interface AppShellContextType {
   // File/URL handlers - these can open in tabs or external apps
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
+  /** Called by user-initiated tab opens (file click, diff click, commit click) to auto-open the editor panel. */
+  onEditorPanelOpen?: () => void
 
   // Workspace
   onSelectWorkspace: (id: string, openInNewWindow?: boolean) => void | Promise<void>
   onRefreshWorkspaces?: () => void
+
+  /** Authenticated SSO user info (undefined when not logged in) */
+  ssoUser?: { userName?: string; department?: string; employeeId?: string }
 
   // App actions
   onOpenSettings: () => void
   onOpenKeyboardShortcuts: () => void
   onOpenStoredUserPreferences: () => void
   onReset: () => void
+  onSsoLogout: () => Promise<void>
 
   // Unified session options callback
   onSessionOptionsChange: (sessionId: string, updates: SessionOptionUpdates) => void

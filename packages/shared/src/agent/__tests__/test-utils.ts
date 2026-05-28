@@ -87,7 +87,7 @@ export function createMockBackendConfig(overrides: Partial<BackendConfig> = {}):
     workspace: createMockWorkspace(),
     session: createMockSession(),
     model: 'test-model',
-    thinkingLevel: 'medium',
+    thinkingEnabled: true,
     isHeadless: true, // Headless mode to avoid config watcher
     ...overrides,
   };

@@ -4,8 +4,7 @@ import {
   createBuiltInConnection,
   validateModelList,
   validateSetupTestInput,
-  BUILT_IN_CONNECTION_TEMPLATES,
-} from '@craft-agent/server-core/domain'
+} from '../../../../../packages/server-core/src/domain'
 import type { ModelDefinition } from '@craft-agent/shared/config/models'
 
 // ============================================================
@@ -87,12 +86,6 @@ describe('createBuiltInConnection', () => {
     expect(conn.name).toBe('Custom Anthropic-Compatible')
   })
 
-  it('creates claude-max with oauth', () => {
-    const conn = createBuiltInConnection('claude-max')
-    expect(conn.providerType).toBe('anthropic')
-    expect(conn.authType).toBe('oauth')
-  })
-
   it('creates pi-api-key with pi provider', () => {
     const conn = createBuiltInConnection('pi-api-key')
     expect(conn.providerType).toBe('pi')
@@ -122,14 +115,10 @@ describe('createBuiltInConnection', () => {
     expect(conn.createdAt).toBeGreaterThan(0)
   })
 
-  it('sets piAuthProvider for chatgpt-plus', () => {
-    const conn = createBuiltInConnection('chatgpt-plus')
-    expect(conn.piAuthProvider).toBe('openai-codex')
-  })
-
-  it('sets piAuthProvider for github-copilot', () => {
-    const conn = createBuiltInConnection('github-copilot')
-    expect(conn.piAuthProvider).toBe('github-copilot')
+  it('rejects removed OAuth built-in templates', () => {
+    expect(() => createBuiltInConnection('claude-max')).toThrow('Unknown built-in connection slug')
+    expect(() => createBuiltInConnection('chatgpt-plus')).toThrow('Unknown built-in connection slug')
+    expect(() => createBuiltInConnection('github-copilot')).toThrow('Unknown built-in connection slug')
   })
 })
 

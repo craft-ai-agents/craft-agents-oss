@@ -2,7 +2,7 @@
  * BindingStore — workspace-scoped persistence for channel bindings.
  *
  * Stores bindings in an explicit storage directory (passed by the caller).
- * In Electron this is `~/.craft-agent/workspaces/{wsId}/messaging/`, but tests
+ * In Electron this is `~/.mdp-agent/workspaces/{wsId}/messaging/`, but tests
  * can point it at any directory.
  *
  * One-shot migration: if a legacy path is provided and contains a bindings.json
@@ -57,20 +57,12 @@ export class BindingStore {
   // Query
   // -------------------------------------------------------------------------
 
-  /**
-   * Find the active binding for a (platform, channelId, threadId) tuple.
-   * `threadId` distinguishes Telegram supergroup forum topics from each
-   * other and from the supergroup's General topic / DMs (undefined).
-   *
-   * Bindings created without `threadId` (DMs, pre-topics-feature data)
-   * only match calls passing `threadId === undefined`.
-   */
-  findByChannel(platform: PlatformType, channelId: string, threadId?: number): ChannelBinding | undefined {
+  /** Find the active binding for a (platform, channelId) tuple. */
+  findByChannel(platform: PlatformType, channelId: string): ChannelBinding | undefined {
     return this.bindings.find(
       (b) =>
         b.platform === platform &&
         b.channelId === channelId &&
-        (b.threadId ?? undefined) === threadId &&
         b.enabled,
     )
   }
@@ -94,13 +86,11 @@ export class BindingStore {
     channelId: string,
     channelName?: string,
     config?: Partial<ChannelBinding['config']>,
-    threadId?: number,
   ): ChannelBinding {
-    // One channel → one session: evict any existing binding for the
-    // (platform, channelId, threadId) tuple. Different topics in the same
-    // supergroup are independently bindable.
+    // One channel -> one session: evict any existing binding for the
+    // (platform, channelId) tuple.
     this.bindings = this.bindings.filter(
-      (b) => !(b.platform === platform && b.channelId === channelId && (b.threadId ?? undefined) === threadId),
+      (b) => !(b.platform === platform && b.channelId === channelId),
     )
 
     const binding: ChannelBinding = {
@@ -109,7 +99,6 @@ export class BindingStore {
       sessionId,
       platform,
       channelId,
-      ...(threadId !== undefined ? { threadId } : {}),
       channelName,
       enabled: true,
       createdAt: Date.now(),
@@ -124,7 +113,6 @@ export class BindingStore {
       sessionId,
       platform,
       channelId,
-      threadId,
       bindingId: binding.id,
       channelName,
     })
@@ -159,10 +147,10 @@ export class BindingStore {
     return binding
   }
 
-  unbind(platform: PlatformType, channelId: string, threadId?: number): boolean {
+  unbind(platform: PlatformType, channelId: string): boolean {
     const before = this.bindings.length
     this.bindings = this.bindings.filter(
-      (b) => !(b.platform === platform && b.channelId === channelId && (b.threadId ?? undefined) === threadId),
+      (b) => !(b.platform === platform && b.channelId === channelId),
     )
     if (this.bindings.length !== before) {
       this.save()
@@ -170,7 +158,6 @@ export class BindingStore {
         event: 'binding_removed',
         platform,
         channelId,
-        threadId,
       })
       return true
     }

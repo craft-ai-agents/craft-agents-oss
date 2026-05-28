@@ -1,9 +1,9 @@
 /**
  * Claude Event Adapter
  *
- * Maps Claude SDK messages (SDKMessage) to Craft Agent's AgentEvent format.
- * Extracted from ClaudeAgent.convertSDKMessage() for testability and to share
- * lifecycle scaffolding with PiEventAdapter via BaseEventAdapter.
+ * Maps Claude SDK messages (SDKMessage) to MDP's AgentEvent format.
+ * Extracted from ClaudeAgent.convertSDKMessage() for testability and
+ * consistency with the Codex/Copilot adapter pattern.
  *
  * Key Claude-specific behavior:
  * - Uses extractToolStarts/extractToolResults from tool-matching.ts (stateless, ID-based)

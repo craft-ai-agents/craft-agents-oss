@@ -43,6 +43,13 @@ export const BUN_VERSION = 'bun-v1.3.9';
 export const UV_VERSION = '0.10.6';
 
 /**
+ * RTK version to bundle with the app.
+ * Update this when upgrading RTK. Check latest at: https://github.com/rtk-ai/rtk/releases
+ * Must satisfy REQUIRED_MIN_VERSION in packages/shared/src/agent/core/rtk-detector.ts (>=0.23.0).
+ */
+export const RTK_VERSION = '0.40.0';
+
+/**
  * Get platform key for resources/bin folder naming.
  */
 export function getPlatformKey(platform: Platform, arch: Arch): string {
@@ -87,6 +94,20 @@ export function getUvDownloadName(platform: Platform, arch: Arch): string {
   if (platform === 'win32' && arch === 'x64') return 'uv-x86_64-pc-windows-msvc.zip';
 
   throw new Error(`Unsupported uv target: ${platform}-${arch}`);
+}
+
+/**
+ * Get RTK release artifact filename for a platform/arch combination.
+ */
+export function getRtkDownloadName(platform: Platform, arch: Arch): string {
+  if (platform === 'darwin' && arch === 'arm64') return 'rtk-aarch64-apple-darwin.tar.gz';
+  if (platform === 'darwin' && arch === 'x64') return 'rtk-x86_64-apple-darwin.tar.gz';
+  if (platform === 'linux' && arch === 'arm64') return 'rtk-aarch64-unknown-linux-gnu.tar.gz';
+  if (platform === 'linux' && arch === 'x64') return 'rtk-x86_64-unknown-linux-musl.tar.gz';
+  if (platform === 'win32' && arch === 'x64') return 'rtk-x86_64-pc-windows-msvc.zip';
+  if (platform === 'win32' && arch === 'arm64') return 'rtk-aarch64-pc-windows-msvc.zip';
+
+  throw new Error(`Unsupported RTK target: ${platform}-${arch}`);
 }
 
 /**
@@ -174,6 +195,93 @@ export async function downloadBun(config: BuildConfig): Promise<void> {
 }
 
 /**
+ * Download and verify RTK binary, then install it to resources/bin/<platform-arch>/rtk(.exe).
+ * RTK checksums.txt uses the format: `sha256:<hex>  <filename>`
+ */
+export async function downloadRtk(config: BuildConfig): Promise<void> {
+  const { platform, arch, electronDir } = config;
+  const rtkDownload = getRtkDownloadName(platform, arch);
+  const rtkBinaryName = platform === 'win32' ? 'rtk.exe' : 'rtk';
+  const platformKey = getPlatformKey(platform, arch);
+
+  const targetDir = join(electronDir, 'resources', 'bin', platformKey);
+  const targetPath = join(targetDir, rtkBinaryName);
+
+  if (existsSync(targetPath)) {
+    console.log(`rtk already present at ${targetPath}`);
+    return;
+  }
+
+  console.log(`Downloading RTK ${RTK_VERSION} for ${platformKey}...`);
+
+  mkdirSync(targetDir, { recursive: true });
+  const tempDir = join(electronDir, '.rtk-download-temp');
+  rmSync(tempDir, { recursive: true, force: true });
+  mkdirSync(tempDir, { recursive: true });
+
+  try {
+    const assetUrl = `https://github.com/rtk-ai/rtk/releases/download/v${RTK_VERSION}/${rtkDownload}`;
+    const checksumUrl = `https://github.com/rtk-ai/rtk/releases/download/v${RTK_VERSION}/checksums.txt`;
+
+    const assetPath = join(tempDir, rtkDownload);
+    const checksumPath = join(tempDir, 'checksums.txt');
+    const extractDir = join(tempDir, 'extract');
+
+    console.log(`  Downloading ${assetUrl}...`);
+    await $`curl -fsSL --retry 3 --retry-delay 2 -o ${assetPath} ${assetUrl}`;
+
+    console.log('  Downloading checksums...');
+    await $`curl -fsSL --retry 3 --retry-delay 2 -o ${checksumPath} ${checksumUrl}`;
+
+    console.log('  Verifying checksum...');
+    const checksumContent = await Bun.file(checksumPath).text();
+    // RTK checksums.txt format: `sha256:<hex>  <filename>`
+    const expectedHash = checksumContent
+      .split('\n')
+      .find((line) => line.includes(rtkDownload))
+      ?.replace(/^sha256:/, '')
+      .trim()
+      .split(/\s+/)[0];
+
+    if (!expectedHash) {
+      throw new Error(`Checksum not found for ${rtkDownload}`);
+    }
+
+    const isValid = await verifySha256(assetPath, expectedHash);
+    if (!isValid) {
+      throw new Error('RTK checksum verification failed!');
+    }
+    console.log('  Checksum verified ✓');
+
+    mkdirSync(extractDir, { recursive: true });
+
+    if (rtkDownload.endsWith('.zip')) {
+      if (process.platform === 'win32') {
+        await $`powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '${assetPath}' -DestinationPath '${extractDir}' -Force"`;
+      } else {
+        await $`unzip -o ${assetPath} -d ${extractDir}`.quiet();
+      }
+    } else {
+      await $`tar -xzf ${assetPath} -C ${extractDir}`;
+    }
+
+    const extractedRtk = findFileRecursive(extractDir, rtkBinaryName);
+    if (!extractedRtk) {
+      throw new Error(`Unable to locate ${rtkBinaryName} in extracted archive`);
+    }
+
+    copyFileSync(extractedRtk, targetPath);
+    if (platform !== 'win32') {
+      await $`chmod +x ${targetPath}`.quiet();
+    }
+
+    console.log(`  RTK installed to ${targetPath} ✓`);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+/**
  * Find the first matching file recursively under a directory.
  */
 function findFileRecursive(root: string, fileName: string): string | null {
@@ -246,8 +354,11 @@ export async function downloadUv(config: BuildConfig): Promise<void> {
     mkdirSync(extractDir, { recursive: true });
 
     if (uvDownload.endsWith('.zip')) {
-      // Use PowerShell on Windows for consistent extraction support.
-      await $`powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '${assetPath}' -DestinationPath '${extractDir}' -Force"`;
+      if (process.platform === 'win32') {
+        await $`powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '${assetPath}' -DestinationPath '${extractDir}' -Force"`;
+      } else {
+        await $`unzip -o ${assetPath} -d ${extractDir}`.quiet();
+      }
     } else {
       await $`tar -xzf ${assetPath} -C ${extractDir}`;
     }
@@ -400,20 +511,71 @@ export function verifySDKCopy(config: BuildConfig): void {
   console.log(`  SDK copy verified: native binary is ${(size / 1024 / 1024).toFixed(1)} MB`);
 }
 
-/**
- * Copy @vscode/ripgrep into the staged node_modules. Replaces the previous
- * `vendor/ripgrep/<platform>/rg` shipped by the SDK before 0.2.113.
- */
-export function copyRipgrep(config: BuildConfig): void {
-  const { rootDir, electronDir } = config;
-  const rgSource = join(rootDir, 'node_modules', '@vscode', 'ripgrep');
-  const binaryName = config.platform === 'win32' ? 'rg.exe' : 'rg';
-  const rgBinary = join(rgSource, 'bin', binaryName);
+// Matches the VERSION constant in node_modules/@vscode/ripgrep/lib/postinstall.js
+const RIPGREP_PREBUILT_VERSION = 'v15.0.1';
 
-  if (!existsSync(rgSource) || !existsSync(rgBinary)) {
+function getRipgrepTarget(platform: Platform, arch: Arch): string {
+  if (platform === 'win32' && arch === 'x64') return 'x86_64-pc-windows-msvc';
+  if (platform === 'win32' && arch === 'arm64') return 'aarch64-pc-windows-msvc';
+  if (platform === 'darwin' && arch === 'arm64') return 'aarch64-apple-darwin';
+  if (platform === 'darwin' && arch === 'x64') return 'x86_64-apple-darwin';
+  if (platform === 'linux' && arch === 'x64') return 'x86_64-unknown-linux-musl';
+  if (platform === 'linux' && arch === 'arm64') return 'aarch64-unknown-linux-musl';
+  throw new Error(`Unsupported ripgrep target: ${platform}-${arch}`);
+}
+
+async function downloadRipgrepBinary(config: BuildConfig, binDir: string): Promise<void> {
+  const { platform, arch } = config;
+  const target = getRipgrepTarget(platform, arch);
+  const ext = platform === 'win32' ? '.zip' : '.tar.gz';
+  const assetName = `ripgrep-${RIPGREP_PREBUILT_VERSION}-${target}${ext}`;
+  const downloadUrl = `https://github.com/microsoft/ripgrep-prebuilt/releases/download/${RIPGREP_PREBUILT_VERSION}/${assetName}`;
+
+  const tempDir = join(binDir, '..', '.rg-download-temp');
+  mkdirSync(tempDir, { recursive: true });
+
+  try {
+    const assetPath = join(tempDir, assetName);
+    console.log(`  Downloading ripgrep ${RIPGREP_PREBUILT_VERSION} for ${target}...`);
+    await $`curl -fsSL --retry 3 --retry-delay 2 -L -o ${assetPath} ${downloadUrl}`;
+
+    const extractDir = join(tempDir, 'extract');
+    mkdirSync(extractDir, { recursive: true });
+
+    if (ext === '.zip') {
+      await $`unzip -o ${assetPath} -d ${extractDir}`.quiet();
+    } else {
+      await $`tar -xzf ${assetPath} -C ${extractDir}`;
+    }
+
+    const binaryName = platform === 'win32' ? 'rg.exe' : 'rg';
+    const extractedBinary = findFileRecursive(extractDir, binaryName);
+    if (!extractedBinary) {
+      throw new Error(`${binaryName} not found in downloaded ripgrep archive`);
+    }
+
+    mkdirSync(binDir, { recursive: true });
+    copyFileSync(extractedBinary, join(binDir, binaryName));
+    if (platform !== 'win32') {
+      await $`chmod +x ${join(binDir, binaryName)}`.quiet();
+    }
+    console.log(`  ripgrep ${binaryName} downloaded ✓`);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Copy @vscode/ripgrep into the staged node_modules. For cross-builds (e.g. macOS → Windows)
+ * the host binary won't match the target — the correct binary is downloaded automatically.
+ */
+export async function copyRipgrep(config: BuildConfig): Promise<void> {
+  const { rootDir, electronDir, platform } = config;
+  const rgSource = join(rootDir, 'node_modules', '@vscode', 'ripgrep');
+
+  if (!existsSync(rgSource)) {
     throw new Error(
-      `@vscode/ripgrep not installed or postinstall did not run. ` +
-      `Run 'bun install' and 'bun pm trust @vscode/ripgrep'.`,
+      `@vscode/ripgrep not installed. Run 'bun install' and 'bun pm trust @vscode/ripgrep'.`,
     );
   }
 
@@ -425,6 +587,12 @@ export function copyRipgrep(config: BuildConfig): void {
     rmSync(rgDest, { recursive: true, force: true });
   }
   cpSync(rgSource, rgDest, { recursive: true, dereference: true });
+
+  const binaryName = platform === 'win32' ? 'rg.exe' : 'rg';
+  if (!existsSync(join(rgDest, 'bin', binaryName))) {
+    console.log(`  Target binary (${binaryName}) missing — downloading for cross-build...`);
+    await downloadRipgrepBinary(config, join(rgDest, 'bin'));
+  }
 }
 
 /**
@@ -615,24 +783,6 @@ export function buildMcpServers(config: BuildConfig): void {
 }
 
 /**
- * Build the WhatsApp worker subprocess (Baileys + Node runtime bundle).
- * Output ships as an extraResource at resources/messaging-whatsapp-worker/worker.cjs
- * and is spawned by WhatsAppAdapter. See electron-builder.yml `extraResources`.
- */
-export function buildWhatsAppWorker(config: BuildConfig): void {
-  const { rootDir } = config;
-  const workerOut = join(rootDir, 'packages', 'messaging-whatsapp-worker', 'dist', 'worker.cjs');
-
-  console.log('Building WhatsApp worker...');
-
-  execSync('bun run build:wa-worker', { cwd: rootDir, stdio: 'inherit', shell: true });
-
-  if (!existsSync(workerOut)) {
-    throw new Error(`WhatsApp worker output not found at ${workerOut}`);
-  }
-}
-
-/**
  * Verify MCP helper servers and Pi agent server are present in packaged resources.
  */
 export function verifyMcpServersExist(config: BuildConfig): void {
@@ -736,10 +886,10 @@ export async function loadEnvFile(config: BuildConfig): Promise<void> {
 export function getArtifactName(platform: Platform, arch: Arch): string {
   switch (platform) {
     case 'darwin':
-      return `Craft-Agents-${arch}.dmg`;
+      return `MDP-${arch}.dmg`;
     case 'win32':
-      return `Craft-Agents-${arch}.exe`;
+      return `MDP-${arch}.exe`;
     case 'linux':
-      return `Craft-Agents-${arch}.AppImage`;
+      return `MDP-${arch}.AppImage`;
   }
 }

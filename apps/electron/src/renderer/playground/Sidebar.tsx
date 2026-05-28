@@ -58,7 +58,7 @@ export function Sidebar({ categories, selectedId, onSelect }: SidebarProps) {
               {/* Category header */}
               <button
                 onClick={() => toggleCategory(category.name)}
-                className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+                className="w-full flex items-center gap-1.5 px-2 py-1.5 text-sm font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
               >
                 <ChevronRight
                   className={cn(

@@ -32,7 +32,7 @@ function piModelToDefinition(m: Model<Api>): ModelDefinition {
     id: `pi/${m.id}`,
     name: m.name,
     shortName,
-    description: `${m.provider} model via Craft Agents Backend`,
+    description: `${m.provider} model via MDP Backend`,
     provider: 'pi',
     contextWindow: m.contextWindow,
     supportsThinking: m.reasoning,

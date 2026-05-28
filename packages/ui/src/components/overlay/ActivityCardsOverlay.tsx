@@ -99,7 +99,7 @@ export function ActivityCardsOverlay({
           <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
             {isInputCard && commandPreview && (
               <div className="bg-background shadow-minimal rounded-[8px] px-4 py-3 font-mono">
-                <div className="text-xs font-semibold text-muted-foreground/70 mb-1">Command</div>
+                <div className="text-sm font-semibold text-muted-foreground/70 mb-1">Command</div>
                 <div className="text-sm text-foreground overflow-x-auto">
                   <span className="text-muted-foreground select-none">$ </span>
                   <span>{commandPreview}</span>
@@ -109,7 +109,7 @@ export function ActivityCardsOverlay({
 
             <div>
               {isInputCard && (
-                <div className="text-xs font-semibold text-muted-foreground/70 mb-2 px-1">Input Params</div>
+                <div className="text-sm font-semibold text-muted-foreground/70 mb-2 px-1">Input Params</div>
               )}
               <div className="p-4">
                 <JsonView value={processedData} style={jsonTheme} collapsed={false} enableClipboard displayDataTypes={false} shortenTextAfterLength={100}>

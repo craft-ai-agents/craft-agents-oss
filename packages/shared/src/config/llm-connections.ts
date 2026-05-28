@@ -44,6 +44,7 @@ export function registerPiModelResolver(resolver: PiModelResolver): void {
  * - 'anthropic': Direct Anthropic API (api.anthropic.com) — uses Claude Agent SDK
  * - 'pi': Pi unified LLM API (20+ providers via @mariozechner/pi-ai)
  * - 'pi_compat': Pi with custom endpoint (Ollama, self-hosted models, Anthropic-compat endpoints)
+ * - 'openllm': OpenLLM-compatible endpoint with user-defined models
  *
  * Legacy values (bedrock, vertex, anthropic_compat) are migrated on startup
  * by migrateLegacyProviderTypes() in storage.ts.
@@ -51,7 +52,31 @@ export function registerPiModelResolver(resolver: PiModelResolver): void {
 export type LlmProviderType =
   | 'anthropic'
   | 'pi'
-  | 'pi_compat';
+  | 'pi_compat'
+  | 'openllm';
+
+/** Pi auth-provider hint used for OpenAI Chat Completions-compatible OpenLLM endpoints. */
+export const OPENLLM_PI_AUTH_PROVIDER = 'openai';
+
+/** Reserved slug for the synthesized OpenLLM environment connection. */
+export const OPENLLM_ENV_CONNECTION_SLUG = 'openllm-env';
+
+
+/**
+ * Build the OpenLLM base URL for the OpenAI-compatible unified endpoint.
+ * The model is passed in the request body, not the URL path.
+ * @param isBuiltIn - true for the built-in env connection (reads OPENLLM_BASE_HOST);
+ *                    false for user-configured connections (reads OPENLLM_HOST).
+ */
+export function buildOpenLlmBaseUrl(env: NodeJS.ProcessEnv = process.env, isBuiltIn = false): string {
+  const envVal = isBuiltIn ? process.env.OPENLLM_BASE_HOST : process.env.OPENLLM_HOST;
+  const host = envVal?.trim();
+  if (!host) {
+    throw new Error(`${envVal} is required for OpenLLM connections`);
+  }
+
+  return `${host.replace(/\/+$/, '')}/v1`;
+}
 
 /**
  * @deprecated Use LlmProviderType instead. Kept for migration compatibility.
@@ -111,6 +136,16 @@ export interface CustomEndpointConfig {
   supportsImages?: boolean;
 }
 
+/** Runtime model shape accepted by the Pi custom-endpoint registration path. */
+export type RuntimeCustomModel = string | {
+  id: string;
+  contextWindow?: number;
+  supportsImages?: boolean;
+};
+
+/** OpenLLM speaks the OpenAI Chat Completions protocol through Pi's custom endpoint path. */
+export const OPENLLM_CUSTOM_ENDPOINT = { api: 'openai-completions' } as const satisfies CustomEndpointConfig;
+
 /**
  * Per-connection behavior when the user sends a message while the agent is
  * still streaming/processing a previous turn.
@@ -126,6 +161,21 @@ export interface CustomEndpointConfig {
  * created before this field existed still pick up the right default.
  */
 export type MidStreamBehavior = 'steer' | 'queue';
+
+type EnvConnectionMidStreamBehaviorResolver = () => MidStreamBehavior | undefined;
+let envConnectionMidStreamBehaviorResolver: EnvConnectionMidStreamBehaviorResolver = () => undefined;
+
+/** Register the app-level preference resolver used by Environment connections. */
+export function registerEnvConnectionMidStreamBehaviorResolver(
+  resolver: EnvConnectionMidStreamBehaviorResolver,
+): void {
+  envConnectionMidStreamBehaviorResolver = resolver;
+}
+
+/** Return true when a value is a valid mid-stream behavior. */
+export function isMidStreamBehavior(value: unknown): value is MidStreamBehavior {
+  return value === 'steer' || value === 'queue';
+}
 
 /**
  * LLM Connection configuration.
@@ -195,6 +245,9 @@ export interface LlmConnection {
 
   /** Timestamp when connection was last used */
   lastUsedAt?: number;
+
+  /** Whether this is the protected connection synthesized from process env. */
+  isEnvironmentConnection?: boolean;
 }
 
 /**
@@ -210,11 +263,101 @@ export interface LlmConnectionWithStatus extends LlmConnection {
 
   /** Whether this is the global default connection */
   isDefault?: boolean;
+
+  /** Whether this is the protected connection synthesized from process env. */
+  isEnvironmentConnection?: boolean;
 }
+
+/**
+ * Environment variables used to synthesize the reserved Environment connection.
+ */
+export interface EnvConnectionEnv {
+  /** Custom LLM endpoint URL. When absent, no Environment connection is created. */
+  LLM_BASE_URL?: string;
+
+  /** Optional model ID used as both the available and default model. */
+  LLM_MODEL?: string;
+
+  /** Optional display name for the synthesized Environment connection. */
+  LLM_CONNECTION_NAME?: string;
+}
+
+/** Reserved slug used by the protected Environment connection. */
+export const ENV_CONNECTION_SLUG = 'env-provider';
+
+/** Env var name used to pass the SSO session token to subprocesses. */
+export const ENV_CONNECTION_SSO_TOKEN_ENV_VAR = 'CRAFT_LLM_SSO_TOKEN';
+
+/** Env var name used to pass the SSO-backed LLM base URL to subprocesses. */
+export const ENV_CONNECTION_SSO_BASE_URL_ENV_VAR = 'CRAFT_LLM_SSO_BASE_URL';
 
 // ============================================================
 // Helpers
 // ============================================================
+
+/**
+ * Build the reserved Environment connection from process environment values.
+ *
+ * Pure source of truth for the env-backed connection shape. This connection
+ * never stores or derives credentials.
+ */
+export function synthesizeEnvConnection(
+  env: EnvConnectionEnv,
+): LlmConnection | null {
+  const baseUrl = env.LLM_BASE_URL?.trim();
+  if (!baseUrl) return null;
+
+  const model = env.LLM_MODEL;
+
+  return {
+    slug: ENV_CONNECTION_SLUG,
+    name: env.LLM_CONNECTION_NAME ?? 'Environment',
+    providerType: 'pi_compat',
+    authType: 'none',
+    piAuthProvider: 'openai',
+    customEndpoint: { api: 'openai-completions' },
+    baseUrl,
+    models: model ? [model] : [],
+    defaultModel: model || undefined,
+    createdAt: 0,
+    isEnvironmentConnection: true,
+  };
+}
+
+/**
+ * Build the synthesized OpenLLM environment connection from process environment.
+ *
+ * Returns null when `OPENLLM_BASE_HOST` is absent. When present the connection is
+ * auto-default and uses SSO-header auth (no API key stored). The host is
+ * read at call time so the connection always reflects the current deployment.
+ *
+ * `OPENLLM_BASE_HOST` is deployment-owned. `OPENLLM_HOST` is user-owned and
+ * powers user-configured OpenLLM Connections — it does not affect this function.
+ */
+export function synthesizeOpenLlmEnvConnection(): LlmConnection | null {
+  const host = process.env.OPENLLM_BASE_HOST?.trim();
+  if (!host) return null;
+
+  const rawModels = process.env.OPENLLM_BASE_MODELS?.trim();
+  const models = rawModels
+    ? rawModels.split(',').map(m => m.trim()).filter(Boolean)
+    : [];
+  const defaultModel = models[0];
+
+  return {
+    slug: OPENLLM_ENV_CONNECTION_SLUG,
+    name: process.env.OPENLLM_BASE_CONNECTION_NAME?.trim() ?? 'OpenLLM',
+    providerType: 'openllm',
+    authType: 'none',
+    piAuthProvider: OPENLLM_PI_AUTH_PROVIDER,
+    customEndpoint: OPENLLM_CUSTOM_ENDPOINT,
+    baseUrl: buildOpenLlmBaseUrl(process.env, true),
+    models,
+    defaultModel,
+    createdAt: 0,
+    isEnvironmentConnection: true,
+  };
+}
 
 /**
  * Returns true when `modelId` must NOT be used as the mini/summarization model
@@ -306,7 +449,7 @@ function findSmallModel(
     const match = connection.models.find(m => {
       if (!isAllowedModel(m)) return false;
       const searchStr = toSearchStr(m);
-      return keywords.some(k => searchStr.includes(k));
+      return keywords.some(k => new RegExp(`\\b${k}\\b`).test(searchStr));
     });
     if (match) {
       return toId(match);
@@ -411,10 +554,10 @@ export function authTypeRequiresEndpoint(authType: LlmAuthType): boolean {
  * Check if a provider type is a "compat" provider.
  * Compat providers use custom endpoints and require explicit model lists.
  * @param providerType - Provider type to check
- * @returns true if this is a compat provider (pi_compat)
+ * @returns true if this is a compat provider (pi_compat/openllm)
  */
 export function isCompatProvider(providerType: LlmProviderType): boolean {
-  return providerType === 'pi_compat';
+  return providerType === 'pi_compat' || providerType === 'openllm';
 }
 
 /**
@@ -447,7 +590,7 @@ export function isLocalConnection(conn: Pick<LlmConnection, 'baseUrl'>): boolean
  * @returns true if this provider uses Pi
  */
 export function isPiProvider(providerType: LlmProviderType): boolean {
-  return providerType === 'pi' || providerType === 'pi_compat';
+  return providerType === 'pi' || providerType === 'pi_compat' || providerType === 'openllm';
 }
 
 /**
@@ -457,9 +600,9 @@ export function isPiProvider(providerType: LlmProviderType): boolean {
  *   has a real failure mode — if no tool fires before the turn ends, the steer
  *   becomes `steer_undelivered` and gets re-queued anyway, paying for the
  *   original turn's tokens for nothing. Default to queue for predictability.
- * - 'pi' / 'pi_compat' → 'steer': Pi's native `.steer()` is non-destructive
- *   (delivers after the current tool finishes, keeps full context). No
- *   downside to defaulting to immediate steering.
+ * - Pi-backed providers (`pi`, `pi_compat`, `openllm`) → 'steer': Pi's native
+ *   `.steer()` is non-destructive (delivers after the current tool finishes,
+ *   keeps full context). No downside to defaulting to immediate steering.
  */
 export function defaultMidStreamBehavior(providerType: LlmProviderType): MidStreamBehavior {
   return providerType === 'anthropic' ? 'queue' : 'steer';
@@ -474,9 +617,15 @@ export function defaultMidStreamBehavior(providerType: LlmProviderType): MidStre
  * provider-appropriate default.
  */
 export function resolveMidStreamBehavior(
-  connection: Pick<LlmConnection, 'midStreamBehavior' | 'providerType'>,
+  connection: Pick<LlmConnection, 'midStreamBehavior' | 'providerType' | 'isEnvironmentConnection'>,
 ): MidStreamBehavior {
-  if (connection.midStreamBehavior === 'steer' || connection.midStreamBehavior === 'queue') {
+  if (connection.isEnvironmentConnection === true) {
+    const appPreference = envConnectionMidStreamBehaviorResolver();
+    if (isMidStreamBehavior(appPreference)) {
+      return appPreference;
+    }
+  }
+  if (isMidStreamBehavior(connection.midStreamBehavior)) {
     return connection.midStreamBehavior;
   }
   return defaultMidStreamBehavior(connection.providerType);
@@ -521,18 +670,44 @@ export function setModelSupportsImages(
 }
 
 /**
+ * Convert persisted connection models into the runtime `customModels` payload
+ * consumed by the Pi subprocess. String entries stay compact; object entries
+ * only carry fields that the runtime registration path understands.
+ */
+export function buildRuntimeCustomModels(
+  models: LlmConnection['models'] | undefined,
+): RuntimeCustomModel[] | undefined {
+  return models?.map(model => {
+    if (typeof model === 'string') return model;
+
+    const supportsImages = typeof model.supportsImages === 'boolean'
+      ? model.supportsImages
+      : undefined;
+    if (model.contextWindow || supportsImages !== undefined) {
+      return {
+        id: model.id,
+        ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
+        ...(supportsImages !== undefined ? { supportsImages } : {}),
+      };
+    }
+
+    return model.id;
+  });
+}
+
+/**
  * Resolve whether a given model on a connection accepts image input.
  *
- * For `pi_compat` (custom-endpoint) connections this mirrors the precedence used
- * by Pi's `buildCustomEndpointModelDef`:
+ * For compat connections this mirrors the precedence used by Pi's
+ * `buildCustomEndpointModelDef`:
  *   per-model `supportsImages` override
  *   ?? connection-level `customEndpoint.supportsImages` default
  *   ?? false
  *
- * For non-`pi_compat` connections the renderer doesn't own the catalog — Pi SDK's
+ * For non-compat connections the renderer doesn't own the catalog — Pi SDK's
  * bundled provider definitions and Anthropic's API do. This helper conservatively
  * returns `true` there (we don't know better; the upstream decides). The
- * pre-flight banner gates on `pi_compat` separately, so this just reports what
+ * pre-flight banner gates on compat providers separately, so this reports what
  * the renderer can know with confidence.
  */
 export function modelSupportsImages(
@@ -638,7 +813,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType, piA
     }
     return models;
   }
-  if (providerType === 'pi_compat') return [];  // Dynamic — user specifies
+  if (isCompatProvider(providerType)) return [];  // Dynamic — user specifies
   // anthropic
   return ANTHROPIC_MODELS;
 }
@@ -726,6 +901,7 @@ export function isValidProviderAuthCombination(
     anthropic: ['api_key', 'oauth'],
     pi: ['api_key', 'oauth', 'iam_credentials', 'environment', 'none'],
     pi_compat: ['api_key_with_endpoint', 'none'],
+    openllm: ['api_key'],
   };
 
   return validCombinations[providerType]?.includes(authType) ?? false;

@@ -1,9 +1,9 @@
 /**
  * TopBar - Persistent top bar above all panels (Slack-style)
  *
- * Layout: [Sidebar] [Menu] [Back] [Forward] [Workspace selector] ... [Browser strip] [+] [Help]
+ * Layout: [Menu] [Sidebar] [Back] [Forward] [Update] [Workspace selector] ... [Browser strip] [+] [Help]
  *
- * Fixed at top of window, 48px tall.
+ * Fixed at top of window, height controlled by --topbar-height.
  * macOS: offset left to avoid stoplight controls.
  */
 
@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next"
 import * as Icons from "lucide-react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
+import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { TopBarButton } from "../ui/TopBarButton"
 import { cn } from "@/lib/utils"
 import { isMac, isWebUI } from "@/lib/platform"
@@ -23,7 +24,7 @@ import {
   StyledDropdownMenuSeparator,
 } from "@/components/ui/styled-dropdown"
 import type { SettingsMenuItem } from "../../../shared/menu-schema"
-import { SquarePenRounded } from "../icons/SquarePenRounded"
+import { SquareCode } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { BrowserTabStrip } from "../browser/BrowserTabStrip"
 import type { Workspace } from "../../../shared/types"
@@ -53,10 +54,21 @@ interface TopBarProps {
   onForward: () => void
   canGoBack: boolean
   canGoForward: boolean
+  isUpdateReady?: boolean
+  updateVersion?: string | null
+  onInstallUpdate?: () => void | Promise<void>
   onToggleSidebar: () => void
+  onToggleRightSidebar: () => void
   onToggleFocusMode: () => void
-  onAddSessionPanel: () => void
   onAddBrowserPanel: () => void
+  /** When true, shows the right sidebar toggle in the top bar */
+  isRightSidebarToggleVisible: boolean
+  /** When true, shows the editor panel toggle button in the top bar */
+  isEditorPanelToggleVisible: boolean
+  /** Whether the editor panel is currently open */
+  isEditorPanelOpen: boolean
+  /** Called when the user clicks the editor panel toggle button */
+  onEditorPanelToggle: () => void
   /** When true, hides controls that don't apply in compact/mobile layout */
   isCompact?: boolean
 }
@@ -79,10 +91,17 @@ export function TopBar({
   onForward,
   canGoBack,
   canGoForward,
+  isUpdateReady,
+  updateVersion,
+  onInstallUpdate,
   onToggleSidebar,
+  onToggleRightSidebar,
   onToggleFocusMode,
-  onAddSessionPanel,
   onAddBrowserPanel,
+  isRightSidebarToggleVisible,
+  isEditorPanelToggleVisible,
+  isEditorPanelOpen,
+  onEditorPanelToggle,
   isCompact,
 }: TopBarProps) {
   const { t } = useTranslation()
@@ -91,6 +110,7 @@ export function TopBar({
 
   const goBackHotkey = useActionLabel('nav.goBackAlt').hotkey
   const goForwardHotkey = useActionLabel('nav.goForwardAlt').hotkey
+  const showUpdateButton = !isCompact && isUpdateReady && Boolean(onInstallUpdate)
 
   useEffect(() => {
     const slotEl = rightSlotRef.current
@@ -132,11 +152,11 @@ export function TopBar({
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 z-panel titlebar-drag-region"
+      className="fixed top-0 left-0 right-0 z-panel titlebar-drag-region bg-foreground-5"
       style={{ height: 'var(--topbar-height)' }}
     >
       <div className="flex h-full w-full items-center justify-between gap-2">
-      {/* === LEFT: Sidebar + Menu + Navigation + Workspace === */}
+      {/* === LEFT: Menu + Sidebar + Navigation + Workspace === */}
       {/* Keep this container draggable. Only individual interactive controls should use titlebar-no-drag. */}
       {/* In compact mode the right slot is hidden, so we add right padding here
           so the workspace pill doesn't run flush against the viewport edge. */}
@@ -145,17 +165,6 @@ export function TopBar({
         style={{ paddingLeft: menuLeftPadding, paddingRight: isCompact ? 12 : 0 }}
       >
         <div className="flex items-center gap-0.5">
-        {!isCompact && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <TopBarButton onClick={onToggleSidebar} aria-label={t("menu.toggleSidebar")}>
-              <PanelLeftRounded className="h-[18px] w-[18px] text-foreground/70" />
-            </TopBarButton>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{t("menu.toggleSidebar")}</TooltipContent>
-        </Tooltip>
-        )}
-
         <AppMenu
           onNewChat={onNewChat}
           onNewWindow={onNewWindow}
@@ -166,6 +175,17 @@ export function TopBar({
           onToggleSidebar={onToggleSidebar}
           onToggleFocusMode={onToggleFocusMode}
         />
+
+        {!isCompact && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <TopBarButton onClick={onToggleSidebar} aria-label={t("menu.toggleSidebar")}>
+              <PanelLeftRounded className="h-[18px] w-[18px] text-foreground/70" />
+            </TopBarButton>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t("menu.toggleSidebar")}</TooltipContent>
+        </Tooltip>
+        )}
         </div>
 
         {/* Back / Forward / Workspace selector (moved from center).
@@ -193,31 +213,50 @@ export function TopBar({
                 </TooltipTrigger>
                 <TooltipContent side="bottom">{t("common.forward")} {goForwardHotkey}</TooltipContent>
               </Tooltip>
+
+              {showUpdateButton && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => { void onInstallUpdate?.() }}
+                      className="titlebar-no-drag ml-1 inline-flex h-[26px] shrink-0 items-center rounded-lg border border-foreground/10 bg-background/70 px-2.5 text-[12px] font-medium leading-none text-foreground/70 shadow-sm transition-colors hover:border-foreground/20 hover:bg-foreground/5 hover:text-foreground"
+                    >
+                      {t("updateButton.label")}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {t("updateButton.tooltip", { version: updateVersion })}
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </>
           )}
 
-          <div className="min-w-0 flex-1">
-            {isCompact ? (
-              <CompactWorkspaceSwitcher
-                workspaces={workspaces}
-                activeWorkspaceId={activeWorkspaceId}
-                onSelect={onSelectWorkspace}
-                onWorkspaceCreated={onWorkspaceCreated}
-                onWorkspaceRemoved={onWorkspaceRemoved}
-                workspaceUnreadMap={workspaceUnreadMap}
-              />
-            ) : (
-              <WorkspaceSwitcher
-                variant="topbar"
-                workspaces={workspaces}
-                activeWorkspaceId={activeWorkspaceId}
-                onSelect={onSelectWorkspace}
-                onWorkspaceCreated={onWorkspaceCreated}
-                onWorkspaceRemoved={onWorkspaceRemoved}
-                workspaceUnreadMap={workspaceUnreadMap}
-              />
-            )}
-          </div>
+          {workspaces.some(w => w.remoteServer) && (
+            <div className="min-w-0 flex-1">
+              {isCompact ? (
+                <CompactWorkspaceSwitcher
+                  workspaces={workspaces}
+                  activeWorkspaceId={activeWorkspaceId}
+                  onSelect={onSelectWorkspace}
+                  onWorkspaceCreated={onWorkspaceCreated}
+                  onWorkspaceRemoved={onWorkspaceRemoved}
+                  workspaceUnreadMap={workspaceUnreadMap}
+                />
+              ) : (
+                <WorkspaceSwitcher
+                  variant="topbar"
+                  workspaces={workspaces}
+                  activeWorkspaceId={activeWorkspaceId}
+                  onSelect={onSelectWorkspace}
+                  onWorkspaceCreated={onWorkspaceCreated}
+                  onWorkspaceRemoved={onWorkspaceRemoved}
+                  workspaceUnreadMap={workspaceUnreadMap}
+                />
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -234,10 +273,6 @@ export function TopBar({
             </TopBarButton>
           </DropdownMenuTrigger>
           <StyledDropdownMenuContent align="end" minWidth="min-w-56">
-            <StyledDropdownMenuItem onClick={onAddSessionPanel}>
-              <SquarePenRounded className="h-3.5 w-3.5" />
-              {t("session.newSessionInPanel")}
-            </StyledDropdownMenuItem>
             <StyledDropdownMenuItem onClick={onAddBrowserPanel}>
               <Icons.Globe className="h-3.5 w-3.5" />
               {t("browser.newWindow")}
@@ -278,11 +313,6 @@ export function TopBar({
               <span className="flex-1">{t("sidebar.automations")}</span>
               <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
             </StyledDropdownMenuItem>
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('messaging'))}>
-              <Icons.MessageSquare className="h-3.5 w-3.5" />
-              <span className="flex-1">{t("settings.messaging.title")}</span>
-              <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
-            </StyledDropdownMenuItem>
             <StyledDropdownMenuSeparator />
             <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
               <Icons.ExternalLink className="h-3.5 w-3.5" />
@@ -290,6 +320,36 @@ export function TopBar({
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
         </DropdownMenu>
+
+        {isEditorPanelToggleVisible && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <TopBarButton
+                onClick={onEditorPanelToggle}
+                aria-label={t("menu.toggleEditorPanel")}
+                className={cn("h-[26px] w-[26px] rounded-lg", isEditorPanelOpen && "bg-foreground/10")}
+              >
+                <SquareCode className="h-[18px] w-[18px] text-foreground/50" strokeWidth={1.5} />
+              </TopBarButton>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t("menu.toggleEditorPanel")}</TooltipContent>
+          </Tooltip>
+        )}
+
+        {isRightSidebarToggleVisible && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <TopBarButton
+                onClick={onToggleRightSidebar}
+                aria-label={t("menu.toggleRightSidebar")}
+                className="h-[26px] w-[26px] rounded-lg"
+              >
+                <PanelRightRounded className="h-[18px] w-[18px] text-foreground/50" />
+              </TopBarButton>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t("menu.toggleRightSidebar")}</TooltipContent>
+          </Tooltip>
+        )}
       </div>
       )}
       </div>

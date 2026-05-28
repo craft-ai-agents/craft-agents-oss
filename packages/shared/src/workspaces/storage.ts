@@ -3,7 +3,7 @@
  *
  * CRUD operations for workspaces.
  * Workspaces can be stored anywhere on disk via rootPath.
- * Default location: ~/.craft-agent/workspaces/
+ * Default location: ~/.mdp-agent/workspaces/
  */
 
 import {
@@ -24,15 +24,16 @@ import { getDefaultStatusConfig, saveStatusConfig, ensureDefaultIconFiles } from
 import { getDefaultLabelConfig, saveLabelConfig } from '../labels/storage.ts';
 import { loadConfigDefaults } from '../config/storage.ts';
 import { parsePermissionMode, PERMISSION_MODE_ORDER } from '../agent/mode-types.ts';
-import { normalizeThinkingLevel } from '../agent/thinking-levels.ts';
+import { normalizeThinkingEnabled } from '../agent/thinking-toggle.ts';
 import type {
   WorkspaceConfig,
   CreateWorkspaceInput,
   LoadedWorkspace,
   WorkspaceSummary,
 } from './types.ts';
+import { DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH } from './types.ts';
 
-const CONFIG_DIR = join(homedir(), '.craft-agent');
+const CONFIG_DIR = join(homedir(), '.mdp-agent');
 const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
 
 // ============================================================
@@ -40,7 +41,7 @@ const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
 // ============================================================
 
 /**
- * Get the default workspaces directory (~/.craft-agent/workspaces/)
+ * Get the default workspaces directory (~/.mdp-agent/workspaces/)
  */
 export function getDefaultWorkspacesDir(): string {
   return DEFAULT_WORKSPACES_DIR;
@@ -125,10 +126,28 @@ export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
         : [...PERMISSION_MODE_ORDER];
     }
 
-    if (config.defaults && 'thinkingLevel' in config.defaults) {
-      // TODO: Remove legacy 'think' normalization after old persisted workspace configs
-      // have realistically aged out across upgrades.
-      config.defaults.thinkingLevel = normalizeThinkingLevel(config.defaults.thinkingLevel);
+    if (config.defaults) {
+      const legacyThinkingKey = 'thinking' + 'Level';
+      const defaults = config.defaults as typeof config.defaults & Record<string, unknown>;
+      const rawThinkingEnabled = defaults.thinkingEnabled ?? defaults[legacyThinkingKey];
+      if (rawThinkingEnabled !== undefined) {
+        defaults.thinkingEnabled = normalizeThinkingEnabled(rawThinkingEnabled);
+      }
+      delete defaults[legacyThinkingKey];
+    }
+
+    if (config.teamPublicKnowledge) {
+      const documents = Array.isArray(config.teamPublicKnowledge.documents)
+        ? [...config.teamPublicKnowledge.documents].sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id))
+        : [];
+
+      config.teamPublicKnowledge = {
+        enabled: config.teamPublicKnowledge.enabled === true,
+        manifestPath: typeof config.teamPublicKnowledge.manifestPath === 'string' && config.teamPublicKnowledge.manifestPath.trim()
+          ? config.teamPublicKnowledge.manifestPath.trim()
+          : DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH,
+        documents,
+      };
     }
 
     return config;
@@ -262,7 +281,7 @@ export function generateSlug(name: string): string {
  * E.g., "my-workspace", "my-workspace-2", "my-workspace-3", ...
  *
  * @param name - Display name to derive the slug from
- * @param baseDir - Parent directory where workspace folders live (e.g., ~/.craft-agent/workspaces/)
+ * @param baseDir - Parent directory where workspace folders live (e.g., ~/.mdp-agent/workspaces/)
  * @returns Full path to a unique, non-existing folder
  */
 export function generateUniqueWorkspacePath(name: string, baseDir: string): string {
@@ -301,11 +320,11 @@ export function createWorkspaceAtPath(
   const globalDefaults = loadConfigDefaults();
 
   // Merge global defaults with provided defaults
-  // AI settings (model, thinkingLevel, defaultLlmConnection) are left undefined
+  // AI settings (model, thinkingEnabled, defaultLlmConnection) are left undefined
   // so they fall back to app-level defaults
   const workspaceDefaults: WorkspaceConfig['defaults'] = {
     model: undefined,
-    thinkingLevel: undefined,
+    thinkingEnabled: undefined,
     // defaultLlmConnection: undefined - falls back to app default
     permissionMode: globalDefaults.workspaceDefaults.permissionMode,
     cyclablePermissionModes: globalDefaults.workspaceDefaults.cyclablePermissionModes,
@@ -389,7 +408,7 @@ export function renameWorkspaceFolder(rootPath: string, newName: string): boolea
 
 /**
  * Discover workspace folders in the default location that have valid config.json
- * Returns paths to valid workspaces found in ~/.craft-agent/workspaces/
+ * Returns paths to valid workspaces found in ~/.mdp-agent/workspaces/
  */
 export function discoverWorkspacesInDefaultLocation(): string[] {
   const discovered: string[] = [];

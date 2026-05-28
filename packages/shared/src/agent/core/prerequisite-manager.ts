@@ -6,7 +6,7 @@
  *
  * Key responsibilities:
  * - Track which files have been read via the Read tool
- * - Check prerequisites before tool execution (e.g., guide.md for sources)
+ * - Check prerequisites before tool execution
  * - Reset state on context compaction
  */
 
@@ -45,11 +45,24 @@ export interface PrerequisiteManagerConfig {
 // Constants
 // ============================================================
 
-/** Slugs that are exempt from prerequisite checks (internal sources) */
-const EXEMPT_SLUGS = new Set(['session', 'craft-agents-docs']);
-
 /** Global browser tools docs path required before browser tool usage. */
-const BROWSER_TOOLS_DOC_PATH = resolve(join(homedir(), '.craft-agent', 'docs', 'browser-tools.md'));
+const BROWSER_TOOLS_DOC_PATH = resolve(join(homedir(), '.mdp-agent', 'docs', 'browser-tools.md'));
+
+function isBrowserPrerequisiteTool(toolName: string): boolean {
+  return (
+    toolName.startsWith('browser_') ||
+    toolName === 'browser_tool' ||
+    toolName === 'mcp__session__browser_tool'
+  );
+}
+
+function isBrowserPrerequisiteEnabled(): boolean {
+  try {
+    return getBrowserToolEnabled();
+  } catch {
+    return true;
+  }
+}
 
 // ============================================================
 // Rules
@@ -62,46 +75,12 @@ const BROWSER_TOOLS_DOC_PATH = resolve(join(homedir(), '.craft-agent', 'docs', '
  * - What message to show when blocking
  */
 const RULES: PrerequisiteRule[] = [
-  // MCP source tools: mcp__{slug}__* format
-  {
-    toolMatcher: (toolName: string) => {
-      if (!toolName.startsWith('mcp__')) return false;
-      const parts = toolName.split('__');
-      if (parts.length < 3) return false;
-      const slug = parts[1]!;
-      return !EXEMPT_SLUGS.has(slug);
-    },
-    resolveRequiredPath: (toolName: string, workspaceRootPath: string) => {
-      const parts = toolName.split('__');
-      const slug = parts[1]!;
-      const guidePath = resolve(workspaceRootPath, 'sources', slug, 'guide.md');
-      return existsSync(guidePath) ? guidePath : null;
-    },
-    blockMessage:
-      'You must read the source guide before using this tool. Please read the file at {filePath} first, then retry.',
-  },
-
-  // API source tools: api_{slug} format
-  {
-    toolMatcher: (toolName: string) => {
-      return toolName.startsWith('api_');
-    },
-    resolveRequiredPath: (toolName: string, workspaceRootPath: string) => {
-      const slug = toolName.slice(4); // Remove 'api_' prefix
-      const guidePath = resolve(workspaceRootPath, 'sources', slug, 'guide.md');
-      return existsSync(guidePath) ? guidePath : null;
-    },
-    blockMessage:
-      'You must read the source guide before using this tool. Please read the file at {filePath} first, then retry.',
-  },
-
   // Built-in browser tool: require browser-tools.md first.
   // Only matches the session-scoped tool (not external MCP browser tools like mcp__playwright__*),
   // and skipped entirely when the built-in browser tool is disabled.
   {
     toolMatcher: (toolName: string) =>
-      getBrowserToolEnabled() &&
-      (toolName === 'browser_tool' || toolName === 'mcp__session__browser_tool'),
+      isBrowserPrerequisiteTool(toolName) && isBrowserPrerequisiteEnabled(),
     resolveRequiredPath: () => {
       return existsSync(BROWSER_TOOLS_DOC_PATH) ? BROWSER_TOOLS_DOC_PATH : null;
     },

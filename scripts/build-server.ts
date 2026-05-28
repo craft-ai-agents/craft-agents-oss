@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Build script for standalone Craft Agent server.
+ * Build script for standalone MDP server.
  *
  * Assembles a self-contained distribution directory with all runtime
  * dependencies, resources, and platform-specific binaries.
@@ -81,7 +81,7 @@ interface ServerBuildConfig {
 
 function showHelp(): void {
   console.log(`
-Standalone server build script for Craft Agent
+Standalone server build script for MDP
 
 Usage:
   bun run scripts/build-server.ts [options]
@@ -356,9 +356,6 @@ function copyProductionDeps(config: ServerBuildConfig): void {
   //    imports that happen to work due to hoisting. No more whack-a-mole.
   // -------------------------------------------------------------------------
   // messaging-gateway is included so its runtime deps (grammy, etc.) land in node_modules.
-  // messaging-whatsapp-worker is intentionally OMITTED: Baileys and its transitive deps
-  // are bundled directly into packages/messaging-whatsapp-worker/dist/worker.cjs by
-  // scripts/build-wa-worker.ts — pulling them into node_modules would duplicate the tree.
   const SERVER_PACKAGES = ['server', 'server-core', 'shared', 'core', 'session-tools-core', 'session-mcp-server', 'messaging-gateway'];
 
   const allImports = new Set<string>();
@@ -450,9 +447,6 @@ function getDirSize(dir: string): number {
 function copyWorkspacePackages(config: ServerBuildConfig): void {
   const { rootDir, outputDir } = config;
 
-  // messaging-whatsapp-worker is included so dist/worker.cjs (built in step 4) ships.
-  // The worker is spawned as a Node subprocess against that file at runtime; see
-  // CRAFT_MESSAGING_WA_WORKER env resolution in packages/server/src/index.ts.
   const packages = [
     'server',
     'server-core',
@@ -461,7 +455,6 @@ function copyWorkspacePackages(config: ServerBuildConfig): void {
     'session-tools-core',
     'session-mcp-server',
     'messaging-gateway',
-    'messaging-whatsapp-worker',
   ];
 
   for (const pkg of packages) {
@@ -597,7 +590,7 @@ exec "$ROOT/vendor/bun/bun" run "$ROOT/packages/server/src/index.ts" "$@"
 
   // start.sh — convenience entry
   const startSh = `#!/bin/sh
-# Craft Agent Server — convenience entry point
+# MDP Server — convenience entry point
 DIR="$(cd "$(dirname "$0")" && pwd)"
 exec "$DIR/bin/craft-server" "$@"
 `;
@@ -609,7 +602,7 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "=== Craft Agent Server Setup ==="
+echo "=== MDP Server Setup ==="
 echo ""
 
 # Make binaries executable
@@ -655,7 +648,7 @@ if [ "\${1:-}" = "--systemd" ]; then
 
   cat > "$SERVICE_FILE" <<UNIT
 [Unit]
-Description=Craft Agent Server
+Description=MDP Server
 After=network.target
 
 [Service]
@@ -752,7 +745,7 @@ services:
       # - CRAFT_RPC_TLS_CERT=/certs/cert.pem
       # - CRAFT_RPC_TLS_KEY=/certs/key.pem
     volumes:
-      - craft-data:/root/.craft-agent
+      - craft-data:/root/.mdp-agent
       # TLS — mount cert directory
       # - ./certs:/certs:ro
     restart: unless-stopped
@@ -824,7 +817,7 @@ async function main(): Promise<void> {
     version,
   };
 
-  console.log(`=== Building Craft Agent Server ${version} for ${platform}-${arch} ===`);
+  console.log(`=== Building MDP Server ${version} for ${platform}-${arch} ===`);
   console.log(`  Output: ${outputDir}`);
 
   // Step 1: Clean
@@ -854,12 +847,6 @@ async function main(): Promise<void> {
     electronDir,
   };
   buildMcpServers(buildConfig);
-
-  // Build the WhatsApp worker bundle. Must happen before copyWorkspacePackages
-  // so dist/worker.cjs exists when we copy the messaging-whatsapp-worker package.
-  // The bundle embeds Baileys + transitive deps; see scripts/build-wa-worker.ts.
-  console.log('  Building WhatsApp worker bundle...');
-  await $`bun run ${join(rootDir, 'scripts', 'build-wa-worker.ts')}`.cwd(rootDir);
 
   // Step 5: Assemble resources
   console.log('\n[5/8] Assembling resources...');

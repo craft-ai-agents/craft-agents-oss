@@ -29,8 +29,11 @@ import {
   isSessionsNavigation,
   isSourcesNavigation,
   isSettingsNavigation,
-  isSkillsNavigation,
+  isLocalSkillsNavigation,
+  isSkillMarketplaceNavigation,
   isAutomationsNavigation,
+  isArchivedNavigation,
+  isAdminNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
@@ -39,10 +42,13 @@ import type { SessionStatusId } from '@/config/session-status-config'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
+import PermissionAdminPage from '@/pages/admin/PermissionAdminPage'
+import FeedbackAdminPage from '@/pages/admin/FeedbackAdminPage'
 import { AutomationInfoPage } from '../automations/AutomationInfoPage'
 import type { ExecutionEntry } from '../automations/types'
 import { automationsAtom } from '@/atoms/automations'
 import { SendResourceToWorkspaceDialog, type SendResourceType } from './SendResourceToWorkspaceDialog'
+import { SkillMarketplacePage } from './skill/SkillMarketplacePage'
 
 export interface MainContentPanelProps {
   /** Whether both sidebar and navigator are hidden (focus mode / CMD+.) */
@@ -81,6 +87,7 @@ export function MainContentPanel({
     automationTestResults,
     getAutomationHistory,
     activeSessionWorkingDirectory,
+    ssoUser,
   } = useAppShellContext()
 
   // Session multi-select state
@@ -244,6 +251,17 @@ export function MainContentPanel({
     )
   }
 
+  // Admin navigator
+  if (isAdminNavigation(navState)) {
+    const subpage = navState.subpage ?? 'permission'
+    const AdminPageComponent = subpage === 'feedback' ? FeedbackAdminPage : PermissionAdminPage
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <AdminPageComponent />
+      </Panel>
+    )
+  }
+
   // Sources navigator - show source info, multi-select panel, or empty state
   if (isSourcesNavigation(navState)) {
     if (isSourceMultiSelectActive) {
@@ -278,8 +296,17 @@ export function MainContentPanel({
     )
   }
 
-  // Skills navigator - show skill info, multi-select panel, or empty state
-  if (isSkillsNavigation(navState)) {
+  // Marketplace navigator
+  if (isSkillMarketplaceNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <SkillMarketplacePage workspaceId={activeWorkspaceId || ''} currentUserId={ssoUser?.employeeId ?? null} />
+      </Panel>
+    )
+  }
+
+  // Local Skills navigator - show skill info, multi-select panel, or empty state
+  if (isLocalSkillsNavigation(navState)) {
     if (isSkillMultiSelectActive) {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
@@ -350,6 +377,25 @@ export function MainContentPanel({
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">{t("automations.noAutomationsConfigured")}</p>
+        </div>
+      </Panel>
+    )
+  }
+
+  // Archived navigator - show archived chat content without switching to sessions navigation.
+  if (isArchivedNavigation(navState)) {
+    if (navState.details) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ChatPage sessionId={navState.details.sessionId} />
+        </Panel>
+      )
+    }
+
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          <p className="text-sm">{t("session.noSessionSelected")}</p>
         </div>
       </Panel>
     )

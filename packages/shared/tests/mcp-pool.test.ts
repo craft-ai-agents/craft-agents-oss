@@ -7,6 +7,9 @@
  * tokens were refreshed but never applied to existing transports.
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { McpClientPool } from '../src/mcp/mcp-pool.ts';
 import type { SdkMcpServerConfig } from '../src/agent/backend/types.ts';
 import type { PoolClient } from '../src/mcp/client.ts';
@@ -32,8 +35,41 @@ function makeMockClient(): PoolClient {
   };
 }
 
+function makeBinaryClient(): PoolClient {
+  return {
+    listTools: async () => mockTools,
+    callTool: async (_name, args) => {
+      if (args.delayMs) {
+        await new Promise(resolve => setTimeout(resolve, Number(args.delayMs)));
+      }
+      return {
+        content: [{
+          type: 'image',
+          data: Buffer.from(String(args.payload)).toString('base64'),
+          mimeType: 'application/octet-stream',
+        }],
+      };
+    },
+    close: async () => {},
+  };
+}
+
+function makeLargeTextClient(): PoolClient {
+  return {
+    listTools: async () => mockTools,
+    callTool: async () => ({
+      content: [{ type: 'text', text: 'large response text '.repeat(3_000) }],
+    }),
+    close: async () => {},
+  };
+}
+
 function httpConfig(token: string, url = 'https://mcp.example.com'): SdkMcpServerConfig {
-  return { type: 'http', url, headers: { Authorization: `Bearer ${token}` } };
+  return { type: 'streamable_http', url, headers: { Authorization: `Bearer ${token}` } };
+}
+
+function stdioConfig(command: string, args?: string[], env?: Record<string, string>): SdkMcpServerConfig {
+  return { type: 'stdio', command, args, env };
 }
 
 /**
@@ -59,6 +95,20 @@ class TestablePool extends McpClientPool {
   resetTracking(): void {
     this.connectCalls = [];
     this.disconnectCalls = [];
+  }
+}
+
+class BinaryPool extends McpClientPool {
+  async connect(slug: string, config: SdkMcpServerConfig): Promise<void> {
+    await this.registerClient(slug, makeBinaryClient());
+    this.activeConfigs.set(slug, config);
+  }
+}
+
+class LargeTextPool extends McpClientPool {
+  async connect(slug: string, config: SdkMcpServerConfig): Promise<void> {
+    await this.registerClient(slug, makeLargeTextClient());
+    this.activeConfigs.set(slug, config);
   }
 }
 
@@ -111,12 +161,12 @@ describe('McpClientPool.sync — config change detection', () => {
     // Only Authorization and URL should trigger reconnect — other header
     // changes (tracing, versioning) should not cause connection churn.
     const config1: SdkMcpServerConfig = {
-      type: 'http',
+      type: 'streamable_http',
       url: 'https://mcp.example.com',
       headers: { Authorization: 'Bearer same', 'X-Request-Id': 'aaa' },
     };
     const config2: SdkMcpServerConfig = {
-      type: 'http',
+      type: 'streamable_http',
       url: 'https://mcp.example.com',
       headers: { Authorization: 'Bearer same', 'X-Request-Id': 'bbb' },
     };
@@ -128,6 +178,37 @@ describe('McpClientPool.sync — config change detection', () => {
 
     expect(pool.connectCalls).toHaveLength(0);
     expect(pool.disconnectCalls).toHaveLength(0);
+  });
+
+  it('reconnects when stdio command changes', async () => {
+    await pool.sync({ local: stdioConfig('old-command', ['serve']) });
+    pool.resetTracking();
+
+    await pool.sync({ local: stdioConfig('new-command', ['serve']) });
+
+    expect(pool.disconnectCalls).toEqual(['local']);
+    expect(pool.connectCalls).toHaveLength(1);
+    expect(pool.connectCalls[0].config).toEqual(stdioConfig('new-command', ['serve']));
+  });
+
+  it('reconnects when stdio args change', async () => {
+    await pool.sync({ local: stdioConfig('node', ['server-v1.mjs']) });
+    pool.resetTracking();
+
+    await pool.sync({ local: stdioConfig('node', ['server-v2.mjs']) });
+
+    expect(pool.disconnectCalls).toEqual(['local']);
+    expect(pool.connectCalls).toHaveLength(1);
+  });
+
+  it('reconnects when stdio env changes', async () => {
+    await pool.sync({ local: stdioConfig('node', ['server.mjs'], { FEATURE: 'old' }) });
+    pool.resetTracking();
+
+    await pool.sync({ local: stdioConfig('node', ['server.mjs'], { FEATURE: 'new' }) });
+
+    expect(pool.disconnectCalls).toEqual(['local']);
+    expect(pool.connectCalls).toHaveLength(1);
   });
 
   it('disconnects sources removed from config', async () => {
@@ -182,5 +263,106 @@ describe('McpClientPool.sync — config change detection', () => {
 
     expect(failures).toContain('craft');
     expect(failPool.isConnected('craft')).toBe(false);
+  });
+});
+
+describe('McpClientPool.refreshSource', () => {
+  it('force reconnects a source and reports tool count', async () => {
+    const pool = new TestablePool();
+    await pool.sync({ craft: httpConfig('token') });
+    pool.resetTracking();
+
+    const result = await pool.refreshSource('craft', httpConfig('token'));
+
+    expect(result).toEqual({ success: true, sourceSlug: 'craft', toolCount: 1 });
+    expect(pool.disconnectCalls).toEqual(['craft']);
+    expect(pool.connectCalls).toHaveLength(1);
+    expect(pool.isConnected('craft')).toBe(true);
+  });
+
+  it('fails closed when reconnect fails', async () => {
+    const pool = new TestablePool();
+    await pool.sync({ craft: httpConfig('token') });
+    pool.connect = async () => {
+      throw new Error('Server unavailable');
+    };
+
+    const result = await pool.refreshSource('craft', httpConfig('token'));
+
+    expect(result).toEqual({ success: false, sourceSlug: 'craft', error: 'Server unavailable' });
+    expect(pool.isConnected('craft')).toBe(false);
+    expect(pool.getProxyToolDefs(['craft'])).toEqual([]);
+  });
+});
+
+describe('McpClientPool.callTool — per-call options', () => {
+  it('saves concurrent binary responses to each call sessionPath', async () => {
+    const sessionA = mkdtempSync(join(tmpdir(), 'mcp-pool-session-a-'));
+    const sessionB = mkdtempSync(join(tmpdir(), 'mcp-pool-session-b-'));
+    const pool = new BinaryPool();
+
+    try {
+      await pool.sync({ craft: httpConfig('token') });
+
+      await Promise.all([
+        pool.callTool('mcp__craft__test-tool', { payload: 'alpha', delayMs: 10 }, { sessionPath: sessionA }),
+        pool.callTool('mcp__craft__test-tool', { payload: 'bravo', delayMs: 1 }, { sessionPath: sessionB }),
+      ]);
+
+      const filesA = readdirSync(join(sessionA, 'downloads'));
+      const filesB = readdirSync(join(sessionB, 'downloads'));
+
+      expect(filesA).toHaveLength(1);
+      expect(filesB).toHaveLength(1);
+      expect(readFileSync(join(sessionA, 'downloads', filesA[0]!), 'utf8')).toBe('alpha');
+      expect(readFileSync(join(sessionB, 'downloads', filesB[0]!), 'utf8')).toBe('bravo');
+    } finally {
+      rmSync(sessionA, { recursive: true, force: true });
+      rmSync(sessionB, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the per-call summarize callback for large responses', async () => {
+    const sessionPath = mkdtempSync(join(tmpdir(), 'mcp-pool-large-response-'));
+    const pool = new LargeTextPool();
+    const prompts: string[] = [];
+
+    try {
+      await pool.sync({ craft: httpConfig('token') });
+
+      const result = await pool.callTool('mcp__craft__test-tool', {}, {
+        sessionPath,
+        summarize: async (prompt) => {
+          prompts.push(prompt);
+          return 'mock summary';
+        },
+      });
+
+      expect(result.isError).toBe(false);
+      expect(prompts).toHaveLength(1);
+      expect(result.content).toContain('mock summary');
+      expect(readdirSync(join(sessionPath, 'long_responses')).length).toBeGreaterThan(0);
+    } finally {
+      rmSync(sessionPath, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('McpClientPool.sync — tools changed listeners', () => {
+  it('notifies all registered listeners except listeners removed before sync', async () => {
+    const pool = new TestablePool();
+    const calls: string[] = [];
+    const first = () => calls.push('first');
+    const second = () => calls.push('second');
+    const removed = () => calls.push('removed');
+
+    pool.addToolsChangedListener(first);
+    pool.addToolsChangedListener(second);
+    pool.addToolsChangedListener(removed);
+    pool.removeToolsChangedListener(removed);
+
+    await pool.sync({});
+
+    expect(calls).toEqual(['first', 'second']);
   });
 });

@@ -126,24 +126,15 @@ export const CHANNEL_MAP = {
   getAuthState: invoke(RPC_CHANNELS.onboarding.GET_AUTH_STATE),
   getSetupNeeds: invoke(RPC_CHANNELS.onboarding.GET_AUTH_STATE, r => r.setupNeeds),
   startWorkspaceMcpOAuth: invoke(RPC_CHANNELS.onboarding.START_MCP_OAUTH),
-  startClaudeOAuth: invoke(RPC_CHANNELS.onboarding.START_CLAUDE_OAUTH),
-  exchangeClaudeCode: invoke(RPC_CHANNELS.onboarding.EXCHANGE_CLAUDE_CODE),
-  hasClaudeOAuthState: invoke(RPC_CHANNELS.onboarding.HAS_CLAUDE_OAUTH_STATE),
-  clearClaudeOAuthState: invoke(RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE),
   deferSetup: invoke(RPC_CHANNELS.onboarding.DEFER_SETUP),
 
-  // ChatGPT OAuth
-  startChatGptOAuth: invoke(RPC_CHANNELS.chatgpt.START_OAUTH),
-  cancelChatGptOAuth: invoke(RPC_CHANNELS.chatgpt.CANCEL_OAUTH),
-  getChatGptAuthStatus: invoke(RPC_CHANNELS.chatgpt.GET_AUTH_STATUS),
-  chatGptLogout: invoke(RPC_CHANNELS.chatgpt.LOGOUT),
-
-  // GitHub Copilot OAuth
-  startCopilotOAuth: invoke(RPC_CHANNELS.copilot.START_OAUTH),
-  cancelCopilotOAuth: invoke(RPC_CHANNELS.copilot.CANCEL_OAUTH),
-  getCopilotAuthStatus: invoke(RPC_CHANNELS.copilot.GET_AUTH_STATUS),
-  copilotLogout: invoke(RPC_CHANNELS.copilot.LOGOUT),
-  onCopilotDeviceCode: listener(RPC_CHANNELS.copilot.DEVICE_CODE),
+  // SSO startup session
+  getSsoSession: invoke(RPC_CHANNELS.sso.GET_SESSION),
+  refreshSsoSession: invoke(RPC_CHANNELS.sso.REFRESH),
+  startSsoLogin: invoke(RPC_CHANNELS.sso.START_LOGIN),
+  handleSsoCallback: invoke(RPC_CHANNELS.sso.HANDLE_CALLBACK),
+  onSsoLoginResult: listener(RPC_CHANNELS.sso.LOGIN_RESULT),
+  logoutSso: invoke(RPC_CHANNELS.sso.LOGOUT),
 
   // Server info (REMOTE_ELIGIBLE)
   getServerHomeDir: invoke(RPC_CHANNELS.server.HOME_DIR),
@@ -156,8 +147,8 @@ export const CHANNEL_MAP = {
   // Settings - API Setup
   setupLlmConnection: invoke(RPC_CHANNELS.settings.SETUP_LLM_CONNECTION),
   testLlmConnectionSetup: invoke(RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP),
-  getDefaultThinkingLevel: invoke(RPC_CHANNELS.settings.GET_DEFAULT_THINKING_LEVEL),
-  setDefaultThinkingLevel: invoke(RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL),
+  getDefaultThinkingEnabled: invoke(RPC_CHANNELS.settings.GET_DEFAULT_THINKING_ENABLED),
+  setDefaultThinkingEnabled: invoke(RPC_CHANNELS.settings.SET_DEFAULT_THINKING_ENABLED),
   getNetworkProxySettings: invoke(RPC_CHANNELS.settings.GET_NETWORK_PROXY),
   setNetworkProxySettings: invoke(RPC_CHANNELS.settings.SET_NETWORK_PROXY),
 
@@ -170,9 +161,23 @@ export const CHANNEL_MAP = {
   getSessionModel: invoke(RPC_CHANNELS.sessions.GET_MODEL),
   setSessionModel: invoke(RPC_CHANNELS.sessions.SET_MODEL),
 
+  // Team context session override
+  getTeamContextOverride: invoke(RPC_CHANNELS.sessions.GET_TEAM_CONTEXT_OVERRIDE),
+  setTeamContextOverride: invoke(RPC_CHANNELS.sessions.SET_TEAM_CONTEXT_OVERRIDE),
+
   // Workspace Settings
   getWorkspaceSettings: invoke(RPC_CHANNELS.workspace.SETTINGS_GET),
   updateWorkspaceSetting: invoke(RPC_CHANNELS.workspace.SETTINGS_UPDATE),
+
+  // User Profile
+  getUserProfile: invoke(RPC_CHANNELS.userProfile.GET),
+  refreshUserProfile: invoke(RPC_CHANNELS.userProfile.REFRESH),
+
+  // Workspace files
+  getWorkspaceFiles: invoke(RPC_CHANNELS.workspace.GET_FILES),
+  watchWorkspaceFiles: invoke(RPC_CHANNELS.workspace.WATCH_FILES),
+  unwatchWorkspaceFiles: invoke(RPC_CHANNELS.workspace.UNWATCH_FILES),
+  onWorkspaceFilesChanged: listener(RPC_CHANNELS.workspace.FILES_CHANGED),
 
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),
@@ -207,14 +212,23 @@ export const CHANNEL_MAP = {
   // Sources
   getSources: invoke(RPC_CHANNELS.sources.GET),
   createSource: invoke(RPC_CHANNELS.sources.CREATE),
+  updateSource: invoke(RPC_CHANNELS.sources.UPDATE),
+  parseMcpJsonImport: invoke(RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT),
+  importMcpJsonCandidates: invoke(RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES),
   deleteSource: invoke(RPC_CHANNELS.sources.DELETE),
   startSourceOAuth: invoke(RPC_CHANNELS.sources.START_OAUTH),
   saveSourceCredentials: invoke(RPC_CHANNELS.sources.SAVE_CREDENTIALS),
   getSourcePermissionsConfig: invoke(RPC_CHANNELS.sources.GET_PERMISSIONS),
   getWorkspacePermissionsConfig: invoke(RPC_CHANNELS.workspace.GET_PERMISSIONS),
+  checkAdminPermission: invoke(RPC_CHANNELS.permissions.CHECK_ADMIN),
   getDefaultPermissionsConfig: invoke(RPC_CHANNELS.permissions.GET_DEFAULTS),
+  mdpPermissionList: invoke(RPC_CHANNELS.permissions.MDP_LIST),
+  mdpPermissionSaveOrUpdate: invoke(RPC_CHANNELS.permissions.MDP_SAVE_OR_UPDATE),
+  mdpPermissionDelete: invoke(RPC_CHANNELS.permissions.MDP_DELETE),
   onDefaultPermissionsChanged: listener(RPC_CHANNELS.permissions.DEFAULTS_CHANGED),
   getMcpTools: invoke(RPC_CHANNELS.sources.GET_MCP_TOOLS),
+  refreshMcpTools: invoke(RPC_CHANNELS.sources.REFRESH_MCP_TOOLS),
+  generateSourceGuide: invoke(RPC_CHANNELS.sources.GENERATE_GUIDE),
 
   // Session content search
   searchSessionContent: invoke(RPC_CHANNELS.sessions.SEARCH_CONTENT),
@@ -228,15 +242,40 @@ export const CHANNEL_MAP = {
   // Skills
   getSkills: invoke(RPC_CHANNELS.skills.GET),
   getSkillFiles: invoke(RPC_CHANNELS.skills.GET_FILES),
+  createSkill: invoke(RPC_CHANNELS.skills.CREATE),
+  forceWriteSkill: invoke(RPC_CHANNELS.skills.FORCE_WRITE),
   deleteSkill: invoke(RPC_CHANNELS.skills.DELETE),
   openSkillInEditor: invoke(RPC_CHANNELS.skills.OPEN_EDITOR),
   openSkillInFinder: invoke(RPC_CHANNELS.skills.OPEN_FINDER),
+  extractSkillsFromZip: invoke(RPC_CHANNELS.skills.EXTRACT_ZIP),
+  resolveRemoteSkills: invoke(RPC_CHANNELS.skills.RESOLVE_REMOTE),
+  installMarketplaceSkill: invoke(RPC_CHANNELS.skills.INSTALL_MARKETPLACE),
+  updateMarketplaceSkill: invoke(RPC_CHANNELS.skills.UPDATE_MARKETPLACE),
+  publishMarketplaceSkill: invoke(RPC_CHANNELS.skills.PUBLISH_MARKETPLACE),
+  publishDirectMarketplaceSkill: invoke(RPC_CHANNELS.skills.PUBLISH_DIRECT_MARKETPLACE),
+  listMarketSkills: invoke(RPC_CHANNELS.skills.LIST_MARKET),
+  uploadMarketSkill: invoke(RPC_CHANNELS.skills.UPLOAD_MARKET),
+  installMarketSkill: invoke(RPC_CHANNELS.skills.INSTALL_MARKET),
+  installLocalZip: invoke(RPC_CHANNELS.skills.INSTALL_LOCAL_ZIP),
+  deleteMarketSkill: invoke(RPC_CHANNELS.skills.DELETE_MARKET),
+  fetchMarketSkillContent: invoke(RPC_CHANNELS.skills.FETCH_MARKET_CONTENT),
+  checkMarketSkillUpdates: invoke(RPC_CHANNELS.skills.CHECK_MARKET_UPDATES),
+  updateMarketSkillsBatch: invoke(RPC_CHANNELS.skills.UPDATE_MARKET_BATCH),
+  devopsAutoInstall: invoke(RPC_CHANNELS.skills.DEVOPS_AUTO_INSTALL),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
+  onSkillUpdateCheck: listener(RPC_CHANNELS.skills.TRIGGER_UPDATE_CHECK),
 
   // Statuses
   listStatuses: invoke(RPC_CHANNELS.statuses.LIST),
   reorderStatuses: invoke(RPC_CHANNELS.statuses.REORDER),
   onStatusesChanged: listener(RPC_CHANNELS.statuses.CHANGED),
+
+  // Team Public Knowledge
+  getTeamPublicKnowledgeConfig: invoke(RPC_CHANNELS.teamPublicKnowledge.GET_CONFIG),
+  updateTeamPublicKnowledgeConfig: invoke(RPC_CHANNELS.teamPublicKnowledge.UPDATE_CONFIG),
+  refreshTeamPublicKnowledge: invoke(RPC_CHANNELS.teamPublicKnowledge.REFRESH),
+  onTeamPublicKnowledgeChanged: listener(RPC_CHANNELS.teamPublicKnowledge.CHANGED),
+  getTeamContextPreview: invoke(RPC_CHANNELS.teamPublicKnowledge.GET_PREVIEW),
 
   // Labels
   listLabels: invoke(RPC_CHANNELS.labels.LIST),
@@ -257,6 +296,13 @@ export const CHANNEL_MAP = {
   // Workspace images
   readWorkspaceImage: invoke(RPC_CHANNELS.workspace.READ_IMAGE),
   writeWorkspaceImage: invoke(RPC_CHANNELS.workspace.WRITE_IMAGE),
+  getChatFeedbackState: invoke(RPC_CHANNELS.workspace.GET_CHAT_FEEDBACK_STATE),
+  setChatFeedbackState: invoke(RPC_CHANNELS.workspace.SET_CHAT_FEEDBACK_STATE),
+  deleteChatFeedbackState: invoke(RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK_STATE),
+  listChatFeedback: invoke(RPC_CHANNELS.workspace.LIST_CHAT_FEEDBACK),
+  addChatFeedback: invoke(RPC_CHANNELS.workspace.ADD_CHAT_FEEDBACK),
+  updateChatFeedback: invoke(RPC_CHANNELS.workspace.UPDATE_CHAT_FEEDBACK),
+  deleteChatFeedback: invoke(RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK),
 
   // Theme
   getAppTheme: invoke(RPC_CHANNELS.theme.GET_APP),
@@ -324,6 +370,10 @@ export const CHANNEL_MAP = {
 
   // Git
   getGitBranch: invoke(RPC_CHANNELS.git.GET_BRANCH),
+  getGitLog: invoke(RPC_CHANNELS.git.GET_LOG),
+  getGitStatus: invoke(RPC_CHANNELS.git.GET_STATUS),
+  getGitFileDiff: invoke(RPC_CHANNELS.git.GET_FILE_DIFF),
+  getGitCommitDetail: invoke(RPC_CHANNELS.git.GET_COMMIT_DETAIL),
   checkGitBash: invoke(RPC_CHANNELS.gitbash.CHECK),
   browseForGitBash: invoke(RPC_CHANNELS.gitbash.BROWSE),
   setGitBashPath: invoke(RPC_CHANNELS.gitbash.SET_PATH),
@@ -368,6 +418,7 @@ export const CHANNEL_MAP = {
   deleteLlmConnection: invoke(RPC_CHANNELS.llmConnections.DELETE),
   testLlmConnection: invoke(RPC_CHANNELS.llmConnections.TEST),
   setDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_DEFAULT),
+  setEnvConnectionMidStreamBehavior: invoke(RPC_CHANNELS.llmConnections.SET_ENV_MID_STREAM_BEHAVIOR),
   setWorkspaceDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT),
 
   // Automations

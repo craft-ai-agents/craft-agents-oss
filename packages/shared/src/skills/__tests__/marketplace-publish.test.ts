@@ -1,0 +1,509 @@
+import { describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { unzipSync, strFromU8 } from 'fflate'
+import {
+  MARKETPLACE_ORIGIN_METADATA_FILE,
+  publishDirectSkillToMarketplace,
+  unpublishMarketplaceSkillFromDiscovery,
+  publishLocalSkillToMarketplace,
+  readMarketplaceOriginMetadata,
+  suggestMarketplacePublishSlug,
+  suggestMarketplaceSlug,
+  validateMarketplacePublishRequest,
+  type MarketplacePublishApi,
+  type MarketplacePublishRequest,
+} from '../marketplace-publish.ts'
+
+function makeWorkspace(): string {
+  return mkdtempSync(join(tmpdir(), 'marketplace-publish-test-'))
+}
+
+function writeSkill(workspaceRoot: string, slug: string, skillMd: string): void {
+  const skillDir = join(workspaceRoot, 'skills', slug)
+  mkdirSync(skillDir, { recursive: true })
+  writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
+  writeFileSync(join(skillDir, 'notes.md'), '# Notes\n')
+}
+
+function makeRequest(workspaceRoot: string, overrides: Partial<MarketplacePublishRequest> = {}): MarketplacePublishRequest {
+  return {
+    workspaceRoot,
+    user: { id: 'owner_1' },
+    skillSlug: 'review-helper',
+    marketplaceSlug: 'review-helper',
+    version: '1.0.0',
+    category: 'Quality',
+    tags: ['review', 'ci'],
+    releaseNotes: 'Initial Marketplace release.',
+    now: () => new Date('2026-05-12T10:00:00.000Z'),
+    api: {
+      async publishSkill() {
+        throw new Error('test must provide api')
+      },
+    },
+    ...overrides,
+  }
+}
+
+describe('publishLocalSkillToMarketplace', () => {
+  test('suggests a marketplace slug from bundled SKILL.md frontmatter name', () => {
+    expect(suggestMarketplaceSlug({
+      name: 'Review Helper!',
+    })).toBe('review-helper')
+    expect(suggestMarketplacePublishSlug({
+      metadata: { name: 'Review Helper' },
+      origin: { ownerId: 'owner_2', marketplaceSlug: 'review-helper' },
+      currentUserId: 'owner_1',
+    })).toBe('review-helper-derived')
+    expect(suggestMarketplacePublishSlug({
+      metadata: { name: 'Review Helper' },
+      origin: { ownerId: 'owner_1', marketplaceSlug: 'review-helper' },
+      currentUserId: 'owner_1',
+    })).toBe('review-helper')
+  })
+
+  test('publishes a Local Skill bundle and links it through Marketplace sidecar metadata', async () => {
+    const workspaceRoot = makeWorkspace()
+    const skillMd = [
+      '---',
+      'name: Review Helper',
+      'description: Reviews pull requests before release.',
+      '---',
+      '',
+      '# Review Helper',
+      '',
+      'Check diffs and tests.',
+    ].join('\n')
+    writeSkill(workspaceRoot, 'review-helper', skillMd)
+    writeFileSync(
+      join(workspaceRoot, 'skills', 'review-helper', MARKETPLACE_ORIGIN_METADATA_FILE),
+      '{"marketplaceSlug":"old"}\n',
+    )
+
+    const publishedInputs: Parameters<MarketplacePublishApi['publishSkill']>[0][] = []
+    const api: MarketplacePublishApi = {
+      async publishSkill(input) {
+        publishedInputs.push(input)
+        return {
+          status: 'published',
+          marketplaceId: 'mkt_skill_review_helper',
+          marketplaceSlug: input.marketplaceSlug,
+          version: input.version,
+          ownerId: input.userId,
+          ownerDisplayName: 'Avery Lee',
+        }
+      },
+    }
+
+    try {
+      const result = await publishLocalSkillToMarketplace(makeRequest(workspaceRoot, { api }))
+
+      expect(result).toEqual({
+        status: 'published',
+        marketplaceId: 'mkt_skill_review_helper',
+        marketplaceSlug: 'review-helper',
+        version: '1.0.0',
+      })
+      expect(publishedInputs).toHaveLength(1)
+      expect(publishedInputs[0]).toMatchObject({
+        userId: 'owner_1',
+        marketplaceSlug: 'review-helper',
+        version: '1.0.0',
+        category: 'Quality',
+        tags: ['review', 'ci'],
+        releaseNotes: 'Initial Marketplace release.',
+      })
+      expect(publishedInputs[0]!.basedOn).toBeUndefined()
+      expect(Object.keys(publishedInputs[0] as unknown as Record<string, unknown>)).not.toContain('name')
+      expect(Object.keys(publishedInputs[0] as unknown as Record<string, unknown>)).not.toContain('description')
+      const files = unzipSync(publishedInputs[0]!.bundle)
+      expect(strFromU8(files['SKILL.md']!)).toBe(skillMd)
+      expect(strFromU8(files['notes.md']!)).toBe('# Notes\n')
+      expect(files[MARKETPLACE_ORIGIN_METADATA_FILE]).toBeUndefined()
+      expect(readMarketplaceOriginMetadata(workspaceRoot, 'review-helper')).toMatchObject({
+        marketplaceId: 'mkt_skill_review_helper',
+        marketplaceSlug: 'review-helper',
+        ownerId: 'owner_1',
+        ownerDisplayName: 'Avery Lee',
+        installedVersion: '1.0.0',
+        installedAt: '2026-05-12T10:00:00.000Z',
+        lastCheckedAt: '2026-05-12T10:00:00.000Z',
+        modified: false,
+        safetyStatus: 'ok',
+      })
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('sends based-on origin when publishing a derived Local Skill', async () => {
+    const workspaceRoot = makeWorkspace()
+    writeSkill(workspaceRoot, 'review-helper', '---\nname: Review Helper\ndescription: Reviews pull requests.\n---\n\nBody\n')
+    writeFileSync(
+      join(workspaceRoot, 'skills', 'review-helper', MARKETPLACE_ORIGIN_METADATA_FILE),
+      JSON.stringify({
+        marketplaceId: 'mkt_original',
+        marketplaceSlug: 'original-skill',
+        ownerId: 'owner_2',
+        ownerDisplayName: 'Original Owner',
+        installedVersion: '2.3.4',
+        installedAt: '2026-05-01T00:00:00.000Z',
+        lastCheckedAt: '2026-05-01T00:00:00.000Z',
+        modified: true,
+        sourceBundleHash: 'hash',
+        safetyStatus: 'ok',
+      }, null, 2),
+    )
+    const basedOn: unknown[] = []
+
+    try {
+      await publishLocalSkillToMarketplace(makeRequest(workspaceRoot, {
+        user: { id: 'owner_1' },
+        marketplaceSlug: 'review-helper-fork',
+        api: {
+          async publishSkill(input) {
+            basedOn.push(input.basedOn)
+            return {
+              status: 'published',
+              marketplaceId: 'mkt_review_helper_fork',
+              marketplaceSlug: input.marketplaceSlug,
+              version: input.version,
+              ownerId: input.userId,
+              ownerDisplayName: 'Avery Lee',
+            }
+          },
+        },
+      }))
+
+      expect(basedOn).toEqual([{ marketplaceId: 'mkt_original', marketplaceSlug: 'original-skill', version: '2.3.4' }])
+      expect(readMarketplaceOriginMetadata(workspaceRoot, 'review-helper')).toMatchObject({
+        marketplaceId: 'mkt_review_helper_fork',
+        marketplaceSlug: 'review-helper-fork',
+        ownerId: 'owner_1',
+        installedVersion: '1.0.0',
+        basedOn: { marketplaceId: 'mkt_original', marketplaceSlug: 'original-skill', version: '2.3.4' },
+      })
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('allows owners to publish a new immutable version to an existing slug', async () => {
+    const workspaceRoot = makeWorkspace()
+    writeSkill(workspaceRoot, 'review-helper', '---\nname: Review Helper\ndescription: Reviews pull requests.\n---\n\nBody\n')
+    writeFileSync(
+      join(workspaceRoot, 'skills', 'review-helper', MARKETPLACE_ORIGIN_METADATA_FILE),
+      JSON.stringify({
+        marketplaceId: 'mkt_skill_review_helper',
+        marketplaceSlug: 'review-helper',
+        ownerId: 'owner_1',
+        ownerDisplayName: 'Avery Lee',
+        installedVersion: '1.0.0',
+        installedAt: '2026-05-01T00:00:00.000Z',
+        lastCheckedAt: '2026-05-01T00:00:00.000Z',
+        modified: true,
+        sourceBundleHash: 'old-hash',
+        safetyStatus: 'ok',
+      }, null, 2),
+    )
+
+    const basedOn: unknown[] = []
+
+    try {
+      const result = await publishLocalSkillToMarketplace(makeRequest(workspaceRoot, {
+        version: '1.1.0',
+        api: {
+          async publishSkill(input) {
+            expect(input.marketplaceSlug).toBe('review-helper')
+            expect(input.version).toBe('1.1.0')
+            basedOn.push(input.basedOn)
+            return {
+              status: 'published',
+              marketplaceId: 'mkt_skill_review_helper',
+              marketplaceSlug: input.marketplaceSlug,
+              version: input.version,
+              ownerId: input.userId,
+              ownerDisplayName: 'Avery Lee',
+            }
+          },
+        },
+      }))
+
+      expect(result.status).toBe('published')
+      expect(basedOn).toEqual([undefined])
+      expect(readMarketplaceOriginMetadata(workspaceRoot, 'review-helper')).toMatchObject({
+        marketplaceId: 'mkt_skill_review_helper',
+        installedVersion: '1.1.0',
+        modified: false,
+      })
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('returns slug ownership conflict without changing Local Skill sidecar metadata', async () => {
+    const workspaceRoot = makeWorkspace()
+    writeSkill(workspaceRoot, 'review-helper', '---\nname: Review Helper\ndescription: Reviews pull requests.\n---\n\nBody\n')
+
+    try {
+      const result = await publishLocalSkillToMarketplace(makeRequest(workspaceRoot, {
+        api: {
+          async publishSkill() {
+            return { status: 'slug-conflict', marketplaceSlug: 'review-helper', message: 'Slug is owned by another publisher.' }
+          },
+        },
+      }))
+
+      expect(result).toEqual({ status: 'slug-conflict', marketplaceSlug: 'review-helper', message: 'Slug is owned by another publisher.' })
+      expect(readMarketplaceOriginMetadata(workspaceRoot, 'review-helper')).toBeNull()
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('validates authenticated context and Marketplace-only publish requirements before upload', async () => {
+    const workspaceRoot = makeWorkspace()
+    writeSkill(workspaceRoot, 'review-helper', '---\nname: Review Helper\ndescription: Reviews pull requests.\n---\n\nBody\n')
+    const api: MarketplacePublishApi = {
+      async publishSkill() {
+        throw new Error('should not upload')
+      },
+    }
+
+    try {
+      await expect(publishLocalSkillToMarketplace(makeRequest(workspaceRoot, { user: null, api }))).rejects.toThrow('Sign in is required')
+      expect(validateMarketplacePublishRequest({
+        marketplaceSlug: 'Review Helper',
+        version: '1',
+        category: 'Other',
+        tags: ['Needs Spaces'],
+      })).toEqual([
+        'Marketplace slug must use lowercase letters, numbers, and single hyphens.',
+        'Version must be a valid SemVer version.',
+        'Category must be one of Documentation, Product, Quality, Security.',
+        'Tags must use lowercase letters, numbers, and hyphens.',
+      ])
+      await expect(publishLocalSkillToMarketplace(makeRequest(workspaceRoot, {
+        marketplaceSlug: 'Review Helper',
+        api,
+      }))).rejects.toThrow('Marketplace slug must use lowercase')
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('rejects invalid Local Skills before upload', async () => {
+    const workspaceRoot = makeWorkspace()
+    mkdirSync(join(workspaceRoot, 'skills', 'broken-skill'), { recursive: true })
+    writeFileSync(join(workspaceRoot, 'skills', 'broken-skill', 'SKILL.md'), '# Missing frontmatter\n')
+    const api: MarketplacePublishApi = {
+      async publishSkill() {
+        throw new Error('should not upload')
+      },
+    }
+
+    try {
+      await expect(publishLocalSkillToMarketplace(makeRequest(workspaceRoot, {
+        skillSlug: 'broken-skill',
+        marketplaceSlug: 'broken-skill',
+        api,
+      }))).rejects.toThrow('Local Skill must have valid SKILL.md frontmatter')
+      expect(existsSync(join(workspaceRoot, 'skills', 'broken-skill', MARKETPLACE_ORIGIN_METADATA_FILE))).toBe(false)
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('unpublishMarketplaceSkillFromDiscovery', () => {
+  test('calls the owner-only unpublish endpoint without deleting published versions', async () => {
+    const requests: unknown[] = []
+
+    const result = await unpublishMarketplaceSkillFromDiscovery({
+      user: { id: 'owner_1' },
+      marketplaceId: 'mkt_skill_review_helper',
+      marketplaceSlug: 'review-helper',
+      api: {
+        async unpublishSkill(input) {
+          requests.push(input)
+          return {
+            status: 'unpublished',
+            marketplaceSlug: input.marketplaceSlug,
+            message: 'Removed from Marketplace discovery. Published versions are preserved.',
+          }
+        },
+      },
+    })
+
+    expect(result).toEqual({
+      status: 'unpublished',
+      marketplaceSlug: 'review-helper',
+      message: 'Removed from Marketplace discovery. Published versions are preserved.',
+    })
+    expect(requests).toEqual([{
+      userId: 'owner_1',
+      marketplaceId: 'mkt_skill_review_helper',
+      marketplaceSlug: 'review-helper',
+    }])
+  })
+
+  test('requires authenticated owner context before unpublishing', async () => {
+    await expect(unpublishMarketplaceSkillFromDiscovery({
+      user: null,
+      marketplaceId: 'mkt_skill_review_helper',
+      marketplaceSlug: 'review-helper',
+      api: {
+        async unpublishSkill() {
+          throw new Error('should not unpublish')
+        },
+      },
+    })).rejects.toThrow('Sign in is required')
+  })
+})
+
+describe('publishDirectSkillToMarketplace', () => {
+  test('publishes a created Skill bundle without installing or linking a Local Skill', async () => {
+    const workspaceRoot = makeWorkspace()
+    const publishedInputs: Parameters<MarketplacePublishApi['publishSkill']>[0][] = []
+
+    try {
+      const result = await publishDirectSkillToMarketplace({
+        user: { id: 'owner_1' },
+        skill: {
+          slug: 'direct-reviewer',
+          metadata: {
+            name: 'Direct Reviewer',
+            description: 'Reviews code before release.',
+          },
+          content: 'Review diffs and tests.',
+        },
+        marketplaceSlug: 'direct-reviewer',
+        version: '1.0.0',
+        category: 'Quality',
+        tags: ['review'],
+        releaseNotes: 'Initial direct publish.',
+        api: {
+          async publishSkill(input) {
+            publishedInputs.push(input)
+            return {
+              status: 'published',
+              marketplaceId: 'mkt_skill_direct_reviewer',
+              marketplaceSlug: input.marketplaceSlug,
+              version: input.version,
+              ownerId: input.userId,
+              ownerDisplayName: 'Avery Lee',
+            }
+          },
+        },
+      })
+
+      expect(result).toEqual({
+        status: 'published',
+        marketplaceId: 'mkt_skill_direct_reviewer',
+        marketplaceSlug: 'direct-reviewer',
+        version: '1.0.0',
+      })
+      expect(publishedInputs).toHaveLength(1)
+      expect(publishedInputs[0]).toMatchObject({
+        userId: 'owner_1',
+        marketplaceSlug: 'direct-reviewer',
+        version: '1.0.0',
+        category: 'Quality',
+        tags: ['review'],
+        releaseNotes: 'Initial direct publish.',
+      })
+      const files = unzipSync(publishedInputs[0]!.bundle)
+      expect(strFromU8(files['SKILL.md']!)).toContain('name: Direct Reviewer')
+      expect(strFromU8(files['SKILL.md']!)).toContain('description: Reviews code before release.')
+      expect(strFromU8(files['SKILL.md']!)).toContain('Review diffs and tests.')
+      expect(existsSync(join(workspaceRoot, 'skills', 'direct-reviewer', 'SKILL.md'))).toBe(false)
+      expect(readMarketplaceOriginMetadata(workspaceRoot, 'direct-reviewer')).toBeNull()
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('publishes upload and remote discovered Skill input through the same publish-only bundle path', async () => {
+    const uploadedBundles: string[] = []
+
+    const api: MarketplacePublishApi = {
+      async publishSkill(input) {
+        uploadedBundles.push(strFromU8(unzipSync(input.bundle)['SKILL.md']!))
+        return {
+          status: 'published',
+          marketplaceId: `mkt_${input.marketplaceSlug}`,
+          marketplaceSlug: input.marketplaceSlug,
+          version: input.version,
+          ownerId: input.userId,
+          ownerDisplayName: 'Avery Lee',
+        }
+      },
+    }
+
+    const uploaded = await publishDirectSkillToMarketplace({
+      user: { id: 'owner_1' },
+      skill: {
+        slug: 'uploaded-helper',
+        metadata: { name: 'Uploaded Helper', description: 'Imported from zip.' },
+        content: 'Uploaded body.',
+      },
+      marketplaceSlug: 'uploaded-helper',
+      version: '1.0.0',
+      category: 'Documentation',
+      api,
+    })
+    const remote = await publishDirectSkillToMarketplace({
+      user: { id: 'owner_1' },
+      skill: {
+        slug: 'remote-helper',
+        metadata: { name: 'Remote Helper', description: 'Imported from remote.' },
+        content: 'Remote body.',
+      },
+      marketplaceSlug: 'remote-helper',
+      version: '1.0.0',
+      category: 'Product',
+      api,
+    })
+
+    expect(uploaded.status).toBe('published')
+    expect(remote.status).toBe('published')
+    expect(uploadedBundles[0]).toContain('Uploaded body.')
+    expect(uploadedBundles[1]).toContain('Remote body.')
+  })
+
+  test('validates direct publish auth, publish fields, and Skill fields before upload', async () => {
+    const api: MarketplacePublishApi = {
+      async publishSkill() {
+        throw new Error('should not upload')
+      },
+    }
+
+    await expect(publishDirectSkillToMarketplace({
+      user: null,
+      skill: {
+        slug: 'direct-reviewer',
+        metadata: { name: 'Direct Reviewer', description: 'Reviews code.' },
+        content: 'Body.',
+      },
+      marketplaceSlug: 'direct-reviewer',
+      version: '1.0.0',
+      category: 'Quality',
+      api,
+    })).rejects.toThrow('Sign in is required')
+
+    await expect(publishDirectSkillToMarketplace({
+      user: { id: 'owner_1' },
+      skill: {
+        slug: '',
+        metadata: { name: '', description: 'Reviews code.' },
+        content: '   ',
+      },
+      marketplaceSlug: 'Direct Reviewer',
+      version: '1',
+      category: 'Other',
+      api,
+    })).rejects.toThrow('Skill name is required')
+  })
+})

@@ -27,10 +27,10 @@ import type { PermissionMode } from '@craft-agent/shared/agent/modes';
 export type { PermissionMode };
 export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 
-// Thinking level types
-import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
-export type { ThinkingLevel };
-export { THINKING_LEVELS, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels';
+// Thinking toggle types
+import type { ThinkingEnabled } from '@craft-agent/shared/agent/thinking-toggle';
+export type { ThinkingEnabled };
+export { DEFAULT_THINKING_ENABLED } from '@craft-agent/shared/agent/thinking-toggle';
 
 export type {
   CoreMessage as Message,
@@ -50,26 +50,64 @@ export type {
 import type { AuthState, SetupNeeds } from '@craft-agent/shared/auth/types';
 import type { AuthType } from '@craft-agent/shared/config/types';
 export type { AuthState, SetupNeeds, AuthType };
+import type { PublicSsoSessionState } from '@craft-agent/shared/auth';
+export type { PublicSsoSessionState };
 
 // Credential health types
 import type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType } from '@craft-agent/shared/credentials/types';
 export type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType };
 
 // Source types for session source selection
-import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@craft-agent/shared/sources/types';
-export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
+import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, SourceGuide } from '@craft-agent/shared/sources/types';
+import type { McpImportBatchCreateResult, McpImportCandidate, McpImportParseResult } from '@craft-agent/shared/sources';
+export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, SourceGuide, McpImportBatchCreateResult, McpImportCandidate, McpImportParseResult };
 
 // Skill types
-import type { LoadedSkill, SkillMetadata } from '@craft-agent/shared/skills/types';
-export type { LoadedSkill, SkillMetadata };
+import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult } from '@craft-agent/shared/skills';
+export type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult };
+
+export interface SkillUpdateCandidate {
+  slug: string
+  name: string
+  chineseName: string
+  description: string
+  currentVersion: string
+  newVersion: string
+  ownerId: string
+  ownerName: string
+}
+
+export interface SkillOrphan {
+  slug: string
+  name: string
+}
+
+export interface SkillUpdateCheckResult {
+  toUpdate: SkillUpdateCandidate[]
+  orphans: SkillOrphan[]
+}
+
+export interface SkillUpdateItem {
+  slug: string
+  chineseName: string
+  description: string
+  newVersion?: string
+  ownerId?: string
+  ownerName?: string
+}
+
+export interface SkillBatchUpdateResult {
+  updated: string[]
+  failed: Array<{ slug: string; error: string }>
+}
 
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
 export type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult };
 
 // LLM connection types
-import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings } from '@craft-agent/shared/config';
-export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings };
+import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, MidStreamBehavior, NetworkProxySettings } from '@craft-agent/shared/config';
+export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, MidStreamBehavior, NetworkProxySettings };
 
 // =============================================================================
 // GUI-only types (not used by server/handler code)
@@ -99,6 +137,26 @@ export interface ToolIconMapping {
   /** Data URL of the icon (e.g., data:image/png;base64,...) */
   iconDataUrl: string
   commands: string[]
+}
+
+/** User profile data shown in workspace settings. */
+export interface UserProfile {
+  zhaohuOpenId?: string
+  userName?: string
+  ystId?: string
+  positon?: string
+  zuName?: string
+  leaderUserInfo?: string
+  shiName?: string
+  pathName?: string
+  sex?: string
+  ip?: string
+  chargeModule?: Array<{
+    appCode?: string
+    appName?: string
+  }>
+  ingProjectInfo?: unknown[]
+  onlineInfo?: unknown[]
 }
 
 /**
@@ -199,7 +257,8 @@ import type {
   OAuthResult,
   McpToolsResult,
   GitBashStatus,
-  ClaudeOAuthResult,
+  GitCommit,
+  GitStatusEntry,
   UpdateInfo,
   WorkspaceSettings,
   PermissionModeState,
@@ -211,7 +270,10 @@ import type {
   DirectoryListingResult,
   RemoteSessionTransferPayload,
   ImportRemoteSessionTransferResult,
+  TeamContextPreview,
 } from '@craft-agent/shared/protocol'
+import type { TeamPublicKnowledgeRefreshSummary } from '@craft-agent/shared/team-public-knowledge'
+import type { TeamPublicKnowledgeConfig } from '@craft-agent/shared/workspaces'
 
 export interface ElectronAPI {
   // Session management
@@ -374,7 +436,7 @@ export interface ElectronAPI {
   onMenuToggleFocusMode(callback: () => void): () => void
   onMenuToggleSidebar(callback: () => void): () => void
 
-  // Deep link navigation listener (for external craftagents:// URLs)
+  // Deep link navigation listener (for external mdp:// URLs)
   onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void
 
   // Auth
@@ -389,26 +451,14 @@ export interface ElectronAPI {
   getAuthState(): Promise<AuthState>
   getSetupNeeds(): Promise<SetupNeeds>
   startWorkspaceMcpOAuth(mcpUrl: string): Promise<OAuthResult & { clientId?: string }>
-  // Claude OAuth (two-step flow)
-  startClaudeOAuth(): Promise<{ success: boolean; authUrl?: string; error?: string }>
-  exchangeClaudeCode(code: string, connectionSlug: string): Promise<ClaudeOAuthResult>
-  hasClaudeOAuthState(): Promise<boolean>
-  clearClaudeOAuthState(): Promise<{ success: boolean }>
   /** Defer onboarding setup — user chose "Setup later" */
   deferSetup(): Promise<{ success: boolean }>
-
-  // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
-  startChatGptOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
-  cancelChatGptOAuth(): Promise<{ success: boolean }>
-  getChatGptAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean; expiresAt?: number; hasRefreshToken?: boolean }>
-  chatGptLogout(connectionSlug: string): Promise<{ success: boolean }>
-
-  // GitHub Copilot OAuth
-  startCopilotOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
-  cancelCopilotOAuth(): Promise<{ success: boolean }>
-  getCopilotAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean }>
-  copilotLogout(connectionSlug: string): Promise<{ success: boolean }>
-  onCopilotDeviceCode(callback: (data: { userCode: string; verificationUri: string }) => void): () => void
+  getSsoSession(): Promise<PublicSsoSessionState>
+  refreshSsoSession(): Promise<{ success: boolean }>
+  startSsoLogin(): Promise<string>
+  handleSsoCallback(payload: { code: string; state?: string }): Promise<{ success: boolean; error?: string }>
+  onSsoLoginResult(callback: (result: { success: boolean; error?: string }) => void): () => void
+  logoutSso(): Promise<{ success: true }>
 
   /** Unified LLM connection setup */
   setupLlmConnection(setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>
@@ -423,9 +473,30 @@ export interface ElectronAPI {
   getSessionModel(sessionId: string, workspaceId: string): Promise<string | null>
   setSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void>
 
+  // Team context session override
+  getTeamContextOverride(sessionId: string): Promise<boolean>
+  setTeamContextOverride(sessionId: string, disabled: boolean): Promise<{ success: boolean }>
+
+  // Team context debug/preview
+  getTeamContextPreview(workspaceId: string, sampleMessage?: string): Promise<TeamContextPreview>
+  refreshTeamPublicKnowledge(workspaceId: string): Promise<TeamPublicKnowledgeRefreshSummary>
+  getTeamPublicKnowledgeConfig(workspaceId: string): Promise<TeamPublicKnowledgeConfig>
+  updateTeamPublicKnowledgeConfig(workspaceId: string, config: TeamPublicKnowledgeConfig): Promise<void>
+  onTeamPublicKnowledgeChanged(callback: (workspaceId: string) => void): () => void
+
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
+
+  // User Profile
+  getUserProfile(): Promise<UserProfile | null>
+  refreshUserProfile(): Promise<UserProfile | null>
+
+  // Workspace files
+  getWorkspaceFiles(workspaceId: string, dirPath?: string, rootPath?: string): Promise<SessionFile[]>
+  watchWorkspaceFiles(workspaceId: string, rootPath?: string): Promise<void>
+  unwatchWorkspaceFiles(): Promise<void>
+  onWorkspaceFilesChanged(callback: (workspaceId: string) => void): () => void
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>
@@ -450,14 +521,23 @@ export interface ElectronAPI {
 
   // Sources
   getSources(workspaceId: string): Promise<LoadedSource[]>
-  createSource(workspaceId: string, config: Partial<FolderSourceConfig>): Promise<FolderSourceConfig>
+  createSource(workspaceId: string, config: Partial<FolderSourceConfig> & Partial<import('@craft-agent/shared/sources').McpManualSourceInput>): Promise<FolderSourceConfig>
+  updateSource(workspaceId: string, sourceSlug: string, config: Partial<FolderSourceConfig> & { authCredential?: string }): Promise<FolderSourceConfig>
+  parseMcpJsonImport(workspaceId: string, json: string): Promise<McpImportParseResult>
+  importMcpJsonCandidates(workspaceId: string, candidates: McpImportCandidate[]): Promise<McpImportBatchCreateResult>
   deleteSource(workspaceId: string, sourceSlug: string): Promise<void>
   startSourceOAuth(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string }>
   saveSourceCredentials(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
   getSourcePermissionsConfig(workspaceId: string, sourceSlug: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
   getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
+  checkAdminPermission(): Promise<boolean>
   getDefaultPermissionsConfig(): Promise<{ config: import('@craft-agent/shared/agent').PermissionsConfigFile | null; path: string }>
+  mdpPermissionList(): Promise<Array<{ employeeId: string; userType: 'admin' | 'super_admin'; createTime?: string; updateTime?: string }>>
+  mdpPermissionSaveOrUpdate(employeeId: string, userType: string): Promise<unknown>
+  mdpPermissionDelete(employeeId: string): Promise<void>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
+  refreshMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
+  generateSourceGuide(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string; guide?: SourceGuide }>
 
   // OAuth (server-owned credentials, client-orchestrated flow)
   performOAuth(args: { sourceSlug: string; sessionId?: string; authRequestId?: string }): Promise<{ success: boolean; error?: string; email?: string }>
@@ -475,9 +555,28 @@ export interface ElectronAPI {
   // Skills
   getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
-  deleteSkill(workspaceId: string, skillSlug: string): Promise<void>
+  createSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string, scope?: 'global' | 'workspace'): Promise<CreateSkillResult>
+  forceWriteSkill(workspaceId: string, slug: string, metadata: SkillMetadata, content: string, scope?: 'global' | 'workspace'): Promise<{ created: true }>
+  deleteSkill(workspaceId: string, skillSlug: string, source?: 'global' | 'workspace' | 'project', skillPath?: string): Promise<void>
   openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInFinder(workspaceId: string, skillSlug: string): Promise<void>
+  extractSkillsFromZip(zipPath: string): Promise<DiscoveredSkill[]>
+  resolveRemoteSkills(input: string): Promise<RemoteResolveResult>
+  installMarketplaceSkill(workspaceId: string, input: MarketplaceSkillInstallInput): Promise<MarketplaceInstallResult>
+  updateMarketplaceSkill(workspaceId: string, input: MarketplaceSkillUpdateInput): Promise<MarketplaceInstallResult>
+  publishMarketplaceSkill(workspaceId: string, input: MarketplaceLocalSkillPublishInput): Promise<MarketplacePublishLocalResult>
+  publishDirectMarketplaceSkill(workspaceId: string, input: MarketplaceDirectSkillPublishInput): Promise<MarketplacePublishDirectResult>
+  // CoPaw market service
+  listMarketSkills(): Promise<CopawMarketSkill[]>
+  uploadMarketSkill(input: CopawMarketUploadInput): Promise<CopawMarketUploadResult>
+  installMarketSkill(workspaceId: string, skillName: string, chineseName: string, description: string, version?: string, ownerId?: string, ownerName?: string): Promise<CopawInstallSkillResult>
+  installLocalZip(workspaceId: string, skillName: string, zipBytes: Uint8Array): Promise<{ slug: string }>
+  deleteMarketSkill(skillName: string): Promise<{ success: true }>
+  fetchMarketSkillContent(skillName: string, version?: string): Promise<{ content: string; extraMetadata?: Record<string, unknown> }>
+  checkMarketSkillUpdates(workspaceId: string): Promise<SkillUpdateCheckResult>
+  updateMarketSkillsBatch(workspaceId: string, items: SkillUpdateItem[]): Promise<SkillBatchUpdateResult>
+  devopsAutoInstall(workspaceId: string): Promise<{ status: 'done' | 'not-logged-in'; installed: string[]; skipped: string[]; failed: Array<{ slug: string; error: string }> }>
+  onSkillUpdateCheck(callback: (reason: string) => void): () => void
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void
@@ -503,6 +602,13 @@ export interface ElectronAPI {
   // Generic workspace image loading/saving
   readWorkspaceImage(workspaceId: string, relativePath: string): Promise<string>
   writeWorkspaceImage(workspaceId: string, relativePath: string, base64: string, mimeType: string): Promise<void>
+  getChatFeedbackState(workspaceId: string): Promise<import('@craft-agent/shared/workspaces').ChatFeedbackStateEntry[]>
+  setChatFeedbackState(workspaceId: string, sessionId: string, messageId: string, isLike: boolean, feedbackId?: string): Promise<void>
+  deleteChatFeedbackState(workspaceId: string, sessionId: string, messageId: string): Promise<void>
+  listChatFeedback(): Promise<import('@craft-agent/shared/feedback').FeedbackRecord[]>
+  addChatFeedback(body: import('@craft-agent/shared/feedback').ChatFeedbackAddRequest): Promise<string>
+  updateChatFeedback(body: import('@craft-agent/shared/feedback').ChatFeedbackUpdateRequest): Promise<boolean>
+  deleteChatFeedback(id: string): Promise<void>
 
   // Tool icon mappings
   getToolIconMappings(): Promise<ToolIconMapping[]>
@@ -582,6 +688,10 @@ export interface ElectronAPI {
 
   // Git operations
   getGitBranch(dirPath: string): Promise<string | null>
+  getGitLog(workspacePath: string): Promise<GitCommit[]>
+  getGitStatus(workspacePath: string): Promise<GitStatusEntry[]>
+  getGitFileDiff(workspacePath: string, filePath: string): Promise<string>
+  getGitCommitDetail(workspacePath: string, commitHash: string): Promise<GitCommit | null>
 
   // Git Bash (Windows)
   checkGitBash(): Promise<GitBashStatus>
@@ -630,8 +740,9 @@ export interface ElectronAPI {
   deleteLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   testLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   setDefaultLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
-  getDefaultThinkingLevel(): Promise<ThinkingLevel>
-  setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>
+  setEnvConnectionMidStreamBehavior(behavior: MidStreamBehavior): Promise<{ success: boolean; error?: string }>
+  getDefaultThinkingEnabled(): Promise<ThinkingEnabled>
+  setDefaultThinkingEnabled(enabled: ThinkingEnabled): Promise<{ success: boolean; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
 
   // Automations
@@ -833,11 +944,19 @@ export interface SettingsNavigationState {
 }
 
 /**
- * Skills navigation state
+ * Local skills navigation state
  */
-export interface SkillsNavigationState {
-  navigator: 'skills'
+export interface LocalSkillsNavigationState {
+  navigator: 'local-skills'
   details: { type: 'skill'; skillSlug: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
+ * Skill Marketplace navigation state
+ */
+export interface SkillMarketplaceNavigationState {
+  navigator: 'skill-marketplace'
   rightSidebar?: RightSidebarPanel
 }
 
@@ -852,18 +971,50 @@ export interface AutomationsNavigationState {
 }
 
 /**
+ * Archived sessions navigation state — Icon Strip Mode, no drill-down, no right sidebar.
+ */
+export interface ArchivedNavigationState {
+  navigator: 'archived'
+  details: { type: 'session'; sessionId: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
+ * Admin subpage types
+ */
+export type AdminSubpage = 'permission' | 'feedback'
+
+/**
+ * Admin navigation state
+ */
+export interface AdminNavigationState {
+  navigator: 'admin'
+  subpage: AdminSubpage | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state
  */
 export type NavigationState =
   | SessionsNavigationState
   | SourcesNavigationState
   | SettingsNavigationState
-  | SkillsNavigationState
+  | LocalSkillsNavigationState
+  | SkillMarketplaceNavigationState
   | AutomationsNavigationState
+  | ArchivedNavigationState
+  | AdminNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
 ): state is SessionsNavigationState => state.navigator === 'sessions'
+
+/**
+ * Sidebar Drill-Down Mode has been retired; keep the helper while older callers
+ * are removed so session navigation stays on the standard sidebar layout.
+ */
+export const isSidebarDrilldownMode = (_state: NavigationState): boolean => false
 
 export const isSourcesNavigation = (
   state: NavigationState
@@ -873,13 +1024,25 @@ export const isSettingsNavigation = (
   state: NavigationState
 ): state is SettingsNavigationState => state.navigator === 'settings'
 
-export const isSkillsNavigation = (
+export const isLocalSkillsNavigation = (
   state: NavigationState
-): state is SkillsNavigationState => state.navigator === 'skills'
+): state is LocalSkillsNavigationState => state.navigator === 'local-skills'
+
+export const isSkillMarketplaceNavigation = (
+  state: NavigationState
+): state is SkillMarketplaceNavigationState => state.navigator === 'skill-marketplace'
 
 export const isAutomationsNavigation = (
   state: NavigationState
 ): state is AutomationsNavigationState => state.navigator === 'automations'
+
+export const isArchivedNavigation = (
+  state: NavigationState
+): state is ArchivedNavigationState => state.navigator === 'archived'
+
+export const isAdminNavigation = (
+  state: NavigationState
+): state is AdminNavigationState => state.navigator === 'admin'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -894,11 +1057,14 @@ export const getNavigationStateKey = (state: NavigationState): string => {
     }
     return 'sources'
   }
-  if (state.navigator === 'skills') {
+  if (state.navigator === 'local-skills') {
     if (state.details?.type === 'skill') {
       return `skills/skill/${state.details.skillSlug}`
     }
-    return 'skills'
+    return 'skills/local'
+  }
+  if (state.navigator === 'skill-marketplace') {
+    return 'skills/marketplace'
   }
   if (state.navigator === 'automations') {
     if (state.details?.type === 'automation') {
@@ -909,6 +1075,14 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   if (state.navigator === 'settings') {
     if (state.subpage === null) return 'settings'
     return `settings:${state.subpage}`
+  }
+  if (state.navigator === 'archived') {
+    if (state.details) return `archived/session/${state.details.sessionId}`
+    return 'archived'
+  }
+  if (state.navigator === 'admin') {
+    if (state.subpage === null) return 'admin'
+    return `admin:${state.subpage}`
   }
   // Chats
   const f = state.filter
@@ -935,13 +1109,14 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   }
 
   // Handle skills
-  if (key === 'skills') return { navigator: 'skills', details: null }
+  if (key === 'skills' || key === 'skills/local') return { navigator: 'local-skills', details: null }
+  if (key === 'skills/marketplace') return { navigator: 'skill-marketplace' }
   if (key.startsWith('skills/skill/')) {
     const skillSlug = key.slice(13)
     if (skillSlug) {
-      return { navigator: 'skills', details: { type: 'skill', skillSlug } }
+      return { navigator: 'local-skills', details: { type: 'skill', skillSlug } }
     }
-    return { navigator: 'skills', details: null }
+    return { navigator: 'local-skills', details: null }
   }
 
   // Handle automations
@@ -963,12 +1138,27 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
     }
   }
 
+  // Handle archived
+  if (key === 'archived') return { navigator: 'archived', details: null }
+  if (key.startsWith('archived/session/')) {
+    const sessionId = key.slice(17)
+    return { navigator: 'archived', details: sessionId ? { type: 'session', sessionId } : null }
+  }
+
+  // Handle admin
+  if (key === 'admin') return { navigator: 'admin', subpage: null }
+  if (key.startsWith('admin:')) {
+    const subpage = key.slice(6) as AdminSubpage
+    if (subpage === 'permission' || subpage === 'feedback') {
+      return { navigator: 'admin', subpage }
+    }
+  }
+
   // Handle sessions
   const parseSessionsKey = (filterKey: string, sessionId?: string): NavigationState | null => {
     let filter: SessionFilter
     if (filterKey === 'allSessions') filter = { kind: 'allSessions' }
     else if (filterKey === 'flagged') filter = { kind: 'flagged' }
-    else if (filterKey === 'archived') filter = { kind: 'archived' }
     else if (filterKey.startsWith('state:')) {
       const stateId = filterKey.slice(6)
       if (!stateId) return null

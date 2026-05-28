@@ -19,8 +19,8 @@ import { CONFIG_DIR } from './paths.ts';
 import type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
 import type { Plan } from '../agent/plan-types.ts';
 import type { PermissionMode } from '../agent/mode-manager.ts';
-import type { ThinkingLevel } from '../agent/thinking-levels.ts';
-import { isValidThinkingLevel, normalizeThinkingLevel } from '../agent/thinking-levels.ts';
+import type { ThinkingEnabled } from '../agent/thinking-toggle.ts';
+import { DEFAULT_THINKING_ENABLED, normalizeThinkingEnabled } from '../agent/thinking-toggle.ts';
 import { parsePermissionMode, PERMISSION_MODE_ORDER } from '../agent/mode-types.ts';
 import { type ConfigDefaults } from './config-defaults-schema.ts';
 import { isValidThemeFile } from './validators.ts';
@@ -41,8 +41,8 @@ export type {
 import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
-import type { LlmConnection } from './llm-connections.ts';
-import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
+import type { LlmConnection, MidStreamBehavior } from './llm-connections.ts';
+import { ENV_CONNECTION_SLUG, OPENLLM_ENV_CONNECTION_SLUG, defaultMidStreamBehavior, isMidStreamBehavior, isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, registerEnvConnectionMidStreamBehaviorResolver, synthesizeEnvConnection, synthesizeOpenLlmEnvConnection, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
 import {
   getModelProvider,
   getModelById,
@@ -53,7 +53,8 @@ export interface StoredConfig {
   // LLM Connections (authoritative source for auth and model config)
   llmConnections?: LlmConnection[];
   defaultLlmConnection?: string;  // Slug of default connection for new sessions
-  defaultThinkingLevel?: ThinkingLevel;  // App-level default thinking level for new sessions
+  defaultThinkingEnabled?: ThinkingEnabled;  // App-level default thinking toggle for new sessions
+  envConnectionMidStreamBehavior?: MidStreamBehavior;  // App-level mid-stream behavior for the protected Environment connection
 
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
@@ -88,6 +89,8 @@ export interface StoredConfig {
   setupDeferred?: boolean;
   // Server mode — embedded remote server settings
   serverConfig?: import('./server-config.ts').ServerConfig;
+  // MDP SSO identity fields. Sensitive tokens live in the credential manager.
+  ssoSessionIdentity?: import('../auth/sso-credential-store.ts').SsoSessionIdentity;
   // One-shot migration markers. Used by migrations that should run at most
   // once per user (e.g. restoring a previously-removed model to connection
   // lists without re-adding it if the user later removes it deliberately).
@@ -110,7 +113,7 @@ let configDefaultsSynced = false;
 /** Minimal config-defaults used when bundled assets aren't available (CI, standalone server). */
 const FALLBACK_CONFIG_DEFAULTS: ConfigDefaults = {
   version: '1.0',
-  description: 'Default configuration values for Craft Agents',
+  description: 'Default configuration values for MDP',
   defaults: {
     notificationsEnabled: true,
     colorTheme: 'default',
@@ -124,7 +127,7 @@ const FALLBACK_CONFIG_DEFAULTS: ConfigDefaults = {
     allowRemoteEvaluate: true,
   },
   workspaceDefaults: {
-    thinkingLevel: 'medium',
+    thinkingEnabled: DEFAULT_THINKING_ENABLED,
     permissionMode: 'ask',
     cyclablePermissionModes: ['safe', 'ask', 'allow-all'],
     localMcpServers: { enabled: true },
@@ -161,7 +164,7 @@ function syncConfigDefaults(): void {
 }
 
 /**
- * Load config defaults from ~/.craft-agent/config-defaults.json
+ * Load config defaults from ~/.mdp-agent/config-defaults.json
  * This file is synced from bundled assets on every launch.
  */
 export function loadConfigDefaults(): ConfigDefaults {
@@ -213,7 +216,7 @@ export function ensureConfigDir(): void {
   if (!existsSync(CONFIG_DIR)) {
     mkdirSync(CONFIG_DIR, { recursive: true });
   }
-  // Initialize bundled docs (creates ~/.craft-agent/docs/ with sources.md, agents.md, permissions.md)
+  // Initialize bundled docs (creates ~/.mdp-agent/docs/ with sources.md, agents.md, permissions.md)
   initializeDocs();
 
   // Initialize config defaults
@@ -525,6 +528,33 @@ export function setEnable1MContext(enabled: boolean): void {
   config.enable1MContext = enabled;
   saveConfig(config);
 }
+
+/**
+ * Get the app-level Environment connection mid-stream behavior.
+ * Falls back to the Environment connection's provider default when unset.
+ */
+export function getEnvConnectionMidStreamBehavior(): MidStreamBehavior {
+  const config = loadStoredConfig();
+  if (isMidStreamBehavior(config?.envConnectionMidStreamBehavior)) {
+    return config.envConnectionMidStreamBehavior;
+  }
+  return defaultMidStreamBehavior('pi_compat');
+}
+
+/**
+ * Set the app-level Environment connection mid-stream behavior.
+ * @returns true if persisted, false if config could not be loaded
+ */
+export function setEnvConnectionMidStreamBehavior(behavior: MidStreamBehavior): boolean {
+  const config = loadStoredConfig();
+  if (!config) return false;
+
+  config.envConnectionMidStreamBehavior = behavior;
+  saveConfig(config);
+  return true;
+}
+
+registerEnvConnectionMidStreamBehaviorResolver(getEnvConnectionMidStreamBehavior);
 
 /**
  * Get whether rtk Bash-output compression is enabled.
@@ -1206,7 +1236,7 @@ const APP_THEME_FILE = join(CONFIG_DIR, 'theme.json');
 const APP_THEMES_DIR = join(CONFIG_DIR, 'themes');
 
 /**
- * Get the path to the app-level theme override file (~/.craft-agent/theme.json).
+ * Get the path to the app-level theme override file (~/.mdp-agent/theme.json).
  */
 export function getAppThemePath(): string {
   return APP_THEME_FILE;
@@ -1217,7 +1247,7 @@ let presetsInitialized = false;
 
 /**
  * Get the app-level themes directory.
- * Preset themes are stored at ~/.craft-agent/themes/
+ * Preset themes are stored at ~/.mdp-agent/themes/
  */
 export function getAppThemesDir(): string {
   return APP_THEMES_DIR;
@@ -2307,29 +2337,7 @@ export function migrateLegacyLlmConnectionsConfig(): void {
   if (legacyAuthType) {
     let migrated: LlmConnection | null = null;
 
-    if (legacyAuthType === 'oauth_token') {
-      // Claude Max OAuth
-      migrated = {
-        slug: 'claude-max',
-        name: 'Claude Max',
-        providerType: 'anthropic',
-        authType: 'oauth',
-        models: getDefaultModelsForConnection('anthropic'),
-        createdAt: Date.now(),
-      };
-    } else if (legacyAuthType === 'codex_oauth') {
-      // ChatGPT Plus OAuth → Pi backend
-      migrated = {
-        slug: 'codex',
-        name: 'ChatGPT Plus (via Pi)',
-        providerType: 'pi',
-        authType: 'oauth',
-        piAuthProvider: 'openai-codex',
-        modelSelectionMode: 'automaticallySyncedFromProvider',
-        models: getDefaultModelsForConnection('pi', 'openai-codex'),
-        createdAt: Date.now(),
-      };
-    } else if (legacyAuthType === 'codex_api_key') {
+    if (legacyAuthType === 'codex_api_key') {
       // OpenAI API Key → Pi backend
       migrated = {
         slug: 'codex-api',
@@ -2557,6 +2565,18 @@ export function getLlmConnections(): LlmConnection[] {
  * @returns Connection or null if not found
  */
 export function getLlmConnection(slug: string): LlmConnection | null {
+  if (slug === ENV_CONNECTION_SLUG) {
+    return synthesizeEnvConnection({
+      LLM_BASE_URL: process.env.LLM_BASE_URL,
+      LLM_MODEL: process.env.LLM_MODEL,
+      LLM_CONNECTION_NAME: process.env.LLM_CONNECTION_NAME,
+    });
+  }
+
+  if (slug === OPENLLM_ENV_CONNECTION_SLUG) {
+    return synthesizeOpenLlmEnvConnection();
+  }
+
   const connections = getLlmConnections();
   return connections.find(c => c.slug === slug) || null;
 }
@@ -2739,14 +2759,19 @@ export function deleteLlmConnection(slug: string): boolean {
  */
 export function getDefaultLlmConnection(): string | null {
   const config = loadStoredConfig();
-  if (!config) return null;
 
-  // If no connections, return null
-  if (!config.llmConnections || config.llmConnections.length === 0) {
-    return null;
-  }
+  // User-set explicit default takes priority over everything
+  if (config?.defaultLlmConnection) return config.defaultLlmConnection;
 
-  return config.defaultLlmConnection || config.llmConnections[0]?.slug || null;
+  // OpenLLM env connection takes priority over plain env-provider when OPENLLM_BASE_HOST is set.
+  if (process.env.OPENLLM_BASE_HOST) return OPENLLM_ENV_CONNECTION_SLUG;
+
+  // Env-provider is the implicit default when LLM_BASE_URL is configured —
+  // matches the UI contract where it always shows with the "Default" badge.
+  if (process.env.LLM_BASE_URL) return ENV_CONNECTION_SLUG;
+
+  // Fall back to first stored connection
+  return config?.llmConnections?.[0]?.slug || null;
 }
 
 /**
@@ -2774,28 +2799,41 @@ export function setDefaultLlmConnection(slug: string): boolean {
 }
 
 /**
- * Get the app-level default thinking level for new sessions.
- * Falls back to bundled config-defaults when unset.
+ * Clear the explicit default LLM connection so the env-var fallback takes over.
+ * Used when the user selects an env-backed (built-in) connection as the global default.
  */
-export function getDefaultThinkingLevel(): ThinkingLevel {
+export function clearDefaultLlmConnection(): void {
   const config = loadStoredConfig();
-  if (config?.defaultThinkingLevel) {
-    const normalized = normalizeThinkingLevel(config.defaultThinkingLevel);
-    if (normalized) return normalized;
-  }
-  const defaults = loadConfigDefaults();
-  return normalizeThinkingLevel(defaults.workspaceDefaults.thinkingLevel) ?? 'medium';
+  if (!config) return;
+  config.defaultLlmConnection = undefined;
+  saveConfig(config);
 }
 
 /**
- * Set the app-level default thinking level for new sessions.
+ * Get the app-level default thinking toggle for new sessions.
+ * Falls back to bundled config-defaults when unset.
+ */
+export function getDefaultThinkingEnabled(): ThinkingEnabled {
+  const config = loadStoredConfig();
+  if (config) {
+    const legacyDefaultThinkingKey = 'defaultThinking' + 'Level';
+    const rawDefaultThinking = config.defaultThinkingEnabled ?? (config as StoredConfig & Record<string, unknown>)[legacyDefaultThinkingKey];
+    const normalized = normalizeThinkingEnabled(rawDefaultThinking);
+    if (normalized !== undefined) return normalized;
+  }
+  const defaults = loadConfigDefaults();
+  return normalizeThinkingEnabled(defaults.workspaceDefaults.thinkingEnabled) ?? DEFAULT_THINKING_ENABLED;
+}
+
+/**
+ * Set the app-level default thinking toggle for new sessions.
  * @returns true if persisted, false if config could not be loaded
  */
-export function setDefaultThinkingLevel(level: ThinkingLevel): boolean {
+export function setDefaultThinkingEnabled(enabled: ThinkingEnabled): boolean {
   const config = loadStoredConfig();
   if (!config) return false;
 
-  config.defaultThinkingLevel = level;
+  config.defaultThinkingEnabled = enabled;
   saveConfig(config);
   return true;
 }
@@ -2897,7 +2935,7 @@ import { copyFileSync } from 'fs';
 const TOOL_ICONS_DIR_NAME = 'tool-icons';
 
 /**
- * Returns the path to the tool-icons directory: ~/.craft-agent/tool-icons/
+ * Returns the path to the tool-icons directory: ~/.mdp-agent/tool-icons/
  */
 export function getToolIconsDir(): string {
   return join(CONFIG_DIR, TOOL_ICONS_DIR_NAME);

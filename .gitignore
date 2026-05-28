@@ -72,3 +72,19 @@ credentials.enc
 # act (local GitHub Actions runner)
 .secrets
 .actrc
+.vscode/settings.json
+
+.sandcastle
+
+.claude
+.agents
+CLAUDE.md
+AGENTS.md
+skills-lock.json
+
+docs/agents/
+
+# Test scripts (not committed to remote)
+scripts/test-user-profile-api.ts
+.vscode/
+pi-extra/

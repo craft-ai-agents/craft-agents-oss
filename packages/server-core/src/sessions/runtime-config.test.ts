@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import type { LlmConnection } from '@craft-agent/shared/config'
 import type { FileAttachment } from '@craft-agent/shared/protocol'
-import { buildBackendRuntimeSignature, filterAttachmentsForModelInput } from './runtime-config'
+import { buildBackendRuntimeSignature, buildRestartRequiredSignature, buildRuntimeConfigUpdate, filterAttachmentsForModelInput } from './runtime-config'
 
 const baseCompat: LlmConnection = {
   slug: 'local',
@@ -56,6 +56,51 @@ describe('buildBackendRuntimeSignature', () => {
 
   it('ignores non-runtime metadata such as lastUsedAt', () => {
     expect(sig({ ...baseCompat, lastUsedAt: 1 })).toBe(sig({ ...baseCompat, lastUsedAt: 2 }))
+  })
+
+  it('supports in-place OpenLLM model switches via a fixed baseUrl (model passed in request body)', () => {
+    const previousHost = process.env.OPENLLM_HOST
+    process.env.OPENLLM_HOST = 'http://myserver:8000'
+    const connection: LlmConnection = {
+      slug: 'openllm',
+      name: 'OpenLLM',
+      providerType: 'openllm',
+      authType: 'api_key',
+      defaultModel: 'llama-3',
+      createdAt: 1,
+      models: ['llama-3', 'mistral-7b'],
+    }
+
+    try {
+      const llama = {
+        connection,
+        provider: 'pi' as const,
+        authType: 'api_key' as const,
+        resolvedModel: 'llama-3',
+      }
+      const mistral = {
+        ...llama,
+        resolvedModel: 'mistral-7b',
+      }
+
+      expect(buildRuntimeConfigUpdate({
+        ...llama,
+        capabilities: { needsHttpPoolServer: false },
+      }).runtime?.baseUrl).toBe('http://myserver:8000/v1')
+      expect(buildRuntimeConfigUpdate({
+        ...mistral,
+        capabilities: { needsHttpPoolServer: false },
+      }).runtime?.baseUrl).toBe('http://myserver:8000/v1')
+      expect(buildRuntimeConfigUpdate({
+        ...mistral,
+        capabilities: { needsHttpPoolServer: false },
+      }).runtime?.customEndpoint).toEqual({ api: 'openai-completions' })
+      expect(buildBackendRuntimeSignature(llama)).not.toBe(buildBackendRuntimeSignature(mistral))
+      expect(buildRestartRequiredSignature(llama)).toBe(buildRestartRequiredSignature(mistral))
+    } finally {
+      if (previousHost === undefined) delete process.env.OPENLLM_HOST
+      else process.env.OPENLLM_HOST = previousHost
+    }
   })
 })
 

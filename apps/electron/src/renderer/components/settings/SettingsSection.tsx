@@ -90,7 +90,7 @@ export interface SettingsGroupProps {
 export function SettingsGroup({ title, children, className }: SettingsGroupProps) {
   return (
     <div className={cn('space-y-6', className)}>
-      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pb-2 border-b border-border">
+      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide pb-2 border-b border-border">
         {title}
       </h2>
       <div className="space-y-8">{children}</div>

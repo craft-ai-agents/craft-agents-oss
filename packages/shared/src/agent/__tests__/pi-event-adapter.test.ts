@@ -1,7 +1,7 @@
 /**
  * Tests for PiEventAdapter
  *
- * Tests the Pi SDK AgentEvent / AgentSessionEvent → Craft AgentEvent conversion.
+ * Tests the Pi SDK AgentEvent / AgentSessionEvent → MDPEvent conversion.
  * Each test provides mock Pi SDK event objects and verifies the AgentEvents produced.
  */
 import { describe, it, expect, beforeEach, afterEach, jest } from 'bun:test';
@@ -180,7 +180,7 @@ describe('PiEventAdapter', () => {
       expect((events[0] as { sdkTurnAnchor?: string }).sdkTurnAnchor).toBeUndefined();
     });
 
-    it('should forward pi_turn_anchor events as Craft AgentEvents', () => {
+    it('should forward pi_turn_anchor events as MDP AgentEvents', () => {
       const events = collect(adapter.adaptEvent({
         type: 'pi_turn_anchor',
         sdkMessageId: 'msg_pi_abc123',

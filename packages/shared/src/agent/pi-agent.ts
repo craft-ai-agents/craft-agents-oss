@@ -30,10 +30,11 @@ import { getBackendRuntime } from './backend/internal/driver-types.ts';
 import { SourceActivationDrainController } from './source-activation-drain.ts';
 
 import type { PermissionMode } from './mode-manager.ts';
-import type { ThinkingLevel } from './thinking-levels.ts';
+import type { ThinkingEnabled } from './thinking-toggle.ts';
 
 // Import models from centralized registry
 import { getModelById } from '../config/models.ts';
+import { ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR } from '../config/llm-connections.ts';
 
 // BaseAgent provides common functionality
 import { BaseAgent } from './base-agent.ts';
@@ -43,7 +44,7 @@ import type { Workspace } from '../config/storage.ts';
 import { PiEventAdapter } from './backend/pi/event-adapter.ts';
 import { EventQueue } from './backend/event-queue.ts';
 
-// System prompt for Craft Agent context
+// System prompt for MDP context
 import { getSystemPrompt } from '../prompts/system.ts';
 import { getCoAuthorPreference } from '../config/preferences.ts';
 
@@ -78,7 +79,7 @@ import { getPermissionModeDiagnostics } from './mode-manager.ts';
 // call_llm pre-execution pipeline
 
 // McpClientPool for source tool proxying (centralized pool from main process)
-import type { McpClientPool } from '../mcp/mcp-pool.ts';
+import type { McpClientPool, McpClientPoolCallOptions } from '../mcp/mcp-pool.ts';
 
 // Path utilities
 import { join } from 'path';
@@ -98,6 +99,12 @@ import type { RtkContext } from './core/rtk-rewrite.ts';
 
 // Workspace slug extraction for skill qualification
 import { extractWorkspaceSlug } from '../utils/workspace.ts';
+
+import {
+  formatTeamKnowledgePolicy,
+  prefetchTeamKnowledge,
+  formatPrefetchBlock,
+} from './core/team-public-knowledge-injector.ts';
 
 // LLM tool types
 import { LLM_QUERY_TIMEOUT_MS, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
@@ -155,7 +162,7 @@ function mapBrowserToolErrorCode(code: string): string | null {
  * planning heuristics, config watching, usage tracking).
  */
 export class PiAgent extends BaseAgent {
-  protected backendName = 'Craft Agents Backend';
+  protected backendName = 'MDP Backend';
 
   // ============================================================
   // Subprocess State
@@ -252,6 +259,12 @@ export class PiAgent extends BaseAgent {
   // Pending ensure_session_ready requests (branch preflight handshake)
   private pendingEnsureSessionReady: Map<string, {
     resolve: (sessionId: string | null) => void;
+    reject: (error: Error) => void;
+  }> = new Map();
+
+  // Pending Windows shell slash command requests.
+  private pendingWindowsShellCommands: Map<string, {
+    resolve: (text: string) => void;
     reject: (error: Error) => void;
   }> = new Map();
 
@@ -444,23 +457,12 @@ export class PiAgent extends BaseAgent {
       this.debug('Custom endpoint mode: no provider credential configured, sending empty API key');
     }
 
-    // Derive AWS env vars from the piAuth credential (single fetch, no race).
-    const awsEnv = this.buildAwsEnv(piAuth, runtime);
+    const subprocessEnv = this.buildSubprocessEnv(piAuth, runtime, sessionDir);
 
-    // Spawn the subprocess
     const child = spawn(nodePath, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        ...getProxyEnvVars(),
-        ...this.config.envOverrides,
-        ...awsEnv,
-        // Pass session dir for cross-process toolMetadataStore
-        ...(sessionDir ? { CRAFT_SESSION_DIR: sessionDir } : {}),
-        // Propagate debug mode
-        CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
-      },
+      env: subprocessEnv,
     });
 
     this.subprocess = child;
@@ -511,7 +513,7 @@ export class PiAgent extends BaseAgent {
       apiKey: legacyApiKey || '',
       model: this._model,
       cwd,
-      thinkingLevel: this._thinkingLevel,
+      thinkingEnabled: this._thinkingEnabled,
       workspaceRootPath: this.config.workspace.rootPath,
       sessionId,
       sessionPath,
@@ -581,7 +583,7 @@ export class PiAgent extends BaseAgent {
    */
   private registerPoolToolsWithSubprocess(): void {
     if (!this.mcpPool) return;
-    const proxyDefs = this.mcpPool.getProxyToolDefs();
+    const proxyDefs = this.mcpPool.getProxyToolDefs(this.getActiveSourceSlugs());
     if (proxyDefs.length > 0) {
       this.send({
         type: 'register_tools',
@@ -714,6 +716,28 @@ export class PiAgent extends BaseAgent {
     if (!process.env.AWS_BEDROCK_FORCE_HTTP1) {
       env.AWS_BEDROCK_FORCE_HTTP1 = '1';
     }
+
+    return env;
+  }
+
+  private buildSubprocessEnv(
+    piAuth: Awaited<ReturnType<PiAgent['getPiAuth']>>,
+    runtime: { piAuthProvider?: string },
+    sessionDir?: string,
+  ): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...getProxyEnvVars(),
+      ...this.config.envOverrides,
+      ...this.buildAwsEnv(piAuth, runtime),
+      // Pass session dir for cross-process toolMetadataStore
+      ...(sessionDir ? { CRAFT_SESSION_DIR: sessionDir } : {}),
+      // Propagate debug mode
+      CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+    };
+
+    if (!this.config.envOverrides?.[ENV_CONNECTION_SSO_TOKEN_ENV_VAR]) delete env[ENV_CONNECTION_SSO_TOKEN_ENV_VAR];
+    if (!this.config.envOverrides?.[ENV_CONNECTION_SSO_BASE_URL_ENV_VAR]) delete env[ENV_CONNECTION_SSO_BASE_URL_ENV_VAR];
 
     return env;
   }
@@ -939,6 +963,10 @@ export class PiAgent extends BaseAgent {
         this.handleEnsureSessionReadyResult(msg);
         break;
 
+      case 'windows_shell_command_result':
+        this.handleWindowsShellCommandResult(msg);
+        break;
+
       case 'compact_result':
         // Response to a compact request
         this.handleCompactResult(msg);
@@ -959,6 +987,12 @@ export class PiAgent extends BaseAgent {
         if (msg.sessionId) {
           this.piSessionId = msg.sessionId as string;
           this.config.onSdkSessionIdUpdate?.(this.piSessionId!);
+        }
+        break;
+
+      case 'sso_token_expired':
+        if (msg.signal === 'SSO_TOKEN_EXPIRED') {
+          this.eventQueue.enqueue({ type: 'error', message: 'SSO_TOKEN_EXPIRED' });
         }
         break;
 
@@ -1066,7 +1100,7 @@ export class PiAgent extends BaseAgent {
    */
   private handleSubprocessEvent(event: Record<string, unknown>): void {
     // The subprocess sends Pi SDK AgentSessionEvent objects serialized as JSON.
-    // Feed them through PiEventAdapter to convert to Craft AgentEvents.
+    // Feed them through PiEventAdapter to convert to MDPEvents.
 
     // Detect session MCP tool completions (same pattern as in-process version)
     const eventType = event.type as string;
@@ -1427,13 +1461,21 @@ export class PiAgent extends BaseAgent {
 
     // MCP source tools — route through centralized pool
     if (this.mcpPool?.isProxyTool(toolName)) {
-      return this.mcpPool.callTool(toolName, args);
+      return this.mcpPool.callTool(toolName, args, this.getMcpCallOptions());
     }
 
     // Unknown tool
     return {
       content: `Unknown proxy tool: ${toolName}`,
       isError: true,
+    };
+  }
+
+  private getMcpCallOptions(): McpClientPoolCallOptions {
+    const sessionId = this.config.session?.id;
+    return {
+      ...(sessionId ? { sessionPath: getSessionPath(this.config.workspace.rootPath, sessionId) } : {}),
+      summarize: this.getSummarizeCallback(),
     };
   }
 
@@ -1622,6 +1664,20 @@ export class PiAgent extends BaseAgent {
     pending.resolve(sessionId);
   }
 
+  private handleWindowsShellCommandResult(msg: Record<string, unknown>): void {
+    const id = msg.id as string;
+    const pending = this.pendingWindowsShellCommands.get(id);
+    if (!pending) return;
+
+    this.pendingWindowsShellCommands.delete(id);
+    if (!msg.success) {
+      pending.reject(new Error(String(msg.errorMessage || 'Windows shell command failed')));
+      return;
+    }
+
+    pending.resolve(String(msg.text || ''));
+  }
+
   /**
    * Handle compact_result from subprocess.
    */
@@ -1728,6 +1784,11 @@ export class PiAgent extends BaseAgent {
     }
     this.pendingEnsureSessionReady.clear();
 
+    for (const [, pending] of this.pendingWindowsShellCommands) {
+      pending.reject(new Error(`Pi subprocess exited unexpectedly (${exitReason})`));
+    }
+    this.pendingWindowsShellCommands.clear();
+
     // Reject pending compact/toggle requests
     for (const [, pending] of this.pendingCompactions) {
       pending.reject(new Error(`Pi subprocess exited unexpectedly (${exitReason})`));
@@ -1782,6 +1843,38 @@ export class PiAgent extends BaseAgent {
       });
 
       this.send({ type: 'ensure_session_ready', id });
+    });
+  }
+
+  private async requestWindowsShellCommand(command: 'win-shell-info' | 'win-processes' | 'win-cleanup'): Promise<string> {
+    await this.ensureSubprocess();
+
+    const id = `windows-shell-command-${++this.rpcIdCounter}`;
+    const timeoutMs = 30_000;
+
+    return new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingWindowsShellCommands.delete(id);
+        reject(new Error(`${command} timed out after ${Math.floor(timeoutMs / 1000)}s`));
+      }, timeoutMs);
+
+      this.pendingWindowsShellCommands.set(id, {
+        resolve: (text) => {
+          clearTimeout(timer);
+          resolve(text);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+
+      this.send({
+        type: 'windows_shell_command',
+        id,
+        command,
+        cwd: this.config.session?.workingDirectory || this.config.workspace.rootPath,
+      });
     });
   }
 
@@ -1991,6 +2084,23 @@ export class PiAgent extends BaseAgent {
         return;
       }
 
+      const windowsCommandMatch = process.platform === 'win32'
+        ? trimmedMessage.match(/^\/(win-shell-info|win-processes|win-cleanup)\s*$/i)
+        : null;
+      if (windowsCommandMatch) {
+        const rawCommand = windowsCommandMatch[1];
+        if (!rawCommand) {
+          yield { type: 'info', message: 'Unknown Windows shell command.' };
+          yield { type: 'complete' };
+          return;
+        }
+        const command = rawCommand.toLowerCase() as 'win-shell-info' | 'win-processes' | 'win-cleanup';
+        const text = await this.requestWindowsShellCommand(command);
+        yield { type: 'info', message: text || `${command} completed.` };
+        yield { type: 'complete' };
+        return;
+      }
+
       // Build system prompt
       const systemPrompt = getSystemPrompt(
         undefined, // pinnedPreferencesPrompt
@@ -1998,7 +2108,7 @@ export class PiAgent extends BaseAgent {
         this.config.workspace.rootPath,
         this.config.session?.workingDirectory,
         this.config.systemPromptPreset,
-        'Craft Agents Backend', // backendName
+        'MDP Backend', // backendName
         getCoAuthorPreference() // respect user's includeCoAuthoredBy preference (#576)
       );
 
@@ -2012,8 +2122,17 @@ export class PiAgent extends BaseAgent {
       )
 
       // Build context parts using centralized PromptBuilder
+      const teamContextDisabled = this.config.session?.teamContextDisabled;
+      const teamPublicKnowledgePolicy = formatTeamKnowledgePolicy(this.config.workspace.rootPath, teamContextDisabled);
+      const prefetchResults = teamContextDisabled ? [] : prefetchTeamKnowledge(this.config.workspace.rootPath, message);
+      const teamPublicKnowledgePrefetchBlock = formatPrefetchBlock(prefetchResults);
+
       const contextParts = this.promptBuilder.buildContextParts(
-        { plansFolderPath: getSessionPlansPath(this.config.workspace.rootPath, this._sessionId) },
+        {
+          plansFolderPath: getSessionPlansPath(this.config.workspace.rootPath, this._sessionId),
+          teamPublicKnowledgePolicy,
+          teamPublicKnowledgePrefetchBlock,
+        },
         sourceContext
       );
 
@@ -2193,15 +2312,15 @@ export class PiAgent extends BaseAgent {
     }
   }
 
-  override setThinkingLevel(level: ThinkingLevel): void {
-    const previousLevel = this.getThinkingLevel();
-    super.setThinkingLevel(level);
-    // Forward to subprocess so it uses the new thinking level on next turn
+  override setThinkingEnabled(enabled: ThinkingEnabled): void {
+    const previousEnabled = this.getThinkingEnabled();
+    super.setThinkingEnabled(enabled);
+    // Forward to subprocess so it uses the new thinking toggle on next turn
     if (this.subprocess) {
-      this.debug(`Forwarding thinking level change to subprocess: ${previousLevel} → ${level}`);
-      this.send({ type: 'set_thinking_level', level });
+      this.debug(`Forwarding thinking toggle change to subprocess: ${previousEnabled} → ${enabled}`);
+      this.send({ type: 'set_thinking_enabled', enabled });
     } else {
-      this.debug(`Thinking level updated but no subprocess to forward to: ${previousLevel} → ${level}`);
+      this.debug(`Thinking toggle updated but no subprocess to forward to: ${previousEnabled} → ${enabled}`);
     }
   }
 

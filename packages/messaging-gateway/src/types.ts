@@ -9,7 +9,7 @@
 // Platform types
 // ---------------------------------------------------------------------------
 
-export type PlatformType = 'telegram' | 'whatsapp' | 'lark'
+export type PlatformType = string
 
 // ---------------------------------------------------------------------------
 // Logger
@@ -70,7 +70,7 @@ export interface AdapterCapabilities {
   inlineButtons: boolean
   maxButtons: number
   maxMessageLength: number
-  markdown: 'v2' | 'whatsapp' | 'lark-post'
+  markdown: string
   webhookSupport: boolean
 }
 
@@ -81,11 +81,6 @@ export interface AdapterCapabilities {
 export interface IncomingMessage {
   platform: PlatformType
   channelId: string
-  /**
-   * Telegram supergroup forum topic id (`message_thread_id`). Undefined for
-   * DMs, the General topic, and non-forum chats. Only Telegram populates this.
-   */
-  threadId?: number
   messageId: string
   senderId: string
   senderName?: string
@@ -140,8 +135,6 @@ export interface InlineButton {
 export interface ButtonPress {
   platform: PlatformType
   channelId: string
-  /** Forum topic id of the message the button was attached to (Telegram). */
-  threadId?: number
   messageId: string
   senderId: string
   /** Optional sender display name (Telegram first name). For UI / pending list. */
@@ -154,15 +147,6 @@ export interface ButtonPress {
   data?: string
 }
 
-/**
- * Per-call options for outbound adapter operations. Currently only Telegram
- * uses `threadId` (forum topic posting); other adapters ignore extra fields.
- */
-export interface SendOptions {
-  /** Telegram forum topic to post into. Undefined → DM or General topic. */
-  threadId?: number
-}
-
 // ---------------------------------------------------------------------------
 // Adapter interface
 // ---------------------------------------------------------------------------
@@ -171,12 +155,6 @@ export interface PlatformConfig {
   token?: string
   webhookUrl?: string
   webhookSecretToken?: string
-  /**
-   * Telegram only: a configured supergroup chatId. When set, the adapter
-   * accepts messages from that chat (in addition to DMs); when unset,
-   * the adapter is DM-only as before.
-   */
-  acceptedSupergroupChatId?: string
   /** Optional logger for adapter-level diagnostics. */
   logger?: MessagingLogger
   [key: string]: unknown
@@ -193,11 +171,11 @@ export interface PlatformAdapter {
   onMessage(handler: (msg: IncomingMessage) => Promise<void>): void
   onButtonPress(handler: (press: ButtonPress) => Promise<void>): void
 
-  sendText(channelId: string, text: string, opts?: SendOptions): Promise<SentMessage>
-  editMessage(channelId: string, messageId: string, text: string, opts?: SendOptions): Promise<void>
-  sendButtons(channelId: string, text: string, buttons: InlineButton[], opts?: SendOptions): Promise<SentMessage>
-  sendTyping(channelId: string, opts?: SendOptions): Promise<void>
-  sendFile(channelId: string, file: Buffer, filename: string, caption?: string, opts?: SendOptions): Promise<SentMessage>
+  sendText(channelId: string, text: string): Promise<SentMessage>
+  editMessage(channelId: string, messageId: string, text: string): Promise<void>
+  sendButtons(channelId: string, text: string, buttons: InlineButton[]): Promise<SentMessage>
+  sendTyping(channelId: string): Promise<void>
+  sendFile(channelId: string, file: Buffer, filename: string, caption?: string): Promise<SentMessage>
 
   /**
    * Clear the inline keyboard on a previously-sent message. Optional because
@@ -205,23 +183,7 @@ export interface PlatformAdapter {
    * Errors are the caller's concern — most implementations should swallow
    * "message can't be edited" since it's non-fatal.
    */
-  clearButtons?(channelId: string, messageId: string, opts?: SendOptions): Promise<void>
-
-  /**
-   * Update the set of chats the adapter accepts inbound messages from at
-   * runtime, without restarting the polling loop. Telegram uses this to
-   * (de)authorise a supergroup chatId after the user pairs/unpairs it in
-   * Settings. Adapters that don't have a configurable filter can implement
-   * this as a no-op.
-   */
-  setAcceptedSupergroupChatId?(chatId: string | undefined): void
-
-  /**
-   * Telegram-only: create a new forum topic in a supergroup. Used by
-   * automation integrations that auto-spawn topics per session. Other
-   * platforms throw or omit the method.
-   */
-  createForumTopic?(chatId: string, name: string): Promise<{ threadId: number; name: string }>
+  clearButtons?(channelId: string, messageId: string): Promise<void>
 
   /** Webhook handler for headless server (Telegram only). */
   handleWebhook?(request: Request): Promise<Response>
@@ -340,12 +302,6 @@ export interface ChannelBinding {
   sessionId: string
   platform: PlatformType
   channelId: string
-  /**
-   * Telegram supergroup forum topic id. Undefined = DM, General topic, or
-   * non-Telegram. Eviction on `bind()` keys on `(platform, channelId, threadId ?? null)`,
-   * so DMs and topics in the same supergroup are independently bindable.
-   */
-  threadId?: number
   channelName?: string
   enabled: boolean
   createdAt: number
@@ -355,24 +311,6 @@ export interface ChannelBinding {
 // ---------------------------------------------------------------------------
 // Gateway config (persisted per workspace)
 // ---------------------------------------------------------------------------
-
-/**
- * Workspace-level Telegram supergroup ("forum") configuration. When set,
- * the adapter accepts messages from this chat (in addition to DMs) and
- * sessions can be bound to specific topics inside it.
- *
- * Captured by typing `/pair <code>` in the supergroup with a workspace-
- * supergroup-kind pairing code. The bot reads the chat title from
- * `getChat()` once and stores it for display only.
- */
-export interface TelegramSupergroupConfig {
-  /** Telegram chat_id of the supergroup, e.g. `"-1001234567890"`. */
-  chatId: string
-  /** Display title captured at pairing time. Refreshed on next successful connect. */
-  title: string
-  /** Unix-ms timestamp when the supergroup was paired. */
-  capturedAt: number
-}
 
 /**
  * Workspace-level access policy for a messaging platform.
@@ -457,59 +395,11 @@ export interface PendingSender {
   bindingId?: string
   sessionId?: string
   channelId?: string
-  threadId?: number
 }
 
 export interface MessagingConfig {
   enabled: boolean
-  platforms: {
-    telegram?: {
-      enabled: boolean
-      /**
-       * Optional configured supergroup. Adapter accepts messages from this
-       * chat in addition to DMs. Sessions can bind to specific topics within.
-       */
-      supergroup?: TelegramSupergroupConfig
-      /**
-       * Workspace-level access policy. Missing field = `'open'` for back-
-       * compat with workspaces that predate access control. Fresh setups
-       * land on `'owner-only'` automatically (registry sets it on first pair).
-       */
-      accessMode?: PlatformAccessMode
-      /**
-       * Telegram user ids permitted to drive the bot at workspace level.
-       * Gates `/new`, `/bind`, `/unbind`, `/status`, `/stop` and serves as
-       * the default sender allow-list for bindings whose `accessMode === 'inherit'`.
-       *
-       * `/pair` itself stays open: if the list is empty, the first
-       * successful redeem seeds the list with the consuming sender. After
-       * that, only existing owners may redeem further codes.
-       */
-      owners?: PlatformOwner[]
-    }
-    whatsapp?: {
-      enabled: boolean
-      /**
-       * When true, messages sent from other devices on the same WA account
-       * to the self-JID (your own number) are routed to a bound session.
-       * The worker filters its own echoes via sent-ID tracking + a response
-       * prefix. Defaults to `true` when unset — the no-second-phone flow is
-       * the expected UX for new users.
-       */
-      selfChatMode?: boolean
-    }
-    lark?: {
-      enabled: boolean
-      /**
-       * Which Lark/Feishu domain the bot belongs to. A bot is registered
-       * with one Open Platform — they're separate ecosystems despite
-       * sharing the same SDK + protocols.
-       *  - `lark` → open.larksuite.com (international)
-       *  - `feishu` → open.feishu.cn (China)
-       */
-      domain?: 'lark' | 'feishu'
-    }
-  }
+  platforms: Record<string, { enabled: boolean } & Record<string, unknown>>
 }
 
 export const DEFAULT_MESSAGING_CONFIG: MessagingConfig = {

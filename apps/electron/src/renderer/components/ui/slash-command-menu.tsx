@@ -1,16 +1,17 @@
 import * as React from 'react'
 import { useTranslation } from "react-i18next"
 import { Command as CommandPrimitive } from 'cmdk'
-import { Check, Minimize2 } from 'lucide-react'
+import { Check, ListChecks, Minimize2, Search, Trash2 } from 'lucide-react'
 import { Icon_Folder } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
+import { isWindows } from '@/lib/platform'
 import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@craft-agent/shared/agent/modes'
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type SlashCommandId = PermissionMode | 'compact'
+export type SlashCommandId = PermissionMode | 'compact' | 'win-shell-info' | 'win-processes' | 'win-cleanup'
 
 /** Union type for all item types in the slash menu */
 export type SlashItemType = 'command' | 'folder'
@@ -97,9 +98,35 @@ const compactCommand: SlashCommand = {
   icon: <Minimize2 className={MENU_ICON_SIZE} />,
 }
 
+const windowsShellInfoCommand: SlashCommand = {
+  id: 'win-shell-info',
+  label: 'Windows Shell Info',
+  description: 'Show discovered PowerShell and Windows shell data paths',
+  icon: <Search className={MENU_ICON_SIZE} />,
+}
+
+const windowsProcessesCommand: SlashCommand = {
+  id: 'win-processes',
+  label: 'Windows Processes',
+  description: 'Show tracked Windows background processes',
+  icon: <ListChecks className={MENU_ICON_SIZE} />,
+}
+
+const windowsCleanupCommand: SlashCommand = {
+  id: 'win-cleanup',
+  label: 'Windows Cleanup',
+  description: 'Clean up stale Windows process registry entries',
+  icon: <Trash2 className={MENU_ICON_SIZE} />,
+}
+
+const windowsCommands: SlashCommand[] = isWindows
+  ? [windowsShellInfoCommand, windowsProcessesCommand, windowsCleanupCommand]
+  : []
+
 export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
   ...permissionModeCommands,
   compactCommand,
+  ...windowsCommands,
 ]
 
 export const DEFAULT_SLASH_COMMAND_GROUPS: CommandGroup[] = [
@@ -112,7 +139,7 @@ export const DEFAULT_SLASH_COMMAND_GROUPS: CommandGroup[] = [
 
 const MENU_CONTAINER_STYLE = 'min-w-[200px] overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small'
 const MENU_LIST_STYLE = 'max-h-[260px] overflow-y-auto py-1'
-const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2 rounded-[6px] mx-1 px-2 py-1.5 text-[13px]'
+const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2 rounded-[6px] mx-1 px-2 py-1.5 text-[14px]'
 const MENU_ITEM_SELECTED = 'bg-foreground/5'
 const MENU_SECTION_HEADER = 'px-3 py-1.5 mb-0.5 text-[12px] font-medium text-muted-foreground border-b border-foreground/5'
 
@@ -490,7 +517,7 @@ export function InlineSlashCommand({
       </div>
       {/* Always-visible footer hint for @ mentions */}
       <div className="h-px bg-border/50 mx-2" />
-      <div className="px-3 py-2.5 select-none text-xs text-muted-foreground">
+      <div className="px-3 py-2.5 select-none text-sm text-muted-foreground">
         Use @ for skills and files
       </div>
     </div>
@@ -578,7 +605,10 @@ export function useInlineSlashCommand({
     result.push({
       id: 'commands',
       label: 'Commands',
-      items: [compactCommand],
+      items: [
+        compactCommand,
+        ...windowsCommands,
+      ],
     })
 
     // Recent folders section - sorted alphabetically by folder name, show all

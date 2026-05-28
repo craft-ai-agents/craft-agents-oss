@@ -1,6 +1,6 @@
 {
-  "name": "Craft Agents",
-  "short_name": "Craft Agents",
+  "name": "MDP",
+  "short_name": "MDP",
   "description": "AI agent interface",
   "start_url": "./",
   "display": "standalone",

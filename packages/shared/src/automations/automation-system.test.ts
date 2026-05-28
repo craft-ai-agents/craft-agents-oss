@@ -69,7 +69,7 @@ describe('AutomationSystem', () => {
       await system.dispose();
     });
 
-    it('should preserve thinkingLevel on prompt actions through load', async () => {
+    it('should migrate legacy thinkingLevel on prompt actions through load', async () => {
       writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
         automations: {
           LabelAdd: [
@@ -96,7 +96,7 @@ describe('AutomationSystem', () => {
       const action = config?.automations.LabelAdd?.[0]?.actions[0];
       expect(action).toMatchObject({
         type: 'prompt',
-        thinkingLevel: 'high',
+        thinkingEnabled: true,
       });
 
       await system.dispose();

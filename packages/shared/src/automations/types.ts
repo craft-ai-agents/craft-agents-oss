@@ -5,7 +5,7 @@
  */
 
 import type { PermissionMode } from '../agent/mode-types.ts';
-import type { ThinkingLevel } from '../agent/thinking-levels.ts';
+import type { ThinkingEnabled } from '../agent/thinking-toggle.ts';
 
 // ============================================================================
 // Event Types
@@ -54,7 +54,7 @@ export const AGENT_EVENTS: AgentEvent[] = [
 // Action Definitions
 // ============================================================================
 
-/** A prompt action - sends a prompt to Craft Agent */
+/** A prompt action - sends a prompt to MDP */
 export interface PromptAction {
   type: 'prompt';
   prompt: string;
@@ -63,10 +63,10 @@ export interface PromptAction {
   /** Model ID for the created session (falls back to provider default if invalid) */
   model?: string;
   /**
-   * Thinking level for the created session.
-   * When omitted, falls back to the workspace default (then DEFAULT_THINKING_LEVEL).
+   * Thinking toggle for the created session.
+   * When omitted, falls back to the workspace default (then DEFAULT_THINKING_ENABLED).
    */
-  thinkingLevel?: ThinkingLevel;
+  thinkingEnabled?: ThinkingEnabled;
 }
 
 /** HTTP method for webhook actions */
@@ -254,8 +254,8 @@ export interface PendingPrompt {
   llmConnection?: string;
   /** Model ID for the created session (falls back to provider default if invalid) */
   model?: string;
-  /** Thinking level for the created session (falls back to workspace default when omitted) */
-  thinkingLevel?: ThinkingLevel;
+  /** Thinking toggle for the created session (falls back to workspace default when omitted) */
+  thinkingEnabled?: ThinkingEnabled;
   /** Forum-topic name to bind the new session to (Telegram supergroup, when paired). */
   telegramTopic?: string;
 }
@@ -264,7 +264,7 @@ export interface AutomationResult {
   event: string;
   matched: number;
   results: ActionExecutionResult[];
-  /** Prompts that should be executed by Craft Agent (with metadata) */
+  /** Prompts that should be executed by MDP (with metadata) */
   pendingPrompts: PendingPrompt[];
 }
 

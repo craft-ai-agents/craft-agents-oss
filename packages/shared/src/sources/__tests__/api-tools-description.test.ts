@@ -44,11 +44,10 @@ describe('buildToolDescription', () => {
   });
 
   test('points the model at sources/{slug}/guide.md', () => {
-    // The description front-runs the prerequisite-manager block by telling the
-    // model where to read. The path string must include the slug verbatim so
-    // the model can resolve it without guessing.
     const desc = buildToolDescription(baseConfig({ name: 'my-special-slug' }));
     expect(desc).toContain('sources/my-special-slug/guide.md');
+    expect(desc).not.toContain('Before the first call');
+    expect(desc).not.toContain('required before the first call');
   });
 
   test('preserves docsUrl when present', () => {

@@ -15,6 +15,7 @@ import type {
   SourceFilter,
   AutomationFilter,
   RightSidebarPanel,
+  AdminSubpage,
 } from './types'
 import { isValidSettingsSubpage, type SettingsSubpage } from './settings-registry'
 
@@ -35,7 +36,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings' | 'archived' | 'admin'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -46,6 +47,8 @@ export interface ParsedCompoundRoute {
   sourceFilter?: SourceFilter
   /** Automation filter (only for automations navigator) */
   automationFilter?: AutomationFilter
+  /** Skills destination (only for skills navigator) */
+  skillDestination?: 'local' | 'marketplace'
   /** Details page info (null for empty state) */
   details: {
     type: string
@@ -61,7 +64,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'automations', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'automations', 'settings', 'admin'
 ]
 
 /**
@@ -108,6 +111,19 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     }
   }
 
+  // Admin navigator
+  if (first === 'admin') {
+    const subpage = segments[1]
+    if (subpage === undefined) {
+      return { navigator: 'admin', details: null }
+    }
+    if (subpage !== 'permission' && subpage !== 'feedback') return null
+    return {
+      navigator: 'admin',
+      details: { type: subpage, id: subpage },
+    }
+  }
+
   // Sources navigator - supports type filters (api, mcp, local)
   if (first === 'sources') {
     if (segments.length === 1) {
@@ -147,13 +163,22 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   // Skills navigator
   if (first === 'skills') {
     if (segments.length === 1) {
-      return { navigator: 'skills', details: null }
+      return { navigator: 'skills', skillDestination: 'local', details: null }
+    }
+
+    if (segments[1] === 'local') {
+      return { navigator: 'skills', skillDestination: 'local', details: null }
+    }
+
+    if (segments[1] === 'marketplace') {
+      return { navigator: 'skills', skillDestination: 'marketplace', details: null }
     }
 
     // skills/skill/{skillSlug}
     if (segments[1] === 'skill' && segments[2]) {
       return {
         navigator: 'skills',
+        skillDestination: 'local',
         details: { type: 'skill', id: segments[2] },
       }
     }
@@ -210,10 +235,14 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       sessionFilter = { kind: 'flagged' }
       detailsStartIndex = 1
       break
-    case 'archived':
-      sessionFilter = { kind: 'archived' }
-      detailsStartIndex = 1
-      break
+    case 'archived': {
+      // Archived view is its own navigator, not a sessions filter
+      const sessionId = segments[1] === 'session' ? segments[2] : undefined
+      return {
+        navigator: 'archived',
+        details: sessionId ? { type: 'session', id: sessionId } : null,
+      }
+    }
     case 'state':
       if (!segments[1]) return null
       // Cast is safe because we're constructing from URL
@@ -275,8 +304,20 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   }
 
   if (parsed.navigator === 'skills') {
+    if (parsed.skillDestination === 'marketplace') return 'skills/marketplace'
+    if (parsed.skillDestination === 'local' && !parsed.details) return 'skills/local'
     if (!parsed.details) return 'skills'
     return `skills/skill/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'archived') {
+    if (!parsed.details) return 'archived'
+    return `archived/session/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'admin') {
+    if (!parsed.details) return 'admin'
+    return `admin/${parsed.details.type}`
   }
 
   if (parsed.navigator === 'automations') {
@@ -522,11 +563,15 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
 
   // Skills
   if (compound.navigator === 'skills') {
+    const destination = compound.skillDestination ?? 'local'
     if (!compound.details) {
-      return { navigator: 'skills', details: null }
+      if (destination === 'marketplace') {
+        return { navigator: 'skill-marketplace' }
+      }
+      return { navigator: 'local-skills', details: null }
     }
     return {
-      navigator: 'skills',
+      navigator: 'local-skills',
       details: { type: 'skill', skillSlug: compound.details.id },
     }
   }
@@ -544,6 +589,22 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
       navigator: 'automations',
       filter: compound.automationFilter,
       details: { type: 'automation', automationId: compound.details.id },
+    }
+  }
+
+  // Admin
+  if (compound.navigator === 'admin') {
+    if (!compound.details) {
+      return { navigator: 'admin', subpage: null }
+    }
+    return { navigator: 'admin', subpage: compound.details.type as AdminSubpage }
+  }
+
+  // Archived
+  if (compound.navigator === 'archived') {
+    return {
+      navigator: 'archived',
+      details: compound.details ? { type: 'session', sessionId: compound.details.id } : null,
     }
   }
 
@@ -599,18 +660,18 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       }
       return { navigator: 'sources', details: null }
     case 'skills':
-      return { navigator: 'skills', details: null }
+      return { navigator: 'local-skills', details: null }
     case 'skill-info':
       if (parsed.id) {
         return {
-          navigator: 'skills',
+          navigator: 'local-skills',
           details: {
             type: 'skill',
             skillSlug: parsed.id,
           },
         }
       }
-      return { navigator: 'skills', details: null }
+      return { navigator: 'local-skills', details: null }
     case 'automations':
       return { navigator: 'automations', details: null }
     case 'automation-info':
@@ -627,7 +688,10 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
     case 'session':
       if (parsed.id) {
         // Reconstruct filter from params
-        const filterKind = (parsed.params.filter || 'allSessions') as SessionFilter['kind']
+        const filterKind = (parsed.params.filter || 'allSessions') as SessionFilter['kind'] | 'archived'
+        if (filterKind === 'archived') {
+          return { navigator: 'archived', details: { type: 'session', sessionId: parsed.id } }
+        }
         let filter: SessionFilter
         if (filterKind === 'state' && parsed.params.stateId) {
           filter = { kind: 'state', stateId: parsed.params.stateId }
@@ -636,7 +700,7 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         } else if (filterKind === 'view' && parsed.params.viewId) {
           filter = { kind: 'view', viewId: parsed.params.viewId }
         } else {
-          filter = { kind: filterKind as 'allSessions' | 'flagged' | 'archived' }
+          filter = { kind: filterKind as 'allSessions' | 'flagged' }
         }
         return {
           navigator: 'sessions',
@@ -659,8 +723,7 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       }
     case 'archived':
       return {
-        navigator: 'sessions',
-        filter: { kind: 'archived' },
+        navigator: 'archived',
         details: null,
       }
     case 'state':
@@ -717,10 +780,19 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
     }
   }
 
-  if (state.navigator === 'skills') {
+  if (state.navigator === 'local-skills') {
     return {
       navigator: 'skills',
+      skillDestination: 'local',
       details: state.details?.type === 'skill' ? { type: 'skill', id: state.details.skillSlug } : null,
+    }
+  }
+
+  if (state.navigator === 'skill-marketplace') {
+    return {
+      navigator: 'skills',
+      skillDestination: 'marketplace',
+      details: null,
     }
   }
 
@@ -729,6 +801,23 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
       navigator: 'automations',
       automationFilter: state.filter ?? undefined,
       details: state.details ? { type: 'automation', id: state.details.automationId } : null,
+    }
+  }
+
+  if (state.navigator === 'archived') {
+    return {
+      navigator: 'archived',
+      details: state.details ? { type: 'session', id: state.details.sessionId } : null,
+    }
+  }
+
+  if (state.navigator === 'admin') {
+    if (state.subpage === null) {
+      return { navigator: 'admin', details: null }
+    }
+    return {
+      navigator: 'admin',
+      details: { type: state.subpage, id: state.subpage },
     }
   }
 

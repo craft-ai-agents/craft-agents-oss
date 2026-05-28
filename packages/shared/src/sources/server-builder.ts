@@ -30,10 +30,10 @@ export const SERVER_BUILD_ERRORS = {
 
 /**
  * MCP server configuration compatible with Claude Agent SDK
- * Supports HTTP/SSE (remote) and stdio (local subprocess) transports.
+ * Supports Streamable HTTP (remote) and stdio (local subprocess) transports.
  */
 export type McpServerConfig =
-  | { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }
+  | { type: 'streamable_http'; url: string; headers?: Record<string, string> }
   | { type: 'stdio'; command: string; args?: string[]; env?: Record<string, string> };
 
 /**
@@ -44,6 +44,8 @@ export interface SourceWithCredential {
   /** Token for MCP sources, or ApiCredential for API sources */
   token?: string | null;
   credential?: ApiCredential | null;
+  /** SSO identity token used by bearer-auth MCP sources when available */
+  ssoIdToken?: string | null;
 }
 
 /**
@@ -83,7 +85,12 @@ export class SourceServerBuilder {
    * @param token - Authentication token (null for public/stdio sources)
    * @param credential - Multi-header credential from credential store (null if not set)
    */
-  buildMcpServer(source: LoadedSource, token: string | null, credential?: ApiCredential | null): McpServerConfig | null {
+  buildMcpServer(
+    source: LoadedSource,
+    token: string | null,
+    credential?: ApiCredential | null,
+    ssoIdToken?: string | null,
+  ): McpServerConfig | null {
     if (source.config.type !== 'mcp' || !source.config.mcp) {
       return null;
     }
@@ -104,16 +111,16 @@ export class SourceServerBuilder {
       };
     }
 
-    // Handle HTTP/SSE transport (remote servers)
+    // Handle Streamable HTTP transport (remote servers)
     if (!mcp.url) {
-      debug(`[SourceServerBuilder] HTTP/SSE source ${source.config.slug} missing URL`);
+      debug(`[SourceServerBuilder] Streamable HTTP source ${source.config.slug} missing URL`);
       return null;
     }
 
     const url = normalizeMcpUrl(mcp.url);
 
     const config: McpServerConfig = {
-      type: mcp.transport === 'sse' ? 'sse' : 'http',
+      type: 'streamable_http',
       url,
     };
 
@@ -134,10 +141,14 @@ export class SourceServerBuilder {
     }
 
     // 3. Auth token (highest priority — OAuth/bearer overrides everything)
+    // Credential-store imports can already provide Authorization as a header bundle.
+    // In that case token may be the raw JSON credential value, so do not re-wrap it.
     if (mcp.authType !== 'none') {
-      if (token) {
+      if (mcp.authType === 'bearer' && ssoIdToken) {
+        mergedHeaders = { ...mergedHeaders, Authorization: `Bearer ${ssoIdToken}` };
+      } else if (token && !mergedHeaders.Authorization && !looksLikeCredentialHeaderBundle(token)) {
         mergedHeaders = { ...mergedHeaders, Authorization: `Bearer ${token}` };
-      } else if (source.config.isAuthenticated) {
+      } else if (source.config.isAuthenticated && !mergedHeaders.Authorization) {
         // Source claims to be authenticated but token is missing - needs re-auth
         debug(`[SourceServerBuilder] Source ${source.config.slug} needs re-authentication`);
         return null;
@@ -323,17 +334,17 @@ export class SourceServerBuilder {
     const apiServers: Record<string, ReturnType<typeof createSdkMcpServer>> = {};
     const errors: BuiltServers['errors'] = [];
 
-    for (const { source, token, credential } of sourcesWithCredentials) {
+    for (const { source, token, credential, ssoIdToken } of sourcesWithCredentials) {
       if (!isSourceUsable(source)) continue;
 
       try {
         if (source.config.type === 'mcp') {
-          const config = this.buildMcpServer(source, token ?? null, credential);
+          const config = this.buildMcpServer(source, token ?? null, credential, ssoIdToken);
           if (config) {
             debug(`[SourceServerBuilder] Built MCP server for ${source.config.slug}`);
             mcpServers[source.config.slug] = config;
           } else if (source.config.mcp?.transport !== 'stdio' && source.config.mcp?.authType !== 'none') {
-            // Only report auth error for HTTP/SSE sources that need auth
+            // Only report auth error for Streamable HTTP sources that need auth
             // Stdio sources don't need auth
             debug(`[SourceServerBuilder] MCP server ${source.config.slug} needs auth`);
             errors.push({
@@ -374,6 +385,21 @@ export class SourceServerBuilder {
  */
 export function normalizeMcpUrl(url: string): string {
   return url.replace(/\/+$/, '');
+}
+
+function looksLikeCredentialHeaderBundle(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{')) return false;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      Object.values(parsed).every((item) => typeof item === 'string')
+    );
+  } catch {
+    return false;
+  }
 }
 
 // Singleton instance

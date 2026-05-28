@@ -1,9 +1,8 @@
-// Load user's shell environment first (before other imports that may use env)
-// This ensures tools like Homebrew, nvm, etc. are available to the agent
-import { loadShellEnv } from './shell-env'
-loadShellEnv()
-
+// Load .env and shell environment before anything else reads process.env
+import { loadDotEnv, loadShellEnv } from './shell-env'
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
+loadDotEnv(app.getAppPath())
+loadShellEnv()
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
@@ -67,12 +66,13 @@ setupI18n()
 const machineId = createHash('sha256').update(hostname() + homedir()).digest('hex').slice(0, 16)
 Sentry.setUser({ id: machineId })
 
-import { join, delimiter } from 'path'
+import { join, delimiter, resolve } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { handleSsoCallback } from '@craft-agent/server-core/handlers/rpc/sso'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
 import { registerAllRpcHandlers } from './handlers/index'
-import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
+import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient, cleanupWorkspaceFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
 import type { PlatformServices } from '../runtime/platform'
 import { createElectronPlatform } from './platform'
 import type { HandlerDeps } from './handlers/handler-deps'
@@ -94,6 +94,7 @@ import { setBundledAssetsRoot } from '@craft-agent/shared/utils'
 import { initializeBackendHostRuntime } from '@craft-agent/shared/agent/backend'
 import { setPowerShellValidatorRoot } from '@craft-agent/shared/agent'
 import { handleDeepLink } from './deep-link'
+import { getDeepLinkScheme } from './deep-link-scheme'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
@@ -102,7 +103,7 @@ import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
 import { getPiModelsForAuthProvider, getAllPiModels } from '@craft-agent/shared/config'
 import { initNotificationService, initBadgeIcon, initInstanceBadge, updateBadgeCount } from './notifications'
-import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating, setBeforeUpdateQuitHook } from './auto-update'
+import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating, setBeforeUpdateQuitHook, startAppUpdateRoutine } from './auto-update'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
 
@@ -147,6 +148,13 @@ if (isDebugMode) {
     process.env.CRAFT_BUN = bunBinary
   }
 
+  // RTK bundled binary — takes priority over any user-installed rtk on PATH.
+  // rtk-detector.ts reads CRAFT_RTK before falling back to which/where.
+  const rtkBinary = join(uvPlatformDir, process.platform === 'win32' ? 'rtk.exe' : 'rtk')
+  if (existsSync(rtkBinary)) {
+    process.env.CRAFT_RTK = rtkBinary
+  }
+
   process.env.CRAFT_SCRIPTS = scriptsDir
   process.env.CRAFT_COMMANDS_ENTRY = app.isPackaged
     ? join(app.getAppPath(), 'packages', 'craft-agents-commands', 'src', 'main.ts')
@@ -182,9 +190,9 @@ registerPiModelResolver((piAuthProvider) =>
   piAuthProvider ? getPiModelsForAuthProvider(piAuthProvider) : getAllPiModels()
 )
 
-// Custom URL scheme for deeplinks (e.g., craftagents://auth-complete)
-// Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (craftagents1, craftagents2, etc.)
-const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'
+// Custom URL scheme for deeplinks (e.g., mdp://auth-complete)
+// Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (mdp1, mdp2, etc.)
+const DEEPLINK_SCHEME = getDeepLinkScheme()
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
@@ -192,6 +200,11 @@ let browserPaneManager: BrowserPaneManager | null = null
 let oauthFlowStore: OAuthFlowStore | null = null
 let moduleSink: EventSink | null = null
 let moduleClientResolver: ((webContentsId: number) => string | undefined) | null = null
+
+const handleDeepLinkSsoCallback = (code: string, state?: string) => {
+  const payload = { code, state }
+  return handleSsoCallback(payload)
+}
 
 // Messaging gateway: the bootstrap handle is created once sessionManager is
 // available (inside createHandlerDeps) and populated with the WS publisher
@@ -204,15 +217,15 @@ let messagingHandle: MessagingBootstrapHandle | null = null
 let pendingDeepLink: string | null = null
 
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
-// Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Craft Agents [1]")
-app.setName(process.env.CRAFT_APP_NAME || 'Craft Agents')
+// Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "MDP [1]")
+app.setName(process.env.CRAFT_APP_NAME || 'MDP')
 
-// Register as default protocol client for craftagents:// URLs
+// Register as default protocol client for mdp:// URLs
 // This must be done before app.whenReady() on some platforms
 if (process.defaultApp) {
   // Development mode: need to pass the app path
   if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient(DEEPLINK_SCHEME, process.execPath, [process.argv[1]])
+    app.setAsDefaultProtocolClient(DEEPLINK_SCHEME, process.execPath, [resolve(process.argv[1])])
   }
 } else {
   // Production mode
@@ -270,7 +283,11 @@ app.on('open-url', (event, url) => {
   mainLog.info('Received deeplink:', url)
 
   if (windowManager) {
-    handleDeepLink(url, windowManager, moduleSink ?? undefined, moduleClientResolver ?? undefined).catch(err => {
+    handleDeepLink(url, windowManager, {
+      sink: moduleSink ?? undefined,
+      resolveClientId: moduleClientResolver ?? undefined,
+      handleSsoCallback: handleDeepLinkSsoCallback,
+    }).catch(err => {
       mainLog.error('Failed to handle deep link:', err)
     })
   } else {
@@ -288,19 +305,23 @@ if (!gotTheLock) {
     // Someone tried to run a second instance, we should focus our window.
     // On Windows/Linux, the deeplink is in commandLine
     const url = commandLine.find(arg => arg.startsWith(`${DEEPLINK_SCHEME}://`))
-    if (url && windowManager) {
-      mainLog.info('Received deeplink from second instance:', url)
-      handleDeepLink(url, windowManager, moduleSink ?? undefined, moduleClientResolver ?? undefined).catch(err => {
-        mainLog.error('Failed to handle deep link:', err)
-      })
-    } else if (windowManager) {
-      // No deep link - just focus the first window
+    if (windowManager) {
       const windows = windowManager.getAllWindows()
       if (windows.length > 0) {
         const win = windows[0].window
         if (win.isMinimized()) win.restore()
         win.focus()
       }
+    }
+    if (url && windowManager) {
+      mainLog.info('Received deeplink from second instance:', url)
+      handleDeepLink(url, windowManager, {
+        sink: moduleSink ?? undefined,
+        resolveClientId: moduleClientResolver ?? undefined,
+        handleSsoCallback: handleDeepLinkSsoCallback,
+      }).catch(err => {
+        mainLog.error('Failed to handle deep link:', err)
+      })
     }
   })
 }
@@ -388,10 +409,10 @@ app.whenReady().then(async () => {
   // Ensure default permissions file exists (copies bundled default.json on first run)
   ensureDefaultPermissions()
 
-  // Seed tool icons to ~/.craft-agent/tool-icons/ (copies bundled SVGs on first run)
+  // Seed tool icons to ~/.mdp-agent/tool-icons/ (copies bundled SVGs on first run)
   ensureToolIcons()
 
-  // Seed preset themes to ~/.craft-agent/themes/ (copies bundled theme JSONs on first run)
+  // Seed preset themes to ~/.mdp-agent/themes/ (copies bundled theme JSONs on first run)
   ensurePresetThemes()
 
   // Register thumbnail:// protocol handler (scheme was registered earlier, before app.whenReady)
@@ -645,25 +666,14 @@ app.whenReady().then(async () => {
             sessionManager: sm,
             credentialManager: getCredentialManager(),
             getMessagingDir: (wsId: string) =>
-              join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+              join(homedir(), '.mdp-agent', 'workspaces', wsId, 'messaging'),
             getLegacyMessagingDir: (wsId: string) => {
               const ws = getWorkspaces().find((w) => w.id === wsId)
               return ws ? join(ws.rootPath, 'messaging') : undefined
             },
             // Route messaging diagnostics through the dedicated messaging log
-            // at ~/.craft-agent/logs/messaging-gateway.log.
+            // at ~/.mdp-agent/logs/messaging-gateway.log.
             logger: messagingGatewayLog,
-            // WhatsApp worker runs under Electron's embedded Node via
-            // ELECTRON_RUN_AS_NODE (WhatsAppAdapter defaults nodeBin to
-            // process.execPath). In dev we resolve worker.cjs from the
-            // monorepo; in packaged builds it's shipped via extraResources
-            // (see apps/electron/electron-builder.yml).
-            whatsapp: {
-              workerEntry: app.isPackaged
-                ? join(process.resourcesPath, 'messaging-whatsapp-worker', 'worker.cjs')
-                : join(process.cwd(), 'packages', 'messaging-whatsapp-worker', 'dist', 'worker.cjs'),
-              pairingMode: 'qr',
-            },
           })
           return {
             sessionManager: sm,
@@ -703,6 +713,7 @@ app.whenReady().then(async () => {
             if (cId === clientId) { clientMap.delete(wcId); break }
           }
           cleanupSessionFileWatchForClient(clientId)
+          cleanupWorkspaceFileWatchForClient(clientId)
         },
       })
 
@@ -746,7 +757,11 @@ app.whenReady().then(async () => {
 
       // Remove workspace from config (cleanup stale entries)
       ipcMain.handle('workspace:remove', async (_event, workspaceId: string) => {
-        const { removeWorkspace: remove } = await import('@craft-agent/shared/config')
+        const { getWorkspaceByNameOrId, removeWorkspace: remove } = await import('@craft-agent/shared/config')
+        const workspace = getWorkspaceByNameOrId(workspaceId)
+        if (workspace) {
+          await instance.sessionManager.closeWorkspace(workspace.rootPath)
+        }
         return remove(workspaceId)
       })
 
@@ -1051,9 +1066,13 @@ app.whenReady().then(async () => {
     // window-state.json with an empty array.
     setBeforeUpdateQuitHook(() => captureAndSaveWindowState('pre-update'))
     if (app.isPackaged) {
-      checkForUpdatesOnLaunch().catch(err => {
-        mainLog.error('[auto-update] Launch check failed:', err)
-      })
+      checkForUpdatesOnLaunch()
+        .catch(err => {
+          mainLog.error('[auto-update] Launch check failed:', err)
+        })
+        .finally(() => {
+          startAppUpdateRoutine()
+        })
     } else {
       mainLog.info('[auto-update] Skipping auto-update in dev mode')
     }
@@ -1061,9 +1080,16 @@ app.whenReady().then(async () => {
     // Process pending deep link from cold start
     if (pendingDeepLink) {
       mainLog.info('Processing pending deep link:', pendingDeepLink)
-      await handleDeepLink(pendingDeepLink, windowManager, moduleSink ?? undefined, moduleClientResolver ?? undefined)
+      await handleDeepLink(pendingDeepLink, windowManager, {
+        sink: moduleSink ?? undefined,
+        resolveClientId: moduleClientResolver ?? undefined,
+        handleSsoCallback: handleDeepLinkSsoCallback,
+      })
       pendingDeepLink = null
     }
+
+    // Set up skill update scheduler: check on startup + daily at 10am
+    setupSkillUpdateScheduler(windowManager)
 
     mainLog.info('App initialized successfully')
     if (isDebugMode) {
@@ -1210,6 +1236,42 @@ app.on('before-quit', async (event) => {
     app.exit(0)
   }
 })
+
+// ─── Skill Update Scheduler ──────────────────────────────────────────────────
+
+/**
+ * Set up skill update triggers:
+ * 1. On app startup: send trigger to renderer once window is ready
+ * 2. Daily at 10:00am: check every minute, fire when hour=10 & minute=0
+ */
+function setupSkillUpdateScheduler(wm: WindowManager): void {
+  const channel = 'skills:triggerUpdateCheck'
+
+  // Startup trigger — send once the first window finishes loading
+  const sendToAllWindows = (reason: string) => {
+    for (const managed of wm.getAllWindows()) {
+      if (!managed.window.isDestroyed()) {
+        managed.window.webContents.send(channel, reason)
+      }
+    }
+  }
+
+  // Delay startup check slightly so renderer hydrates first
+  setTimeout(() => sendToAllWindows('startup'), 3000)
+
+  // Daily 10am trigger — check every 60s
+  let lastFiredDate = ''
+  setInterval(() => {
+    const now = new Date()
+    if (now.getHours() === 10 && now.getMinutes() === 0) {
+      const today = now.toDateString()
+      if (lastFiredDate !== today) {
+        lastFiredDate = today
+        sendToAllWindows('scheduled')
+      }
+    }
+  }, 60_000)
+}
 
 // Handle uncaught exceptions — forward to Sentry explicitly since registering
 // a custom handler can interfere with @sentry/electron's automatic capture.

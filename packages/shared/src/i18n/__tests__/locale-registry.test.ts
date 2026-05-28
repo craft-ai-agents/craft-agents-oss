@@ -90,29 +90,9 @@ describe("getDateLocale", () => {
     expect(locale.code).toBe("en-US");
   });
 
-  it("es resolves to Spanish", () => {
-    const locale = getDateLocale("es");
-    expect(locale.code).toBe("es");
-  });
-
   it("zh-Hans resolves to Simplified Chinese", () => {
     const locale = getDateLocale("zh-Hans");
     expect(locale.code).toBe("zh-CN");
-  });
-
-  it("hu resolves to Hungarian", () => {
-    const locale = getDateLocale("hu");
-    expect(locale.code).toBe("hu");
-  });
-
-  it("de resolves to German", () => {
-    const locale = getDateLocale("de");
-    expect(locale.code).toBe("de");
-  });
-
-  it("pl resolves to Polish", () => {
-    const locale = getDateLocale("pl");
-    expect(locale.code).toBe("pl");
   });
 
   it("unknown locale falls back to English", () => {

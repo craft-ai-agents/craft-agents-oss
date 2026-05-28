@@ -62,6 +62,12 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   // skills — local filesystem actions (guarded for remote)
   RPC_CHANNELS.skills.OPEN_EDITOR,
   RPC_CHANNELS.skills.OPEN_FINDER,
+  RPC_CHANNELS.skills.EXTRACT_ZIP,
+  RPC_CHANNELS.skills.INSTALL_LOCAL_ZIP,
+  RPC_CHANNELS.skills.TRIGGER_UPDATE_CHECK,
+  // Remote skill resolver runs on the local machine; discovered skills are
+  // installed separately via REMOTE_ELIGIBLE createSkill/forceWriteSkill.
+  RPC_CHANNELS.skills.RESOLVE_REMOTE,
 
   // system — local OS info
   RPC_CHANNELS.system.VERSIONS,
@@ -201,6 +207,12 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.onboarding.VALIDATE_MCP,
   RPC_CHANNELS.onboarding.START_MCP_OAUTH,
   RPC_CHANNELS.onboarding.DEFER_SETUP,
+  RPC_CHANNELS.sso.GET_SESSION,
+  RPC_CHANNELS.sso.REFRESH,
+  RPC_CHANNELS.sso.START_LOGIN,
+  RPC_CHANNELS.sso.HANDLE_CALLBACK,
+  RPC_CHANNELS.sso.LOGIN_RESULT,
+  RPC_CHANNELS.sso.LOGOUT,
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
   RPC_CHANNELS.settings.SET_NETWORK_PROXY,
 
@@ -255,6 +267,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.sessions.IMPORT,
   RPC_CHANNELS.sessions.EXPORT_REMOTE_TRANSFER,
   RPC_CHANNELS.sessions.IMPORT_REMOTE_TRANSFER,
+  RPC_CHANNELS.sessions.GET_TEAM_CONTEXT_OVERRIDE,
+  RPC_CHANNELS.sessions.SET_TEAM_CONTEXT_OVERRIDE,
 
   // transfer — chunked large-payload import (sessions, resources)
   RPC_CHANNELS.transfer.START,
@@ -290,37 +304,16 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.llmConnections.DELETE,
   RPC_CHANNELS.llmConnections.TEST,
   RPC_CHANNELS.llmConnections.SET_DEFAULT,
+  RPC_CHANNELS.llmConnections.SET_ENV_MID_STREAM_BEHAVIOR,
   RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT,
   RPC_CHANNELS.llmConnections.REFRESH_MODELS,
   RPC_CHANNELS.llmConnections.CHANGED,
 
-  // chatgpt — OAuth via capability passthrough
-  RPC_CHANNELS.chatgpt.START_OAUTH,
-  RPC_CHANNELS.chatgpt.COMPLETE_OAUTH,
-  RPC_CHANNELS.chatgpt.CANCEL_OAUTH,
-  RPC_CHANNELS.chatgpt.GET_AUTH_STATUS,
-  RPC_CHANNELS.chatgpt.LOGOUT,
-
-  // copilot — OAuth via capability passthrough
-  RPC_CHANNELS.copilot.START_OAUTH,
-  RPC_CHANNELS.copilot.CANCEL_OAUTH,
-  RPC_CHANNELS.copilot.GET_AUTH_STATUS,
-  RPC_CHANNELS.copilot.LOGOUT,
-  RPC_CHANNELS.copilot.DEVICE_CODE,
-
-  // Claude OAuth — runs on workspace server so credentials and connection config
-  // end up on the same server that will use them. Browser opening is client-side.
-  // (ChatGPT OAuth stays LOCAL_ONLY — requires localhost callback server.)
-  RPC_CHANNELS.onboarding.START_CLAUDE_OAUTH,
-  RPC_CHANNELS.onboarding.EXCHANGE_CLAUDE_CODE,
-  RPC_CHANNELS.onboarding.HAS_CLAUDE_OAUTH_STATE,
-  RPC_CHANNELS.onboarding.CLEAR_CLAUDE_OAUTH_STATE,
-
   // settings — workspace-level settings
   RPC_CHANNELS.settings.SETUP_LLM_CONNECTION,
   RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP,
-  RPC_CHANNELS.settings.GET_DEFAULT_THINKING_LEVEL,
-  RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL,
+  RPC_CHANNELS.settings.GET_DEFAULT_THINKING_ENABLED,
+  RPC_CHANNELS.settings.SET_DEFAULT_THINKING_ENABLED,
 
   // pi — provider config on workspace server
   RPC_CHANNELS.pi.GET_API_KEY_PROVIDERS,
@@ -340,12 +333,17 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // sources — source config per-workspace
   RPC_CHANNELS.sources.GET,
   RPC_CHANNELS.sources.CREATE,
+  RPC_CHANNELS.sources.UPDATE,
+  RPC_CHANNELS.sources.PARSE_MCP_JSON_IMPORT,
+  RPC_CHANNELS.sources.IMPORT_MCP_JSON_CANDIDATES,
   RPC_CHANNELS.sources.DELETE,
   RPC_CHANNELS.sources.START_OAUTH,
   RPC_CHANNELS.sources.SAVE_CREDENTIALS,
   RPC_CHANNELS.sources.CHANGED,
   RPC_CHANNELS.sources.GET_PERMISSIONS,
   RPC_CHANNELS.sources.GET_MCP_TOOLS,
+  RPC_CHANNELS.sources.REFRESH_MCP_TOOLS,
+  RPC_CHANNELS.sources.GENERATE_GUIDE,
 
   // oauth — OAuth state management
   RPC_CHANNELS.oauth.START,
@@ -353,20 +351,49 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.oauth.CANCEL,
   RPC_CHANNELS.oauth.REVOKE,
 
-  // workspace — workspace config + images (sharp on headless)
+  // workspace — workspace config + files/images (sharp on headless)
+  RPC_CHANNELS.workspace.GET_FILES,
+  RPC_CHANNELS.workspace.WATCH_FILES,
+  RPC_CHANNELS.workspace.UNWATCH_FILES,
+  RPC_CHANNELS.workspace.FILES_CHANGED,
   RPC_CHANNELS.workspace.GET_PERMISSIONS,
   RPC_CHANNELS.workspace.READ_IMAGE,
   RPC_CHANNELS.workspace.WRITE_IMAGE,
+  RPC_CHANNELS.workspace.GET_CHAT_FEEDBACK_STATE,
+  RPC_CHANNELS.workspace.SET_CHAT_FEEDBACK_STATE,
+  RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK_STATE,
+  RPC_CHANNELS.workspace.LIST_CHAT_FEEDBACK,
+  RPC_CHANNELS.workspace.ADD_CHAT_FEEDBACK,
+  RPC_CHANNELS.workspace.UPDATE_CHAT_FEEDBACK,
+  RPC_CHANNELS.workspace.DELETE_CHAT_FEEDBACK,
   RPC_CHANNELS.workspace.SETTINGS_GET,
   RPC_CHANNELS.workspace.SETTINGS_UPDATE,
 
   // permissions — workspace permissions
+  RPC_CHANNELS.permissions.CHECK_ADMIN,
   RPC_CHANNELS.permissions.GET_DEFAULTS,
   RPC_CHANNELS.permissions.DEFAULTS_CHANGED,
+  RPC_CHANNELS.permissions.MDP_LIST,
+  RPC_CHANNELS.permissions.MDP_SAVE_OR_UPDATE,
+  RPC_CHANNELS.permissions.MDP_DELETE,
 
   // skills — skill content per-workspace (not openEditor/openFinder which are local OS)
   RPC_CHANNELS.skills.GET,
   RPC_CHANNELS.skills.GET_FILES,
+  RPC_CHANNELS.skills.CREATE,
+  RPC_CHANNELS.skills.FORCE_WRITE,
+  RPC_CHANNELS.skills.INSTALL_MARKETPLACE,
+  RPC_CHANNELS.skills.UPDATE_MARKETPLACE,
+  RPC_CHANNELS.skills.PUBLISH_MARKETPLACE,
+  RPC_CHANNELS.skills.PUBLISH_DIRECT_MARKETPLACE,
+  RPC_CHANNELS.skills.LIST_MARKET,
+  RPC_CHANNELS.skills.UPLOAD_MARKET,
+  RPC_CHANNELS.skills.INSTALL_MARKET,
+  RPC_CHANNELS.skills.DELETE_MARKET,
+  RPC_CHANNELS.skills.FETCH_MARKET_CONTENT,
+  RPC_CHANNELS.skills.CHECK_MARKET_UPDATES,
+  RPC_CHANNELS.skills.UPDATE_MARKET_BATCH,
+  RPC_CHANNELS.skills.DEVOPS_AUTO_INSTALL,
   RPC_CHANNELS.skills.DELETE,
   RPC_CHANNELS.skills.CHANGED,
 
@@ -404,10 +431,25 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
 
   // git — workspace filesystem
   RPC_CHANNELS.git.GET_BRANCH,
+  RPC_CHANNELS.git.GET_LOG,
+  RPC_CHANNELS.git.GET_STATUS,
+  RPC_CHANNELS.git.GET_FILE_DIFF,
+  RPC_CHANNELS.git.GET_COMMIT_DETAIL,
 
   // resources — workspace resource export/import
   RPC_CHANNELS.resources.EXPORT,
   RPC_CHANNELS.resources.IMPORT,
+
+  // userProfile — server-side user profile refresh/read
+  RPC_CHANNELS.userProfile.REFRESH,
+  RPC_CHANNELS.userProfile.GET,
+
+  // teamPublicKnowledge — workspace-scoped team public knowledge cache
+  RPC_CHANNELS.teamPublicKnowledge.GET_CONFIG,
+  RPC_CHANNELS.teamPublicKnowledge.UPDATE_CONFIG,
+  RPC_CHANNELS.teamPublicKnowledge.REFRESH,
+  RPC_CHANNELS.teamPublicKnowledge.CHANGED,
+  RPC_CHANNELS.teamPublicKnowledge.GET_PREVIEW,
 
   // messaging — gateway channels run on workspace server
   RPC_CHANNELS.messaging.WA_REGISTER,

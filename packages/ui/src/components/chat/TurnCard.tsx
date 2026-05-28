@@ -4,6 +4,7 @@ import i18n from 'i18next'
 import { useTranslation } from 'react-i18next'
 import type { ToolDisplayMeta, AnnotationV1 } from '@craft-agent/core'
 import { normalizePath, pathStartsWith, stripPathPrefix } from '@craft-agent/core/utils'
+import { extractReasoningContent } from '@craft-agent/shared/reasoning'
 import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
 import { motion, AnimatePresence } from 'motion/react'
 import {
@@ -12,7 +13,6 @@ import {
   XCircle,
   Circle,
   MessageCircleDashed,
-  FileText,
   ArrowUpRight,
   Ban,
   Copy,
@@ -23,6 +23,8 @@ import {
   Pencil,
   FilePenLine,
   GitBranch,
+  ThumbsDown,
+  ThumbsUp,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
@@ -38,7 +40,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '../tooltip'
 import { parseDiffFromFile, type FileContents } from '@pierre/diffs'
 import { getDiffStats, getUnifiedDiffStats } from '../code-viewer'
 import { TurnCardActionsMenu } from './TurnCardActionsMenu'
-import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, shouldShowThinkingIndicator, type ActivityGroup, type AssistantTurn } from './turn-utils'
+import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, getThinkingBlockExpanded, type TurnPhase, type ActivityGroup, type AssistantTurn } from './turn-utils'
 import { extractAnnotationSelectedText } from './follow-up-helpers'
 import {
   formatAnnotationFollowUpTooltipText,
@@ -197,7 +199,7 @@ function computeEditWriteDiffStats(
 /** Shared size configuration for activity UI - exported for reuse in inline execution */
 export const SIZE_CONFIG = {
   /** Base font size class for all text */
-  fontSize: 'text-[13px]',
+  fontSize: 'text-[14px]',
   /** Icon size class (width and height) */
   iconSize: 'w-3 h-3',
   /** Spinner text size class */
@@ -211,6 +213,34 @@ export const SIZE_CONFIG = {
   /** Number of items before which we apply staggered animation */
   staggeredAnimationLimit: 10,
 } as const
+
+function FeedbackThumbIcon({
+  type,
+  active,
+}: {
+  type: 'like' | 'dislike'
+  active: boolean
+}) {
+  if (!active) {
+    const Icon = type === 'like' ? ThumbsUp : ThumbsDown
+    return <Icon className={SIZE_CONFIG.iconSize} />
+  }
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={cn(SIZE_CONFIG.iconSize, "shrink-0")}
+      fill="currentColor"
+    >
+      {type === 'like' ? (
+        <path d="M1 21h4V9H1v12Zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2Z" />
+      ) : (
+        <path d="M15 3H6c-.83 0-1.54.5-1.84 1.22L1.14 11.27c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.58-6.59c.37-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2Zm4 0v12h4V3h-4Z" />
+      )}
+    </svg>
+  )
+}
 
 // ============================================================================
 // Types
@@ -274,6 +304,8 @@ export interface ResponseContent {
   messageId?: string
   /** Persisted annotations attached to the response message */
   annotations?: AnnotationV1[]
+  /** Reasoning text extracted from thinking blocks or <think> tags, or null when absent */
+  reasoningText?: string | null
 }
 
 // ============================================================================
@@ -322,6 +354,10 @@ export interface TurnCardProps {
   onPopOut?: (text: string) => void
   /** Callback to open turn details in a new window */
   onOpenDetails?: () => void
+  /** Current feedback state for this assistant turn */
+  feedbackValue?: 'like' | 'dislike' | null
+  /** Callback when user selects like/dislike feedback */
+  onFeedback?: (value: 'like' | 'dislike') => void
   /** Callback to open individual activity details in Monaco */
   onOpenActivityDetails?: (activity: ActivityItem) => void
   /** Callback to open all edits/writes in multi-file diff view */
@@ -349,7 +385,7 @@ export interface TurnCardProps {
    *  Accept Plan dropdown when a plan is the last response. */
   compactMode?: boolean
   /** Callback to branch the session from a specific message */
-  onBranch?: (messageId: string, options?: { newPanel?: boolean }) => void
+  onBranch?: (messageId: string) => void
   /** Callback to add an annotation to a response message */
   onAddAnnotation?: (messageId: string, annotation: AnnotationV1) => void
   /** Callback to remove a persisted annotation from a response message */
@@ -386,7 +422,7 @@ const BUFFER_CONFIG = {
   MAX_BUFFER_MS: 2500,         // Never buffer longer than 2.5s
   TIMEOUT_MIN_WORDS: 5,        // Show on timeout if at least this many words
   HIGH_WORD_COUNT: 60,         // Show regardless of structure at this count
-  CONTENT_THROTTLE_MS: 300,    // Throttle content updates during streaming (perf optimization)
+  CONTENT_THROTTLE_MS: 50,     // Throttle content updates during streaming (perf optimization)
 } as const
 
 type BufferReason =
@@ -401,9 +437,14 @@ type BufferReason =
   | 'high_word_count'
   | 'buffering'
 
-/** Count words in text */
+const CJK_RE = /[一-鿿㐀-䶿぀-ヿ가-힯]/g
+
+/** Count content units in text. CJK characters each count as one unit (no spaces between words). */
 function countWords(text: string): number {
-  return text.trim().split(/\s+/).filter(w => w.length > 0).length
+  const cjkCount = (text.match(CJK_RE) ?? []).length
+  const stripped = text.replace(CJK_RE, ' ')
+  const latinCount = stripped.trim().split(/\s+/).filter(w => w.length > 0).length
+  return cjkCount + latinCount
 }
 
 /** Detect code blocks (fenced) */
@@ -423,8 +464,8 @@ function hasHeader(text: string): boolean {
 
 /** Detect structural content (sentences, paragraphs, etc) */
 function hasStructure(text: string): boolean {
-  // Sentence ending (period, exclamation, question mark, colon)
-  if (/[.!?:]\s*$/.test(text.trimEnd())) return true
+  // Sentence ending (ASCII or CJK fullwidth punctuation)
+  if (/[.!?:。！？：]\s*$/.test(text.trimEnd())) return true
   // Paragraph breaks
   if (/\n\s*\n/.test(text)) return true
   // Headers anywhere
@@ -436,7 +477,7 @@ function hasStructure(text: string): boolean {
 
 /** Detect if text ends with a question (AI asking for clarification) */
 function isQuestion(text: string): boolean {
-  return /\?\s*$/.test(text.trim())
+  return /[?？]\s*$/.test(text.trim())
 }
 
 /**
@@ -899,50 +940,60 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
   const depth = activity.depth || 0
 
   // Intermediate messages (LLM commentary) - render with dashed circle icon
-  // Show "Thinking" while streaming, stripped markdown content when complete
+  // Show spinner while streaming; strip <think> tags and show inline ThinkingBlock when complete
   if (activity.type === 'intermediate') {
     const isThinking = activity.status === 'running'
-    const displayContent = isThinking ? 'Thinking...' : stripMarkdown(activity.content || '')
     const isComplete = activity.status === 'completed'
+    const { reasoningText, cleanContent } = isThinking
+      ? { reasoningText: null, cleanContent: '' }
+      : extractReasoningContent({ content: activity.content || '' })
+    const displayContent = isThinking ? 'Thinking...' : stripMarkdown(cleanContent)
     return (
       <div className="flex items-stretch">
         <TreeViewConnector depth={depth} isLastChild={isLastChild} />
-        <div
-          className={cn(
-            "group/row flex items-center gap-2 py-0.5 text-foreground/75 flex-1 min-w-0",
-            SIZE_CONFIG.fontSize
-          )}
-          onClick={onOpenDetails && isComplete ? onOpenDetails : undefined}
-        >
-          {isThinking ? (
-            <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center shrink-0")}>
-              <Spinner className={SIZE_CONFIG.spinnerSize} />
-            </div>
-          ) : (
-            <MessageCircleDashed className={cn(SIZE_CONFIG.iconSize, "shrink-0")} />
-          )}
-          <span className={cn("truncate flex-1", onOpenDetails && isComplete && "group-hover/row:underline")}>{displayContent}</span>
-          {/* Open details button */}
-          {onOpenDetails && isComplete && (
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpenDetails()
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+        <div className="flex flex-col flex-1 min-w-0">
+          <div
+            className={cn(
+              "group/row flex items-center gap-2 py-0.5 text-foreground/75",
+              SIZE_CONFIG.fontSize
+            )}
+            onClick={onOpenDetails && isComplete ? onOpenDetails : undefined}
+          >
+            {isThinking ? (
+              <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center shrink-0")}>
+                <Spinner className={SIZE_CONFIG.spinnerSize} />
+              </div>
+            ) : (
+              <MessageCircleDashed className={cn(SIZE_CONFIG.iconSize, "shrink-0")} />
+            )}
+            <span className={cn("truncate flex-1", onOpenDetails && isComplete && "group-hover/row:underline")}>{displayContent}</span>
+            {/* Open details button */}
+            {onOpenDetails && isComplete && (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
                   e.stopPropagation()
                   onOpenDetails()
-                }
-              }}
-              className={cn(
-                "p-0.5 rounded-[3px] opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0",
-                "hover:bg-muted/80 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              )}
-            >
-              <ArrowUpRight className={SIZE_CONFIG.iconSize} />
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation()
+                    onOpenDetails()
+                  }
+                }}
+                className={cn(
+                  "p-0.5 rounded-[3px] opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0",
+                  "hover:bg-muted/80 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                )}
+              >
+                <ArrowUpRight className={SIZE_CONFIG.iconSize} />
+              </div>
+            )}
+          </div>
+          {isComplete && reasoningText && (
+            <div className="pb-1">
+              <ThinkingBlock reasoningText={reasoningText} />
             </div>
           )}
         </div>
@@ -1393,6 +1444,10 @@ export interface ResponseCardProps {
   onOpenUrl?: (url: string) => void
   /** Callback to open response in Monaco editor */
   onPopOut?: () => void
+  /** Current feedback state for this response */
+  feedbackValue?: 'like' | 'dislike' | null
+  /** Callback when user selects like/dislike feedback */
+  onFeedback?: (value: 'like' | 'dislike') => void
   /** Card variant - 'response' for AI messages, 'plan' for plan messages */
   variant?: 'response' | 'plan'
   /** Parent session ID (used to reset local annotation/island UI state on session switches) */
@@ -1413,7 +1468,7 @@ export interface ResponseCardProps {
    *  keeps the Accept Plan dropdown when a plan is the last response. */
   compactMode?: boolean
   /** Callback to branch the session from this response */
-  onBranch?: (options?: { newPanel?: boolean }) => void
+  onBranch?: () => void
   /** Callback to add annotation from selected text */
   onAddAnnotation?: (messageId: string, annotation: AnnotationV1) => void
   /** Callback to remove persisted annotation */
@@ -1433,14 +1488,11 @@ export interface ResponseCardProps {
 }
 
 interface BranchDropdownProps {
-  onBranch: (options?: { newPanel?: boolean }) => void
+  onBranch: () => void
 }
 
 function BranchDropdown({ onBranch }: BranchDropdownProps) {
   const { t } = useTranslation()
-  const handleBranchClick = () => {
-    onBranch({ newPanel: true })
-  }
 
   return (
     <DropdownMenu>
@@ -1461,10 +1513,10 @@ function BranchDropdown({ onBranch }: BranchDropdownProps) {
       </DropdownMenuTrigger>
 
       <StyledDropdownMenuContent align="end" minWidth="min-w-64" sideOffset={6}>
-        <StyledDropdownMenuItem onClick={handleBranchClick} className="items-start py-2">
+        <StyledDropdownMenuItem onClick={onBranch} className="items-start py-2">
           <div className="flex flex-col gap-0.5">
-            <span className="text-[13px] leading-tight">{t('chat.branchFromThisMessage')}</span>
-            <span className="max-w-[220px] whitespace-normal text-xs leading-tight text-muted-foreground">
+            <span className="text-[14px] leading-tight">{t('chat.branchFromThisMessage')}</span>
+            <span className="max-w-[220px] whitespace-normal text-sm leading-tight text-muted-foreground">
               {t('chat.branchFromThisMessageDescription')}
             </span>
           </div>
@@ -1645,13 +1697,26 @@ function applyTextHighlightRange(
  * on every character. Content updates every 300ms during streaming, avoiding
  * expensive markdown parsing on every delta.
  */
-export function ResponseCard({
+export function ResponseCard(props: ResponseCardProps) {
+  const variant = props.variant ?? 'response'
+  const hasVisibleText = props.text.trim().length > 0
+
+  if (variant === 'response' && !hasVisibleText) {
+    return null
+  }
+
+  return <ResponseCardContent {...props} />
+}
+
+function ResponseCardContent({
   text,
   isStreaming,
   streamStartTime,
   onOpenFile,
   onOpenUrl,
   onPopOut,
+  feedbackValue,
+  onFeedback,
   variant = 'response',
   sessionId,
   messageId,
@@ -2459,7 +2524,7 @@ export function ResponseCard({
             data-search-root="response"
             onMouseDown={handleSelectionPointerDown}
             onMouseUp={handleTextSelection}
-            className="pl-[22px] pr-[16px] py-3 text-sm overflow-y-auto scrollbar-hover"
+            className="pl-[22px] pr-[16px] py-3 text-base overflow-y-auto scrollbar-hover"
             style={{
               maxHeight: MAX_HEIGHT,
               // Subtle fade at top and bottom edges (16px) - only in dark mode for better contrast
@@ -2510,18 +2575,37 @@ export function ResponseCard({
                     </>
                   )}
                 </button>
-                {onPopOut && (
-                  <button
-                    onClick={onPopOut}
-                    className={cn(
-                      "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
-                      "text-muted-foreground hover:text-foreground",
-                      "focus:outline-none focus-visible:underline"
-                    )}
-                  >
-                    <FileText className={SIZE_CONFIG.iconSize} />
-                    <span>Markdown</span>
-                  </button>
+                {onFeedback && (
+                  <>
+                    <button
+                      type="button"
+                      aria-pressed={feedbackValue === 'like'}
+                      aria-label="点赞"
+                      onClick={() => onFeedback('like')}
+                      className={cn(
+                        "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
+                        feedbackValue === 'like' ? "text-blue-500" : "text-muted-foreground hover:text-foreground",
+                        "focus:outline-none focus-visible:underline"
+                      )}
+                    >
+                      <FeedbackThumbIcon type="like" active={feedbackValue === 'like'} />
+                      <span>点赞</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={feedbackValue === 'dislike'}
+                      aria-label="点踩"
+                      onClick={() => onFeedback('dislike')}
+                      className={cn(
+                        "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
+                        feedbackValue === 'dislike' ? "text-blue-500" : "text-muted-foreground hover:text-foreground",
+                        "focus:outline-none focus-visible:underline"
+                      )}
+                    >
+                      <FeedbackThumbIcon type="dislike" active={feedbackValue === 'dislike'} />
+                      <span>点踩</span>
+                    </button>
+                  </>
                 )}
               </div>
 
@@ -2605,7 +2689,7 @@ export function ResponseCard({
           data-search-root="response"
           onMouseDown={handleSelectionPointerDown}
           onMouseUp={handleTextSelection}
-          className="pl-[22px] pr-4 py-3 text-sm overflow-y-auto scrollbar-hover"
+          className="pl-[22px] pr-4 py-3 text-base overflow-y-auto scrollbar-hover"
           style={{
             maxHeight: MAX_HEIGHT,
             // Subtle fade at top and bottom edges (16px) - only in dark mode for better contrast
@@ -2721,6 +2805,71 @@ function TodoList({ todos }: TodoListProps) {
 }
 
 // ============================================================================
+// ThinkingBlock Component
+// ============================================================================
+
+/**
+ * Displays the model's reasoning text with expand/collapse behaviour.
+ *
+ * - When phase/isBuffering are provided (turn-level): auto-expands while reasoning is
+ *   in progress, auto-collapses when the first response text becomes visible.
+ * - When phase/isBuffering are omitted (intermediate activity inline use): starts collapsed.
+ * - Stays mounted once reasoning text first appears to prevent flicker across streaming ticks.
+ */
+function ThinkingBlock({
+  reasoningText,
+  phase,
+  isBuffering,
+}: {
+  reasoningText: string | null
+  phase?: TurnPhase
+  isBuffering?: boolean
+}) {
+  const { t } = useTranslation()
+  const shouldAutoExpand = phase !== undefined ? getThinkingBlockExpanded(phase, isBuffering ?? false) : false
+  const [expanded, setExpanded] = useState(shouldAutoExpand)
+
+  // Track whether we've ever had reasoning text so we don't unmount once shown
+  const hasEverHadReasoningRef = useRef(false)
+  if (reasoningText) hasEverHadReasoningRef.current = true
+
+  const prevAutoExpandRef = useRef(shouldAutoExpand)
+  useEffect(() => {
+    if (prevAutoExpandRef.current && !shouldAutoExpand) {
+      setExpanded(false)
+    }
+    prevAutoExpandRef.current = shouldAutoExpand
+  }, [shouldAutoExpand])
+
+  if (!reasoningText && !hasEverHadReasoningRef.current) return null
+
+  const headerButtonClass = "flex items-center gap-1.5 w-full px-3 py-1.5 text-left text-muted-foreground hover:bg-muted/40 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+
+  return (
+    <div className={cn("rounded-[8px] border border-border/50 overflow-hidden", SIZE_CONFIG.fontSize)}>
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className={headerButtonClass}
+      >
+        <motion.div
+          initial={false}
+          animate={{ rotate: expanded ? 90 : 0 }}
+          className="flex items-center justify-center shrink-0"
+        >
+          <ChevronRight className={SIZE_CONFIG.iconSize} />
+        </motion.div>
+        <span>{t('chat.reasoning')}</span>
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 pt-0.5 text-muted-foreground/80 whitespace-pre-wrap break-words">
+          {reasoningText}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
 // Main Component
 // ============================================================================
 
@@ -2750,6 +2899,8 @@ export const TurnCard = React.memo(function TurnCard({
   onOpenUrl,
   onPopOut,
   onOpenDetails,
+  feedbackValue,
+  onFeedback,
   onOpenActivityDetails,
   onOpenMultiFileDiff,
   hasEditOrWriteActivities,
@@ -2841,10 +2992,13 @@ export const TurnCard = React.memo(function TurnCard({
 
   // Check if response is in buffering state
   // No polling needed - parent updates trigger re-evaluation naturally
-  const isBuffering = useMemo(
-    () => isResponseBuffering(response),
-    [response]
-  )
+  const isBuffering = useMemo(() => {
+    if (!isResponseBuffering(response)) return false
+    // When thinking has finished and response text arrived, skip buffering entirely.
+    // The ThinkingBlock was the visual placeholder; ResponseCard should appear immediately.
+    if (response?.reasoningText && response?.text) return false
+    return true
+  }, [response])
 
 
   // Compute preview text with cross-fade animation
@@ -2921,11 +3075,6 @@ export const TurnCard = React.memo(function TurnCard({
 
   // Only count non-plan activities for the collapsible section
   const hasActivities = sortedActivities.length > 0
-
-  // Determine if thinking indicator should show using the phase-based state machine.
-  // This properly handles the "gap" state (awaiting) between tool completion and next action,
-  // which was previously causing the turn card to "disappear".
-  const isThinking = shouldShowThinkingIndicator(turnPhase, isBuffering)
 
   return (
     <div className="space-y-1">
@@ -3070,23 +3219,6 @@ export const TurnCard = React.memo(function TurnCard({
                       </motion.div>
                     ))
                   )}
-                  {/* Thinking/Buffering indicator - shown while waiting for response */}
-                  {isThinking && !animateResponse && (
-                    <motion.div
-                      key="thinking"
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{
-                        delay: Math.min(sortedActivities.length, SIZE_CONFIG.staggeredAnimationLimit) * 0.03,
-                        duration: 0.3,
-                        ease: "easeOut"
-                      }}
-                      className={cn("flex items-center gap-2 py-0.5 text-muted-foreground/70", SIZE_CONFIG.fontSize)}
-                    >
-                      <Spinner className={SIZE_CONFIG.spinnerSize} />
-                      <span>{isBuffering ? 'Preparing response...' : 'Thinking...'}</span>
-                    </motion.div>
-                  )}
                   </AnimatePresence>
                 </div>
                 {/* TodoList - inside expanded section */}
@@ -3099,12 +3231,13 @@ export const TurnCard = React.memo(function TurnCard({
         </div>
       )}
 
-      {/* Standalone thinking indicator - when no activities but still working */}
-      {!hasActivities && isThinking && !animateResponse && (
-        <div className={cn("flex items-center gap-2 px-3 py-1.5 text-muted-foreground", SIZE_CONFIG.fontSize)}>
-          <Spinner className={SIZE_CONFIG.spinnerSize} />
-          <span>{isBuffering ? 'Preparing response...' : 'Thinking...'}</span>
-        </div>
+      {/* ThinkingBlock - reasoning display when model produces reasoning text */}
+      {!animateResponse && (
+        <ThinkingBlock
+          reasoningText={response?.reasoningText ?? null}
+          phase={turnPhase}
+          isBuffering={isBuffering}
+        />
       )}
 
       {/* Plan Activities - rendered as full ResponseCards, time-sorted with other activities */}
@@ -3128,7 +3261,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse && index === planActivities.length - 1}
             compactMode={compactMode}
-            onBranch={onBranch ? (options?: { newPanel?: boolean }) => onBranch(planActivity.messageId ?? planActivity.id, options) : undefined}
+            onBranch={onBranch ? () => onBranch(planActivity.messageId ?? planActivity.id) : undefined}
             sendMessageKey={sendMessageKey}
             hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
             openAnnotationRequest={openAnnotationRequest}
@@ -3157,6 +3290,8 @@ export const TurnCard = React.memo(function TurnCard({
                 onOpenUrl={onOpenUrl}
                 onPopOut={onPopOut ? () => onPopOut(response.text) : undefined}
                 variant={response.isPlan ? 'plan' : 'response'}
+                feedbackValue={response.isPlan ? undefined : feedbackValue}
+                onFeedback={response.isPlan ? undefined : onFeedback}
                 messageId={response.messageId}
                 annotations={response.annotations}
                 onAddAnnotation={onAddAnnotation}
@@ -3167,7 +3302,7 @@ export const TurnCard = React.memo(function TurnCard({
                 onAcceptWithCompact={onAcceptPlanWithCompact}
                 isLastResponse={isLastResponse}
                 compactMode={compactMode}
-                onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
+                onBranch={onBranch && response.messageId ? () => onBranch(response.messageId!) : undefined}
                 sendMessageKey={sendMessageKey}
                 hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
                 openAnnotationRequest={openAnnotationRequest}
@@ -3189,6 +3324,8 @@ export const TurnCard = React.memo(function TurnCard({
             onOpenUrl={onOpenUrl}
             onPopOut={onPopOut ? () => onPopOut(response.text) : undefined}
             variant={response.isPlan ? 'plan' : 'response'}
+            feedbackValue={response.isPlan ? undefined : feedbackValue}
+            onFeedback={response.isPlan ? undefined : onFeedback}
             messageId={response.messageId}
             annotations={response.annotations}
             onAddAnnotation={onAddAnnotation}
@@ -3199,7 +3336,7 @@ export const TurnCard = React.memo(function TurnCard({
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse}
             compactMode={compactMode}
-            onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
+            onBranch={onBranch && response.messageId ? () => onBranch(response.messageId!) : undefined}
             sendMessageKey={sendMessageKey}
             hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
             openAnnotationRequest={openAnnotationRequest}
@@ -3246,6 +3383,9 @@ export const TurnCard = React.memo(function TurnCard({
 
   // Re-render when active follow-up annotation state changes (plan CTA label)
   if (prev.hasActiveFollowUpAnnotations !== next.hasActiveFollowUpAnnotations) return false
+
+  // Re-render when response feedback state changes
+  if (prev.feedbackValue !== next.feedbackValue) return false
 
   // For complete, non-streaming turns: skip re-render only when both
   // session and turn identities match. Prevents stale local UI state from

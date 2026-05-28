@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { CHAT_LAYOUT } from '@/config/layout'
-import { flattenLabels, type LabelConfig } from '@craft-agent/shared/labels'
+import type { LabelConfig } from '@craft-agent/shared/labels'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import type { SessionStatus } from '@/config/session-status-config'
 import type { BackgroundTask } from '../ActiveTasksBar'
@@ -48,7 +48,6 @@ export function ChatInputZone({
   className,
   inputProps,
 }: ChatInputZoneProps) {
-  const [autoOpenLabelId, setAutoOpenLabelId] = React.useState<string | null>(null)
   const shouldShowOptionBadges = showOptionBadges ?? !compactMode
   const inputResetKey = `${sessionId}::${inputProps.structuredInput?.type ?? 'freeform'}`
 
@@ -56,18 +55,6 @@ export function ChatInputZone({
     inputProps.onInputChange?.('')
     inputProps.onAttachmentsChange?.([])
   }, [inputProps])
-
-  const handleLabelAdd = React.useCallback((labelId: string) => {
-    const current = sessionLabels || []
-    if (current.includes(labelId)) return
-
-    onLabelsChange?.([...current, labelId])
-
-    const config = flattenLabels(labels || []).find(label => label.id === labelId)
-    if (config?.valueType) {
-      setAutoOpenLabelId(labelId)
-    }
-  }, [labels, onLabelsChange, sessionLabels])
 
   return (
     <div className={cn(
@@ -92,8 +79,6 @@ export function ChatInputZone({
             const next = (sessionLabels || []).filter(entry => entry !== labelId && !entry.startsWith(`${labelId}::`))
             onLabelsChange?.(next)
           }}
-          autoOpenLabelId={autoOpenLabelId}
-          onAutoOpenConsumed={() => setAutoOpenLabelId(null)}
           sessionStatuses={sessionStatuses}
           currentSessionStatus={currentSessionStatus}
           onSessionStatusChange={onSessionStatusChange}
@@ -110,12 +95,8 @@ export function ChatInputZone({
           compactMode={compactMode}
           permissionMode={permissionMode}
           onPermissionModeChange={onPermissionModeChange}
-          labels={labels}
-          sessionLabels={sessionLabels}
-          onLabelAdd={handleLabelAdd}
           sessionFolderPath={sessionFolderPath}
           sessionId={sessionId}
-          currentSessionStatus={currentSessionStatus}
         />
       </InputErrorBoundary>
     </div>

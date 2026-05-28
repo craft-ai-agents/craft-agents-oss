@@ -15,7 +15,7 @@ import type {
   PermissionRequest as BasePermissionRequest,
 } from '@craft-agent/core/types'
 import type { PermissionMode } from '../agent/mode-types'
-import type { ThinkingLevel } from '../agent/thinking-levels'
+import type { ThinkingEnabled } from '../agent/thinking-toggle'
 import type { CustomEndpointConfig } from '../config/llm-connections'
 import type {
   AuthRequest as SharedAuthRequest,
@@ -73,7 +73,7 @@ export interface Session {
   sharedId?: string
   model?: string
   llmConnection?: string
-  thinkingLevel?: ThinkingLevel
+  thinkingEnabled?: ThinkingEnabled
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   lastFinalMessageId?: string
   isAsyncOperationOngoing?: boolean
@@ -101,18 +101,19 @@ export interface Session {
   isArchived?: boolean
   archivedAt?: number
   supportsBranching?: boolean
+  teamContextDisabled?: boolean
 }
 
 export interface CreateSessionOptions {
   name?: string
   permissionMode?: PermissionMode
   /**
-   * Reasoning/thinking level override. When set, takes precedence over workspace
+   * Reasoning/thinking toggle override. When set, takes precedence over workspace
    * and global defaults. Silently ignored by the underlying SDK on non-reasoning
    * models (e.g. gpt-4o) — provider drivers don't attach the reasoning param to
    * the API request for models with `reasoning: false` in the Pi SDK catalog.
    */
-  thinkingLevel?: ThinkingLevel
+  thinkingEnabled?: ThinkingEnabled
   /**
    * Working directory for the session:
    * - 'user_default' or undefined: Use workspace's configured default working directory
@@ -171,6 +172,7 @@ export type SessionEvent =
   | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string; turnId?: string; parentToolUseId?: string; isError?: boolean; timestamp?: number }
   | { type: 'error'; sessionId: string; error: string; timestamp?: number }
   | { type: 'typed_error'; sessionId: string; error: TypedError; timestamp?: number }
+  | { type: 'sso_token_expired'; sessionId: string }
   | { type: 'complete'; sessionId: string; tokenUsage?: Session['tokenUsage']; hasUnread?: boolean }
   | { type: 'interrupted'; sessionId: string; message?: Message; queuedMessages?: string[] }
   | { type: 'status'; sessionId: string; message: string; statusType?: 'compacting' }
@@ -209,6 +211,7 @@ export type SessionEvent =
   | { type: 'usage_update'; sessionId: string; tokenUsage: { inputTokens: number; contextWindow?: number } }
   | { type: 'message_annotations_updated'; sessionId: string; messageId: string; annotations: AnnotationV1[] }
   | { type: 'working_directory_error'; sessionId: string; error: string }
+  | { type: 'session_team_context_override_changed'; sessionId: string; disabled: boolean }
 
 export interface SendMessageOptions {
   skillSlugs?: string[]
@@ -231,7 +234,7 @@ export type SessionCommand =
   | { type: 'markUnread' }
   | { type: 'setActiveViewing'; workspaceId: string }
   | { type: 'setPermissionMode'; mode: PermissionMode }
-  | { type: 'setThinkingLevel'; level: ThinkingLevel }
+  | { type: 'setThinkingEnabled'; enabled: ThinkingEnabled }
   | { type: 'updateWorkingDirectory'; dir: string }
   | { type: 'setSources'; sourceSlugs: string[] }
   | { type: 'setLabels'; labels: string[] }
@@ -372,6 +375,7 @@ export interface TestLlmConnectionParams {
   baseUrl?: string
   model?: string
   piAuthProvider?: string
+  providerType?: 'openllm'
   /** Optional custom endpoint protocol hint so setup tests mirror runtime routing */
   customEndpoint?: CustomEndpointConfig
 }
@@ -485,6 +489,32 @@ export interface GitBashStatus {
   platform: 'win32' | 'darwin' | 'linux'
 }
 
+export type GitFileChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed'
+
+export interface GitFileChange {
+  path: string
+  additions: number
+  deletions: number
+  status: GitFileChangeStatus
+  diff?: string
+}
+
+export type GitStatusEntryStatus = 'modified' | 'staged' | 'untracked' | 'deleted'
+
+export interface GitStatusEntry {
+  path: string
+  status: GitStatusEntryStatus
+}
+
+export interface GitCommit {
+  hash: string
+  shortHash: string
+  message: string
+  author: string
+  date: string
+  filesChanged: GitFileChange[]
+}
+
 export interface UpdateInfo {
   available: boolean
   currentVersion: string
@@ -503,11 +533,49 @@ export interface WorkspaceSettings {
   model?: string
   permissionMode?: PermissionMode
   cyclablePermissionModes?: PermissionMode[]
-  thinkingLevel?: ThinkingLevel
+  thinkingEnabled?: ThinkingEnabled
   workingDirectory?: string
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
   enabledSourceSlugs?: string[]
+  /** Whether team public knowledge is enabled for this workspace. */
+  teamPublicKnowledgeEnabled?: boolean
+  /** Number of configured team public knowledge documents. */
+  teamPublicKnowledgeDocumentsCount?: number
+}
+
+// ---------------------------------------------------------------------------
+// Team context preview types
+// ---------------------------------------------------------------------------
+
+export interface TeamContextPreviewTriggerTerm {
+  term: string
+  kind: string
+  priority: number
+}
+
+export interface TeamContextPrefetchPreview {
+  term: string
+  kind: string
+  summary: string
+  excerpt?: string
+  confidence: number
+  relevance: string
+  source: string
+  updatedAt: number
+}
+
+export interface TeamContextPreview {
+  /** Whether team public knowledge is enabled in workspace config. */
+  enabled: boolean
+  /** Number of cached documents. */
+  documentsCount: number
+  /** Formatted policy XML block, if available. */
+  policyXml?: string
+  /** Extracted trigger terms. */
+  triggerTerms: TeamContextPreviewTriggerTerm[]
+  /** Sample prefetch results for a given term, if available. */
+  prefetchResults?: TeamContextPrefetchPreview[]
 }
 
 // ---------------------------------------------------------------------------
@@ -525,7 +593,7 @@ export interface ClaudeOAuthResult {
 // ---------------------------------------------------------------------------
 
 export type TestAutomationAction =
-  | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
+  | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingEnabled?: ThinkingEnabled }
   | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string>; bodyFormat?: 'json' | 'form' | 'raw'; body?: unknown; captureResponse?: boolean; auth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string } }
 
 export interface TestAutomationPayload {

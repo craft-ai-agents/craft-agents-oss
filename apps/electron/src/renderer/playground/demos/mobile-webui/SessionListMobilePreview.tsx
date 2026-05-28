@@ -4,7 +4,6 @@ import { MobileWebUIFrame, type MobileDevice } from './MobileWebUIFrame'
 import { MobilePlaygroundProviders } from './MobilePlaygroundProviders'
 import {
   MOCK_SESSIONS,
-  MOCK_LABELS,
   MOCK_SESSION_STATUSES,
   MOBILE_WORKSPACE_ID,
 } from './mock-mobile-data'
@@ -62,7 +61,6 @@ export function SessionListMobilePreview({
             onSessionStatusChange={log('onSessionStatusChange')}
             onRename={log('onRename')}
             onFocusChatInput={log('onFocusChatInput')}
-            onSessionSelect={log('onSessionSelect')}
             onOpenInNewWindow={log('onOpenInNewWindow')}
             onNavigateToView={log('onNavigateToView')}
             searchActive={searchActive}
@@ -70,8 +68,6 @@ export function SessionListMobilePreview({
             onSearchChange={setQuery}
             onSearchClose={() => setQuery('')}
             sessionStatuses={MOCK_SESSION_STATUSES}
-            labels={MOCK_LABELS}
-            onLabelsChange={log('onLabelsChange')}
             groupingMode={groupingMode}
             workspaceId={MOBILE_WORKSPACE_ID}
           />

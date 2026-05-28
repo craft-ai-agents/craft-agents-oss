@@ -1,0 +1,565 @@
+import { createHash } from 'crypto'
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs'
+import { join, normalize } from 'path'
+import { strToU8, zipSync } from 'fflate'
+import { valid as validSemver } from 'semver'
+import matter from 'gray-matter'
+import { getWorkspaceSkillsPath } from '../workspaces/storage.ts'
+import { deriveSkillSlug, loadSkill } from './storage.ts'
+import type { SkillMetadata } from './types.ts'
+import {
+  MARKETPLACE_ORIGIN_METADATA_FILE,
+  readMarketplaceOriginMetadata,
+  type MarketplaceOriginMetadata,
+} from './marketplace-install.ts'
+import { PRODUCT_MARKETPLACE_CATEGORIES, type ProductMarketplaceCategory } from './marketplace-config.ts'
+
+export { MARKETPLACE_ORIGIN_METADATA_FILE, readMarketplaceOriginMetadata } from './marketplace-install.ts'
+
+export {
+  PRODUCT_MARKETPLACE_CATEGORIES,
+  type ProductMarketplaceCategory,
+  suggestMarketplacePublishSlug,
+} from './marketplace-config.ts'
+
+/** Payload sent to the Marketplace service when publishing a Local Skill bundle. */
+export interface MarketplacePublishApiInput {
+  userId: string
+  bundle: Uint8Array
+  marketplaceSlug: string
+  version: string
+  category: ProductMarketplaceCategory
+  tags?: string[]
+  releaseNotes?: string
+  basedOn?: {
+    marketplaceId: string
+    marketplaceSlug: string
+    version: string
+  }
+}
+
+/** Marketplace service response for a Local Skill publish attempt. */
+export type MarketplacePublishApiResult =
+  | {
+      status: 'published'
+      marketplaceId: string
+      marketplaceSlug: string
+      version: string
+      ownerId: string
+      ownerDisplayName: string
+    }
+  | {
+      status: 'slug-conflict'
+      marketplaceSlug: string
+      message: string
+    }
+
+/** Owner request to remove a Marketplace Skill from future discovery and distribution. */
+export interface MarketplaceUnpublishApiInput {
+  userId: string
+  marketplaceId: string
+  marketplaceSlug: string
+}
+
+/** Marketplace service response for an owner unpublish action. */
+export type MarketplaceUnpublishApiResult =
+  | {
+      status: 'unpublished'
+      marketplaceSlug: string
+      message: string
+    }
+  | {
+      status: 'forbidden'
+      message: string
+    }
+
+/** Boundary used by publish orchestration to create Marketplace Skill versions. */
+export interface MarketplacePublishApi {
+  publishSkill(input: MarketplacePublishApiInput): Promise<MarketplacePublishApiResult>
+}
+
+/** Boundary used by owner lifecycle actions on Marketplace Skills. */
+export interface MarketplaceOwnerActionsApi {
+  unpublishSkill(input: MarketplaceUnpublishApiInput): Promise<MarketplaceUnpublishApiResult>
+}
+
+/** Complete Local Skill publish request, including workspace context and service boundary. */
+export interface MarketplacePublishRequest {
+  workspaceRoot: string
+  user: { id: string } | null
+  skillSlug: string
+  marketplaceSlug: string
+  version: string
+  category: string
+  tags?: string[]
+  releaseNotes?: string
+  api: MarketplacePublishApi
+  now?: () => Date
+}
+
+/** Complete direct Marketplace publish request for Skills that should not be installed locally. */
+export interface MarketplaceDirectPublishRequest {
+  user: { id: string } | null
+  skill: {
+    slug: string
+    metadata: SkillMetadata
+    content: string
+  }
+  marketplaceSlug: string
+  version: string
+  category: string
+  tags?: string[]
+  releaseNotes?: string
+  api: MarketplacePublishApi
+}
+
+/** Complete owner unpublish request, preserving Marketplace versions remotely. */
+export interface MarketplaceUnpublishRequest {
+  user: { id: string } | null
+  marketplaceId: string
+  marketplaceSlug: string
+  api: MarketplaceOwnerActionsApi
+}
+
+/** Renderer-safe input for publishing a Local Skill through workspace-owned RPC. */
+export interface MarketplaceLocalSkillPublishInput {
+  userId: string
+  skillSlug: string
+  marketplaceSlug: string
+  version: string
+  category: string
+  tags?: string[]
+  releaseNotes?: string
+}
+
+/** Renderer-safe input for publishing a Marketplace Skill without creating a Local Skill. */
+export interface MarketplaceDirectSkillPublishInput {
+  userId: string
+  skill: {
+    slug: string
+    metadata: SkillMetadata
+    content: string
+  }
+  marketplaceSlug: string
+  version: string
+  category: string
+  tags?: string[]
+  releaseNotes?: string
+}
+
+/** Renderer-safe result returned after publishing a Local Skill through RPC. */
+export type MarketplacePublishLocalResult =
+  | {
+      status: 'published'
+      marketplaceId: string
+      marketplaceSlug: string
+      version: string
+    }
+  | {
+      status: 'slug-conflict'
+      marketplaceSlug: string
+      message: string
+    }
+
+/** Renderer-safe result returned after direct Marketplace publish through RPC. */
+export type MarketplacePublishDirectResult = MarketplacePublishLocalResult
+
+/** Renderer-safe result returned after unpublishing a Marketplace Skill. */
+export type MarketplaceUnpublishResult = MarketplaceUnpublishApiResult
+
+/** Suggest the editable Marketplace slug from SKILL.md frontmatter metadata. */
+export function suggestMarketplaceSlug(metadata: Pick<SkillMetadata, 'name'>): string {
+  return deriveSkillSlug(metadata.name)
+}
+
+/** Validate product-level Marketplace publish fields before uploading the bundle. */
+export function validateMarketplacePublishRequest(input: {
+  marketplaceSlug: string
+  version: string
+  category: string
+  tags?: string[]
+  releaseNotes?: string
+}): string[] {
+  const errors: string[] = []
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.marketplaceSlug)) {
+    errors.push('Marketplace slug must use lowercase letters, numbers, and single hyphens.')
+  }
+  if (!validSemver(input.version)) {
+    errors.push('Version must be a valid SemVer version.')
+  }
+  if (!isProductMarketplaceCategory(input.category)) {
+    errors.push(`Category must be one of ${PRODUCT_MARKETPLACE_CATEGORIES.join(', ')}.`)
+  }
+  if (input.tags?.some((tag) => !/^[a-z0-9][a-z0-9-]{0,39}$/.test(tag))) {
+    errors.push('Tags must use lowercase letters, numbers, and hyphens.')
+  }
+  if (input.releaseNotes && input.releaseNotes.length > 5000) {
+    errors.push('Release notes must be 5000 characters or fewer.')
+  }
+  return errors
+}
+
+/** Bundle, upload, and link an existing workspace Local Skill to a Marketplace version. */
+export async function publishLocalSkillToMarketplace(
+  request: MarketplacePublishRequest,
+): Promise<MarketplacePublishLocalResult> {
+  if (!request.user) {
+    throw new Error('Sign in is required to publish Marketplace Skills.')
+  }
+
+  const skill = loadSkill(request.workspaceRoot, request.skillSlug)
+  if (!skill) {
+    throw new Error('Local Skill must have valid SKILL.md frontmatter before it can be published.')
+  }
+
+  const validationErrors = validateMarketplacePublishRequest(request)
+  if (validationErrors.length > 0) {
+    throw new Error(validationErrors.join(' '))
+  }
+  const category = request.category as ProductMarketplaceCategory
+
+  const bundle = bundleLocalSkill(request.workspaceRoot, request.skillSlug)
+  const origin = readMarketplaceOriginMetadata(request.workspaceRoot, request.skillSlug)
+  const basedOn = getDerivedPublishAttribution(origin, request.user.id)
+
+  const published = await request.api.publishSkill({
+    userId: request.user.id,
+    bundle,
+    marketplaceSlug: request.marketplaceSlug,
+    version: request.version,
+    category,
+    tags: cleanOptionalStringArray(request.tags),
+    releaseNotes: cleanOptionalString(request.releaseNotes),
+    basedOn,
+  })
+
+  if (published.status === 'slug-conflict') return published
+
+  const publishedAt = (request.now?.() ?? new Date()).toISOString()
+  const bundleHash = sha256(bundle)
+  writeMarketplacePublishMetadata(request.workspaceRoot, request.skillSlug, {
+    marketplaceId: published.marketplaceId,
+    marketplaceSlug: published.marketplaceSlug,
+    ownerId: published.ownerId,
+    ownerDisplayName: published.ownerDisplayName,
+    installedVersion: published.version,
+    installedAt: origin?.installedAt ?? publishedAt,
+    lastCheckedAt: publishedAt,
+    modified: false,
+    sourceBundleHash: bundleHash,
+    sourceBundleContentHash: bundleHash,
+    safetyStatus: 'ok',
+    basedOn: basedOn ?? origin?.basedOn,
+  })
+
+  return {
+    status: 'published',
+    marketplaceId: published.marketplaceId,
+    marketplaceSlug: published.marketplaceSlug,
+    version: published.version,
+  }
+}
+
+/** Bundle and publish a Skill directly to Marketplace without writing Local Skill files or sidecar metadata. */
+export async function publishDirectSkillToMarketplace(
+  request: MarketplaceDirectPublishRequest,
+): Promise<MarketplacePublishDirectResult> {
+  if (!request.user) {
+    throw new Error('Sign in is required to publish Marketplace Skills.')
+  }
+
+  const validationErrors = [
+    ...validateDirectSkill(request.skill),
+    ...validateMarketplacePublishRequest(request),
+  ]
+  if (validationErrors.length > 0) {
+    throw new Error(validationErrors.join(' '))
+  }
+
+  const category = request.category as ProductMarketplaceCategory
+  const published = await request.api.publishSkill({
+    userId: request.user.id,
+    bundle: bundleDirectSkill(request.skill),
+    marketplaceSlug: request.marketplaceSlug,
+    version: request.version,
+    category,
+    tags: cleanOptionalStringArray(request.tags),
+    releaseNotes: cleanOptionalString(request.releaseNotes),
+  })
+
+  if (published.status === 'slug-conflict') return published
+
+  return {
+    status: 'published',
+    marketplaceId: published.marketplaceId,
+    marketplaceSlug: published.marketplaceSlug,
+    version: published.version,
+  }
+}
+
+/** Removes a Marketplace Skill from discovery and future distribution without deleting versions. */
+export async function unpublishMarketplaceSkillFromDiscovery(
+  request: MarketplaceUnpublishRequest,
+): Promise<MarketplaceUnpublishResult> {
+  if (!request.user) {
+    throw new Error('Sign in is required to manage Marketplace Skills.')
+  }
+  if (!request.marketplaceId.trim() || !request.marketplaceSlug.trim()) {
+    throw new Error('Marketplace Skill identity is required before unpublishing.')
+  }
+
+  return request.api.unpublishSkill({
+    userId: request.user.id,
+    marketplaceId: request.marketplaceId,
+    marketplaceSlug: request.marketplaceSlug,
+  })
+}
+
+/** Publish a Local Skill to the configured Marketplace HTTP service from an owning workspace. */
+export async function publishLocalSkillToMarketplaceService(
+  workspaceRoot: string,
+  input: MarketplaceLocalSkillPublishInput,
+  options: {
+    baseUrl: string
+    fetchImpl?: typeof fetch
+    now?: () => Date
+  },
+): Promise<MarketplacePublishLocalResult> {
+  return publishLocalSkillToMarketplace({
+    workspaceRoot,
+    user: { id: input.userId },
+    skillSlug: input.skillSlug,
+    marketplaceSlug: input.marketplaceSlug,
+    version: input.version,
+    category: input.category,
+    tags: input.tags,
+    releaseNotes: input.releaseNotes,
+    now: options.now,
+    api: createHttpMarketplacePublishApi(options.baseUrl, options.fetchImpl ?? fetch),
+  })
+}
+
+/** Publish a Skill directly to the configured Marketplace HTTP service without Local Skill installation. */
+export async function publishDirectSkillToMarketplaceService(
+  input: MarketplaceDirectSkillPublishInput,
+  options: {
+    baseUrl: string
+    fetchImpl?: typeof fetch
+  },
+): Promise<MarketplacePublishDirectResult> {
+  return publishDirectSkillToMarketplace({
+    user: { id: input.userId },
+    skill: input.skill,
+    marketplaceSlug: input.marketplaceSlug,
+    version: input.version,
+    category: input.category,
+    tags: input.tags,
+    releaseNotes: input.releaseNotes,
+    api: createHttpMarketplacePublishApi(options.baseUrl, options.fetchImpl ?? fetch),
+  })
+}
+
+/** Unpublish a Marketplace Skill from the configured Marketplace HTTP service. */
+export async function unpublishMarketplaceSkillFromDiscoveryService(
+  input: {
+    userId: string
+    marketplaceId: string
+    marketplaceSlug: string
+  },
+  options: {
+    baseUrl: string
+    fetchImpl?: typeof fetch
+  },
+): Promise<MarketplaceUnpublishResult> {
+  return unpublishMarketplaceSkillFromDiscovery({
+    user: { id: input.userId },
+    marketplaceId: input.marketplaceId,
+    marketplaceSlug: input.marketplaceSlug,
+    api: createHttpMarketplaceOwnerActionsApi(options.baseUrl, options.fetchImpl ?? fetch),
+  })
+}
+
+/** Create the HTTP Marketplace publish boundary used by production RPC handlers. */
+export function createHttpMarketplacePublishApi(baseUrl: string, fetchImpl: typeof fetch = fetch): MarketplacePublishApi {
+  return {
+    async publishSkill(input) {
+      const form = new FormData()
+      form.set('bundle', new Blob([toArrayBuffer(input.bundle)], { type: 'application/zip' }), 'skill.zip')
+      form.set('marketplaceSlug', input.marketplaceSlug)
+      form.set('version', input.version)
+      form.set('category', input.category)
+      if (input.tags && input.tags.length > 0) form.set('tags', JSON.stringify(input.tags))
+      if (input.releaseNotes) form.set('releaseNotes', input.releaseNotes)
+      if (input.basedOn) form.set('basedOn', JSON.stringify(input.basedOn))
+
+      const response = await fetchImpl(`${baseUrl.replace(/\/$/, '')}/v1/skills/publish`, {
+        method: 'POST',
+        headers: {
+          'X-Craft-User-Id': input.userId,
+        },
+        body: form,
+      })
+      const data = await response.json().catch(() => ({})) as Partial<MarketplacePublishApiResult> & { message?: string }
+
+      if (response.status === 409) {
+        return {
+          status: 'slug-conflict',
+          marketplaceSlug: input.marketplaceSlug,
+          message: data.message ?? 'Marketplace slug is owned by another publisher.',
+        }
+      }
+      if (!response.ok) {
+        throw new Error(data.message ?? `Marketplace publish failed with HTTP ${response.status}.`)
+      }
+      if (data.status !== 'published' || !data.marketplaceId || !data.marketplaceSlug || !data.version || !data.ownerId || !data.ownerDisplayName) {
+        throw new Error('Marketplace publish response is missing published Skill metadata.')
+      }
+      return {
+        status: 'published',
+        marketplaceId: data.marketplaceId,
+        marketplaceSlug: data.marketplaceSlug,
+        version: data.version,
+        ownerId: data.ownerId,
+        ownerDisplayName: data.ownerDisplayName,
+      }
+    },
+  }
+}
+
+/** Create the HTTP Marketplace owner actions boundary used by production handlers. */
+export function createHttpMarketplaceOwnerActionsApi(baseUrl: string, fetchImpl: typeof fetch = fetch): MarketplaceOwnerActionsApi {
+  return {
+    async unpublishSkill(input) {
+      const response = await fetchImpl(`${baseUrl.replace(/\/$/, '')}/v1/skills/${encodeURIComponent(input.marketplaceSlug)}/unpublish`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Craft-User-Id': input.userId,
+        },
+        body: JSON.stringify({ marketplaceId: input.marketplaceId }),
+      })
+      const data = await response.json().catch(() => ({})) as Partial<MarketplaceUnpublishApiResult> & { message?: string }
+
+      if (response.status === 403) {
+        return {
+          status: 'forbidden',
+          message: data.message ?? 'Only the Marketplace Skill owner can unpublish this Skill.',
+        }
+      }
+      if (!response.ok) {
+        throw new Error(data.message ?? `Marketplace unpublish failed with HTTP ${response.status}.`)
+      }
+      if (data.status !== 'unpublished' || !data.marketplaceSlug || !data.message) {
+        throw new Error('Marketplace unpublish response is missing Skill metadata.')
+      }
+      return {
+        status: 'unpublished',
+        marketplaceSlug: data.marketplaceSlug,
+        message: data.message,
+      }
+    },
+  }
+}
+
+function bundleLocalSkill(workspaceRoot: string, skillSlug: string): Uint8Array {
+  const skillDir = join(getWorkspaceSkillsPath(workspaceRoot), skillSlug)
+  return bundleSkillDir(skillDir)
+}
+
+/** Bundle all publishable files from an absolute skill directory path into a zip. */
+export function bundleSkillDir(skillDir: string): Uint8Array {
+  const files: Record<string, Uint8Array> = {}
+  for (const relativePath of listPublishableSkillFiles(skillDir)) {
+    files[relativePath] = readFileSync(join(skillDir, relativePath))
+  }
+  if (!files['SKILL.md']) {
+    throw new Error('Skill bundle must include SKILL.md.')
+  }
+  return zipSync(files)
+}
+
+function bundleDirectSkill(skill: MarketplaceDirectPublishRequest['skill']): Uint8Array {
+  return zipSync({
+    'SKILL.md': strToU8(matter.stringify(skill.content.trim(), skill.metadata)),
+  })
+}
+
+function validateDirectSkill(skill: MarketplaceDirectPublishRequest['skill']): string[] {
+  const errors: string[] = []
+  if (!skill.slug.trim()) errors.push('Skill slug is required.')
+  if (!skill.metadata.name.trim()) errors.push('Skill name is required.')
+  if (!skill.metadata.description.trim()) errors.push('Skill description is required.')
+  if (!skill.content.trim()) errors.push('Skill instructions are required.')
+  return errors
+}
+
+function listPublishableSkillFiles(root: string, dir = root): string[] {
+  if (!existsSync(root)) return []
+
+  const paths: string[] = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const absolutePath = join(dir, entry.name)
+    const relativePath = normalize(absolutePath.slice(root.length + 1)).replace(/\\/g, '/')
+    if (relativePath === MARKETPLACE_ORIGIN_METADATA_FILE) continue
+    if (entry.isDirectory()) {
+      paths.push(...listPublishableSkillFiles(root, absolutePath))
+      continue
+    }
+    if (!entry.isFile()) continue
+    if (!statSync(absolutePath).isFile()) continue
+    paths.push(relativePath)
+  }
+  return paths.sort((a, b) => a.localeCompare(b))
+}
+
+function writeMarketplacePublishMetadata(
+  workspaceRoot: string,
+  skillSlug: string,
+  metadata: MarketplaceOriginMetadata,
+): void {
+  const skillDir = join(getWorkspaceSkillsPath(workspaceRoot), skillSlug)
+  writeFileSync(join(skillDir, MARKETPLACE_ORIGIN_METADATA_FILE), `${JSON.stringify(metadata, null, 2)}\n`)
+}
+
+function isProductMarketplaceCategory(category: string): category is ProductMarketplaceCategory {
+  return PRODUCT_MARKETPLACE_CATEGORIES.includes(category as ProductMarketplaceCategory)
+}
+
+function cleanOptionalString(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : undefined
+}
+
+function cleanOptionalStringArray(value: string[] | undefined): string[] | undefined {
+  const cleaned = value?.map((entry) => entry.trim()).filter(Boolean)
+  return cleaned && cleaned.length > 0 ? cleaned : undefined
+}
+
+function getDerivedPublishAttribution(
+  origin: MarketplaceOriginMetadata | null,
+  userId: string,
+): MarketplacePublishApiInput['basedOn'] {
+  const attributableOrigin = getAttributableOrigin(origin)
+  if (!attributableOrigin || attributableOrigin.ownerId === userId) return undefined
+
+  return {
+    marketplaceId: attributableOrigin.marketplaceId,
+    marketplaceSlug: attributableOrigin.marketplaceSlug,
+    version: attributableOrigin.installedVersion,
+  }
+}
+
+function getAttributableOrigin(origin: MarketplaceOriginMetadata | null): MarketplaceOriginMetadata | null {
+  if (!origin?.marketplaceId || !origin.marketplaceSlug || !origin.installedVersion || !origin.ownerId) {
+    return null
+  }
+  return origin
+}
+
+function sha256(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex')
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+}

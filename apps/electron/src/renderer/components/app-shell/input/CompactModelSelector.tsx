@@ -31,10 +31,6 @@ import {
   resolveEffectiveConnectionSlug,
   type LlmConnectionWithStatus,
 } from '@config/llm-connections'
-import {
-  THINKING_LEVELS,
-  type ThinkingLevel,
-} from '@craft-agent/shared/agent/thinking-levels'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { derivePickerMode } from './picker-mode'
 import {
@@ -49,8 +45,6 @@ interface CompactModelSelectorProps {
   currentConnection?: string
   onModelChange: (model: string, connection?: string) => void
   onConnectionChange?: (connectionSlug: string) => void
-  thinkingLevel?: ThinkingLevel
-  onThinkingLevelChange?: (level: ThinkingLevel) => void
   isEmptySession?: boolean
   connectionUnavailable?: boolean
   contextStatus?: {
@@ -65,8 +59,6 @@ export function CompactModelSelector({
   currentConnection,
   onModelChange,
   onConnectionChange,
-  thinkingLevel = 'medium',
-  onThinkingLevelChange,
   isEmptySession = false,
   connectionUnavailable = false,
   contextStatus,
@@ -123,13 +115,6 @@ export function CompactModelSelector({
     return model.name ?? stripPiPrefixForDisplay(model.id)
   }, [availableModels, currentModel, connectionDefaultModel])
 
-  const thinkingDisabled = React.useMemo(() => {
-    const model = availableModels.find(
-      m => typeof m !== 'string' && m.id === currentModel,
-    )
-    return typeof model !== 'string' && model?.supportsThinking === false
-  }, [availableModels, currentModel])
-
   const connectionsByProvider = React.useMemo(
     () => groupConnectionsByProvider(llmConnections),
     [llmConnections],
@@ -174,7 +159,7 @@ export function CompactModelSelector({
             ? t('common.unavailable')
             : `${t('common.model')}: ${currentModelDisplayName}`}
           className={cn(
-            'h-7 pl-2 pr-2 text-xs font-medium rounded-[6px] flex items-center gap-1.5 shadow-tinted outline-none select-none min-w-[64px] shrink',
+            'h-7 pl-2 pr-2 text-sm font-medium rounded-[6px] flex items-center gap-1.5 shadow-tinted outline-none select-none min-w-[64px] shrink',
             connectionUnavailable
               ? 'bg-destructive/10 text-destructive'
               : 'bg-foreground/5 text-foreground/70',
@@ -213,7 +198,7 @@ export function CompactModelSelector({
               <div className="font-medium text-sm mb-1">
                 {t('chat.connectionUnavailable')}
               </div>
-              <div className="text-xs text-muted-foreground mb-3">
+              <div className="text-sm text-muted-foreground mb-3">
                 {t('chat.connectionUnavailableDescription')}
               </div>
               <button
@@ -222,7 +207,7 @@ export function CompactModelSelector({
                   setOpen(false)
                   navigate(routes.view.settings('ai'))
                 }}
-                className="text-xs underline text-foreground/70 hover:text-foreground"
+                className="text-sm underline text-foreground/70 hover:text-foreground"
               >
                 {t('chat.modelPicker.openAiSettings')}
               </button>
@@ -236,7 +221,7 @@ export function CompactModelSelector({
           ) : pickerMode === 'switcher' ? (
             connectionsByProvider.map(([providerName, connections]) => (
               <React.Fragment key={providerName}>
-                <div className="px-3 pt-3 pb-1 text-xs font-medium text-foreground/60 uppercase tracking-wide select-none">
+                <div className="px-3 pt-3 pb-1 text-sm font-medium text-foreground/60 uppercase tracking-wide select-none">
                   {providerName}
                 </div>
                 {connections.map(conn => {
@@ -262,7 +247,7 @@ export function CompactModelSelector({
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium truncate">{conn.name}</div>
                           {!isAuthenticated && (
-                            <div className="text-xs text-muted-foreground">
+                            <div className="text-sm text-muted-foreground">
                               {t('settings.ai.notAuthenticated')}
                             </div>
                           )}
@@ -364,7 +349,7 @@ export function CompactModelSelector({
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">{modelName}</div>
                       {description && (
-                        <div className="text-xs text-foreground/50 truncate">
+                        <div className="text-sm text-foreground/50 truncate">
                           {description}
                         </div>
                       )}
@@ -394,50 +379,13 @@ export function CompactModelSelector({
             })
           )}
 
-          {/* === Thinking section === */}
-          {THINKING_LEVELS.length > 0 && pickerMode !== 'unavailable' && (
-            <>
-              <div className="px-3 pt-4 pb-1 text-xs font-medium text-foreground/60 uppercase tracking-wide select-none">
-                {t('chat.modelPicker.thinkingSection')}
-              </div>
-              {THINKING_LEVELS.map(({ id, nameKey, descriptionKey }) => {
-                const isSelected = thinkingLevel === id
-                return (
-                  <DrawerClose asChild key={id}>
-                    <button
-                      type="button"
-                      disabled={thinkingDisabled}
-                      onClick={() => onThinkingLevelChange?.(id)}
-                      className={cn(
-                        'flex items-center justify-between w-full px-3 py-2 rounded-lg text-left transition-colors',
-                        thinkingDisabled && 'opacity-50 cursor-not-allowed',
-                        !thinkingDisabled && isSelected && 'bg-foreground/5',
-                        !thinkingDisabled && !isSelected && 'hover:bg-foreground/5',
-                      )}
-                    >
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium">{t(nameKey)}</div>
-                        <div className="text-xs text-foreground/50">
-                          {t(descriptionKey)}
-                        </div>
-                      </div>
-                      {isSelected && (
-                        <Check className="h-3 w-3 text-foreground/60 shrink-0 ml-3" />
-                      )}
-                    </button>
-                  </DrawerClose>
-                )
-              })}
-            </>
-          )}
-
           {/* === Context section === */}
           {contextStatus?.inputTokens != null && contextStatus.inputTokens > 0 && (
             <>
-              <div className="px-3 pt-4 pb-1 text-xs font-medium text-foreground/60 uppercase tracking-wide select-none">
+              <div className="px-3 pt-4 pb-1 text-sm font-medium text-foreground/60 uppercase tracking-wide select-none">
                 {t('chat.modelPicker.contextSection')}
               </div>
-              <div className="flex items-center justify-between px-3 py-2 text-xs text-foreground/60 select-none">
+              <div className="flex items-center justify-between px-3 py-2 text-sm text-foreground/60 select-none">
                 <span>{t('chat.context')}</span>
                 <span className="flex items-center gap-1.5">
                   {contextStatus.isCompacting && <Spinner className="h-3 w-3" />}
@@ -470,7 +418,7 @@ function LockedSingleRow({
     <div className="flex items-center justify-between px-3 py-2 rounded-lg opacity-80 select-none">
       <div className="min-w-0">
         <div className="text-sm font-medium truncate">{stripPiPrefixForDisplay(modelId)}</div>
-        <div className="text-xs text-foreground/50">{t('chat.connectionDefault')}</div>
+        <div className="text-sm text-foreground/50">{t('chat.connectionDefault')}</div>
       </div>
       <div className="flex items-center gap-1 ml-3 shrink-0">
         {showVision && connection && (

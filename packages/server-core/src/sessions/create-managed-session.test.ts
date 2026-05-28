@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { createManagedSession } from './SessionManager.ts'
+import { ENV_CONNECTION_SLUG } from '@craft-agent/shared/config'
+import { buildSsoSubprocessEnvOverrides, createManagedSession } from './SessionManager.ts'
 
 describe('createManagedSession', () => {
   const workspace = {
@@ -9,21 +10,55 @@ describe('createManagedSession', () => {
     createdAt: Date.now(),
   }
 
-  it('normalizes legacy thinkingLevel=think on restore', () => {
+  it('normalizes legacy thinkingEnabled=think on restore', () => {
     const managed = createManagedSession({
       id: 'session_legacy',
-      thinkingLevel: 'think' as any,
+      thinkingEnabled: 'think' as any,
     }, workspace as any)
 
-    expect(managed.thinkingLevel).toBe('medium')
+    expect(managed.thinkingEnabled).toBe(true)
   })
 
-  it('drops invalid thinking levels instead of leaking them into runtime state', () => {
+  it('normalizes legacy thinkingEnabled=off on restore', () => {
     const managed = createManagedSession({
-      id: 'session_invalid',
-      thinkingLevel: 'ultra' as any,
+      id: 'session_off',
+      thinkingEnabled: 'off' as any,
     }, workspace as any)
 
-    expect(managed.thinkingLevel).toBeUndefined()
+    expect(managed.thinkingEnabled).toBe(false)
+  })
+
+  it('migrates legacy thinkingLevel=off on restore', () => {
+    const managed = createManagedSession({
+      id: 'session_legacy_off',
+      thinkingLevel: 'off',
+    } as any, workspace as any)
+
+    expect(managed.thinkingEnabled).toBe(false)
+    expect((managed as Record<string, unknown>).thinkingLevel).toBeUndefined()
+  })
+})
+
+describe('buildSsoSubprocessEnvOverrides', () => {
+  it('injects the current SSO token and LLM_BASE_URL for the environment connection', async () => {
+    const env = await buildSsoSubprocessEnvOverrides(ENV_CONNECTION_SLUG, {
+      env: { LLM_BASE_URL: ' https://llm.example.test/v1 ' },
+      loadSsoSession: async () => ({ token: 'sso-token' }),
+    })
+
+    expect(env).toEqual({
+      CRAFT_LLM_SSO_TOKEN: 'sso-token',
+      CRAFT_LLM_SSO_BASE_URL: 'https://llm.example.test/v1',
+    })
+  })
+
+  it('does not expose SSO env vars for non-environment connections', async () => {
+    const env = await buildSsoSubprocessEnvOverrides('default-api', {
+      env: { LLM_BASE_URL: 'https://llm.example.test/v1' },
+      loadSsoSession: async () => ({ token: 'sso-token' }),
+    })
+
+    expect(env.CRAFT_LLM_SSO_TOKEN).toBeUndefined()
+    expect(env.CRAFT_LLM_SSO_BASE_URL).toBeUndefined()
   })
 })

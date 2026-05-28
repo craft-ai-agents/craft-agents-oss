@@ -445,7 +445,7 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
         <div className="px-3 py-2 bg-muted/50 border-b">
           <span className="text-[12px] text-muted-foreground font-medium">{spec.title || t('datatable.defaultTitle')}</span>
         </div>
-        <div className="py-8 text-center text-muted-foreground text-[13px]">{t('datatable.loadingData')}</div>
+        <div className="py-8 text-center text-muted-foreground text-[14px]">{t('datatable.loadingData')}</div>
       </div>
     )
   }
@@ -457,7 +457,7 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
         <div className="px-3 py-2 bg-muted/50 border-b">
           <span className="text-[12px] text-muted-foreground font-medium">{spec.title || t('datatable.defaultTitle')}</span>
         </div>
-        <div className="py-6 text-center text-destructive/70 text-[13px]">{fileError}</div>
+        <div className="py-6 text-center text-destructive/70 text-[14px]">{fileError}</div>
       </div>
     )
   }
@@ -491,7 +491,7 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
         WebkitMaskImage: maskImage,
       } : { overflowX: 'auto' }}
     >
-      <table className="w-max min-w-full text-[13px]">
+      <table className="w-max min-w-full text-[14px]">
         <thead>
           <tr className="border-b border-foreground/[0.06] bg-foreground/[0.02]">
             {parsed.columns.map((col) => (
@@ -527,7 +527,7 @@ export function MarkdownDatatableBlock({ code, className }: MarkdownDatatableBlo
             </React.Fragment>
           )) : processedRows.length ? renderRows(processedRows) : (
             <tr>
-              <td colSpan={parsed.columns.length} className="py-6 text-center text-muted-foreground text-[13px]">
+              <td colSpan={parsed.columns.length} className="py-6 text-center text-muted-foreground text-[14px]">
                 No rows
               </td>
             </tr>

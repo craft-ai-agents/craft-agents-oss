@@ -10,6 +10,8 @@
 
 import { describe, it, expect, afterEach } from 'bun:test'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { mkdtempSync, rmSync } from 'node:fs'
 import type { Subprocess } from 'bun'
 import WebSocket from 'ws'
 
@@ -25,14 +27,24 @@ interface SpawnedServer {
   stop: () => Promise<void>
 }
 
+function createTestConfigDir(): string {
+  return mkdtempSync(join(tmpdir(), 'craft-server-smoke-'))
+}
+
+function removeTestConfigDir(configDir: string): void {
+  rmSync(configDir, { recursive: true, force: true })
+}
+
 async function spawnTestServer(extraEnv?: Record<string, string>): Promise<SpawnedServer> {
   const token = crypto.randomUUID() + crypto.randomUUID() // 72 chars, well above 16 minimum
   const { CLAUDECODE: _, ...parentEnv } = process.env
+  const configDir = createTestConfigDir()
 
   const proc = Bun.spawn(['bun', 'run', SERVER_ENTRY], {
     env: {
       ...parentEnv,
       ...extraEnv,
+      CRAFT_CONFIG_DIR: configDir,
       CRAFT_SERVER_TOKEN: token,
       CRAFT_RPC_PORT: '0',
       CRAFT_RPC_HOST: '127.0.0.1',
@@ -66,8 +78,12 @@ async function spawnTestServer(extraEnv?: Record<string, string>): Promise<Spawn
             healthPort: 0, // health port not printed; we skip health test if 0
             proc,
             stop: async () => {
-              proc.kill('SIGTERM')
-              await proc.exited
+              try {
+                proc.kill('SIGTERM')
+                await proc.exited
+              } finally {
+                removeTestConfigDir(configDir)
+              }
             },
           })
           return
@@ -90,6 +106,7 @@ async function spawnTestServer(extraEnv?: Record<string, string>): Promise<Spawn
       }
       clearTimeout(timer)
       if (!url) {
+        removeTestConfigDir(configDir)
         reject(new Error('Server exited before printing CRAFT_SERVER_URL'))
       }
     })()
@@ -151,9 +168,11 @@ describe('headless server smoke test', () => {
   it('rejects short token at startup', async () => {
     const token = 'short'
     const { CLAUDECODE: _, ...parentEnv } = process.env
+    const configDir = createTestConfigDir()
     const proc = Bun.spawn(['bun', 'run', SERVER_ENTRY], {
       env: {
         ...parentEnv,
+        CRAFT_CONFIG_DIR: configDir,
         CRAFT_SERVER_TOKEN: token,
         CRAFT_RPC_PORT: '0',
         CRAFT_RPC_HOST: '127.0.0.1',
@@ -163,7 +182,11 @@ describe('headless server smoke test', () => {
     })
 
     const exitCode = await proc.exited
-    expect(exitCode).not.toBe(0)
+    try {
+      expect(exitCode).not.toBe(0)
+    } finally {
+      removeTestConfigDir(configDir)
+    }
   }, TEST_TIMEOUT)
 
   it('shuts down cleanly on SIGTERM', async () => {

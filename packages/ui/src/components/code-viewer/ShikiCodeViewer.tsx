@@ -155,7 +155,7 @@ export function ShikiCodeViewer({
           {lines.map((_, index) => (
             <div
               key={index}
-              className="font-mono text-[13px] leading-[1.6] px-2"
+              className="font-mono text-[14px] leading-[1.6] px-2"
               style={{ color: lineNumberColor }}
             >
               {startLine + index}
@@ -166,13 +166,13 @@ export function ShikiCodeViewer({
         {/* Code content */}
         <div className="flex-1 min-w-0 p-4 overflow-x-auto">
           {isLoading || !highlighted ? (
-            <pre className="font-mono text-[13px] leading-[1.6] whitespace-pre">
+            <pre className="font-mono text-[14px] leading-[1.6] whitespace-pre">
               <code>{code}</code>
             </pre>
           ) : (
             <div
               className={cn(
-                'font-mono text-[13px] leading-[1.6]',
+                'font-mono text-[14px] leading-[1.6]',
                 '[&_pre]:!bg-transparent [&_pre]:!m-0 [&_pre]:!p-0 [&_pre]:whitespace-pre',
                 '[&_code]:!bg-transparent'
               )}

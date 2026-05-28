@@ -1,15 +1,14 @@
 /**
  * RTK binary detector.
  *
- * Resolves the path to the rtk binary (https://github.com/rtk-ai/rtk) by
- * looking it up on the user's PATH, then verifies it meets the minimum
- * version required by `rtk rewrite` (added in 0.23.0).
+ * Resolves the path to the rtk binary (https://github.com/rtk-ai/rtk).
+ * Check order:
+ *   1. CRAFT_RTK env var — set by the Electron main process when the bundled
+ *      binary is present in resources/bin/{platform}/rtk[.exe].
+ *   2. PATH search via which/where — for user-installed rtk.
  *
- * Result is cached per process — restart the app to pick up an install
- * or upgrade.
- *
- * Bundling rtk in `apps/electron/resources/bin/` is a separate concern
- * (see plans/rtk-integration-path-a.md); this MVP detects only.
+ * Both paths verify the version meets the minimum required by `rtk rewrite`
+ * (added in 0.23.0). Result is cached per process.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -100,7 +99,7 @@ export function resetRtkPathCache(): void {
 function resolveStatus(): CachedStatus {
   if (cachedStatus !== undefined) return cachedStatus;
 
-  const rtkPath = findRtkOnPath();
+  const rtkPath = findRtk();
   if (!rtkPath) {
     cachedStatus = { path: null, version: null };
     return cachedStatus;
@@ -116,7 +115,12 @@ function resolveStatus(): CachedStatus {
   return cachedStatus;
 }
 
-function findRtkOnPath(): string | null {
+function findRtk(): string | null {
+  // 1. Bundled binary — set by Electron main process startup.
+  const bundled = process.env.CRAFT_RTK?.trim();
+  if (bundled) return bundled;
+
+  // 2. User-installed binary on PATH.
   const whichCmd = process.platform === 'win32' ? 'where' : 'which';
   try {
     const result = execFileSync(whichCmd, ['rtk'], { encoding: 'utf-8', timeout: 2000 }).trim();

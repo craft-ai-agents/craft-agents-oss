@@ -13,23 +13,12 @@
 import { randomInt } from 'node:crypto'
 import type { PlatformType } from './types'
 
-/**
- * Pairing-code intent.
- *
- * - `session`: classic flow — typing `/pair <code>` in a chat binds that
- *   chat (DM, or a Telegram supergroup topic) to the originating session.
- * - `workspace-supergroup`: workspace-level setup — typing `/pair <code>`
- *   in a Telegram supergroup registers that supergroup as the workspace's
- *   accepted forum, after which sessions can be bound to specific topics
- *   inside it. The `sessionId` field is unused for this kind.
- */
-export type PairingKind = 'session' | 'workspace-supergroup'
+export type PairingKind = 'session'
 
 export interface PairingEntry {
   kind: PairingKind
   workspaceId: string
-  /** Only set for `kind: 'session'`. */
-  sessionId?: string
+  sessionId: string
   platform: PlatformType
   code: string
   expiresAt: number
@@ -77,19 +66,10 @@ export class PairingCodeManager {
     return this.generateInternal({ kind: 'session', workspaceId, sessionId, platform })
   }
 
-  /**
-   * Issue a workspace-supergroup pairing code. Used for the one-time setup
-   * flow that captures a Telegram supergroup's chat_id when the user types
-   * `/pair <code>` inside it.
-   */
-  generateForSupergroup(workspaceId: string, platform: PlatformType): GeneratedPairing {
-    return this.generateInternal({ kind: 'workspace-supergroup', workspaceId, platform })
-  }
-
   private generateInternal(args: {
     kind: PairingKind
     workspaceId: string
-    sessionId?: string
+    sessionId: string
     platform: PlatformType
   }): GeneratedPairing {
     this.checkRate(args.workspaceId)
@@ -105,7 +85,7 @@ export class PairingCodeManager {
     this.entries.set(this.key(args.platform, code), {
       kind: args.kind,
       workspaceId: args.workspaceId,
-      ...(args.sessionId !== undefined ? { sessionId: args.sessionId } : {}),
+      sessionId: args.sessionId,
       platform: args.platform,
       code,
       expiresAt,

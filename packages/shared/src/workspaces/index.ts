@@ -7,12 +7,29 @@
 // Types
 export type {
   WorkspaceConfig,
+  TeamPublicKnowledgeConfig,
+  TeamPublicKnowledgeDocumentConfig,
   CreateWorkspaceInput,
   LoadedWorkspace,
   WorkspaceSummary,
 } from './types.ts';
+export { DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH } from './types.ts';
 
 // Storage functions
+export {
+  CHAT_FEEDBACK_STATE_FILE,
+  deleteChatFeedbackState,
+  getChatFeedbackState,
+  listChatFeedbackState,
+  loadChatFeedbackState,
+  setChatFeedbackState,
+} from './chat-feedback-state.ts';
+
+export type {
+  ChatFeedbackStateEntry,
+  ChatFeedbackStateFile,
+} from './chat-feedback-state.ts';
+
 export {
   // Path utilities
   getDefaultWorkspacesDir,

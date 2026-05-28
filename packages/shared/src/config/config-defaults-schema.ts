@@ -6,7 +6,7 @@
  */
 
 import type { PermissionMode } from '../agent/mode-manager.ts';
-import type { ThinkingLevel } from '../agent/thinking-levels.ts';
+import type { ThinkingEnabled } from '../agent/thinking-toggle.ts';
 
 export interface ConfigDefaults {
   version: string;
@@ -28,7 +28,7 @@ export interface ConfigDefaults {
     allowRemoteEvaluate: boolean;
   };
   workspaceDefaults: {
-    thinkingLevel: ThinkingLevel;
+    thinkingEnabled: ThinkingEnabled;
     permissionMode: PermissionMode;
     cyclablePermissionModes: PermissionMode[];
     localMcpServers: {

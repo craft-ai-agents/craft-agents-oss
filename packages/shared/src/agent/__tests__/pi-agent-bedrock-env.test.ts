@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import { PiAgent } from '../pi-agent.ts'
 import type { BackendConfig } from '../backend/types.ts'
 
-function createConfig(): BackendConfig {
+function createConfig(overrides: Partial<BackendConfig> = {}): BackendConfig {
   return {
     provider: 'pi',
     workspace: {
@@ -17,6 +17,7 @@ function createConfig(): BackendConfig {
       lastUsedAt: Date.now(),
     } as any,
     isHeadless: true,
+    ...overrides,
   }
 }
 
@@ -65,5 +66,52 @@ describe('PiAgent Bedrock env handling', () => {
     expect(env).toEqual({})
 
     agent.destroy()
+  })
+})
+
+describe('PiAgent SSO subprocess env handling', () => {
+  it('passes SSO env overrides when the session explicitly provides them', () => {
+    const agent = new PiAgent(createConfig({
+      envOverrides: {
+        CRAFT_LLM_SSO_TOKEN: 'sso-token',
+        CRAFT_LLM_SSO_BASE_URL: 'https://llm.example.test/v1',
+      },
+    }))
+
+    const env = (agent as any).buildSubprocessEnv(null, {}, '/tmp/session') as NodeJS.ProcessEnv
+
+    expect(env.CRAFT_LLM_SSO_TOKEN).toBe('sso-token')
+    expect(env.CRAFT_LLM_SSO_BASE_URL).toBe('https://llm.example.test/v1')
+
+    agent.destroy()
+  })
+
+  it('strips parent SSO env vars when the session does not explicitly provide them', () => {
+    const previousToken = process.env.CRAFT_LLM_SSO_TOKEN
+    const previousBaseUrl = process.env.CRAFT_LLM_SSO_BASE_URL
+    process.env.CRAFT_LLM_SSO_TOKEN = 'parent-token'
+    process.env.CRAFT_LLM_SSO_BASE_URL = 'https://parent.example.test/v1'
+
+    try {
+      const agent = new PiAgent(createConfig())
+
+      const env = (agent as any).buildSubprocessEnv(null, {}, '/tmp/session') as NodeJS.ProcessEnv
+
+      expect(env.CRAFT_LLM_SSO_TOKEN).toBeUndefined()
+      expect(env.CRAFT_LLM_SSO_BASE_URL).toBeUndefined()
+
+      agent.destroy()
+    } finally {
+      if (previousToken === undefined) {
+        delete process.env.CRAFT_LLM_SSO_TOKEN
+      } else {
+        process.env.CRAFT_LLM_SSO_TOKEN = previousToken
+      }
+      if (previousBaseUrl === undefined) {
+        delete process.env.CRAFT_LLM_SSO_BASE_URL
+      } else {
+        process.env.CRAFT_LLM_SSO_BASE_URL = previousBaseUrl
+      }
+    }
   })
 })

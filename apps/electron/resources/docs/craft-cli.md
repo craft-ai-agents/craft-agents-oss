@@ -1,4 +1,4 @@
-# Craft Agent CLI Guide
+# MDP CLI Guide
 
 `craft-agent` is the preferred interface for managing workspace config domains such as labels, sources, skills, and automations.
 
@@ -362,7 +362,7 @@ craft-agent theme reset-override
 - `set-color-theme` and `set-workspace-color-theme` require an existing preset ID (`default` is always valid).
 - `set-override` validates `theme.json` shape before writing.
 - Workspace override is stored in `workspace/config.json` under `defaults.colorTheme`.
-- App override is stored in `~/.craft-agent/theme.json`.
+- App override is stored in `~/.mdp-agent/theme.json`.
 <!-- cli:theme:end -->
 
 ---

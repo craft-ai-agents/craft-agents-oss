@@ -21,6 +21,7 @@ import {
 import { DEFAULT_THEME, loadAppTheme, getAllowRemoteEvaluate } from '@craft-agent/shared/config'
 import { CodedError } from '@craft-agent/shared/protocol'
 import { getBrowserLiveFxCornerRadii } from '../shared/browser-live-fx'
+import { getDeepLinkPrefix } from './deep-link-scheme'
 import type {
   IBrowserPaneManager,
   BrowserInstanceSnapshot,
@@ -51,7 +52,6 @@ const THEME_COLOR_NULL_SENTINEL = '__NULL__'
 const THEME_OBSERVER_MIN_INTERVAL_MS = 120
 const EARLY_THEME_EXTRACTION_DELAY_MS = 100
 const BROWSER_EMPTY_STATE_PAGE = 'browser-empty-state.html'
-const CRAFT_DEEPLINK_SCHEME_PREFIX = `${process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'}://`
 
 const THEME_COLOR_EXTRACTOR_FN = String.raw`
 () => {
@@ -501,6 +501,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     this.layoutAllViews(instance)
 
     this.setupWindowListeners(instance)
+    window.once('ready-to-show', () => {
+      this.markToolbarReady(instance, 'ready-to-show')
+    })
     this.instances.set(instanceId, instance)
     this.emitStateChange(instance)
     mainLog.info(`[browser-pane] toolbar version: v4-react-chromeless`)
@@ -655,7 +658,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       normalizedPath = `workspace/${encodeURIComponent(workspaceId)}/${normalizedPath}`
     }
 
-    return `${CRAFT_DEEPLINK_SCHEME_PREFIX}${normalizedPath}${routeQuery ? `?${routeQuery}` : ''}`
+    return `${getDeepLinkPrefix()}${normalizedPath}${routeQuery ? `?${routeQuery}` : ''}`
   }
 
   private async triggerEmptyStateRouteLaunch(
@@ -2103,10 +2106,18 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     }
 
     this.destroyingIds.delete(instance.id)
-    this.closePopupsForParent(instance.id, 'parent_destroy')
-    this.applyAgentControlLock(instance, false)
-    this.updateNativeOverlayState(instance)
-    instance.cdp.detach()
+    const runCleanup = (label: string, action: () => void): void => {
+      try {
+        action()
+      } catch (error) {
+        mainLog.warn(`[browser-pane] finalize cleanup failed id=${instance.id} step=${label} error=${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+
+    runCleanup('closePopupsForParent', () => this.closePopupsForParent(instance.id, 'parent_destroy'))
+    runCleanup('applyAgentControlLock', () => this.applyAgentControlLock(instance, false))
+    runCleanup('updateNativeOverlayState', () => this.updateNativeOverlayState(instance))
+    runCleanup('cdp.detach', () => instance.cdp.detach())
     this.instances.delete(instance.id)
     this.removedCallback?.(instance.id)
     mainLog.info(`[browser-pane] Destroyed instance: ${instance.id} (${source})`)
@@ -2164,7 +2175,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   private async handleDeepLinkUrl(url: string): Promise<void> {
-    if (!url.startsWith(CRAFT_DEEPLINK_SCHEME_PREFIX)) return
+    if (!url.startsWith(getDeepLinkPrefix())) return
 
     try {
       if (!this.windowManager) {
@@ -2176,7 +2187,10 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       const { handleDeepLink } = await import('./deep-link')
       const sink = this.windowManager.getRpcEventSink() ?? undefined
       const resolver = (wcId: number) => this.windowManager?.getClientIdForWindow(wcId)
-      const result = await handleDeepLink(url, this.windowManager, sink, resolver)
+      const result = await handleDeepLink(url, this.windowManager, {
+        sink,
+        resolveClientId: resolver,
+      })
       if (!result.success) {
         mainLog.warn(`[browser-pane] deep-link handling failed: ${result.error ?? 'unknown error'} url=${url}`)
       }
@@ -3499,13 +3513,19 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     })
 
     pageWc.on('will-navigate', (event, url) => {
-      if (url.startsWith(CRAFT_DEEPLINK_SCHEME_PREFIX)) {
+      if (url.startsWith(getDeepLinkPrefix())) {
         event.preventDefault()
         void this.handleDeepLinkUrl(url)
       }
     })
 
-    pageWc.on('did-create-window', (popupWindow, details) => {
+    pageWc.on('did-create-window', (firstArg, secondArg, thirdArg) => {
+      const popupWindow = firstArg?.webContents ? firstArg : secondArg
+      const details = firstArg?.webContents ? secondArg : thirdArg
+      if (!popupWindow?.webContents) {
+        mainLog.warn(`[browser-pane] did-create-window ignored id=${instance.id}: missing popup webContents`)
+        return
+      }
       const popupUrl = details?.url || popupWindow.webContents.getURL?.() || 'about:blank'
       this.registerPopupWindow(instance, popupWindow, popupUrl)
     })
@@ -3515,7 +3535,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
         `[browser-pane] window-open requested id=${instance.id} url=${details.url} disposition=${details.disposition ?? 'unknown'} frameName=${details.frameName || 'none'}`,
       )
 
-      if (details.url.startsWith(CRAFT_DEEPLINK_SCHEME_PREFIX)) {
+      if (details.url.startsWith(getDeepLinkPrefix())) {
         void this.handleDeepLinkUrl(details.url)
         return { action: 'deny' }
       }

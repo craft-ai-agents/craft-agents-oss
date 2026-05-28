@@ -9,7 +9,7 @@
 export type McpAuthType = 'workspace_oauth' | 'workspace_bearer' | 'public';
 
 /**
- * Configuration for a remote Craft Agent Server.
+ * Configuration for a remote MDP Server.
  * When set on a workspace, handler calls are proxied over WebSocket.
  */
 export interface RemoteServerConfig {

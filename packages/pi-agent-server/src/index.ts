@@ -42,6 +42,7 @@ import type {
   CreateAgentSessionOptions,
   ToolDefinition,
 } from '@mariozechner/pi-coding-agent';
+import type { ThinkingLevel as PiThinkingLevel } from '@mariozechner/pi-agent-core';
 
 // Pi AI types
 import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
@@ -71,11 +72,12 @@ import { handleLargeResponse, estimateTokens, tokenLimitFor } from '../../shared
 import { getSessionPlansPath, getSessionPath } from '../../shared/src/sessions/storage.ts';
 import { buildCallLlmRequest, withTimeout, LLM_QUERY_TIMEOUT_MS } from '../../shared/src/agent/llm-tool.ts';
 import type { LLMQueryRequest, LLMQueryResult } from '../../shared/src/agent/llm-tool.ts';
-import { PI_TOOL_NAME_MAP, THINKING_TO_PI } from '../../shared/src/agent/backend/pi/constants.ts';
+import { PI_TOOL_NAME_MAP, THINKING_ENABLED_TO_PI } from '../../shared/src/agent/backend/pi/constants.ts';
 import { getDefaultSummarizationModel } from '../../shared/src/config/models.ts';
+import { ENV_CONNECTION_SSO_TOKEN_ENV_VAR } from '../../shared/src/config/llm-connections.ts';
 import { createWebFetchTool } from './tools/web-fetch.ts';
-import { resolveSearchProvider } from './tools/search/resolve-provider.ts';
-import { createSearchTool } from './tools/search/create-search-tool.ts';
+import type { WindowsShellCommandName } from './windows-process-tools.ts';
+import { resolveConfiguredGitBashShellPath } from './git-bash-shell.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
 import { applySystemPromptOverride } from './system-prompt-override.ts';
 
@@ -98,7 +100,7 @@ interface InitMessage {
   apiKey: string;
   model: string;
   cwd: string;
-  thinkingLevel: string;
+  thinkingEnabled: boolean;
   workspaceRootPath: string;
   sessionId: string;
   sessionPath: string;
@@ -140,14 +142,17 @@ type InboundMessage =
   | { type: 'mini_completion'; id: string; prompt: string }
   | { type: 'llm_query'; id: string; request: LLMQueryRequest }
   | { type: 'ensure_session_ready'; id: string }
+  | { type: 'windows_shell_command'; id: string; command: WindowsShellCommandName; cwd?: string }
   | { type: 'set_model'; model: string }
-  | { type: 'set_thinking_level'; level: string }
+  | { type: 'set_thinking_enabled'; enabled: boolean }
   | { type: 'compact'; id: string; customInstructions?: string }
   | { type: 'set_auto_compaction'; id: string; enabled: boolean }
   | RuntimeConfigUpdateMessage
   | { type: 'steer'; message: string }
   | { type: 'token_update'; piAuth: { provider: string; credential: PiCredential } }
   | { type: 'shutdown' };
+
+type PiThinkingEnabledKey = keyof typeof THINKING_ENABLED_TO_PI;
 
 /** Proxy tool definition from main process */
 interface ProxyToolDef {
@@ -194,6 +199,14 @@ interface OutboundLlmQueryResult {
   errorCode?: string;
 }
 interface OutboundEnsureSessionReadyResult { type: 'ensure_session_ready_result'; id: string; sessionId: string | null }
+interface OutboundWindowsShellCommandResult {
+  type: 'windows_shell_command_result';
+  id: string;
+  success: boolean;
+  text?: string;
+  details?: Record<string, unknown>;
+  errorMessage?: string;
+}
 interface OutboundCompactResult {
   type: 'compact_result';
   id: string;
@@ -227,6 +240,7 @@ type OutboundMessage =
   | OutboundMiniResult
   | OutboundLlmQueryResult
   | OutboundEnsureSessionReadyResult
+  | OutboundWindowsShellCommandResult
   | OutboundCompactResult
   | OutboundSetAutoCompactionResult
   | OutboundRuntimeConfigUpdateResult
@@ -394,6 +408,14 @@ function setInterceptorApiHints(model: { api?: string; provider?: string; baseUr
   );
 }
 
+function setInterceptorThinkingEnabled(enabled: boolean): void {
+  process.env.CRAFT_PI_THINKING_ENABLED = String(enabled);
+}
+
+function mapThinkingEnabledToPi(enabled: boolean): PiThinkingLevel {
+  return THINKING_ENABLED_TO_PI[String(enabled) as PiThinkingEnabledKey];
+}
+
 /**
  * Resolve the API key for custom endpoint auth.
  * Returns empty string for local endpoints (Ollama etc.) that don't need auth.
@@ -407,6 +429,17 @@ function resolveCustomEndpointApiKey(): string {
     if (isLocalhostUrl(initConfig.baseUrl)) {
       // Local endpoints (Ollama, LM Studio) don't need auth.
       // Pi SDK requires a truthy apiKey to register models, so use a placeholder.
+      return 'not-needed';
+    }
+    // SSO mode: the network interceptor injects the real Authorization header at
+    // HTTP level, so Pi SDK just needs a truthy placeholder to proceed.
+    if (process.env[ENV_CONNECTION_SSO_TOKEN_ENV_VAR]) {
+      return 'not-needed';
+    }
+    // authType 'none' serialises as undefined through connectionAuthTypeToBackendAuthType.
+    // Auth is handled externally (SSO interceptor when token arrives, or endpoint needs none).
+    // Return a placeholder so the Pi SDK doesn't reject the session before the request is made.
+    if (!initConfig?.authType) {
       return 'not-needed';
     }
     debugLog('[custom-endpoint] Warning: no API key found for non-localhost endpoint — requests will likely fail');
@@ -492,6 +525,14 @@ function createAuthenticatedRegistry(): {
   } else if (initConfig?.apiKey) {
     authStorage.set('anthropic', { type: 'api_key', key: initConfig.apiKey });
     debugLog('Injected API key into auth storage (legacy fallback)');
+  } else if (initConfig?.baseUrl?.trim() && (process.env[ENV_CONNECTION_SSO_TOKEN_ENV_VAR] || !initConfig.authType)) {
+    // No explicit credential, but auth is handled outside the Pi SDK:
+    //   - SSO mode: network interceptor replaces the Authorization header at HTTP level.
+    //   - authType 'none' (→ undefined): endpoint needs no auth or auth is injected later.
+    // Pi SDK still checks authStorage before running prompt() — inject a placeholder
+    // so it doesn't reject the session before the request even reaches the wire.
+    authStorage.set('custom-endpoint', { type: 'api_key', key: 'not-needed' } as unknown as AuthCredential);
+    debugLog('Injected placeholder credential for custom-endpoint provider (no-auth / SSO mode)');
   }
 
   const modelRegistry = PiModelRegistry.inMemory(authStorage);
@@ -525,28 +566,18 @@ async function ensureSession(): Promise<AgentSession> {
   // Store at module scope for set_model handler
   piModelRegistry = modelRegistry;
 
-  // Build tools: coding tools + web tools wrapped with permission hooks + proxy tools.
-  // Search provider is selected based on the user's LLM connection:
-  //   - OpenAI/OpenRouter → Responses API built-in web_search
-  //   - ChatGPT Plus (openai-codex) → ChatGPT backend responses endpoint
-  //   - Google → Gemini API with googleSearch grounding
-  //   - Others → DuckDuckGo fallback
-  //
-  // IMPORTANT: resolve dynamically on each search call so token_update refreshes
-  // are used without recreating the session.
-  const searchProvider = {
-    get name() {
-      return resolveSearchProvider(initConfig?.piAuth).name;
-    },
-    async search(query: string, count: number) {
-      return resolveSearchProvider(initConfig?.piAuth).search(query, count);
-    },
-  };
-  const searchTool = createSearchTool(searchProvider);
+  // Build tools: coding tools + server-local tools wrapped with permission hooks + proxy tools.
   const webFetchTool = createWebFetchTool(() =>
     initConfig ? getSessionPath(initConfig.workspaceRootPath, initConfig.sessionId) : null
   );
-  const webTools = [searchTool, webFetchTool];
+  const serverTools: ToolDefinition<any, any>[] = [webFetchTool];
+  if (process.platform === 'win32') {
+    const [{ createPowerShellTool }, { createWindowsProcessTools }] = await Promise.all([
+      import('./powershell-tool.ts'),
+      import('./windows-process-tools.ts'),
+    ]);
+    serverTools.push(createPowerShellTool(), ...createWindowsProcessTools());
+  }
 
   // Pi SDK 0.70.0 registration contract:
   //   - `customTools` accepts ToolDefinition[] — our hook-wrapped objects go here
@@ -557,9 +588,10 @@ async function ensureSession(): Promise<AgentSession> {
   //     our hooked versions take effect (permissions + large-response summarization).
   //   - Do NOT pass tool *objects* to `tools` — `allowedToolNames = new Set(options.tools)`
   //     then `.has(name)` returns false for every string lookup → zero tools active.
+  const bashShellPath = resolveConfiguredGitBashShellPath();
   const builtinDefs = [
     createReadToolDefinition(cwd),
-    createBashToolDefinition(cwd),
+    createBashToolDefinition(cwd, bashShellPath ? { shellPath: bashShellPath } : undefined),
     createEditToolDefinition(cwd),
     createWriteToolDefinition(cwd),
     createGrepToolDefinition(cwd),
@@ -567,9 +599,9 @@ async function ensureSession(): Promise<AgentSession> {
     createLsToolDefinition(cwd),
   ];
   const proxyTools = buildProxyTools();
-  const wrappedAll = wrapToolsWithHooks([...builtinDefs, ...webTools, ...proxyTools]);
+  const wrappedAll = wrapToolsWithHooks([...builtinDefs, ...serverTools, ...proxyTools]);
   const toolAllowlist = wrappedAll.map(t => t.name);
-  debugLog(`Session tools: ${builtinDefs.length} builtin + ${webTools.length} web + ${proxyTools.length} proxy = ${wrappedAll.length} total`);
+  debugLog(`Session tools: ${builtinDefs.length} builtin + ${serverTools.length} server + ${proxyTools.length} proxy = ${wrappedAll.length} total`);
 
   // Build session options
   const sessionOptions: CreateAgentSessionOptions = {
@@ -655,11 +687,7 @@ async function ensureSession(): Promise<AgentSession> {
     setInterceptorApiHints(undefined);
   }
 
-  // Set thinking level
-  const piThinkingLevel = THINKING_TO_PI[initConfig.thinkingLevel as keyof typeof THINKING_TO_PI];
-  if (piThinkingLevel) {
-    sessionOptions.thinkingLevel = piThinkingLevel;
-  }
+  sessionOptions.thinkingLevel = mapThinkingEnabledToPi(initConfig.thinkingEnabled);
 
   // Create the session — tools flow through customTools + allowlist (see comment above).
   const { session } = await createAgentSession(sessionOptions);
@@ -920,6 +948,18 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
       const fallback = providerDefault ?? getDefaultSummarizationModel();
       debugLog(`[queryLlm] Model ${bareModel} incompatible with ${authProvider} (resolved: ${resolvedProvider}), falling back to ${fallback}`);
       model = fallback;
+    }
+  } else if (shouldPreferCustomEndpoint()) {
+    // No piAuth (SSO / no-auth custom endpoint): the default Anthropic Haiku resolves
+    // to 'anthropic' provider in the Pi SDK catalog but no Anthropic credentials exist
+    // in authStorage. Fall back to the custom endpoint's own registered model instead.
+    const bareModel = model.startsWith('pi/') ? model.slice(3) : model;
+    const resolved = resolvePiModel(modelRegistry, bareModel, undefined, true);
+    const resolvedProvider = (resolved as any)?.provider;
+    if (!resolved || resolvedProvider !== 'custom-endpoint') {
+      const customModel = initConfig.model || [...customEndpointModelIds][0] || model;
+      debugLog(`[queryLlm] Model ${bareModel} not resolvable via custom-endpoint (resolved: ${resolvedProvider ?? 'none'}), falling back to ${customModel}`);
+      model = customModel;
     }
   }
 
@@ -1253,6 +1293,7 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
   }
 
   initConfig = msg;
+  setInterceptorThinkingEnabled(msg.thinkingEnabled);
 
   // Azure OpenAI requires a tenant-specific endpoint URL.
   // The Pi SDK (via Vercel AI SDK) reads AZURE_OPENAI_BASE_URL from env.
@@ -1453,6 +1494,30 @@ async function handleEnsureSessionReady(msg: Extract<InboundMessage, { type: 'en
   });
 }
 
+async function handleWindowsShellCommand(msg: Extract<InboundMessage, { type: 'windows_shell_command' }>): Promise<void> {
+  try {
+    if (process.platform !== 'win32') {
+      throw new Error('Windows shell commands are only available on Windows');
+    }
+    const { runWindowsShellCommand } = await import('./windows-process-tools.ts');
+    const result = await runWindowsShellCommand(msg.command, msg.cwd || resolvedCwd());
+    send({
+      type: 'windows_shell_command_result',
+      id: msg.id,
+      success: true,
+      text: result.text,
+      details: result.details,
+    });
+  } catch (error) {
+    send({
+      type: 'windows_shell_command_result',
+      id: msg.id,
+      success: false,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 async function handleCompact(msg: Extract<InboundMessage, { type: 'compact' }>): Promise<void> {
   try {
     const session = await ensureSession();
@@ -1597,26 +1662,26 @@ async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }
   }
 }
 
-async function handleSetThinkingLevel(msg: Extract<InboundMessage, { type: 'set_thinking_level' }>): Promise<void> {
-  debugLog(`[set_thinking_level] Received: ${msg.level}`);
+async function handleSetThinkingEnabled(msg: Extract<InboundMessage, { type: 'set_thinking_enabled' }>): Promise<void> {
+  debugLog(`[set_thinking_enabled] Received: ${msg.enabled}`);
+  if (initConfig) {
+    initConfig = { ...initConfig, thinkingEnabled: msg.enabled };
+  }
+  setInterceptorThinkingEnabled(msg.enabled);
 
   if (!piSession) {
-    debugLog('[set_thinking_level] No active session, ignoring');
+    debugLog('[set_thinking_enabled] No active session, ignoring');
     return;
   }
 
-  const piLevel = THINKING_TO_PI[msg.level as keyof typeof THINKING_TO_PI];
-  if (!piLevel) {
-    debugLog(`[set_thinking_level] No Pi mapping for level: ${msg.level}`);
-    return;
-  }
+  const piLevel = mapThinkingEnabledToPi(msg.enabled);
 
   try {
     piSession.setThinkingLevel(piLevel);
-    debugLog(`[set_thinking_level] Thinking level changed to: ${msg.level} (mapped: ${piLevel})`);
+    debugLog(`[set_thinking_enabled] Thinking toggle changed to: ${msg.enabled} (mapped: ${piLevel})`);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    debugLog(`[set_thinking_level] Failed to set thinking level: ${errorMsg}`);
+    debugLog(`[set_thinking_enabled] Failed to set thinking toggle: ${errorMsg}`);
   }
 }
 
@@ -1694,12 +1759,16 @@ async function processMessage(msg: InboundMessage): Promise<void> {
       await handleEnsureSessionReady(msg);
       break;
 
+    case 'windows_shell_command':
+      await handleWindowsShellCommand(msg);
+      break;
+
     case 'set_model':
       await handleSetModel(msg);
       break;
 
-    case 'set_thinking_level':
-      await handleSetThinkingLevel(msg);
+    case 'set_thinking_enabled':
+      await handleSetThinkingEnabled(msg);
       break;
 
     case 'compact':

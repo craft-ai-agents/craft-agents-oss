@@ -71,6 +71,7 @@ export interface LinkItem {
   expanded?: boolean
   onToggle?: () => void
   items?: SidebarItem[]    // Subitems as data (rendered as nested LeftSidebar) - supports separators
+  expandedContent?: React.ReactNode
   // Compact mode: reduced vertical padding (4px less total height)
   compact?: boolean
   // Tutorial system
@@ -148,7 +149,7 @@ const itemVariants: Variants = {
  * sidebar keyboard navigation. This component just renders the items.
  *
  * Styling matches agent items in the sidebar for consistency:
- * - py-[7px] px-2 text-[13px] rounded-md
+ * - py-[7px] px-2 text-[14px] rounded-md
  * - Icon: h-3.5 w-3.5
  *
  * Link variants:
@@ -205,7 +206,6 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
 
           const link = item
           const itemProps = getItemProps?.(link.id)
-          const isFocused = focusedItemId === link.id
 
           // Button element shared by both expandable and non-expandable items
           const buttonElement = (
@@ -216,9 +216,7 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
           )
 
           // Determine which expanded content to render (sortable vs regular)
-          const expandedContent = link.expandable && link.items && link.expanded
-            ? renderExpandedContent(link, getItemProps, focusedItemId, isNested)
-            : null
+          const expandedContent = getExpandedContent(link, getItemProps, focusedItemId, isNested)
 
           // Wrap with context menu if configured, scoped to button only.
           // ContextMenuTrigger with asChild sets data-state="open" on the button
@@ -257,7 +255,7 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
               )}
               {/* Expandable subitems — outside context menu scope so only the
                 * clicked button gets data-state="open", not nested children */}
-              {link.expandable && link.items && (
+              {link.expandable && (link.items || link.expandedContent) && (
                 <AnimatePresence initial={false}>
                   {link.expanded && (
                     <motion.div
@@ -332,6 +330,23 @@ function renderExpandedContent(
       links={link.items!}
     />
   )
+}
+
+function getExpandedContent(
+  link: LinkItem,
+  getItemProps: LeftSidebarProps['getItemProps'],
+  focusedItemId: string | null | undefined,
+  isNested: boolean | undefined,
+): React.ReactNode {
+  if (!link.expandable || !link.expanded) {
+    return null
+  }
+
+  if (link.items) {
+    return renderExpandedContent(link, getItemProps, focusedItemId, isNested)
+  }
+
+  return link.expandedContent ?? null
 }
 
 // ============================================================
@@ -486,7 +501,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
         onClick={isOverlay ? undefined : link.onClick}
         data-tutorial={link.dataTutorial}
         className={cn(
-          "group flex w-full items-center gap-2 rounded-[6px] text-[13px] select-none outline-none",
+          "group flex w-full items-center gap-2 rounded-[6px] text-[14px] select-none outline-none",
           "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
           // Compact mode: 4px less total height (py-[3px] vs py-[5px])
           link.compact ? "py-[3px]" : "py-[5px]",
@@ -537,7 +552,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
         )}
         {/* Label Badge: Shows count or status on the right, revealed on section hover */}
         {link.label && (
-          <span data-touch-reveal="true" className={cn(link.afterTitle ? 'ml-0' : 'ml-auto', 'text-xs text-foreground/30 opacity-0 group-hover/section:opacity-100 group-data-[state=open]:opacity-100 group-data-[edit-active=true]:opacity-100 transition-opacity')}>
+          <span data-touch-reveal="true" className={cn(link.afterTitle ? 'ml-0' : 'ml-auto', 'text-sm text-foreground/30 opacity-0 group-hover/section:opacity-100 group-data-[state=open]:opacity-100 group-data-[edit-active=true]:opacity-100 transition-opacity')}>
             {link.label}
           </span>
         )}

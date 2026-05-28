@@ -248,3 +248,126 @@ describe('Full flow: Source config → ApiConfig → Headers', () => {
     expect(headers['X-API-Key']).toBe('my-simple-key');
   });
 });
+
+describe('SourceServerBuilder.buildMcpServer', () => {
+  const builder = new SourceServerBuilder();
+
+  test('preserves imported Authorization credential headers instead of wrapping credential JSON as bearer token', () => {
+    const source = createMockSource({
+      slug: 'modelscope',
+      type: 'mcp',
+      isAuthenticated: true,
+      mcp: {
+        transport: 'streamable_http',
+        url: 'https://mcp.api-inference.modelscope.net/example/mcp',
+        authType: 'bearer',
+        headerNames: ['Authorization'],
+      },
+      api: undefined,
+    });
+    const credential: MultiHeaderCredential = {
+      Authorization: 'Bearer ms-token',
+    };
+    const token = JSON.stringify(credential);
+
+    const config = builder.buildMcpServer(source, token, credential);
+
+    expect(config).not.toBeNull();
+    if (!config || config.type !== 'streamable_http') {
+      throw new Error('Expected streamable HTTP MCP config');
+    }
+    expect(config.headers?.Authorization).toBe('Bearer ms-token');
+  });
+
+  test('still builds Authorization from a plain bearer token when no imported Authorization header exists', () => {
+    const source = createMockSource({
+      slug: 'plain-bearer',
+      type: 'mcp',
+      isAuthenticated: true,
+      mcp: {
+        transport: 'streamable_http',
+        url: 'https://example.com/mcp',
+        authType: 'bearer',
+      },
+      api: undefined,
+    });
+
+    const config = builder.buildMcpServer(source, 'plain-token', null);
+
+    expect(config).not.toBeNull();
+    if (!config || config.type !== 'streamable_http') {
+      throw new Error('Expected streamable HTTP MCP config');
+    }
+    expect(config.headers?.Authorization).toBe('Bearer plain-token');
+  });
+
+  test('prefers SSO idToken for bearer MCP sources when available', () => {
+    const source = createMockSource({
+      slug: 'yst-bearer',
+      type: 'mcp',
+      isAuthenticated: true,
+      mcp: {
+        transport: 'streamable_http',
+        url: 'https://example.com/mcp',
+        authType: 'bearer',
+      },
+      api: undefined,
+    });
+
+    const config = builder.buildMcpServer(source, 'source-token', null, 'sso-id-token');
+
+    expect(config).not.toBeNull();
+    if (!config || config.type !== 'streamable_http') {
+      throw new Error('Expected streamable HTTP MCP config');
+    }
+    expect(config.headers?.Authorization).toBe('Bearer sso-id-token');
+  });
+
+  test('SSO idToken overrides imported Authorization headers for bearer MCP sources', () => {
+    const source = createMockSource({
+      slug: 'yst-bearer-header',
+      type: 'mcp',
+      isAuthenticated: true,
+      mcp: {
+        transport: 'streamable_http',
+        url: 'https://example.com/mcp',
+        authType: 'bearer',
+        headerNames: ['Authorization'],
+      },
+      api: undefined,
+    });
+    const credential: MultiHeaderCredential = {
+      Authorization: 'Bearer source-header-token',
+    };
+
+    const config = builder.buildMcpServer(source, JSON.stringify(credential), credential, 'sso-id-token');
+
+    expect(config).not.toBeNull();
+    if (!config || config.type !== 'streamable_http') {
+      throw new Error('Expected streamable HTTP MCP config');
+    }
+    expect(config.headers?.Authorization).toBe('Bearer sso-id-token');
+  });
+
+  test('falls back to source bearer token when SSO idToken is unavailable', () => {
+    const source = createMockSource({
+      slug: 'fallback-bearer',
+      type: 'mcp',
+      isAuthenticated: true,
+      mcp: {
+        transport: 'streamable_http',
+        url: 'https://example.com/mcp',
+        authType: 'bearer',
+      },
+      api: undefined,
+    });
+
+    const config = builder.buildMcpServer(source, 'source-token', null, null);
+
+    expect(config).not.toBeNull();
+    if (!config || config.type !== 'streamable_http') {
+      throw new Error('Expected streamable HTTP MCP config');
+    }
+    expect(config.headers?.Authorization).toBe('Bearer source-token');
+  });
+});

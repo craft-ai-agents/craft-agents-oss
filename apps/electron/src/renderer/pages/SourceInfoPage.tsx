@@ -7,9 +7,11 @@
 
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { useEffect, useState, useMemo, useCallback } from 'react'
-import { AlertCircle } from 'lucide-react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { AlertCircle, Loader2, RefreshCw, Sparkles } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
+import { Button } from '@/components/ui/button'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceMenu } from '@/components/app-shell/SourceMenu'
 import { cn } from '@/lib/utils'
@@ -66,6 +68,23 @@ function getSourceUrl(source: LoadedSource): string | null {
   if (type === 'local' && local?.path) return local.path
 
   return null
+}
+
+function getMcpConnectionSignature(source: LoadedSource | null): string | null {
+  if (!source || source.config.type !== 'mcp') return null
+  const mcp = source.config.mcp
+  if (!mcp) return null
+  return JSON.stringify({
+    transport: mcp.transport ?? 'streamable_http',
+    url: mcp.url ?? null,
+    authType: mcp.authType ?? null,
+    clientId: mcp.clientId ?? null,
+    command: mcp.command ?? null,
+    args: mcp.args ?? [],
+    env: mcp.env ?? {},
+    headers: mcp.headers ?? {},
+    headerNames: mcp.headerNames ?? [],
+  })
 }
 
 /**
@@ -178,7 +197,10 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
   const [mcpTools, setMcpTools] = useState<McpToolWithPermission[] | null>(null)
   const [mcpToolsLoading, setMcpToolsLoading] = useState(false)
   const [mcpToolsError, setMcpToolsError] = useState<string | null>(null)
+  const [mcpToolsRefreshing, setMcpToolsRefreshing] = useState(false)
+  const [sourceGuideGenerating, setSourceGuideGenerating] = useState(false)
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
+  const mcpConnectionSignatureRef = useRef<string | null>(null)
 
 
   // Load source data
@@ -196,6 +218,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
         const found = sources.find((s) => s.config.slug === sourceSlug)
         if (found) {
           setSource(found)
+          mcpConnectionSignatureRef.current = getMcpConnectionSignature(found)
 
           const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, sourceSlug)
           if (isMounted) {
@@ -219,6 +242,52 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     }
   }, [workspaceId, sourceSlug])
 
+  const loadMcpTools = useCallback(async (options: { refresh?: boolean; isMounted?: () => boolean } = {}) => {
+    const isStillMounted = options.isMounted ?? (() => true)
+    const shouldRefresh = options.refresh ?? false
+    const setBusy = shouldRefresh ? setMcpToolsRefreshing : setMcpToolsLoading
+
+    setBusy(true)
+    setMcpToolsError(null)
+
+    try {
+      const result = shouldRefresh
+        ? await window.electronAPI.refreshMcpTools(workspaceId, sourceSlug)
+        : await window.electronAPI.getMcpTools(workspaceId, sourceSlug)
+      if (!isStillMounted()) return
+
+      if (result.success && result.tools) {
+        setMcpTools(result.tools)
+        if (shouldRefresh) {
+          const sources = await window.electronAPI.getSources(workspaceId)
+          if (!isStillMounted()) return
+          const updated = sources.find((s) => s.config.slug === sourceSlug)
+          if (updated) {
+            mcpConnectionSignatureRef.current = getMcpConnectionSignature(updated)
+            setSource(updated)
+          }
+          toast.success('MCP tools refreshed')
+        }
+      } else {
+        setMcpToolsError(result.error || t('sourceInfo.failedToLoadTools'))
+        if (shouldRefresh) {
+          toast.error('Failed to refresh MCP tools', {
+            description: result.error || t('sourceInfo.failedToLoadTools'),
+          })
+        }
+      }
+    } catch (err) {
+      if (!isStillMounted()) return
+      const message = err instanceof Error ? err.message : t('sourceInfo.failedToLoadTools')
+      setMcpToolsError(message)
+      if (shouldRefresh) {
+        toast.error('Failed to refresh MCP tools', { description: message })
+      }
+    } finally {
+      if (isStillMounted()) setBusy(false)
+    }
+  }, [workspaceId, sourceSlug, t])
+
   // Load MCP tools when source is loaded and is MCP type
   useEffect(() => {
     if (!source || source.config.type !== 'mcp') {
@@ -228,33 +297,12 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     }
 
     let isMounted = true
-    setMcpToolsLoading(true)
-    setMcpToolsError(null)
-
-    const loadTools = async () => {
-      try {
-        const result = await window.electronAPI.getMcpTools(workspaceId, sourceSlug)
-        if (!isMounted) return
-
-        if (result.success && result.tools) {
-          setMcpTools(result.tools)
-        } else {
-          setMcpToolsError(result.error || t('sourceInfo.failedToLoadTools'))
-        }
-      } catch (err) {
-        if (!isMounted) return
-        setMcpToolsError(err instanceof Error ? err.message : t('sourceInfo.failedToLoadTools'))
-      } finally {
-        if (isMounted) setMcpToolsLoading(false)
-      }
-    }
-
-    loadTools()
+    loadMcpTools({ isMounted: () => isMounted })
 
     return () => {
       isMounted = false
     }
-  }, [source, workspaceId, sourceSlug])
+  }, [source, loadMcpTools])
 
   // Load workspace settings (for localMcpEnabled)
   useEffect(() => {
@@ -277,6 +325,9 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
       const updated = sources.find((s) => s.config.slug === sourceSlug)
 
       if (updated) {
+        const previousMcpSignature = mcpConnectionSignatureRef.current
+        const nextMcpSignature = getMcpConnectionSignature(updated)
+        mcpConnectionSignatureRef.current = nextMcpSignature
         setSource(updated)
 
         const loadPermissionsConfig = async () => {
@@ -288,11 +339,15 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
           }
         }
         loadPermissionsConfig()
+
+        if (previousMcpSignature && nextMcpSignature && previousMcpSignature !== nextMcpSignature) {
+          void loadMcpTools({ refresh: true })
+        }
       }
     })
 
     return cleanup
-  }, [sourceSlug, workspaceId])
+  }, [loadMcpTools, sourceSlug, workspaceId])
 
   // Compute source URL
   const sourceUrl = useMemo(() => source ? getSourceUrl(source) : null, [source])
@@ -351,8 +406,36 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
 
   // Handle opening in new window
   const handleOpenInNewWindow = useCallback(() => {
-    window.electronAPI.openUrl(`craftagents://sources/source/${sourceSlug}?window=focused`)
+    window.electronAPI.openUrl(`mdp://sources/source/${sourceSlug}?window=focused`)
   }, [sourceSlug])
+
+  const handleRefreshMcpTools = useCallback(() => {
+    if (!source || source.config.type !== 'mcp' || mcpToolsRefreshing) return
+    void loadMcpTools({ refresh: true })
+  }, [loadMcpTools, mcpToolsRefreshing, source])
+
+  const handleGenerateSourceGuide = useCallback(async () => {
+    if (!source || source.config.type !== 'mcp' || sourceGuideGenerating) return
+
+    setSourceGuideGenerating(true)
+    try {
+      const result = await window.electronAPI.generateSourceGuide(workspaceId, sourceSlug)
+      if (!result.success || !result.guide) {
+        toast.error('Failed to generate source guide', {
+          description: result.error,
+        })
+        return
+      }
+      setSource((current) => current ? { ...current, guide: result.guide ?? current.guide } : current)
+      toast.success('Source guide generated')
+    } catch (err) {
+      toast.error('Failed to generate source guide', {
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setSourceGuideGenerating(false)
+    }
+  }, [source, sourceGuideGenerating, sourceSlug, workspaceId])
 
   // Get source name for header
   const sourceName = source?.config.name || sourceSlug
@@ -463,15 +546,34 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
               title={t('sourceInfo.tools')}
               description={t('sourceInfo.toolsDesc')}
               actions={
-                // EditPopover for AI-assisted tool permissions editing
-                <EditPopover
-                  trigger={<EditButton />}
-                  {...getEditConfig('source-tool-permissions', source.folderPath)}
-                  secondaryAction={{
-                    label: t('common.editFile'),
-                    filePath: `${source.folderPath}/permissions.json`,
-                  }}
-                />
+                <div className="flex items-center gap-1.5">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRefreshMcpTools}
+                        disabled={mcpToolsRefreshing}
+                        aria-label="Refresh MCP tools"
+                        className="h-8 px-3 rounded-[6px] bg-background shadow-minimal text-foreground/70 hover:text-foreground"
+                      >
+                        {mcpToolsRefreshing
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <RefreshCw className="h-4 w-4" />}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">Refresh MCP tools</TooltipContent>
+                  </Tooltip>
+                  <EditPopover
+                    trigger={<EditButton />}
+                    {...getEditConfig('source-tool-permissions', source.folderPath)}
+                    secondaryAction={{
+                      label: t('common.editFile'),
+                      filePath: `${source.folderPath}/permissions.json`,
+                    }}
+                  />
+                </div>
               }
             >
               <ToolsDataTable
@@ -504,25 +606,48 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
           )}
 
           {/* Documentation */}
-          {source.guide?.raw && (
+          {(source.guide?.raw || source.config.type === 'mcp') && (
             <Info_Section
               title={t('sourceInfo.documentation')}
               description={t('sourceInfo.documentationDesc')}
               actions={
-                // EditPopover for AI-assisted guide.md editing with "Edit File" as secondary action
-                <EditPopover
-                  trigger={<EditButton />}
-                  {...getEditConfig('source-guide', source.folderPath)}
-                  secondaryAction={{
-                    label: t('common.editFile'),
-                    filePath: `${source.folderPath}/guide.md`,
-                  }}
-                />
+                <div className="flex items-center gap-1.5">
+                  {source.config.type === 'mcp' && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleGenerateSourceGuide}
+                          disabled={sourceGuideGenerating}
+                          aria-label="Generate source guide"
+                          className="h-8 px-3 rounded-[6px] bg-background shadow-minimal text-foreground/70 hover:text-foreground"
+                        >
+                          {sourceGuideGenerating
+                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : <Sparkles className="h-4 w-4" />}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Generate source guide</TooltipContent>
+                    </Tooltip>
+                  )}
+                  <EditPopover
+                    trigger={<EditButton />}
+                    {...getEditConfig('source-guide', source.folderPath)}
+                    secondaryAction={{
+                      label: t('common.editFile'),
+                      filePath: `${source.folderPath}/guide.md`,
+                    }}
+                  />
+                </div>
               }
             >
-              <Info_Markdown maxHeight={540} fullscreen>
-                {source.guide.raw}
-              </Info_Markdown>
+              {source.guide?.raw && (
+                <Info_Markdown maxHeight={540} fullscreen>
+                  {source.guide.raw}
+                </Info_Markdown>
+              )}
             </Info_Section>
           )}
         </Info_Page.Content>

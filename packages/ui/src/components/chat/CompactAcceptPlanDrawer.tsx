@@ -57,7 +57,7 @@ export function CompactAcceptPlanDrawer({
           type="button"
           aria-label={effectiveAcceptLabel}
           className={cn(
-            'h-[28px] pl-2.5 pr-2 text-xs font-medium rounded-[6px] flex items-center gap-1.5 transition-all',
+            'h-[28px] pl-2.5 pr-2 text-sm font-medium rounded-[6px] flex items-center gap-1.5 transition-all',
             'bg-success/5 text-success hover:bg-success/10 shadow-tinted',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
             className,
@@ -85,7 +85,7 @@ export function CompactAcceptPlanDrawer({
               onClick={() => onAccept()}
             >
               <span className="text-sm font-medium">{effectiveAcceptOptionLabel}</span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-sm text-muted-foreground">
                 {t('plan.executeImmediately')}
               </span>
             </button>
@@ -98,7 +98,7 @@ export function CompactAcceptPlanDrawer({
               onClick={() => onAcceptWithCompact()}
             >
               <span className="text-sm font-medium">{t('plan.acceptAndCompact')}</span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-sm text-muted-foreground">
                 {t('plan.worksForComplex')}
               </span>
             </button>

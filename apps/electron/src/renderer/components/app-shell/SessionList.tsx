@@ -9,12 +9,10 @@ import { Inbox, Archive } from "lucide-react"
 import { getSessionStatus } from "@/utils/session"
 import * as storage from "@/lib/local-storage"
 import { KEYS } from "@/lib/local-storage"
-import type { LabelConfig } from "@craft-agent/shared/labels"
-import { flattenLabels } from "@craft-agent/shared/labels"
 import * as MultiSelect from "@/hooks/useMultiSelect"
 import { Spinner } from "@craft-agent/ui"
 import { EntityListEmptyScreen } from "@/components/ui/entity-list-empty"
-import { EntityList, type EntityListGroup } from "@/components/ui/entity-list"
+import { EntityList, type EntityListGroup, type EntityListHeightBehavior } from "@/components/ui/entity-list"
 import { RenameDialog } from "@/components/ui/rename-dialog"
 import { SessionSearchHeader } from "./SessionSearchHeader"
 import { SessionItem } from "./SessionItem"
@@ -31,6 +29,7 @@ import { sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@craft-agent/shared/views"
 import type { SessionStatusId, SessionStatus } from "@/config/session-status-config"
 import { buildCollapsedGroupsScopeSuffix } from "@/utils/session-list-collapse"
+import { cn } from "@/lib/utils"
 
 export interface SessionListRow {
   item: SessionMeta
@@ -38,6 +37,9 @@ export interface SessionListRow {
 
 /** Grouping mode for chat list */
 export type ChatGroupingMode = 'date' | 'status' | 'unread'
+
+/** Controls whether SessionList fills its parent or sizes to its content. */
+export type SessionListHeightBehavior = EntityListHeightBehavior
 
 interface SessionListProps {
   items: SessionMeta[]
@@ -51,8 +53,6 @@ interface SessionListProps {
   onRename: (sessionId: string, name: string) => void
   /** Called when Enter is pressed to focus chat input for a specific session */
   onFocusChatInput?: (sessionId?: string) => void
-  /** Called when a session is selected */
-  onSessionSelect?: (session: SessionMeta) => void
   /** Called when user wants to open a session in a new window */
   onOpenInNewWindow?: (session: SessionMeta) => void
   /** Called to navigate to a specific view (e.g., 'allSessions', 'flagged') */
@@ -71,10 +71,6 @@ interface SessionListProps {
   sessionStatuses?: SessionStatus[]
   /** View evaluator — evaluates a session and returns matching view configs */
   evaluateViews?: (meta: SessionMeta) => ViewConfig[]
-  /** Label configs for resolving session label IDs to display info */
-  labels?: LabelConfig[]
-  /** Callback when session labels are toggled (for labels submenu in SessionMenu) */
-  onLabelsChange?: (sessionId: string, labels: string[]) => void
   /** How to group sessions: 'date' (default) or 'status' */
   groupingMode?: ChatGroupingMode
   /** Workspace ID for content search (optional - if not provided, content search is disabled) */
@@ -86,11 +82,13 @@ interface SessionListProps {
   /** Override which session is highlighted (for multi-panel focused panel tracking) */
   focusedSessionId?: string | null
   /** Override navigation target (for multi-panel: focuses existing panel or navigates focused panel) */
-  onNavigateToSession?: (sessionId: string) => void
+  onNavigateToSession?: (sessionId: string, session?: SessionMeta) => void
   /** Session-level pending prompt marker (permission/admin approval) */
   hasPendingPrompt?: (sessionId: string) => boolean
   /** DOM-verified match info for the active session (from ChatDisplay) */
   activeChatMatchInfo?: { sessionId: string | null; count: number; isHighlighting?: boolean }
+  /** Whether the list should fill its parent height or size to its content */
+  heightBehavior?: SessionListHeightBehavior
 }
 
 // Re-export SessionStatusId for use by parent components
@@ -131,8 +129,6 @@ export function SessionList({
   onSearchClose,
   sessionStatuses = [],
   evaluateViews,
-  labels = [],
-  onLabelsChange,
   groupingMode = 'date',
   workspaceId,
   statusFilter,
@@ -141,6 +137,7 @@ export function SessionList({
   onNavigateToSession,
   hasPendingPrompt,
   activeChatMatchInfo,
+  heightBehavior = 'fill',
 }: SessionListProps) {
   const { t, i18n } = useTranslation()
   const setSendToWorkspace = useSetAtom(sendToWorkspaceAtom)
@@ -158,9 +155,6 @@ export function SessionList({
   const navigateToSession = onNavigateToSession ?? navigateToSessionPrimary
   const navState = useNavigationState()
   const { showEscapeOverlay } = useEscapeInterrupt()
-
-  // Pre-flatten label tree once for efficient ID lookups in each SessionItem
-  const flatLabels = useMemo(() => flattenLabels(labels), [labels])
 
   // Get current filter from navigation state (for preserving context in tab routes)
   const currentFilter = isSessionsNavigation(navState) ? navState.filter : undefined
@@ -484,12 +478,12 @@ export function SessionList({
     getId: (row) => row.item.id,
     keyboard: {
       onNavigate: useCallback((row: SessionListRow) => {
-        navigateToSession(row.item.id)
+        navigateToSession(row.item.id, row.item)
       }, [navigateToSession]),
       onActivate: useCallback((row: SessionListRow) => {
         // Only navigate when not in multi-select (matches original behavior)
         if (!MultiSelect.isMultiSelectActive(selectionStore.state)) {
-          navigateToSession(row.item.id)
+          navigateToSession(row.item.id, row.item)
         }
         onFocusChatInput?.(row.item.id)
       }, [selectionStore.state, navigateToSession, onFocusChatInput]),
@@ -528,15 +522,15 @@ export function SessionList({
   useAction('navigator.clearSelection', () => {
     const selectedId = selectionStore.state.selected
     interactions.selection.clear()
-    if (selectedId) navigateToSession(selectedId)
+    if (selectedId) navigateToSession(selectedId, items.find(item => item.id === selectedId))
   }, {
     enabled: () => isMultiSelectActive && !showEscapeOverlay,
-  }, [isMultiSelectActive, showEscapeOverlay, interactions.selection, selectionStore.state.selected, navigateToSession])
+  }, [isMultiSelectActive, showEscapeOverlay, interactions.selection, selectionStore.state.selected, navigateToSession, items])
 
   // --- Click handlers ---
   const handleSelectSession = useCallback((row: SessionListRow, index: number) => {
     selectSession(row.item.id, index)
-    navigateToSession(row.item.id)
+    navigateToSession(row.item.id, row.item)
   }, [selectSession, navigateToSession])
 
   const handleSelectSessionById = useCallback((sessionId: string) => {
@@ -546,8 +540,8 @@ export function SessionList({
     } else {
       selectSession(sessionId, 0)
     }
-    navigateToSession(sessionId)
-  }, [rowIndexMap, selectSession, navigateToSession])
+    navigateToSession(sessionId, items.find(item => item.id === sessionId))
+  }, [items, rowIndexMap, selectSession, navigateToSession])
 
   const handleToggleSelect = useCallback((row: SessionListRow, index: number) => {
     focusZone('navigator', { intent: 'click', moveFocus: false })
@@ -622,15 +616,12 @@ export function SessionList({
     onUnarchive: onUnarchive ? handleUnarchiveWithToast : undefined,
     onMarkUnread,
     onDelete: handleDeleteWithToast,
-    onLabelsChange,
     onSelectSessionById: handleSelectSessionById,
     onOpenInNewWindow: handleOpenInNewWindow,
     onSendToWorkspace: (ids: string[]) => setSendToWorkspace(ids),
     onFocusZone: handleFocusZone,
     onKeyDown: handleKeyDown,
     sessionStatuses,
-    flatLabels,
-    labels,
     searchQuery: resolvedSearchQuery,
     selectedSessionId: focusedSessionId !== undefined ? focusedSessionId : selectionStore.state.selected,
     isMultiSelectActive,
@@ -642,9 +633,9 @@ export function SessionList({
     handleRenameClick, onSessionStatusChange,
     onFlag, handleFlagWithToast, onUnflag, handleUnflagWithToast,
     onArchive, handleArchiveWithToast, onUnarchive, handleUnarchiveWithToast,
-    onMarkUnread, handleDeleteWithToast, onLabelsChange,
+    onMarkUnread, handleDeleteWithToast,
     handleSelectSessionById, handleOpenInNewWindow, setSendToWorkspace, handleFocusZone, handleKeyDown,
-    sessionStatuses, flatLabels, labels, resolvedSearchQuery,
+    sessionStatuses, resolvedSearchQuery,
     focusedSessionId, selectionStore.state.selected, isMultiSelectActive,
     sessionOptions, contentSearchResults, activeChatMatchInfo, hasPendingPrompt,
   ])
@@ -652,13 +643,15 @@ export function SessionList({
   // --- Empty state (non-search) — render before EntityList ---
   // Don't show empty state when there are collapsed groups with content
   if (flatRows.length === 0 && rowData.groups.length === 0 && !searchActive) {
+    const emptyStateClassName = heightBehavior === 'fill' ? 'h-full' : 'py-8'
+
     if (currentFilter?.kind === 'archived') {
       return (
         <EntityListEmptyScreen
           icon={<Archive />}
           title={t("session.noArchivedSessions")}
           description={t("session.noArchivedSessionsDesc")}
-          className="h-full"
+          className={emptyStateClassName}
         />
       )
     }
@@ -668,7 +661,7 @@ export function SessionList({
         icon={<Inbox />}
         title={t("session.noSessionsYet")}
         description={t("session.noSessionsYetDesc")}
-        className="h-full"
+        className={emptyStateClassName}
       >
         <button
           onClick={() => {
@@ -677,7 +670,7 @@ export function SessionList({
             else if (currentFilter?.kind === 'label') params.label = currentFilter.labelId
             navigate(routes.action.newSession(Object.keys(params).length > 0 ? params : undefined))
           }}
-          className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
+          className="inline-flex items-center h-7 px-3 text-sm font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
         >
           {t("session.newSession")}
         </button>
@@ -687,89 +680,90 @@ export function SessionList({
 
   // --- Render ---
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className={cn('flex flex-col min-h-0', heightBehavior === 'fill' && 'flex-1')}>
       <SessionListProvider value={listContext}>
-      <EntityList<SessionListRow>
-        groups={rowData.groups}
-        getKey={(row) => row.item.id}
-        renderItem={(row, _indexInGroup, isFirstInGroup) => {
-          const flatIndex = rowIndexMap.get(row.item.id) ?? 0
-          const rowProps = interactions.getRowProps(row, flatIndex)
-          return (
-            <SessionItem
-              item={row.item}
-              index={flatIndex}
-              itemProps={rowProps.buttonProps as Record<string, unknown>}
-              isSelected={rowProps.isSelected}
-              isFirstInGroup={isFirstInGroup}
-              isInMultiSelect={rowProps.isInMultiSelect ?? false}
-              onSelect={() => handleSelectSession(row, flatIndex)}
-              onToggleSelect={() => handleToggleSelect(row, flatIndex)}
-              onRangeSelect={() => handleRangeSelect(flatIndex)}
-            />
-          )
-        }}
-        header={
-          <>
-            {searchActive && (
-              <SessionSearchHeader
-                searchQuery={searchQuery}
-                onSearchChange={onSearchChange}
-                onSearchClose={onSearchClose}
-                onKeyDown={handleSearchKeyDown}
-                onFocus={() => setIsSearchInputFocused(true)}
-                onBlur={() => setIsSearchInputFocused(false)}
-                isSearching={isSearchingContent}
-                isUnavailable={isSearchUnavailable}
-                resultCount={matchingFilterItems.length + otherResultItems.length}
-                exceededLimit={exceededSearchLimit}
-                inputRef={searchInputRef}
+        <EntityList<SessionListRow>
+          groups={rowData.groups}
+          getKey={(row) => row.item.id}
+          renderItem={(row, _indexInGroup, isFirstInGroup) => {
+            const flatIndex = rowIndexMap.get(row.item.id) ?? 0
+            const rowProps = interactions.getRowProps(row, flatIndex)
+            return (
+              <SessionItem
+                item={row.item}
+                index={flatIndex}
+                itemProps={rowProps.buttonProps as Record<string, unknown>}
+                isSelected={rowProps.isSelected}
+                isFirstInGroup={isFirstInGroup}
+                isInMultiSelect={rowProps.isInMultiSelect ?? false}
+                onSelect={() => handleSelectSession(row, flatIndex)}
+                onToggleSelect={() => handleToggleSelect(row, flatIndex)}
+                onRangeSelect={() => handleRangeSelect(flatIndex)}
               />
-            )}
-            {isSearchMode && matchingFilterItems.length === 0 && otherResultItems.length > 0 && (
-              <div className="px-4 py-3 text-sm text-muted-foreground">
-                {t("session.noResultsInFilter")}
+            )
+          }}
+          header={
+            <>
+              {searchActive && (
+                <SessionSearchHeader
+                  searchQuery={searchQuery}
+                  onSearchChange={onSearchChange}
+                  onSearchClose={onSearchClose}
+                  onKeyDown={handleSearchKeyDown}
+                  onFocus={() => setIsSearchInputFocused(true)}
+                  onBlur={() => setIsSearchInputFocused(false)}
+                  isSearching={isSearchingContent}
+                  isUnavailable={isSearchUnavailable}
+                  resultCount={matchingFilterItems.length + otherResultItems.length}
+                  exceededLimit={exceededSearchLimit}
+                  inputRef={searchInputRef}
+                />
+              )}
+              {isSearchMode && matchingFilterItems.length === 0 && otherResultItems.length > 0 && (
+                <div className="px-4 py-3 text-sm text-muted-foreground">
+                  {t("session.noResultsInFilter")}
+                </div>
+              )}
+            </>
+          }
+          emptyState={
+            isSearchMode && !isSearchingContent ? (
+              <div className="flex flex-col items-center justify-center py-12 px-4">
+                <p className="text-sm text-muted-foreground">{t("session.noSessionsFound")}</p>
+                <p className="text-sm text-muted-foreground/60 mt-0.5">
+                  {t("session.noSessionsFoundDesc")}
+                </p>
+                <button
+                  onClick={() => onSearchChange?.('')}
+                  className="text-sm text-foreground hover:underline mt-2"
+                >
+                  {t("session.clearSearch")}
+                </button>
               </div>
-            )}
-          </>
-        }
-        emptyState={
-          isSearchMode && !isSearchingContent ? (
-            <div className="flex flex-col items-center justify-center py-12 px-4">
-              <p className="text-sm text-muted-foreground">{t("session.noSessionsFound")}</p>
-              <p className="text-xs text-muted-foreground/60 mt-0.5">
-                {t("session.noSessionsFoundDesc")}
-              </p>
-              <button
-                onClick={() => onSearchChange?.('')}
-                className="text-xs text-foreground hover:underline mt-2"
-              >
-                {t("session.clearSearch")}
-              </button>
-            </div>
-          ) : undefined
-        }
-        footer={
-          hasMore ? (
-            <div className="flex justify-center py-4">
-              <Spinner className="text-muted-foreground" />
-            </div>
-          ) : undefined
-        }
-        viewportRef={scrollViewportRef}
-        containerRef={zoneRef}
-        containerProps={{
-          'data-focus-zone': 'navigator',
-          'data-list-role': 'sessions',
-          role: 'listbox',
-          'aria-label': 'Sessions',
-        }}
-        scrollAreaClassName="select-none mask-fade-top-short"
-        collapsedGroups={collapsedGroups}
-        onToggleCollapse={toggleGroupCollapse}
-        onCollapseAll={collapseAllGroups}
-        onExpandAll={expandAllGroups}
-      />
+            ) : undefined
+          }
+          footer={
+            hasMore ? (
+              <div className="flex justify-center py-4">
+                <Spinner className="text-muted-foreground" />
+              </div>
+            ) : undefined
+          }
+          viewportRef={scrollViewportRef}
+          containerRef={zoneRef}
+          containerProps={{
+            'data-focus-zone': 'navigator',
+            'data-list-role': 'sessions',
+            role: 'listbox',
+            'aria-label': 'Sessions',
+          }}
+          heightBehavior={heightBehavior}
+          scrollAreaClassName="select-none mask-fade-top-short"
+          collapsedGroups={collapsedGroups}
+          onToggleCollapse={toggleGroupCollapse}
+          onCollapseAll={collapseAllGroups}
+          onExpandAll={expandAllGroups}
+        />
       </SessionListProvider>
 
       {/* Rename Dialog */}

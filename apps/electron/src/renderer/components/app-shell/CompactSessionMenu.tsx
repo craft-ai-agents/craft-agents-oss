@@ -35,7 +35,6 @@ import {
   ChevronLeft,
   ChevronRight,
   CloudUpload,
-  Columns2,
   Copy,
   Flag,
   FlagOff,
@@ -59,11 +58,6 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/components/ui/drawer'
-import { LabelIcon } from '@/components/ui/label-icon'
-import {
-  createLabelMenuItems,
-  type LabelMenuItem,
-} from '@/components/ui/label-menu-utils'
 import type { LabelConfig } from '@craft-agent/shared/labels'
 import {
   getStateColor,
@@ -78,7 +72,7 @@ import { getFileManagerName } from '@/lib/platform'
 import { useMessagingConnect, type MessagingPlatform } from '@/components/messaging/MessagingSessionMenuItem'
 import { useSessionMenuActions } from '@/hooks/useSessionMenuActions'
 
-type View = 'root' | 'status' | 'labels' | 'share' | 'messaging'
+type View = 'root' | 'status' | 'share' | 'messaging'
 
 export interface CompactSessionMenuProps {
   /** Title text shown in the trigger button + drawer header. */
@@ -177,16 +171,10 @@ export function CompactSessionMenu({
   const isArchived = item.isArchived ?? false
   const sharedUrl = item.sharedUrl
   const currentSessionStatus = getSessionStatus(item)
-  const sessionLabels = item.labels ?? []
   const _hasMessages = hasMessagesMeta(item)
   const _hasUnread = hasUnreadMeta(item)
 
   const actions = useSessionMenuActions({ item, onLabelsChange })
-
-  const flatLabelItems = React.useMemo(
-    (): LabelMenuItem[] => createLabelMenuItems(labels),
-    [labels],
-  )
 
   // Wrap a callback so it also closes the drawer. Async callbacks fire
   // their work in the background — the drawer doesn't need to stay open
@@ -215,7 +203,6 @@ export function CompactSessionMenu({
   const headerTitle = (() => {
     switch (view) {
       case 'status':    return t('sessionMenu.status')
-      case 'labels':    return t('sessionMenu.labels')
       case 'share':     return t('sessionMenu.shared')
       case 'messaging': return t('sessionMenu.connectMessaging')
       default:          return title ?? ''
@@ -252,7 +239,7 @@ export function CompactSessionMenu({
             >
               <h1
                 className={cn(
-                  'text-sm font-semibold truncate font-sans leading-tight',
+                  'text-base font-semibold truncate font-sans leading-tight',
                   isRegeneratingTitle && 'animate-shimmer-text',
                 )}
               >
@@ -292,8 +279,6 @@ export function CompactSessionMenu({
               sharedUrl={sharedUrl}
               sessionStatuses={sessionStatuses}
               currentSessionStatus={currentSessionStatus}
-              labelsCount={sessionLabels.length}
-              hasLabels={labels.length > 0}
               isFlagged={isFlagged}
               isArchived={isArchived}
               hasMessages={_hasMessages}
@@ -304,7 +289,6 @@ export function CompactSessionMenu({
               onSendToWorkspace={closeAfter(onSendToWorkspace)}
               onOpenMessagingSub={() => setView('messaging')}
               onOpenStatusSub={() => setView('status')}
-              onOpenLabelsSub={() => setView('labels')}
               onFlag={closeAfter(onFlag)}
               onUnflag={closeAfter(onUnflag)}
               onArchive={closeAfter(onArchive)}
@@ -312,7 +296,6 @@ export function CompactSessionMenu({
               onMarkUnread={closeAfter(onMarkUnread)}
               onRename={closeAfter(onRename)}
               onRefreshTitle={closeAfter(actions.refreshTitle)}
-              onOpenInNewPanel={closeAfter(actions.openInNewPanel)}
               onOpenInNewWindow={closeAfter(onOpenInNewWindow)}
               onShowInFinder={closeAfter(actions.showInFinder)}
               onCopyPath={closeAfter(actions.copyPath)}
@@ -328,14 +311,6 @@ export function CompactSessionMenu({
                 onSessionStatusChange(id)
                 setOpen(false)
               }}
-            />
-          )}
-
-          {view === 'labels' && (
-            <LabelsPane
-              items={flatLabelItems}
-              appliedLabelIds={actions.appliedLabelIds}
-              onToggle={actions.toggleLabel}
             />
           )}
 
@@ -365,8 +340,6 @@ interface RootPaneProps {
   sharedUrl?: string
   sessionStatuses: SessionStatus[]
   currentSessionStatus: SessionStatusId
-  labelsCount: number
-  hasLabels: boolean
   isFlagged: boolean
   isArchived: boolean
   hasMessages: boolean
@@ -377,7 +350,6 @@ interface RootPaneProps {
   onSendToWorkspace?: () => void
   onOpenMessagingSub: () => void
   onOpenStatusSub: () => void
-  onOpenLabelsSub: () => void
   onFlag?: () => void
   onUnflag?: () => void
   onArchive?: () => void
@@ -385,7 +357,6 @@ interface RootPaneProps {
   onMarkUnread?: () => void
   onRename?: () => void
   onRefreshTitle?: () => void
-  onOpenInNewPanel?: () => void
   onOpenInNewWindow?: () => void
   onShowInFinder?: () => void
   onCopyPath?: () => void
@@ -396,8 +367,6 @@ function RootPane({
   sharedUrl,
   sessionStatuses,
   currentSessionStatus,
-  labelsCount,
-  hasLabels,
   isFlagged,
   isArchived,
   hasMessages,
@@ -408,7 +377,6 @@ function RootPane({
   onSendToWorkspace,
   onOpenMessagingSub,
   onOpenStatusSub,
-  onOpenLabelsSub,
   onFlag,
   onUnflag,
   onArchive,
@@ -416,7 +384,6 @@ function RootPane({
   onMarkUnread,
   onRename,
   onRefreshTitle,
-  onOpenInNewPanel,
   onOpenInNewWindow,
   onShowInFinder,
   onCopyPath,
@@ -466,16 +433,6 @@ function RootPane({
         onTap={onOpenStatusSub}
       />
 
-      {hasLabels && (
-        <Row
-          icon={<Tag className="h-4 w-4" />}
-          label={t('sessionMenu.labels')}
-          trailing={labelsCount > 0 ? <CountBadge count={labelsCount} /> : undefined}
-          chevron
-          onTap={onOpenLabelsSub}
-        />
-      )}
-
       {!isFlagged ? (
         <Row icon={<Flag className="h-4 w-4 text-info" />} label={t('sessionMenu.flag')} onTap={onFlag} />
       ) : (
@@ -499,7 +456,6 @@ function RootPane({
 
       <Separator />
 
-      <Row icon={<Columns2 className="h-4 w-4" />} label={t('sessionMenu.openInNewPanel')} onTap={onOpenInNewPanel} />
       {onOpenInNewWindow && (
         <Row icon={<AppWindow className="h-4 w-4" />} label={t('sessionMenu.openInNewWindow')} onTap={onOpenInNewWindow} />
       )}
@@ -544,40 +500,6 @@ function StatusPane({
             label={state.label}
             radioSelected={activeStateId === state.id}
             onTap={() => onSelect(state.id)}
-          />
-        )
-      })}
-    </div>
-  )
-}
-
-function LabelsPane({
-  items,
-  appliedLabelIds,
-  onToggle,
-}: {
-  items: LabelMenuItem[]
-  appliedLabelIds: Set<string>
-  onToggle: (id: string) => void
-}) {
-  // The Labels row in RootPane is gated on `hasLabels`, so this pane is only
-  // ever entered when items.length > 0 — no empty-state branch needed.
-  return (
-    <div className="flex flex-col">
-      {items.map((item) => {
-        const isApplied = appliedLabelIds.has(item.id)
-        return (
-          <Row
-            key={item.id}
-            icon={<LabelIcon label={item.config} size="lg" />}
-            label={item.parentPath ? (
-              <>
-                <span className="text-foreground/50">{item.parentPath}</span>
-                {item.label}
-              </>
-            ) : item.label}
-            radioSelected={isApplied}
-            onTap={() => onToggle(item.id)}
           />
         )
       })}
@@ -665,12 +587,4 @@ function Row({
 
 function Separator() {
   return <div className="my-1 mx-3 h-px bg-foreground/[0.06]" />
-}
-
-function CountBadge({ count }: { count: number }) {
-  return (
-    <span className="text-[11px] tabular-nums text-foreground/50">
-      {count}
-    </span>
-  )
 }

@@ -11,6 +11,7 @@ import type { SavedWindow } from './window-state'
 
 // Vite dev server URL for hot reload
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
+const MAC_TRAFFIC_LIGHT_POSITION = { x: 18, y: 24 }
 
 /**
  * Get the appropriate background material for Windows transparency effects
@@ -235,7 +236,7 @@ export class WindowManager {
       // macOS-specific: hidden title bar with inset traffic lights
       ...(isMac && {
         titleBarStyle: 'hiddenInset',
-        trafficLightPosition: { x: 18, y: 16 },
+        trafficLightPosition: MAC_TRAFFIC_LIGHT_POSITION,
         vibrancy: 'under-window',
         visualEffectState: 'active',
       }),
@@ -244,9 +245,9 @@ export class WindowManager {
         frame: true, // Keep native frame for better UX
         autoHideMenuBar: true, // Menu is null on Windows, this is just for safety
         // Note: Don't use transparent:true with backgroundMaterial - it hides the window frame
-        ...(windowsBackgroundMaterial && {
-          backgroundMaterial: windowsBackgroundMaterial,
-        }),
+        // ...(windowsBackgroundMaterial && {
+        //   backgroundMaterial: windowsBackgroundMaterial,
+        // }),
       }),
       // Linux: use native frame
       ...(!isMac && !isWindows && {
@@ -752,7 +753,7 @@ export class WindowManager {
       // setWindowButtonVisibility can reset position to default, so we need
       // to restore the custom position using the modern setWindowButtonPosition API
       if (visible) {
-        managed.window.setWindowButtonPosition({ x: 18, y: 19 })
+        managed.window.setWindowButtonPosition(MAC_TRAFFIC_LIGHT_POSITION)
       }
     }
   }

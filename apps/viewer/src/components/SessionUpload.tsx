@@ -152,7 +152,7 @@ export function SessionUpload({ onSessionLoad }: SessionUploadProps) {
         </div>
       )}
 
-      <div className="mt-6 text-center text-xs text-foreground/30">
+      <div className="mt-6 text-center text-sm text-foreground/30">
         <p>Session files are processed locally in your browser.</p>
         <p>No data is uploaded to any server.</p>
       </div>

@@ -4,9 +4,6 @@ import { RPC_CHANNELS, type FileAttachment, type SendMessageOptions, type Sessio
 import type { StoredAttachment } from '@craft-agent/core/types'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { perf } from '@craft-agent/shared/utils'
-import { isValidThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
-
-const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { setTransferableHandler } from './transfer'
@@ -127,6 +124,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sessions.IMPORT,
   RPC_CHANNELS.sessions.EXPORT_REMOTE_TRANSFER,
   RPC_CHANNELS.sessions.IMPORT_REMOTE_TRANSFER,
+  RPC_CHANNELS.sessions.GET_TEAM_CONTEXT_OVERRIDE,
+  RPC_CHANNELS.sessions.SET_TEAM_CONTEXT_OVERRIDE,
 ] as const
 
 export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -321,12 +320,11 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         return sessionManager.setActiveViewingSession(sessionId, command.workspaceId)
       case 'setPermissionMode':
         return sessionManager.setSessionPermissionMode(sessionId, command.mode)
-      case 'setThinkingLevel':
-        // Validate thinking level before passing to session manager
-        if (!isValidThinkingLevel(command.level)) {
-          throw new Error(`Invalid thinking level: ${command.level}. Valid values: ${VALID_THINKING_LEVELS_LIST}`)
+      case 'setThinkingEnabled':
+        if (typeof command.enabled !== 'boolean') {
+          throw new Error(`Invalid thinking toggle: ${String(command.enabled)}. Valid values: true, false`)
         }
-        return sessionManager.setSessionThinkingLevel(sessionId, command.level)
+        return sessionManager.setSessionThinkingEnabled(sessionId, command.enabled)
       case 'updateWorkingDirectory':
         return sessionManager.updateWorkingDirectory(sessionId, command.dir)
       case 'setSources':
@@ -572,5 +570,21 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     await sessionManager.waitForInit()
     if (!targetWorkspaceId || typeof targetWorkspaceId !== 'string') throw new Error('targetWorkspaceId is required')
     return sessionManager.importRemoteSessionTransfer(targetWorkspaceId, payload)
+  })
+
+  // ============================================================
+  // Team Context Override
+  // ============================================================
+
+  // Get the current team context disabled override for a session.
+  server.handle(RPC_CHANNELS.sessions.GET_TEAM_CONTEXT_OVERRIDE, async (_ctx, sessionId: string) => {
+    const session = await sessionManager.getSession(sessionId)
+    return session?.teamContextDisabled ?? false
+  })
+
+  // Set the team context disabled override for a session.
+  server.handle(RPC_CHANNELS.sessions.SET_TEAM_CONTEXT_OVERRIDE, async (_ctx, sessionId: string, disabled: boolean) => {
+    await sessionManager.updateSessionTeamContextOverride(sessionId, disabled)
+    return { success: true }
   })
 }

@@ -188,7 +188,7 @@ export default function AppearanceSettingsPage() {
           window.electronAPI.getHomeDir(),
         ])
         setToolIcons(mappings)
-        setToolIconsJsonPath(`${homeDir}/.craft-agent/tool-icons/tool-icons.json`)
+        setToolIconsJsonPath(`${homeDir}/.mdp-agent/tool-icons/tool-icons.json`)
       } catch (error) {
         console.error('Failed to load tool icon mappings:', error)
       }
@@ -295,7 +295,7 @@ export default function AppearanceSettingsPage() {
                   </SettingsRow>
                 </SettingsCard>
                 {themeLoadError && (
-                  <p className="mt-2 text-xs text-info">
+                  <p className="mt-2 text-sm text-info">
                     {t("settings.appearance.themeWarning")} {themeLoadError} ({themeResolvedFrom === 'fallback' ? t("settings.appearance.usingBundledFallback") : t("settings.appearance.usingDefaultTheme")})
                   </p>
                 )}

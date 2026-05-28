@@ -5,12 +5,15 @@ import { registerAuthHandlers } from './auth'
 import { registerAutomationsHandlers } from './automations'
 import { registerFilesHandlers } from './files'
 import { registerLabelsHandlers } from './labels'
+import { registerGitHandlers } from './git'
 import { registerLlmConnectionsHandlers } from './llm-connections'
 import { registerOAuthHandlers } from './oauth'
 import { registerResourcesHandlers } from './resources'
 import { registerOnboardingHandlers } from './onboarding'
 import { registerSessionsHandlers } from './sessions'
+import { registerTeamPublicKnowledgeHandlers } from './teamPublicKnowledge'
 export { registerSessionsHandlers, cleanupSessionFileWatchForClient } from './sessions'
+export { cleanupWorkspaceFileWatchForClient } from './workspace-files'
 import { registerServerHandlers } from './server'
 import type { ServerHandlerContext } from '../../bootstrap/headless-start'
 export type { ServerHandlerContext } from '../../bootstrap/headless-start'
@@ -18,10 +21,13 @@ export { getHealthCheck } from './server'
 import { registerSettingsHandlers } from './settings'
 import { registerSkillsHandlers } from './skills'
 import { registerSourcesHandlers } from './sources'
+import { registerSsoHandlers } from './sso'
 import { registerStatusesHandlers } from './statuses'
 import { registerSystemCoreHandlers } from './system'
 import { registerTransferHandlers } from './transfer'
+import { registerUserProfileHandlers } from './userProfile'
 import { registerWorkspaceCoreHandlers } from './workspace'
+import { registerWorkspaceFilesHandlers } from './workspace-files'
 import { registerMessagingHandlers } from './messaging'
 
 export function registerCoreRpcHandlers(
@@ -32,6 +38,7 @@ export function registerCoreRpcHandlers(
   registerAuthHandlers(server, deps)
   registerAutomationsHandlers(server, deps)
   registerFilesHandlers(server, deps)
+  registerGitHandlers(server)
   registerLabelsHandlers(server, deps)
   registerLlmConnectionsHandlers(server, deps)
   registerOAuthHandlers(server, deps)
@@ -42,9 +49,13 @@ export function registerCoreRpcHandlers(
   registerSettingsHandlers(server, deps)
   registerSkillsHandlers(server, deps)
   registerSourcesHandlers(server, deps)
+  registerSsoHandlers(server, deps)
   registerStatusesHandlers(server, deps)
+  registerTeamPublicKnowledgeHandlers(server, deps)
   registerSystemCoreHandlers(server, deps)
   registerTransferHandlers(server)
+  registerUserProfileHandlers(server, deps)
   registerWorkspaceCoreHandlers(server, deps)
+  registerWorkspaceFilesHandlers(server, deps)
   registerMessagingHandlers(server, deps)
 }

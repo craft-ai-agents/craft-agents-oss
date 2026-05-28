@@ -14,16 +14,17 @@ import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
-import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2, MessageSquareMore, Zap, Clock, Check } from 'lucide-react'
-import type { CredentialHealthStatus, CredentialHealthIssue } from '../../../shared/types'
+import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2, MessageSquareMore, Zap, Clock, Check, FolderOpen, RefreshCw } from 'lucide-react'
+import type { CredentialHealthStatus, CredentialHealthIssue, GitBashStatus } from '../../../shared/types'
 import { Spinner, FullscreenOverlayBase } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 import { motion, AnimatePresence } from 'motion/react'
-import type { LlmConnectionWithStatus, ThinkingLevel, WorkspaceSettings, Workspace } from '../../../shared/types'
-import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
+import type { LlmConnectionWithStatus, ThinkingEnabled, WorkspaceSettings, Workspace } from '../../../shared/types'
+import { DEFAULT_THINKING_ENABLED, THINKING_ENABLEDS } from '@craft-agent/shared/agent/thinking-toggle'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import {
   DropdownMenu,
@@ -191,17 +192,30 @@ interface ConnectionRowProps {
   onDelete: () => void
   onSetDefault: () => void
   onValidate: () => void
-  onReauthenticate: () => void
   onEdit: () => void
   onSetMidStreamBehavior: (behavior: MidStreamBehavior) => void
   validationState: ValidationState
   validationError?: string
 }
 
-function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
+/** Sort Settings AI connections with env-backed connections pinned before defaults. */
+export function sortLlmConnectionsForSettings(connections: LlmConnectionWithStatus[]): LlmConnectionWithStatus[] {
+  return [...connections].sort((a, b) => {
+    if (a.isEnvironmentConnection && !b.isEnvironmentConnection) return -1
+    if (!a.isEnvironmentConnection && b.isEnvironmentConnection) return 1
+    if (a.isDefault && !b.isDefault) return -1
+    if (!a.isDefault && b.isDefault) return 1
+    return a.name.localeCompare(b.name)
+  })
+}
+
+/** Render one Settings AI connection row with context-sensitive actions. */
+export function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
+  const isEnvironmentConnection = connection.isEnvironmentConnection === true
+  const isUserManagedConnection = !isEnvironmentConnection
 
   // Opening dialog/overlay flows directly from a dropdown item can race with
   // menu teardown and leave a transient interaction lock behind on some systems.
@@ -241,13 +255,16 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
         const piLabel = !isSubscription && connection.piAuthProvider
           ? PI_AUTH_PROVIDER_LABELS[connection.piAuthProvider]
           : null
-        parts.push(piLabel ?? 'Craft Agents Backend')
+        parts.push(piLabel ?? 'MDP Backend')
         break
       }
       case 'pi_compat':
         parts.push(connection.baseUrl?.toLowerCase().includes('manifest.build')
           ? 'Manifest'
-          : 'Craft Agents Backend Compatible')
+          : 'MDP Agent Backend Compatible')
+        break
+      case 'openllm':
+        parts.push('OpenLLM')
         break
       default: parts.push(provider || 'Unknown')
     }
@@ -285,7 +302,11 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
         <div className="flex items-center gap-1">
           <ConnectionIcon connection={connection} size={14} />
           <span>{connection.name}</span>
-          {connection.isDefault && (
+          {isEnvironmentConnection ? (
+            <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
+              {t("common.builtIn")}
+            </span>
+          ) : connection.isDefault && (
             <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
               {t("common.default")}
             </span>
@@ -299,31 +320,29 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
           <button
             className="p-1.5 rounded-md hover:bg-foreground/[0.05] data-[state=open]:bg-foreground/[0.05] transition-colors"
             data-state={menuOpen ? 'open' : 'closed'}
+            aria-label="Connection actions"
           >
             <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
           </button>
         </DropdownMenuTrigger>
         <StyledDropdownMenuContent align="end">
-          <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onRenameClick)}>
-            <Pencil className="h-3.5 w-3.5" />
-            <span>{t("common.rename")}</span>
-          </StyledDropdownMenuItem>
-          {!connection.isDefault && (
-            <StyledDropdownMenuItem onClick={onSetDefault}>
-              <Star className="h-3.5 w-3.5" />
-              <span>{t("settings.ai.setAsDefault")}</span>
-            </StyledDropdownMenuItem>
-          )}
-          {connection.authType === 'oauth' ? (
-            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onReauthenticate)}>
-              <RefreshCcw className="h-3.5 w-3.5" />
-              <span>{t("settings.ai.reAuthenticate")}</span>
-            </StyledDropdownMenuItem>
-          ) : (
-            <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
-              <Settings2 className="h-3.5 w-3.5" />
-              <span>{t("common.edit")}</span>
-            </StyledDropdownMenuItem>
+          {isUserManagedConnection && (
+            <>
+              <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onRenameClick)}>
+                <Pencil className="h-3.5 w-3.5" />
+                <span>{t("common.rename")}</span>
+              </StyledDropdownMenuItem>
+              {!connection.isDefault && (
+                <StyledDropdownMenuItem onClick={onSetDefault}>
+                  <Star className="h-3.5 w-3.5" />
+                  <span>{t("settings.ai.setAsDefault")}</span>
+                </StyledDropdownMenuItem>
+              )}
+              <StyledDropdownMenuItem onClick={() => runAfterMenuClose(onEdit)}>
+                <Settings2 className="h-3.5 w-3.5" />
+                <span>{t("common.edit")}</span>
+              </StyledDropdownMenuItem>
+            </>
           )}
           <StyledDropdownMenuItem
             onClick={onValidate}
@@ -355,15 +374,19 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
               </DropdownMenuSub>
             )
           })()}
-          <StyledDropdownMenuSeparator />
-          <StyledDropdownMenuItem
-            onClick={onDelete}
-            variant="destructive"
-            disabled={isLastConnection}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            <span>{t("common.delete")}</span>
-          </StyledDropdownMenuItem>
+          {isUserManagedConnection && (
+            <>
+              <StyledDropdownMenuSeparator />
+              <StyledDropdownMenuItem
+                onClick={onDelete}
+                variant="destructive"
+                disabled={isLastConnection}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{t("common.delete")}</span>
+              </StyledDropdownMenuItem>
+            </>
+          )}
         </StyledDropdownMenuContent>
       </DropdownMenu>
     </SettingsRow>
@@ -383,7 +406,7 @@ interface WorkspaceOverrideCardProps {
 const WORKSPACE_SETTING_LABELS: Partial<Record<keyof WorkspaceSettings, string>> = {
   defaultLlmConnection: 'workspace connection override',
   model: 'workspace model override',
-  thinkingLevel: 'workspace thinking override',
+  thinkingEnabled: 'workspace thinking override',
 }
 
 function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: WorkspaceOverrideCardProps) {
@@ -447,22 +470,22 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
     updateSetting('model', model === 'global' ? undefined : model)
   }, [updateSetting])
 
-  const handleThinkingChange = useCallback((level: string) => {
+  const handleThinkingChange = useCallback((value: string) => {
     // 'global' means use app default (clear workspace override)
-    updateSetting('thinkingLevel', level === 'global' ? undefined : level as ThinkingLevel)
+    updateSetting('thinkingEnabled', value === 'global' ? undefined : value === 'true')
   }, [updateSetting])
 
   // Determine if workspace has any overrides
   const hasOverrides = settings && (
     settings.defaultLlmConnection ||
     settings.model ||
-    settings.thinkingLevel
+    settings.thinkingEnabled !== undefined
   )
 
   // Get display values
   const currentConnection = settings?.defaultLlmConnection || 'global'
   const currentModel = settings?.model || 'global'
-  const currentThinking = settings?.thinkingLevel || 'global'
+  const currentThinking = settings?.thinkingEnabled === undefined ? 'global' : String(settings.thinkingEnabled)
 
   // Derive workspace's effective connection (override or default)
   const workspaceEffectiveConnection = useMemo(() => {
@@ -481,9 +504,9 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
     if (settings?.model) {
       parts.push(getModelShortName(settings.model))
     }
-    if (settings?.thinkingLevel) {
-      const level = THINKING_LEVELS.find(l => l.id === settings.thinkingLevel)
-      parts.push(level ? t(level.nameKey) : settings.thinkingLevel)
+    if (settings?.thinkingEnabled !== undefined) {
+      const level = THINKING_ENABLEDS.find(l => l.id === settings.thinkingEnabled)
+      parts.push(level ? t(level.nameKey) : String(settings.thinkingEnabled))
     }
     return parts.join(' · ')
   }
@@ -505,14 +528,14 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
             {iconUrl ? (
               <img src={iconUrl} alt="" className="w-full h-full object-cover" />
             ) : (
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-sm font-medium text-muted-foreground">
                 {workspace.name?.charAt(0)?.toUpperCase() || 'W'}
               </span>
             )}
           </div>
           <div className="text-left">
             <div className="text-sm font-medium">{workspace.name}</div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-sm text-muted-foreground">
               {isLoading ? t("common.loading") : getSummary()}
             </div>
           </div>
@@ -545,7 +568,8 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
                     value: conn.slug,
                     label: conn.name,
                     description: conn.providerType === 'anthropic' ? 'Anthropic' :
-                                 conn.providerType === 'pi' ? 'Craft Agents Backend' :
+                                 conn.providerType === 'pi' ? 'MDP Backend' :
+                                 conn.providerType === 'openllm' ? 'OpenLLM' :
                                  conn.providerType || 'Unknown',
                   })),
                 ]}
@@ -569,8 +593,8 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
                 onValueChange={handleThinkingChange}
                 options={[
                   { value: 'global', label: t("settings.ai.useDefault"), description: t("settings.ai.inheritFromApp") },
-                  ...THINKING_LEVELS.map(({ id, nameKey, descriptionKey }) => ({
-                    value: id,
+                  ...THINKING_ENABLEDS.map(({ id, nameKey, descriptionKey }) => ({
+                    value: String(id),
                     label: t(nameKey),
                     description: t(descriptionKey),
                   })),
@@ -591,6 +615,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
 /** Map a connection's provider type to the corresponding API key setup method. */
 function getApiKeyMethodForConnection(conn: LlmConnectionWithStatus): ApiSetupMethod {
   const provider = conn.providerType || conn.type
+  if (provider === 'openllm') return 'openllm_api_key'
   if (provider === 'pi' || provider === 'pi_compat') return 'pi_api_key'
   return 'anthropic_api_key'
 }
@@ -606,7 +631,6 @@ export default function AiSettingsPage() {
   // API Setup overlay state
   const [showApiSetup, setShowApiSetup] = useState(false)
   const [editingConnectionSlug, setEditingConnectionSlug] = useState<string | null>(null)
-  const [isDirectEdit, setIsDirectEdit] = useState(false)
   const [editInitialValues, setEditInitialValues] = useState<{
     apiKey?: string
     baseUrl?: string
@@ -621,13 +645,20 @@ export default function AiSettingsPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
 
   // Default settings state (app-level)
-  const [defaultThinking, setDefaultThinking] = useState<ThinkingLevel>(DEFAULT_THINKING_LEVEL)
+  const [defaultThinking, setDefaultThinking] = useState<ThinkingEnabled>(DEFAULT_THINKING_ENABLED)
   const [extendedPromptCache, setExtendedPromptCache] = useState(false)
   const [enable1MContext, setEnable1MContext] = useState(false)
   const [rtkEnabled, setRtkEnabled] = useState(false)
   const [rtkStatus, setRtkStatus] = useState<{ installed: boolean; path: string | null; version: string | null } | null>(null)
   const [rtkRechecking, setRtkRechecking] = useState(false)
   const [rtkGain, setRtkGain] = useState<{ totalCommands: number; totalInput: number; totalOutput: number; totalSaved: number; avgSavingsPct: number; totalTimeMs: number; avgTimeMs: number } | null>(null)
+
+  // Git Bash (Windows only)
+  const [gitBashStatus, setGitBashStatus] = useState<GitBashStatus | null>(null)
+  const [gitBashRechecking, setGitBashRechecking] = useState(false)
+  const [gitBashCustomPath, setGitBashCustomPath] = useState('')
+  const [gitBashShowInput, setGitBashShowInput] = useState(false)
+  const [gitBashError, setGitBashError] = useState<string | undefined>()
 
   // Validation state per connection
   const [validationStates, setValidationStates] = useState<Record<string, {
@@ -651,8 +682,8 @@ export default function AiSettingsPage() {
         const ws = await window.electronAPI.getWorkspaces()
         setWorkspaces(ws)
 
-        const defaultThinkingLevel = await window.electronAPI.getDefaultThinkingLevel()
-        setDefaultThinking(defaultThinkingLevel)
+        const defaultThinkingEnabled = await window.electronAPI.getDefaultThinkingEnabled()
+        setDefaultThinking(defaultThinkingEnabled)
 
         const extendedCache = await window.electronAPI.getExtendedPromptCache()
         setExtendedPromptCache(extendedCache)
@@ -665,6 +696,9 @@ export default function AiSettingsPage() {
 
         const status = await window.electronAPI.getRtkStatus()
         setRtkStatus(status)
+
+        const gbStatus = await window.electronAPI.checkGitBash()
+        setGitBashStatus(gbStatus)
 
         // Check credential health for potential issues (corruption, machine migration)
         const health = await window.electronAPI.getCredentialHealth()
@@ -699,7 +733,8 @@ export default function AiSettingsPage() {
 
   // OnboardingWizard hook for editing API connection
   const apiSetupOnboarding = useOnboarding({
-    initialStep: 'provider-select',
+    initialStep: 'credentials',
+    initialApiSetupMethod: 'pi_api_key',
     onConfigSaved: refreshLlmConnections,
     onComplete: () => {
       closeApiSetup()
@@ -720,7 +755,6 @@ export default function AiSettingsPage() {
     apiSetupOnboarding.reset()
     // Clear any credential health issues after successful re-authentication
     setCredentialHealthIssues([])
-    setIsDirectEdit(false)
     setEditInitialValues(undefined)
   }, [closeApiSetup, refreshLlmConnections, apiSetupOnboarding])
 
@@ -728,20 +762,13 @@ export default function AiSettingsPage() {
   const handleCloseApiSetup = useCallback(() => {
     closeApiSetup()
     apiSetupOnboarding.reset()
-    setIsDirectEdit(false)
     setEditInitialValues(undefined)
   }, [closeApiSetup, apiSetupOnboarding])
 
   // Handler for re-authenticate button in credential health banner
   const handleReauthenticate = useCallback(() => {
-    // Open API setup for the default connection (or first connection if available)
-    const defaultConn = llmConnections.find(c => c.isDefault) || llmConnections[0]
-    if (defaultConn) {
-      openApiSetup(defaultConn.slug)
-    } else {
-      openApiSetup()
-    }
-  }, [llmConnections, openApiSetup])
+    openApiSetup()
+  }, [openApiSetup])
 
   // Connection action handlers
   const handleRenameClick = useCallback((connection: LlmConnectionWithStatus) => {
@@ -779,18 +806,6 @@ export default function AiSettingsPage() {
     setRenameValue('')
   }, [renamingConnection, renameValue, refreshLlmConnections])
 
-  const handleReauthenticateConnection = useCallback((connection: LlmConnectionWithStatus) => {
-    openApiSetup(connection.slug)
-    apiSetupOnboarding.reset()
-
-    if (connection.authType === 'oauth') {
-      const method = connection.providerType === 'pi'
-                   ? (connection.piAuthProvider === 'github-copilot' ? 'pi_copilot_oauth' : 'pi_chatgpt_oauth')
-                   : 'claude_oauth'
-      apiSetupOnboarding.handleStartOAuth(method, connection.slug)
-    }
-  }, [apiSetupOnboarding, openApiSetup])
-
   const handleEditConnection = useCallback(async (connection: LlmConnectionWithStatus) => {
     // Fetch stored API key (best-effort — if IPC not available yet, skip pre-fill)
     let apiKey: string | undefined
@@ -823,7 +838,6 @@ export default function AiSettingsPage() {
 
     // Open overlay and jump directly to credentials step (no reset — jumpToCredentials sets state)
     openApiSetup(connection.slug)
-    setIsDirectEdit(true)
     const method = getApiKeyMethodForConnection(connection)
     apiSetupOnboarding.jumpToCredentials(method)
   }, [apiSetupOnboarding, openApiSetup])
@@ -893,7 +907,8 @@ export default function AiSettingsPage() {
   }, [refreshLlmConnections])
 
   // Update a connection's mid-stream send behavior (steer vs queue).
-  // Uses the same saveLlmConnection RPC as other connection edits.
+  // Environment uses a dedicated app-level preference because env-provider
+  // remains protected from the normal SAVE mutation path.
   const handleSetMidStreamBehavior = useCallback(async (
     connection: LlmConnectionWithStatus,
     behavior: MidStreamBehavior,
@@ -901,8 +916,19 @@ export default function AiSettingsPage() {
     if (!window.electronAPI) return
     if (resolveMidStreamBehavior(connection) === behavior) return
     try {
+      if (connection.isEnvironmentConnection) {
+        const result = await window.electronAPI.setEnvConnectionMidStreamBehavior(behavior)
+        if (result.success) {
+          refreshLlmConnections?.()
+        } else {
+          console.error('Failed to update environment mid-stream behavior:', result.error)
+          toast.error(t('settings.ai.midStream.updateFailed'))
+        }
+        return
+      }
+
       const updated = { ...connection, midStreamBehavior: behavior }
-      const { isAuthenticated: _a, authError: _b, isDefault: _c, ...connectionData } = updated
+      const { isAuthenticated: _a, authError: _b, isDefault: _c, isEnvironmentConnection: _d, ...connectionData } = updated
       const result = await window.electronAPI.saveLlmConnection(connectionData as import('../../../shared/types').LlmConnection)
       if (result.success) {
         refreshLlmConnections?.()
@@ -934,14 +960,14 @@ export default function AiSettingsPage() {
     await refreshLlmConnections()
   }, [defaultConnection, refreshLlmConnections])
 
-  const handleDefaultThinkingChange = useCallback(async (level: ThinkingLevel) => {
+  const handleDefaultThinkingChange = useCallback(async (enabled: ThinkingEnabled) => {
     if (!window.electronAPI) return
 
     const previous = defaultThinking
-    setDefaultThinking(level)
+    setDefaultThinking(enabled)
 
     try {
-      const result = await window.electronAPI.setDefaultThinkingLevel(level)
+      const result = await window.electronAPI.setDefaultThinkingEnabled(enabled)
       if (!result.success) {
         console.error('Failed to set default thinking level:', result.error)
         setDefaultThinking(previous)
@@ -986,6 +1012,42 @@ export default function AiSettingsPage() {
     setRtkGain(gain ?? null)
   }, [])
 
+  // Git Bash handlers (Windows only)
+  const handleRecheckGitBash = useCallback(async () => {
+    setGitBashRechecking(true)
+    try {
+      const status = await window.electronAPI.checkGitBash()
+      setGitBashStatus(status)
+      if (status.found) {
+        setGitBashShowInput(false)
+        setGitBashError(undefined)
+      }
+    } finally {
+      setGitBashRechecking(false)
+    }
+  }, [])
+
+  const handleBrowseGitBash = useCallback(async () => {
+    const path = await window.electronAPI.browseForGitBash()
+    if (path) {
+      setGitBashCustomPath(path)
+      setGitBashShowInput(true)
+    }
+  }, [])
+
+  const handleUseGitBashPath = useCallback(async () => {
+    if (!gitBashCustomPath.trim()) return
+    const result = await window.electronAPI.setGitBashPath(gitBashCustomPath.trim())
+    if (result.success) {
+      const status = await window.electronAPI.checkGitBash()
+      setGitBashStatus(status)
+      setGitBashShowInput(false)
+      setGitBashError(undefined)
+    } else {
+      setGitBashError(result.error || 'Invalid path')
+    }
+  }, [gitBashCustomPath])
+
   // Refresh gain stats whenever rtk transitions to installed-and-enabled
   useEffect(() => {
     if (rtkStatus?.installed && rtkEnabled) {
@@ -1027,8 +1089,9 @@ export default function AiSettingsPage() {
                       value: conn.slug,
                       label: conn.name,
                       description: conn.providerType === 'anthropic' ? 'Anthropic API' :
-                                   conn.providerType === 'pi' ? 'Craft Agents Backend' :
-                                   conn.providerType === 'pi_compat' ? (conn.baseUrl?.toLowerCase().includes('manifest.build') ? 'Manifest' : 'Craft Agents Backend Compatible') :
+                                   conn.providerType === 'pi' ? 'MDP Agent Backend' :
+                                   conn.providerType === 'pi_compat' ? (conn.baseUrl?.toLowerCase().includes('manifest.build') ? 'Manifest' : 'MDP Agent Backend Compatible') :
+                                   conn.providerType === 'openllm' ? 'OpenLLM' :
                                    conn.providerType || 'Unknown',
                     }))}
                   />
@@ -1044,10 +1107,10 @@ export default function AiSettingsPage() {
                   <SettingsMenuSelectRow
                     label={t("settings.ai.thinking")}
                     description={t("settings.ai.thinkingDesc")}
-                    value={defaultThinking}
-                    onValueChange={(v) => handleDefaultThinkingChange(v as ThinkingLevel)}
-                    options={THINKING_LEVELS.map(({ id, nameKey, descriptionKey }) => ({
-                      value: id,
+                    value={String(defaultThinking)}
+                    onValueChange={(v) => handleDefaultThinkingChange(v === 'true')}
+                    options={THINKING_ENABLEDS.map(({ id, nameKey, descriptionKey }) => ({
+                      value: String(id),
                       label: t(nameKey),
                       description: t(descriptionKey),
                     }))}
@@ -1080,12 +1143,7 @@ export default function AiSettingsPage() {
                       {t("settings.ai.noConnections")}
                     </div>
                   ) : (
-                    [...llmConnections]
-                      .sort((a, b) => {
-                        if (a.isDefault && !b.isDefault) return -1
-                        if (!a.isDefault && b.isDefault) return 1
-                        return a.name.localeCompare(b.name)
-                      })
+                    sortLlmConnectionsForSettings(llmConnections)
                       .map((conn) => (
                       <ConnectionRow
                         key={conn.slug}
@@ -1095,7 +1153,6 @@ export default function AiSettingsPage() {
                         onDelete={() => handleDeleteConnection(conn.slug)}
                         onSetDefault={() => handleSetDefaultConnection(conn.slug)}
                         onValidate={() => handleValidateConnection(conn.slug)}
-                        onReauthenticate={() => handleReauthenticateConnection(conn)}
                         onEdit={() => handleEditConnection(conn)}
                         onSetMidStreamBehavior={(behavior) => handleSetMidStreamBehavior(conn, behavior)}
                         validationState={validationStates[conn.slug]?.state || 'idle'}
@@ -1139,7 +1196,7 @@ export default function AiSettingsPage() {
                       />
                       {rtkEnabled && rtkGain && rtkGain.totalCommands > 0 && (
                         <div className="px-4 pb-4 -mt-1">
-                          <div className="flex items-center justify-between text-xs text-foreground/60">
+                          <div className="flex items-center justify-between text-sm text-foreground/60">
                             <span>
                               {t("settings.ai.rtk.gainSummary", {
                                 saved: formatTokenCount(rtkGain.totalSaved),
@@ -1190,6 +1247,60 @@ export default function AiSettingsPage() {
                 </SettingsCard>
               </SettingsSection>
 
+              {/* Git Bash */}
+              {gitBashStatus !== null && (
+                <SettingsSection title={t("settings.ai.gitBash.title")} description={t("settings.ai.gitBash.description")}>
+                  <SettingsCard>
+                    <SettingsRow
+                      label={t("settings.ai.gitBash.path")}
+                      description={gitBashStatus.path ?? (gitBashStatus.found ? t("settings.ai.gitBash.auto") : t("settings.ai.gitBash.notFound"))}
+                    >
+                      <Button
+                        size="sm"
+                        onClick={handleRecheckGitBash}
+                        disabled={gitBashRechecking}
+                        className="bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
+                      >
+                        <RefreshCw className={`mr-1.5 size-3.5 ${gitBashRechecking ? 'animate-spin' : ''}`} />
+                        {gitBashRechecking ? t("common.checking") : t("settings.ai.gitBash.recheck")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleBrowseGitBash}
+                        className="bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
+                      >
+                        <FolderOpen className="mr-1.5 size-3.5" />
+                        {t("settings.ai.gitBash.browse")}
+                      </Button>
+                    </SettingsRow>
+                    {gitBashShowInput && (
+                      <div className="px-4 pb-4 space-y-2">
+                        <Input
+                          value={gitBashCustomPath}
+                          onChange={(e) => {
+                            setGitBashCustomPath(e.target.value)
+                            setGitBashError(undefined)
+                          }}
+                          placeholder={t("onboarding.gitBash.pathPlaceholder")}
+                          className="text-sm"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleUseGitBashPath}
+                          disabled={!gitBashCustomPath.trim()}
+                          className="w-full bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
+                        >
+                          {t("settings.ai.gitBash.useThisPath")}
+                        </Button>
+                        {gitBashError && (
+                          <p className="text-sm text-red-500">{gitBashError}</p>
+                        )}
+                      </div>
+                    )}
+                  </SettingsCard>
+                </SettingsSection>
+              )}
+
               {/* API Setup Fullscreen Overlay */}
               <FullscreenOverlayBase
                 isOpen={showApiSetup}
@@ -1199,17 +1310,13 @@ export default function AiSettingsPage() {
                 <OnboardingWizard
                   state={apiSetupOnboarding.state}
                   onContinue={apiSetupOnboarding.handleContinue}
-                  onBack={isDirectEdit ? handleCloseApiSetup : apiSetupOnboarding.handleBack}
-                  onSelectProvider={apiSetupOnboarding.handleSelectProvider}
-                  onSelectApiSetupMethod={apiSetupOnboarding.handleSelectApiSetupMethod}
+                  onBack={handleCloseApiSetup}
                   onSubmitCredential={apiSetupOnboarding.handleSubmitCredential}
-                  onSubmitLocalModel={apiSetupOnboarding.handleSubmitLocalModel}
-                  onStartOAuth={apiSetupOnboarding.handleStartOAuth}
                   onFinish={handleApiSetupFinish}
-                  isWaitingForCode={apiSetupOnboarding.isWaitingForCode}
-                  onSubmitAuthCode={apiSetupOnboarding.handleSubmitAuthCode}
-                  onCancelOAuth={apiSetupOnboarding.handleCancelOAuth}
-                  copilotDeviceCode={apiSetupOnboarding.copilotDeviceCode}
+                  onBrowseGitBash={apiSetupOnboarding.handleBrowseGitBash}
+                  onUseGitBashPath={apiSetupOnboarding.handleUseGitBashPath}
+                  onRecheckGitBash={apiSetupOnboarding.handleRecheckGitBash}
+                  onClearError={apiSetupOnboarding.handleClearError}
                   editInitialValues={editInitialValues}
                   className="h-full"
                 />

@@ -6,8 +6,9 @@
 import { spawn, type Subprocess } from "bun";
 import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "fs";
 import { join, basename } from "path";
+import { homedir } from "os";
 import * as esbuild from "esbuild";
-import { downloadUv, type Platform, type Arch } from "./build/common";
+import { downloadUv, downloadRtk, type Platform, type Arch } from "./build/common";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
@@ -74,6 +75,30 @@ async function ensureBundledUvForCurrentPlatform(): Promise<void> {
   });
 }
 
+async function ensureBundledRtkForCurrentPlatform(): Promise<void> {
+  const platform = resolveBuildPlatform();
+  const arch = resolveBuildArch();
+  const platformKey = `${platform}-${arch}`;
+  const rtkBinary = platform === "win32" ? "rtk.exe" : "rtk";
+  const rtkPath = join(ELECTRON_DIR, "resources", "bin", platformKey, rtkBinary);
+
+  if (existsSync(rtkPath)) {
+    console.log(`✅ Bundled rtk present: ${rtkPath}`);
+    return;
+  }
+
+  console.log(`⬇️  Bundled rtk missing, bootstrapping ${platformKey}...`);
+  await downloadRtk({
+    platform,
+    arch,
+    upload: false,
+    uploadLatest: false,
+    uploadScript: false,
+    rootDir: ROOT_DIR,
+    electronDir: ELECTRON_DIR,
+  });
+}
+
 // Multi-instance detection (matches detect-instance.sh logic)
 // Detects instance number from folder name suffix (e.g., craft-agents-1 → instance 1)
 function detectInstance(): void {
@@ -87,9 +112,9 @@ function detectInstance(): void {
     const instanceNum = match[1];
     process.env.CRAFT_INSTANCE_NUMBER = instanceNum;
     process.env.CRAFT_VITE_PORT = `${instanceNum}173`;
-    process.env.CRAFT_APP_NAME = `Craft Agents [${instanceNum}]`;
-    process.env.CRAFT_CONFIG_DIR = join(process.env.HOME || "", `.craft-agent-${instanceNum}`);
-    process.env.CRAFT_DEEPLINK_SCHEME = `craftagents${instanceNum}`;
+    process.env.CRAFT_APP_NAME = `MDP [${instanceNum}]`;
+    process.env.CRAFT_CONFIG_DIR = join(homedir(), `.mdp-agent-${instanceNum}`);
+    process.env.CRAFT_DEEPLINK_SCHEME = `mdp${instanceNum}`;
     console.log(`🔢 Instance ${instanceNum} detected: port=${process.env.CRAFT_VITE_PORT}, config=${process.env.CRAFT_CONFIG_DIR}`);
   }
 }
@@ -178,6 +203,92 @@ async function killProcessOnPort(port: string): Promise<void> {
   }
 }
 
+async function readSubprocessOutput(proc: Subprocess): Promise<string> {
+  if (!proc.stdout) return "";
+  try {
+    return await new Response(proc.stdout).text();
+  } catch {
+    return "";
+  }
+}
+
+async function findProcessIds(pattern: string): Promise<number[]> {
+  if (process.platform === "win32") {
+    return [];
+  }
+
+  try {
+    const proc = spawn({
+      cmd: ["pgrep", "-f", pattern],
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const output = await readSubprocessOutput(proc);
+    await proc.exited;
+    return output
+      .split("\n")
+      .map((line) => Number(line.trim()))
+      .filter((pid) => Number.isInteger(pid) && pid > 0);
+  } catch {
+    return [];
+  }
+}
+
+async function killProcessIds(pids: number[], label: string): Promise<void> {
+  const uniquePids = [...new Set(pids)]
+    .filter((pid) => pid !== process.pid && pid !== process.ppid);
+
+  if (uniquePids.length === 0) return;
+
+  for (const pid of uniquePids) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // Process may already be dead.
+    }
+  }
+
+  await Bun.sleep(750);
+
+  for (const pid of uniquePids) {
+    try {
+      process.kill(pid, 0);
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // Process exited after SIGTERM.
+    }
+  }
+
+  console.log(`🔪 Killed stale ${label}: ${uniquePids.join(", ")}`);
+}
+
+async function cleanupExistingElectronDevInstances(): Promise<void> {
+  if (process.platform === "win32") {
+    // On Windows, taskkill all electron.exe processes so the single-instance
+    // lock from a stale dev session doesn't cause the new window to silently exit.
+    try {
+      const kill = spawn({
+        cmd: ["taskkill", "/F", "/IM", "electron.exe"],
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      await kill.exited;
+      console.log("🔪 Killed stale electron.exe process(es)");
+    } catch {
+      // No electron.exe running — ignore.
+    }
+    return;
+  }
+
+  const escapedRoot = ROOT_DIR.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pids = await Promise.all([
+    findProcessIds(`${escapedRoot}.*node_modules/.bin/electron apps/electron`),
+    findProcessIds(`${escapedRoot}.*node_modules/electron/dist/Electron\\.app/Contents/MacOS/Electron apps/electron`),
+  ]);
+
+  await killProcessIds(pids.flat(), "Electron dev process(es)");
+}
+
 // Clean Vite cache directory
 function cleanViteCache(): void {
   const viteCacheDir = join(ELECTRON_DIR, "node_modules/.vite");
@@ -194,24 +305,6 @@ function copyResources(): void {
   if (existsSync(srcDir)) {
     cpSync(srcDir, destDir, { recursive: true, force: true });
     console.log("📦 Copied resources to dist");
-  }
-}
-
-// Build the WhatsApp worker bundle (dist/worker.cjs). Runs the canonical
-// `scripts/build-wa-worker.ts` as a subprocess so the dev path stays in
-// sync with the packaged/CI build. Cheap (~70ms) so we always rebuild.
-async function buildWaWorker(): Promise<void> {
-  console.log("📨 Building WhatsApp worker...");
-  const proc = spawn({
-    cmd: ["bun", "run", "scripts/build-wa-worker.ts"],
-    cwd: ROOT_DIR,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) {
-    console.error("❌ WhatsApp worker build failed");
-    process.exit(1);
   }
 }
 
@@ -285,8 +378,8 @@ function getElectronEnv(): Record<string, string> {
     ...process.env as Record<string, string>,
     VITE_DEV_SERVER_URL: `http://localhost:${vitePort}`,
     CRAFT_CONFIG_DIR: process.env.CRAFT_CONFIG_DIR || "",
-    CRAFT_APP_NAME: process.env.CRAFT_APP_NAME || "Craft Agents",
-    CRAFT_DEEPLINK_SCHEME: process.env.CRAFT_DEEPLINK_SCHEME || "craftagents",
+    CRAFT_APP_NAME: process.env.CRAFT_APP_NAME || "MDP",
+    CRAFT_DEEPLINK_SCHEME: process.env.CRAFT_DEEPLINK_SCHEME || "mdp",
     CRAFT_INSTANCE_NUMBER: process.env.CRAFT_INSTANCE_NUMBER || "",
   };
 }
@@ -416,19 +509,22 @@ async function main(): Promise<void> {
   }
 
   await ensureBundledUvForCurrentPlatform();
+  await ensureBundledRtkForCurrentPlatform();
 
   copyResources();
 
   // Build MCP servers for Codex sessions
   await buildMcpServers();
 
-  // Build WhatsApp worker bundle so the adapter can spawn it on demand
-  await buildWaWorker();
-
   const vitePort = process.env.CRAFT_VITE_PORT || "5173";
   const oauthDefines = getOAuthDefines();
 
-  // Kill any existing process on the Vite port
+  // A second Electron launch exits immediately because of the single-instance
+  // lock. If we kill only the Vite port first, the old window is left loading a
+  // dead dev URL. Remove stale Electron dev instances before replacing Vite.
+  await cleanupExistingElectronDevInstances();
+
+  // Kill any existing process on the Vite port.
   await killProcessOnPort(vitePort);
 
   // =========================================================
@@ -622,8 +718,15 @@ async function main(): Promise<void> {
     process.on("SIGHUP", () => cleanup());
   }
 
-  // Wait for electron to exit (main process)
-  await electronProc.exited;
+  const exitedProcess = await Promise.race([
+    electronProc.exited.then((exitCode) => ({ name: "Electron", exitCode })),
+    viteProc.exited.then((exitCode) => ({ name: "Vite", exitCode })),
+  ]);
+
+  if (exitedProcess.name === "Vite") {
+    console.error(`❌ Vite dev server exited unexpectedly (${exitedProcess.exitCode}); stopping Electron dev.`);
+  }
+
   await cleanup();
 }
 

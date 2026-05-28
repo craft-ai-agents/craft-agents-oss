@@ -58,10 +58,7 @@ export class Router {
   }
 
   async route(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
-    // Threads (Telegram supergroup forum topics) participate in the binding
-    // lookup key, so two topics in the same supergroup route to different
-    // sessions even though they share `chat.id`.
-    const binding = this.bindingStore.findByChannel(msg.platform, msg.channelId, msg.threadId)
+    const binding = this.bindingStore.findByChannel(msg.platform, msg.channelId)
 
     if (binding) {
       const verdict = evaluateBindingAccess({
@@ -83,7 +80,6 @@ export class Router {
           event: 'message_routed',
           platform: msg.platform,
           channelId: msg.channelId,
-          threadId: msg.threadId,
           sessionId: binding.sessionId,
           bindingId: binding.id,
           attachmentCount: fileAttachments?.length ?? 0,
@@ -101,16 +97,11 @@ export class Router {
           event: 'message_route_failed',
           platform: msg.platform,
           channelId: msg.channelId,
-          threadId: msg.threadId,
           sessionId: binding.sessionId,
           bindingId: binding.id,
           error: err,
         })
-        await adapter.sendText(
-          msg.channelId,
-          `Failed to send message to session: ${errorMsg}`,
-          { threadId: msg.threadId },
-        )
+        await adapter.sendText(msg.channelId, `Failed to send message to session: ${errorMsg}`)
       }
       return
     }
@@ -119,7 +110,6 @@ export class Router {
       event: 'message_unbound',
       platform: msg.platform,
       channelId: msg.channelId,
-      threadId: msg.threadId,
       messageId: msg.messageId,
     })
     await this.commands.handle(adapter, msg)

@@ -16,9 +16,9 @@
 
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { useState, useEffect, useCallback, useRef, memo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
-import { File, Folder, FolderOpen, FileText, Image, FileCode, ChevronRight, ExternalLink } from 'lucide-react'
+import { FolderOpen, ChevronRight, ExternalLink } from 'lucide-react'
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -31,6 +31,7 @@ import * as storage from '@/lib/local-storage'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { getFileManagerName } from '@/lib/platform'
 import { restoreSessionFileWatch } from './session-files-watch'
+import { FileThumbnail, getFileIcon } from './file-tree-shared'
 
 /**
  * Stagger animation variants for child items - matches LeftSidebar pattern
@@ -104,137 +105,6 @@ function collectDirectoryPaths(entries: SessionFile[]): string[] {
   return directories
 }
 
-/**
- * Get icon for file based on name/type (14x14px matching sidebar)
- */
-function getFileIcon(file: SessionFile, isExpanded?: boolean) {
-  const iconClass = "h-3.5 w-3.5 text-muted-foreground"
-
-  if (file.type === 'directory') {
-    return isExpanded
-      ? <FolderOpen className={iconClass} />
-      : <Folder className={iconClass} />
-  }
-
-  const ext = file.name.split('.').pop()?.toLowerCase()
-
-  if (ext === 'md' || ext === 'markdown') {
-    return <FileText className={iconClass} />
-  }
-
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico'].includes(ext || '')) {
-    return <Image className={iconClass} />
-  }
-
-  if (['ts', 'tsx', 'js', 'jsx', 'json', 'yaml', 'yml', 'py', 'rb', 'go', 'rs'].includes(ext || '')) {
-    return <FileCode className={iconClass} />
-  }
-
-  return <File className={iconClass} />
-}
-
-/**
- * Extensions that have thumbnail previews via the thumbnail:// protocol.
- * Matches the ALL_PREVIEWABLE set in thumbnail-protocol.ts.
- */
-const PREVIEWABLE_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'ico', 'heic', 'heif',
-  'pdf', 'svg', 'psd', 'ai',
-])
-
-/**
- * Extensions that get lightweight image previews in web mode.
- * Excludes pdf/psd/ai/svg — not rendered as <img> thumbnails here.
- */
-const WEB_PREVIEWABLE_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico',
-])
-
-/** True when running in web UI (browser) rather than Electron. */
-const isWebMode = window.electronAPI.getRuntimeEnvironment() === 'web'
-
-/**
- * Constructs a thumbnail:// protocol URL for a given file path.
- * The path is URI-encoded so it can be embedded safely in a URL.
- * Works cross-platform (macOS paths start with /, Windows with C:\).
- */
-function getThumbnailUrl(filePath: string): string {
-  return `thumbnail://thumb/${encodeURIComponent(filePath)}`
-}
-
-/**
- * FileThumbnail — Renders an image thumbnail with cross-fade from icon fallback.
- *
- * In Electron: loads via the custom thumbnail:// protocol (efficient 64x64 resize).
- * In Web mode: loads via readFilePreviewDataUrl RPC (server-side resized preview).
- *
- * Shows the Lucide icon immediately, then cross-fades to the thumbnail on load.
- * If loading fails, the icon stays visible — no layout shift, no error state.
- */
-const FileThumbnail = memo(function FileThumbnail({ file }: { file: SessionFile }) {
-  const [loaded, setLoaded] = useState(false)
-  const [failed, setFailed] = useState(false)
-  const [dataUrl, setDataUrl] = useState<string | null>(null)
-
-  // Reset state when file changes (e.g. watcher triggered re-render)
-  useEffect(() => {
-    setLoaded(false)
-    setFailed(false)
-    setDataUrl(null)
-  }, [file.path])
-
-  const ext = file.name.split('.').pop()?.toLowerCase() || ''
-  const previewableSet = isWebMode ? WEB_PREVIEWABLE_EXTENSIONS : PREVIEWABLE_EXTENSIONS
-  const canPreview = previewableSet.has(ext)
-
-  // Web mode: load a small preview via RPC as a base64 data URL
-  useEffect(() => {
-    if (!isWebMode || !canPreview || failed) return
-    let cancelled = false
-    window.electronAPI.readFilePreviewDataUrl(file.path, 64).then((url) => {
-      if (!cancelled) setDataUrl(url)
-    }).catch(() => {
-      if (!cancelled) setFailed(true)
-    })
-    return () => { cancelled = true }
-  }, [file.path, canPreview, failed])
-
-  // Fall back to regular icon if not previewable or thumbnail failed
-  if (!canPreview || failed) {
-    return getFileIcon(file)
-  }
-
-  const imgSrc = isWebMode ? dataUrl : getThumbnailUrl(file.path)
-
-  return (
-    <>
-      {/* Fallback icon — visible initially, fades out when thumbnail loads */}
-      <span
-        className={cn(
-          'absolute inset-0 flex items-center justify-center transition-opacity duration-200',
-          loaded ? 'opacity-0' : 'opacity-100'
-        )}
-      >
-        {getFileIcon(file)}
-      </span>
-      {/* Thumbnail — fades in on successful load */}
-      {imgSrc && (
-        <img
-          src={imgSrc}
-          alt=""
-          loading="lazy"
-          onLoad={() => setLoaded(true)}
-          onError={() => setFailed(true)}
-          className={cn(
-            'absolute inset-0 h-full w-full rounded-[2px] object-cover transition-opacity duration-200',
-            loaded ? 'opacity-100' : 'opacity-0'
-          )}
-        />
-      )}
-    </>
-  )
-})
-
 interface FileTreeItemProps {
   file: SessionFile
   depth: number
@@ -297,7 +167,7 @@ function FileTreeItem({
       className={cn(
         // Base styles matching LeftSidebar exactly
         // min-w-0 and overflow-hidden required for truncation to work in grid context
-        "group flex w-full min-w-0 overflow-hidden items-center gap-2 rounded-[6px] py-[5px] text-[13px] select-none outline-none text-left",
+        "group flex w-full min-w-0 overflow-hidden items-center gap-2 rounded-[6px] py-[5px] text-[14px] select-none outline-none text-left",
         "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
         "hover:bg-sidebar-hover transition-colors",
         // Same padding for all items - nested indentation handled by container
@@ -576,12 +446,12 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
       {/* Header - matches sidebar styling with select-none, extra top padding for visual balance */}
       {!hideHeader && (
         <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
-          <span className="text-xs font-medium text-muted-foreground">{t("chat.sessionFiles")}</span>
+          <span className="text-sm font-medium text-muted-foreground">{t("chat.sessionFiles")}</span>
           {sessionFolderPath && (
             <button
               type="button"
               onClick={() => window.electronAPI.showInFolder(sessionFolderPath)}
-              className="text-xs text-foreground/50 hover:text-foreground/80 hover:underline underline-offset-2 transition-colors"
+              className="text-sm text-foreground/50 hover:text-foreground/80 hover:underline underline-offset-2 transition-colors"
             >
               {t("chat.viewInFileManager", { fileManager: fileManagerName })}
             </button>
@@ -594,7 +464,7 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-2 min-h-0">
         {files.length === 0 ? (
           <div className="px-4 text-muted-foreground select-none">
-            <p className="text-xs">
+            <p className="text-sm">
               {isLoading ? t('chat.sessionFilesLoading') : t('chat.sessionFilesEmpty')}
             </p>
           </div>

@@ -156,7 +156,7 @@ export interface SessionToolContext {
   /** Unique session identifier */
   sessionId: string;
 
-  /** Absolute path to workspace folder (~/.craft-agent/workspaces/{id}) */
+  /** Absolute path to workspace folder (~/.mdp-agent/workspaces/{id}) */
   workspacePath: string;
 
   /** Path to sources folder within workspace */
@@ -198,6 +198,11 @@ export interface SessionToolContext {
    * Only available in Claude (has keychain access).
    */
   credentialManager?: CredentialManagerInterface;
+
+  /**
+   * Get the current SSO identity token for bearer-auth MCP sources.
+   */
+  getSsoIdToken?(): Promise<string | null>;
 
   /**
    * Load a source config from the workspace.
@@ -293,7 +298,7 @@ export interface SessionToolContext {
 
   /**
    * Submit developer feedback. Injected by each backend:
-   * - Claude: writes JSON files to ~/.craft-agent/feedback/
+   * - Claude: writes JSON files to ~/.mdp-agent/feedback/
    * - Codex/Pi: could send over IPC or write directly
    */
   submitFeedback?(feedback: import('./types.ts').DeveloperFeedback): void;

@@ -12,6 +12,7 @@ import {
   ChevronUp,
   AlertCircle,
   Image as ImageIcon,
+  Brain,
   X,
 } from 'lucide-react'
 import { Icon_Home, Icon_Folder, Spinner } from '@craft-agent/ui'
@@ -31,11 +32,6 @@ import {
   type MentionItem,
   type MentionItemType,
 } from '@/components/ui/mention-menu'
-import {
-  InlineLabelMenu,
-  useInlineLabelMenu,
-} from '@/components/ui/label-menu'
-import type { LabelConfig } from '@craft-agent/shared/labels'
 import { parseMentions } from '@/lib/mentions'
 import { RichTextInput, type RichTextInputHandle } from '@/components/ui/rich-text-input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
@@ -43,7 +39,6 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuSub,
-  DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu'
 import {
   StyledDropdownMenuContent,
@@ -66,7 +61,6 @@ import {
   modelSupportsImages,
 } from '@config/llm-connections'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
-import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceSelectorPopover } from '@/components/ui/SourceSelectorPopover'
 import { CompactSourceSelector } from '@/components/ui/CompactSourceSelector'
@@ -76,7 +70,7 @@ import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import { derivePickerMode } from './picker-mode'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
-import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelNameKey } from '@craft-agent/shared/agent/thinking-levels'
+import { type ThinkingEnabled, getThinkingEnabledNameKey } from '@craft-agent/shared/agent/thinking-toggle'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { ToolbarStatusSlot } from './ToolbarStatusSlot'
@@ -89,6 +83,8 @@ import {
 } from './working-directory-history'
 import { useWorkingDirectoryState } from './use-working-directory-state'
 import { CompactPermissionModeSelector } from './CompactPermissionModeSelector'
+import { useAtomValue, useSetAtom } from 'jotai'
+import { lineCommentQueueAtom, clearLineCommentsAtom, formatLineCommentsMessage } from '@/atoms/line-comments'
 import { CompactModelSelector } from './CompactModelSelector'
 import {
   formatTokenCount,
@@ -149,11 +145,11 @@ export interface FreeFormInputProps {
   currentModel: string
   /** Callback when model changes (includes connection slug for proper persistence) */
   onModelChange: (model: string, connection?: string) => void
-  // Thinking level (session-level setting)
-  /** Current thinking level ('off', 'think', 'max') */
-  thinkingLevel?: ThinkingLevel
-  /** Callback when thinking level changes */
-  onThinkingLevelChange?: (level: ThinkingLevel) => void
+  // Thinking toggle (session-level setting)
+  /** Current thinking toggle */
+  thinkingEnabled?: ThinkingEnabled
+  /** Callback when thinking toggle changes */
+  onThinkingEnabledChange?: (enabled: ThinkingEnabled) => void
   // Advanced options
   permissionMode?: PermissionMode
   onPermissionModeChange?: (mode: PermissionMode) => void
@@ -184,13 +180,6 @@ export interface FreeFormInputProps {
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
   skills?: LoadedSkill[]
-  // Label selection (for #labels)
-  /** Available labels for #label autocomplete */
-  labels?: LabelConfig[]
-  /** Currently applied session labels */
-  sessionLabels?: string[]
-  /** Callback when a label is added via # menu */
-  onLabelAdd?: (labelId: string) => void
   /** Workspace ID for loading skill icons */
   workspaceId?: string
   /** Current working directory path */
@@ -201,8 +190,6 @@ export interface FreeFormInputProps {
   sessionFolderPath?: string
   /** Session ID for scoping events like approve-plan */
   sessionId?: string
-  /** Current session status of the session (for # menu state selection) */
-  currentSessionStatus?: string
   /** Disable send action (for tutorial guidance) */
   disableSend?: boolean
   /** Whether the session is empty (no messages yet) - affects context badge prominence */
@@ -272,8 +259,8 @@ export function FreeFormInput({
   inputRef: externalInputRef,
   currentModel,
   onModelChange,
-  thinkingLevel = 'medium',
-  onThinkingLevelChange,
+  thinkingEnabled = true,
+  onThinkingEnabledChange,
   permissionMode = 'ask',
   onPermissionModeChange,
   enabledModes = ['safe', 'ask', 'allow-all'],
@@ -288,15 +275,11 @@ export function FreeFormInput({
   enabledSourceSlugs = [],
   onSourcesChange,
   skills = [],
-  labels = [],
-  sessionLabels = [],
-  onLabelAdd,
   workspaceId,
   workingDirectory,
   onWorkingDirectoryChange,
   sessionFolderPath,
   sessionId,
-  currentSessionStatus,
   disableSend = false,
   isEmptySession = false,
   contextStatus,
@@ -313,18 +296,23 @@ export function FreeFormInput({
 }: FreeFormInputProps) {
   const { t } = useTranslation()
 
+  const lineCommentQueue = useAtomValue(lineCommentQueueAtom)
+  const clearLineComments = useSetAtom(clearLineCommentsAtom)
+  const hasLineComments = lineCommentQueue.length > 0
+
   // Default rotating placeholders for onboarding/empty state (i18n-aware)
   const defaultPlaceholders = React.useMemo(() => [
     t("chatInput.placeholder.workOn"),
     t("chatInput.placeholder.shiftTab"),
     t("chatInput.placeholder.mention"),
-    t("chatInput.placeholder.labels"),
     t("chatInput.placeholder.newLine"),
     t("chatInput.placeholder.sidebar", { key: cmdKey }),
     t("chatInput.placeholder.focusMode", { key: cmdKey }),
   ], [t])
 
-  const effectivePlaceholderProp = placeholder ?? defaultPlaceholders
+  const effectivePlaceholderProp = hasLineComments
+    ? t('chatInput.lineComments.placeholder')
+    : (placeholder ?? defaultPlaceholders)
 
   // Read connection default model, connections, and workspace info from context.
   // Uses optional variant so playground (no provider) doesn't crash.
@@ -372,13 +360,14 @@ export function FreeFormInput({
     return connection.models || ANTHROPIC_MODELS
   }, [llmConnections, currentConnection, workspaceDefaultConnection, connectionUnavailable])
 
-  const availableThinkingLevels = THINKING_LEVELS
-
-  // Disable thinking selector when the current model explicitly doesn't support it
+  // Disable thinking toggle when the current model explicitly doesn't support it
   const thinkingDisabled = React.useMemo(() => {
     const model = availableModels.find(m => typeof m !== 'string' && m.id === currentModel)
     return typeof model !== 'string' && model?.supportsThinking === false
   }, [availableModels, currentModel])
+  const thinkingToggleLabel = thinkingDisabled
+    ? t('thinking.notSupported')
+    : t(getThinkingEnabledNameKey(thinkingEnabled))
 
   // Get display name for current model (full name, not short name)
   const currentModelDisplayName = React.useMemo(() => {
@@ -420,16 +409,6 @@ export function FreeFormInput({
     if (!effectiveConnection) return null
     return llmConnections.find(c => c.slug === effectiveConnection) ?? null
   }, [llmConnections, effectiveConnection])
-
-
-  // Access sessionStatuses and onSessionStatusChange from context for the # menu state picker
-  const sessionStatuses = appShellCtx?.sessionStatuses ?? []
-  const onSessionStatusChange = appShellCtx?.onSessionStatusChange
-  // Resolve workspace rootPath for "Add New Label" deep link
-  const workspaceRootPath = React.useMemo(() => {
-    if (!appShellCtx || !workspaceId) return null
-    return appShellCtx.workspaces.find(w => w.id === workspaceId)?.rootPath ?? null
-  }, [appShellCtx, workspaceId])
 
   // Workspace slug for SDK skill qualification (server-computed)
   // SDK expects "workspaceSlug:skillSlug" format, NOT UUID
@@ -938,6 +917,12 @@ export function FreeFormInput({
     else if (commandId === 'ask') onPermissionModeChange?.('ask')
     else if (commandId === 'allow-all') onPermissionModeChange?.('allow-all')
     else if (commandId === 'compact' && !isProcessing) onSubmit('/compact', undefined)
+    else if (
+      (commandId === 'win-shell-info' || commandId === 'win-processes' || commandId === 'win-cleanup') &&
+      !isProcessing
+    ) {
+      onSubmit(`/${commandId}`, undefined)
+    }
   }, [onPermissionModeChange, isProcessing, onSubmit])
 
   // Handle folder selection from slash command menu
@@ -995,47 +980,6 @@ export function FreeFormInput({
     // Use workspace slug (not UUID) for SDK skill qualification
     workspaceId: workspaceSlug,
   })
-
-  // Inline label menu hook (for #labels)
-  const handleLabelSelect = React.useCallback((labelId: string) => {
-    onLabelAdd?.(labelId)
-  }, [onLabelAdd])
-
-  const inlineLabel = useInlineLabelMenu({
-    inputRef: richInputRef,
-    labels,
-    sessionLabels,
-    onSelect: handleLabelSelect,
-    sessionStatuses,
-    activeStateId: currentSessionStatus,
-  })
-
-  // "Add New Label" handler: cleans up the #trigger text and opens a controlled
-  // EditPopover so the user can describe the label before the agent creates it.
-  const [addLabelPopoverOpen, setAddLabelPopoverOpen] = React.useState(false)
-  const [addLabelPrefill, setAddLabelPrefill] = React.useState('')
-  const handleAddLabel = React.useCallback((prefill: string) => {
-    if (!workspaceRootPath) return
-
-    // Remove the #trigger text from input
-    const cleaned = inlineLabel.handleSelect('')
-    setInput(cleaned)
-    syncToParent(cleaned)
-    inlineLabel.close()
-
-    // Store the prefill text (e.g., "Test" from "#Test") to pre-fill the popover
-    // Format: "Add new label {prefill}" so user can just press enter or modify
-    setAddLabelPrefill(prefill ? t('labels.addNewLabel', { prefill }) : '')
-
-    // Open the EditPopover for label creation
-    setAddLabelPopoverOpen(true)
-  }, [workspaceRootPath, inlineLabel, syncToParent, t])
-
-  // Memoize the add-label config so the EditPopover doesn't recreate on every render
-  const addLabelEditConfig = React.useMemo(() => {
-    if (!workspaceRootPath) return null
-    return getEditConfig('add-label', workspaceRootPath)
-  }, [workspaceRootPath])
 
   // Report height changes to parent (for external animation sync)
   React.useLayoutEffect(() => {
@@ -1252,7 +1196,7 @@ export function FreeFormInput({
 
   // Submit message - backend handles queueing and interruption
   const submitMessage = React.useCallback(() => {
-    const hasContent = input.trim() || attachments.length > 0 || followUpItems.length > 0
+    const hasContent = input.trim() || attachments.length > 0 || followUpItems.length > 0 || lineCommentQueue.length > 0
     if (!hasContent || disabled) return false
 
     // Tutorial may disable sending to guide user through specific steps
@@ -1274,11 +1218,16 @@ export function FreeFormInput({
 
     const attachmentSnapshot = attachments
 
+    const commentPrefix = formatLineCommentsMessage(lineCommentQueue)
+    const userText = input.trim()
+    const finalText = [commentPrefix, userText].filter(Boolean).join('\n\n')
+
     onSubmit(
-      input.trim(),
+      finalText,
       attachmentSnapshot.length > 0 ? attachmentSnapshot : undefined,
       mentions.skills.length > 0 ? mentions.skills : undefined
     )
+    clearLineComments()
     setInput('')
     setAttachments([])
     // Clear draft immediately (cancel any pending debounced sync)
@@ -1293,7 +1242,7 @@ export function FreeFormInput({
     })
 
     return true
-  }, [input, attachments, followUpItems, disabled, disableSend, onInputChange, onAttachmentsChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir])
+  }, [input, attachments, followUpItems, lineCommentQueue, clearLineComments, disabled, disableSend, onInputChange, onAttachmentsChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir])
 
   // Listen for craft:submit-input events (simulate pressing the Send button)
   React.useEffect(() => {
@@ -1346,18 +1295,6 @@ export function FreeFormInput({
       if (e.key === 'Escape') {
         e.preventDefault()
         inlineSlash.close()
-        return
-      }
-    }
-
-    // Don't submit when label menu is open - let it handle navigation keys
-    if (inlineLabel.isOpen) {
-      if (e.key === 'Enter' || e.key === 'Tab' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        return
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        inlineLabel.close()
         return
       }
     }
@@ -1433,10 +1370,7 @@ export function FreeFormInput({
     // Update inline mention state (for @mentions - skills, sources, folders)
     inlineMention.handleInputChange(nextValue, cursorPosition)
 
-    // Update inline label state (for #labels)
-    inlineLabel.handleInputChange(nextValue, cursorPosition)
-
-    // Auto-capitalize first letter (but not for slash commands, @mentions, or #labels)
+    // Auto-capitalize first letter (but not for slash commands or @mentions)
     // Only if autoCapitalisation setting is enabled
     let newValue = nextValue
     if (autoCapitalisation && nextValue.length > 0 && nextValue.charAt(0) !== '/' && nextValue.charAt(0) !== '@' && nextValue.charAt(0) !== '#') {
@@ -1460,7 +1394,7 @@ export function FreeFormInput({
       setInput(newValue)
       syncToParent(newValue)
     }
-  }, [inlineSlash, inlineMention, inlineLabel, syncToParent, autoCapitalisation])
+  }, [inlineSlash, inlineMention, syncToParent, autoCapitalisation])
 
   // Handle inline slash command selection (removes the /command text)
   const handleInlineSlashCommandSelect = React.useCallback((commandId: SlashCommandId) => {
@@ -1490,25 +1424,6 @@ export function FreeFormInput({
     }, 0)
   }, [inlineMention, syncToParent])
 
-  // Handle inline label selection (removes the #label text from input)
-  const handleInlineLabelSelect = React.useCallback((labelId: string) => {
-    const newValue = inlineLabel.handleSelect(labelId)
-    setInput(newValue)
-    syncToParent(newValue)
-    richInputRef.current?.focus()
-  }, [inlineLabel, syncToParent])
-
-  // Handle inline state selection from # menu (removes #text, changes session state)
-  const handleInlineStateSelect = React.useCallback((stateId: string) => {
-    const newValue = inlineLabel.handleSelect('')
-    setInput(newValue)
-    syncToParent(newValue)
-    if (sessionId) {
-      onSessionStatusChange?.(sessionId, stateId)
-    }
-    richInputRef.current?.focus()
-  }, [inlineLabel, syncToParent, sessionId, onSessionStatusChange])
-
   const followUpLayoutKey = React.useMemo(
     () => followUpItems.map(item => [
       item.id,
@@ -1536,7 +1451,7 @@ export function FreeFormInput({
     return () => window.clearTimeout(timer)
   }, [followUpLayoutKey])
 
-  const hasContent = input.trim() || attachments.length > 0 || followUpItems.length > 0
+  const hasContent = input.trim() || attachments.length > 0 || followUpItems.length > 0 || lineCommentQueue.length > 0
 
   // Pre-flight image-support check: warn when staged images would be silently
   // stripped by Pi SDK because the active custom-endpoint model is text-only.
@@ -1590,44 +1505,6 @@ export function FreeFormInput({
           isSearching={inlineMention.isSearching}
         />
 
-        {/* Inline Label & State Autocomplete (#labels / #states) */}
-        <InlineLabelMenu
-          open={inlineLabel.isOpen}
-          onOpenChange={(open) => !open && inlineLabel.close()}
-          items={inlineLabel.items}
-          onSelect={handleInlineLabelSelect}
-          onAddLabel={handleAddLabel}
-          filter={inlineLabel.filter}
-          position={inlineLabel.position}
-          states={inlineLabel.states}
-          activeStateId={inlineLabel.activeStateId}
-          onSelectState={handleInlineStateSelect}
-        />
-
-        {/* Controlled EditPopover for "Add New Label" — opens when user selects
-            the option from the # menu with no matches.
-            Spread the full config so optional fields like `inlineExecution`,
-            `displayLabel`, and `displayLabelKey` reach the popover. The previous
-            cherry-pick dropped `inlineExecution: true`, which made the popover
-            fall back to the same-window deep-link path; that worked inside
-            Electron but launched the desktop app from the WebUI via `craftagents://`.
-            Match the AppShell pattern (which already uses spread). */}
-        {addLabelEditConfig && (
-          <EditPopover
-            trigger={<span className="absolute top-0 left-0 w-0 h-0 overflow-hidden" />}
-            open={addLabelPopoverOpen}
-            onOpenChange={setAddLabelPopoverOpen}
-            {...addLabelEditConfig}
-            defaultValue={addLabelPrefill}
-            secondaryAction={workspaceRootPath ? {
-              label: 'Edit File',
-              filePath: `${workspaceRootPath}/labels/config.json`,
-            } : undefined}
-            side="top"
-            align="start"
-          />
-        )}
-
         {/* Pre-flight image-support warning — only for pi_compat connections
             where the renderer can both detect text-only models and offer to
             flip the per-model supportsImages override on the spot. */}
@@ -1645,6 +1522,26 @@ export function FreeFormInput({
           disabled={disabled}
           loadingCount={loadingCount}
         />
+
+        {/* Line comment queue pill */}
+        <AnimatePresence initial={false}>
+          {hasLineComments && (
+            <motion.div
+              key="line-comment-pill"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0.2, 1] }}
+              className="overflow-hidden"
+            >
+              <div className="px-3 pt-3.5 pb-0">
+                <span className="inline-flex items-center gap-1 rounded-[6px] bg-foreground/5 px-2 py-1 text-[12px] text-foreground/80 select-none">
+                  {t('chatInput.lineComments.pill', { count: lineCommentQueue.length })}
+                </span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Follow-up context chips */}
         <AnimatePresence initial={false}>
@@ -1676,7 +1573,7 @@ export function FreeFormInput({
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -4, scale: 0.98 }}
                           transition={{ duration: 0.16, ease: [0.2, 0, 0.2, 1] }}
-                          className="inline-flex max-w-full items-center gap-1.5 overflow-hidden rounded-[6px] bg-foreground/2 pl-1.5 pr-2 py-1 text-[13px] text-foreground/80 select-none transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          className="inline-flex max-w-full items-center gap-1.5 overflow-hidden rounded-[6px] bg-foreground/2 pl-1.5 pr-2 py-1 text-[14px] text-foreground/80 select-none transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                           onClick={(event) => {
                             const rect = event.currentTarget.getBoundingClientRect()
                             onFollowUpClick?.(item, {
@@ -1711,7 +1608,7 @@ export function FreeFormInput({
                                 {chipIndex}
                               </span>
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-[420px] break-words text-xs">
+                            <TooltipContent side="top" className="max-w-[420px] break-words text-sm">
                               {tooltipText}
                             </TooltipContent>
                           </Tooltip>
@@ -1797,8 +1694,6 @@ export function FreeFormInput({
               currentConnection={currentConnection}
               onModelChange={onModelChange}
               onConnectionChange={onConnectionChange}
-              thinkingLevel={thinkingLevel}
-              onThinkingLevelChange={onThinkingLevelChange}
               isEmptySession={isEmptySession}
               connectionUnavailable={connectionUnavailable}
               contextStatus={contextStatus}
@@ -2027,6 +1922,32 @@ export function FreeFormInput({
 
           {/* Right side: Model + Send - never shrink so they're always visible */}
           <div className="flex items-center shrink-0">
+            {onThinkingEnabledChange && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={thinkingToggleLabel}
+                    aria-pressed={thinkingEnabled}
+                    disabled={thinkingDisabled}
+                    onClick={() => onThinkingEnabledChange(!thinkingEnabled)}
+                    className={cn(
+                      "input-toolbar-btn inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors select-none",
+                      thinkingEnabled && !thinkingDisabled
+                        ? "bg-foreground/10 text-foreground hover:bg-foreground/15"
+                        : "text-foreground/50 hover:bg-foreground/5 hover:text-foreground",
+                      thinkingDisabled && "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-foreground/50",
+                    )}
+                  >
+                    <Brain className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {thinkingToggleLabel}
+                </TooltipContent>
+              </Tooltip>
+            )}
+
           {/* 5. Model/Connection Selector - Hidden in compact mode (EditPopover embedding) */}
           {!compactMode && (
           <DropdownMenu open={modelDropdownOpen} onOpenChange={setModelDropdownOpen}>
@@ -2036,7 +1957,7 @@ export function FreeFormInput({
                   <button
                     type="button"
                     className={cn(
-                      "input-toolbar-btn inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
+                      "input-toolbar-btn inline-flex items-center h-7 px-1.5 gap-0.5 text-[14px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
                       modelDropdownOpen && "bg-foreground/5",
                       connectionUnavailable && "text-destructive",
                     )}
@@ -2066,7 +1987,7 @@ export function FreeFormInput({
                 <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
                   <AlertCircle className="h-8 w-8 text-destructive mb-2" />
                   <div className="font-medium text-sm mb-1">{t('chat.connectionUnavailable')}</div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-sm text-muted-foreground">
                     {t('chat.connectionUnavailableDescription')}
                   </div>
                 </div>
@@ -2086,7 +2007,7 @@ export function FreeFormInput({
                     >
                       <div className="text-left">
                         <div className="font-medium text-sm">{stripPiPrefixForDisplay(connectionDefaultModel)}</div>
-                        <div className="text-xs text-muted-foreground">{t('chat.connectionDefault')}</div>
+                        <div className="text-sm text-muted-foreground">{t('chat.connectionDefault')}</div>
                       </div>
                       <div className="flex items-center gap-1 ml-3 shrink-0">
                         {showVisionToggle && effectiveConnectionDetails && (
@@ -2135,7 +2056,7 @@ export function FreeFormInput({
                 connectionsByProvider.map(([providerName, connections], index) => (
                   <React.Fragment key={providerName}>
                     {/* Provider group label */}
-                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide select-none">
+                    <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground uppercase tracking-wide select-none">
                       {providerName}
                     </div>
                     {connections.map((conn) => {
@@ -2157,7 +2078,7 @@ export function FreeFormInput({
                                 {isCurrentConnection && <Check className="h-3 w-3 text-foreground" />}
                               </div>
                               {!isAuthenticated && (
-                                <div className="text-xs text-muted-foreground">{t('settings.ai.notAuthenticated')}</div>
+                                <div className="text-sm text-muted-foreground">{t('settings.ai.notAuthenticated')}</div>
                               )}
                             </div>
                           </StyledDropdownMenuSubTrigger>
@@ -2246,7 +2167,7 @@ export function FreeFormInput({
                   {/* Indicator showing which connection is being used */}
                   {!isEmptySession && currentConnectionDetails && llmConnections.length > 1 && (
                     <>
-                      <div className="flex items-center gap-2 px-2 py-1.5 text-xs select-none text-muted-foreground">
+                      <div className="flex items-center gap-2 px-2 py-1.5 text-sm select-none text-muted-foreground">
                         <span>{t('chat.usingConnection', { name: currentConnectionDetails.name })}</span>
                       </div>
                       <StyledDropdownMenuSeparator className="my-1" />
@@ -2273,7 +2194,7 @@ export function FreeFormInput({
                         <div className="text-left">
                           <div className="font-medium text-sm">{modelName}</div>
                           {description && (
-                            <div className="text-xs text-muted-foreground">{description}</div>
+                            <div className="text-sm text-muted-foreground">{description}</div>
                           )}
                         </div>
                         <div className="flex items-center gap-1 ml-3 shrink-0">
@@ -2323,49 +2244,12 @@ export function FreeFormInput({
                 </>
               )}
 
-              {/* Thinking level selector — only shown when thinking levels are available
-                  (Claude supports extended thinking, OpenAI backends may not) */}
-              {availableThinkingLevels.length > 0 && (
-                <>
-                  <StyledDropdownMenuSeparator className="my-1" />
-
-                  <DropdownMenuSub>
-                    <StyledDropdownMenuSubTrigger disabled={thinkingDisabled} className={cn("flex items-center justify-between px-2 py-2 rounded-lg", thinkingDisabled && "opacity-50 cursor-not-allowed")}>
-                      <div className="text-left flex-1">
-                        <div className="font-medium text-sm">{t(getThinkingLevelNameKey(thinkingLevel))}</div>
-                        <div className="text-xs text-muted-foreground">{thinkingDisabled ? t('thinking.notSupported') : t('thinking.extendedDesc')}</div>
-                      </div>
-                    </StyledDropdownMenuSubTrigger>
-                    <StyledDropdownMenuSubContent className="min-w-[220px]">
-                      {availableThinkingLevels.map(({ id, nameKey, descriptionKey }) => {
-                        const isSelected = thinkingLevel === id
-                        return (
-                          <StyledDropdownMenuItem
-                            key={id}
-                            onSelect={() => onThinkingLevelChange?.(id)}
-                            className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
-                          >
-                            <div className="text-left">
-                              <div className="font-medium text-sm">{t(nameKey)}</div>
-                              <div className="text-xs text-muted-foreground">{t(descriptionKey)}</div>
-                            </div>
-                            {isSelected && (
-                              <Check className="h-3 w-3 text-foreground shrink-0 ml-3" />
-                            )}
-                          </StyledDropdownMenuItem>
-                        )
-                      })}
-                    </StyledDropdownMenuSubContent>
-                  </DropdownMenuSub>
-                </>
-              )}
-
               {/* Context usage footer - only show when we have token data */}
               {contextStatus?.inputTokens != null && contextStatus.inputTokens > 0 && (
                 <>
                   <StyledDropdownMenuSeparator className="my-1" />
                   <div className="px-2 py-1.5 select-none">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
                       <span>{t('chat.context')}</span>
                       <span className="flex items-center gap-1.5">
                         {contextStatus.isCompacting && (
@@ -2545,7 +2429,7 @@ function WorkingDirectoryBadge({
   // Styles matching todo-filter-menu.tsx for consistency
   const MENU_CONTAINER_STYLE = 'min-w-[200px] max-w-[400px] overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small p-0'
   const MENU_LIST_STYLE = 'max-h-[200px] overflow-y-auto p-1 [&_[cmdk-list-sizer]]:space-y-px'
-  const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2 rounded-[6px] px-3 py-1.5 text-[13px] outline-none'
+  const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2 rounded-[6px] px-3 py-1.5 text-[14px] outline-none'
 
   return (
     <>
@@ -2563,8 +2447,8 @@ function WorkingDirectoryBadge({
               hasFolder ? (
                 <span className="flex flex-col gap-0.5">
                   <span className="font-medium">{t("chat.workingDirectory")}</span>
-                  <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
-                  {gitBranch && <span className="text-xs opacity-70">{t("chat.onBranch", { branch: gitBranch })}</span>}
+                  <span className="text-sm opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
+                  {gitBranch && <span className="text-sm opacity-70">{t("chat.onBranch", { branch: gitBranch })}</span>}
                 </span>
               ) : t("chat.chooseWorkingDirectory")
             }

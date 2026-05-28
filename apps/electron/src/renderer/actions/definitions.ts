@@ -11,13 +11,6 @@ export const actions = {
     defaultHotkey: 'mod+n',
     category: 'General',
   },
-  'app.newChatInPanel': {
-    id: 'app.newChatInPanel',
-    label: 'New Chat in Panel',
-    description: 'Create a new chat session in a new panel',
-    defaultHotkey: 'mod+t',
-    category: 'General',
-  },
   'app.settings': {
     id: 'app.settings',
     label: 'Settings',
@@ -155,24 +148,6 @@ export const actions = {
     category: 'Navigator',
     scope: 'navigator',
     when: 'navigatorFocus',
-  },
-
-  // ═══════════════════════════════════════════
-  // Panels
-  // ═══════════════════════════════════════════
-  'panel.focusNext': {
-    id: 'panel.focusNext',
-    label: 'Focus Next Panel',
-    description: 'Move focus to the next panel',
-    defaultHotkey: 'mod+shift+]',
-    category: 'Navigation',
-  },
-  'panel.focusPrev': {
-    id: 'panel.focusPrev',
-    label: 'Focus Previous Panel',
-    description: 'Move focus to the previous panel',
-    defaultHotkey: 'mod+shift+[',
-    category: 'Navigation',
   },
 
   // ═══════════════════════════════════════════

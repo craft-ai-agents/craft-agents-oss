@@ -43,7 +43,7 @@ function IconSpacer() {
 export function OwnersListEditor({ owners, enforced, onRemove, currentUserId }: Props) {
   if (owners.length === 0) {
     return (
-      <div className="flex items-start gap-3 px-4 py-3 text-xs text-foreground/50">
+      <div className="flex items-start gap-3 px-4 py-3 text-sm text-foreground/50">
         <IconSpacer />
         <span>
           <Trans
@@ -109,7 +109,7 @@ function OwnerRow({
             </span>
           )}
         </div>
-        <div className="mt-0.5 truncate text-xs text-foreground/50">{secondary}</div>
+        <div className="mt-0.5 truncate text-sm text-foreground/50">{secondary}</div>
       </div>
       <Button
         variant="ghost"

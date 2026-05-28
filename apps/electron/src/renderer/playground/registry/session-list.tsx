@@ -93,8 +93,6 @@ function createMockContext(overrides: Partial<SessionListContextValue> = {}): Se
     onFocusZone: () => {},
     onKeyDown: () => {},
     sessionStatuses: mockSessionStatuses,
-    flatLabels: [],
-    labels: [],
     isMultiSelectActive: false,
     contentSearchResults: new Map(),
     ...overrides,
@@ -175,10 +173,10 @@ function SessionListSearchPreview({
             {showNoResults ? (
               <div className="flex flex-col items-center justify-center py-12 px-4">
                 <p className="text-sm text-muted-foreground">No conversations found</p>
-                <p className="text-xs text-muted-foreground/60 mt-0.5">
+                <p className="text-sm text-muted-foreground/60 mt-0.5">
                   Searched titles and message content
                 </p>
-                <button className="text-xs text-foreground hover:underline mt-2">
+                <button className="text-sm text-foreground hover:underline mt-2">
                   Clear search
                 </button>
               </div>

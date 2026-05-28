@@ -6,12 +6,13 @@ import { homedir } from 'node:os';
 let injectMetadataIntoToolSchema: typeof import('../unified-network-interceptor.ts').injectMetadataIntoToolSchema;
 let sanitizeEmptyTextCacheControl: typeof import('../unified-network-interceptor.ts').sanitizeEmptyTextCacheControl;
 let upgradePromptCacheTtl: typeof import('../unified-network-interceptor.ts').upgradePromptCacheTtl;
+let applyPiThinkingChatTemplateKwargs: typeof import('../unified-network-interceptor.ts').applyPiThinkingChatTemplateKwargs;
 let _resetConfigCacheForTesting: typeof import('../interceptor-common.ts')._resetConfigCacheForTesting;
 
 describe('unified-network-interceptor schema metadata injection', () => {
   beforeAll(async () => {
     process.env.CRAFT_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
-    ({ injectMetadataIntoToolSchema, sanitizeEmptyTextCacheControl, upgradePromptCacheTtl } = await import('../unified-network-interceptor.ts'));
+    ({ injectMetadataIntoToolSchema, sanitizeEmptyTextCacheControl, upgradePromptCacheTtl, applyPiThinkingChatTemplateKwargs } = await import('../unified-network-interceptor.ts'));
     ({ _resetConfigCacheForTesting } = await import('../interceptor-common.ts'));
   });
 
@@ -54,6 +55,26 @@ describe('unified-network-interceptor schema metadata injection', () => {
     expect(result.required).toEqual(['_displayName', '_intent']);
     expect(result.properties._displayName).toEqual({ type: 'string', description: 'custom display name schema' });
     expect(result.properties._intent).toEqual({ type: 'string', description: 'custom intent schema' });
+  });
+});
+
+describe('applyPiThinkingChatTemplateKwargs', () => {
+  it('injects enable_thinking only when Pi thinking is enabled', () => {
+    const enabledBody: Record<string, unknown> = { model: 'qwen3', stream: true };
+    applyPiThinkingChatTemplateKwargs(enabledBody, true);
+    expect(enabledBody).toEqual({
+      model: 'qwen3',
+      stream: true,
+      chat_template_kwargs: { enable_thinking: true },
+    });
+
+    const disabledBody: Record<string, unknown> = {
+      model: 'qwen3',
+      stream: true,
+      chat_template_kwargs: { enable_thinking: true },
+    };
+    applyPiThinkingChatTemplateKwargs(disabledBody, false);
+    expect(disabledBody).toEqual({ model: 'qwen3', stream: true });
   });
 });
 
@@ -123,7 +144,7 @@ describe('sanitizeEmptyTextCacheControl', () => {
 });
 
 describe('upgradePromptCacheTtl', () => {
-  const configFile = join(homedir(), '.craft-agent', 'config.json');
+  const configFile = join(homedir(), '.mdp-agent', 'config.json');
   let originalConfig: string | null = null;
 
   beforeEach(() => {
@@ -146,7 +167,7 @@ describe('upgradePromptCacheTtl', () => {
   });
 
   function enableExtendedCache() {
-    const dir = join(homedir(), '.craft-agent');
+    const dir = join(homedir(), '.mdp-agent');
     mkdirSync(dir, { recursive: true });
     const existing = originalConfig ? JSON.parse(originalConfig) : {};
     writeFileSync(configFile, JSON.stringify({ ...existing, extendedPromptCache: true }));
@@ -154,7 +175,7 @@ describe('upgradePromptCacheTtl', () => {
   }
 
   function disableExtendedCache() {
-    const dir = join(homedir(), '.craft-agent');
+    const dir = join(homedir(), '.mdp-agent');
     mkdirSync(dir, { recursive: true });
     const existing = originalConfig ? JSON.parse(originalConfig) : {};
     writeFileSync(configFile, JSON.stringify({ ...existing, extendedPromptCache: false }));

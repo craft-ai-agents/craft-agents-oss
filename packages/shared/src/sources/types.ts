@@ -5,7 +5,7 @@
  * They replace the old "connections" concept with a more flexible, folder-based architecture.
  *
  * File structure:
- * ~/.craft-agent/workspaces/{workspaceId}/sources/{sourceSlug}/
+ * ~/.mdp-agent/workspaces/{workspaceId}/sources/{sourceSlug}/
  *   ├── config.json   - Source settings
  *   └── guide.md      - Usage guidelines + cached data (in YAML frontmatter)
  */
@@ -237,31 +237,32 @@ export function isRefreshableSource(source: LoadedSource): boolean {
 
 /**
  * MCP transport type for sources
- * - 'http': HTTP-based MCP server (URL endpoint)
- * - 'sse': Server-Sent Events MCP server (URL endpoint)
+ * - 'streamable_http': Streamable HTTP MCP server (URL endpoint)
+ * - 'streamable-http', 'http', 'sse': legacy import/config spellings accepted
+ *   for compatibility and normalized to 'streamable_http' by save paths.
  * - 'stdio': Local subprocess MCP server (spawned command)
  */
-export type McpTransport = 'http' | 'sse' | 'stdio';
+export type McpTransport = 'streamable_http' | 'streamable-http' | 'http' | 'sse' | 'stdio';
 
 /**
  * MCP-specific configuration
- * Supports both HTTP-based and local stdio-based MCP servers.
+ * Supports both Streamable HTTP and local stdio-based MCP servers.
  */
 export interface McpSourceConfig {
   /**
-   * Transport type. Defaults to 'http' if not specified.
+   * Transport type. Defaults to 'streamable_http' if not specified.
    */
   transport?: McpTransport;
 
-  // === HTTP/SSE transport fields ===
+  // === Streamable HTTP transport fields ===
   /**
-   * URL endpoint for HTTP or SSE transport.
-   * Required when transport is 'http' or 'sse' (or undefined).
+   * URL endpoint for Streamable HTTP transport.
+   * Required when transport is 'streamable_http' (or undefined).
    */
   url?: string;
 
   /**
-   * Authentication type for HTTP/SSE servers.
+   * Authentication type for Streamable HTTP servers.
    */
   authType?: SourceMcpAuthType;
 
@@ -287,7 +288,7 @@ export interface McpSourceConfig {
    */
   env?: Record<string, string>;
 
-  // === HTTP/SSE custom headers ===
+  // === Streamable HTTP custom headers ===
   /**
    * Custom headers to include in every MCP request.
    * Auth headers (e.g. Authorization) are merged on top when authType is set.
@@ -505,7 +506,7 @@ export interface LoadedSource {
   /** Absolute path to source folder (for resolving relative icon paths) */
   folderPath: string;
 
-  /** Absolute path to workspace folder (e.g., ~/.craft-agent/workspaces/xxx) */
+  /** Absolute path to workspace folder (e.g., ~/.mdp-agent/workspaces/xxx) */
   workspaceRootPath: string;
 
   /**

@@ -181,7 +181,7 @@
   --step-actions-margin: 2rem;
 
   /* Fonts - System fonts as default, Inter via data-font="inter" */
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-default: var(--font-sans);
@@ -373,7 +373,7 @@ html[data-scenic] {
 /* Inter Font - Opt-in via data-font="inter" attribute
    Loaded from Google Fonts in index.html with optical sizing (opsz) axis */
 html[data-font="inter"] {
-  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-default: var(--font-sans);
   font-optical-sizing: auto;
   font-feature-settings: "cv01", "cv02", "cv03", "cv04", "case";
@@ -1444,12 +1444,12 @@ html.dark[data-scenic] .fullscreen-overlay-background {
 }
 
 /* ==========================================================================
-   TopBar height — bumps to 56px on narrow viewports so it matches the larger
-   touch targets and feels less cramped on mobile. The TopBar uses position:
+   TopBar height — desktop uses a taller 64px title bar while narrow viewports
+   stay at 56px to preserve vertical space. The TopBar uses position:
    fixed so the App content area reads the same variable for its padding-top.
    ========================================================================== */
 :root {
-  --topbar-height: 48px;
+  --topbar-height: 64px;
 }
 @media (max-width: 768px) {
   :root {

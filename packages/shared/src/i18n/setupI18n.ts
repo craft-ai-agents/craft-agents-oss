@@ -23,16 +23,23 @@ export function setupI18n(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   plugins: any[] = [],
 ): I18nInstance {
-  if (initialized) return i18n;
-
   let instance = i18n;
   for (const plugin of plugins) {
     instance = instance.use(plugin);
   }
 
+  if (initialized) {
+    for (const plugin of plugins) {
+      if (typeof plugin?.init === "function") {
+        plugin.init(i18n);
+      }
+    }
+    return i18n;
+  }
+
   instance.init({
     resources,
-    fallbackLng: "en",
+    fallbackLng: "zh-Hans",
     supportedLngs: [...SUPPORTED_LANGUAGE_CODES],
     interpolation: { escapeValue: false },
     initImmediate: false, // synchronous init — resources are bundled inline

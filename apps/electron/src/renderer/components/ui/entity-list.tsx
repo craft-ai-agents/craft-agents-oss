@@ -40,6 +40,9 @@ export interface EntityListGroup<T> {
   collapsedCount?: number
 }
 
+/** Controls whether the list owns the vertical scroll viewport or sizes to its content. */
+export type EntityListHeightBehavior = 'fill' | 'auto'
+
 export interface EntityListProps<T> {
   /** Flat item list (used when not grouped) */
   items?: T[]
@@ -63,6 +66,8 @@ export interface EntityListProps<T> {
   viewportRef?: React.RefObject<HTMLDivElement>
   /** Additional ScrollArea class */
   scrollAreaClassName?: string
+  /** Whether the list should fill its parent height or size to its content */
+  heightBehavior?: EntityListHeightBehavior
   className?: string
   /** Set of collapsed group keys (for collapsible groups) */
   collapsedGroups?: Set<string>
@@ -111,7 +116,7 @@ function CollapsibleGroupHeader({
           onClick={onToggle}
           className="w-full py-2 px-4 flex items-center gap-1.5 cursor-pointer group/header relative"
         >
-          <div className="absolute inset-y-0.5 left-2 right-2 rounded-[6px] group-hover/header:bg-foreground/2 transition-colors pointer-events-none" />
+          <div className="absolute inset-y-0.5 left-2 right-0 rounded-[6px] group-hover/header:bg-foreground/2 transition-colors pointer-events-none" />
           <ChevronRight
             className={cn(
               "h-3 w-3 text-muted-foreground/60 transition-transform relative",
@@ -155,6 +160,7 @@ export function EntityList<T>({
   containerProps,
   viewportRef,
   scrollAreaClassName,
+  heightBehavior = 'fill',
   className,
   collapsedGroups,
   onToggleCollapse,
@@ -169,7 +175,7 @@ export function EntityList<T>({
   // Empty state — rendered outside everything for proper centering
   if (isEmpty && emptyState) {
     return (
-      <div className={cn('flex flex-col flex-1', className)}>
+      <div className={cn('flex flex-col', heightBehavior === 'fill' && 'flex-1', className)}>
         {header}
         {emptyState}
       </div>
@@ -177,12 +183,12 @@ export function EntityList<T>({
   }
 
   return (
-    <div className={cn('flex flex-col flex-1 min-h-0', className)}>
+    <div className={cn('flex flex-col min-h-0', heightBehavior === 'fill' && 'flex-1', className)}>
       {header}
-      <ScrollArea className={cn('flex-1', scrollAreaClassName)} viewportRef={viewportRef}>
+      <ScrollArea className={cn(heightBehavior === 'fill' && 'flex-1', scrollAreaClassName)} viewportRef={viewportRef} viewportClassName="overflow-x-hidden">
         <div
           ref={containerRef}
-          className="flex flex-col pb-2"
+          className="flex min-w-0 flex-col overflow-x-hidden pb-2"
           {...containerProps}
         >
           <div className="pt-1">

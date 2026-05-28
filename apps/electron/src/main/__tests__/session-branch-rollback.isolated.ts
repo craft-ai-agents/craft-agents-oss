@@ -62,15 +62,16 @@ mock.module('@craft-agent/shared/config', () => ({
   loadConfigDefaults: () => ({
     workspaceDefaults: {
       permissionMode: 'ask',
-      thinkingLevel: 'medium',
+      thinkingEnabled: true,
     },
   }),
   getLlmConnection: () => null,
   getDefaultLlmConnection: () => null,
   resolveAuthEnvVars: () => ({}),
+  resetManagedAnthropicAuthEnvVars: () => {},
   getToolIconsDir: () => '/tmp/tool-icons',
   getMiniModel: () => 'claude-haiku-4-5-20251001',
-  getDefaultThinkingLevel: () => 'medium',
+  getDefaultThinkingEnabled: () => true,
   ConfigWatcher: class ConfigWatcher {
     constructor(..._args: unknown[]) {}
     start() {}
@@ -81,6 +82,7 @@ mock.module('@craft-agent/shared/config', () => ({
   migrateOrphanedDefaultConnections: async () => {},
   MODEL_REGISTRY: [],
   // Targeted stubs: prevent SyntaxError in tests that import these from the barrel
+  CONFIG_DIR: '/tmp/craft-agent-config',
   DEFAULT_MODEL: 'claude-sonnet-4-20250514',
   DEFAULT_THEME: { mode: 'system' },
   getDefaultModelsForConnection: () => ({ default: 'claude-sonnet-4-20250514', mini: 'claude-haiku-4-5-20251001' }),
@@ -89,6 +91,22 @@ mock.module('@craft-agent/shared/config', () => ({
   clearGitBashPath: () => {},
   setActiveWorkspace: () => {},
   getSummarizationModel: () => 'claude-haiku-4-5-20251001',
+  defaultMidStreamBehavior: (providerType: string) => providerType === 'anthropic' ? 'queue' : 'steer',
+  OPENLLM_HOST_ENV_VAR: 'OPENLLM_HOST',
+  OPENLLM_BASE_HOST_ENV_VAR: 'OPENLLM_BASE_HOST',
+  OPENLLM_ENV_CONNECTION_SLUG: 'openllm-env',
+  OPENLLM_PI_AUTH_PROVIDER: 'anthropic',
+  OPENLLM_CUSTOM_ENDPOINT: { api: 'anthropic-messages' },
+  buildOpenLlmBaseUrl: (modelName: string) => `https://openllm.test/llm/${encodeURIComponent(modelName)}/v1`,
+  buildRuntimeCustomModels: (models: any[] | undefined) => models,
+  ENV_CONNECTION_SLUG: 'env-provider',
+  ENV_CONNECTION_SSO_TOKEN_ENV_VAR: 'CRAFT_LLM_SSO_TOKEN',
+  ENV_CONNECTION_SSO_BASE_URL_ENV_VAR: 'CRAFT_LLM_SSO_BASE_URL',
+  resolveMidStreamBehavior: (connection: { midStreamBehavior?: string; providerType: string }) => (
+    connection.midStreamBehavior === 'queue' || connection.midStreamBehavior === 'steer'
+      ? connection.midStreamBehavior
+      : connection.providerType === 'anthropic' ? 'queue' : 'steer'
+  ),
   ensureConfigDir: () => {},
   ensureConfigDefaults: () => {},
   addWorkspace: async () => null,
@@ -107,13 +125,14 @@ mock.module('@craft-agent/shared/config', () => ({
   touchLlmConnection: async () => {},
   isCompatProvider: () => false,
   isAnthropicProvider: () => true,
+  modelSupportsImages: () => false,
 }))
 
 mock.module('@craft-agent/shared/workspaces', () => ({
   loadWorkspaceConfig: () => ({
     defaults: {
       permissionMode: 'ask',
-      thinkingLevel: 'medium',
+      thinkingEnabled: true,
       defaultLlmConnection: undefined,
     },
   }),
@@ -246,7 +265,7 @@ mock.module('@craft-agent/shared/sessions', () => ({
       'name','isFlagged','sessionStatus','labels','hidden',
       'lastReadMessageId','hasUnread',
       'enabledSourceSlugs','permissionMode','previousPermissionMode','workingDirectory',
-      'model','llmConnection','connectionLocked','thinkingLevel',
+      'model','llmConnection','connectionLocked','thinkingEnabled',
       'sharedUrl','sharedId','pendingPlanExecution',
       'isArchived','archivedAt',
       'branchFromMessageId','branchFromSdkSessionId','branchFromSessionPath',

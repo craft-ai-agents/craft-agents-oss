@@ -7,9 +7,9 @@ import { markdownUrlTransform } from '../url-transform'
 
 describe('resolveMarkdownLinkTarget', () => {
   it('resolves absolute unix file paths as file targets', () => {
-    expect(resolveMarkdownLinkTarget('/Users/balintorosz/.craft-agent/sessions/abc/image.jpg')).toEqual({
+    expect(resolveMarkdownLinkTarget('/Users/balintorosz/.mdp-agent/sessions/abc/image.jpg')).toEqual({
       kind: 'file',
-      path: '/Users/balintorosz/.craft-agent/sessions/abc/image.jpg',
+      path: '/Users/balintorosz/.mdp-agent/sessions/abc/image.jpg',
     })
   })
 
@@ -115,7 +115,7 @@ describe('ReactMarkdown anchor rendering with markdownUrlTransform', () => {
 
 describe('classifyMarkdownLinkTarget', () => {
   it('classifies absolute unix file paths as file', () => {
-    expect(classifyMarkdownLinkTarget('/Users/balintorosz/.craft-agent/sessions/abc/image.jpg')).toBe('file')
+    expect(classifyMarkdownLinkTarget('/Users/balintorosz/.mdp-agent/sessions/abc/image.jpg')).toBe('file')
   })
 
   it('classifies file URLs as file', () => {

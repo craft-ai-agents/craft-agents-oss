@@ -55,13 +55,24 @@ export interface McpToolResult {
   sourceSlug?: string;
 }
 
+export interface McpClientPoolCallOptions {
+  /** Session storage path used for binary response downloads and large-response files. */
+  sessionPath?: string;
+  /** Optional summarizer used when a successful tool response exceeds inline limits. */
+  summarize?: (prompt: string) => Promise<string | null>;
+}
+
+export type McpClientPoolRefreshSourceResult =
+  | { success: true; sourceSlug: string; toolCount: number }
+  | { success: false; sourceSlug: string; error: string };
+
 /**
  * Convert SdkMcpServerConfig (used by backend types) to CraftMcpClient config.
  */
 function sdkConfigToClientConfig(config: SdkMcpServerConfig): McpClientConfig | null {
-  if (config.type === 'http' || config.type === 'sse') {
+  if (config.type === 'streamable_http') {
     return {
-      transport: 'http',
+      transport: 'streamable_http',
       url: config.url,
       headers: config.headers,
     };
@@ -79,15 +90,14 @@ function sdkConfigToClientConfig(config: SdkMcpServerConfig): McpClientConfig | 
 
 /**
  * Check if an MCP source's config has changed in a way that requires reconnection.
- * Compares auth headers (token refresh) and URL changes.
- * Ignores stdio sources since they don't use OAuth tokens.
+ * Compares HTTP URL/auth changes and stdio process config changes.
  */
 function mcpConfigChanged(oldConfig: SdkMcpServerConfig, newConfig: SdkMcpServerConfig): boolean {
   if (oldConfig.type !== newConfig.type) return true;
 
   if (
-    (oldConfig.type === 'http' || oldConfig.type === 'sse') &&
-    (newConfig.type === 'http' || newConfig.type === 'sse')
+    oldConfig.type === 'streamable_http' &&
+    newConfig.type === 'streamable_http'
   ) {
     if (oldConfig.url !== newConfig.url) return true;
     const oldAuth = oldConfig.headers?.['Authorization'];
@@ -95,7 +105,29 @@ function mcpConfigChanged(oldConfig: SdkMcpServerConfig, newConfig: SdkMcpServer
     if (oldAuth !== newAuth) return true;
   }
 
+  if (oldConfig.type === 'stdio' && newConfig.type === 'stdio') {
+    if (oldConfig.command !== newConfig.command) return true;
+    if (!stringArraysEqual(oldConfig.args, newConfig.args)) return true;
+    if (!stringRecordsEqual(oldConfig.env, newConfig.env)) return true;
+  }
+
   return false;
+}
+
+function stringArraysEqual(a?: string[], b?: string[]): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+}
+
+function stringRecordsEqual(a?: Record<string, string>, b?: Record<string, string>): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  const aKeys = Object.keys(a).sort();
+  const bKeys = Object.keys(b).sort();
+  if (!stringArraysEqual(aKeys, bKeys)) return false;
+  return aKeys.every(key => a[key] === b[key]);
 }
 
 export class McpClientPool {
@@ -117,27 +149,33 @@ export class McpClientPool {
   /** Workspace root path for local MCP filtering */
   private workspaceRootPath?: string;
 
-  /** Session storage path for saving large responses */
-  private sessionPath?: string;
+  /** Subscribers called after sync() connects/disconnects sources, so clients can be notified */
+  private toolsChangedListeners = new Set<() => void>();
 
-  /** Summarize callback for large response handling */
-  private summarizeCallback?: (prompt: string) => Promise<string | null>;
-
-  /** Called after sync() connects/disconnects sources, so clients can be notified */
-  onToolsChanged?: () => void;
-
-  constructor(options?: { debug?: (msg: string) => void; workspaceRootPath?: string; sessionPath?: string }) {
+  constructor(options?: { debug?: (msg: string) => void; workspaceRootPath?: string }) {
     this.debugFn = options?.debug;
     this.workspaceRootPath = options?.workspaceRootPath;
-    this.sessionPath = options?.sessionPath;
   }
 
   /**
-   * Set the summarize callback for large response handling.
-   * Typically called after agent creation: pool.setSummarizeCallback(agent.getSummarizeCallback())
+   * Subscribe to tool-list changes emitted after each sync reconciliation.
    */
-  setSummarizeCallback(fn: (prompt: string) => Promise<string | null>): void {
-    this.summarizeCallback = fn;
+  addToolsChangedListener(listener: () => void): void {
+    this.toolsChangedListeners.add(listener);
+  }
+
+  /**
+   * Remove a previously registered tool-list change listener.
+   */
+  removeToolsChangedListener(listener: () => void): void {
+    this.toolsChangedListeners.delete(listener);
+  }
+
+  private notifyToolsChanged(): void {
+    const listeners = Array.from(this.toolsChangedListeners);
+    for (const listener of listeners) {
+      listener();
+    }
   }
 
   private debug(msg: string): void {
@@ -219,6 +257,43 @@ export class McpClientPool {
     this.proxyTools.clear();
     this.activeConfigs.clear();
     this.debug('Disconnected all MCP clients');
+  }
+
+  /**
+   * Force a single source to reconnect and rediscover tools.
+   *
+   * Refresh fails closed: any existing client/cache is removed first, and a
+   * failed reconnect leaves the source disconnected instead of exposing stale
+   * tools from an old process or config.
+   */
+  async refreshSource(
+    slug: string,
+    config: SdkMcpServerConfig
+  ): Promise<McpClientPoolRefreshSourceResult> {
+    await this.disconnect(slug);
+    try {
+      await this.connect(slug, config);
+      const toolCount = this.toolCache.get(slug)?.length ?? 0;
+      return { success: true, sourceSlug: slug, toolCount };
+    } catch (error) {
+      this.debug(`Failed to refresh MCP source ${slug}: ${error instanceof Error ? error.message : String(error)}`);
+      return {
+        success: false,
+        sourceSlug: slug,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      this.notifyToolsChanged();
+    }
+  }
+
+  /**
+   * Remove one source from the running pool and notify listeners.
+   * Used when a refresh cannot build a usable connection config.
+   */
+  async removeSource(slug: string): Promise<void> {
+    await this.disconnect(slug);
+    this.notifyToolsChanged();
   }
 
   // ============================================================
@@ -303,7 +378,7 @@ export class McpClientPool {
       }
     }
 
-    this.onToolsChanged?.();
+    this.notifyToolsChanged();
     return failures;
   }
 
@@ -363,9 +438,16 @@ export class McpClientPool {
 
   /**
    * Execute an MCP tool by its proxy name (mcp__{slug}__{toolName}).
+   * Per-call options decide where binary/large responses are saved and which
+   * session-specific summarizer is used.
+   *
    * Returns a result matching the subprocess protocol format.
    */
-  async callTool(proxyName: string, args: Record<string, unknown>): Promise<McpToolResult> {
+  async callTool(
+    proxyName: string,
+    args: Record<string, unknown>,
+    options: McpClientPoolCallOptions = {}
+  ): Promise<McpToolResult> {
     const info = this.proxyTools.get(proxyName);
     if (!info) {
       return {
@@ -403,7 +485,7 @@ export class McpClientPool {
           } else if (block.text !== undefined && block.text !== null) {
             parts.push(JSON.stringify(block.text, null, 2));
           }
-        } else if ((block.type === 'image' || block.type === 'audio') && block.data && this.sessionPath) {
+        } else if ((block.type === 'image' || block.type === 'audio') && block.data && options.sessionPath) {
           // Decode base64 binary content and save to downloads/
           try {
             const buffer = Buffer.from(block.data, 'base64');
@@ -411,7 +493,7 @@ export class McpClientPool {
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
             const safeName = sanitizeFilename(proxyName);
             const filename = `${safeName}_${timestamp}${ext}`;
-            const saved = saveBinaryResponse(this.sessionPath, filename, buffer, block.mimeType ?? null);
+            const saved = saveBinaryResponse(options.sessionPath, filename, buffer, block.mimeType ?? null);
             if (saved.type === 'file_download') {
               parts.push(`[${block.type.charAt(0).toUpperCase() + block.type.slice(1)} saved: ${saved.path} (${saved.sizeHuman})]`);
             }
@@ -425,12 +507,12 @@ export class McpClientPool {
       const text = parts.join('\n') || JSON.stringify(result);
 
       // 3. Centralized binary + large response handling
-      if (!result.isError && this.sessionPath) {
+      if (!result.isError && options.sessionPath) {
         const guarded = await guardLargeResult(text, {
-          sessionPath: this.sessionPath,
+          sessionPath: options.sessionPath,
           toolName: proxyName,
           input: args,
-          summarize: this.summarizeCallback,
+          summarize: options.summarize,
         });
         if (guarded) {
           return { content: guarded, isError: false };

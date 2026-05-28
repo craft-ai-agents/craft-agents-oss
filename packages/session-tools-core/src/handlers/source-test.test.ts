@@ -24,6 +24,7 @@ interface CtxOverrides {
   validateStdioMcpConnection?: SessionToolContext['validateStdioMcpConnection'];
   validateMcpConnection?: SessionToolContext['validateMcpConnection'];
   credentialManager?: SessionToolContext['credentialManager'];
+  getSsoIdToken?: SessionToolContext['getSsoIdToken'];
 }
 
 function createCtx(workspacePath: string, overrides: CtxOverrides = {}): SessionToolContext {
@@ -68,6 +69,7 @@ function createCtx(workspacePath: string, overrides: CtxOverrides = {}): Session
     validateStdioMcpConnection: overrides.validateStdioMcpConnection,
     validateMcpConnection: overrides.validateMcpConnection,
     credentialManager: overrides.credentialManager,
+    getSsoIdToken: overrides.getSsoIdToken,
     activateSourceInSession: overrides.activateSourceInSession,
   } as unknown as SessionToolContext;
   // Expose saved for assertions (test-only — not on real ctx).
@@ -527,7 +529,7 @@ function writeHttpMcpSource(
     tagline: 'A test HTTP MCP source',
     icon: '🧪',
     mcp: {
-      transport: 'http',
+      transport: 'streamable_http',
       url: 'https://mcp.example.test',
       authType: 'oauth',
     },
@@ -585,7 +587,7 @@ describe('source_test HTTP MCP probe credential forwarding (regression for #720)
   it('OAuth MCP with cached token forwards accessToken to the probe (no refresh)', async () => {
     writeHttpMcpSource(tempDir, 'oauth-cached', {
       mcp: {
-        transport: 'http',
+        transport: 'streamable_http',
         url: 'https://mcp.example.test',
         authType: 'oauth',
       },
@@ -618,7 +620,7 @@ describe('source_test HTTP MCP probe credential forwarding (regression for #720)
   it('OAuth MCP without cached token falls back to refresh and forwards the fresh token', async () => {
     writeHttpMcpSource(tempDir, 'oauth-refresh', {
       mcp: {
-        transport: 'http',
+        transport: 'streamable_http',
         url: 'https://mcp.example.test',
         authType: 'oauth',
       },
@@ -645,7 +647,7 @@ describe('source_test HTTP MCP probe credential forwarding (regression for #720)
   it('Bearer MCP without headerNames forwards accessToken (defense-in-depth)', async () => {
     writeHttpMcpSource(tempDir, 'bearer-cached', {
       mcp: {
-        transport: 'http',
+        transport: 'streamable_http',
         url: 'https://mcp.example.test',
         authType: 'bearer',
       },
@@ -669,11 +671,69 @@ describe('source_test HTTP MCP probe credential forwarding (regression for #720)
     expect(cred.refreshCalls).toBe(0);
   });
 
+  it('Bearer MCP prefers the SSO idToken over the source bearer token', async () => {
+    writeHttpMcpSource(tempDir, 'bearer-sso', {
+      mcp: {
+        transport: 'streamable_http',
+        url: 'https://mcp.example.test',
+        authType: 'bearer',
+      },
+    } as Partial<SourceConfig>);
+
+    const cred = makeCredentialManager({ cachedToken: 'bearer-tok' });
+    const calls: ValidateMcpCall[] = [];
+    const ctx = createCtx(tempDir, {
+      credentialManager: cred.manager,
+      getSsoIdToken: async () => 'sso-id-token',
+      validateMcpConnection: async (config) => {
+        calls.push(config);
+        return { success: true };
+      },
+    });
+
+    await handleSourceTest(ctx, { sourceSlug: 'bearer-sso', autoEnable: false });
+
+    expect(calls.length).toBe(1);
+    expect(calls[0]?.accessToken).toBe('sso-id-token');
+    expect(cred.getTokenCalls).toBe(1);
+    expect(cred.refreshCalls).toBe(0);
+  });
+
+  it('Bearer MCP with headerNames still forwards the SSO idToken as accessToken', async () => {
+    writeHttpMcpSource(tempDir, 'bearer-header-sso', {
+      mcp: {
+        transport: 'streamable_http',
+        url: 'https://mcp.example.test',
+        authType: 'bearer',
+        headerNames: ['Authorization'],
+      },
+    } as Partial<SourceConfig>);
+
+    const cred = makeCredentialManager({
+      cachedToken: JSON.stringify({ Authorization: 'Bearer source-header-token' }),
+    });
+    const calls: ValidateMcpCall[] = [];
+    const ctx = createCtx(tempDir, {
+      credentialManager: cred.manager,
+      getSsoIdToken: async () => 'sso-id-token',
+      validateMcpConnection: async (config) => {
+        calls.push(config);
+        return { success: true };
+      },
+    });
+
+    await handleSourceTest(ctx, { sourceSlug: 'bearer-header-sso', autoEnable: false });
+
+    expect(calls.length).toBe(1);
+    expect(calls[0]?.headers).toEqual({ Authorization: 'Bearer source-header-token' });
+    expect(calls[0]?.accessToken).toBe('sso-id-token');
+  });
+
   it('headerNames flow still merges credential headers, accessToken stays undefined', async () => {
     // Multi-header credential — credential value is a JSON object keyed by header name.
     writeHttpMcpSource(tempDir, 'header-style', {
       mcp: {
-        transport: 'http',
+        transport: 'streamable_http',
         url: 'https://mcp.example.test',
         headerNames: ['X-Api-Key'],
       },

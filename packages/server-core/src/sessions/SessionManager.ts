@@ -1,6 +1,6 @@
 import type { EventSink, RpcServer } from '@craft-agent/server-core/transport'
 import { CLIENT_BROWSER_INVOKE } from '@craft-agent/server-core/transport'
-import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput } from '@craft-agent/server-core/handlers'
+import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput, RefreshWorkspaceMcpSourceResult } from '@craft-agent/server-core/handlers'
 import { RemoteBrowserPaneManager } from './RemoteBrowserPaneManager'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
@@ -20,7 +20,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
+import { ENV_CONNECTION_SLUG, ENV_CONNECTION_SSO_BASE_URL_ENV_VAR, ENV_CONNECTION_SSO_TOKEN_ENV_VAR, OPENLLM_ENV_CONNECTION_SLUG, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingEnabled, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -63,6 +63,7 @@ import {
   writeSessionJsonl,
   serializeSession,
   validateBundle,
+  redactStoredSessionForExternal,
   type SessionBundle,
   type DispatchMode,
   type StoredSession,
@@ -72,15 +73,15 @@ import {
   type SessionHeader,
   pickSessionFields,
 } from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
+import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, loadSource, loadSourceConfig, saveSourceConfig, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
-import { getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
+import { getValidClaudeOAuthToken, SsoCredentialStore } from '@craft-agent/shared/auth'
 import { resolveAuthEnvVars } from '@craft-agent/shared/config'
 import { toolMetadataStore, getLastApiError } from '@craft-agent/shared/interceptor'
 import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
 import { restoreFiles } from '@craft-agent/shared/utils/bundle-files'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
+import { McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
@@ -89,19 +90,31 @@ import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
-import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
+import { type ThinkingEnabled, DEFAULT_THINKING_ENABLED, normalizeThinkingEnabled } from '@craft-agent/shared/agent/thinking-toggle'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
 import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
-import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
+import { buildBackendRuntimeSignature, buildRestartRequiredSignature, buildRuntimeConfigUpdate, filterAttachmentsForModelInput } from './runtime-config'
+import { UserProfileContextManager, type UserProfileProvider, type UserProfile, type LoadedUserProfileContext } from './user-profile-context'
+import { HttpUserProfileProvider, UserProfileRefreshLoop, readLocalUserProfile } from './user-profile-http'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
 import { resizeImageForAPI, resizeIconBuffer } from '@craft-agent/server-core/services'
 export { sanitizeForTitle }
+
+export interface SessionManagerOptions {
+  userProfileProvider?: UserProfileProvider
+  userProfileContextEnabled?: boolean
+  userProfileCachePath?: string
+  /** HTTP fetch implementation override (defaults to globalThis.fetch). */
+  fetchFn?: (url: string) => Promise<Response>
+  /** Refresh interval for HTTP user profile polling in ms (default 43_200_000 = 12h). */
+  userProfileRefreshIntervalMs?: number
+}
 
 // Module-level platform ref — set once during init via setSessionPlatform()
 let _platform: PlatformServices | null = null
@@ -113,6 +126,40 @@ let sessionLog: Logger = createScopedLogger(CONSOLE_LOGGER, 'session')
 export function setSessionPlatform(platform: PlatformServices): void {
   _platform = platform
   sessionLog = createScopedLogger(platform.logger, 'session')
+}
+
+interface SsoSubprocessEnvOptions {
+  env?: Pick<NodeJS.ProcessEnv, 'LLM_BASE_URL'>
+  loadSsoSession?: () => Promise<{ token?: string | null } | null>
+}
+
+export async function buildSsoSubprocessEnvOverrides(
+  connectionSlug: string | undefined,
+  options: SsoSubprocessEnvOptions = {},
+): Promise<Record<string, string>> {
+  let baseUrl: string | undefined
+
+  if (connectionSlug === ENV_CONNECTION_SLUG) {
+    baseUrl = (options.env?.LLM_BASE_URL ?? process.env.LLM_BASE_URL)?.trim()
+  } else if (connectionSlug === OPENLLM_ENV_CONNECTION_SLUG) {
+    baseUrl = process.env.OPENLLM_BASE_HOST?.trim()
+  } else {
+    return {}
+  }
+
+  if (!baseUrl) return {}
+
+  try {
+    const session = await (options.loadSsoSession ?? (() => new SsoCredentialStore().load()))()
+    if (!session?.token) return {}
+    return {
+      [ENV_CONNECTION_SSO_TOKEN_ENV_VAR]: session.token,
+      [ENV_CONNECTION_SSO_BASE_URL_ENV_VAR]: baseUrl,
+    }
+  } catch (error) {
+    sessionLog.warn('Failed to load SSO session for subprocess env injection:', error)
+    return {}
+  }
 }
 
 interface SessionRuntimeHooks {
@@ -142,6 +189,10 @@ const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
 }
 
 let sessionRuntimeHooks: SessionRuntimeHooks = defaultSessionRuntimeHooks
+
+function appendDynamicUserProfileContext(message: string, context: LoadedUserProfileContext): string {
+  return `${message}\n\n<dynamic_user_context>\n${context.dynamicContext}\n</dynamic_user_context>`
+}
 
 export function setSessionRuntimeHooks(hooks: Partial<SessionRuntimeHooks>): void {
   sessionRuntimeHooks = {
@@ -361,6 +412,7 @@ async function saveClaudeTurnAnchor(
  * @param sources - Sources to build servers for
  * @param sessionPath - Optional path to session folder for saving large API responses
  * @param tokenRefreshManager - Optional TokenRefreshManager for OAuth token refresh
+ * @param summarize - Optional summarizer for large API responses from API sources
  */
 async function buildServersFromSources(
   sources: LoadedSource[],
@@ -371,6 +423,7 @@ async function buildServersFromSources(
   const span = perf.span('sources.buildServers', { count: sources.length })
   const credManager = getSourceCredentialManager()
   const serverBuilder = getSourceServerBuilder()
+  const ssoIdToken = await loadSsoIdToken()
 
   // Load credentials for all sources
   const sourcesWithCreds: SourceWithCredential[] = await Promise.all(
@@ -378,6 +431,7 @@ async function buildServersFromSources(
       source,
       token: await credManager.getToken(source),
       credential: await credManager.getApiCredential(source),
+      ssoIdToken,
     }))
   )
   span.mark('credentials.loaded')
@@ -462,6 +516,15 @@ async function buildServersFromSources(
 
   span.end()
   return result
+}
+
+async function loadSsoIdToken(): Promise<string | null> {
+  try {
+    return (await new SsoCredentialStore().load())?.idToken ?? null
+  } catch (error) {
+    sessionLog.debug(`Unable to load SSO idToken for source auth: ${error instanceof Error ? error.message : String(error)}`)
+    return null
+  }
 }
 
 /**
@@ -557,7 +620,7 @@ async function getBrowserToolIconDataUrl(): Promise<string | undefined> {
   try {
     const iconCandidates = [
       join(getToolIconsDir(), BROWSER_TOOL_ICON_FILENAME),
-      // Dev fallback (before sync to ~/.craft-agent/tool-icons)
+      // Dev fallback (before sync to ~/.mdp-agent/tool-icons)
       join(process.cwd(), 'apps', 'electron', 'resources', 'tool-icons', BROWSER_TOOL_ICON_FILENAME),
       // Packaged fallback (app resources)
       join(process.resourcesPath, 'tool-icons', BROWSER_TOOL_ICON_FILENAME),
@@ -691,7 +754,7 @@ async function resolveToolDisplayMeta(
 
   // CLI tool icon resolution for Bash commands
   // Parses the command string to detect known tools (git, npm, docker, etc.)
-  // and resolves their brand icon from ~/.craft-agent/tool-icons/
+  // and resolves their brand icon from ~/.mdp-agent/tool-icons/
   if (toolName === 'Bash' && toolInput?.command) {
     try {
       const toolIconsDir = getToolIconsDir()
@@ -786,10 +849,10 @@ interface ManagedSession {
   permissionMode?: PermissionMode
   /** Previous permission mode (preserved across restarts for session_state modeTransition context) */
   previousPermissionMode?: PermissionMode
-  /** Centralized MCP client pool for this session's source connections */
-  mcpPool?: McpClientPool
   /** HTTP MCP server exposing pool tools to external SDK subprocesses */
   poolServer?: McpPoolServer
+  /** Listener registered on the workspace MCP pool while this session has a pool server. */
+  mcpToolsChangedListener?: () => void
   // SDK session ID for conversation continuity
   sdkSessionId?: string
   // Token usage for display
@@ -834,8 +897,8 @@ interface ManagedSession {
   llmConnection?: string
   // Whether the connection is locked (cannot be changed after first agent creation)
   connectionLocked?: boolean
-  // Thinking level for this session ('off', 'think', 'max')
-  thinkingLevel?: ThinkingLevel
+  // Thinking toggle for this session
+  thinkingEnabled?: ThinkingEnabled
   // System prompt preset for mini agents ('default' | 'mini')
   systemPromptPreset?: 'default' | 'mini' | string
   // Role/type of the last message (for badge display without loading messages)
@@ -931,6 +994,8 @@ interface ManagedSession {
   // Whether the previous turn was interrupted (for context injection on next message).
   // Ephemeral — not persisted to disk. Cleared after one-shot injection.
   wasInterrupted?: boolean
+  // When true, session-level override disables team context injection for this session.
+  teamContextDisabled?: boolean
   /**
    * Runtime-only: Pi SDK message id → Craft assistant message id.
    * Populated when a `text_complete` arrives carrying `sdkMessageId`, and read
@@ -1000,15 +1065,16 @@ export function createManagedSession(
     Object.entries(s).filter(([, v]) => v !== undefined)
   ) as Partial<ManagedSession>
 
-  if ('thinkingLevel' in sourceFields) {
-    // TODO: Remove legacy 'think' normalization after old persisted session
-    // headers have realistically aged out across upgrades.
-    const normalizedThinkingLevel = normalizeThinkingLevel(sourceFields.thinkingLevel)
-    if (normalizedThinkingLevel) {
-      sourceFields.thinkingLevel = normalizedThinkingLevel
+  {
+    const legacyThinkingKey = 'thinking' + 'Level'
+    const rawThinkingEnabled = sourceFields.thinkingEnabled ?? (s[legacyThinkingKey] as unknown)
+    const normalizedThinkingEnabled = normalizeThinkingEnabled(rawThinkingEnabled)
+    if (normalizedThinkingEnabled !== undefined) {
+      sourceFields.thinkingEnabled = normalizedThinkingEnabled
     } else {
-      delete sourceFields.thinkingLevel
+      delete sourceFields.thinkingEnabled
     }
+    delete (sourceFields as Partial<ManagedSession> & Record<string, unknown>)[legacyThinkingKey]
   }
 
   const managed = {
@@ -1031,7 +1097,7 @@ export function createManagedSession(
     tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
       log: (msg) => sessionLog.debug(msg),
     }),
-    // Caller overrides (permissionMode defaults, thinkingLevel, messagesLoaded, etc.)
+    // Caller overrides (permissionMode defaults, thinkingEnabled, messagesLoaded, etc.)
     ...overrides,
   } as ManagedSession
 
@@ -1106,6 +1172,10 @@ export class SessionManager implements ISessionManager {
   private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
   // Config watchers for live updates (sources, etc.) - one per workspace
   private configWatchers: Map<string, ConfigWatcher> = new Map()
+  private workspaceMcpPools: Map<string, McpClientPool> = new Map()
+  private workspaceTokenRefreshManagers: Map<string, TokenRefreshManager> = new Map()
+  // Bootstrap sync promises keyed by workspaceRootPath — awaited in getOrCreateAgent to avoid re-syncing
+  private workspaceMcpPoolBootstrapPromises: Map<string, Promise<void>> = new Map()
   // Automation systems for workspace event automations - one per workspace (includes scheduler, diffing, and handlers)
   private automationSystems: Map<string, AutomationSystem> = new Map()
   // Pending credential request resolvers (keyed by requestId)
@@ -1147,6 +1217,28 @@ export class SessionManager implements ISessionManager {
   private agentRefreshLocks: Map<string, Promise<void>> = new Map()
   /** Monotonic clock to ensure strictly increasing message timestamps */
   private lastTimestamp = 0
+  private readonly userProfileContextManager: UserProfileContextManager
+  private readonly httpUserProfileProvider: HttpUserProfileProvider
+  private readonly userProfileRefreshLoop: UserProfileRefreshLoop
+
+  constructor(options: SessionManagerOptions = {}) {
+    this.userProfileContextManager = new UserProfileContextManager({
+      provider: options.userProfileProvider,
+      enabled: options.userProfileContextEnabled,
+      cachePath: options.userProfileCachePath,
+    })
+
+    this.httpUserProfileProvider = new HttpUserProfileProvider({
+      fetchFn: options.fetchFn,
+    })
+    this.userProfileRefreshLoop = new UserProfileRefreshLoop({
+      provider: this.httpUserProfileProvider,
+      intervalMs: options.userProfileRefreshIntervalMs,
+      onError: (error) => {
+        sessionLog.error('User profile refresh failed:', error)
+      },
+    })
+  }
 
   /**
    * Optional binder installed by the messaging-gateway bootstrap. When set,
@@ -1441,6 +1533,7 @@ export class SessionManager implements ISessionManager {
     }
 
     sessionLog.info(`Setting up ConfigWatcher for workspace: ${workspaceId} (${workspaceRootPath})`)
+    this.setupWorkspaceMcpPool(workspaceRootPath)
 
     const callbacks: ConfigWatcherCallbacks = {
       onSourcesListChange: async (sources: LoadedSource[]) => {
@@ -1594,7 +1687,7 @@ export class SessionManager implements ISessionManager {
                 mentions: pending.mentions,
                 llmConnection: pending.llmConnection,
                 model: pending.model,
-                thinkingLevel: pending.thinkingLevel,
+                thinkingEnabled: pending.thinkingEnabled,
                 automationName: pending.automationName,
                 telegramTopic: pending.telegramTopic,
               })
@@ -1629,6 +1722,197 @@ export class SessionManager implements ISessionManager {
       })
       this.automationSystems.set(workspaceRootPath, automationSystem)
       sessionLog.info(`Initialized AutomationSystem for workspace ${workspaceId}`)
+    }
+  }
+
+  private setupWorkspaceMcpPool(workspaceRootPath: string): void {
+    if (this.workspaceMcpPools.has(workspaceRootPath)) {
+      return
+    }
+
+    const tokenRefreshManager = new TokenRefreshManager(getSourceCredentialManager(), {
+      log: (msg) => sessionLog.debug(msg),
+    })
+    const pool = new McpClientPool({
+      debug: (msg) => sessionLog.debug(msg),
+      workspaceRootPath,
+    })
+
+    this.workspaceTokenRefreshManagers.set(workspaceRootPath, tokenRefreshManager)
+    this.workspaceMcpPools.set(workspaceRootPath, pool)
+
+    // Only bootstrap eagerly when an SSO session is already persisted (headless
+    // with a prior login, or SSO bypass mode active). If no session exists the
+    // login page is about to be shown — defer to syncAllWorkspaceMcpPools(),
+    // which is called from the SSO callback / GET_SESSION handlers after auth.
+    const bootstrapPromise = new SsoCredentialStore().load()
+      .then(session => {
+        if (!session) return
+        return this.syncWorkspaceMcpPool(workspaceRootPath, pool, tokenRefreshManager)
+      })
+      .catch(() => {})
+    this.workspaceMcpPoolBootstrapPromises.set(workspaceRootPath, bootstrapPromise)
+  }
+
+  private async syncWorkspaceMcpPool(
+    workspaceRootPath: string,
+    pool: McpClientPool,
+    tokenRefreshManager: TokenRefreshManager,
+  ): Promise<void> {
+    try {
+      const allWorkspaceMcpSources = loadAllSources(workspaceRootPath)
+        .filter(source => source.config.type === 'mcp' && isSourceUsable(source))
+      const { mcpServers } = await buildServersFromSources(
+        allWorkspaceMcpSources,
+        undefined,
+        tokenRefreshManager,
+      )
+      if (this.workspaceMcpPools.get(workspaceRootPath) !== pool) {
+        return
+      }
+      await pool.sync(mcpServers)
+      if (this.workspaceMcpPools.get(workspaceRootPath) !== pool) {
+        await pool.disconnectAll()
+      }
+    } catch (error) {
+      sessionLog.warn(`Failed to bootstrap workspace MCP pool for ${workspaceRootPath}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  async syncAllWorkspaceMcpPools(): Promise<void> {
+    await Promise.all(
+      Array.from(this.workspaceMcpPools.keys()).map(rootPath => this.syncWorkspaceMcpPoolFromDisk(rootPath))
+    )
+  }
+
+  private async syncWorkspaceMcpPoolFromDisk(workspaceRootPath: string): Promise<void> {
+    const pool = this.workspaceMcpPools.get(workspaceRootPath)
+    if (!pool) return
+
+    const tokenRefreshManager = this.workspaceTokenRefreshManagers.get(workspaceRootPath) ?? new TokenRefreshManager(getSourceCredentialManager(), {
+      log: (msg) => sessionLog.debug(msg),
+    })
+    if (!this.workspaceTokenRefreshManagers.has(workspaceRootPath)) {
+      this.workspaceTokenRefreshManagers.set(workspaceRootPath, tokenRefreshManager)
+    }
+
+    await this.syncWorkspaceMcpPool(workspaceRootPath, pool, tokenRefreshManager)
+  }
+
+  async refreshWorkspaceMcpSource(
+    workspaceRootPath: string,
+    sourceSlug: string,
+  ): Promise<RefreshWorkspaceMcpSourceResult> {
+    let pool = this.workspaceMcpPools.get(workspaceRootPath)
+    if (!pool) {
+      this.setupWorkspaceMcpPool(workspaceRootPath)
+      pool = this.workspaceMcpPools.get(workspaceRootPath)
+    }
+    if (!pool) {
+      return { success: false, sourceSlug, error: 'Workspace MCP pool not initialized' }
+    }
+
+    const source = loadSource(workspaceRootPath, sourceSlug)
+    if (!source) {
+      await pool.removeSource(sourceSlug)
+      return { success: false, sourceSlug, error: 'Source not found' }
+    }
+    if (source.config.type !== 'mcp') {
+      await pool.removeSource(sourceSlug)
+      return { success: false, sourceSlug, error: 'Source is not an MCP server' }
+    }
+
+    const tokenRefreshManager = this.workspaceTokenRefreshManagers.get(workspaceRootPath) ?? new TokenRefreshManager(getSourceCredentialManager(), {
+      log: (msg) => sessionLog.debug(msg),
+    })
+    if (!this.workspaceTokenRefreshManagers.has(workspaceRootPath)) {
+      this.workspaceTokenRefreshManagers.set(workspaceRootPath, tokenRefreshManager)
+    }
+
+    const { mcpServers, errors } = await buildServersFromSources([source], undefined, tokenRefreshManager)
+    const config = mcpServers[sourceSlug]
+    if (!config) {
+      await pool.removeSource(sourceSlug)
+      const error = errors.find(entry => entry.sourceSlug === sourceSlug)?.error ?? 'Unable to build MCP server config'
+      this.markMcpSourceConnectionFailed(workspaceRootPath, sourceSlug, error)
+      return { success: false, sourceSlug, error }
+    }
+
+    const result = await pool.refreshSource(sourceSlug, config)
+    if (!result.success) {
+      this.markMcpSourceConnectionFailed(workspaceRootPath, sourceSlug, result.error)
+      return result
+    }
+
+    const sourceConfig = loadSourceConfig(workspaceRootPath, sourceSlug)
+    if (sourceConfig) {
+      sourceConfig.isAuthenticated = true
+      sourceConfig.connectionStatus = 'connected'
+      sourceConfig.connectionError = undefined
+      sourceConfig.lastTestedAt = Date.now()
+      saveSourceConfig(workspaceRootPath, sourceConfig)
+    }
+
+    return result
+  }
+
+  async removeWorkspaceMcpSource(workspaceRootPath: string, sourceSlug: string): Promise<void> {
+    const pool = this.workspaceMcpPools.get(workspaceRootPath)
+    if (!pool) return
+    await pool.removeSource(sourceSlug)
+  }
+
+  private markMcpSourceConnectionFailed(workspaceRootPath: string, sourceSlug: string, error: string): void {
+    const sourceConfig = loadSourceConfig(workspaceRootPath, sourceSlug)
+    if (!sourceConfig) return
+    sourceConfig.isAuthenticated = false
+    sourceConfig.connectionStatus = 'failed'
+    sourceConfig.connectionError = error
+    sourceConfig.lastTestedAt = Date.now()
+    saveSourceConfig(workspaceRootPath, sourceConfig)
+  }
+
+  private updateSessionPoolServerSources(managed: ManagedSession, sourceSlugs: string[]): void {
+    managed.poolServer?.setSlugFilter(sourceSlugs)
+  }
+
+  private notifySessionPoolServerSourcesChanged(managed: ManagedSession, sourceSlugs: string[]): void {
+    this.updateSessionPoolServerSources(managed, sourceSlugs)
+    managed.poolServer?.notifyToolsChanged()
+  }
+
+  /**
+   * Tear down workspace-scoped infrastructure initialized by setupConfigWatcher().
+   */
+  async closeWorkspace(workspaceRootPath: string): Promise<void> {
+    const watcher = this.configWatchers.get(workspaceRootPath)
+    if (watcher) {
+      watcher.stop()
+      this.configWatchers.delete(workspaceRootPath)
+      sessionLog.info(`Stopped config watcher for ${workspaceRootPath}`)
+    }
+
+    const pool = this.workspaceMcpPools.get(workspaceRootPath)
+    if (pool) {
+      this.workspaceMcpPools.delete(workspaceRootPath)
+      try {
+        await pool.disconnectAll()
+      } catch (error) {
+        sessionLog.warn(`Failed to disconnect workspace MCP pool for ${workspaceRootPath}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    this.workspaceTokenRefreshManagers.delete(workspaceRootPath)
+    this.workspaceMcpPoolBootstrapPromises.delete(workspaceRootPath)
+
+    const automationSystem = this.automationSystems.get(workspaceRootPath)
+    if (automationSystem) {
+      try {
+        automationSystem.dispose()
+        sessionLog.info(`Disposed AutomationSystem for ${workspaceRootPath}`)
+      } catch (error) {
+        sessionLog.error(`Failed to dispose AutomationSystem for ${workspaceRootPath}:`, error)
+      }
+      this.automationSystems.delete(workspaceRootPath)
     }
   }
 
@@ -1718,6 +2002,8 @@ export class SessionManager implements ISessionManager {
     const allSources = loadAllSources(workspaceRootPath)
     managed.agent.setAllSources(allSources)
 
+    await this.syncWorkspaceMcpPoolFromDisk(workspaceRootPath)
+
     // Rebuild MCP and API servers for session's enabled sources
     const enabledSlugs = managed.enabledSourceSlugs || []
     const enabledSources = allSources.filter(s =>
@@ -1727,6 +2013,7 @@ export class SessionManager implements ISessionManager {
     const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
     const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath, managed.tokenRefreshManager, managed.agent?.getSummarizeCallback())
     const intendedSlugs = enabledSources.map(s => s.config.slug)
+    this.notifySessionPoolServerSourcesChanged(managed, enabledSlugs)
 
     // Update bridge-mcp-server config/credentials for backends that need it
     await applyBridgeUpdates(managed.agent, sessionPath, enabledSources, mcpServers, managed.id, workspaceRootPath, 'source reload', managed.poolServer?.url)
@@ -1822,6 +2109,9 @@ export class SessionManager implements ISessionManager {
 
       // Load existing sessions from disk
       this.loadSessionsFromDisk()
+
+      // Start the user profile HTTP refresh loop
+      this.userProfileRefreshLoop.start()
 
       // Signal that initialization is complete — IPC handlers waiting on initGate will proceed
       this.initGate.markReady()
@@ -2117,6 +2407,7 @@ export class SessionManager implements ISessionManager {
       const { mcpServers } = await buildServersFromSources(
         enabledSources, sessionPath, managed.tokenRefreshManager
       )
+      this.notifySessionPoolServerSourcesChanged(managed, enabledSlugs)
       await applyBridgeUpdates(managed.agent, sessionPath, enabledSources, mcpServers, managed.id, workspaceRootPath, 'source auth', managed.poolServer?.url)
     }
 
@@ -2402,6 +2693,7 @@ export class SessionManager implements ISessionManager {
     const storedSession = loadStoredSession(managed.workspace.rootPath, managed.id)
     if (storedSession) {
       managed.messages = (storedSession.messages || []).map(storedToMessage)
+      managed.messageCount = managed.messages.length
       managed.tokenUsage = storedSession.tokenUsage
       managed.lastReadMessageId = storedSession.lastReadMessageId
       managed.hasUnread = storedSession.hasUnread  // Explicit unread flag for NEW badge state machine
@@ -2476,13 +2768,13 @@ export class SessionManager implements ISessionManager {
       ?? globalDefaults.workspaceDefaults.permissionMode
 
     const userDefaultWorkingDir = wsConfig?.defaults?.workingDirectory || undefined
-    // Resolve thinking level with caller-first precedence, matching permissionMode above:
+    // Resolve thinking toggle with caller-first precedence, matching permissionMode above:
     //   caller override → workspace default → global default.
-    // normalizeThinkingLevel() tolerates undefined/unknown inputs.
-    const defaultThinkingLevel =
-      normalizeThinkingLevel(options?.thinkingLevel)
-      ?? normalizeThinkingLevel(wsConfig?.defaults?.thinkingLevel)
-      ?? getDefaultThinkingLevel()
+    // normalizeThinkingEnabled() tolerates undefined/unknown inputs.
+    const defaultThinkingEnabled =
+      normalizeThinkingEnabled(options?.thinkingEnabled)
+      ?? normalizeThinkingEnabled(wsConfig?.defaults?.thinkingEnabled)
+      ?? getDefaultThinkingEnabled()
     // Get default model from workspace config (used when no session-specific model is set)
     const defaultModel = wsConfig?.defaults?.model
     // Get default enabled sources from workspace config
@@ -2809,7 +3101,7 @@ export class SessionManager implements ISessionManager {
       workingDirectory: resolvedWorkingDir,
       model: resolvedModel,
       llmConnection: options?.llmConnection,
-      thinkingLevel: defaultThinkingLevel,
+      thinkingEnabled: defaultThinkingEnabled,
       systemPromptPreset: options?.systemPromptPreset,
       enabledSourceSlugs: defaultEnabledSourceSlugs,
       branchFromMessageId: validatedBranch?.sourceMessageId,
@@ -2915,17 +3207,14 @@ export class SessionManager implements ISessionManager {
       }
     }
 
-    if (managed.mcpPool) {
-      try {
-        await managed.mcpPool.disconnectAll()
-      } catch (error) {
-        sessionLog.warn(`Failed to disconnect MCP pool for ${sessionId} during ${reason}: ${error instanceof Error ? error.message : error}`)
-      }
+    if (managed.mcpToolsChangedListener) {
+      const workspacePool = this.workspaceMcpPools.get(managed.workspace.rootPath)
+      workspacePool?.removeToolsChangedListener(managed.mcpToolsChangedListener)
     }
 
     managed.agent = null
     managed.poolServer = undefined
-    managed.mcpPool = undefined
+    managed.mcpToolsChangedListener = undefined
     managed.envOverrides = undefined
     managed.agentReady = undefined
     managed.agentReadyResolve = undefined
@@ -3039,32 +3328,10 @@ export class SessionManager implements ISessionManager {
       return
     }
 
-    const connection = backendContext.connection
     let refreshed = false
     if (managed.agent?.updateRuntimeConfig) {
       try {
-        refreshed = await managed.agent.updateRuntimeConfig({
-          model: backendContext.resolvedModel,
-          providerType: connection?.providerType,
-          authType: backendContext.authType,
-          runtime: connection ? {
-            baseUrl: connection.baseUrl,
-            piAuthProvider: connection.piAuthProvider,
-            customEndpoint: connection.customEndpoint,
-            customModels: connection.models?.map(model => {
-              if (typeof model === 'string') return model
-              const supportsImages = typeof model.supportsImages === 'boolean' ? model.supportsImages : undefined
-              if (model.contextWindow || supportsImages !== undefined) {
-                return {
-                  id: model.id,
-                  ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
-                  ...(supportsImages !== undefined ? { supportsImages } : {}),
-                }
-              }
-              return model.id
-            }),
-          } : undefined,
-        })
+        refreshed = await managed.agent.updateRuntimeConfig(buildRuntimeConfigUpdate(backendContext))
       } catch (error) {
         sessionLog.warn(`Runtime config in-place refresh failed for ${managed.id}: ${error instanceof Error ? error.message : error}`)
       }
@@ -3180,16 +3447,32 @@ export class SessionManager implements ISessionManager {
       // Build server configs for enabled sources
       const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath, managed.tokenRefreshManager)
 
-      // Create centralized MCP client pool (all backends use it)
-      managed.mcpPool = new McpClientPool({ debug: (msg) => sessionLog.debug(msg), workspaceRootPath: managed.workspace.rootPath, sessionPath })
+      let workspacePool = this.workspaceMcpPools.get(managed.workspace.rootPath)
+      if (!workspacePool) {
+        this.setupWorkspaceMcpPool(managed.workspace.rootPath)
+        workspacePool = this.workspaceMcpPools.get(managed.workspace.rootPath)
+      }
+      if (!workspacePool) {
+        throw new Error(`Workspace MCP pool not initialized for ${managed.workspace.rootPath}`)
+      }
+      // Await the in-progress bootstrap sync rather than triggering a redundant re-sync.
+      // If bootstrap already completed the promise resolves immediately.
+      await this.workspaceMcpPoolBootstrapPromises.get(managed.workspace.rootPath)?.catch(() => {})
 
       // Backends that run as external subprocesses need an HTTP pool server
       let poolServerUrl: string | undefined
       if (backendContext.capabilities.needsHttpPoolServer) {
-        managed.poolServer = new McpPoolServer(managed.mcpPool, { debug: (msg) => sessionLog.debug(msg) })
-        managed.mcpPool.onToolsChanged = () => managed.poolServer?.notifyToolsChanged()
+        managed.poolServer = new McpPoolServer(workspacePool, {
+          debug: (msg) => sessionLog.debug(msg),
+          slugFilter: enabledSlugs,
+          sessionPath,
+          getCallToolOptions: () => ({
+            summarize: managed.agent?.getSummarizeCallback(),
+          }),
+        })
+        managed.mcpToolsChangedListener = () => managed.poolServer?.notifyToolsChanged()
+        workspacePool.addToolsChangedListener(managed.mcpToolsChangedListener)
         poolServerUrl = await managed.poolServer.start()
-        await managed.mcpPool.sync(mcpServers) // Ensure pool has tools before SDK connects
       }
 
       // Per-session env overrides
@@ -3199,6 +3482,7 @@ export class SessionManager implements ISessionManager {
         // Pass mini model to SDK subprocess so built-in tools like WebFetch
         // use the correct model for summarization (instead of hardcoded Haiku)
         ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
+        ...(await buildSsoSubprocessEnvOverrides(backendContext.connection?.slug ?? managed.llmConnection)),
       }
       managed.envOverrides = envOverrides
 
@@ -3328,7 +3612,7 @@ export class SessionManager implements ISessionManager {
         coreConfig: {
         workspace: managed.workspace,
         miniModel,
-        thinkingLevel: managed.thinkingLevel,
+        thinkingEnabled: managed.thinkingEnabled,
         session: sessionConfig,
         onSdkSessionIdUpdate,
         onSdkSessionIdCleared,
@@ -3339,7 +3623,7 @@ export class SessionManager implements ISessionManager {
         markBranchSeedApplied,
         getTransferredSessionSummary,
         markTransferredSessionSummaryApplied,
-        mcpPool: managed.mcpPool,
+        mcpPool: workspacePool,
         poolServerUrl,
         envOverrides,
         // Claude-specific
@@ -3432,11 +3716,6 @@ export class SessionManager implements ISessionManager {
           message: postInitResult.authWarning,
           level: postInitResult.authWarningLevel || 'error',
         }, managed.workspace.id)
-      }
-
-      // Wire up large response handling in the MCP pool (all backends)
-      if (managed.mcpPool && managed.agent) {
-        managed.mcpPool.setSummarizeCallback(managed.agent.getSummarizeCallback())
       }
 
       // Wire up browser pane tools — merge BrowserPaneFns into session callbacks
@@ -4009,7 +4288,7 @@ export class SessionManager implements ISessionManager {
           model: request.model ?? managed.model,
           enabledSourceSlugs: request.enabledSourceSlugs ?? managed.enabledSourceSlugs,
           permissionMode: request.permissionMode ?? managed.permissionMode,
-          thinkingLevel: request.thinkingLevel ?? managed.thinkingLevel,
+          thinkingEnabled: request.thinkingEnabled ?? managed.thinkingEnabled,
           labels: request.labels ?? managed.labels,
           workingDirectory: request.workingDirectory,
         })
@@ -4263,6 +4542,7 @@ export class SessionManager implements ISessionManager {
         const intendedSlugs = allEnabledSources
           .filter(isSourceUsable)
           .map(s => s.config.slug)
+        this.notifySessionPoolServerSourcesChanged(managed, managed.enabledSourceSlugs || [])
 
         // Update bridge-mcp-server config/credentials for backends that need it
         await applyBridgeUpdates(managed.agent!, sessionPath, allEnabledSources, mcpServers, managed.id, workspaceRootPath, 'source enable', managed.poolServer?.url)
@@ -4544,12 +4824,13 @@ export class SessionManager implements ISessionManager {
       if (!storedSession) {
         return { success: false, error: 'Session file not found' }
       }
+      const externalSession = redactStoredSessionForExternal(storedSession)
 
       const { VIEWER_URL } = await import('@craft-agent/shared/branding')
       const response = await fetch(`${VIEWER_URL}/s/api`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(storedSession)
+        body: JSON.stringify(externalSession)
       })
 
       if (!response.ok) {
@@ -4608,12 +4889,13 @@ export class SessionManager implements ISessionManager {
       if (!storedSession) {
         return { success: false, error: 'Session file not found' }
       }
+      const externalSession = redactStoredSessionForExternal(storedSession)
 
       const { VIEWER_URL } = await import('@craft-agent/shared/branding')
       const response = await fetch(`${VIEWER_URL}/s/api/${managed.sharedId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(storedSession)
+        body: JSON.stringify(externalSession)
       })
 
       if (!response.ok) {
@@ -4738,6 +5020,7 @@ export class SessionManager implements ISessionManager {
 
       // Set active source servers (tools are only available from these)
       const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
+      this.notifySessionPoolServerSourcesChanged(managed, sourceSlugs)
 
       // Update bridge-mcp-server config/credentials for backends that need it
       const usableSources = sources.filter(isSourceUsable)
@@ -5123,6 +5406,23 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
+   * Update the team context disabled override for a session.
+   * When true, team public knowledge injection is disabled for this session.
+   */
+  async updateSessionTeamContextOverride(sessionId: string, disabled: boolean): Promise<void> {
+    sessionLog.info(`[updateSessionTeamContextOverride] sessionId=${sessionId}, disabled=${disabled}`)
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.teamContextDisabled = disabled
+      await updateSessionMetadata(managed.workspace.rootPath, sessionId, { teamContextDisabled: disabled })
+      // Notify renderer
+      this.sendEvent({ type: 'session_team_context_override_changed', sessionId, disabled }, managed.workspace.id)
+    } else {
+      sessionLog.warn(`[updateSessionTeamContextOverride] Session not found: ${sessionId}`)
+    }
+  }
+
+  /**
    * Update the content of a specific message in a session
    * Used by preview window to save edited content back to the original message
    */
@@ -5385,6 +5685,10 @@ export class SessionManager implements ISessionManager {
         sessionLog.warn(`Failed to stop pool server for ${sessionId}: ${err instanceof Error ? err.message : err}`)
       })
     }
+    if (managed.mcpToolsChangedListener) {
+      this.workspaceMcpPools.get(workspaceRootPath)?.removeToolsChangedListener(managed.mcpToolsChangedListener)
+      managed.mcpToolsChangedListener = undefined
+    }
 
     // Cancel any pending source-activation auto-retry timer (craft-agents-oss#804).
     if (managed.autoRetryTimer) {
@@ -5460,6 +5764,8 @@ export class SessionManager implements ISessionManager {
     // Ensure messages are loaded before we try to add new ones
     await this.ensureMessagesLoaded(managed)
 
+    const userProfileContext = await this.userProfileContextManager.load()
+
     // If currently processing, behavior depends on the connection's
     // `midStreamBehavior` (resolved via {@link resolveMidStreamBehavior},
     // defaults to provider-appropriate value):
@@ -5501,6 +5807,7 @@ export class SessionManager implements ISessionManager {
         timestamp: this.monotonic(),
         attachments: storedAttachments,
         badges: options?.badges,
+        dynamicContextRef: userProfileContext?.ref,
       }
       managed.messages.push(userMessage)
 
@@ -5550,6 +5857,7 @@ export class SessionManager implements ISessionManager {
         timestamp: this.monotonic(),
         attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
         badges: options?.badges,  // Include content badges (sources, skills with embedded icons)
+        dynamicContextRef: userProfileContext?.ref,
       }
       managed.messages.push(userMessage)
 
@@ -5767,6 +6075,7 @@ export class SessionManager implements ISessionManager {
       if (mcpCount > 0 || apiCount > 0 || enabledSlugs.length > 0) {
         const usableSources = sources.filter(isSourceUsable)
         const intendedSlugs = usableSources.map(s => s.config.slug)
+        this.updateSessionPoolServerSources(managed, enabledSlugs)
         await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
         await applyBridgeUpdates(agent, sessionPath, usableSources, mcpServers, sessionId, workspaceRootPath, 'send message', managed.poolServer?.url)
         sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
@@ -5805,6 +6114,9 @@ export class SessionManager implements ISessionManager {
       if (managed.wasInterrupted) {
         effectiveMessage = `${message}\n\n<system-reminder>The previous assistant response was interrupted by the user and may be incomplete. Do not repeat or continue the interrupted response unless asked. Focus on the new message above.</system-reminder>`
         managed.wasInterrupted = false
+      }
+      if (userProfileContext) {
+        effectiveMessage = appendDynamicUserProfileContext(effectiveMessage, userProfileContext)
       }
 
       const messageBackendContext = resolveBackendContext({
@@ -6679,21 +6991,21 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
-   * Set the thinking level for a session. See {@link ThinkingLevel} for valid values.
+   * Set the thinking toggle for a session. See {@link ThinkingEnabled} for valid values.
    * This is sticky and persisted across messages.
    */
-  setSessionThinkingLevel(sessionId: string, level: ThinkingLevel): void {
+  setSessionThinkingEnabled(sessionId: string, enabled: ThinkingEnabled): void {
     const managed = this.sessions.get(sessionId)
     if (managed) {
-      // Update thinking level in managed session
-      managed.thinkingLevel = level
+      // Update thinking toggle in managed session
+      managed.thinkingEnabled = enabled
 
-      // Update the agent's thinking level if it exists
+      // Update the agent's thinking toggle if it exists
       if (managed.agent) {
-        managed.agent.setThinkingLevel(level)
+        managed.agent.setThinkingEnabled(enabled)
       }
 
-      sessionLog.info(`Session ${sessionId}: thinking level set to ${level}`)
+      sessionLog.info(`Session ${sessionId}: thinking toggle set to ${enabled}`)
       // Persist to disk
       this.persistSession(managed)
     }
@@ -7185,6 +7497,14 @@ export class SessionManager implements ISessionManager {
       }
 
       case 'error': {
+        if (event.message === 'SSO_TOKEN_EXPIRED') {
+          void new SsoCredentialStore().clear().catch(error => {
+            sessionLog.warn('Failed to clear expired SSO session after interceptor signal:', error)
+          })
+          this.sendEvent({ type: 'sso_token_expired', sessionId }, workspaceId)
+          break
+        }
+
         // Skip errors after handoff (plan submission, auth request) — the SDK may emit
         // an error from the interrupted query after we've already stopped processing.
         if (!managed.isProcessing) {
@@ -7539,9 +7859,9 @@ export class SessionManager implements ISessionManager {
    * Execute a prompt automation by creating a new session and sending the prompt.
    *
    * The options-object form replaced the previous positional-args signature
-   * once the param list outgrew readability — `thinkingLevel` was the trigger.
-   * When `thinkingLevel` is omitted, `createSession` falls back to the
-   * workspace default (then DEFAULT_THINKING_LEVEL).
+   * once the param list outgrew readability — `thinkingEnabled` was the trigger.
+   * When `thinkingEnabled` is omitted, `createSession` falls back to the
+   * workspace default (then DEFAULT_THINKING_ENABLED).
    */
   async executePromptAutomation(
     input: ExecutePromptAutomationInput,
@@ -7555,7 +7875,7 @@ export class SessionManager implements ISessionManager {
       mentions,
       llmConnection,
       model,
-      thinkingLevel,
+      thinkingEnabled,
       automationName,
       telegramTopic,
     } = input
@@ -7588,7 +7908,7 @@ export class SessionManager implements ISessionManager {
       enabledSourceSlugs: resolved?.sourceSlugs,
       llmConnection,
       model,
-      thinkingLevel,
+      thinkingEnabled,
     })
 
     // Populate triggeredBy metadata so title generation is explicitly skipped
@@ -7687,6 +8007,7 @@ export class SessionManager implements ISessionManager {
     const envOverrides: Record<string, string> = {
       CRAFT_WORKSPACE_PATH: workspaceRootPath,
       ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
+      ...(await buildSsoSubprocessEnvOverrides(backendContext.connection?.slug ?? managed.llmConnection)),
     }
 
     const agent = createBackendFromResolvedContext({
@@ -7892,7 +8213,7 @@ export class SessionManager implements ISessionManager {
       model: header.model,
       llmConnection: header.llmConnection,
       connectionLocked: header.connectionLocked,
-      thinkingLevel: header.thinkingLevel,
+      thinkingEnabled: header.thinkingEnabled,
       hidden: header.hidden,
       transferredSessionSummary: header.transferredSessionSummary,
       transferredSessionSummaryApplied: header.transferredSessionSummaryApplied,
@@ -7936,8 +8257,8 @@ export class SessionManager implements ISessionManager {
         storedSession.llmConnection = undefined
         storedSession.connectionLocked = false
       }
-      // Clear thinking level so the session inherits the workspace default
-      storedSession.thinkingLevel = undefined
+      // Clear thinking toggle so the session inherits the workspace default
+      storedSession.thinkingEnabled = undefined
       // Clear working directory — the source path won't exist on a different server.
       // The user can set a new cwd after the session is transferred.
       storedSession.workingDirectory = undefined
@@ -8031,6 +8352,18 @@ export class SessionManager implements ISessionManager {
     return match?.slug ?? null
   }
 
+  // ---------------------------------------------------------------------------
+  // User profile
+  // ---------------------------------------------------------------------------
+
+  async refreshUserProfile(): Promise<UserProfile | null> {
+    return this.userProfileRefreshLoop.refresh()
+  }
+
+  getUserProfile(): Promise<UserProfile | null> {
+    return Promise.resolve(readLocalUserProfile())
+  }
+
   /**
    * Clean up all resources held by the SessionManager.
    * Should be called on app shutdown to prevent resource leaks.
@@ -8038,23 +8371,15 @@ export class SessionManager implements ISessionManager {
   cleanup(): void {
     sessionLog.info('Cleaning up resources...')
 
-    // Stop all ConfigWatchers (file system watchers)
-    for (const [path, watcher] of this.configWatchers) {
-      watcher.stop()
-      sessionLog.info(`Stopped config watcher for ${path}`)
+    // Stop workspace-scoped infrastructure (ConfigWatchers, MCP pools, automations)
+    const workspacePaths = new Set([
+      ...this.configWatchers.keys(),
+      ...this.workspaceMcpPools.keys(),
+      ...this.automationSystems.keys(),
+    ])
+    for (const workspacePath of workspacePaths) {
+      void this.closeWorkspace(workspacePath)
     }
-    this.configWatchers.clear()
-
-    // Dispose all AutomationSystems (includes scheduler, handlers, and event loggers)
-    for (const [workspacePath, automationSystem] of this.automationSystems) {
-      try {
-        automationSystem.dispose()
-        sessionLog.info(`Disposed AutomationSystem for ${workspacePath}`)
-      } catch (error) {
-        sessionLog.error(`Failed to dispose AutomationSystem for ${workspacePath}:`, error)
-      }
-    }
-    this.automationSystems.clear()
 
     // Clear all pending delta flush timers
     for (const [sessionId, timer] of this.deltaFlushTimers) {
@@ -8072,6 +8397,9 @@ export class SessionManager implements ISessionManager {
     for (const sessionId of this.sessions.keys()) {
       unregisterSessionScopedToolCallbacks(sessionId)
     }
+
+    // Stop the user profile HTTP refresh loop
+    this.userProfileRefreshLoop.stop()
 
     sessionLog.info('Cleanup complete')
   }

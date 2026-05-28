@@ -4,7 +4,7 @@ This guide covers how to present structured data using datatable and spreadsheet
 
 ## Overview
 
-Craft Agents supports three ways to display tabular data:
+MDP supports three ways to display tabular data:
 
 | Format | Best For | Interactivity |
 |--------|----------|---------------|

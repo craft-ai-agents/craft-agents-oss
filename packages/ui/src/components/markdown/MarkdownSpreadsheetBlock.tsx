@@ -196,7 +196,7 @@ export function MarkdownSpreadsheetBlock({ code, className }: MarkdownSpreadshee
         <div className="px-3 py-2 bg-muted/50 border-b">
           <span className="text-[12px] text-muted-foreground font-medium">{loadingLabel}</span>
         </div>
-        <div className="py-8 text-center text-muted-foreground text-[13px]">{t('datatable.loadingData')}</div>
+        <div className="py-8 text-center text-muted-foreground text-[14px]">{t('datatable.loadingData')}</div>
       </div>
     )
   }
@@ -209,7 +209,7 @@ export function MarkdownSpreadsheetBlock({ code, className }: MarkdownSpreadshee
         <div className="px-3 py-2 bg-muted/50 border-b">
           <span className="text-[12px] text-muted-foreground font-medium">{errorLabel}</span>
         </div>
-        <div className="py-6 text-center text-destructive/70 text-[13px]">{fileError}</div>
+        <div className="py-6 text-center text-destructive/70 text-[14px]">{fileError}</div>
       </div>
     )
   }
@@ -232,7 +232,7 @@ export function MarkdownSpreadsheetBlock({ code, className }: MarkdownSpreadshee
         WebkitMaskImage: maskImage,
       } : { overflowX: 'auto' }}
     >
-      <table className="w-max min-w-full text-[13px]">
+      <table className="w-max min-w-full text-[14px]">
         {/* Column letter headers */}
         <thead>
           <tr className="border-b border-foreground/[0.08] bg-foreground/[0.03]">

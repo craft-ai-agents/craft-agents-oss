@@ -469,7 +469,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const handleOpenInNewWindow = React.useCallback(async () => {
     const route = routes.view.allSessions(sessionId)
     const separator = route.includes('?') ? '&' : '?'
-    const url = `craftagents://${route}${separator}window=focused`
+    const url = `mdp://${route}${separator}window=focused`
     try {
       await window.electronAPI?.openUrl(url)
     } catch (error) {
@@ -600,7 +600,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     )
   }, [isCompactMode, sessionId, session?.sessionFolderPath, sessionMeta])
 
-  const headerActions = isCompactMode ? compactInfoButton : shareButton
+  const headerActions = isCompactMode ? compactInfoButton : null
 
   // Build title menu content for chat sessions using shared SessionMenu.
   // Desktop uses Radix DropdownMenu via PanelHeader; compact mode uses a
@@ -609,7 +609,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const titleMenu = React.useMemo(() => (sessionMeta && !isCompactMode) ? (
     <SessionMenu
       item={sessionMeta}
-      sessionStatuses={sessionStatuses ?? []}
       labels={labels ?? []}
       onLabelsChange={handleLabelsChange}
       onRename={handleRename}
@@ -618,14 +617,12 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       onArchive={handleArchive}
       onUnarchive={handleUnarchive}
       onMarkUnread={handleMarkUnread}
-      onSessionStatusChange={handleSessionStatusChange}
       onOpenInNewWindow={handleOpenInNewWindow}
       onDelete={handleDelete}
     />
   ) : null, [
     sessionMeta,
     isCompactMode,
-    sessionStatuses,
     labels,
     handleLabelsChange,
     handleRename,
@@ -634,7 +631,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     handleArchive,
     handleUnarchive,
     handleMarkUnread,
-    handleSessionStatusChange,
     handleOpenInNewWindow,
     handleDelete,
   ])
@@ -644,7 +640,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       title={displayTitle}
       isRegeneratingTitle={isAsyncOperationOngoing}
       item={sessionMeta}
-      sessionStatuses={sessionStatuses ?? []}
       labels={labels ?? []}
       onLabelsChange={handleLabelsChange}
       onRename={handleRename}
@@ -653,7 +648,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       onArchive={handleArchive}
       onUnarchive={handleUnarchive}
       onMarkUnread={handleMarkUnread}
-      onSessionStatusChange={handleSessionStatusChange}
       onOpenInNewWindow={handleOpenInNewWindow}
       onDelete={handleDelete}
     />
@@ -662,7 +656,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     isCompactMode,
     displayTitle,
     isAsyncOperationOngoing,
-    sessionStatuses,
     labels,
     handleLabelsChange,
     handleRename,
@@ -671,7 +664,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     handleArchive,
     handleUnarchive,
     handleMarkUnread,
-    handleSessionStatusChange,
     handleOpenInNewWindow,
     handleDelete,
   ])
@@ -712,8 +704,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 onRespondToPermission={onRespondToPermission}
                 pendingCredential={undefined}
                 onRespondToCredential={onRespondToCredential}
-                thinkingLevel={sessionOpts.thinkingLevel}
-                onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
+                thinkingEnabled={sessionOpts.thinkingEnabled}
+                onThinkingEnabledChange={(enabled) => setOption('thinkingEnabled', enabled)}
                 permissionMode={sessionOpts.permissionMode}
                 onPermissionModeChange={setPermissionMode}
                 enabledModes={enabledModes}
@@ -738,6 +730,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 onMatchInfoChange={onChatMatchInfoChange}
                 connectionUnavailable={connectionUnavailable}
                 compactMode={!!isCompactMode}
+                readOnly={isArchived}
                 enableCompactModelPicker={!!isCompactMode}
               />
             </div>
@@ -789,8 +782,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             onRespondToPermission={onRespondToPermission}
             pendingCredential={pendingCredential}
             onRespondToCredential={onRespondToCredential}
-            thinkingLevel={sessionOpts.thinkingLevel}
-            onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
+            thinkingEnabled={sessionOpts.thinkingEnabled}
+            onThinkingEnabledChange={(enabled) => setOption('thinkingEnabled', enabled)}
             permissionMode={sessionOpts.permissionMode}
             onPermissionModeChange={setPermissionMode}
             enabledModes={enabledModes}
@@ -818,6 +811,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             onMatchInfoChange={onChatMatchInfoChange}
             connectionUnavailable={connectionUnavailable}
             compactMode={!!isCompactMode}
+            readOnly={isArchived}
             enableCompactModelPicker={!!isCompactMode}
           />
         </div>

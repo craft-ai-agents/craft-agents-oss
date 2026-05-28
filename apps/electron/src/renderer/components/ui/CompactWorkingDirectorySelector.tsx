@@ -102,9 +102,9 @@ export function CompactWorkingDirectorySelector({
           hasFolder ? (
             <span className="flex flex-col gap-0.5">
               <span className="font-medium">{t('chat.workingDirectory')}</span>
-              <span className="text-xs opacity-70">{formatPath(workingDirectory, homeDir)}</span>
+              <span className="text-sm opacity-70">{formatPath(workingDirectory, homeDir)}</span>
               {gitBranch && (
-                <span className="text-xs opacity-70">{t('chat.onBranch', { branch: gitBranch })}</span>
+                <span className="text-sm opacity-70">{t('chat.onBranch', { branch: gitBranch })}</span>
               )}
             </span>
           ) : (
@@ -141,11 +141,11 @@ export function CompactWorkingDirectorySelector({
                 <Icon_Folder className="h-5 w-5 shrink-0 text-foreground/60" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">{displayFolderName}</div>
-                  <div className="text-xs text-foreground/50 truncate">
+                  <div className="text-sm text-foreground/50 truncate">
                     {formatPath(workingDirectory, homeDir)}
                   </div>
                   {gitBranch && (
-                    <div className="text-xs text-foreground/50 truncate">
+                    <div className="text-sm text-foreground/50 truncate">
                       {t('chat.onBranch', { branch: gitBranch })}
                     </div>
                   )}
@@ -174,7 +174,7 @@ export function CompactWorkingDirectorySelector({
                       <Icon_Folder className="h-5 w-5 shrink-0 text-foreground/60" />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate">{recentFolderName}</div>
-                        <div className="text-xs text-foreground/50 truncate">
+                        <div className="text-sm text-foreground/50 truncate">
                           {formatPath(path, homeDir)}
                         </div>
                       </div>

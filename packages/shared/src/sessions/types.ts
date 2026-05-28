@@ -10,7 +10,7 @@
  */
 
 import type { PermissionMode } from '../agent/mode-manager.ts';
-import type { ThinkingLevel } from '../agent/thinking-levels.ts';
+import type { ThinkingEnabled } from '../agent/thinking-toggle.ts';
 import type { StoredAttachment, MessageRole, ToolStatus, AuthRequestType, AuthStatus, CredentialInputMode, StoredMessage } from '@craft-agent/core/types';
 
 /**
@@ -35,7 +35,7 @@ export const SESSION_PERSISTENT_FIELDS = [
   // Config
   'enabledSourceSlugs', 'permissionMode', 'previousPermissionMode', 'workingDirectory',
   // Model/Connection
-  'model', 'llmConnection', 'connectionLocked', 'thinkingLevel',
+  'model', 'llmConnection', 'connectionLocked', 'thinkingEnabled',
   // Sharing
   'sharedUrl', 'sharedId',
   // Plan execution
@@ -53,6 +53,8 @@ export const SESSION_PERSISTENT_FIELDS = [
   'transferredSessionSummaryApplied',
   // Automation origin
   'triggeredBy',
+  // Team context
+  'teamContextDisabled',
 ] as const;
 
 export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
@@ -143,8 +145,8 @@ export interface SessionConfig {
   llmConnection?: string;
   /** Whether the connection is locked (cannot be changed after first agent creation) */
   connectionLocked?: boolean;
-  /** Thinking level for this session ('off', 'think', 'max') */
-  thinkingLevel?: ThinkingLevel;
+  /** Thinking toggle for this session ('off', 'think', 'max') */
+  thinkingEnabled?: ThinkingEnabled;
   /**
    * Pending plan execution state - tracks "Accept & Compact" flow.
    * When set, indicates a plan needs to be executed after compaction completes.
@@ -197,6 +199,8 @@ export interface SessionConfig {
   transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
+  /** When true, session-level override disables team context injection for this session. */
+  teamContextDisabled?: boolean;
 }
 
 /**
@@ -217,7 +221,7 @@ export interface SessionHeader {
   id: string;
   /** SDK session ID (captured after first message) */
   sdkSessionId?: string;
-  /** Workspace root path (stored as portable path, e.g., ~/.craft-agent/...) */
+  /** Workspace root path (stored as portable path, e.g., ~/.mdp-agent/...) */
   workspaceRootPath: string;
   /** Optional user-defined name */
   name?: string;
@@ -259,8 +263,8 @@ export interface SessionHeader {
   llmConnection?: string;
   /** Whether the connection is locked (cannot be changed after first agent creation) */
   connectionLocked?: boolean;
-  /** Thinking level for this session ('off', 'think', 'max') */
-  thinkingLevel?: ThinkingLevel;
+  /** Thinking toggle for this session ('off', 'think', 'max') */
+  thinkingEnabled?: ThinkingEnabled;
   /**
    * Pending plan execution state - tracks "Accept & Compact" flow.
    * When set, indicates a plan needs to be executed after compaction completes.
@@ -288,6 +292,8 @@ export interface SessionHeader {
   transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
+  /** When true, session-level override disables team context injection for this session. */
+  teamContextDisabled?: boolean;
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;
@@ -344,8 +350,8 @@ export interface SessionMetadata {
   llmConnection?: string;
   /** Whether the connection is locked (cannot be changed after first agent creation) */
   connectionLocked?: boolean;
-  /** Thinking level for this session ('off', 'think', 'max') */
-  thinkingLevel?: ThinkingLevel;
+  /** Thinking toggle for this session ('off', 'think', 'max') */
+  thinkingEnabled?: ThinkingEnabled;
   /** ID of last message user has read - for unread detection */
   lastReadMessageId?: string;
   /** ID of the last final (non-intermediate) assistant message - for unread detection */

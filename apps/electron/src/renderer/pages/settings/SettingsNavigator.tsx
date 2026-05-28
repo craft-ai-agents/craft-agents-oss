@@ -65,7 +65,7 @@ function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRo
 
   // Open settings page in a new window via deep link
   const handleOpenInNewWindow = () => {
-    window.electronAPI.openUrl(`craftagents://settings/${item.id}?window=focused`)
+    window.electronAPI.openUrl(`mdp://settings/${item.id}?window=focused`)
   }
 
   return (
@@ -112,7 +112,7 @@ function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRo
             >
               {item.label}
             </span>
-            <span className="text-xs text-foreground/60 line-clamp-1">
+            <span className="text-sm text-foreground/60 line-clamp-1">
               {item.description}
             </span>
           </div>

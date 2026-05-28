@@ -7,10 +7,12 @@
 
 import {
   existsSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -24,6 +26,9 @@ import {
   needsIconDownload,
   isIconUrl,
 } from '../utils/icon.ts';
+export { deriveSkillSlug } from './slug.ts';
+
+const MARKETPLACE_ORIGIN_METADATA_FILE = '.marketplace-origin.json';
 
 // ============================================================
 // Agent Skills Paths (Issue #171)
@@ -80,17 +85,34 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
 
     return {
       metadata: {
-        name: parsed.data.name as string,
+        name: (parsed.data.display_name || parsed.data.name) as string,
         description: parsed.data.description as string,
         globs: parsed.data.globs as string[] | undefined,
         alwaysAllow: parsed.data.alwaysAllow as string[] | undefined,
         icon,
         requiredSources: normalizeRequiredSources(parsed.data.requiredSources),
+        metadata: isRecord(parsed.data.metadata) ? parsed.data.metadata : undefined,
+        author: parsed.data.author as string | undefined,
+        extraMetadata: isRecord(parsed.data.metadata) ? parsed.data.metadata : undefined,
       },
       body: parsed.content,
     };
   } catch {
     return null;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readMarketplaceOriginSidecar(skillDir: string): LoadedSkill['marketplaceOrigin'] {
+  const path = join(skillDir, MARKETPLACE_ORIGIN_METADATA_FILE);
+  if (!existsSync(path)) return undefined;
+  try {
+    return JSON.parse(readFileSync(path, 'utf-8')) as LoadedSkill['marketplaceOrigin'];
+  } catch {
+    return undefined;
   }
 }
 
@@ -138,6 +160,7 @@ function loadSkillFromDir(skillsDir: string, slug: string, source: SkillSource):
     iconPath: findIconFile(skillDir),
     path: skillDir,
     source,
+    marketplaceOrigin: (source === 'workspace' || source === 'global') ? readMarketplaceOriginSidecar(skillDir) : undefined,
   };
 }
 
@@ -287,6 +310,51 @@ export function getSkillIconPath(workspaceRoot: string, slug: string): string | 
 }
 
 // ============================================================
+// Create Operations
+// ============================================================
+
+/** Result from creating a workspace skill without overwriting. */
+export type CreateSkillResult = { created: true } | { conflict: true };
+
+function writeSkillFile(workspaceRoot: string, slug: string, metadata: SkillMetadata, content: string): void {
+  const skillsDir = getWorkspaceSkillsPath(workspaceRoot);
+  const skillDir = join(skillsDir, slug);
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(join(skillDir, 'SKILL.md'), matter.stringify(content, metadata));
+  invalidateSkillsCache();
+}
+
+/**
+ * Create a workspace skill unless the slug already has a SKILL.md.
+ */
+export function createSkill(
+  workspaceRoot: string,
+  slug: string,
+  metadata: SkillMetadata,
+  content: string
+): CreateSkillResult {
+  if (skillExists(workspaceRoot, slug)) {
+    return { conflict: true };
+  }
+
+  writeSkillFile(workspaceRoot, slug, metadata, content);
+  return { created: true };
+}
+
+/**
+ * Create or replace a workspace skill.
+ */
+export function forceWriteSkill(
+  workspaceRoot: string,
+  slug: string,
+  metadata: SkillMetadata,
+  content: string
+): { created: true } {
+  writeSkillFile(workspaceRoot, slug, metadata, content);
+  return { created: true };
+}
+
+// ============================================================
 // Delete Operations
 // ============================================================
 
@@ -305,6 +373,7 @@ export function deleteSkill(workspaceRoot: string, slug: string): boolean {
 
   try {
     rmSync(skillDir, { recursive: true });
+    invalidateSkillsCache();
     return true;
   } catch {
     return false;

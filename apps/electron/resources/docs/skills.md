@@ -1,6 +1,6 @@
 # Skills Configuration Guide
 
-This guide explains how to create and configure skills in Craft Agent.
+This guide explains how to create and configure skills in MDP.
 
 > **CLI-first workflow (recommended):** Use `craft-agent skill ...` commands instead of editing `SKILL.md` files directly.
 > - `craft-agent skill --help`
@@ -18,13 +18,13 @@ Skills are specialized instructions that extend Claude's capabilities for specif
 
 ## Same Format as Claude Code SDK
 
-Craft Agent uses **the identical SKILL.md format** as the Claude Code SDK. This means:
+MDP uses **the identical SKILL.md format** as the Claude Code SDK. This means:
 
-1. **Format compatibility**: Any skill written for Claude Code works in Craft Agent
+1. **Format compatibility**: Any skill written for Claude Code works in MDP
 2. **Same frontmatter fields**: `name`, `description`, `globs`, `alwaysAllow`, `requiredSources`
 3. **Same content structure**: Markdown body with instructions for Claude
 
-**What Craft Agent adds:**
+**What MDP adds:**
 - **Visual icons**: Display custom icons in the UI for each skill
 - **Workspace organization**: Skills are scoped to workspaces
 - **UI management**: Browse, edit, and validate skills through the interface
@@ -33,7 +33,7 @@ Craft Agent uses **the identical SKILL.md format** as the Claude Code SDK. This 
 
 When a skill is invoked (e.g., `/commit`):
 
-1. **Workspace skill checked first** - If `~/.craft-agent/workspaces/{id}/skills/commit/SKILL.md` exists, it's used
+1. **Workspace skill checked first** - If `~/.mdp-agent/workspaces/{id}/skills/commit/SKILL.md` exists, it's used
 2. **SDK skill as fallback** - If no workspace skill exists, the built-in SDK skill is used
 
 This allows you to:
@@ -45,7 +45,7 @@ This allows you to:
 
 Skills are stored as folders:
 ```
-~/.craft-agent/workspaces/{workspaceId}/skills/{slug}/
+~/.mdp-agent/workspaces/{workspaceId}/skills/{slug}/
 ├── SKILL.md          # Required: Skill definition (same format as Claude Code SDK)
 ├── icon.svg          # Recommended: Skill icon for UI display
 ├── icon.png          # Alternative: PNG icon
@@ -131,7 +131,7 @@ requiredSources:
 ### 1. Create the skill directory
 
 ```bash
-mkdir -p ~/.craft-agent/workspaces/{ws}/skills/my-skill
+mkdir -p ~/.mdp-agent/workspaces/{ws}/skills/my-skill
 ```
 
 ### 2. Write SKILL.md
@@ -296,7 +296,7 @@ session — no manual toggle needed.
 
 To customize a built-in SDK skill like `/commit`:
 
-1. Create `~/.craft-agent/workspaces/{ws}/skills/commit/SKILL.md`
+1. Create `~/.mdp-agent/workspaces/{ws}/skills/commit/SKILL.md`
 2. Write your custom instructions
 3. Add an icon
 4. Run `skill_validate({ skillSlug: "commit" })`

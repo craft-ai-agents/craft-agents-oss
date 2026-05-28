@@ -32,14 +32,14 @@ describe('BaseAgent', () => {
     });
   });
 
-  describe('Thinking Level Configuration', () => {
-    it('should initialize with config thinking level', () => {
-      expect(agent.getThinkingLevel()).toBe('medium');
+  describe('Thinking Toggle Configuration', () => {
+    it('should initialize with config thinking toggle', () => {
+      expect(agent.getThinkingEnabled()).toBe(true);
     });
 
-    it('should allow setting thinking level', () => {
-      agent.setThinkingLevel('max');
-      expect(agent.getThinkingLevel()).toBe('max');
+    it('should allow setting thinking toggle', () => {
+      agent.setThinkingEnabled(false);
+      expect(agent.getThinkingEnabled()).toBe(false);
     });
 
   });
@@ -112,7 +112,7 @@ describe('BaseAgent', () => {
 
     it('should track source servers', async () => {
       await agent.setSourceServers(
-        { 'source-1': { type: 'http', url: 'http://test' } },
+        { 'source-1': { type: 'streamable_http', url: 'http://test' } },
         { 'source-2': {} },
         ['source-1', 'source-2']
       );
@@ -123,7 +123,7 @@ describe('BaseAgent', () => {
 
     it('should check if source is active', async () => {
       await agent.setSourceServers(
-        { 'active-source': { type: 'http', url: 'http://test' } },
+        { 'active-source': { type: 'streamable_http', url: 'http://test' } },
         {},
         ['active-source']
       );
@@ -224,9 +224,9 @@ describe('BaseAgent', () => {
       let message = '';
       agent.onDebug = (msg) => { message = msg; };
 
-      // Trigger a debug message by setting thinking level
-      agent.setThinkingLevel('off');
-      expect(message).toContain('Thinking level');
+      // Trigger a debug message by setting thinking toggle
+      agent.setThinkingEnabled(false);
+      expect(message).toContain('Thinking toggle');
     });
 
     it('should support permission mode change callback', () => {

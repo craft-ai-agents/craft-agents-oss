@@ -86,23 +86,6 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
     return { success: registry.unbindBinding(ctx.workspaceId, bindingId) }
   })
 
-  // Workspace-supergroup pairing (Telegram forum support — Phase A)
-  server.handle(RPC_CHANNELS.messaging.GENERATE_SUPERGROUP_CODE, async (ctx, platform: string) => {
-    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
-    return registry.generateSupergroupPairingCode(ctx.workspaceId, platform)
-  })
-
-  server.handle(RPC_CHANNELS.messaging.GET_SUPERGROUP, async (ctx) => {
-    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
-    return registry.getWorkspaceSupergroup(ctx.workspaceId)
-  })
-
-  server.handle(RPC_CHANNELS.messaging.UNBIND_SUPERGROUP, async (ctx) => {
-    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
-    await registry.unbindWorkspaceSupergroup(ctx.workspaceId)
-    return { success: true }
-  })
-
   server.handle(RPC_CHANNELS.messaging.WA_START_CONNECT, async (ctx) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
     await registry.startWhatsAppConnect(ctx.workspaceId)

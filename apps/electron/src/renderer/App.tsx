@@ -12,7 +12,7 @@ import { useEventProcessor } from './event-processor'
 import type { AgentEvent, Effect } from './event-processor'
 import { AppShell } from '@/components/app-shell/AppShell'
 import type { AppShellContextType } from '@/context/AppShellContext'
-import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
+import { OnboardingWizard, ReauthScreen, SsoLoginPage } from '@/components/onboarding'
 import { WorkspacePicker } from '@/components/workspace'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
@@ -33,7 +33,7 @@ import { coerceInputText } from './lib/input-text'
 import { getSessionsToRefreshAfterStaleReconnect } from './lib/reconnect-recovery'
 import { formatSessionLoadFailure, shouldTreatSessionLoadFailureAsTransportFallback } from './lib/session-load'
 import { extractWorkspaceSlugFromPath } from '@craft-agent/shared/utils/workspace-slug'
-import { DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
+import { DEFAULT_THINKING_ENABLED } from '@craft-agent/shared/agent/thinking-toggle'
 import { initRendererPerf } from './lib/perf'
 import {
   initializeSessionsAtom,
@@ -71,10 +71,11 @@ import { useStaleSessionRecovery } from '@/hooks/useStaleSessionRecovery'
 import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '@/components/app-shell/TransportConnectionBanner'
 import { getFileManagerName } from '@/lib/platform'
 import { rendererLog } from '@/lib/logger'
+import { resolveAuthenticatedStartupState } from '@/lib/app-startup'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
-type AppState = 'loading' | 'onboarding' | 'reauth' | 'workspace-picker' | 'ready'
+type AppState = 'loading' | 'sso-login' | 'onboarding' | 'reauth' | 'workspace-picker' | 'ready'
 
 /** Type for the Jotai store returned by useStore() */
 type JotaiStore = ReturnType<typeof getDefaultStore>
@@ -206,7 +207,7 @@ function SessionLoadErrorScreen({
         <p className="mt-2 text-sm text-foreground/60">
           {t("errors.failedToLoadSessionsDesc")}
         </p>
-        <p className="mt-3 rounded-lg bg-foreground/5 px-3 py-2 text-left text-xs text-foreground/70 break-words">
+        <p className="mt-3 rounded-lg bg-foreground/5 px-3 py-2 text-left text-sm text-foreground/70 break-words">
           {message}
         </p>
         <button
@@ -235,6 +236,8 @@ export default function App() {
   // App state: loading -> check auth -> onboarding or ready
   const [appState, setAppState] = useState<AppState>('loading')
   const [setupNeeds, setSetupNeeds] = useState<SetupNeeds | null>(null)
+  const [ssoLoginResult, setSsoLoginResult] = useState<{ success: boolean; error?: string } | null>(null)
+  const [ssoUser, setSsoUser] = useState<{ userName?: string; department?: string; employeeId?: string } | undefined>(undefined)
 
   // Per-session Jotai atom setters for isolated updates
   // NOTE: No sessionsAtom - we don't store a Session[] array anywhere to prevent memory leaks
@@ -424,11 +427,11 @@ export default function App() {
         ...defaultSessionOptions,
         ...current,
         permissionMode: session.permissionMode ?? defaultSessionOptions.permissionMode,
-        thinkingLevel: session.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
+        thinkingEnabled: session.thinkingEnabled ?? DEFAULT_THINKING_ENABLED,
       }
 
       const hasNonDefaultMode = merged.permissionMode !== defaultSessionOptions.permissionMode
-      const hasNonDefaultThinking = merged.thinkingLevel !== DEFAULT_THINKING_LEVEL
+      const hasNonDefaultThinking = merged.thinkingEnabled !== DEFAULT_THINKING_ENABLED
 
       if (!hasNonDefaultMode && !hasNonDefaultThinking && merged.permissionModeVersion == null) {
         next.delete(session.id)
@@ -476,11 +479,11 @@ export default function App() {
       const optionsMap = new Map<string, SessionOptions>()
       for (const s of loadedSessions) {
         const hasNonDefaultMode = s.permissionMode && s.permissionMode !== 'ask'
-        const hasNonDefaultThinking = s.thinkingLevel && s.thinkingLevel !== DEFAULT_THINKING_LEVEL
+        const hasNonDefaultThinking = s.thinkingEnabled !== undefined && s.thinkingEnabled !== DEFAULT_THINKING_ENABLED
         if (hasNonDefaultMode || hasNonDefaultThinking) {
           optionsMap.set(s.id, {
             permissionMode: s.permissionMode ?? 'ask',
-            thinkingLevel: s.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
+            thinkingEnabled: s.thinkingEnabled ?? DEFAULT_THINKING_ENABLED,
           })
         }
       }
@@ -655,33 +658,46 @@ export default function App() {
   useEffect(() => {
     const initialize = async () => {
       try {
+        const ssoSession = await window.electronAPI.getSsoSession()
+        if (!ssoSession.authenticated) {
+          setAppState('sso-login')
+          return
+        }
+        setSsoUser({
+          userName: ssoSession.userName,
+          department: ssoSession.department,
+          employeeId: ssoSession.employeeId,
+        })
+
         // Get this window's workspace ID (passed via URL query param from main process)
         const wsId = await window.electronAPI.getWindowWorkspace()
         setWindowWorkspaceId(wsId)
 
+        // Auto-install DevOps skills on login (idempotent: already-installed skills are skipped)
+        if (wsId) window.electronAPI.devopsAutoInstall(wsId).catch(() => {})
+
         const needs = await window.electronAPI.getSetupNeeds()
         setSetupNeeds(needs)
 
-        if (needs.isFullyConfigured) {
-          // If no workspace is selected (thin client without CRAFT_WORKSPACE_ID),
-          // show workspace picker before entering the main app
-          if (!wsId) {
-            setAppState('workspace-picker')
-          } else {
-            setAppState('ready')
-          }
-        } else {
-          // New user or needs setup - show onboarding
-          setAppState('onboarding')
-        }
+        const nextState = await resolveAuthenticatedStartupState({
+          setupNeeds: needs,
+          windowWorkspaceId: wsId,
+          listLlmConnectionsWithStatus: () => window.electronAPI.listLlmConnectionsWithStatus(),
+        })
+        setAppState(nextState)
       } catch (error) {
         console.error('Failed to check auth state:', error)
-        // If check fails, show onboarding to be safe
-        setAppState('onboarding')
+        setAppState('sso-login')
       }
     }
 
     initialize()
+  }, [])
+
+  useEffect(() => {
+    return window.electronAPI.onSsoLoginResult((result) => {
+      setSsoLoginResult(result)
+    })
   }, [])
 
   // Session selection state
@@ -885,6 +901,12 @@ export default function App() {
       const workspaceId = windowWorkspaceId ?? ''
 
       // Session lifecycle events are handled explicitly (not by the agent event processor).
+      if (event.type === 'sso_token_expired') {
+        setSsoLoginResult(null)
+        setAppState('sso-login')
+        return
+      }
+
       if (event.type === 'session_created') {
         window.electronAPI.getSessionMessages(sessionId)
           .then((createdSession: Session | null) => {
@@ -1377,9 +1399,9 @@ export default function App() {
       // Sync permission mode change with backend
       window.electronAPI.sessionCommand(sessionId, { type: 'setPermissionMode', mode: updates.permissionMode })
     }
-    if (updates.thinkingLevel !== undefined) {
-      // Sync thinking level change with backend (session-level, persisted)
-      window.electronAPI.sessionCommand(sessionId, { type: 'setThinkingLevel', level: updates.thinkingLevel })
+    if (updates.thinkingEnabled !== undefined) {
+      // Sync thinking toggle change with backend (session-level, persisted)
+      window.electronAPI.sessionCommand(sessionId, { type: 'setThinkingEnabled', enabled: updates.thinkingEnabled })
     }
   }, [sessionOptions])
 
@@ -1672,6 +1694,34 @@ export default function App() {
     setShowResetDialog(true)
   }, [])
 
+  const clearRendererSsoSessionState = useCallback(() => {
+    initializeSessions([])
+    setWorkspaces([])
+    setWindowWorkspaceId(null)
+    setSetupNeeds(null)
+    setLlmConnections([])
+    setDefaultLlmConnectionSlug(undefined)
+    setWorkspaceDefaultLlmConnection(undefined)
+    setSession({ selected: null })
+    setPendingPermissions(new Map())
+    setPendingCredentials(new Map())
+    setSessionOptions(new Map())
+    setSessionLoadError(null)
+    setSsoLoginResult(null)
+    sessionDraftsRef.current.clear()
+    clearStreamingState()
+    store.set(sourcesAtom, [])
+    store.set(skillsAtom, [])
+    store.set(sessionMetaMapAtom, new Map())
+    store.set(sessionIdsAtom, [])
+  }, [clearStreamingState, initializeSessions, setSession, store])
+
+  const handleSsoLogout = useCallback(async () => {
+    await window.electronAPI.logoutSso()
+    clearRendererSsoSessionState()
+    setAppState('sso-login')
+  }, [clearRendererSsoSessionState])
+
   // Execute reset after user confirms in dialog
   const executeReset = useCallback(async () => {
     try {
@@ -1813,6 +1863,8 @@ export default function App() {
     onOpenKeyboardShortcuts: handleOpenKeyboardShortcuts,
     onOpenStoredUserPreferences: handleOpenStoredUserPreferences,
     onReset: handleReset,
+    onSsoLogout: handleSsoLogout,
+    ssoUser,
     // Session options
     onSessionOptionsChange: handleSessionOptionsChange,
     onInputChange: handleInputChange,
@@ -1855,6 +1907,8 @@ export default function App() {
     handleOpenKeyboardShortcuts,
     handleOpenStoredUserPreferences,
     handleReset,
+    handleSsoLogout,
+    ssoUser,
     handleSessionOptionsChange,
     handleInputChange,
     handleAttachmentsChange,
@@ -1914,6 +1968,34 @@ export default function App() {
     )
   }
 
+  if (appState === 'sso-login') {
+    return (
+      <DismissibleLayerProvider>
+        <ModalProvider>
+          <WindowCloseHandler />
+          <SsoLoginPage
+            result={ssoLoginResult}
+            onSuccess={async () => {
+              setSsoLoginResult(null)
+              const wsId = await window.electronAPI.getWindowWorkspace()
+              setWindowWorkspaceId(wsId)
+              // Auto-install DevOps skills on login (idempotent: already-installed skills are skipped)
+              if (wsId) window.electronAPI.devopsAutoInstall(wsId).catch(() => {})
+              const needs = await window.electronAPI.getSetupNeeds()
+              setSetupNeeds(needs)
+              const nextState = await resolveAuthenticatedStartupState({
+                setupNeeds: needs,
+                windowWorkspaceId: wsId,
+                listLlmConnectionsWithStatus: () => window.electronAPI.listLlmConnectionsWithStatus(),
+              })
+              setAppState(nextState)
+            }}
+          />
+        </ModalProvider>
+      </DismissibleLayerProvider>
+    )
+  }
+
   // Onboarding state
   // ModalProvider + WindowCloseHandler ensures X button works on Windows
   // (without this, the close IPC message has no listener and window stays open)
@@ -1922,23 +2004,14 @@ export default function App() {
       <DismissibleLayerProvider>
         <ModalProvider>
           <WindowCloseHandler />
-          <OnboardingWizard
-            state={onboarding.state}
-            onContinue={onboarding.handleContinue}
-            onBack={onboarding.handleBack}
-            onSelectProvider={onboarding.handleSelectProvider}
-            onSkipSetup={onboarding.handleSkipSetup}
-            onSelectApiSetupMethod={onboarding.handleSelectApiSetupMethod}
-            onSubmitCredential={onboarding.handleSubmitCredential}
-            onSubmitLocalModel={onboarding.handleSubmitLocalModel}
-            onStartOAuth={onboarding.handleStartOAuth}
-            onFinish={onboarding.handleFinish}
-            isWaitingForCode={onboarding.isWaitingForCode}
-            onSubmitAuthCode={onboarding.handleSubmitAuthCode}
-            onCancelOAuth={onboarding.handleCancelOAuth}
-            copilotDeviceCode={onboarding.copilotDeviceCode}
-            onBrowseGitBash={onboarding.handleBrowseGitBash}
-            onUseGitBashPath={onboarding.handleUseGitBashPath}
+            <OnboardingWizard
+              state={onboarding.state}
+              onContinue={onboarding.handleContinue}
+              onBack={onboarding.handleBack}
+              onSubmitCredential={onboarding.handleSubmitCredential}
+              onFinish={onboarding.handleFinish}
+              onBrowseGitBash={onboarding.handleBrowseGitBash}
+              onUseGitBashPath={onboarding.handleUseGitBashPath}
             onRecheckGitBash={onboarding.handleRecheckGitBash}
             onClearError={onboarding.handleClearError}
           />
@@ -2023,6 +2096,9 @@ export default function App() {
                   defaultLayout={[20, 32, 48]}
                   menuNewChatTrigger={menuNewChatTrigger}
                   isFocusedMode={isFocusedMode}
+                  isUpdateReady={updateChecker.isReadyToInstall}
+                  updateVersion={updateChecker.updateInfo?.latestVersion}
+                  onInstallUpdate={updateChecker.installUpdate}
                 />
               )}
             </div>

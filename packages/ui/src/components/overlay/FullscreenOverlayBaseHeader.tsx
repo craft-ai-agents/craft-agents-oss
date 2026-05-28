@@ -71,7 +71,7 @@ function displayPath(filePath: string): string {
 
 const contextMenuContentClasses = cn(
   'popover-styled z-dropdown min-w-40 overflow-hidden p-1',
-  'w-fit font-sans whitespace-nowrap text-xs flex flex-col gap-0.5',
+  'w-fit font-sans whitespace-nowrap text-sm flex flex-col gap-0.5',
   'animate-in fade-in-0 zoom-in-95'
 )
 
@@ -165,7 +165,7 @@ function FilePathBadge({ filePath }: FilePathBadgeProps) {
             <button
               className={cn(
                 'flex items-center gap-1.5 h-[26px] px-2.5 rounded-[6px]',
-                'font-sans text-[13px] font-medium text-foreground/70',
+                'font-sans text-[14px] font-medium text-foreground/70',
                 'bg-background shadow-minimal',
                 'min-w-0 cursor-pointer group'
               )}

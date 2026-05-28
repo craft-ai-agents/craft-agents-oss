@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-server.sh — Set up the Craft Agent standalone server.
+# install-server.sh — Set up the MDP Agent standalone server.
 #
 # Usage:
 #   bash scripts/install-server.sh
@@ -74,7 +74,7 @@ info "Generated server token"
 
 echo ""
 echo "===================================="
-echo "  Craft Agent Server Ready"
+echo "  MDP Agent Server Ready"
 echo "===================================="
 echo ""
 echo "Start the server (with Web UI):"

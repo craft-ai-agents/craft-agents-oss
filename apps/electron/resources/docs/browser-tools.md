@@ -1,6 +1,6 @@
 # Browser Tools
 
-Use `browser_tool` to control built-in browser windows (Chromium) inside Craft Agents.
+Use `browser_tool` to control built-in browser windows (Chromium) inside MDP.
 
 > **Quick start:** Run `browser_tool --help` to see all available commands and usage examples.
 
@@ -217,7 +217,7 @@ Output is deterministic JSON (`href`, `protocol`, `host`, `hostname`, `pathname`
 ## Behavior notes
 
 - Browser tools are allowed in **Explore/Safe mode** by default.
-- Before first browser tool usage, the agent must read this guide (`~/.craft-agent/docs/browser-tools.md`).
+- Before first browser tool usage, the agent must read this guide (`~/.mdp-agent/docs/browser-tools.md`).
 - Closing browser UI via OS controls may hide the window; use `browser_tool close` for explicit teardown.
 
 ---

@@ -33,6 +33,7 @@ import type { EventSink } from '@craft-agent/server-core/transport'
 const PLATFORM = platform()
 const IS_MAC = PLATFORM === 'darwin'
 const IS_WINDOWS = PLATFORM === 'win32'
+const APP_UPDATE_ROUTINE_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 // Get the update cache directory path (for file watcher fallback on macOS)
 // electron-updater uses these paths:
@@ -63,6 +64,8 @@ let updateInfo: UpdateInfo = {
 }
 
 let eventSink: EventSink | null = null
+let activeCheckPromise: Promise<UpdateInfo> | null = null
+let appUpdateRoutineTimer: ReturnType<typeof setInterval> | null = null
 
 // Flag to indicate update is in progress — used to prevent force exit during quitAndInstall
 let __isUpdating = false
@@ -100,6 +103,10 @@ export function setAutoUpdateEventSink(sink: EventSink): void {
  */
 export function getUpdateInfo(): UpdateInfo {
   return { ...updateInfo }
+}
+
+function appUpdateCheckIsBusy(): boolean {
+  return activeCheckPromise !== null || ['downloading', 'ready', 'installing'].includes(updateInfo.downloadState)
 }
 
 /**
@@ -327,6 +334,21 @@ function checkForExistingDownload(): { exists: boolean; version?: string } {
  * @param options.autoDownload - If false, only checks without downloading (for manual "Check Now")
  */
 export async function checkForUpdates(options: CheckOptions = {}): Promise<UpdateInfo> {
+  if (activeCheckPromise) {
+    mainLog.info('[auto-update] Check already in progress, joining active check')
+    return activeCheckPromise
+  }
+
+  activeCheckPromise = runUpdateCheck(options)
+
+  try {
+    return await activeCheckPromise
+  } finally {
+    activeCheckPromise = null
+  }
+}
+
+async function runUpdateCheck(options: CheckOptions = {}): Promise<UpdateInfo> {
   const { autoDownload = true } = options
 
   // Temporarily override autoDownload for this check if needed
@@ -371,6 +393,33 @@ export async function checkForUpdates(options: CheckOptions = {}): Promise<Updat
   }
 
   return getUpdateInfo()
+}
+
+/**
+ * Start the periodic app update routine for long-running packaged apps.
+ * The launch-time check remains the first check; this routine only handles
+ * users who keep the app open for days without restarting.
+ */
+export function startAppUpdateRoutine(intervalMs = APP_UPDATE_ROUTINE_INTERVAL_MS): void {
+  if (appUpdateRoutineTimer) {
+    mainLog.info('[auto-update] App update routine already started')
+    return
+  }
+
+  mainLog.info(`[auto-update] Starting app update routine (${Math.round(intervalMs / 60_000)} minute interval)`)
+
+  appUpdateRoutineTimer = setInterval(() => {
+    if (appUpdateCheckIsBusy()) {
+      mainLog.info(`[auto-update] Routine check skipped; current state is ${updateInfo.downloadState}`)
+      return
+    }
+
+    checkForUpdates({ autoDownload: true }).catch(err => {
+      mainLog.error('[auto-update] Routine check failed:', err)
+    })
+  }, intervalMs)
+
+  appUpdateRoutineTimer.unref?.()
 }
 
 /**

@@ -7,7 +7,7 @@ Customize the icons shown next to CLI commands in chat activity rows.
 When the agent runs a CLI command (e.g., `git status`, `npm install`), the app resolves the command name to a branded icon. The mapping is defined in:
 
 ```
-~/.craft-agent/tool-icons/tool-icons.json
+~/.mdp-agent/tool-icons/tool-icons.json
 ```
 
 Icon files (`.png`, `.ico`, `.svg`, `.jpg`) live in the same directory alongside the JSON config.
@@ -41,7 +41,7 @@ Icon files (`.png`, `.ico`, `.svg`, `.jpg`) live in the same directory alongside
 
 ## Adding a Custom Tool
 
-1. Place your icon file in `~/.craft-agent/tool-icons/` (any of: `.png`, `.ico`, `.svg`, `.jpg`)
+1. Place your icon file in `~/.mdp-agent/tool-icons/` (any of: `.png`, `.ico`, `.svg`, `.jpg`)
 2. Add an entry to `tool-icons.json`:
 
 ```json

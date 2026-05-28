@@ -100,7 +100,7 @@ export function TransportConnectionBanner({
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{copy.title}</p>
-          <p className="text-xs opacity-90 truncate">{copy.description}</p>
+          <p className="text-sm opacity-90 truncate">{copy.description}</p>
         </div>
         {copy.showRetry && (
           <Button size="sm" variant="outline" onClick={onRetry} className="shrink-0 h-7">

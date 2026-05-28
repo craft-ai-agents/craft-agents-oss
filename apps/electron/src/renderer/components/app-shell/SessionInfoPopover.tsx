@@ -135,7 +135,7 @@ function SessionInfoPopoverContent({ sessionId, sessionFolderPath }: { sessionId
   return (
     <div className="h-full min-h-0 flex flex-col">
       <div className="shrink-0 p-3 border-b border-border/50">
-        <label className="text-xs font-medium text-muted-foreground block mb-1.5 select-none">
+        <label className="text-sm font-medium text-muted-foreground block mb-1.5 select-none">
           {t("chat.title")}
         </label>
         <div className="rounded-lg bg-foreground-2 has-[:focus]:bg-background shadow-minimal transition-colors">

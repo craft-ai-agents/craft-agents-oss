@@ -19,6 +19,19 @@ cpSync('resources', 'dist/resources', { recursive: true });
 
 console.log('✓ Copied resources/ → dist/resources/');
 
+// Copy subprocess servers into resources so electron-builder bundles them
+const subprocessServers = ['pi-agent-server', 'session-mcp-server', 'bridge-mcp-server'];
+for (const server of subprocessServers) {
+  const src = join('..', '..', 'packages', server, 'dist');
+  const dest = join('dist', 'resources', server);
+  try {
+    cpSync(src, dest, { recursive: true });
+    console.log(`✓ Copied ${server}/dist → dist/resources/${server}`);
+  } catch {
+    console.log(`⚠ ${server}/dist not found — run server:build:subprocess first`);
+  }
+}
+
 // Copy PowerShell parser script (for Windows command validation in Explore mode)
 // Source: packages/shared/src/agent/powershell-parser.ps1
 // Destination: dist/resources/powershell-parser.ps1

@@ -59,7 +59,7 @@ export function registerAuthHandlers(server: RpcServer, deps: HandlerDeps): void
       }
 
       // Delete the config file
-      const configPath = join(homedir(), '.craft-agent', 'config.json')
+      const configPath = join(homedir(), '.mdp-agent', 'config.json')
       await unlink(configPath).catch(() => {
         // Ignore if file doesn't exist
       })

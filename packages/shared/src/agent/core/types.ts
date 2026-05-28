@@ -112,6 +112,10 @@ export interface ContextBlockOptions {
   inactiveSources?: LoadedSource[];
   /** Whether local MCP is enabled */
   localMcpEnabled?: boolean;
+  /** Pre-formatted team public knowledge policy block (null = disabled/no terms) */
+  teamPublicKnowledgePolicy?: string | null;
+  /** Pre-formatted team public knowledge prefetch block (null = no matches) */
+  teamPublicKnowledgePrefetchBlock?: string | null;
 }
 
 /**

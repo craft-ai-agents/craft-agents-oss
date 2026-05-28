@@ -55,7 +55,7 @@ export async function connectToRemote(url: string, token: string, workspaceId?: 
 export function registerWorkspaceGuiHandlers(server: RpcServer, deps: HandlerDeps): void {
   const windowManager = deps.windowManager
 
-  // Test connection to a remote Craft Agent Server.
+  // Test connection to a remote MDP Server.
   // Pure discovery — returns list of existing workspaces or needsWorkspace flag.
   // Workspace creation is handled separately via invokeOnServer → server:createWorkspace.
   server.handle(RPC_CHANNELS.remote.TEST_CONNECTION, async (_ctx, url: string, token: string) => {
@@ -102,7 +102,7 @@ export function registerWorkspaceGuiHandlers(server: RpcServer, deps: HandlerDep
   // Open a session in a new window
   server.handle(RPC_CHANNELS.window.OPEN_SESSION_IN_NEW_WINDOW, async (_ctx, workspaceId: string, sessionId: string) => {
     if (!windowManager) return
-    const deepLink = `craftagents://allSessions/session/${sessionId}`
+    const deepLink = `mdp://allSessions/session/${sessionId}`
     windowManager.createWindow({
       workspaceId,
       focused: true,

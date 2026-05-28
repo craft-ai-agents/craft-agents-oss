@@ -13,7 +13,7 @@ import { HelpCircle, Plus } from 'lucide-react'
 function MockTopBar() {
   return (
     <div className="absolute top-0 left-0 right-0 h-[48px] z-[50] flex items-center justify-between px-3 border-b border-border/30 bg-background/80 backdrop-blur-sm">
-      <span className="text-xs text-muted-foreground">Mock TopBar</span>
+      <span className="text-sm text-muted-foreground">Mock TopBar</span>
       <div className="flex items-center gap-1" style={{ paddingRight: 12 }}>
         <button className="h-[26px] w-[26px] flex items-center justify-center rounded-lg hover:bg-foreground/5">
           <Plus className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
@@ -33,7 +33,7 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
       <MockTopBar />
       <div className="h-full flex flex-col pt-[48px]">
         {children}
-        <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">
+        <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
           (main content area)
         </div>
       </div>

@@ -190,9 +190,9 @@ describe('extractSdkReportedBinaryPath', () => {
 
   it('captures macOS .app bundle paths without truncating at the first dot', () => {
     const msg =
-      'Claude Code native binary not found at /Applications/Craft Agents.app/Contents/Resources/app/node_modules/@anthropic-ai/claude-agent-sdk-binary/claude';
+      'Claude Code native binary not found at /Applications/MDP.app/Contents/Resources/app/node_modules/@anthropic-ai/claude-agent-sdk-binary/claude';
     expect(extractSdkReportedBinaryPath(msg)).toBe(
-      '/Applications/Craft Agents.app/Contents/Resources/app/node_modules/@anthropic-ai/claude-agent-sdk-binary/claude',
+      '/Applications/MDP.app/Contents/Resources/app/node_modules/@anthropic-ai/claude-agent-sdk-binary/claude',
     );
   });
 

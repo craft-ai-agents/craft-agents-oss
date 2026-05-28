@@ -6,32 +6,10 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, rmSync, readdirSync, statSync, cpSync } from 'fs';
-import { join } from 'path';
+import { existsSync, rmSync, readdirSync, statSync, cpSync } from 'fs';
+import { join, resolve } from 'path';
 import type { BuildConfig } from './common';
 
-/**
- * Verify SDK native binary is bundled in the packaged Windows app.
- * Since SDK 0.2.113 the SDK ships a per-platform native binary instead of cli.js.
- */
-export function verifyPackagedSDK(unpackedPath: string): void {
-  const appPath = join(unpackedPath, 'resources', 'app');
-  const binaryPath = join(
-    appPath,
-    'node_modules', '@anthropic-ai', 'claude-agent-sdk-binary', 'claude.exe',
-  );
-
-  if (!existsSync(binaryPath)) {
-    throw new Error(`CRITICAL: SDK native binary not bundled! Expected at: ${binaryPath}`);
-  }
-
-  const stats = statSync(binaryPath);
-  if (stats.size < 50_000_000) {
-    throw new Error(`CRITICAL: SDK native binary too small (${stats.size} bytes, expected ~210 MB)`);
-  }
-
-  console.log(`  SDK bundled: claude.exe is ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
-}
 
 /**
  * Sleep helper (Node.js replacement for Bun.sleep)
@@ -43,12 +21,13 @@ function sleep(ms: number): Promise<void> {
 /**
  * Run a shell command with proper Windows handling
  */
-function run(command: string, cwd: string): void {
+function run(command: string, cwd: string, env?: Record<string, string>): void {
   console.log(`    > ${command}`);
   execSync(command, {
     cwd,
     stdio: 'inherit',
     shell: true,
+    ...(env && { env: { ...process.env, ...env } }),
   });
 }
 
@@ -71,7 +50,7 @@ function runQuiet(command: string, cwd: string): void {
  * Kill processes that might lock files
  */
 async function killLockingProcesses(): Promise<void> {
-  const processesToKill = ['node', 'npm', 'electron', 'electron-builder'];
+  const processesToKill = ['electron'];
 
   for (const procName of processesToKill) {
     runQuiet(`taskkill /F /IM ${procName}.exe 2>nul`, process.cwd());
@@ -200,25 +179,14 @@ export async function buildElectronAppWindows(config: BuildConfig): Promise<void
   }
   cpSync(resourcesSrc, resourcesDst, { recursive: true });
 
-  // Copy doc assets (matches electron:build:assets step used by Mac/Linux builds)
-  // Without this, loadBundledDocs() can't find the docs and falls back to placeholders
-  console.log('  Copying doc assets...');
-  const docsSrc = join(rootDir, 'packages', 'shared', 'assets', 'docs');
-  const docsDst = join(electronDir, 'dist', 'assets', 'docs');
-  if (existsSync(docsSrc)) {
-    mkdirSync(join(electronDir, 'dist', 'assets'), { recursive: true });
-    cpSync(docsSrc, docsDst, { recursive: true, force: true });
-    console.log('  Doc assets copied ✓');
-  } else {
-    console.warn('  ⚠️ No doc assets found at', docsSrc);
-  }
 }
 
 /**
  * Package the Windows app with electron-builder (with retry logic)
  */
 export async function packageWindows(config: BuildConfig): Promise<string> {
-  const { electronDir } = config;
+  const { rootDir, electronDir } = config;
+  const ebCache = process.env.ELECTRON_BUILDER_CACHE ?? resolve(rootDir, '.cache', 'electron-builder');
 
   console.log('Packaging app with electron-builder...');
 
@@ -240,7 +208,7 @@ export async function packageWindows(config: BuildConfig): Promise<string> {
 
     try {
       // Run electron-builder from electronDir using npx (npx traverses up to find it in root node_modules)
-      run('npx electron-builder --win --x64', electronDir);
+      run('npx electron-builder --win --x64', electronDir, { ELECTRON_BUILDER_CACHE: ebCache });
       console.log(`  electron-builder succeeded on attempt ${attempt} ✓`);
       lastError = null;
       break;
@@ -258,15 +226,6 @@ export async function packageWindows(config: BuildConfig): Promise<string> {
 
   if (lastError) {
     throw new Error(`electron-builder failed after ${maxRetries} attempts: ${lastError.message}`);
-  }
-
-  // Verify SDK is bundled in the unpacked app before checking artifacts
-  const unpackedPath = join(electronDir, 'release', 'win-unpacked');
-  if (existsSync(unpackedPath)) {
-    console.log('Verifying SDK in packaged app...');
-    verifyPackagedSDK(unpackedPath);
-  } else {
-    console.warn('  win-unpacked not found, skipping SDK verification');
   }
 
   // Find the built installer

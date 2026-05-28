@@ -103,7 +103,7 @@ export function SettingsTextarea({
         {maxLength !== undefined && (
           <div
             className={cn(
-              'absolute bottom-2 right-3 text-xs',
+              'absolute bottom-2 right-3 text-sm',
               isOverLimit ? 'text-destructive' : 'text-muted-foreground'
             )}
           >

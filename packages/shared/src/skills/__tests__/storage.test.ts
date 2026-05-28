@@ -14,10 +14,13 @@
  * baseline count and validating relative to it.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'fs';
 import { homedir, tmpdir } from 'os';
 import { join } from 'path';
 import {
+  createSkill as createWorkspaceSkill,
+  forceWriteSkill,
+  deriveSkillSlug,
   loadAllSkills,
   loadWorkspaceSkills,
   loadSkill,
@@ -172,6 +175,32 @@ describe('loadSkill', () => {
     expect(skill!.metadata.globs).toEqual(['*.tsx', '*.css']);
   });
 
+  it('should load Marketplace origin metadata for workspace skills', () => {
+    const skillDir = createSkill(join(workspaceRoot, 'skills'), 'derived-helper');
+    writeFileSync(join(skillDir, '.marketplace-origin.json'), JSON.stringify({
+      marketplaceId: 'mkt_skill_original',
+      marketplaceSlug: 'original-skill',
+      ownerId: 'owner_2',
+      ownerDisplayName: 'Original Owner',
+      installedVersion: '1.2.3',
+      installedAt: '2026-05-01T00:00:00.000Z',
+      lastCheckedAt: '2026-05-01T00:00:00.000Z',
+      modified: true,
+      sourceBundleHash: 'hash',
+      safetyStatus: 'ok',
+    }));
+
+    const skill = loadSkill(workspaceRoot, 'derived-helper');
+
+    expect(skill).not.toBeNull();
+    expect(skill!.marketplaceOrigin).toMatchObject({
+      marketplaceId: 'mkt_skill_original',
+      marketplaceSlug: 'original-skill',
+      ownerId: 'owner_2',
+      installedVersion: '1.2.3',
+    });
+  });
+
   it('should load skill with normalized requiredSources', () => {
     createSkill(join(workspaceRoot, 'skills'), 'with-sources', {
       requiredSources: ['linear', ' github ', 'linear'],
@@ -240,6 +269,89 @@ Use linear tools.
 
     expect(skill).not.toBeNull();
     expect(skill!.iconPath).toBeUndefined();
+  });
+});
+
+// ============================================================
+// Tests: createSkill
+// ============================================================
+
+describe('createSkill', () => {
+  it('writes a workspace SKILL.md with YAML frontmatter and markdown body', () => {
+    const result = createWorkspaceSkill(
+      workspaceRoot,
+      'code-reviewer',
+      {
+        name: 'Code Reviewer',
+        description: 'Reviews code for correctness',
+      },
+      'Read the diff and identify blocking bugs.'
+    );
+
+    expect(result).toEqual({ created: true });
+    const skill = loadSkill(workspaceRoot, 'code-reviewer');
+    expect(skill).not.toBeNull();
+    expect(skill!.metadata).toEqual({
+      name: 'Code Reviewer',
+      description: 'Reviews code for correctness',
+    });
+    expect(skill!.content.trim()).toBe('Read the diff and identify blocking bugs.');
+  });
+
+  it('returns conflict without modifying an existing SKILL.md', () => {
+    const skillsDir = join(workspaceRoot, 'skills');
+    const skillDir = createSkill(skillsDir, 'existing', {
+      name: 'Existing',
+      description: 'Original description',
+      content: 'Original body',
+    });
+    const skillFile = join(skillDir, 'SKILL.md');
+    const before = readFileSync(skillFile, 'utf-8');
+
+    const result = createWorkspaceSkill(
+      workspaceRoot,
+      'existing',
+      {
+        name: 'Existing',
+        description: 'Changed description',
+      },
+      'Changed body'
+    );
+
+    expect(result).toEqual({ conflict: true });
+    expect(readFileSync(skillFile, 'utf-8')).toBe(before);
+  });
+
+  it('forceWriteSkill replaces an existing SKILL.md', () => {
+    createSkill(join(workspaceRoot, 'skills'), 'replace-me', {
+      name: 'Replace Me',
+      description: 'Original description',
+      content: 'Original body',
+    });
+
+    const result = forceWriteSkill(
+      workspaceRoot,
+      'replace-me',
+      {
+        name: 'Replacement',
+        description: 'Updated description',
+      },
+      'Updated body'
+    );
+
+    expect(result).toEqual({ created: true });
+    const skill = loadSkill(workspaceRoot, 'replace-me');
+    expect(skill!.metadata.name).toBe('Replacement');
+    expect(skill!.metadata.description).toBe('Updated description');
+    expect(skill!.content.trim()).toBe('Updated body');
+  });
+});
+
+describe('deriveSkillSlug', () => {
+  it('lowercases names and collapses non-alphanumeric runs into hyphens', () => {
+    expect(deriveSkillSlug('My Skill!')).toBe('my-skill');
+    expect(deriveSkillSlug('Code Reviewer')).toBe('code-reviewer');
+    expect(deriveSkillSlug('  API---Docs__Helper  ')).toBe('api-docs-helper');
   });
 });
 

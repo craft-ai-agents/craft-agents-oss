@@ -1821,9 +1821,9 @@ function SampleDataTable() {
       <tbody>
         {rows.map((row) => (
           <tr key={row.tool} className="border-b border-border/50">
-            <td className="py-2 px-4 font-mono text-xs">{row.tool}</td>
+            <td className="py-2 px-4 font-mono text-sm">{row.tool}</td>
             <td className="py-2 px-4">
-              <span className={`text-xs px-2 py-0.5 rounded-full ${
+              <span className={`text-sm px-2 py-0.5 rounded-full ${
                 row.permission === 'allowed' ? 'bg-green-500/10 text-green-600' :
                 row.permission === 'ask' ? 'bg-amber-500/10 text-amber-600' :
                 'bg-red-500/10 text-red-600'

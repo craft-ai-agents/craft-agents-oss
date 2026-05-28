@@ -8,6 +8,7 @@
 export type {
   SourceType,
   SourceMcpAuthType,
+  McpTransport,
   ApiAuthType,
   KnownProvider,
   ApiOAuthProvider,
@@ -76,6 +77,40 @@ export type {
   ApiCredential,
   BasicAuthCredential,
 } from './credential-manager.ts';
+
+// MCP JSON import parsing
+export {
+  createMcpSourceFromManualInput,
+  createMcpSourcesFromCandidates,
+  defaultMcpPostCreateConnectionTester,
+  detectDuplicateMcpImportCandidates,
+  generateMcpSourceGuide,
+  parseMcpJsonImportCandidates,
+  stdioCommandFingerprint,
+} from './mcp-import.ts';
+export type {
+  McpManualSourceInput,
+  McpManualAuthCredentialInput,
+  McpImportCandidateAction,
+  McpImportCandidate,
+  McpImportBatchCreateResult,
+  McpImportCreateOptions,
+  McpImportCreateResult,
+  McpImportCredentialManager,
+  McpImportDuplicateMatch,
+  McpImportDuplicateReason,
+  McpImportFieldError,
+  McpImportParseResult,
+  McpImportParseOptions,
+  McpImportSecret,
+  McpImportSecretHandling,
+  McpImportSecretLocation,
+  McpPostCreateConnectionTestContext,
+  McpPostCreateConnectionTester,
+  McpPostCreateConnectionTestResult,
+  McpSourceGuideGenerationContext,
+  McpSourceGuideGenerator,
+} from './mcp-import.ts';
 
 // Server Builder (builds MCP/API servers from sources)
 export {

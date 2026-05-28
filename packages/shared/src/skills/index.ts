@@ -13,9 +13,106 @@ export {
   invalidateSkillsCache,
   loadSkillBySlug,
   getSkillIconPath,
+  deriveSkillSlug,
+  createSkill,
+  forceWriteSkill,
   deleteSkill,
   skillExists,
   listSkillSlugs,
   skillNeedsIconDownload,
   downloadSkillIcon,
 } from './storage.ts';
+
+export type { CreateSkillResult } from './storage.ts';
+
+export { extractSkillsFromZip, extractSkillsFromZipBytes } from './zip-extractor.ts';
+export { unzipSyncEncoding } from './zip-encoding.ts';
+export { resolveRemoteSkills, parseRemoteInput } from './remote-resolver.ts';
+export { extractMcpSourceCandidatesFromSkillMetadata } from './mcp-sources.ts';
+export type { RemoteResolveResult } from './remote-resolver.ts';
+export {
+  MARKETPLACE_ORIGIN_METADATA_FILE,
+  applyMarketplaceSkillUpdate,
+  applyMarketplaceSkillUpdateFromIntent,
+  checkMarketplaceSkillUpdates,
+  downloadMarketplaceBundle,
+  installMarketplaceSkill,
+  installMarketplaceSkillFromIntent,
+  readMarketplaceOriginMetadata,
+} from './marketplace-install.ts';
+export {
+  PRODUCT_MARKETPLACE_CATEGORIES,
+  createHttpMarketplaceOwnerActionsApi,
+  createHttpMarketplacePublishApi,
+  bundleSkillDir,
+  publishDirectSkillToMarketplace,
+  publishDirectSkillToMarketplaceService,
+  publishLocalSkillToMarketplace,
+  publishLocalSkillToMarketplaceService,
+  suggestMarketplacePublishSlug,
+  suggestMarketplaceSlug,
+  unpublishMarketplaceSkillFromDiscovery,
+  unpublishMarketplaceSkillFromDiscoveryService,
+  validateMarketplacePublishRequest,
+} from './marketplace-publish.ts';
+export type {
+  MarketplaceOwnerActionsApi,
+  MarketplacePublishApi,
+  MarketplacePublishApiInput,
+  MarketplacePublishApiResult,
+  MarketplaceLocalSkillPublishInput,
+  MarketplaceDirectPublishRequest,
+  MarketplaceDirectSkillPublishInput,
+  MarketplacePublishDirectResult,
+  MarketplacePublishLocalResult,
+  MarketplacePublishRequest,
+  MarketplaceUnpublishApiInput,
+  MarketplaceUnpublishApiResult,
+  MarketplaceUnpublishRequest,
+  MarketplaceUnpublishResult,
+  ProductMarketplaceCategory,
+} from './marketplace-publish.ts';
+export {
+  resolveMarketplaceServiceConfig,
+} from './marketplace-config.ts';
+export type {
+  MarketplaceInstallApi,
+  MarketplaceInstallConflictResolution,
+  MarketplaceInstallIntent,
+  MarketplaceInstallRequest,
+  MarketplaceInstallResult,
+  MarketplaceSkillInstallInput,
+  MarketplaceSkillUpdateInput,
+  MarketplaceOriginMetadata,
+  MarketplaceUpdateApplyApi,
+  MarketplaceUpdateApplyRequest,
+  MarketplaceUpdateCheckApi,
+  MarketplaceUpdateCheckItem,
+  MarketplaceUpdateCheckRequest,
+  MarketplaceUpdateCheckResponse,
+  MarketplaceUpdateCheckResult,
+  MarketplaceUpdateStatus,
+} from './marketplace-install.ts';
+export type {
+  MarketplaceBuildChannel,
+  MarketplaceServiceConfig,
+  MarketplaceServiceConfigInput,
+  MarketplaceServiceEnvironment,
+} from './marketplace-config.ts';
+
+export {
+  COPAW_MARKET_BASE_URL,
+  listCopawMarketSkills,
+  uploadCopawMarketSkill,
+  deleteCopawMarketSkill,
+  downloadCopawMarketSkillZip,
+  generateMarketSkillVersion,
+} from './copaw-market-api.ts';
+export type {
+  CopawMarketSkill,
+  CopawMarketUploadInput,
+  CopawMarketUploadPayload,
+  CopawMarketUploadResult,
+  CopawInstallConflict,
+  CopawInstallSkillResult,
+} from './copaw-market-api.ts';

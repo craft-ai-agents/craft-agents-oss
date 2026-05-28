@@ -46,7 +46,6 @@ export interface RecordRejectionInput {
   bindingId?: string
   sessionId?: string
   channelId?: string
-  threadId?: number
 }
 
 export class PendingSendersStore {
@@ -123,7 +122,6 @@ export class PendingSendersStore {
         ...(input.bindingId ? { bindingId: input.bindingId } : {}),
         ...(input.sessionId ? { sessionId: input.sessionId } : {}),
         ...(input.channelId ? { channelId: input.channelId } : {}),
-        ...(input.threadId !== undefined ? { threadId: input.threadId } : {}),
       }
       this.entries.splice(idx, 1)
       this.entries.unshift(merged)
@@ -139,7 +137,6 @@ export class PendingSendersStore {
         ...(input.bindingId ? { bindingId: input.bindingId } : {}),
         ...(input.sessionId ? { sessionId: input.sessionId } : {}),
         ...(input.channelId ? { channelId: input.channelId } : {}),
-        ...(input.threadId !== undefined ? { threadId: input.threadId } : {}),
       }
       this.entries.unshift(merged)
       if (this.entries.length > MAX_ENTRIES) {
@@ -241,7 +238,7 @@ function isPendingSender(value: unknown): value is PendingSender {
   if (typeof value !== 'object' || value === null) return false
   const v = value as Record<string, unknown>
   return (
-    (v.platform === 'telegram' || v.platform === 'whatsapp' || v.platform === 'lark') &&
+    typeof v.platform === 'string' &&
     typeof v.userId === 'string' &&
     typeof v.lastAttemptAt === 'number' &&
     typeof v.attemptCount === 'number'

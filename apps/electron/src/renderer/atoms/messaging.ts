@@ -50,12 +50,6 @@ export const setMessagingBindingsAtom = atom(
   },
 )
 
-/**
- * Global messaging dialog state.
- *
- * Hoisted out of SessionMenu so dialogs survive context-menu / dropdown close.
- * Rendered by <MessagingDialogHost /> mounted at AppShell level.
- */
 export type MessagingDialogState =
   | { kind: 'closed' }
   | {

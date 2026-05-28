@@ -121,22 +121,30 @@ describe('createBuiltInConnection seeds midStreamBehavior', () => {
     expect(conn.midStreamBehavior).toBe('queue')
   })
 
-  it("Claude Max OAuth → 'queue' (still uses Claude SDK)", () => {
-    const conn = createBuiltInConnection('claude-max')
-    expect(conn.providerType).toBe('anthropic')
-    expect(conn.midStreamBehavior).toBe('queue')
-  })
-
-  it("ChatGPT Plus → 'steer' (Pi backend, native polite steer)", () => {
-    const conn = createBuiltInConnection('chatgpt-plus')
-    expect(conn.providerType).toBe('pi')
-    expect(conn.midStreamBehavior).toBe('steer')
-  })
-
-  it("Pi API key (Craft Agents Backend) → 'steer'", () => {
+  it("Pi API key (MDP Backend) → 'steer'", () => {
     const conn = createBuiltInConnection('pi-api-key')
     expect(conn.providerType).toBe('pi')
     expect(conn.midStreamBehavior).toBe('steer')
+  })
+
+  it("OpenLLM API key → 'steer' with no persisted base URL", () => {
+    const conn = createBuiltInConnection('openllm-api')
+    expect(conn).toMatchObject({
+      slug: 'openllm-api',
+      name: 'OpenLLM',
+      providerType: 'openllm',
+      authType: 'api_key',
+      models: [],
+      defaultModel: '',
+      midStreamBehavior: 'steer',
+    })
+    expect(conn.baseUrl).toBeUndefined()
+  })
+
+  it('rejects removed OAuth built-in templates', () => {
+    expect(() => createBuiltInConnection('claude-max')).toThrow('Unknown built-in connection slug')
+    expect(() => createBuiltInConnection('chatgpt-plus')).toThrow('Unknown built-in connection slug')
+    expect(() => createBuiltInConnection('github-copilot')).toThrow('Unknown built-in connection slug')
   })
 
   it("anthropic-api with custom endpoint becomes pi_compat → 'steer'", () => {

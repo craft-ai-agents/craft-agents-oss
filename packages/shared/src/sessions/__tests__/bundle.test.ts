@@ -91,6 +91,91 @@ describe('serializeSession', () => {
     expect(Array.isArray(bundle!.files)).toBe(true)
   })
 
+  it('redacts dynamic context references for external export', () => {
+    const session = makeStoredSession({
+      messages: [
+        {
+          id: 'msg-profile',
+          type: 'user',
+          content: 'Hello world',
+          timestamp: 1000,
+          dynamicContextRef: {
+            type: 'user_profile',
+            status: 'fresh',
+            fetchedAt: 1000,
+            summary: 'Ada Lovelace, AI Platform, Engineering',
+            ystId: 'OS-12345',
+            dynamicContext: '<user_profile>YST ID: OS-12345</user_profile>',
+          } as any,
+        },
+        {
+          id: 'msg-knowledge',
+          type: 'user',
+          content: 'What is launch code?',
+          timestamp: 1100,
+          dynamicContextRef: {
+            type: 'team_public_knowledge',
+            status: 'fresh',
+            fetchedAt: 1100,
+            summary: 'Team knowledge entries matched',
+            entries: [{ excerpt: 'Internal launch code is DELTA-7' }],
+            content: 'Internal launch code is DELTA-7',
+          } as any,
+        },
+      ],
+    })
+    setupSessionDir(tmpDir, session)
+
+    const bundle = serializeSession(tmpDir, session.id)
+
+    expect(bundle).not.toBeNull()
+    expect(bundle!.session.messages[0]!.dynamicContextRef).toEqual({
+      type: 'user_profile',
+      status: 'fresh',
+      fetchedAt: 1000,
+      summary: 'User profile context redacted for export',
+    })
+    expect(bundle!.session.messages[1]!.dynamicContextRef).toEqual({
+      type: 'team_public_knowledge',
+      status: 'fresh',
+      fetchedAt: 1100,
+      summary: 'Team public knowledge reference redacted for export',
+    })
+    const exported = JSON.stringify(bundle)
+    expect(exported).not.toContain('Ada Lovelace')
+    expect(exported).not.toContain('OS-12345')
+    expect(exported).not.toContain('<user_profile')
+    expect(exported).not.toContain('DELTA-7')
+  })
+
+  it('handles missing or malformed dynamic context refs without expanding them', () => {
+    const session = makeStoredSession({
+      messages: [
+        {
+          id: 'msg-missing-ref',
+          type: 'user',
+          content: 'Hello world',
+          timestamp: 1000,
+          dynamicContextRef: {
+            type: 'team_public_knowledge',
+            entryIds: ['missing-entry'],
+            summary: 'Old matched entry',
+          } as any,
+        },
+      ],
+    })
+    setupSessionDir(tmpDir, session)
+
+    const bundle = serializeSession(tmpDir, session.id)
+
+    expect(bundle).not.toBeNull()
+    expect(bundle!.session.messages[0]!.dynamicContextRef).toEqual({
+      type: 'team_public_knowledge',
+      summary: 'Team public knowledge reference redacted for export',
+    })
+    expect(JSON.stringify(bundle)).not.toContain('missing-entry')
+  })
+
   it('includes attachment files in bundle', () => {
     const session = makeStoredSession()
     const sessionDir = setupSessionDir(tmpDir, session)

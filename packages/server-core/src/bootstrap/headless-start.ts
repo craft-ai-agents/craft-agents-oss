@@ -2,7 +2,8 @@ import { writeFileSync, readFileSync, unlinkSync, existsSync } from 'node:fs'
 import { uptime as osUptime } from 'node:os'
 import { join } from 'node:path'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
-import { ensureConfigDir, loadStoredConfig, saveConfig } from '@craft-agent/shared/config'
+import { ensureConfigDir, getWorkspaces, loadStoredConfig, saveConfig } from '@craft-agent/shared/config'
+import { TeamPublicKnowledgeRefreshLoop } from '@craft-agent/shared/team-public-knowledge'
 import { CONFIG_DIR } from '@craft-agent/shared/config/paths'
 import { setBundledAssetsRoot } from '@craft-agent/shared/utils'
 import { WsRpcServer, type WsRpcTlsOptions } from '../transport/server'
@@ -348,7 +349,26 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
 
   modelRefreshService.startAll()
 
-  platform.logger.info(`Craft Agent server listening on ${wsServer.protocol}://${rpcHost}:${wsServer.port}`)
+  const teamPublicKnowledgeLoops = new Map<string, TeamPublicKnowledgeRefreshLoop>()
+  const syncTeamPublicKnowledgeLoops = (): void => {
+    const activeRoots = new Set(getWorkspaces().map(workspace => workspace.rootPath))
+    for (const workspaceRoot of activeRoots) {
+      if (teamPublicKnowledgeLoops.has(workspaceRoot)) continue
+      const loop = new TeamPublicKnowledgeRefreshLoop(workspaceRoot)
+      loop.start()
+      teamPublicKnowledgeLoops.set(workspaceRoot, loop)
+    }
+    for (const [workspaceRoot, loop] of teamPublicKnowledgeLoops) {
+      if (activeRoots.has(workspaceRoot)) continue
+      loop.stop()
+      teamPublicKnowledgeLoops.delete(workspaceRoot)
+    }
+  }
+  syncTeamPublicKnowledgeLoops()
+  const teamPublicKnowledgeWorkspaceTimer = setInterval(syncTeamPublicKnowledgeLoops, 60_000)
+  teamPublicKnowledgeWorkspaceTimer.unref?.()
+
+  platform.logger.info(`MDP server listening on ${wsServer.protocol}://${rpcHost}:${wsServer.port}`)
 
   let stopped = false
   const stop = async (): Promise<void> => {
@@ -374,6 +394,14 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
       modelRefreshService.stopAll?.()
     } catch (error) {
       platform.logger.error('[bootstrap] Failed to stop model refresh service:', error)
+    }
+
+    try {
+      clearInterval(teamPublicKnowledgeWorkspaceTimer)
+      for (const loop of teamPublicKnowledgeLoops.values()) loop.stop()
+      teamPublicKnowledgeLoops.clear()
+    } catch (error) {
+      platform.logger.error('[bootstrap] Failed to stop team public knowledge refresh loops:', error)
     }
 
     try {

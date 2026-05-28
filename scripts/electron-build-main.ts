@@ -17,14 +17,12 @@ const SESSION_SERVER_DIR = join(ROOT_DIR, "packages/session-mcp-server");
 const SESSION_SERVER_OUTPUT = join(SESSION_SERVER_DIR, "dist/index.js");
 const PI_AGENT_SERVER_DIR = join(ROOT_DIR, "packages/pi-agent-server");
 const PI_AGENT_SERVER_OUTPUT = join(PI_AGENT_SERVER_DIR, "dist/index.js");
-const WA_WORKER_DIR = join(ROOT_DIR, "packages/messaging-whatsapp-worker");
-const WA_WORKER_SOURCE = join(WA_WORKER_DIR, "src/worker.ts");
-const WA_WORKER_OUTPUT = join(WA_WORKER_DIR, "dist/worker.cjs");
 
 // Load .env file if it exists
 function loadEnvFile(): void {
-  const envPath = join(ROOT_DIR, ".env");
-  if (existsSync(envPath)) {
+  for (const filename of [".env", ".env.local"]) {
+    const envPath = join(ROOT_DIR, filename);
+    if (!existsSync(envPath)) continue;
     const content = readFileSync(envPath, "utf-8");
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
@@ -49,21 +47,38 @@ function loadEnvFile(): void {
 // To enable in the future, add @sentry/esbuild-plugin. See apps/electron/CLAUDE.md.
 // NOTE: Google OAuth credentials are NOT baked into the build - users provide their own
 // via source config. See README_FOR_OSS.md for setup instructions.
-function getBuildDefines(): string[] {
-  const definedVars = [
-    "SLACK_OAUTH_CLIENT_ID",
-    "SLACK_OAUTH_CLIENT_SECRET",
-    "MICROSOFT_OAUTH_CLIENT_ID",
-    "MICROSOFT_OAUTH_CLIENT_SECRET",
-    "SENTRY_ELECTRON_INGEST_URL",
-    "CRAFT_DEV_RUNTIME",
-  ];
+const BUILD_ENV_VARS = [
+  "SLACK_OAUTH_CLIENT_ID",
+  "SLACK_OAUTH_CLIENT_SECRET",
+  "MICROSOFT_OAUTH_CLIENT_ID",
+  "MICROSOFT_OAUTH_CLIENT_SECRET",
+  "SENTRY_ELECTRON_INGEST_URL",
+  "CRAFT_DEV_RUNTIME",
+  // MDP SSO / deployment config
+  "MDP_AUTH_URL",
+  "MDP_CLIENT_ID",
+  "MDP_API_URL",
+  "MDP_RELAY_URL",
+  "MDP_ENABLE_SSO_STATE_CHECK",
+  // Environment LLM connection (generic OpenAI-compatible endpoint)
+  "LLM_BASE_URL",
+  "LLM_MODEL",
+  "LLM_CONNECTION_NAME",
+  // Built-in OpenLLM connection (deployment-owned; baked at build time)
+  "OPENLLM_BASE_HOST",
+  "OPENLLM_BASE_MODELS",
+  "OPENLLM_BASE_CONNECTION_NAME",
+  // Marketplace
+  "COPAW_MARKET_BASE_URL",
+];
 
-  return definedVars.map((varName) => {
+function getBuildDefines(): string[] {
+  return BUILD_ENV_VARS.map((varName) => {
     const value = process.env[varName] || "";
     return `--define:process.env.${varName}="${value}"`;
   });
 }
+
 
 // Wait for file to stabilize (no size changes)
 async function waitForFileStable(filePath: string, timeoutMs = 10000): Promise<boolean> {
@@ -257,59 +272,6 @@ async function buildPiAgentServer(): Promise<void> {
   console.log("✅ Pi agent server built successfully");
 }
 
-// Build the WhatsApp worker (Baileys-backed subprocess spawned by WhatsAppAdapter)
-async function buildWhatsAppWorker(): Promise<void> {
-  if (!existsSync(WA_WORKER_SOURCE)) {
-    console.log("⏭️  WhatsApp worker skipped (package not found)");
-    return;
-  }
-
-  console.log("📨 Building WhatsApp worker...");
-
-  const workerDistDir = join(WA_WORKER_DIR, "dist");
-  if (!existsSync(workerDistDir)) {
-    mkdirSync(workerDistDir, { recursive: true });
-  }
-
-  // Baileys is bundled INTO worker.cjs (not external) so the packaged app is
-  // self-contained. Dynamic `import('@whiskeysockets/baileys')` is resolved
-  // at bundle time because the specifier is a literal.
-  const proc = spawn({
-    cmd: [
-      "bun", "run", "esbuild",
-      WA_WORKER_SOURCE,
-      "--bundle",
-      "--platform=node",
-      "--format=cjs",
-      "--target=node20",
-      `--outfile=${WA_WORKER_OUTPUT}`,
-      "--external:electron",
-      // Baileys' runtime-optional features — wrapped in try/catch at the
-      // call site and not used by Craft Agent (we send text + documents, no
-      // link previews, no inline image processing, no terminal QR).
-      "--external:link-preview-js",
-      "--external:qrcode-terminal",
-      "--external:jimp",
-    ],
-    cwd: ROOT_DIR,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) {
-    console.error("❌ WhatsApp worker build failed with exit code", exitCode);
-    process.exit(exitCode);
-  }
-
-  if (!existsSync(WA_WORKER_OUTPUT)) {
-    console.error("❌ WhatsApp worker output not found at", WA_WORKER_OUTPUT);
-    process.exit(1);
-  }
-
-  console.log("✅ WhatsApp worker built successfully");
-}
-
 async function main(): Promise<void> {
   loadEnvFile();
 
@@ -330,9 +292,6 @@ async function main(): Promise<void> {
 
   // Build unified network interceptor (CJS bundle for Node.js --require)
   await buildInterceptor();
-
-  // Build WhatsApp worker (Baileys subprocess — optional package)
-  await buildWhatsAppWorker();
 
   const buildDefines = getBuildDefines();
 

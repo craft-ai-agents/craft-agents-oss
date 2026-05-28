@@ -16,6 +16,16 @@ import { motion, AnimatePresence } from "motion/react"
 import { toast } from "sonner"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { Markdown, CollapsibleMarkdownProvider, StreamingMarkdown, type RenderMode } from "@/components/markdown"
 import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
@@ -43,7 +53,7 @@ import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
 import type { PermissionMode } from "@craft-agent/shared/agent/modes"
-import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
+import type { ThinkingEnabled } from "@craft-agent/shared/agent/thinking-toggle"
 import {
   TurnCard,
   UserMessageBubble,
@@ -72,8 +82,21 @@ import { useAppShellContext } from "@/context/AppShellContext"
 import { navigate, routes } from "@/lib/navigate"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from "@/lib/file-changes"
-import { resolveBranchNewPanelOption } from "./branching"
+import { createBranchSessionAndNavigate } from "./branch-session-navigation"
 import { handleErrorMessageAction } from "./error-message-actions"
+import {
+  applySavedFeedbackId,
+  buildFeedbackConversationContext,
+  buildFeedbackStateByMessageId,
+  buildFeedbackTurnMessages,
+  clampFeedbackComment,
+  isFeedbackTargetTurn,
+  resolveFeedbackIdForDelete,
+  resolveNextFeedbackValue,
+  type FeedbackRating,
+  type FeedbackStateByMessageId,
+} from "./feedback-context"
+import { ChatFeedbackProvider, useChatFeedbackContext } from "./ChatFeedbackContext"
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -116,6 +139,12 @@ type OverlayState =
   | MarkdownOverlayState
   | null
 
+interface DislikeFeedbackDialogState {
+  turn: AssistantTurn
+  messageId: string
+  comment: string
+}
+
 function isStackedActivityTool(activity: ActivityItem): boolean {
   const toolName = activity.toolName?.toLowerCase() || ''
   return toolName === 'bash' || toolName.startsWith('mcp__') || toolName.startsWith('browser_')
@@ -143,6 +172,8 @@ interface ChatDisplayProps {
   textareaRef?: React.RefObject<RichTextInputHandle>
   /** When true, disables input (e.g., when agent needs activation) */
   disabled?: boolean
+  /** When true, renders the transcript without the chat input zone */
+  readOnly?: boolean
   /** Pending permission request for this session */
   pendingPermission?: PermissionRequest
   /** Callback to respond to permission request */
@@ -157,11 +188,11 @@ interface ChatDisplayProps {
   pendingCredential?: CredentialRequest
   /** Callback to respond to credential request */
   onRespondToCredential?: (sessionId: string, requestId: string, response: CredentialResponse) => void
-  // Thinking level (session-level setting)
-  /** Current thinking level ('off', 'think', 'max') */
-  thinkingLevel?: ThinkingLevel
-  /** Callback when thinking level changes */
-  onThinkingLevelChange?: (level: ThinkingLevel) => void
+  // Thinking toggle (session-level setting)
+  /** Current thinking toggle */
+  thinkingEnabled?: ThinkingEnabled
+  /** Callback when thinking toggle changes */
+  onThinkingEnabledChange?: (enabled: ThinkingEnabled) => void
   // Advanced options
   /** Current permission mode */
   permissionMode?: PermissionMode
@@ -185,12 +216,12 @@ interface ChatDisplayProps {
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
   skills?: LoadedSkill[]
-  // Label selection (for #labels)
-  /** Available label configs (tree) for label menu and badge display */
+  // Label badges
+  /** Available label configs (tree) for badge display */
   labels?: import('@craft-agent/shared/labels').LabelConfig[]
   /** Callback when labels change */
   onLabelsChange?: (labels: string[]) => void
-  // State/status selection (for # menu and ActiveOptionBadges)
+  // State/status badge
   /** Available workflow states */
   sessionStatuses?: import('@/config/session-status-config').SessionStatus[]
   /** Callback when session state changes */
@@ -375,7 +406,7 @@ function ProcessingIndicator({ startTime, statusMessage }: ProcessingIndicatorPr
   const displayMessage = statusMessage || t(PROCESSING_MESSAGE_KEYS[messageIndex])
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[13px] text-muted-foreground">
+    <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[14px] text-muted-foreground">
       {/* Spinner in same location as TurnCard chevron */}
       <div className="w-3 h-3 flex items-center justify-center shrink-0">
         <Spinner className="text-[10px]" />
@@ -434,7 +465,7 @@ function ScrollOnMount({
  *
  * Shows empty state when no session is selected
  */
-export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>(function ChatDisplay({
+const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>(function ChatDisplayContent({
   session,
   onSendMessage,
   onOpenFile,
@@ -444,13 +475,14 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   onConnectionChange,
   textareaRef: externalTextareaRef,
   disabled = false,
+  readOnly = false,
   pendingPermission,
   onRespondToPermission,
   pendingCredential,
   onRespondToCredential,
-  // Thinking level
-  thinkingLevel = 'medium',
-  onThinkingLevelChange,
+  // Thinking toggle
+  thinkingEnabled = true,
+  onThinkingEnabledChange,
   // Advanced options
   permissionMode = 'ask',
   onPermissionModeChange,
@@ -465,10 +497,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   onSourcesChange,
   // Skills (for @mentions)
   skills,
-  // Labels (for #labels)
+  // Label badges
   labels,
   onLabelsChange,
-  // States (for # menu and badge)
+  // State badge
   sessionStatuses,
   onSessionStatusChange,
   workspaceId,
@@ -500,6 +532,25 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Panel focus state (for multi-panel auto-scroll behavior)
   const appShellContext = useAppShellContext()
   const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
+  const { feedbackByMessageId, setFeedbackByMessageId, resetFeedback } = useChatFeedbackContext()
+  const feedbackByMessageIdRef = React.useRef(feedbackByMessageId)
+  feedbackByMessageIdRef.current = feedbackByMessageId
+  const replaceFeedbackByMessageId = useCallback((next: FeedbackStateByMessageId) => {
+    feedbackByMessageIdRef.current = next
+    setFeedbackByMessageId(next)
+  }, [setFeedbackByMessageId])
+  const updateFeedbackByMessageId = useCallback((
+    updater: (prev: FeedbackStateByMessageId) => FeedbackStateByMessageId
+  ) => {
+    const next = updater(feedbackByMessageIdRef.current)
+    feedbackByMessageIdRef.current = next
+    setFeedbackByMessageId(next)
+    return next
+  }, [setFeedbackByMessageId])
+  const resetFeedbackState = useCallback(() => {
+    feedbackByMessageIdRef.current = {}
+    resetFeedback()
+  }, [resetFeedback])
 
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -507,6 +558,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const scrollViewportRef = React.useRef<HTMLDivElement>(null)
   const prevSessionIdRef = React.useRef<string | null>(null)
+  const sessionRef = React.useRef<Session | null>(session)
+  sessionRef.current = session
+  const pendingFeedbackSaveByMessageIdRef = React.useRef<Record<string, Promise<string>>>({})
   // Reverse pagination: show last N turns initially, load more on scroll up
   const TURNS_PER_PAGE = 20
   const [visibleTurnCount, setVisibleTurnCount] = React.useState(TURNS_PER_PAGE)
@@ -973,9 +1027,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
   // Overlay state - controls which overlay is shown (if any)
   const [overlayState, setOverlayState] = useState<OverlayState>(null)
+  const [dislikeFeedbackDialog, setDislikeFeedbackDialog] = useState<DislikeFeedbackDialogState | null>(null)
 
   // Diff viewer settings - loaded from user preferences on mount, persisted on change
-  // These settings are stored in ~/.craft-agent/preferences.json (not localStorage)
+  // These settings are stored in ~/.mdp-agent/preferences.json (not localStorage)
   const [diffViewerSettings, setDiffViewerSettings] = useState<Partial<DiffViewerSettings>>({})
 
   // Load diff viewer settings from preferences on mount
@@ -1013,6 +1068,322 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const handleCloseOverlay = useCallback(() => {
     setOverlayState(null)
   }, [])
+
+  useEffect(() => {
+    resetFeedbackState()
+    setDislikeFeedbackDialog(null)
+    pendingFeedbackSaveByMessageIdRef.current = {}
+  }, [session?.id, resetFeedbackState])
+
+  useEffect(() => {
+    if (!session?.workspaceId || !session.id) {
+      resetFeedbackState()
+      return
+    }
+
+    let cancelled = false
+    const sessionId = session.id
+
+    resetFeedbackState()
+    window.electronAPI.getChatFeedbackState(session.workspaceId)
+      .then(entries => {
+        if (cancelled) return
+        replaceFeedbackByMessageId(buildFeedbackStateByMessageId(entries, sessionId))
+      })
+      .catch(error => {
+        console.error('[MDP Agent Feedback] Failed to load feedback state:', error)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [session?.workspaceId, session?.id, replaceFeedbackByMessageId, resetFeedbackState])
+
+  const logFeedbackToConsole = useCallback((
+    turn: AssistantTurn,
+    rating: FeedbackRating,
+    comment: string
+  ) => {
+    const currentSession = sessionRef.current
+    if (!currentSession) return
+
+    const context = buildFeedbackConversationContext(
+      currentSession.messages,
+      turn.response?.messageId,
+      turn.turnId
+    )
+
+    console.log('[MDP Agent Feedback]', {
+      time: new Date().toISOString(),
+      action: rating === 'like' ? '点赞' : '点踩',
+      sessionId: currentSession.id,
+      turnId: turn.turnId,
+      responseMessageId: turn.response?.messageId,
+      conversationMessages: context.conversationMessages,
+      userMessages: context.userBoundaryMessages,
+      comment,
+    })
+  }, [])
+
+  const buildFeedbackRequestBody = useCallback((
+    turn: AssistantTurn,
+    rating: FeedbackRating,
+    comment: string
+  ) => {
+    const currentSession = sessionRef.current
+    if (!currentSession) return null
+
+    const context = buildFeedbackConversationContext(
+      currentSession.messages,
+      turn.response?.messageId,
+      turn.turnId
+    )
+
+    return {
+      session_id: currentSession.id,
+      employee_id: appShellContext?.ssoUser?.employeeId ?? '',
+      turn_messages: buildFeedbackTurnMessages(context),
+      is_like: rating === 'like',
+      comment,
+    }
+  }, [appShellContext?.ssoUser?.employeeId])
+
+  const deleteRemoteFeedbackWithLog = useCallback((feedbackId: string): Promise<void> => {
+    const params = { id: feedbackId }
+
+    return window.electronAPI.deleteChatFeedback(feedbackId)
+      .then(result => {
+        console.log('[MDP Agent Feedback] deleteChatFeedback result:', {
+          time: new Date().toISOString(),
+          params,
+          result: result ?? null,
+        })
+        return result
+      })
+      .catch(error => {
+        console.error('[MDP Agent Feedback] deleteChatFeedback result:', {
+          time: new Date().toISOString(),
+          params,
+          error,
+        })
+        throw error
+      })
+  }, [])
+
+  const persistFeedbackSelection = useCallback((
+    turn: AssistantTurn,
+    messageId: string,
+    rating: FeedbackRating,
+    comment: string,
+    feedbackId?: string
+  ): Promise<string> => {
+    const currentSession = sessionRef.current
+    if (!currentSession?.workspaceId) return Promise.resolve('')
+
+    const body = buildFeedbackRequestBody(turn, rating, comment)
+    if (!body) return Promise.resolve('')
+
+    const saveMode = feedbackId ? 'update' : 'add'
+    const save = feedbackId
+      ? window.electronAPI.updateChatFeedback({ ...body, id: feedbackId }).then(() => feedbackId)
+      : window.electronAPI.addChatFeedback(body)
+
+    return save.then(savedFeedbackId => {
+      console.log('[MDP Agent Feedback] saveChatFeedback result:', {
+        time: new Date().toISOString(),
+        mode: saveMode,
+        messageId,
+        rating,
+        existingFeedbackId: feedbackId ?? null,
+        savedFeedbackId: savedFeedbackId || null,
+      })
+
+      if (!savedFeedbackId) return ''
+      const nextFeedbackByMessageId = applySavedFeedbackId(
+        feedbackByMessageIdRef.current,
+        messageId,
+        rating,
+        savedFeedbackId,
+      )
+      if (nextFeedbackByMessageId === feedbackByMessageIdRef.current) {
+        return savedFeedbackId
+      }
+
+      replaceFeedbackByMessageId(nextFeedbackByMessageId)
+
+      return window.electronAPI.setChatFeedbackState(
+        currentSession.workspaceId,
+        currentSession.id,
+        messageId,
+        rating === 'like',
+        savedFeedbackId,
+      ).then(() => savedFeedbackId)
+    })
+  }, [buildFeedbackRequestBody, replaceFeedbackByMessageId])
+
+  const handleFeedback = useCallback((
+    turn: AssistantTurn,
+    messageId: string,
+    rating: FeedbackRating
+  ) => {
+    const currentSession = sessionRef.current
+    if (!currentSession?.workspaceId) return
+
+    const previousFeedback = feedbackByMessageIdRef.current[messageId]
+    const previousRating = previousFeedback?.rating ?? null
+    const nextRating = resolveNextFeedbackValue(previousRating, rating)
+
+    updateFeedbackByMessageId(prev => {
+      const next = { ...prev }
+      if (nextRating) {
+        next[messageId] = {
+          rating: nextRating,
+          ...(previousFeedback?.feedbackId ? { feedbackId: previousFeedback.feedbackId } : {}),
+        }
+      } else {
+        delete next[messageId]
+      }
+      return next
+    })
+
+    if (!nextRating) {
+      setDislikeFeedbackDialog(prev => prev?.messageId === messageId ? null : prev)
+      const pendingSave = pendingFeedbackSaveByMessageIdRef.current[messageId]
+      console.log('[MDP Agent Feedback] cancel feedback:', {
+        time: new Date().toISOString(),
+        sessionId: currentSession.id,
+        messageId,
+        selectedRating: rating,
+        previousFeedback: previousFeedback ?? null,
+        hasPendingSave: Boolean(pendingSave),
+      })
+      const feedbackIdForDelete = resolveFeedbackIdForDelete(
+        previousFeedback,
+        pendingSave,
+      )
+      if (feedbackIdForDelete) {
+        feedbackIdForDelete
+          .then(feedbackId => {
+            if (!feedbackId) {
+              console.warn('[MDP Agent Feedback] deleteChatFeedback skipped: missing feedback id after resolve', {
+                time: new Date().toISOString(),
+                messageId,
+                previousFeedback: previousFeedback ?? null,
+              })
+              return undefined
+            }
+            return deleteRemoteFeedbackWithLog(feedbackId).catch(() => undefined)
+          })
+          .catch(error => {
+            console.error('[MDP Agent Feedback] Failed to resolve feedback id for delete:', error)
+          })
+      } else {
+        console.warn('[MDP Agent Feedback] deleteChatFeedback skipped: no feedback id available', {
+          time: new Date().toISOString(),
+          messageId,
+          previousFeedback: previousFeedback ?? null,
+          hasPendingSave: false,
+        })
+      }
+      window.electronAPI.deleteChatFeedbackState(currentSession.workspaceId, currentSession.id, messageId)
+        .catch(error => {
+          console.error('[MDP Agent Feedback] Failed to delete feedback state:', error)
+        })
+      return
+    }
+
+    window.electronAPI.setChatFeedbackState(
+      currentSession.workspaceId,
+      currentSession.id,
+      messageId,
+      nextRating === 'like',
+      previousFeedback?.feedbackId,
+    ).catch(error => {
+      console.error('[MDP Agent Feedback] Failed to save feedback state:', error)
+    })
+
+    const savePromise = persistFeedbackSelection(
+      turn,
+      messageId,
+      nextRating,
+      '',
+      previousFeedback?.feedbackId,
+    ).catch(error => {
+      console.error('[MDP Agent Feedback] Failed to save remote feedback:', error)
+      return ''
+    }).finally(() => {
+      if (pendingFeedbackSaveByMessageIdRef.current[messageId] === savePromise) {
+        delete pendingFeedbackSaveByMessageIdRef.current[messageId]
+      }
+    })
+    pendingFeedbackSaveByMessageIdRef.current[messageId] = savePromise
+
+    if (nextRating === 'dislike') {
+      setDislikeFeedbackDialog({
+        turn,
+        messageId,
+        comment: '',
+      })
+      return
+    }
+
+    setDislikeFeedbackDialog(prev => prev?.messageId === messageId ? null : prev)
+    logFeedbackToConsole(turn, nextRating, '')
+  }, [deleteRemoteFeedbackWithLog, logFeedbackToConsole, persistFeedbackSelection, updateFeedbackByMessageId])
+
+  const handleDislikeCommentChange = useCallback((comment: string) => {
+    setDislikeFeedbackDialog(prev => prev
+      ? { ...prev, comment: clampFeedbackComment(comment) }
+      : prev
+    )
+  }, [])
+
+  const handleCloseDislikeDialog = useCallback(() => {
+    setDislikeFeedbackDialog(null)
+  }, [])
+
+  const handleSubmitDislikeFeedback = useCallback(() => {
+    if (!dislikeFeedbackDialog) return
+
+    const comment = clampFeedbackComment(dislikeFeedbackDialog.comment)
+    const currentSession = sessionRef.current
+    const currentFeedback = feedbackByMessageIdRef.current[dislikeFeedbackDialog.messageId]
+    updateFeedbackByMessageId(prev => ({
+      ...prev,
+      [dislikeFeedbackDialog.messageId]: {
+        rating: 'dislike',
+        ...(prev[dislikeFeedbackDialog.messageId]?.feedbackId
+          ? { feedbackId: prev[dislikeFeedbackDialog.messageId]!.feedbackId }
+          : {}),
+      },
+    }))
+
+    const pendingSave = pendingFeedbackSaveByMessageIdRef.current[dislikeFeedbackDialog.messageId]
+    const feedbackIdPromise = currentFeedback?.feedbackId
+      ? Promise.resolve(currentFeedback.feedbackId)
+      : pendingSave ?? persistFeedbackSelection(dislikeFeedbackDialog.turn, dislikeFeedbackDialog.messageId, 'dislike', '')
+
+    feedbackIdPromise
+      .then(feedbackId => {
+        if (!feedbackId || !currentSession?.workspaceId) return
+        const body = buildFeedbackRequestBody(dislikeFeedbackDialog.turn, 'dislike', comment)
+        if (!body) return
+        return window.electronAPI.updateChatFeedback({ ...body, id: feedbackId })
+          .then(() => window.electronAPI.setChatFeedbackState(
+            currentSession.workspaceId,
+            currentSession.id,
+            dislikeFeedbackDialog.messageId,
+            false,
+            feedbackId,
+          ))
+      })
+      .catch(error => {
+        console.error('[MDP Agent Feedback] Failed to update dislike comment:', error)
+      })
+
+    logFeedbackToConsole(dislikeFeedbackDialog.turn, 'dislike', comment)
+    setDislikeFeedbackDialog(null)
+  }, [buildFeedbackRequestBody, dislikeFeedbackDialog, logFeedbackToConsole, persistFeedbackSelection, updateFeedbackByMessageId])
 
   // Extract overlay cards for activity-based overlays (Input/Output, future extensible)
   const overlayCards = useMemo(() => {
@@ -1381,6 +1752,12 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Reverse pagination: only render last N turns for fast initial render
   const startIndex = Math.max(0, allTurns.length - visibleTurnCount)
   const turns = allTurns.slice(startIndex)
+  const feedbackTargetTurns = allTurns.map(candidateTurn => ({
+    type: candidateTurn.type,
+    hasResponse: candidateTurn.type === 'assistant' && Boolean(candidateTurn.response?.messageId),
+    isComplete: candidateTurn.type === 'assistant' ? candidateTurn.isComplete : undefined,
+    isStreaming: candidateTurn.type === 'assistant' ? candidateTurn.isStreaming : undefined,
+  }))
   const hasMoreAbove = startIndex > 0
 
   const assistantTurnIndexByMessageId = useMemo(() => {
@@ -1479,483 +1856,484 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
         <div className="flex flex-1 flex-col min-h-0 min-w-0 relative">
           {/* Content layer */}
           <div className="flex flex-1 flex-col min-h-0 min-w-0 relative z-10">
-          {/* === MESSAGES AREA: Scrollable list of message bubbles === */}
-          <div className="relative flex-1 min-h-0">
-            {/* Mask wrapper - fades content at top and bottom over transparent/image backgrounds */}
-            <div
-              className="h-full"
-              style={{
-                maskImage: 'linear-gradient(to bottom, transparent 0%, black 32px, black calc(100% - 32px), transparent 100%)',
-                WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 32px, black calc(100% - 32px), transparent 100%)'
-              }}
-            >
-              <ScrollArea className="h-full min-w-0" viewportRef={scrollViewportRef}>
-              <div className={cn(
-                CHAT_LAYOUT.maxWidth,
-                "mx-auto min-w-0",
-                compactMode ? "px-3 py-4 space-y-2" : [CHAT_LAYOUT.containerPadding, CHAT_LAYOUT.messageSpacing]
-              )}>
-                {/* Session-level AnimatePresence: Prevents layout jump when switching sessions */}
-                <AnimatePresence mode={compactMode ? "sync" : "wait"} initial={false}>
-                  <motion.div
-                    key={compactMode ? 'compact-session' : session?.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={compactMode ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
-                  >
-                    {/* Loading/Content AnimatePresence: sync mode avoids stale loading exits masking ready content */}
-                    <AnimatePresence mode="sync" initial={false}>
-                    {messagesLoading ? (
-                      /* Loading State: Show spinner while messages are being lazy loaded */
+            {/* === MESSAGES AREA: Scrollable list of message bubbles === */}
+            <div className="relative flex-1 min-h-0">
+              {/* Mask wrapper - fades content at top and bottom over transparent/image backgrounds */}
+              <div
+                className="h-full"
+                style={{
+                  maskImage: 'linear-gradient(to bottom, transparent 0%, black 32px, black calc(100% - 32px), transparent 100%)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 32px, black calc(100% - 32px), transparent 100%)'
+                }}
+              >
+                <ScrollArea className="h-full min-w-0" viewportRef={scrollViewportRef}>
+                  <div className={cn(
+                    CHAT_LAYOUT.maxWidth,
+                    "mx-auto min-w-0",
+                    compactMode ? "px-3 py-4 space-y-2" : [CHAT_LAYOUT.containerPadding, CHAT_LAYOUT.messageSpacing]
+                  )}>
+                    {/* Session-level AnimatePresence: Prevents layout jump when switching sessions */}
+                    <AnimatePresence mode={compactMode ? "sync" : "wait"} initial={false}>
                       <motion.div
-                        key="loading"
+                        key={compactMode ? 'compact-session' : session?.id}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        transition={compactMode ? { duration: 0 } : { duration: 0.1 }}
-                        className="flex items-center justify-center h-64"
+                        transition={compactMode ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
                       >
-                        <Spinner className="text-foreground/30" />
-                      </motion.div>
-                    ) : messagesLoadError ? (
-                      <motion.div
-                        key="load-error"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={compactMode ? { duration: 0 } : { duration: 0.1 }}
-                        className="flex items-center justify-center h-64 px-4"
-                      >
-                        <div
-                          className="max-w-sm rounded-[8px] border border-destructive/20 px-4 py-3 text-center shadow-tinted"
-                          style={{
-                            backgroundColor: 'oklch(from var(--destructive) l c h / 0.03)',
-                            '--shadow-color': 'var(--destructive-rgb)',
-                          } as React.CSSProperties}
-                        >
-                          <AlertTriangle className="mx-auto mb-2 h-4 w-4 text-destructive/70" />
-                          <div className="text-sm font-medium text-destructive">Failed to load conversation</div>
-                          <p className="mt-1 break-words text-xs text-destructive/70">{messagesLoadError}</p>
-                          {onRetryMessagesLoad && (
-                            <button
-                              type="button"
-                              onClick={onRetryMessagesLoad}
-                              disabled={messagesRetrying}
-                              className="mt-3 rounded border border-destructive/20 px-2 py-0.5 text-xs text-destructive/70 transition-colors hover:border-destructive/40 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+                        {/* Loading/Content AnimatePresence: sync mode avoids stale loading exits masking ready content */}
+                        <AnimatePresence mode="sync" initial={false}>
+                          {messagesLoading ? (
+                            /* Loading State: Show spinner while messages are being lazy loaded */
+                            <motion.div
+                              key="loading"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={compactMode ? { duration: 0 } : { duration: 0.1 }}
+                              className="flex items-center justify-center h-64"
                             >
-                              {messagesRetrying ? 'Retrying…' : 'Retry'}
-                            </button>
+                              <Spinner className="text-foreground/30" />
+                            </motion.div>
+                          ) : messagesLoadError ? (
+                            <motion.div
+                              key="load-error"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={compactMode ? { duration: 0 } : { duration: 0.1 }}
+                              className="flex items-center justify-center h-64 px-4"
+                            >
+                              <div
+                                className="max-w-sm rounded-[8px] border border-destructive/20 px-4 py-3 text-center shadow-tinted"
+                                style={{
+                                  backgroundColor: 'oklch(from var(--destructive) l c h / 0.03)',
+                                  '--shadow-color': 'var(--destructive-rgb)',
+                                } as React.CSSProperties}
+                              >
+                                <AlertTriangle className="mx-auto mb-2 h-4 w-4 text-destructive/70" />
+                                <div className="text-sm font-medium text-destructive">Failed to load conversation</div>
+                                <p className="mt-1 break-words text-sm text-destructive/70">{messagesLoadError}</p>
+                                {onRetryMessagesLoad && (
+                                  <button
+                                    type="button"
+                                    onClick={onRetryMessagesLoad}
+                                    disabled={messagesRetrying}
+                                    className="mt-3 rounded border border-destructive/20 px-2 py-0.5 text-sm text-destructive/70 transition-colors hover:border-destructive/40 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {messagesRetrying ? 'Retrying…' : 'Retry'}
+                                  </button>
+                                )}
+                              </div>
+                            </motion.div>
+                          ) : (
+                            /* Turn-based Message Display - memoized to avoid re-grouping on every render */
+                            /* AnimatePresence handles the fade-in animation when transitioning from loading */
+                            <motion.div
+                              key={compactMode ? 'loaded-compact' : `loaded-${session?.id}`}
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={compactMode ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
+                            >
+                              {/* Scroll to bottom before paint - fires via useLayoutEffect */}
+                              {/* Skip when search is active on session switch - scroll to first match instead */}
+                              <ScrollOnMount
+                                targetRef={messagesEndRef}
+                                skip={skipScrollToBottom}
+                                onScroll={() => {
+                                  skipSmoothScrollUntilRef.current = Date.now() + 500
+                                }}
+                              />
+                              {/* Empty state for compact mode - inviting conversational prompt, centered in full popover */}
+                              {compactMode && turns.length === 0 && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center select-none gap-1 pointer-events-none">
+                                  <span className="text-sm text-muted-foreground">{t("editPopover.whatToChange")}</span>
+                                  <span className="text-sm text-muted-foreground/50">{t("editPopover.justDescribe")}</span>
+                                </div>
+                              )}
+                              {!compactMode && hasUnrenderedLoadedMessages && (
+                                <div className="flex h-64 items-center justify-center px-4 text-center">
+                                  <div className="max-w-sm rounded-[8px] border border-border/50 bg-foreground/[0.03] px-4 py-3">
+                                    <CircleAlert className="mx-auto mb-2 h-4 w-4 text-foreground/50" />
+                                    <div className="text-sm font-medium text-foreground/70">Conversation loaded, but no renderable messages were found.</div>
+                                    <p className="mt-1 text-sm text-foreground/50">Try reloading the session. If this persists, the message history may contain an unsupported format.</p>
+                                  </div>
+                                </div>
+                              )}
+                              {/* Load more indicator - shown when there are older messages */}
+                              {hasMoreAbove && (
+                                <div className="text-center text-muted-foreground/60 text-sm py-3 select-none">
+                                  ↑ {t('chat.scrollUpForEarlier', { count: startIndex })}
+                                </div>
+                              )}
+                              {turns.map((turn, index) => {
+                                // Compute turn key and check if it's a search match
+                                const turnKey = getTurnKey(turn)
+                                const isCurrentMatch = isSearchActive && matchingTurnIds[currentMatchIndex] === turnKey
+                                const isAnyMatch = isSearchActive && matchingTurnIds.includes(turnKey)
+
+                                // User turns - render with MemoizedMessageBubble
+                                // Extra padding creates visual separation from AI responses
+                                if (turn.type === 'user') {
+                                  return (
+                                    <div
+                                      key={turnKey}
+                                      ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
+                                      className={cn(
+                                        compactMode ? "pt-2 pb-1" : CHAT_LAYOUT.userMessagePadding,
+                                        "rounded-lg transition-all duration-200",
+                                        isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
+                                        isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
+                                      )}
+                                    >
+                                      <MemoizedMessageBubble
+                                        message={turn.message}
+                                        onOpenFile={onOpenFile}
+                                        onOpenUrl={onOpenUrl}
+                                        sessionId={session?.id}
+                                        compactMode={compactMode}
+                                      />
+                                    </div>
+                                  )
+                                }
+
+                                // System turns (error, status, info, warning) - render with MemoizedMessageBubble
+                                if (turn.type === 'system') {
+                                  return (
+                                    <div
+                                      key={turnKey}
+                                      ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
+                                      className={cn(
+                                        "rounded-lg transition-all duration-200",
+                                        isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
+                                        isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
+                                      )}
+                                    >
+                                      <MemoizedMessageBubble
+                                        message={turn.message}
+                                        onOpenFile={onOpenFile}
+                                        onOpenUrl={onOpenUrl}
+                                        sessionId={session?.id}
+                                        onRetry={turn.message.role === 'error' ? () => {
+                                          const msgs = session?.messages
+                                          if (!msgs) return
+                                          const errorIdx = msgs.findIndex(m => m.id === turn.message.id)
+                                          const lastUserMsg = msgs.slice(0, errorIdx).findLast(m => m.role === 'user')
+                                          if (lastUserMsg) {
+                                            onSendMessage(lastUserMsg.content)
+                                          }
+                                        } : undefined}
+                                      />
+                                    </div>
+                                  )
+                                }
+
+                                // Auth-request turns - render inline auth UI
+                                // mt-2 matches ResponseCard spacing for visual consistency
+                                if (turn.type === 'auth-request') {
+                                  // Interactive only if no user message follows
+                                  const isAuthInteractive = !turns.slice(index + 1).some(t => t.type === 'user')
+                                  return (
+                                    <div
+                                      key={turnKey}
+                                      ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
+                                      className={cn(
+                                        "mt-2 rounded-lg transition-all duration-200",
+                                        isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
+                                        isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
+                                      )}
+                                    >
+                                      <MemoizedAuthRequestCard
+                                        message={turn.message}
+                                        sessionId={session.id}
+                                        onRespondToCredential={onRespondToCredential}
+                                        isInteractive={isAuthInteractive}
+                                      />
+                                    </div>
+                                  )
+                                }
+
+                                // Check if this is the last response (for Accept Plan button visibility)
+                                const isLastResponse = index === turns.length - 1 || !turns.slice(index + 1).some(t => t.type === 'user')
+
+                                // Assistant turns - render with TurnCard (buffered streaming)
+                                const assistantUiKey = getAssistantTurnUiKey(turn, index)
+                                const responseMessageId = turn.response?.messageId
+                                const canShowFeedback = Boolean(responseMessageId) && isFeedbackTargetTurn(
+                                  feedbackTargetTurns,
+                                  startIndex + index,
+                                  { isSessionProcessing: session.isProcessing },
+                                )
+                                return (
+                                  <div
+                                    key={turnKey}
+                                    ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
+                                    className={cn(
+                                      "pt-2",
+                                      "rounded-lg transition-all duration-200",
+                                      isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
+                                      isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
+                                    )}
+                                  >
+                                    <TurnCard
+                                      sessionId={session.id}
+                                      sessionFolderPath={session.sessionFolderPath}
+                                      hasActiveFollowUpAnnotations={pendingFollowUpAnnotations.length > 0}
+                                      turnId={turn.turnId}
+                                      activities={turn.activities}
+                                      response={turn.response}
+                                      intent={turn.intent}
+                                      isStreaming={turn.isStreaming}
+                                      isComplete={turn.isComplete}
+                                      isExpanded={expandedTurns.has(assistantUiKey)}
+                                      onExpandedChange={(expanded) => toggleTurn(assistantUiKey, expanded)}
+                                      expandedActivityGroups={expandedActivityGroups}
+                                      onExpandedActivityGroupsChange={setExpandedActivityGroups}
+                                      todos={turn.todos}
+                                      onOpenFile={onOpenFile}
+                                      onOpenUrl={onOpenUrl}
+                                      isLastResponse={isLastResponse}
+                                      compactMode={compactMode}
+                                      sendMessageKey={sendMessageKey}
+                                      openAnnotationRequest={openAnnotationRequest}
+                                      feedbackValue={canShowFeedback && responseMessageId ? feedbackByMessageId[responseMessageId]?.rating ?? null : null}
+                                      onFeedback={canShowFeedback && responseMessageId ? (rating: FeedbackRating) => handleFeedback(turn, responseMessageId, rating) : undefined}
+                                      onBranch={session?.supportsBranching ? async (messageId: string) => {
+                                        if (!session) return
+                                        try {
+                                          await createBranchSessionAndNavigate({
+                                            session,
+                                            messageId,
+                                            createSession: appShellContext.onCreateSession,
+                                            navigate,
+                                          })
+                                        } catch (error) {
+                                          const rawMessage = error instanceof Error ? error.message : 'Failed to create branch'
+                                          const message = rawMessage.includes('source and target providers must match')
+                                            || rawMessage.includes('same provider/backend')
+                                            ? 'Branching is only supported within the same provider/backend. Switch this panel connection and try again.'
+                                            : rawMessage
+                                          toast.error(t('toast.couldNotCreateBranch'), { description: message })
+                                        }
+                                      } : undefined}
+                                      onAddAnnotation={async (messageId, annotation) => {
+                                        if (!session) return
+                                        try {
+                                          await window.electronAPI.sessionCommand(session.id, {
+                                            type: 'addAnnotation',
+                                            messageId,
+                                            annotation,
+                                          })
+                                        } catch (error) {
+                                          toast.error(t('toast.couldNotSaveHighlight'), {
+                                            description: error instanceof Error ? error.message : 'Unknown error',
+                                          })
+                                          throw error
+                                        }
+                                      }}
+                                      onRemoveAnnotation={async (messageId, annotationId) => {
+                                        if (!session) return
+                                        try {
+                                          await window.electronAPI.sessionCommand(session.id, {
+                                            type: 'removeAnnotation',
+                                            messageId,
+                                            annotationId,
+                                          })
+                                        } catch (error) {
+                                          toast.error(t('toast.couldNotRemoveHighlight'), {
+                                            description: error instanceof Error ? error.message : 'Unknown error',
+                                          })
+                                        }
+                                      }}
+                                      onUpdateAnnotation={async (messageId, annotationId, patch) => {
+                                        if (!session) return
+                                        try {
+                                          await window.electronAPI.sessionCommand(session.id, {
+                                            type: 'updateAnnotation',
+                                            messageId,
+                                            annotationId,
+                                            patch,
+                                          })
+                                        } catch (error) {
+                                          toast.error(t('toast.couldNotUpdateHighlight'), {
+                                            description: error instanceof Error ? error.message : 'Unknown error',
+                                          })
+                                          throw error
+                                        }
+                                      }}
+                                      onSaveAndSendFollowUp={handleSaveAndSendFollowUp}
+                                      onAcceptPlan={() => {
+                                        const planMessage = session?.messages.findLast(m => m.role === 'plan')
+                                        const planPath = planMessage?.planPath
+
+                                        window.dispatchEvent(new CustomEvent('craft:approve-plan', {
+                                          detail: {
+                                            sessionId: session?.id,
+                                            planPath,
+                                            includeDraftInput: true,
+                                            source: 'plan-card',
+                                          },
+                                        }))
+                                      }}
+                                      onAcceptPlanWithCompact={() => {
+                                        const planMessage = session?.messages.findLast(m => m.role === 'plan')
+                                        const planPath = planMessage?.planPath
+
+                                        window.dispatchEvent(new CustomEvent('craft:approve-plan-with-compact', {
+                                          detail: {
+                                            sessionId: session?.id,
+                                            planPath,
+                                            includeDraftInput: true,
+                                            source: 'plan-card',
+                                          },
+                                        }))
+                                      }}
+                                      onPopOut={(text) => {
+                                        // Open raw markdown source in code viewer
+                                        setOverlayState({
+                                          type: 'markdown',
+                                          content: text,
+                                          title: 'Response Preview',
+                                          forceCodeView: true,
+                                        })
+                                      }}
+                                      onOpenDetails={() => {
+                                        // Open turn details in markdown overlay
+                                        const markdown = formatTurnAsMarkdown(turn)
+                                        setOverlayState({
+                                          type: 'markdown',
+                                          content: markdown,
+                                          title: 'Turn Details',
+                                        })
+                                      }}
+                                      onOpenActivityDetails={(activity) => {
+                                        // Write tool for .md/.txt → Document overlay (rendered markdown)
+                                        // rather than multi-diff, since these are better viewed as formatted documents
+                                        const isDocumentWrite = activity.toolName === 'Write' && (() => {
+                                          const actInput = activity.toolInput as Record<string, unknown> | undefined
+                                          const fp = (actInput?.file_path as string) || ''
+                                          const ext = fp.split('.').pop()?.toLowerCase()
+                                          return ext === 'md' || ext === 'txt'
+                                        })()
+
+                                        // Edit/Write tool → Multi-file diff overlay (ungrouped, focused on this change)
+                                        // Exception: Write to .md/.txt files goes to document overlay instead
+                                        if ((activity.toolName === 'Edit' || activity.toolName === 'Write') && !isDocumentWrite) {
+                                          const changes = collectFileChangesFromActivities(turn.activities)
+                                          if (changes.length > 0) {
+                                            setOverlayState({
+                                              type: 'multi-diff',
+                                              changes,
+                                              consolidated: false, // Ungrouped mode - show individual changes
+                                              focusedChangeId: getFirstFileChangeIdForActivity(activity.id, changes),
+                                            })
+                                          }
+                                        } else {
+                                          // All other tools → open generic activity cards overlay (Input/Output)
+                                          setOverlayState({ type: 'activity', activity })
+                                        }
+                                      }}
+                                      hasEditOrWriteActivities={turn.activities.some(a =>
+                                        a.toolName === 'Edit' || a.toolName === 'Write'
+                                      )}
+                                      onOpenMultiFileDiff={() => {
+                                        const changes = collectFileChangesFromActivities(turn.activities)
+                                        if (changes.length > 0) {
+                                          setOverlayState({
+                                            type: 'multi-diff',
+                                            changes,
+                                            consolidated: true, // Consolidated mode - group by file
+                                          })
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                )
+                              })}
+                            </motion.div>
                           )}
-                        </div>
+                        </AnimatePresence>
                       </motion.div>
-                    ) : (
-                    /* Turn-based Message Display - memoized to avoid re-grouping on every render */
-                    /* AnimatePresence handles the fade-in animation when transitioning from loading */
-                    <motion.div
-                      key={compactMode ? 'loaded-compact' : `loaded-${session?.id}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={compactMode ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
-                    >
-                  {/* Scroll to bottom before paint - fires via useLayoutEffect */}
-                  {/* Skip when search is active on session switch - scroll to first match instead */}
-                  <ScrollOnMount
-                    targetRef={messagesEndRef}
-                    skip={skipScrollToBottom}
-                    onScroll={() => {
-                      skipSmoothScrollUntilRef.current = Date.now() + 500
-                    }}
-                  />
-                  {/* Empty state for compact mode - inviting conversational prompt, centered in full popover */}
-                  {compactMode && turns.length === 0 && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center select-none gap-1 pointer-events-none">
-                      <span className="text-sm text-muted-foreground">{t("editPopover.whatToChange")}</span>
-                      <span className="text-xs text-muted-foreground/50">{t("editPopover.justDescribe")}</span>
-                    </div>
-                  )}
-                  {!compactMode && hasUnrenderedLoadedMessages && (
-                    <div className="flex h-64 items-center justify-center px-4 text-center">
-                      <div className="max-w-sm rounded-[8px] border border-border/50 bg-foreground/[0.03] px-4 py-3">
-                        <CircleAlert className="mx-auto mb-2 h-4 w-4 text-foreground/50" />
-                        <div className="text-sm font-medium text-foreground/70">Conversation loaded, but no renderable messages were found.</div>
-                        <p className="mt-1 text-xs text-foreground/50">Try reloading the session. If this persists, the message history may contain an unsupported format.</p>
-                      </div>
-                    </div>
-                  )}
-                  {/* Load more indicator - shown when there are older messages */}
-                  {hasMoreAbove && (
-                    <div className="text-center text-muted-foreground/60 text-xs py-3 select-none">
-                      ↑ {t('chat.scrollUpForEarlier', { count: startIndex })}
-                    </div>
-                  )}
-                  {turns.map((turn, index) => {
-                    // Compute turn key and check if it's a search match
-                    const turnKey = getTurnKey(turn)
-                    const isCurrentMatch = isSearchActive && matchingTurnIds[currentMatchIndex] === turnKey
-                    const isAnyMatch = isSearchActive && matchingTurnIds.includes(turnKey)
-
-                    // User turns - render with MemoizedMessageBubble
-                    // Extra padding creates visual separation from AI responses
-                    if (turn.type === 'user') {
-                      return (
-                        <div
-                          key={turnKey}
-                          ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
-                          className={cn(
-                            compactMode ? "pt-2 pb-1" : CHAT_LAYOUT.userMessagePadding,
-                            "rounded-lg transition-all duration-200",
-                            isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
-                            isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
-                          )}
-                        >
-                          <MemoizedMessageBubble
-                            message={turn.message}
-                            onOpenFile={onOpenFile}
-                            onOpenUrl={onOpenUrl}
-                            sessionId={session?.id}
-                            compactMode={compactMode}
-                          />
-                        </div>
-                      )
-                    }
-
-                    // System turns (error, status, info, warning) - render with MemoizedMessageBubble
-                    if (turn.type === 'system') {
-                      return (
-                        <div
-                          key={turnKey}
-                          ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
-                          className={cn(
-                            "rounded-lg transition-all duration-200",
-                            isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
-                            isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
-                          )}
-                        >
-                          <MemoizedMessageBubble
-                            message={turn.message}
-                            onOpenFile={onOpenFile}
-                            onOpenUrl={onOpenUrl}
-                            sessionId={session?.id}
-                            onRetry={turn.message.role === 'error' ? () => {
-                              const msgs = session?.messages
-                              if (!msgs) return
-                              const errorIdx = msgs.findIndex(m => m.id === turn.message.id)
-                              const lastUserMsg = msgs.slice(0, errorIdx).findLast(m => m.role === 'user')
-                              if (lastUserMsg) {
-                                onSendMessage(lastUserMsg.content)
-                              }
-                            } : undefined}
-                          />
-                        </div>
-                      )
-                    }
-
-                    // Auth-request turns - render inline auth UI
-                    // mt-2 matches ResponseCard spacing for visual consistency
-                    if (turn.type === 'auth-request') {
-                      // Interactive only if no user message follows
-                      const isAuthInteractive = !turns.slice(index + 1).some(t => t.type === 'user')
-                      return (
-                        <div
-                          key={turnKey}
-                          ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
-                          className={cn(
-                            "mt-2 rounded-lg transition-all duration-200",
-                            isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
-                            isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
-                          )}
-                        >
-                          <MemoizedAuthRequestCard
-                            message={turn.message}
-                            sessionId={session.id}
-                            onRespondToCredential={onRespondToCredential}
-                            isInteractive={isAuthInteractive}
-                          />
-                        </div>
-                      )
-                    }
-
-                    // Check if this is the last response (for Accept Plan button visibility)
-                    const isLastResponse = index === turns.length - 1 || !turns.slice(index + 1).some(t => t.type === 'user')
-
-                    // Assistant turns - render with TurnCard (buffered streaming)
-                    const assistantUiKey = getAssistantTurnUiKey(turn, index)
-                    return (
-                      <div
-                        key={turnKey}
-                        ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
-                        className={cn(
-                          "pt-2",
-                          "rounded-lg transition-all duration-200",
-                          isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
-                          isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
-                        )}
-                      >
-                      <TurnCard
-                        sessionId={session.id}
-                        sessionFolderPath={session.sessionFolderPath}
-                        hasActiveFollowUpAnnotations={pendingFollowUpAnnotations.length > 0}
-                        turnId={turn.turnId}
-                        activities={turn.activities}
-                        response={turn.response}
-                        intent={turn.intent}
-                        isStreaming={turn.isStreaming}
-                        isComplete={turn.isComplete}
-                        isExpanded={expandedTurns.has(assistantUiKey)}
-                        onExpandedChange={(expanded) => toggleTurn(assistantUiKey, expanded)}
-                        expandedActivityGroups={expandedActivityGroups}
-                        onExpandedActivityGroupsChange={setExpandedActivityGroups}
-                        todos={turn.todos}
-                        onOpenFile={onOpenFile}
-                        onOpenUrl={onOpenUrl}
-                        isLastResponse={isLastResponse}
-                        compactMode={compactMode}
-                        sendMessageKey={sendMessageKey}
-                        openAnnotationRequest={openAnnotationRequest}
-                        onBranch={session?.supportsBranching ? async (messageId: string, options?: { newPanel?: boolean }) => {
-                          if (!session) return
-                          try {
-                            const child = await appShellContext.onCreateSession(
-                              session.workspaceId,
-                              {
-                                branchFromMessageId: messageId,
-                                branchFromSessionId: session.id,
-                                name: `Branch of ${session.name || 'Untitled'}`,
-                                // Keep branch on the same backend/provider by inheriting parent session settings.
-                                llmConnection: session.llmConnection,
-                                model: session.model,
-                                permissionMode: session.permissionMode,
-                                workingDirectory: session.workingDirectory,
-                                enabledSourceSlugs: session.enabledSourceSlugs,
-                              }
-                            )
-                            navigate(routes.view.allSessions(child.id), { newPanel: resolveBranchNewPanelOption(options) })
-                          } catch (error) {
-                            const rawMessage = error instanceof Error ? error.message : 'Failed to create branch'
-                            const message = rawMessage.includes('source and target providers must match')
-                              || rawMessage.includes('same provider/backend')
-                              ? 'Branching is only supported within the same provider/backend. Switch this panel connection and try again.'
-                              : rawMessage
-                            toast.error(t('toast.couldNotCreateBranch'), { description: message })
-                          }
-                        } : undefined}
-                        onAddAnnotation={async (messageId, annotation) => {
-                          if (!session) return
-                          try {
-                            await window.electronAPI.sessionCommand(session.id, {
-                              type: 'addAnnotation',
-                              messageId,
-                              annotation,
-                            })
-                          } catch (error) {
-                            toast.error(t('toast.couldNotSaveHighlight'), {
-                              description: error instanceof Error ? error.message : 'Unknown error',
-                            })
-                            throw error
-                          }
-                        }}
-                        onRemoveAnnotation={async (messageId, annotationId) => {
-                          if (!session) return
-                          try {
-                            await window.electronAPI.sessionCommand(session.id, {
-                              type: 'removeAnnotation',
-                              messageId,
-                              annotationId,
-                            })
-                          } catch (error) {
-                            toast.error(t('toast.couldNotRemoveHighlight'), {
-                              description: error instanceof Error ? error.message : 'Unknown error',
-                            })
-                          }
-                        }}
-                        onUpdateAnnotation={async (messageId, annotationId, patch) => {
-                          if (!session) return
-                          try {
-                            await window.electronAPI.sessionCommand(session.id, {
-                              type: 'updateAnnotation',
-                              messageId,
-                              annotationId,
-                              patch,
-                            })
-                          } catch (error) {
-                            toast.error(t('toast.couldNotUpdateHighlight'), {
-                              description: error instanceof Error ? error.message : 'Unknown error',
-                            })
-                            throw error
-                          }
-                        }}
-                        onSaveAndSendFollowUp={handleSaveAndSendFollowUp}
-                        onAcceptPlan={() => {
-                          const planMessage = session?.messages.findLast(m => m.role === 'plan')
-                          const planPath = planMessage?.planPath
-
-                          window.dispatchEvent(new CustomEvent('craft:approve-plan', {
-                            detail: {
-                              sessionId: session?.id,
-                              planPath,
-                              includeDraftInput: true,
-                              source: 'plan-card',
-                            },
-                          }))
-                        }}
-                        onAcceptPlanWithCompact={() => {
-                          const planMessage = session?.messages.findLast(m => m.role === 'plan')
-                          const planPath = planMessage?.planPath
-
-                          window.dispatchEvent(new CustomEvent('craft:approve-plan-with-compact', {
-                            detail: {
-                              sessionId: session?.id,
-                              planPath,
-                              includeDraftInput: true,
-                              source: 'plan-card',
-                            },
-                          }))
-                        }}
-                        onPopOut={(text) => {
-                          // Open raw markdown source in code viewer
-                          setOverlayState({
-                            type: 'markdown',
-                            content: text,
-                            title: 'Response Preview',
-                            forceCodeView: true,
-                          })
-                        }}
-                        onOpenDetails={() => {
-                          // Open turn details in markdown overlay
-                          const markdown = formatTurnAsMarkdown(turn)
-                          setOverlayState({
-                            type: 'markdown',
-                            content: markdown,
-                            title: 'Turn Details',
-                          })
-                        }}
-                        onOpenActivityDetails={(activity) => {
-                          // Write tool for .md/.txt → Document overlay (rendered markdown)
-                          // rather than multi-diff, since these are better viewed as formatted documents
-                          const isDocumentWrite = activity.toolName === 'Write' && (() => {
-                            const actInput = activity.toolInput as Record<string, unknown> | undefined
-                            const fp = (actInput?.file_path as string) || ''
-                            const ext = fp.split('.').pop()?.toLowerCase()
-                            return ext === 'md' || ext === 'txt'
-                          })()
-
-                          // Edit/Write tool → Multi-file diff overlay (ungrouped, focused on this change)
-                          // Exception: Write to .md/.txt files goes to document overlay instead
-                          if ((activity.toolName === 'Edit' || activity.toolName === 'Write') && !isDocumentWrite) {
-                            const changes = collectFileChangesFromActivities(turn.activities)
-                            if (changes.length > 0) {
-                              setOverlayState({
-                                type: 'multi-diff',
-                                changes,
-                                consolidated: false, // Ungrouped mode - show individual changes
-                                focusedChangeId: getFirstFileChangeIdForActivity(activity.id, changes),
-                              })
-                            }
-                          } else {
-                            // All other tools → open generic activity cards overlay (Input/Output)
-                            setOverlayState({ type: 'activity', activity })
-                          }
-                        }}
-                        hasEditOrWriteActivities={turn.activities.some(a =>
-                          a.toolName === 'Edit' || a.toolName === 'Write'
-                        )}
-                        onOpenMultiFileDiff={() => {
-                          const changes = collectFileChangesFromActivities(turn.activities)
-                          if (changes.length > 0) {
-                            setOverlayState({
-                              type: 'multi-diff',
-                              changes,
-                              consolidated: true, // Consolidated mode - group by file
-                            })
-                          }
-                        }}
-                      />
-                      </div>
-                    )
-                  })}
-                    </motion.div>
-                    )}
                     </AnimatePresence>
-                  </motion.div>
-                </AnimatePresence>
-                {/* Processing Indicator - always visible while processing */}
-                {session.isProcessing && (() => {
-                  // Find the last user message timestamp for accurate elapsed time
-                  const lastUserMsg = [...session.messages].reverse().find(m => m.role === 'user')
-                  return (
-                    <ProcessingIndicator
-                      startTime={lastUserMsg?.timestamp}
-                      statusMessage={session.currentStatus?.message}
-                    />
-                  )
-                })()}
-                {/* Scroll Anchor: For auto-scroll to bottom */}
-                <div ref={messagesEndRef} />
+                    {/* Processing Indicator - always visible while processing */}
+                    {session.isProcessing && (() => {
+                      // Find the last user message timestamp for accurate elapsed time
+                      const lastUserMsg = [...session.messages].reverse().find(m => m.role === 'user')
+                      return (
+                        <ProcessingIndicator
+                          startTime={lastUserMsg?.timestamp}
+                          statusMessage={session.currentStatus?.message}
+                        />
+                      )
+                    })()}
+                    {/* Scroll Anchor: For auto-scroll to bottom */}
+                    <div ref={messagesEndRef} />
+                  </div>
+                </ScrollArea>
               </div>
-              </ScrollArea>
             </div>
-          </div>
 
-          {/* === INPUT CONTAINER: FreeForm or Structured Input === */}
-          <ChatInputZone
-            compactMode={compactMode}
-            permissionMode={permissionMode}
-            onPermissionModeChange={onPermissionModeChange}
-            tasks={backgroundTasks}
-            sessionId={session.id}
-            sessionFolderPath={sessionFolderPath}
-            onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type ?? 'shell')}
-            onInsertMessage={onInputChange}
-            sessionLabels={session.labels}
-            labels={labels}
-            onLabelsChange={onLabelsChange}
-            sessionStatuses={sessionStatuses}
-            currentSessionStatus={session.sessionStatus || 'todo'}
-            onSessionStatusChange={onSessionStatusChange}
-            inputProps={{
-              placeholder,
-              disabled: isInputDisabled,
-              isProcessing: session.isProcessing,
-              onAnimatedHeightChange: handleAnimatedHeightChange,
-              onSubmit: handleSubmit,
-              onStop: handleStop,
-              textareaRef,
-              currentModel,
-              onModelChange,
-              thinkingLevel,
-              onThinkingLevelChange,
-              enabledModes,
-              enableCompactModelPicker,
-              structuredInput,
-              onStructuredResponse: handleStructuredResponse,
-              inputValue,
-              onInputChange,
-              attachmentsValue,
-              onAttachmentsChange,
-              sources,
-              enabledSourceSlugs: session.enabledSourceSlugs,
-              onSourcesChange,
-              skills,
-              workspaceId,
-              workingDirectory,
-              onWorkingDirectoryChange,
-              disableSend: disableSend || connectionUnavailable,
-              connectionUnavailable,
-              isEmptySession: session.messages.length === 0,
-              currentConnection: session.llmConnection,
-              onConnectionChange,
-              contextStatus: {
-                isCompacting: session.currentStatus?.statusType === 'compacting',
-                inputTokens: session.tokenUsage?.inputTokens,
-                contextWindow: session.tokenUsage?.contextWindow,
-              },
-              followUpItems: followUpInputItems,
-              onFollowUpClick: handleFollowUpChipClick,
-              onFollowUpIndexClick: handleFollowUpIndexClick,
-            }}
-          />
+            {/* === INPUT CONTAINER: FreeForm or Structured Input === */}
+            {!readOnly && (
+              <ChatInputZone
+                compactMode={compactMode}
+                permissionMode={permissionMode}
+                onPermissionModeChange={onPermissionModeChange}
+                tasks={backgroundTasks}
+                sessionId={session.id}
+                sessionFolderPath={sessionFolderPath}
+                onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type ?? 'shell')}
+                onInsertMessage={onInputChange}
+                sessionLabels={session.labels}
+                labels={labels}
+                onLabelsChange={onLabelsChange}
+                sessionStatuses={sessionStatuses}
+                currentSessionStatus={session.sessionStatus || 'todo'}
+                onSessionStatusChange={onSessionStatusChange}
+                inputProps={{
+                  placeholder,
+                  disabled: isInputDisabled,
+                  isProcessing: session.isProcessing,
+                  onAnimatedHeightChange: handleAnimatedHeightChange,
+                  onSubmit: handleSubmit,
+                  onStop: handleStop,
+                  textareaRef,
+                  currentModel,
+                  onModelChange,
+                  thinkingEnabled,
+                  onThinkingEnabledChange,
+                  enabledModes,
+                  enableCompactModelPicker,
+                  structuredInput,
+                  onStructuredResponse: handleStructuredResponse,
+                  inputValue,
+                  onInputChange,
+                  attachmentsValue,
+                  onAttachmentsChange,
+                  sources,
+                  enabledSourceSlugs: session.enabledSourceSlugs,
+                  onSourcesChange,
+                  skills,
+                  workspaceId,
+                  workingDirectory,
+                  onWorkingDirectoryChange,
+                  disableSend: disableSend || connectionUnavailable,
+                  connectionUnavailable,
+                  isEmptySession: session.messages.length === 0,
+                  currentConnection: session.llmConnection,
+                  onConnectionChange,
+                  contextStatus: {
+                    isCompacting: session.currentStatus?.statusType === 'compacting',
+                    inputTokens: session.tokenUsage?.inputTokens,
+                    contextWindow: session.tokenUsage?.contextWindow,
+                  },
+                  followUpItems: followUpInputItems,
+                  onFollowUpClick: handleFollowUpChipClick,
+                  onFollowUpIndexClick: handleFollowUpIndexClick,
+                }}
+              />
+            )}
           </div>
         </div>
       ) : null}
@@ -2093,7 +2471,51 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           />
         )
       )}
+
+      <Dialog
+        open={!!dislikeFeedbackDialog}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) handleCloseDislikeDialog()
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>评价</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Textarea
+              value={dislikeFeedbackDialog?.comment ?? ''}
+              maxLength={255}
+              rows={6}
+              className="min-h-30"
+              placeholder="请输入评价，感谢您的建议"
+              onChange={(event) => handleDislikeCommentChange(event.target.value)}
+            />
+            <div className="text-right text-sm text-muted-foreground">
+              {(dislikeFeedbackDialog?.comment.length ?? 0)}/255
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={handleCloseDislikeDialog}>
+              取消
+            </Button>
+            <Button onClick={handleSubmitDislikeFeedback}>
+              提交
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  )
+})
+
+export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>(function ChatDisplay(props, ref) {
+  return (
+    <ChatFeedbackProvider>
+      <ChatDisplayContent {...props} ref={ref} />
+    </ChatFeedbackProvider>
   )
 })
 
@@ -2150,7 +2572,7 @@ function ErrorMessage({ message, onOpenUrl, sessionId, onRetry }: { message: Mes
           '--shadow-color': 'var(--destructive-rgb)',
         } as React.CSSProperties}
       >
-        <div className="text-xs text-destructive/50 mb-0.5 font-semibold">
+        <div className="text-sm text-destructive/50 mb-0.5 font-semibold">
           {message.errorTitle || t('common.error')}
         </div>
         <p className="text-sm text-destructive">{message.content}</p>
@@ -2168,7 +2590,7 @@ function ErrorMessage({ message, onOpenUrl, sessionId, onRetry }: { message: Mes
                     onRetry,
                   })
                 }}
-                className="text-xs px-2 py-0.5 rounded border border-destructive/20 text-destructive/70 hover:text-destructive hover:border-destructive/40 transition-colors"
+                className="text-sm px-2 py-0.5 rounded border border-destructive/20 text-destructive/70 hover:text-destructive hover:border-destructive/40 transition-colors"
               >
                 {action.label}{action.action === 'open_url' ? ' ↗' : ''}
               </button>
@@ -2181,14 +2603,14 @@ function ErrorMessage({ message, onOpenUrl, sessionId, onRetry }: { message: Mes
           <div className="mt-2">
             <button
               onClick={() => setDetailsOpen(!detailsOpen)}
-              className="flex items-center gap-1 text-xs text-destructive/70 hover:text-destructive transition-colors"
+              className="flex items-center gap-1 text-sm text-destructive/70 hover:text-destructive transition-colors"
             >
               {detailsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
               <span>{detailsOpen ? t('chat.hideTechnicalDetails') : t('chat.showTechnicalDetails')}</span>
             </button>
 
             <AnimatedCollapsibleContent isOpen={detailsOpen} className="overflow-hidden">
-              <div className="mt-2 pt-2 border-t border-destructive/20 text-xs text-destructive/60 font-mono space-y-0.5">
+              <div className="mt-2 pt-2 border-t border-destructive/20 text-sm text-destructive/60 font-mono space-y-0.5">
                 {message.errorDetails?.map((detail, i) => (
                   <div key={i}>{detail}</div>
                 ))}
@@ -2284,7 +2706,7 @@ function MessageBubble({
   // === STATUS MESSAGE: Matches ProcessingIndicator layout for visual consistency ===
   if (message.role === 'status') {
     return (
-      <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[13px] text-muted-foreground">
+      <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[14px] text-muted-foreground">
         {/* Spinner in same location as TurnCard chevron */}
         <div className="w-3 h-3 flex items-center justify-center shrink-0">
           <Spinner className="text-[10px]" />
@@ -2320,7 +2742,7 @@ function MessageBubble({
     const Icon = config.icon
 
     return (
-      <div className={cn('flex items-center gap-2 px-3 py-1 text-[13px] select-none', config.className)}>
+      <div className={cn('flex items-center gap-2 px-3 py-1 text-[14px] select-none', config.className)}>
         <div className="w-3 h-3 flex items-center justify-center shrink-0">
           <Icon className="w-3 h-3" />
         </div>
@@ -2334,7 +2756,7 @@ function MessageBubble({
     return (
       <div className="flex justify-start">
         <div className="max-w-[80%] bg-info/10 rounded-[8px] pl-5 pr-4 pt-2 pb-2.5 break-words select-none">
-          <div className="text-xs text-info/50 mb-0.5 font-semibold">
+          <div className="text-sm text-info/50 mb-0.5 font-semibold">
             Warning
           </div>
           <p className="text-sm text-info">{message.content}</p>
