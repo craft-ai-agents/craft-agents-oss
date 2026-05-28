@@ -532,6 +532,9 @@ export interface ElectronAPI {
   getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
   checkAdminPermission(): Promise<boolean>
   getDefaultPermissionsConfig(): Promise<{ config: import('@craft-agent/shared/agent').PermissionsConfigFile | null; path: string }>
+  mdpPermissionList(): Promise<Array<{ employeeId: string; userType: 'admin' | 'super_admin'; createTime?: string; updateTime?: string }>>
+  mdpPermissionSaveOrUpdate(employeeId: string, userType: string): Promise<unknown>
+  mdpPermissionDelete(employeeId: string): Promise<void>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
   refreshMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
   generateSourceGuide(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string; guide?: SourceGuide }>

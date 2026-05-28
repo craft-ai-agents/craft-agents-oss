@@ -25,6 +25,9 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.GET_PERMISSIONS,
   RPC_CHANNELS.permissions.CHECK_ADMIN,
   RPC_CHANNELS.permissions.GET_DEFAULTS,
+  RPC_CHANNELS.permissions.MDP_LIST,
+  RPC_CHANNELS.permissions.MDP_SAVE_OR_UPDATE,
+  RPC_CHANNELS.permissions.MDP_DELETE,
   RPC_CHANNELS.sources.GET_MCP_TOOLS,
   RPC_CHANNELS.sources.REFRESH_MCP_TOOLS,
   RPC_CHANNELS.sources.GENERATE_GUIDE,
@@ -286,6 +289,49 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
 
     const json = await res.json() as { body?: boolean }
     return json.body === true
+  })
+
+  server.handle(RPC_CHANNELS.permissions.MDP_LIST, async () => {
+    const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+    const session = await new SsoCredentialStore().load()
+    if (!session) throw new Error('Not authenticated')
+
+    const baseUrl = (process.env.VITE_PERMISSION_API_URL || process.env.MDP_API_URL || '').replace(/\/+$/, '')
+    const res = await fetch(`${baseUrl}/api/mdp/permission/list`, {
+      headers: { authorization: session.token },
+    })
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`)
+    const json = await res.json() as { body: unknown }
+    return json.body
+  })
+
+  server.handle(RPC_CHANNELS.permissions.MDP_SAVE_OR_UPDATE, async (_ctx, payload: { employeeId: string; userType: string }) => {
+    const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+    const session = await new SsoCredentialStore().load()
+    if (!session) throw new Error('Not authenticated')
+
+    const baseUrl = (process.env.VITE_PERMISSION_API_URL || process.env.MDP_API_URL || '').replace(/\/+$/, '')
+    const res = await fetch(`${baseUrl}/api/mdp/permission/saveOrUpdate`, {
+      method: 'POST',
+      headers: { authorization: session.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employeeId: payload.employeeId, userType: payload.userType }),
+    })
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`)
+    const json = await res.json() as { body: unknown }
+    return json.body
+  })
+
+  server.handle(RPC_CHANNELS.permissions.MDP_DELETE, async (_ctx, payload: { employeeId: string }) => {
+    const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+    const session = await new SsoCredentialStore().load()
+    if (!session) throw new Error('Not authenticated')
+
+    const baseUrl = (process.env.VITE_PERMISSION_API_URL || process.env.MDP_API_URL || '').replace(/\/+$/, '')
+    const res = await fetch(`${baseUrl}/api/mdp/permission/delete?employeeId=${encodeURIComponent(payload.employeeId)}`, {
+      method: 'POST',
+      headers: { authorization: session.token },
+    })
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`)
   })
 
   // Get default permissions from ~/.mdp-agent/permissions/default.json

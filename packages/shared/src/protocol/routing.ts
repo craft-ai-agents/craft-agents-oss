@@ -373,6 +373,9 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.permissions.CHECK_ADMIN,
   RPC_CHANNELS.permissions.GET_DEFAULTS,
   RPC_CHANNELS.permissions.DEFAULTS_CHANGED,
+  RPC_CHANNELS.permissions.MDP_LIST,
+  RPC_CHANNELS.permissions.MDP_SAVE_OR_UPDATE,
+  RPC_CHANNELS.permissions.MDP_DELETE,
 
   // skills — skill content per-workspace (not openEditor/openFinder which are local OS)
   RPC_CHANNELS.skills.GET,

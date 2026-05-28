@@ -265,6 +265,9 @@ export const RPC_CHANNELS = {
     CHECK_ADMIN: 'permissions:checkAdmin',
     GET_DEFAULTS: 'permissions:getDefaults',
     DEFAULTS_CHANGED: 'permissions:defaultsChanged',
+    MDP_LIST: 'permissions:mdpList',
+    MDP_SAVE_OR_UPDATE: 'permissions:mdpSaveOrUpdate',
+    MDP_DELETE: 'permissions:mdpDelete',
   },
   skills: {
     GET: 'skills:get',

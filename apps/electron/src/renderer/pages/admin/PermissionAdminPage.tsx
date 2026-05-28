@@ -2,7 +2,7 @@
  * PermissionAdminPage
  *
  * Admin page for managing user permissions (admin / super_admin).
- * Migrated from CoPaw console. Falls back to stub data if API is unavailable.
+ * Migrated from CoPaw console.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -27,45 +27,11 @@ interface PermissionPO {
 }
 
 // ============================================================
-// API (uses VITE_PERMISSION_API_URL env var; falls back to stub)
+// Constants
 // ============================================================
 
-const PERMISSION_API_BASE: string = import.meta.env.VITE_PERMISSION_API_URL ?? ''
-
 const TOAST_OPTS = { position: 'top-center' as const }
-
-const STUB_DATA: PermissionPO[] = [
-  { employeeId: 'EMP001', userType: 'super_admin', createTime: '2025-01-01 10:00:00', updateTime: '2025-01-01 10:00:00' },
-  { employeeId: 'EMP002', userType: 'admin', createTime: '2025-03-15 09:30:00', updateTime: '2025-03-15 09:30:00' },
-]
-
-async function permRequest<T>(path: string, token: string, options: RequestInit = {}): Promise<T> {
-  const url = `${PERMISSION_API_BASE}${path}`
-  const method = options.method ?? 'GET'
-  const headers: Record<string, string> = {
-    ...(token ? { authorization: token } : {}),
-    ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
-  }
-  const res = await fetch(url, { ...options, headers })
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-  const json = await res.json() as { body: T }
-  return json.body
-}
-
-function buildPermissionApi(token: string) {
-  return {
-    getList: () => permRequest<PermissionPO[]>('/api/mdp/permission/list', token),
-    saveOrUpdate: (employeeId: string, userType: string) =>
-      permRequest<boolean>('/api/mdp/permission/saveOrUpdate', token, {
-        method: 'POST',
-        body: JSON.stringify({ employeeId, userType }),
-      }),
-    delete: (employeeId: string) =>
-      permRequest<void>(`/api/mdp/permission/delete?employeeId=${encodeURIComponent(employeeId)}`, token, {
-        method: 'POST',
-      }),
-  }
-}
+const PAGE_SIZE = 10
 
 // ============================================================
 // Sub-components
@@ -219,32 +185,22 @@ export default function PermissionAdminPage() {
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [permApi, setPermApi] = useState<ReturnType<typeof buildPermissionApi> | null>(null)
   const [page, setPage] = useState(1)
-  const PAGE_SIZE = 10
   const checkedRef = useRef(false)
 
   useEffect(() => {
     if (checkedRef.current) return
     checkedRef.current = true
-    window.electronAPI.getSsoSession().then((session) => {
-      if (!session.authenticated) { setAuthStatus('denied'); return }
-      const api = buildPermissionApi(session.token)
-      setPermApi(api)
-      fetch(`${PERMISSION_API_BASE}/api/mdp/permission/checkAdmin?employeeId=${encodeURIComponent(session.employeeId)}`, {
-        headers: { authorization: session.token },
-      })
-        .then((res) => res.json())
-        .then((json: { body: boolean }) => setAuthStatus(json.body ? 'ok' : 'denied'))
-        .catch(() => { toast('权限验证失败，请检查网络', TOAST_OPTS); setAuthStatus('denied') })
-    }).catch(() => { toast('获取登录信息失败', TOAST_OPTS); setAuthStatus('denied') })
+    window.electronAPI.checkAdminPermission()
+      .then((isAdmin) => setAuthStatus(isAdmin ? 'ok' : 'denied'))
+      .catch(() => { toast('权限验证失败，请检查网络', TOAST_OPTS); setAuthStatus('denied') })
   }, [])
 
   const fetchList = useCallback(async () => {
-    if (!permApi) return
+    if (authStatus !== 'ok') return
     setLoading(true)
     try {
-      const data = await permApi.getList()
+      const data = await window.electronAPI.mdpPermissionList()
       const newList = data ?? []
       setList(newList)
       setPage(p => {
@@ -252,19 +208,18 @@ export default function PermissionAdminPage() {
         return p > maxPage ? maxPage : p
       })
     } catch {
-      setList(STUB_DATA)
+      toast('获取权限列表失败', TOAST_OPTS)
     } finally {
       setLoading(false)
     }
-  }, [permApi])
+  }, [authStatus])
 
   useEffect(() => { fetchList() }, [fetchList])
 
   const handleAdd = async (employeeId: string, userType: string) => {
-    if (!permApi) return
     setSubmitting(true)
     try {
-      await permApi.saveOrUpdate(employeeId, userType)
+      await window.electronAPI.mdpPermissionSaveOrUpdate(employeeId, userType)
       toast('权限保存成功', TOAST_OPTS)
       fetchList()
     } catch {
@@ -275,10 +230,9 @@ export default function PermissionAdminPage() {
   }
 
   const handleDelete = async (employeeId: string) => {
-    if (!permApi) return
     setDeletingId(employeeId)
     try {
-      await permApi.delete(employeeId)
+      await window.electronAPI.mdpPermissionDelete(employeeId)
       toast('权限已删除', TOAST_OPTS)
       fetchList()
     } catch {
