@@ -68,6 +68,10 @@ function httpConfig(token: string, url = 'https://mcp.example.com'): SdkMcpServe
   return { type: 'streamable_http', url, headers: { Authorization: `Bearer ${token}` } };
 }
 
+function stdioConfig(command: string, args?: string[], env?: Record<string, string>): SdkMcpServerConfig {
+  return { type: 'stdio', command, args, env };
+}
+
 /**
  * Subclass that intercepts connect/disconnect to avoid real MCP connections
  * while letting sync()'s config-change detection logic run against real state.
@@ -176,6 +180,37 @@ describe('McpClientPool.sync — config change detection', () => {
     expect(pool.disconnectCalls).toHaveLength(0);
   });
 
+  it('reconnects when stdio command changes', async () => {
+    await pool.sync({ local: stdioConfig('old-command', ['serve']) });
+    pool.resetTracking();
+
+    await pool.sync({ local: stdioConfig('new-command', ['serve']) });
+
+    expect(pool.disconnectCalls).toEqual(['local']);
+    expect(pool.connectCalls).toHaveLength(1);
+    expect(pool.connectCalls[0].config).toEqual(stdioConfig('new-command', ['serve']));
+  });
+
+  it('reconnects when stdio args change', async () => {
+    await pool.sync({ local: stdioConfig('node', ['server-v1.mjs']) });
+    pool.resetTracking();
+
+    await pool.sync({ local: stdioConfig('node', ['server-v2.mjs']) });
+
+    expect(pool.disconnectCalls).toEqual(['local']);
+    expect(pool.connectCalls).toHaveLength(1);
+  });
+
+  it('reconnects when stdio env changes', async () => {
+    await pool.sync({ local: stdioConfig('node', ['server.mjs'], { FEATURE: 'old' }) });
+    pool.resetTracking();
+
+    await pool.sync({ local: stdioConfig('node', ['server.mjs'], { FEATURE: 'new' }) });
+
+    expect(pool.disconnectCalls).toEqual(['local']);
+    expect(pool.connectCalls).toHaveLength(1);
+  });
+
   it('disconnects sources removed from config', async () => {
     const config = httpConfig('token');
     await pool.sync({ craft: config, linear: config });
@@ -228,6 +263,35 @@ describe('McpClientPool.sync — config change detection', () => {
 
     expect(failures).toContain('craft');
     expect(failPool.isConnected('craft')).toBe(false);
+  });
+});
+
+describe('McpClientPool.refreshSource', () => {
+  it('force reconnects a source and reports tool count', async () => {
+    const pool = new TestablePool();
+    await pool.sync({ craft: httpConfig('token') });
+    pool.resetTracking();
+
+    const result = await pool.refreshSource('craft', httpConfig('token'));
+
+    expect(result).toEqual({ success: true, sourceSlug: 'craft', toolCount: 1 });
+    expect(pool.disconnectCalls).toEqual(['craft']);
+    expect(pool.connectCalls).toHaveLength(1);
+    expect(pool.isConnected('craft')).toBe(true);
+  });
+
+  it('fails closed when reconnect fails', async () => {
+    const pool = new TestablePool();
+    await pool.sync({ craft: httpConfig('token') });
+    pool.connect = async () => {
+      throw new Error('Server unavailable');
+    };
+
+    const result = await pool.refreshSource('craft', httpConfig('token'));
+
+    expect(result).toEqual({ success: false, sourceSlug: 'craft', error: 'Server unavailable' });
+    expect(pool.isConnected('craft')).toBe(false);
+    expect(pool.getProxyToolDefs(['craft'])).toEqual([]);
   });
 });
 

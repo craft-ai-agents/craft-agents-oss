@@ -94,7 +94,7 @@ import { parseError, type AgentError } from './errors.ts';
 // Centralized PreToolUse pipeline
 import { runPreToolUseChecks, type PreToolUseCheckResult } from './core/pre-tool-use.ts';
 import { getRtkPath } from './core/rtk-detector.ts';
-import { getRtkEnabled } from '../config/storage.ts';
+import { getRtkEnabled, getBrowserToolEnabled } from '../config/storage.ts';
 import type { RtkContext } from './core/rtk-rewrite.ts';
 
 // Workspace slug extraction for skill qualification
@@ -121,6 +121,38 @@ export const PI_BACKEND_SESSION_TOOL_NAMES = new Set<string>([
   'spawn_session',
   'browser_tool',
 ]);
+
+/**
+ * Map a transport `err.code` to an agent-facing string for `browser_tool` failures.
+ * Returns null for unknown codes so callers can fall back to the raw `err.message`.
+ *
+ * Receiver-side check: keyed on `err.code === 'X'`, never `instanceof CodedError` —
+ * the transport reconstructs a plain `Error` with `.code` attached.
+ */
+function mapBrowserToolErrorCode(code: string): string | null {
+  switch (code) {
+    case 'BROWSER_NO_CAPABLE_CLIENT':
+    case 'CAPABILITY_UNAVAILABLE':
+      return 'No connected desktop client supports browser tools, or no client is currently connected. ' +
+        'Ask the user to open this workspace from the Craft Agent desktop app.';
+    case 'CLIENT_DISCONNECTED':
+      return 'The desktop client that owned this browser session disconnected. ' +
+        'Ask the user to reconnect and retry.';
+    case 'CLIENT_REQUEST_TIMEOUT':
+      return 'Browser operation timed out (>30s). The desktop client may be unresponsive.';
+    case 'BROWSER_INSTANCE_NOT_OWNED':
+      return 'That browser instance ID doesn\'t belong to this session. ' +
+        'Use `windows` to list owned instances, or `open` to create a new one.';
+    case 'BROWSER_REMOTE_UPLOAD_NOT_SUPPORTED':
+      return 'File upload from a remote agent is not supported. ' +
+        'Ask the user to attach the file to the session.';
+    case 'BROWSER_REMOTE_EVALUATE_BLOCKED':
+      return 'JavaScript evaluation is disabled on this desktop client. ' +
+        'Ask the user to enable it in settings.';
+    default:
+      return null;
+  }
+}
 
 /**
  * Backend implementation using the Pi coding agent SDK via subprocess.
@@ -227,6 +259,12 @@ export class PiAgent extends BaseAgent {
   // Pending ensure_session_ready requests (branch preflight handshake)
   private pendingEnsureSessionReady: Map<string, {
     resolve: (sessionId: string | null) => void;
+    reject: (error: Error) => void;
+  }> = new Map();
+
+  // Pending Windows shell slash command requests.
+  private pendingWindowsShellCommands: Map<string, {
+    resolve: (text: string) => void;
     reject: (error: Error) => void;
   }> = new Map();
 
@@ -512,7 +550,15 @@ export class PiAgent extends BaseAgent {
     // These tools (SubmitPlan, config_validate, source auth, call_llm, etc.)
     // are executed in the main process when the LLM calls them.
     this.assertBackendSessionToolParity();
-    const sessionToolDefs = getSessionToolProxyDefs();
+    let sessionToolDefs = getSessionToolProxyDefs();
+
+    // Mirror Claude's gate: hide `browser_tool` when the user has disabled
+    // the built-in browser tool. Without this filter, Pi would still advertise
+    // `mcp__session__browser_tool` while Claude doesn't — sessions would behave
+    // inconsistently depending on backend.
+    if (!getBrowserToolEnabled()) {
+      sessionToolDefs = sessionToolDefs.filter(d => d.name !== 'mcp__session__browser_tool');
+    }
 
     // Patch call_llm description with provider-specific model hint
     if (this.config.miniModel) {
@@ -915,6 +961,10 @@ export class PiAgent extends BaseAgent {
       case 'ensure_session_ready_result':
         // Response to an ensure_session_ready request
         this.handleEnsureSessionReadyResult(msg);
+        break;
+
+      case 'windows_shell_command_result':
+        this.handleWindowsShellCommandResult(msg);
         break;
 
       case 'compact_result':
@@ -1531,8 +1581,14 @@ export class PiAgent extends BaseAgent {
 
           return { content, isError: false };
         } catch (error) {
+          // Branch on `err.code` (string), not `instanceof CodedError` — the
+          // transport reconstructs a plain Error on the receiving side, so
+          // class identity is lost across the wire.
+          const rawCode = (error as { code?: unknown } | null)?.code;
+          const code = typeof rawCode === 'string' ? rawCode : '';
           const msg = error instanceof Error ? error.message : String(error);
-          return { content: msg, isError: true };
+          const friendly = mapBrowserToolErrorCode(code) ?? msg;
+          return { content: friendly, isError: true };
         }
       }
 
@@ -1606,6 +1662,20 @@ export class PiAgent extends BaseAgent {
       this.config.onSdkSessionIdUpdate?.(sessionId);
     }
     pending.resolve(sessionId);
+  }
+
+  private handleWindowsShellCommandResult(msg: Record<string, unknown>): void {
+    const id = msg.id as string;
+    const pending = this.pendingWindowsShellCommands.get(id);
+    if (!pending) return;
+
+    this.pendingWindowsShellCommands.delete(id);
+    if (!msg.success) {
+      pending.reject(new Error(String(msg.errorMessage || 'Windows shell command failed')));
+      return;
+    }
+
+    pending.resolve(String(msg.text || ''));
   }
 
   /**
@@ -1714,6 +1784,11 @@ export class PiAgent extends BaseAgent {
     }
     this.pendingEnsureSessionReady.clear();
 
+    for (const [, pending] of this.pendingWindowsShellCommands) {
+      pending.reject(new Error(`Pi subprocess exited unexpectedly (${exitReason})`));
+    }
+    this.pendingWindowsShellCommands.clear();
+
     // Reject pending compact/toggle requests
     for (const [, pending] of this.pendingCompactions) {
       pending.reject(new Error(`Pi subprocess exited unexpectedly (${exitReason})`));
@@ -1768,6 +1843,38 @@ export class PiAgent extends BaseAgent {
       });
 
       this.send({ type: 'ensure_session_ready', id });
+    });
+  }
+
+  private async requestWindowsShellCommand(command: 'win-shell-info' | 'win-processes' | 'win-cleanup'): Promise<string> {
+    await this.ensureSubprocess();
+
+    const id = `windows-shell-command-${++this.rpcIdCounter}`;
+    const timeoutMs = 30_000;
+
+    return new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingWindowsShellCommands.delete(id);
+        reject(new Error(`${command} timed out after ${Math.floor(timeoutMs / 1000)}s`));
+      }, timeoutMs);
+
+      this.pendingWindowsShellCommands.set(id, {
+        resolve: (text) => {
+          clearTimeout(timer);
+          resolve(text);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+
+      this.send({
+        type: 'windows_shell_command',
+        id,
+        command,
+        cwd: this.config.session?.workingDirectory || this.config.workspace.rootPath,
+      });
     });
   }
 
@@ -1973,6 +2080,23 @@ export class PiAgent extends BaseAgent {
         } else {
           yield { type: 'info', message: 'Compacted context to fit within limits' };
         }
+        yield { type: 'complete' };
+        return;
+      }
+
+      const windowsCommandMatch = process.platform === 'win32'
+        ? trimmedMessage.match(/^\/(win-shell-info|win-processes|win-cleanup)\s*$/i)
+        : null;
+      if (windowsCommandMatch) {
+        const rawCommand = windowsCommandMatch[1];
+        if (!rawCommand) {
+          yield { type: 'info', message: 'Unknown Windows shell command.' };
+          yield { type: 'complete' };
+          return;
+        }
+        const command = rawCommand.toLowerCase() as 'win-shell-info' | 'win-processes' | 'win-cleanup';
+        const text = await this.requestWindowsShellCommand(command);
+        yield { type: 'info', message: text || `${command} completed.` };
         yield { type: 'complete' };
         return;
       }

@@ -13,7 +13,6 @@ import {
   XCircle,
   Circle,
   MessageCircleDashed,
-  FileText,
   ArrowUpRight,
   Ban,
   Copy,
@@ -1698,7 +1697,18 @@ function applyTextHighlightRange(
  * on every character. Content updates every 300ms during streaming, avoiding
  * expensive markdown parsing on every delta.
  */
-export function ResponseCard({
+export function ResponseCard(props: ResponseCardProps) {
+  const variant = props.variant ?? 'response'
+  const hasVisibleText = props.text.trim().length > 0
+
+  if (variant === 'response' && !hasVisibleText) {
+    return null
+  }
+
+  return <ResponseCardContent {...props} />
+}
+
+function ResponseCardContent({
   text,
   isStreaming,
   streamStartTime,
@@ -2565,19 +2575,6 @@ export function ResponseCard({
                     </>
                   )}
                 </button>
-                {onPopOut && (
-                  <button
-                    onClick={onPopOut}
-                    className={cn(
-                      "turn-action-btn flex items-center gap-1.5 transition-colors select-none",
-                      "text-muted-foreground hover:text-foreground",
-                      "focus:outline-none focus-visible:underline"
-                    )}
-                  >
-                    <FileText className={SIZE_CONFIG.iconSize} />
-                    <span>Markdown</span>
-                  </button>
-                )}
                 {onFeedback && (
                   <>
                     <button

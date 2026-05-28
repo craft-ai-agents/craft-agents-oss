@@ -1591,6 +1591,8 @@
   "turnCard.responding": "回复中...",
   "turnCard.starting": "启动中...",
   "turnCard.stepsCompleted": "步骤已完成",
+  "updateButton.label": "更新",
+  "updateButton.tooltip": "重启以更新到 v{{version}}",
   "viewer.clearSession": "清除会话",
   "webui.connectingToServer": "正在连接服务器...",
   "webui.connectionFailed": "连接失败",

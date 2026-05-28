@@ -62,6 +62,10 @@ export interface McpClientPoolCallOptions {
   summarize?: (prompt: string) => Promise<string | null>;
 }
 
+export type McpClientPoolRefreshSourceResult =
+  | { success: true; sourceSlug: string; toolCount: number }
+  | { success: false; sourceSlug: string; error: string };
+
 /**
  * Convert SdkMcpServerConfig (used by backend types) to CraftMcpClient config.
  */
@@ -86,8 +90,7 @@ function sdkConfigToClientConfig(config: SdkMcpServerConfig): McpClientConfig | 
 
 /**
  * Check if an MCP source's config has changed in a way that requires reconnection.
- * Compares auth headers (token refresh) and URL changes.
- * Ignores stdio sources since they don't use OAuth tokens.
+ * Compares HTTP URL/auth changes and stdio process config changes.
  */
 function mcpConfigChanged(oldConfig: SdkMcpServerConfig, newConfig: SdkMcpServerConfig): boolean {
   if (oldConfig.type !== newConfig.type) return true;
@@ -102,7 +105,29 @@ function mcpConfigChanged(oldConfig: SdkMcpServerConfig, newConfig: SdkMcpServer
     if (oldAuth !== newAuth) return true;
   }
 
+  if (oldConfig.type === 'stdio' && newConfig.type === 'stdio') {
+    if (oldConfig.command !== newConfig.command) return true;
+    if (!stringArraysEqual(oldConfig.args, newConfig.args)) return true;
+    if (!stringRecordsEqual(oldConfig.env, newConfig.env)) return true;
+  }
+
   return false;
+}
+
+function stringArraysEqual(a?: string[], b?: string[]): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+}
+
+function stringRecordsEqual(a?: Record<string, string>, b?: Record<string, string>): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  const aKeys = Object.keys(a).sort();
+  const bKeys = Object.keys(b).sort();
+  if (!stringArraysEqual(aKeys, bKeys)) return false;
+  return aKeys.every(key => a[key] === b[key]);
 }
 
 export class McpClientPool {
@@ -232,6 +257,43 @@ export class McpClientPool {
     this.proxyTools.clear();
     this.activeConfigs.clear();
     this.debug('Disconnected all MCP clients');
+  }
+
+  /**
+   * Force a single source to reconnect and rediscover tools.
+   *
+   * Refresh fails closed: any existing client/cache is removed first, and a
+   * failed reconnect leaves the source disconnected instead of exposing stale
+   * tools from an old process or config.
+   */
+  async refreshSource(
+    slug: string,
+    config: SdkMcpServerConfig
+  ): Promise<McpClientPoolRefreshSourceResult> {
+    await this.disconnect(slug);
+    try {
+      await this.connect(slug, config);
+      const toolCount = this.toolCache.get(slug)?.length ?? 0;
+      return { success: true, sourceSlug: slug, toolCount };
+    } catch (error) {
+      this.debug(`Failed to refresh MCP source ${slug}: ${error instanceof Error ? error.message : String(error)}`);
+      return {
+        success: false,
+        sourceSlug: slug,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      this.notifyToolsChanged();
+    }
+  }
+
+  /**
+   * Remove one source from the running pool and notify listeners.
+   * Used when a refresh cannot build a usable connection config.
+   */
+  async removeSource(slug: string): Promise<void> {
+    await this.disconnect(slug);
+    this.notifyToolsChanged();
   }
 
   // ============================================================

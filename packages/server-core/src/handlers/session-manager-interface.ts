@@ -27,6 +27,10 @@ import type { SessionBundle, DispatchMode } from '@craft-agent/shared/sessions'
 import type { EventSink } from '../transport'
 import type { UserProfile } from '../sessions/user-profile-context'
 
+export type RefreshWorkspaceMcpSourceResult =
+  | { success: true; sourceSlug: string; toolCount: number }
+  | { success: false; sourceSlug: string; error: string }
+
 export interface ISessionManager {
   // ---------------------------------------------------------------------------
   // Lifecycle
@@ -89,6 +93,7 @@ export interface ISessionManager {
     existingMessageId?: string,
     _isAuthRetry?: boolean,
     onAck?: (messageId: string) => void,
+    rpcContext?: { callerClientId?: string },
   ): Promise<void>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
@@ -205,6 +210,10 @@ export interface ISessionManager {
   closeWorkspace(workspaceRootPath: string): Promise<void>
   /** Re-sync all workspace MCP pools from disk — call after SSO login to pick up the fresh identity token. */
   syncAllWorkspaceMcpPools(): Promise<void>
+  /** Force one MCP source in the running workspace pool to reconnect and rediscover tools. */
+  refreshWorkspaceMcpSource(workspaceRootPath: string, sourceSlug: string): Promise<RefreshWorkspaceMcpSourceResult>
+  /** Remove one MCP source from the running workspace pool and clear its cached tools. */
+  removeWorkspaceMcpSource(workspaceRootPath: string, sourceSlug: string): Promise<void>
   /**
    * Manually notify the ConfigWatcher of a file change.
    * Workaround for Bun's fs.watch on Linux not detecting atomic renames.

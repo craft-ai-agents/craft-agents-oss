@@ -572,6 +572,7 @@ UI Create / Upload / Remote / Marketplace
   -> RPC skills.CREATE / FORCE_WRITE / INSTALL_*
   -> 写入 ~/.agents/skills/{slug}/SKILL.md 或 {workspace}/skills/{slug}/SKILL.md
   -> 安装 skill-provided MCP Sources
+  -> 刷新新建或复用的 MCP Source 在 workspace MCP pool 中的连接和工具缓存
   -> 广播 skills.CHANGED
   -> UI 刷新列表
 ```

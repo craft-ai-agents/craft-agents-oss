@@ -9,11 +9,13 @@ import type { ViewRoute } from '../../../shared/routes'
 export function getSessionClickRoute({
   navState,
   sessionId,
+  isArchived,
 }: {
   navState: NavigationState
   sessionId: string
+  isArchived?: boolean
 }): ViewRoute {
-  return isArchivedNavigation(navState)
+  return isArchivedNavigation(navState) && isArchived
     ? routes.view.archived(sessionId)
     : routes.view.allSessions(sessionId)
 }

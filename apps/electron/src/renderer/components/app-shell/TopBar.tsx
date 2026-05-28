@@ -1,7 +1,7 @@
 /**
  * TopBar - Persistent top bar above all panels (Slack-style)
  *
- * Layout: [Menu] [Sidebar] [Back] [Forward] [Workspace selector] ... [Browser strip] [+] [Help]
+ * Layout: [Menu] [Sidebar] [Back] [Forward] [Update] [Workspace selector] ... [Browser strip] [+] [Help]
  *
  * Fixed at top of window, height controlled by --topbar-height.
  * macOS: offset left to avoid stoplight controls.
@@ -54,6 +54,9 @@ interface TopBarProps {
   onForward: () => void
   canGoBack: boolean
   canGoForward: boolean
+  isUpdateReady?: boolean
+  updateVersion?: string | null
+  onInstallUpdate?: () => void | Promise<void>
   onToggleSidebar: () => void
   onToggleRightSidebar: () => void
   onToggleFocusMode: () => void
@@ -88,6 +91,9 @@ export function TopBar({
   onForward,
   canGoBack,
   canGoForward,
+  isUpdateReady,
+  updateVersion,
+  onInstallUpdate,
   onToggleSidebar,
   onToggleRightSidebar,
   onToggleFocusMode,
@@ -104,6 +110,7 @@ export function TopBar({
 
   const goBackHotkey = useActionLabel('nav.goBackAlt').hotkey
   const goForwardHotkey = useActionLabel('nav.goForwardAlt').hotkey
+  const showUpdateButton = !isCompact && isUpdateReady && Boolean(onInstallUpdate)
 
   useEffect(() => {
     const slotEl = rightSlotRef.current
@@ -206,6 +213,23 @@ export function TopBar({
                 </TooltipTrigger>
                 <TooltipContent side="bottom">{t("common.forward")} {goForwardHotkey}</TooltipContent>
               </Tooltip>
+
+              {showUpdateButton && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => { void onInstallUpdate?.() }}
+                      className="titlebar-no-drag ml-1 inline-flex h-[26px] shrink-0 items-center rounded-lg border border-foreground/10 bg-background/70 px-2.5 text-[12px] font-medium leading-none text-foreground/70 shadow-sm transition-colors hover:border-foreground/20 hover:bg-foreground/5 hover:text-foreground"
+                    >
+                      {t("updateButton.label")}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {t("updateButton.tooltip", { version: updateVersion })}
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </>
           )}
 

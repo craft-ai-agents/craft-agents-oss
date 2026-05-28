@@ -2096,6 +2096,9 @@ export default function App() {
                   defaultLayout={[20, 32, 48]}
                   menuNewChatTrigger={menuNewChatTrigger}
                   isFocusedMode={isFocusedMode}
+                  isUpdateReady={updateChecker.isReadyToInstall}
+                  updateVersion={updateChecker.updateInfo?.latestVersion}
+                  onInstallUpdate={updateChecker.installUpdate}
                 />
               )}
             </div>

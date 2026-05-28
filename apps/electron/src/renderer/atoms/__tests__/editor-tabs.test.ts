@@ -10,6 +10,7 @@ import {
   closeTabAtom,
   refreshAllTabsAtom,
   detectTurnEnd,
+  getNewSessionFilePaths,
   type EditorTab,
 } from '../editor-tabs'
 
@@ -279,6 +280,19 @@ describe('detectTurnEnd', () => {
       prev = next
     }
     expect(count).toBe(2)
+  })
+})
+
+describe('getNewSessionFilePaths', () => {
+  it('does not report files as new before the watcher baseline is primed', () => {
+    expect(getNewSessionFilePaths(null, ['/session/data/first.md'])).toEqual([])
+  })
+
+  it('reports only paths missing from the previous baseline', () => {
+    expect(getNewSessionFilePaths(
+      new Set(['/session/data/first.md']),
+      ['/session/data/first.md', '/session/data/second.md'],
+    )).toEqual(['/session/data/second.md'])
   })
 })
 

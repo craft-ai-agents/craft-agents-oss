@@ -917,6 +917,12 @@ export function FreeFormInput({
     else if (commandId === 'ask') onPermissionModeChange?.('ask')
     else if (commandId === 'allow-all') onPermissionModeChange?.('allow-all')
     else if (commandId === 'compact' && !isProcessing) onSubmit('/compact', undefined)
+    else if (
+      (commandId === 'win-shell-info' || commandId === 'win-processes' || commandId === 'win-cleanup') &&
+      !isProcessing
+    ) {
+      onSubmit(`/${commandId}`, undefined)
+    }
   }, [onPermissionModeChange, isProcessing, onSubmit])
 
   // Handle folder selection from slash command menu

@@ -54,9 +54,11 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     if (candidates.length === 0) return
 
     const confirmedStdioCommands: Record<string, true> = {}
+    const refreshSourceSlugs = new Set<string>()
     const importCandidates = candidates.map((candidate) => {
       if (candidate.duplicate?.sourceSlug) {
         addSlugToWorkspaceDefaults(workspaceRoot, candidate.duplicate.sourceSlug)
+        refreshSourceSlugs.add(candidate.duplicate.sourceSlug)
         return { ...candidate, action: { type: 'skip' as const } }
       }
       if (candidate.input.mcp?.transport === 'stdio' && candidate.input.mcp.command) {
@@ -75,6 +77,14 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     for (const created of result.results) {
       if (!created.success || 'skipped' in created) continue
       addSlugToWorkspaceDefaults(workspaceRoot, created.sourceSlug)
+      refreshSourceSlugs.add(created.sourceSlug)
+    }
+
+    for (const sourceSlug of refreshSourceSlugs) {
+      const refreshResult = await deps.sessionManager.refreshWorkspaceMcpSource(workspaceRoot, sourceSlug)
+      if (!refreshResult.success) {
+        deps.platform.logger?.warn(`SKILLS: MCP source refresh failed for ${sourceSlug}: ${refreshResult.error}`)
+      }
     }
 
     pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspaceRoot))

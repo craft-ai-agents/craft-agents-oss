@@ -18,10 +18,18 @@ import {
   type BrowserEmptyStateLaunchResult,
   type BrowserInstanceInfo,
 } from '../shared/types'
-import { DEFAULT_THEME, loadAppTheme } from '@craft-agent/shared/config'
+import { DEFAULT_THEME, loadAppTheme, getAllowRemoteEvaluate } from '@craft-agent/shared/config'
+import { CodedError } from '@craft-agent/shared/protocol'
 import { getBrowserLiveFxCornerRadii } from '../shared/browser-live-fx'
-import type { IBrowserPaneManager } from '@craft-agent/server-core/handlers'
 import { getDeepLinkPrefix } from './deep-link-scheme'
+import type {
+  IBrowserPaneManager,
+  BrowserInstanceSnapshot,
+} from '@craft-agent/server-core/handlers'
+import type {
+  BrowserCapabilityRequest,
+  ScreenshotResultWire,
+} from '@craft-agent/server-core/transport'
 
 export type { BrowserInstanceInfo }
 
@@ -145,6 +153,13 @@ interface BrowserInstance {
   boundSessionId: string | null
   ownerType: 'session' | 'manual'
   ownerSessionId: string | null
+  /**
+   * Workspace this instance is associated with, or `null` for unbound manual
+   * windows. Renderers in other workspaces filter such entries out of the tab
+   * strip / status badge. Stamped at create-time (or first bind) — once non-null,
+   * subsequent rebinds may overwrite it with the new binder's workspace.
+   */
+  workspaceId: string | null
   isVisible: boolean
   isHiding: boolean
   keepAliveOnWindowClose: boolean
@@ -172,6 +187,7 @@ interface CreateBrowserInstanceOptions {
   show?: boolean
   ownerType?: 'session' | 'manual'
   ownerSessionId?: string
+  workspaceId?: string | null
 }
 
 export interface BrowserScreenshotOptions {
@@ -349,6 +365,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     const shouldShow = options?.show ?? false
     const ownerType = options?.ownerType ?? 'manual'
     const ownerSessionId = ownerType === 'session' ? (options?.ownerSessionId ?? null) : null
+    const workspaceId = options?.workspaceId ?? null
 
     if (this.instances.has(instanceId)) {
       mainLog.warn(`[browser-pane] Instance already exists, reusing: ${instanceId}`)
@@ -442,6 +459,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       boundSessionId: ownerSessionId,
       ownerType,
       ownerSessionId,
+      workspaceId,
       isVisible: false,
       isHiding: false,
       keepAliveOnWindowClose: true,
@@ -673,6 +691,35 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       infos.push(this.toInfo(instance))
     }
     return infos
+  }
+
+  async listInstancesAsync(): Promise<BrowserInstanceInfo[]> {
+    return this.listInstances()
+  }
+
+  async getInstanceAsync(id: string): Promise<BrowserInstanceSnapshot | undefined> {
+    return this.getInstance(id)
+  }
+
+  async createForSessionAsync(
+    sessionId: string,
+    options?: { show?: boolean; workspaceId?: string | null },
+  ): Promise<string> {
+    return this.createForSession(sessionId, options)
+  }
+
+  async getOrCreateForSessionAsync(
+    sessionId: string,
+    options?: { workspaceId?: string | null },
+  ): Promise<string> {
+    return this.getOrCreateForSession(sessionId, options)
+  }
+
+  async focusBoundForSessionAsync(
+    sessionId: string,
+    options?: { workspaceId?: string | null },
+  ): Promise<string> {
+    return this.focusBoundForSession(sessionId, options)
   }
 
   getWindowCount(): number {
@@ -1681,12 +1728,18 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     await instance.pageView.webContents.executeJavaScript(`window.scrollBy(${deltaX}, ${deltaY})`)
   }
 
-  bindSession(id: string, sessionId: string): void {
+  bindSession(id: string, sessionId: string, options?: { workspaceId?: string | null }): void {
     const instance = this.instances.get(id)
     if (instance) {
       instance.boundSessionId = sessionId
       instance.ownerType = 'session'
       instance.ownerSessionId = sessionId
+      // Adopt the new binder's workspace. Manual windows being reused for a
+      // session start carrying that session's workspace so the receiving
+      // workspace's UI sees them and others don't.
+      if (options?.workspaceId !== undefined) {
+        instance.workspaceId = options.workspaceId
+      }
       this.emitStateChange(instance)
     }
   }
@@ -1728,50 +1781,86 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     return null
   }
 
-  private findReusableUnboundInstance(): BrowserInstance | null {
-    const unbound = Array.from(this.instances.values()).filter(i => i.boundSessionId === null && i.ownerType === 'manual')
-    if (unbound.length === 0) return null
+  /**
+   * Pick an unbound window that the caller's workspace is allowed to adopt.
+   *
+   * Why workspace filtering matters: when a session ends, its window stays
+   * alive and becomes `ownerType='manual'` so the next turn of the **same**
+   * session can re-bind it. But the window keeps its original `workspaceId`.
+   * Without filtering, a session in workspace B would grab a window left
+   * behind by workspace A — moving the window across workspaces, which is
+   * exactly the leak this whole workspace-isolation work is fixing.
+   *
+   * Rule: adoption is allowed if the unbound window has `workspaceId === null`
+   * (truly user-opened, no workspace context) OR matches the caller's
+   * `workspaceId`. Same-workspace reuse covers the legitimate "turn ended,
+   * next turn re-binds" case as well as any future turn of any session in
+   * that workspace.
+   */
+  private findReusableUnboundInstance(workspaceId: string | null): BrowserInstance | null {
+    const candidates = Array.from(this.instances.values()).filter(
+      (i) =>
+        i.boundSessionId === null &&
+        i.ownerType === 'manual' &&
+        (i.workspaceId === null || i.workspaceId === workspaceId),
+    )
+    if (candidates.length === 0) return null
 
     // Prefer visible windows first, then fall back to first available.
-    return unbound.find(i => i.isVisible) ?? unbound[0]
+    return candidates.find((i) => i.isVisible) ?? candidates[0]
   }
 
-  createForSession(sessionId: string, options?: { show?: boolean }): string {
+  createForSession(
+    sessionId: string,
+    options?: { show?: boolean; allowReuseManual?: boolean; workspaceId?: string | null },
+  ): string {
+    const workspaceId = options?.workspaceId ?? null
     const existing = this.getBoundForSession(sessionId)
     if (existing) {
+      // Already bound — adopt the workspace if the caller provided one and the
+      // existing instance was bound before we knew about its workspace.
+      if (options?.workspaceId !== undefined) {
+        const instance = this.instances.get(existing)
+        if (instance) instance.workspaceId = options.workspaceId
+      }
       if (options?.show) {
         this.focus(existing)
       }
       return existing
     }
 
-    // Reuse an unbound/manual window before creating a new one.
-    // This helps agents avoid unnecessary browser window sprawl.
-    const reusable = this.findReusableUnboundInstance()
-    if (reusable) {
-      this.bindSession(reusable.id, sessionId)
-      if (options?.show) {
-        this.focus(reusable.id)
+    // Reuse an unbound/manual window before creating a new one — local
+    // sessions only. Remote agents must always get a fresh window so they
+    // can never hijack a window the user opened manually.
+    const allowReuseManual = options?.allowReuseManual ?? true
+    if (allowReuseManual) {
+      const reusable = this.findReusableUnboundInstance(workspaceId)
+      if (reusable) {
+        this.bindSession(reusable.id, sessionId, { workspaceId })
+        if (options?.show) {
+          this.focus(reusable.id)
+        }
+        mainLog.info(`[browser-pane] Reused unbound instance ${reusable.id} for session ${sessionId} (workspace=${workspaceId ?? 'none'})`)
+        return reusable.id
       }
-      mainLog.info(`[browser-pane] Reused unbound instance ${reusable.id} for session ${sessionId}`)
-      return reusable.id
     }
 
     return this.createInstance(undefined, {
       show: options?.show ?? false,
       ownerType: 'session',
       ownerSessionId: sessionId,
+      workspaceId,
     })
   }
 
-  focusBoundForSession(sessionId: string): string {
-    const id = this.createForSession(sessionId, { show: true })
+  focusBoundForSession(sessionId: string, options?: { workspaceId?: string | null }): string {
+    const id = this.createForSession(sessionId, { show: true, workspaceId: options?.workspaceId })
     this.focus(id)
     return id
   }
 
-  getOrCreateForSession(sessionId: string): string {
-    return this.createForSession(sessionId, { show: false })
+  getOrCreateForSession(sessionId: string, options?: { workspaceId?: string | null }): string {
+    return this.createForSession(sessionId, { show: false, workspaceId: options?.workspaceId })
   }
 
   getBoundInstanceId(sessionId: string): string | null {
@@ -2308,6 +2397,363 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     mainLog.info('[browser-pane] Toolbar IPC handlers registered')
   }
 
+  // ---------------------------------------------------------------------------
+  // Capability IPC — dispatcher for the `client:browser:invoke` WS capability.
+  //
+  // Sits between the preload bridge (which receives the WS request from the
+  // remote server) and the real BrowserPaneManager. It rewrites session IDs to
+  // an owner-key namespace, refuses any instance ID not owned by the calling
+  // (workspaceId, sessionId), and blocks unsafe methods like `uploadFile` or
+  // (optionally) `evaluate`.
+  // ---------------------------------------------------------------------------
+
+  /** Register the `__browser:invoke` IPC handler. Call once at app startup. */
+  registerCapabilityIpc(): void {
+    ipcMain.handle('__browser:invoke', async (_event, req: BrowserCapabilityRequest) => {
+      return await this.dispatchCapability(req)
+    })
+    mainLog.info('[browser-pane] Capability IPC handler registered')
+  }
+
+  /** Owner-key namespacing: remote sessions can't collide with local sessions. */
+  private toOwnerKey(workspaceId: string, sessionId: string): string {
+    return `remote:${workspaceId}:${sessionId}`
+  }
+
+  private isRemoteOwnerKey(value: string | null | undefined): value is string {
+    return typeof value === 'string' && value.startsWith('remote:')
+  }
+
+  private parseOwnerKey(value: string): { workspaceId: string; sessionId: string } | null {
+    if (!this.isRemoteOwnerKey(value)) return null
+    const rest = value.slice('remote:'.length)
+    const colon = rest.indexOf(':')
+    if (colon === -1) return null
+    return { workspaceId: rest.slice(0, colon), sessionId: rest.slice(colon + 1) }
+  }
+
+  /** Replace `remote:${ws}:${sid}` owner-keys with raw `sid` on outbound payloads. */
+  private stripOwnerKeysInPlace<T extends Partial<BrowserInstanceInfo>>(info: T): T {
+    if (this.isRemoteOwnerKey(info.boundSessionId)) {
+      info.boundSessionId = this.parseOwnerKey(info.boundSessionId)!.sessionId
+    }
+    if (this.isRemoteOwnerKey(info.ownerSessionId)) {
+      info.ownerSessionId = this.parseOwnerKey(info.ownerSessionId)!.sessionId
+    }
+    return info
+  }
+
+  /**
+   * Throws `BROWSER_INSTANCE_NOT_OWNED` unless the instance belongs to `ownerKey`.
+   * Called by every dispatcher branch that accepts an instanceId — including read-only ones.
+   */
+  private requireOwnedInstance(instanceId: string, ownerKey: string): void {
+    const instance = this.instances.get(instanceId)
+    if (!instance || instance.window.isDestroyed()) {
+      throw new CodedError('BROWSER_INSTANCE_NOT_OWNED', `Browser instance "${instanceId}" not found.`)
+    }
+    const owned = instance.boundSessionId === ownerKey || instance.ownerSessionId === ownerKey
+    if (!owned) {
+      throw new CodedError('BROWSER_INSTANCE_NOT_OWNED',
+        `Browser instance "${instanceId}" is not owned by this session.`)
+    }
+  }
+
+  /** Session-scoped listInstances — never returns workspace-wide windows to a remote agent. */
+  private listInstancesForOwner(ownerKey: string): BrowserInstanceInfo[] {
+    const infos: BrowserInstanceInfo[] = []
+    for (const instance of this.instances.values()) {
+      if (instance.window.isDestroyed()) {
+        this.cleanupDestroyedInstance(instance, 'listInstancesForOwner')
+        continue
+      }
+      const owned = instance.boundSessionId === ownerKey || instance.ownerSessionId === ownerKey
+      if (!owned) continue
+      infos.push(this.stripOwnerKeysInPlace(this.toInfo(instance)))
+    }
+    return infos
+  }
+
+  /**
+   * Extract a plain {@link BrowserInstanceSnapshot} from a live `BrowserInstance`.
+   *
+   * `this.getInstance(id)` returns the full instance, which has non-cloneable
+   * Electron native references (`window: BrowserWindow`, `pageView: BrowserView`,
+   * `toolbarView`, ...). When we ship the result back over the `__browser:invoke`
+   * IPC channel, Electron's structured-clone serializer throws
+   * "An object could not be cloned" — see the user-reported bug on the remote
+   * bridge path. Always pass the live instance through this helper before
+   * returning over IPC.
+   */
+  private toSnapshot(instance: BrowserInstance): BrowserInstanceSnapshot {
+    return {
+      ownerType: instance.ownerType,
+      ownerSessionId: instance.ownerSessionId,
+      isVisible: instance.isVisible,
+      title: instance.title,
+      currentUrl: instance.currentUrl,
+    }
+  }
+
+  private toScreenshotWire(result: BrowserScreenshotResult): ScreenshotResultWire {
+    const buf = result.imageBuffer
+    return {
+      imageFormat: result.imageFormat,
+      imageBytes: new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength),
+      metadata: result.metadata,
+    }
+  }
+
+  /** Main dispatcher. Strongly-typed `switch` over `IBrowserPaneManager` methods. */
+  private async dispatchCapability(req: BrowserCapabilityRequest): Promise<unknown> {
+    if (!req || req.v !== 1) {
+      throw new CodedError('HANDLER_ERROR',
+        `Unsupported browser capability request shape (v=${(req as { v?: unknown })?.v}).`)
+    }
+    const ownerKey = this.toOwnerKey(req.workspaceId, req.sessionId)
+    const args = req.args ?? []
+
+    switch (req.method) {
+      // -- Session-scoped (no instanceId arg, takes a sessionId) ----------------
+      case 'createForSession': {
+        const [, options] = args as [string, { show?: boolean } | undefined]
+        return this.createForSession(ownerKey, {
+          show: options?.show ?? false,
+          allowReuseManual: false,
+          workspaceId: req.workspaceId,
+        })
+      }
+      // Remote agents must NEVER reuse an existing manual / unbound window —
+      // even one that was previously bound to a local session. The
+      // workspaceId-aware reuse filter is best-effort (it can still match
+      // legacy windows stamped with workspaceId=null), so we belt-and-brace
+      // by disabling manual reuse on every remote lifecycle path. Each remote
+      // session-id namespace gets a fresh window unless it already owns one.
+      case 'getOrCreateForSession':
+        return this.createForSession(ownerKey, {
+          show: false,
+          allowReuseManual: false,
+          workspaceId: req.workspaceId,
+        })
+      case 'focusBoundForSession': {
+        const id = this.createForSession(ownerKey, {
+          show: true,
+          allowReuseManual: false,
+          workspaceId: req.workspaceId,
+        })
+        this.focus(id)
+        return id
+      }
+      case 'destroyForSession':
+        this.destroyForSession(ownerKey)
+        return undefined
+      case 'clearVisualsForSession':
+        await this.clearVisualsForSession(ownerKey)
+        return undefined
+      case 'unbindAllForSession':
+        this.unbindAllForSession(ownerKey)
+        return undefined
+      case 'setAgentControl': {
+        const [, meta] = args as [string, { displayName?: string; intent?: string }]
+        this.setAgentControl(ownerKey, meta, { workspaceId: req.workspaceId })
+        return undefined
+      }
+      case 'clearAgentControl':
+        this.clearAgentControl(ownerKey)
+        return undefined
+
+      // -- Mixed (instanceId + optional sessionId) ----------------------------
+      case 'clearAgentControlForInstance': {
+        const [instanceId, sessionId] = args as [string, string | undefined]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.clearAgentControlForInstance(
+          instanceId,
+          sessionId !== undefined ? ownerKey : undefined,
+        )
+      }
+
+      // -- Instance-id only ----------------------------------------------------
+      case 'getInstance': {
+        const [instanceId] = args as [string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        const live = this.getInstance(instanceId)
+        if (!live) return undefined
+        // `getInstance` returns the live BrowserInstance (which embeds non-
+        // cloneable Electron native objects). Project to a plain snapshot
+        // before crossing the IPC boundary.
+        return this.stripOwnerKeysInPlace(this.toSnapshot(live))
+      }
+      case 'listInstances':
+        return this.listInstancesForOwner(ownerKey)
+      case 'bindSession': {
+        const [instanceId] = args as [string, string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        this.bindSession(instanceId, ownerKey, { workspaceId: req.workspaceId })
+        return undefined
+      }
+      case 'focus': {
+        const [instanceId] = args as [string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        this.focus(instanceId)
+        return undefined
+      }
+      case 'hide': {
+        const [instanceId] = args as [string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        this.hide(instanceId)
+        return undefined
+      }
+      case 'destroyInstance': {
+        const [instanceId] = args as [string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        this.destroyInstance(instanceId)
+        return undefined
+      }
+
+      // -- Navigation ----------------------------------------------------------
+      case 'navigate': {
+        const [instanceId, url] = args as [string, string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.navigate(instanceId, url)
+      }
+      case 'goBack': {
+        const [instanceId] = args as [string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.goBack(instanceId)
+      }
+      case 'goForward': {
+        const [instanceId] = args as [string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.goForward(instanceId)
+      }
+
+      // -- Interaction ---------------------------------------------------------
+      case 'getAccessibilitySnapshot': {
+        const [instanceId] = args as [string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.getAccessibilitySnapshot(instanceId)
+      }
+      case 'clickElement': {
+        const [instanceId, ref, options] = args as [
+          string, string,
+          { waitFor?: 'none' | 'navigation' | 'network-idle'; timeoutMs?: number } | undefined,
+        ]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.clickElement(instanceId, ref, options)
+      }
+      case 'clickAtCoordinates': {
+        const [instanceId, x, y] = args as [string, number, number]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.clickAtCoordinates(instanceId, x, y)
+      }
+      case 'drag': {
+        const [instanceId, x1, y1, x2, y2] = args as [string, number, number, number, number]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.drag(instanceId, x1, y1, x2, y2)
+      }
+      case 'fillElement': {
+        const [instanceId, ref, value] = args as [string, string, string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.fillElement(instanceId, ref, value)
+      }
+      case 'typeText': {
+        const [instanceId, text] = args as [string, string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.typeText(instanceId, text)
+      }
+      case 'selectOption': {
+        const [instanceId, ref, value] = args as [string, string, string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.selectOption(instanceId, ref, value)
+      }
+      case 'sendKey': {
+        const [instanceId, keyArgs] = args as [string, BrowserKeyArgs]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.sendKey(instanceId, keyArgs)
+      }
+      case 'scroll': {
+        const [instanceId, direction, amount] = args as [
+          string, 'up' | 'down' | 'left' | 'right', number | undefined,
+        ]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.scroll(instanceId, direction, amount)
+      }
+      case 'waitFor': {
+        const [instanceId, waitArgs] = args as [string, BrowserWaitArgs]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.waitFor(instanceId, waitArgs)
+      }
+      case 'evaluate': {
+        const [instanceId, expression] = args as [string, string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        if (!getAllowRemoteEvaluate()) {
+          throw new CodedError('BROWSER_REMOTE_EVALUATE_BLOCKED',
+            'JavaScript evaluation from remote agents is disabled in this client.')
+        }
+        return this.evaluate(instanceId, expression)
+      }
+
+      // -- Clipboard -----------------------------------------------------------
+      case 'setClipboard': {
+        const [instanceId, text] = args as [string, string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.setClipboard(instanceId, text)
+      }
+      case 'getClipboard': {
+        const [instanceId] = args as [string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.getClipboard(instanceId)
+      }
+
+      // -- Capture / introspection --------------------------------------------
+      case 'screenshot': {
+        const [instanceId, options] = args as [string, BrowserScreenshotOptions | undefined]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        const result = await this.screenshot(instanceId, options)
+        return this.toScreenshotWire(result)
+      }
+      case 'screenshotRegion': {
+        const [instanceId, target] = args as [string, BrowserScreenshotRegionTarget]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        const result = await this.screenshotRegion(instanceId, target)
+        return this.toScreenshotWire(result)
+      }
+      case 'getConsoleLogs': {
+        const [instanceId, options] = args as [string, BrowserConsoleOptions | undefined]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.getConsoleLogs(instanceId, options)
+      }
+      case 'getNetworkLogs': {
+        const [instanceId, options] = args as [string, BrowserNetworkOptions | undefined]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.getNetworkLogs(instanceId, options)
+      }
+      case 'windowResize': {
+        const [instanceId, width, height] = args as [string, number, number]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.windowResize(instanceId, width, height)
+      }
+      case 'getDownloads': {
+        const [instanceId, options] = args as [string, BrowserDownloadOptions | undefined]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.getDownloads(instanceId, options)
+      }
+      case 'uploadFile':
+        throw new CodedError('BROWSER_REMOTE_UPLOAD_NOT_SUPPORTED',
+          'File upload from a remote agent is not supported yet. Ask the user to attach the file to the session.')
+      case 'detectSecurityChallenge': {
+        const [instanceId] = args as [string]
+        this.requireOwnedInstance(instanceId, ownerKey)
+        return this.detectSecurityChallenge(instanceId)
+      }
+
+      default: {
+        const method = (req as { method?: unknown }).method
+        throw new CodedError('HANDLER_ERROR', `Unknown browser capability method: ${String(method)}`)
+      }
+    }
+  }
+
   private markToolbarReady(instance: BrowserInstance, reason: string): void {
     if (instance.toolbarReady || instance.window.isDestroyed()) return
 
@@ -2338,7 +2784,11 @@ export class BrowserPaneManager implements IBrowserPaneManager {
    * Activate or update the agent control overlay on the browser instance
    * bound to the given session. Called from sessions.ts on browser_* tool_start events.
    */
-  setAgentControl(sessionId: string, meta: { displayName?: string; intent?: string }): void {
+  setAgentControl(
+    sessionId: string,
+    meta: { displayName?: string; intent?: string },
+    options?: { workspaceId?: string | null },
+  ): void {
     for (const instance of this.instances.values()) {
       if (instance.boundSessionId === sessionId) {
         instance.agentControl = {
@@ -2346,6 +2796,12 @@ export class BrowserPaneManager implements IBrowserPaneManager {
           sessionId,
           displayName: meta.displayName,
           intent: meta.intent,
+        }
+
+        // Backfill workspaceId for instances that were created before the
+        // workspace was known (legacy callers / pre-workspaceId code paths).
+        if (options?.workspaceId !== undefined && instance.workspaceId === null) {
+          instance.workspaceId = options.workspaceId
         }
 
         const label = this.getAgentControlLabel(instance.agentControl)
@@ -3164,6 +3620,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       isVisible: instance.isVisible,
       agentControlActive: !!instance.agentControl?.active,
       themeColor: instance.themeColor,
+      workspaceId: instance.workspaceId,
     }
   }
 

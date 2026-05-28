@@ -87,3 +87,4 @@ docs/agents/
 # Test scripts (not committed to remote)
 scripts/test-user-profile-api.ts
 .vscode/
+pi-extra/

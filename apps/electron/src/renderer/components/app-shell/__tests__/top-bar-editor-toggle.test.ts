@@ -27,4 +27,15 @@ describe('TopBar editor panel toggle', () => {
   test('gates the editor toggle button behind isEditorPanelToggleVisible', () => {
     expect(topBarSource).toContain('isEditorPanelToggleVisible &&')
   })
+
+  test('accepts update button props', () => {
+    expect(topBarSource).toContain('isUpdateReady')
+    expect(topBarSource).toContain('updateVersion')
+    expect(topBarSource).toContain('onInstallUpdate')
+  })
+
+  test('renders localized titlebar update button text and tooltip', () => {
+    expect(topBarSource).toContain('updateButton.label')
+    expect(topBarSource).toContain('updateButton.tooltip')
+  })
 })

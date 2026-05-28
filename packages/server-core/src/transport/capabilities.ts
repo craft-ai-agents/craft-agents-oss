@@ -4,6 +4,7 @@
  * See docs/adr-transport-locality.md for the locality boundary definition.
  */
 
+import type { BrowserCapabilityRequest } from './browser-capability'
 import type { RpcServer } from './types'
 
 /** Capability: open a URL in the client's default browser. */
@@ -21,6 +22,9 @@ export const CLIENT_CONFIRM_DIALOG = 'client:confirmDialog'
 /** Capability: show a native file/folder picker on the client. */
 export const CLIENT_OPEN_FILE_DIALOG = 'client:openFileDialog'
 
+/** Capability: drive a local `BrowserPaneManager` instance for a remote agent. */
+export const CLIENT_BROWSER_INVOKE = 'client:browser:invoke'
+
 /** All capabilities a local Electron client advertises on handshake. */
 export const LOCAL_CLIENT_CAPABILITIES: readonly string[] = [
   CLIENT_OPEN_EXTERNAL,
@@ -28,6 +32,7 @@ export const LOCAL_CLIENT_CAPABILITIES: readonly string[] = [
   CLIENT_SHOW_IN_FOLDER,
   CLIENT_CONFIRM_DIALOG,
   CLIENT_OPEN_FILE_DIALOG,
+  CLIENT_BROWSER_INVOKE,
 ]
 
 // ---------------------------------------------------------------------------
@@ -127,4 +132,18 @@ export async function requestClientOpenFileDialog(
   spec: FileDialogSpec,
 ): Promise<{ canceled: boolean; filePaths: string[] }> {
   return await server.invokeClient(clientId, CLIENT_OPEN_FILE_DIALOG, spec)
+}
+
+/**
+ * Ask the client to invoke a `BrowserPaneManager` method.
+ *
+ * Errors propagate with `.code` preserved (see transport error-code preservation
+ * in `client.ts` / `server.ts`). Callers can branch on `(err as any).code`.
+ */
+export async function requestClientBrowserInvoke<T>(
+  server: RpcServer,
+  clientId: string,
+  req: BrowserCapabilityRequest,
+): Promise<T> {
+  return server.invokeClient(clientId, CLIENT_BROWSER_INVOKE, req) as Promise<T>
 }

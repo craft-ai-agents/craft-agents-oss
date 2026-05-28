@@ -26,6 +26,15 @@ describe('session click route', () => {
     expect(getSessionClickRoute({
       navState: { navigator: 'archived', details: null },
       sessionId: 'session-3',
+      isArchived: true,
     })).toBe('archived/session/session-3')
+  })
+
+  test('clicking a normal session from archived navigation exits archived mode', () => {
+    expect(getSessionClickRoute({
+      navState: { navigator: 'archived', details: null },
+      sessionId: 'session-4',
+      isArchived: false,
+    })).toBe('allSessions/session/session-4')
   })
 })
