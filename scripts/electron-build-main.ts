@@ -21,7 +21,8 @@ const WA_WORKER_DIR = join(ROOT_DIR, "packages/messaging-whatsapp-worker");
 const WA_WORKER_SOURCE = join(WA_WORKER_DIR, "src/worker.ts");
 const WA_WORKER_OUTPUT = join(WA_WORKER_DIR, "dist/worker.cjs");
 
-// Load .env file if it exists
+// Load the committed-safe build env only. Do not load .env.local here:
+// this script can run for distributable builds where owner keys must not bake in.
 function loadEnvFile(): void {
   const envPath = join(ROOT_DIR, ".env");
   if (existsSync(envPath)) {

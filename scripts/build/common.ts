@@ -641,7 +641,10 @@ export async function uploadToS3(config: BuildConfig): Promise<void> {
 }
 
 /**
- * Load environment variables from .env file
+ * Load committed-safe build environment variables.
+ *
+ * Do not load .env.local here: release builds can bake selected env values into
+ * bundles, and owner-local secrets must not ship in app artifacts.
  */
 export async function loadEnvFile(config: BuildConfig): Promise<void> {
   const envPath = join(config.rootDir, '.env');

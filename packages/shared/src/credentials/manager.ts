@@ -9,6 +9,7 @@ import type { CredentialBackend } from './backends/types.ts';
 import type { CredentialId, CredentialType, StoredCredential, CredentialHealthStatus, CredentialHealthIssue } from './types.ts';
 import type { LlmAuthType, LlmProviderType } from '../config/llm-connections.ts';
 import { SecureStorageBackend } from './backends/secure-storage.ts';
+import { EnvironmentBackend } from './backends/env.ts';
 import { debug } from '../utils/debug.ts';
 
 export class CredentialManager {
@@ -50,6 +51,7 @@ export class CredentialManager {
   private async _doInitialize(): Promise<void> {
     const potentialBackends: CredentialBackend[] = [
       new SecureStorageBackend(),
+      new EnvironmentBackend(),
     ];
 
     // Check which backends are available

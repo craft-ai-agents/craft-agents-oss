@@ -32,6 +32,38 @@ The `CredentialManager` (see [packages/shared/src/credentials/](packages/shared/
 abstracts away whether the actual storage is OS keychain, encrypted file, or plain JSON. We
 reuse it.
 
+### Local/dev environment fallback
+
+Encrypted RunnerOS credential storage is the primary source of truth. Environment variables are
+read-only fallback values for local development and owner-operated installs; they are never written
+back into source files, agent configs, or manifests.
+
+Priority:
+
+1. Saved encrypted credential.
+2. Read-only environment fallback.
+3. Missing credential / connect UI.
+
+Supported fallback names:
+
+| Credential | Preferred env | Compatibility env |
+|---|---|---|
+| LLM connection API key | `RUNNER_LLM_<SLUG>_API_KEY` | `<SLUG>_API_KEY`, provider aliases like `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `KIMI_API_KEY`, `QWEN_API_KEY`, `GOOGLE_API_KEY`, `GEMINI_API_KEY` |
+| Source API key | `RUNNER_SOURCE_<SLUG>_API_KEY` | `<SLUG>_API_KEY`, selected legacy aliases like `YOUTUBE_API_KEY`, `ELEVENLABS_API_KEY`, `INWORLD_API_KEY` |
+| Source bearer token | `RUNNER_SOURCE_<SLUG>_BEARER_TOKEN` | `<SLUG>_BEARER_TOKEN` |
+| Source basic auth | `RUNNER_SOURCE_<SLUG>_BASIC_AUTH` | `<SLUG>_BASIC_AUTH` |
+| Messaging token | `RUNNER_MESSAGING_<NAME>_TOKEN` | `<NAME>_BOT_TOKEN` |
+
+OAuth user tokens are not resolved generically from environment variables. OAuth integrations should
+use the app connect flow or a source-specific integration credential file when explicitly supported.
+For example, Canva integration client credentials can be supplied with `CANVA_CLIENT_ID` and
+`CANVA_CLIENT_SECRET`, or `~/.config/runneros/canva/integration.json`.
+
+The local Electron dev script loads `.env` and then `.env.local`, with `.env.local` winning.
+`.env.local` is gitignored and is the correct place for the app owner's private dev keys.
+Distributable build scripts intentionally do not load `.env.local`, because selected env values can
+be bundled into release artifacts.
+
 ### After
 
 Add a new sentinel workspace value `__global__` to indicate the global tier:
