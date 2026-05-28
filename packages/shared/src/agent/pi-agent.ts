@@ -2038,7 +2038,9 @@ export class PiAgent extends BaseAgent {
         return;
       }
 
-      const windowsCommandMatch = trimmedMessage.match(/^\/(win-shell-info|win-processes|win-cleanup)\s*$/i);
+      const windowsCommandMatch = process.platform === 'win32'
+        ? trimmedMessage.match(/^\/(win-shell-info|win-processes|win-cleanup)\s*$/i)
+        : null;
       if (windowsCommandMatch) {
         const rawCommand = windowsCommandMatch[1];
         if (!rawCommand) {

@@ -4,6 +4,7 @@ import { Command as CommandPrimitive } from 'cmdk'
 import { Check, ListChecks, Minimize2, Search, Trash2 } from 'lucide-react'
 import { Icon_Folder } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
+import { isWindows } from '@/lib/platform'
 import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@craft-agent/shared/agent/modes'
 
 // ============================================================================
@@ -118,12 +119,14 @@ const windowsCleanupCommand: SlashCommand = {
   icon: <Trash2 className={MENU_ICON_SIZE} />,
 }
 
+const windowsCommands: SlashCommand[] = isWindows
+  ? [windowsShellInfoCommand, windowsProcessesCommand, windowsCleanupCommand]
+  : []
+
 export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
   ...permissionModeCommands,
   compactCommand,
-  windowsShellInfoCommand,
-  windowsProcessesCommand,
-  windowsCleanupCommand,
+  ...windowsCommands,
 ]
 
 export const DEFAULT_SLASH_COMMAND_GROUPS: CommandGroup[] = [
@@ -604,9 +607,7 @@ export function useInlineSlashCommand({
       label: 'Commands',
       items: [
         compactCommand,
-        windowsShellInfoCommand,
-        windowsProcessesCommand,
-        windowsCleanupCommand,
+        ...windowsCommands,
       ],
     })
 

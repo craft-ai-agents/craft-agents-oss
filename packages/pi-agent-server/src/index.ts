@@ -76,8 +76,7 @@ import { PI_TOOL_NAME_MAP, THINKING_ENABLED_TO_PI } from '../../shared/src/agent
 import { getDefaultSummarizationModel } from '../../shared/src/config/models.ts';
 import { ENV_CONNECTION_SSO_TOKEN_ENV_VAR } from '../../shared/src/config/llm-connections.ts';
 import { createWebFetchTool } from './tools/web-fetch.ts';
-import { createPowerShellTool } from './powershell-tool.ts';
-import { createWindowsProcessTools, runWindowsShellCommand, type WindowsShellCommandName } from './windows-process-tools.ts';
+import type { WindowsShellCommandName } from './windows-process-tools.ts';
 import { resolveConfiguredGitBashShellPath } from './git-bash-shell.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
 import { applySystemPromptOverride } from './system-prompt-override.ts';
@@ -571,7 +570,14 @@ async function ensureSession(): Promise<AgentSession> {
   const webFetchTool = createWebFetchTool(() =>
     initConfig ? getSessionPath(initConfig.workspaceRootPath, initConfig.sessionId) : null
   );
-  const serverTools = [webFetchTool, createPowerShellTool(), ...createWindowsProcessTools()];
+  const serverTools: ToolDefinition<any, any>[] = [webFetchTool];
+  if (process.platform === 'win32') {
+    const [{ createPowerShellTool }, { createWindowsProcessTools }] = await Promise.all([
+      import('./powershell-tool.ts'),
+      import('./windows-process-tools.ts'),
+    ]);
+    serverTools.push(createPowerShellTool(), ...createWindowsProcessTools());
+  }
 
   // Pi SDK 0.70.0 registration contract:
   //   - `customTools` accepts ToolDefinition[] — our hook-wrapped objects go here
@@ -1490,6 +1496,10 @@ async function handleEnsureSessionReady(msg: Extract<InboundMessage, { type: 'en
 
 async function handleWindowsShellCommand(msg: Extract<InboundMessage, { type: 'windows_shell_command' }>): Promise<void> {
   try {
+    if (process.platform !== 'win32') {
+      throw new Error('Windows shell commands are only available on Windows');
+    }
+    const { runWindowsShellCommand } = await import('./windows-process-tools.ts');
     const result = await runWindowsShellCommand(msg.command, msg.cwd || resolvedCwd());
     send({
       type: 'windows_shell_command_result',
