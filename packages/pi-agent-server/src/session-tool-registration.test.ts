@@ -10,9 +10,7 @@ import {
   type ToolDefinition,
   type CreateAgentSessionOptions,
 } from '@mariozechner/pi-coding-agent';
-import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { createWebFetchTool } from './tools/web-fetch.ts';
-import type { WebSearchProvider } from './tools/search/types.ts';
 
 /**
  * Regression contract for Pi SDK 0.70.0 tool registration.
@@ -32,13 +30,6 @@ import type { WebSearchProvider } from './tools/search/types.ts';
  *   (otherwise it gets filtered out by `_refreshToolRegistry`'s allowlist guard).
  */
 
-const stubSearchProvider: WebSearchProvider = {
-  name: 'Stub',
-  async search() {
-    return [];
-  },
-};
-
 function assertValidToolDefinition(tool: ToolDefinition<any, any>): void {
   expect(typeof tool.name).toBe('string');
   expect(tool.name.length).toBeGreaterThan(0);
@@ -50,14 +41,6 @@ function assertValidToolDefinition(tool: ToolDefinition<any, any>): void {
 }
 
 describe('Pi subprocess tool shape contract', () => {
-  it('createSearchTool returns a valid ToolDefinition with promptSnippet', () => {
-    const tool = createSearchTool(stubSearchProvider);
-    assertValidToolDefinition(tool);
-    expect(tool.name).toBe('web_search');
-    expect(typeof tool.promptSnippet).toBe('string');
-    expect((tool.promptSnippet as string).length).toBeGreaterThan(0);
-  });
-
   it('createWebFetchTool returns a valid ToolDefinition with promptSnippet', () => {
     const tool = createWebFetchTool(() => null);
     assertValidToolDefinition(tool);
@@ -92,7 +75,7 @@ describe('Pi SDK 0.70.0 CreateAgentSessionOptions contract', () => {
     // objects, the line below will become a type error and this test will
     // fail at build time — preventing silent regression.
     const options: CreateAgentSessionOptions = {
-      tools: ['read', 'bash', 'edit', 'write', 'web_search', 'web_fetch'],
+      tools: ['read', 'bash', 'edit', 'write', 'web_fetch'],
     };
     expect(Array.isArray(options.tools)).toBe(true);
     for (const name of options.tools ?? []) {
@@ -101,18 +84,16 @@ describe('Pi SDK 0.70.0 CreateAgentSessionOptions contract', () => {
   });
 
   it('`customTools` field accepts ToolDefinition[] (the tool object channel)', () => {
-    const searchTool = createSearchTool(stubSearchProvider);
     const webFetchTool = createWebFetchTool(() => null);
     const options: CreateAgentSessionOptions = {
-      customTools: [searchTool, webFetchTool],
+      customTools: [webFetchTool],
     };
-    expect(options.customTools?.length).toBe(2);
+    expect(options.customTools?.length).toBe(1);
   });
 
   it('customTools names ⊆ tools allowlist invariant', () => {
     // This is the invariant the subprocess must maintain when building sessionOptions.
     // If any customTool name is missing from `tools`, that tool gets filtered out.
-    const searchTool = createSearchTool(stubSearchProvider);
     const webFetchTool = createWebFetchTool(() => null);
     const customTools = [
       createReadToolDefinition('/tmp'),
@@ -122,7 +103,6 @@ describe('Pi SDK 0.70.0 CreateAgentSessionOptions contract', () => {
       createGrepToolDefinition('/tmp'),
       createFindToolDefinition('/tmp'),
       createLsToolDefinition('/tmp'),
-      searchTool,
       webFetchTool,
     ];
     const tools = customTools.map(t => t.name);

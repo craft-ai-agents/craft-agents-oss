@@ -76,8 +76,6 @@ import { PI_TOOL_NAME_MAP, THINKING_ENABLED_TO_PI } from '../../shared/src/agent
 import { getDefaultSummarizationModel } from '../../shared/src/config/models.ts';
 import { ENV_CONNECTION_SSO_TOKEN_ENV_VAR } from '../../shared/src/config/llm-connections.ts';
 import { createWebFetchTool } from './tools/web-fetch.ts';
-import { resolveSearchProvider } from './tools/search/resolve-provider.ts';
-import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { resolveConfiguredGitBashShellPath } from './git-bash-shell.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
 import { applySystemPromptOverride } from './system-prompt-override.ts';
@@ -557,28 +555,11 @@ async function ensureSession(): Promise<AgentSession> {
   // Store at module scope for set_model handler
   piModelRegistry = modelRegistry;
 
-  // Build tools: coding tools + web tools wrapped with permission hooks + proxy tools.
-  // Search provider is selected based on the user's LLM connection:
-  //   - OpenAI/OpenRouter → Responses API built-in web_search
-  //   - ChatGPT Plus (openai-codex) → ChatGPT backend responses endpoint
-  //   - Google → Gemini API with googleSearch grounding
-  //   - Others → DuckDuckGo fallback
-  //
-  // IMPORTANT: resolve dynamically on each search call so token_update refreshes
-  // are used without recreating the session.
-  const searchProvider = {
-    get name() {
-      return resolveSearchProvider(initConfig?.piAuth).name;
-    },
-    async search(query: string, count: number) {
-      return resolveSearchProvider(initConfig?.piAuth).search(query, count);
-    },
-  };
-  const searchTool = createSearchTool(searchProvider);
+  // Build tools: coding tools + fetch tool wrapped with permission hooks + proxy tools.
   const webFetchTool = createWebFetchTool(() =>
     initConfig ? getSessionPath(initConfig.workspaceRootPath, initConfig.sessionId) : null
   );
-  const webTools = [searchTool, webFetchTool];
+  const webTools = [webFetchTool];
 
   // Pi SDK 0.70.0 registration contract:
   //   - `customTools` accepts ToolDefinition[] — our hook-wrapped objects go here
