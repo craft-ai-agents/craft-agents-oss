@@ -70,6 +70,10 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       if (enableInWorkspace) {
         addSlugToWorkspaceDefaults(workspace.rootPath, created.slug)
       }
+      const poolRefresh = await deps.sessionManager.refreshWorkspaceMcpSource(workspace.rootPath, created.slug)
+      if (!poolRefresh.success) {
+        log.warn(`SOURCES_CREATE: MCP source pool refresh failed for ${created.slug}: ${poolRefresh.error}`)
+      }
       pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
       return created
     }
@@ -117,7 +121,15 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     saveSourceConfig(workspace.rootPath, updated)
 
     if (updated.type === 'mcp') {
-      await refreshMcpSourceConnection(workspace.rootPath, sourceSlug)
+      const connectionRefresh = await refreshMcpSourceConnection(workspace.rootPath, sourceSlug)
+      if (!connectionRefresh.success) {
+        await deps.sessionManager.removeWorkspaceMcpSource(workspace.rootPath, sourceSlug)
+      } else {
+        const poolRefresh = await deps.sessionManager.refreshWorkspaceMcpSource(workspace.rootPath, sourceSlug)
+        if (!poolRefresh.success) {
+          log.warn(`SOURCES_UPDATE: MCP source pool refresh failed for ${sourceSlug}: ${poolRefresh.error}`)
+        }
+      }
     }
 
     pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
@@ -159,6 +171,10 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       if (candidate?.enableInWorkspace ?? true) {
         addSlugToWorkspaceDefaults(workspace.rootPath, r.sourceSlug)
       }
+      const poolRefresh = await deps.sessionManager.refreshWorkspaceMcpSource(workspace.rootPath, r.sourceSlug)
+      if (!poolRefresh.success) {
+        log.warn(`SOURCES_IMPORT: MCP source pool refresh failed for ${r.sourceSlug}: ${poolRefresh.error}`)
+      }
     }
     pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
     return result
@@ -170,6 +186,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
     const { deleteSource } = await import('@craft-agent/shared/sources')
     deleteSource(workspace.rootPath, sourceSlug)
+    await deps.sessionManager.removeWorkspaceMcpSource(workspace.rootPath, sourceSlug)
     pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
 
     // Clean up stale slug from workspace default sources
@@ -307,9 +324,16 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     if (!workspace) return { success: false, error: 'Workspace not found' }
 
     const refreshResult = await refreshMcpSourceConnection(workspace.rootPath, sourceSlug)
-    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
     if (!refreshResult.success) {
+      await deps.sessionManager.removeWorkspaceMcpSource(workspace.rootPath, sourceSlug)
+      pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
       return { success: false, error: refreshResult.error }
+    }
+
+    const poolRefresh = await deps.sessionManager.refreshWorkspaceMcpSource(workspace.rootPath, sourceSlug)
+    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, loadWorkspaceSources(workspace.rootPath))
+    if (!poolRefresh.success) {
+      return { success: false, error: poolRefresh.error }
     }
 
     const source = loadWorkspaceSources(workspace.rootPath).find(s => s.config.slug === sourceSlug)

@@ -1,5 +1,5 @@
 import type { EventSink } from '@craft-agent/server-core/transport'
-import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput } from '@craft-agent/server-core/handlers'
+import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput, RefreshWorkspaceMcpSourceResult } from '@craft-agent/server-core/handlers'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
 import { basename, dirname, join } from 'path'
@@ -71,7 +71,7 @@ import {
   type SessionHeader,
   pickSessionFields,
 } from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
+import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, loadSource, loadSourceConfig, saveSourceConfig, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
 import { getValidClaudeOAuthToken, SsoCredentialStore } from '@craft-agent/shared/auth'
 import { resolveAuthEnvVars } from '@craft-agent/shared/config'
@@ -1697,6 +1697,79 @@ export class SessionManager implements ISessionManager {
     }
 
     await this.syncWorkspaceMcpPool(workspaceRootPath, pool, tokenRefreshManager)
+  }
+
+  async refreshWorkspaceMcpSource(
+    workspaceRootPath: string,
+    sourceSlug: string,
+  ): Promise<RefreshWorkspaceMcpSourceResult> {
+    let pool = this.workspaceMcpPools.get(workspaceRootPath)
+    if (!pool) {
+      this.setupWorkspaceMcpPool(workspaceRootPath)
+      pool = this.workspaceMcpPools.get(workspaceRootPath)
+    }
+    if (!pool) {
+      return { success: false, sourceSlug, error: 'Workspace MCP pool not initialized' }
+    }
+
+    const source = loadSource(workspaceRootPath, sourceSlug)
+    if (!source) {
+      await pool.removeSource(sourceSlug)
+      return { success: false, sourceSlug, error: 'Source not found' }
+    }
+    if (source.config.type !== 'mcp') {
+      await pool.removeSource(sourceSlug)
+      return { success: false, sourceSlug, error: 'Source is not an MCP server' }
+    }
+
+    const tokenRefreshManager = this.workspaceTokenRefreshManagers.get(workspaceRootPath) ?? new TokenRefreshManager(getSourceCredentialManager(), {
+      log: (msg) => sessionLog.debug(msg),
+    })
+    if (!this.workspaceTokenRefreshManagers.has(workspaceRootPath)) {
+      this.workspaceTokenRefreshManagers.set(workspaceRootPath, tokenRefreshManager)
+    }
+
+    const { mcpServers, errors } = await buildServersFromSources([source], undefined, tokenRefreshManager)
+    const config = mcpServers[sourceSlug]
+    if (!config) {
+      await pool.removeSource(sourceSlug)
+      const error = errors.find(entry => entry.sourceSlug === sourceSlug)?.error ?? 'Unable to build MCP server config'
+      this.markMcpSourceConnectionFailed(workspaceRootPath, sourceSlug, error)
+      return { success: false, sourceSlug, error }
+    }
+
+    const result = await pool.refreshSource(sourceSlug, config)
+    if (!result.success) {
+      this.markMcpSourceConnectionFailed(workspaceRootPath, sourceSlug, result.error)
+      return result
+    }
+
+    const sourceConfig = loadSourceConfig(workspaceRootPath, sourceSlug)
+    if (sourceConfig) {
+      sourceConfig.isAuthenticated = true
+      sourceConfig.connectionStatus = 'connected'
+      sourceConfig.connectionError = undefined
+      sourceConfig.lastTestedAt = Date.now()
+      saveSourceConfig(workspaceRootPath, sourceConfig)
+    }
+
+    return result
+  }
+
+  async removeWorkspaceMcpSource(workspaceRootPath: string, sourceSlug: string): Promise<void> {
+    const pool = this.workspaceMcpPools.get(workspaceRootPath)
+    if (!pool) return
+    await pool.removeSource(sourceSlug)
+  }
+
+  private markMcpSourceConnectionFailed(workspaceRootPath: string, sourceSlug: string, error: string): void {
+    const sourceConfig = loadSourceConfig(workspaceRootPath, sourceSlug)
+    if (!sourceConfig) return
+    sourceConfig.isAuthenticated = false
+    sourceConfig.connectionStatus = 'failed'
+    sourceConfig.connectionError = error
+    sourceConfig.lastTestedAt = Date.now()
+    saveSourceConfig(workspaceRootPath, sourceConfig)
   }
 
   private updateSessionPoolServerSources(managed: ManagedSession, sourceSlugs: string[]): void {

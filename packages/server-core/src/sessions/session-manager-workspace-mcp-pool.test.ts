@@ -21,18 +21,24 @@ type SyncCall = {
 
 describe('SessionManager workspace MCP pool bootstrap', () => {
   const originalSync = McpClientPool.prototype.sync
+  const originalRefreshSource = McpClientPool.prototype.refreshSource
+  const originalRemoveSource = McpClientPool.prototype.removeSource
   const originalDisconnectAll = McpClientPool.prototype.disconnectAll
   const originalRemoveToolsChangedListener = McpClientPool.prototype.removeToolsChangedListener
 
   let roots: string[]
   let sm: SessionManager
   let syncCalls: SyncCall[]
+  let refreshSourceCalls: Array<{ pool: McpClientPool; slug: string; config: McpServerConfig }>
+  let removeSourceCalls: Array<{ pool: McpClientPool; slug: string }>
   let disconnectCalls: McpClientPool[]
   let removedListeners: Array<{ pool: McpClientPool; listener: () => void }>
 
   beforeEach(() => {
     roots = []
     syncCalls = []
+    refreshSourceCalls = []
+    removeSourceCalls = []
     disconnectCalls = []
     removedListeners = []
     sm = new SessionManager()
@@ -50,6 +56,22 @@ describe('SessionManager workspace MCP pool bootstrap', () => {
       disconnectCalls.push(this)
     }
 
+    McpClientPool.prototype.refreshSource = async function (
+      this: McpClientPool,
+      slug: string,
+      config: McpServerConfig,
+    ) {
+      refreshSourceCalls.push({ pool: this, slug, config })
+      return { success: true, sourceSlug: slug, toolCount: 1 }
+    }
+
+    McpClientPool.prototype.removeSource = async function (
+      this: McpClientPool,
+      slug: string,
+    ) {
+      removeSourceCalls.push({ pool: this, slug })
+    }
+
     McpClientPool.prototype.removeToolsChangedListener = function (
       this: McpClientPool,
       listener: () => void,
@@ -62,6 +84,8 @@ describe('SessionManager workspace MCP pool bootstrap', () => {
   afterEach(async () => {
     await Promise.all(roots.map((root) => sm.closeWorkspace(root)))
     McpClientPool.prototype.sync = originalSync
+    McpClientPool.prototype.refreshSource = originalRefreshSource
+    McpClientPool.prototype.removeSource = originalRemoveSource
     McpClientPool.prototype.disconnectAll = originalDisconnectAll
     McpClientPool.prototype.removeToolsChangedListener = originalRemoveToolsChangedListener
     for (const root of roots) {
@@ -235,6 +259,42 @@ describe('SessionManager workspace MCP pool bootstrap', () => {
     expect(Object.keys(syncCalls[0]!.mcpServers).sort()).toEqual(['github', 'linear'])
     expect(Object.keys(setSourceServersCalls[0]!.mcpServers)).toEqual(['linear'])
     expect(setSourceServersCalls[0]!.intendedSlugs).toEqual(['linear'])
+  })
+
+  it('refreshes one MCP source in the workspace pool', async () => {
+    const workspaceRoot = makeWorkspaceRoot('sm-workspace-refresh-source-')
+    writeMcpSource(workspaceRoot, 'linear')
+
+    sm.setupConfigWatcher(workspaceRoot, 'ws_refresh_source')
+    await waitForSyncCalls(1)
+
+    const result = await sm.refreshWorkspaceMcpSource(workspaceRoot, 'linear')
+
+    const workspacePool = (sm as unknown as PoolMaps).workspaceMcpPools.get(workspaceRoot)!
+    expect(result).toEqual({ success: true, sourceSlug: 'linear', toolCount: 1 })
+    expect(refreshSourceCalls).toHaveLength(1)
+    expect(refreshSourceCalls[0]!.pool).toBe(workspacePool)
+    expect(refreshSourceCalls[0]!.slug).toBe('linear')
+    expect(refreshSourceCalls[0]!.config).toEqual({
+      type: 'streamable_http',
+      url: 'https://linear.example.com/mcp',
+    })
+  })
+
+  it('removes stale tools when a source-level refresh cannot build config', async () => {
+    const workspaceRoot = makeWorkspaceRoot('sm-workspace-refresh-missing-')
+    writeMcpSource(workspaceRoot, 'linear')
+
+    sm.setupConfigWatcher(workspaceRoot, 'ws_refresh_missing')
+    await waitForSyncCalls(1)
+    rmSync(join(workspaceRoot, 'sources', 'linear'), { recursive: true, force: true })
+
+    const result = await sm.refreshWorkspaceMcpSource(workspaceRoot, 'linear')
+
+    const workspacePool = (sm as unknown as PoolMaps).workspaceMcpPools.get(workspaceRoot)!
+    expect(result).toEqual({ success: false, sourceSlug: 'linear', error: 'Source not found' })
+    expect(removeSourceCalls).toEqual([{ pool: workspacePool, slug: 'linear' }])
+    expect(refreshSourceCalls).toHaveLength(0)
   })
 
   it('disposes a session runtime without disconnecting the workspace pool', async () => {

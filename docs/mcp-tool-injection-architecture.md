@@ -549,6 +549,8 @@ disconnectAll()
 |---------|---------|---------|
 | Source 首次激活 | `setSourceServers()` → `pool.sync()` → `connect()` | 该 source 全量 listTools |
 | OAuth Token 刷新（auth header 变化） | `sync()` 内 `mcpConfigChanged()` 检测 → `disconnect()` + `connect()` | 该 source 重连 + 全量 listTools |
+| Stdio 连接配置变化（command/args/env） | `sync()` 内 `mcpConfigChanged()` 检测 → `disconnect()` + `connect()` | 该 source 重连 + 全量 listTools |
+| MCP Source Refresh（手动刷新 / skill-provided source 更新） | `refreshWorkspaceMcpSource()` → `pool.refreshSource()` | 该 source 强制重连 + 全量 listTools |
 | Source 停用再启用 | `setSourceServers()` → `pool.sync()` → `disconnect()` + `connect()` | 该 source 全量 listTools |
 | Session 销毁 | `pool.disconnectAll()` | 全量清除 |
 

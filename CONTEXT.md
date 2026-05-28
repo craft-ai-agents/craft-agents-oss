@@ -242,6 +242,12 @@ An explicit retry of an MCP Source's connection and tool discovery. Used after M
 
 MCP Source Refresh updates the source's connection status and available tools. It is distinct from re-reading source documentation; source guide files are optional reference material, not a prerequisite for using a configured MCP Source.
 
+For workspace-scoped MCP pools, refresh is source-level by default: the app reconnects only the affected MCP Source and notifies active sessions when its available tools change.
+
+Skill install or update triggers MCP Source Refresh for each skill-provided MCP Source it creates or reuses. Source config changes on disk also trigger MCP Source Refresh when the effective MCP connection config changes, including local stdio command, args, or env changes.
+
+The manual MCP Source detail-page refresh performs MCP Source Refresh against the running workspace pool, not only a standalone connection test.
+
 ### Team Public Knowledge
 Workspace-scoped, team-maintained public Markdown reference data that can be cached and surfaced to the agent as untrusted context.
 
