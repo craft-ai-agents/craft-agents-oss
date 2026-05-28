@@ -94,7 +94,7 @@ export function SessionMenu({
   return (
     <>
       {/* Share/Shared based on shared state */}
-      {!sharedUrl ? (
+      {/* {!sharedUrl ? (
         <MenuItem onClick={actions.share}>
           <CloudUpload className="h-3.5 w-3.5" />
           <span className="flex-1">{t("sessionMenu.share")}</span>
@@ -117,7 +117,7 @@ export function SessionMenu({
         </Sub>
       )}
 
-      {/* Send to Workspace — visible when at least one other workspace exists */}
+      < !-- Send to Workspace — visible when at least one other workspace exists -->
       {hasRemoteWorkspaces && onSendToWorkspace && (
         <MenuItem onClick={onSendToWorkspace}>
           <Send className="h-3.5 w-3.5" />
@@ -125,7 +125,7 @@ export function SessionMenu({
         </MenuItem>
       )}
 
-      <Separator />
+      <Separator /> */}
 
       {/* Flag/Unflag */}
       {!isFlagged ? (
