@@ -1591,6 +1591,8 @@
   "turnCard.responding": "Responding...",
   "turnCard.starting": "Starting...",
   "turnCard.stepsCompleted": "Steps Completed",
+  "updateButton.label": "Update",
+  "updateButton.tooltip": "Restart to update to v{{version}}",
   "viewer.clearSession": "Clear session",
   "webui.connectingToServer": "Connecting to server...",
   "webui.connectionFailed": "Connection Failed",

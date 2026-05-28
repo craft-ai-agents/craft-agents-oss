@@ -159,6 +159,12 @@ interface AppShellProps {
   menuNewChatTrigger?: number
   /** Focused mode - hides sidebars, shows only the chat content */
   isFocusedMode?: boolean
+  /** App update is downloaded and ready to install */
+  isUpdateReady?: boolean
+  /** Downloaded update version, used in titlebar tooltip */
+  updateVersion?: string | null
+  /** Install the downloaded update and restart the app */
+  onInstallUpdate?: () => void | Promise<void>
 }
 
 /**
@@ -190,6 +196,9 @@ function AppShellContent({
   defaultCollapsed = false,
   menuNewChatTrigger,
   isFocusedMode = false,
+  isUpdateReady,
+  updateVersion,
+  onInstallUpdate,
 }: AppShellProps) {
   // Destructure commonly used values from context
   // Note: sessions is NOT destructured here - we use sessionMetaMapAtom instead
@@ -1722,6 +1731,9 @@ function AppShellContent({
           onForward={goForward}
           canGoBack={canGoBack}
           canGoForward={canGoForward}
+          isUpdateReady={isUpdateReady}
+          updateVersion={updateVersion}
+          onInstallUpdate={onInstallUpdate}
           onToggleSidebar={handleToggleSidebar}
           onToggleRightSidebar={handleToggleRightSidebar}
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
