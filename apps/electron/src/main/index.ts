@@ -873,7 +873,7 @@ app.whenReady().then(async () => {
 
       // Language change: sync from renderer to main process and rebuild native menu
       ipcMain.handle('i18n:changeLanguage', async (_event, lang: string) => {
-        i18n.changeLanguage(lang)
+        await i18n.changeLanguage(lang)
         const { rebuildMenu } = await import('./menu')
         await rebuildMenu()
       })
