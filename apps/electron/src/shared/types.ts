@@ -687,6 +687,10 @@ export interface ElectronAPI {
   startWhatsAppConnect(): Promise<{ success: boolean }>
   submitWhatsAppPhone(phoneNumber: string): Promise<{ success: boolean }>
   onWhatsAppEvent(callback: (payload: { workspaceId: string; event: WhatsAppUiEvent }) => void): () => void
+  // WeChat (微信 iLink ClawBot adapter)
+  startWeChatConnect(): Promise<{ success: boolean }>
+  submitWeChatVerifyCode(code: string): Promise<{ success: boolean }>
+  onWeChatEvent(callback: (payload: { workspaceId: string; event: WeChatUiEvent }) => void): () => void
   // Messaging access control (Phase 3)
   getMessagingPlatformOwners(platform: string): Promise<MessagingPlatformOwnerInfo[]>
   setMessagingPlatformOwners(platform: string, owners: MessagingPlatformOwnerInfo[]): Promise<MessagingPlatformOwnerInfo[]>
@@ -752,6 +756,14 @@ export type WhatsAppUiEvent =
   | { type: 'connected'; jid?: string; name?: string }
   | { type: 'disconnected'; loggedOut: boolean; reason?: string }
   | { type: 'unavailable'; reason: string; message: string }
+  | { type: 'error'; message: string }
+
+/** Event payloads broadcast from the WeChat login flow to the UI. */
+export type WeChatUiEvent =
+  | { type: 'qr'; qr: string }
+  | { type: 'scanned' }
+  | { type: 'need_verifycode' }
+  | { type: 'connected' }
   | { type: 'error'; message: string }
 
 // =============================================================================

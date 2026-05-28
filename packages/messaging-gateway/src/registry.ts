@@ -30,6 +30,13 @@ import { PairingCodeManager } from './pairing'
 import { TelegramAdapter } from './adapters/telegram/index'
 import { WhatsAppAdapter, type WhatsAppEvent } from './adapters/whatsapp/index'
 import { LarkAdapter, parseLarkCredentials, type LarkCredentials } from './adapters/lark/index'
+import {
+  WeChatAdapter,
+  parseWeChatCredentials,
+  startWeChatQrLogin,
+  type WeChatCredentials,
+  type WeChatLoginEvent,
+} from './adapters/wechat/index'
 import { TopicRegistry } from './topic-registry'
 import type { SessionEvent } from './renderer'
 import type { EventSinkFn } from './event-fanout'
@@ -93,6 +100,8 @@ interface WorkspaceState {
 
 export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
   private readonly workspaces = new Map<string, WorkspaceState>()
+  /** In-flight WeChat QR logins awaiting a verify code from the UI, per workspace. */
+  private readonly wechatVerifyResolvers = new Map<string, Array<(code: string) => void>>()
   private readonly pairing = new PairingCodeManager()
   private readonly log: MessagingLogger
 
@@ -167,6 +176,22 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       })
     }
 
+    if (isPlatformConfigured(config, 'wechat')) {
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: true,
+        connected: false,
+        state: 'connecting',
+        lastError: undefined,
+      })
+      void this.tryConnectWeChat(workspaceId, state).catch((err) => {
+        this.log.error('background WeChat connect failed', {
+          event: 'wechat_connect_failed',
+          workspaceId,
+          error: err,
+        })
+      })
+    }
+
     if (isPlatformConfigured(config, 'whatsapp')) {
       if (this.hasWhatsAppAuthState(workspaceId)) {
         this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
@@ -231,6 +256,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         telegram: cloneRuntime(state.runtime.telegram),
         whatsapp: cloneRuntime(state.runtime.whatsapp),
         lark: cloneRuntime(state.runtime.lark),
+        wechat: cloneRuntime(state.runtime.wechat),
       },
     }
   }
@@ -250,6 +276,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       await state.gateway.unregisterAdapter('telegram').catch(() => {})
       await state.gateway.unregisterAdapter('whatsapp').catch(() => {})
       await state.gateway.unregisterAdapter('lark').catch(() => {})
+      await state.gateway.unregisterAdapter('wechat').catch(() => {})
       state.whatsappOffEvent?.()
       state.whatsappOffEvent = undefined
       state.whatsapp = null
@@ -274,10 +301,17 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         identity: undefined,
         lastError: undefined,
       })
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: false,
+        connected: false,
+        state: 'disconnected',
+        identity: undefined,
+        lastError: undefined,
+      })
       return
     }
 
-    for (const platform of ['telegram', 'whatsapp', 'lark'] as const) {
+    for (const platform of ['telegram', 'whatsapp', 'lark', 'wechat'] as const) {
       const configured = isPlatformConfigured(cfg, platform)
       if (!configured && state.gateway.getAdapter(platform)) {
         await state.gateway.unregisterAdapter(platform).catch(() => {})
@@ -1015,6 +1049,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         telegram: createRuntime('telegram', isPlatformConfigured(cfg, 'telegram')),
         whatsapp: createRuntime('whatsapp', isPlatformConfigured(cfg, 'whatsapp')),
         lark: createRuntime('lark', isPlatformConfigured(cfg, 'lark')),
+        wechat: createRuntime('wechat', isPlatformConfigured(cfg, 'wechat')),
       },
     }
     this.workspaces.set(workspaceId, state)
@@ -1090,6 +1125,147 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         error: err,
       })
       this.setPlatformRuntime(workspaceId, state, 'lark', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: err instanceof Error ? err.message : String(err),
+      })
+      throw err
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // WeChat — QR login + iLink long-poll lifecycle
+  // -------------------------------------------------------------------------
+
+  async startWeChatConnect(workspaceId: string): Promise<void> {
+    const state = this.workspaces.get(workspaceId) ?? this.bootstrapWorkspace(workspaceId)
+    this.setPlatformRuntime(workspaceId, state, 'wechat', {
+      configured: true,
+      connected: false,
+      state: 'connecting',
+      lastError: undefined,
+    })
+
+    const verifyResolvers: Array<(code: string) => void> = []
+    // Unblock any prior in-flight login for this workspace so it settles instead
+    // of hanging on its verify-code waiter until the long-poll timeout.
+    const prior = this.wechatVerifyResolvers.get(workspaceId)
+    if (prior) for (const resolve of prior.splice(0)) resolve('')
+    this.wechatVerifyResolvers.set(workspaceId, verifyResolvers)
+
+    const result = await startWeChatQrLogin({
+      onEvent: (event: WeChatLoginEvent) => {
+        this.opts.publishEvent?.(
+          RPC_CHANNELS.messaging.WECHAT_UI_EVENT,
+          { to: 'workspace', workspaceId },
+          { workspaceId, event },
+        )
+        if (event.type === 'error') {
+          this.setPlatformRuntime(workspaceId, state, 'wechat', {
+            configured: false,
+            connected: false,
+            state: 'error',
+            lastError: event.message,
+          })
+        }
+      },
+      verifyCodeProvider: () =>
+        new Promise<string>((resolve) => {
+          verifyResolvers.push(resolve)
+        }),
+    }).finally(() => {
+      // Only clear if we're still the active login — a newer connect may have
+      // replaced our resolver array.
+      if (this.wechatVerifyResolvers.get(workspaceId) === verifyResolvers) {
+        this.wechatVerifyResolvers.delete(workspaceId)
+      }
+    })
+
+    if (!result) return
+
+    // Already bound to this instance — reconnect from the stored credential.
+    if (result === 'already-connected') {
+      await this.tryConnectWeChat(workspaceId, state)
+      await state.gateway.start()
+      return
+    }
+
+    await this.opts.credentialManager.set(
+      { type: 'messaging_bearer', workspaceId, name: 'wechat' },
+      { value: JSON.stringify(result) },
+    )
+    state.configStore.update({
+      enabled: true,
+      platforms: { wechat: { enabled: true } },
+    })
+    await this.tryConnectWeChat(workspaceId, state)
+    await state.gateway.start()
+  }
+
+  /** Submit a verify code from the UI for an in-progress WeChat login. */
+  submitWeChatVerifyCode(workspaceId: string, code: string): void {
+    const resolvers = this.wechatVerifyResolvers.get(workspaceId)
+    const resolve = resolvers?.shift()
+    if (resolve) resolve(code)
+  }
+
+  private async tryConnectWeChat(workspaceId: string, state: WorkspaceState): Promise<void> {
+    const cred = await this.opts.credentialManager
+      .get({ type: 'messaging_bearer', workspaceId, name: 'wechat' })
+      .catch(() => null)
+
+    if (!cred?.value) {
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: 'WeChat credentials are missing.',
+      })
+      return
+    }
+
+    let creds: WeChatCredentials
+    try {
+      creds = parseWeChatCredentials(cred.value)
+    } catch (err) {
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: err instanceof Error ? err.message : 'WeChat credentials are malformed',
+      })
+      return
+    }
+
+    await state.gateway.unregisterAdapter('wechat').catch(() => {})
+
+    try {
+      const adapter = new WeChatAdapter()
+      await adapter.initialize({
+        token: cred.value,
+        logger: this.log.child({
+          component: 'wechat-adapter',
+          workspaceId,
+          platform: 'wechat',
+        }),
+      })
+      state.botUsernames.wechat = adapter.getBotInfo().name
+      state.gateway.registerAdapter(adapter)
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
+        configured: true,
+        connected: true,
+        state: 'connected',
+        identity: state.botUsernames.wechat ?? creds.userId,
+        lastError: undefined,
+      })
+    } catch (err) {
+      this.log.error('failed to connect WeChat', {
+        event: 'wechat_connect_failed',
+        workspaceId,
+        error: err,
+      })
+      this.setPlatformRuntime(workspaceId, state, 'wechat', {
         configured: true,
         connected: false,
         state: 'error',
@@ -1531,7 +1707,7 @@ function toBindingInfo(b: ChannelBinding): MessagingBindingInfo {
 }
 
 function isKnownPlatform(p: string): p is PlatformType {
-  return p === 'telegram' || p === 'whatsapp' || p === 'lark'
+  return p === 'telegram' || p === 'whatsapp' || p === 'lark' || p === 'wechat'
 }
 
 function capitalize(value: string): string {

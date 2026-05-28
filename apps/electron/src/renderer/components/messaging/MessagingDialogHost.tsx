@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 import { messagingDialogAtom } from '@/atoms/messaging'
 import { PairingCodeDialog } from './PairingCodeDialog'
 import { WhatsAppConnectDialog } from './WhatsAppConnectDialog'
+import { WeChatConnectDialog } from './WeChatConnectDialog'
 
 export function MessagingDialogHost() {
   const [state, setState] = useAtom(messagingDialogAtom)
@@ -56,7 +57,10 @@ export function MessagingDialogHost() {
     return off
   }, [isWaitingForPair, setState, t])
 
-  const openPairing = async (sessionId: string, platform: 'telegram' | 'whatsapp') => {
+  const openPairing = async (
+    sessionId: string,
+    platform: 'telegram' | 'whatsapp' | 'lark' | 'wechat',
+  ) => {
     setState({
       kind: 'pairing',
       platform,
@@ -94,6 +98,14 @@ export function MessagingDialogHost() {
     close()
   }
 
+  const handleWeChatConnected = () => {
+    if (state.kind === 'wechat_connect' && state.continueToPairingSessionId) {
+      void openPairing(state.continueToPairingSessionId, 'wechat')
+      return
+    }
+    close()
+  }
+
   return (
     <>
       <PairingCodeDialog
@@ -109,6 +121,11 @@ export function MessagingDialogHost() {
         open={state.kind === 'wa_connect'}
         onOpenChange={(o) => { if (!o) close() }}
         onConnected={handleWhatsAppConnected}
+      />
+      <WeChatConnectDialog
+        open={state.kind === 'wechat_connect'}
+        onOpenChange={(o) => { if (!o) close() }}
+        onConnected={handleWeChatConnected}
       />
     </>
   )

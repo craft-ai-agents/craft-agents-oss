@@ -614,6 +614,7 @@ function MessagingPane({ onConnect }: { onConnect: (platform: MessagingPlatform)
       <Row icon={<MessageSquare className="h-4 w-4" />} label="Telegram" onTap={() => onConnect('telegram')} />
       <Row icon={<MessageSquare className="h-4 w-4" />} label="WhatsApp" onTap={() => onConnect('whatsapp')} />
       <Row icon={<MessageSquare className="h-4 w-4" />} label="Lark / Feishu" onTap={() => onConnect('lark')} />
+      <Row icon={<MessageSquare className="h-4 w-4" />} label="WeChat" onTap={() => onConnect('wechat')} />
     </div>
   )
 }
