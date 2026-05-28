@@ -2379,6 +2379,7 @@ export class SessionManager implements ISessionManager {
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
             || a.slug === SOCIAL_PUBLISHER_SLUG
+            || a.slug === 'hypermotion-agent'
             || a.slug === 'update-system-agent',
         )
         const { ensured } = ensureRequiredAgents(required)

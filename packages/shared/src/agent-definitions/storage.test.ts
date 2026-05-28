@@ -504,6 +504,18 @@ body
     expect(youtubeAgent?.systemPrompt).toContain('You do not publish')
   })
 
+  test('starter library includes the Hypermotion Agent with bundled motion source', () => {
+    const hypermotionAgent = STARTER_AGENTS.find((agent) => agent.slug === 'hypermotion-agent')
+
+    expect(hypermotionAgent).toBeDefined()
+    expect(hypermotionAgent?.metadata.visualAgent).toBe(true)
+    expect(hypermotionAgent?.metadata.skills).toContain('hyperframes')
+    expect(hypermotionAgent?.metadata.skills).toContain('remotion-production')
+    expect(hypermotionAgent?.metadata.sources).toContain('hypermotion')
+    expect(hypermotionAgent?.systemPrompt).toContain('node bin/hypermotion.mjs doctor')
+    expect(hypermotionAgent?.systemPrompt).toContain('showInCanvas')
+  })
+
   test('starter library includes the Update System Agent as read-only maintenance', () => {
     const updateAgent = STARTER_AGENTS.find((agent) => agent.slug === 'update-system-agent')
 
