@@ -305,7 +305,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     return json.body
   })
 
-  server.handle(RPC_CHANNELS.permissions.MDP_SAVE_OR_UPDATE, async (_ctx, payload: { employeeId: string; userType: string }) => {
+  server.handle(RPC_CHANNELS.permissions.MDP_SAVE_OR_UPDATE, async (_ctx, employeeId: string, userType: string) => {
     const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
     const session = await new SsoCredentialStore().load()
     if (!session) throw new Error('Not authenticated')
@@ -314,20 +314,20 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     const res = await fetch(`${baseUrl}/api/mdp/permission/saveOrUpdate`, {
       method: 'POST',
       headers: { authorization: session.token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employeeId: payload.employeeId, userType: payload.userType }),
+      body: JSON.stringify({ employeeId, userType }),
     })
     if (!res.ok) throw new Error(`Request failed: ${res.status}`)
     const json = await res.json() as { body: unknown }
     return json.body
   })
 
-  server.handle(RPC_CHANNELS.permissions.MDP_DELETE, async (_ctx, payload: { employeeId: string }) => {
+  server.handle(RPC_CHANNELS.permissions.MDP_DELETE, async (_ctx, employeeId: string) => {
     const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
     const session = await new SsoCredentialStore().load()
     if (!session) throw new Error('Not authenticated')
 
     const baseUrl = (process.env.VITE_PERMISSION_API_URL || process.env.MDP_API_URL || '').replace(/\/+$/, '')
-    const res = await fetch(`${baseUrl}/api/mdp/permission/delete?employeeId=${encodeURIComponent(payload.employeeId)}`, {
+    const res = await fetch(`${baseUrl}/api/mdp/permission/delete?employeeId=${encodeURIComponent(employeeId)}`, {
       method: 'POST',
       headers: { authorization: session.token },
     })
