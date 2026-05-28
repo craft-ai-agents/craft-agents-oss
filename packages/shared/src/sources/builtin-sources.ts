@@ -15,6 +15,7 @@ const PRINTING_PRESS_SOCIAL_SLUG = 'printing-press-social';
 const HYPERMOTION_SLUG = 'hypermotion';
 const GOOGLE_ADS_SLUG = 'google-ads';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
+const OPEN_SLIDE_SLUG = 'open-slide';
 
 function firstExistingPath(candidates: string[], fallback: string): string {
   for (const candidate of candidates) {
@@ -150,6 +151,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getHypermotionSource(workspaceId, workspaceRootPath),
     getGoogleAdsSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
+    getOpenSlideSource(workspaceId, workspaceRootPath),
   ];
 }
 
@@ -487,6 +489,81 @@ export function getYouTubeResearchSource(workspaceId: string, workspaceRootPath:
 }
 
 /**
+ * Built-in source for the open-slide deck framework.
+ *
+ * Each workspace gets its own decks folder at `<workspaceRoot>/decks/`.
+ * Decks are scaffolded on demand via `npx @open-slide/cli init <deck-id>`.
+ * Once installed (per deck), the `open-slide` bin handles dev, build, and preview.
+ *
+ * No credentials, no API keys, no external services — entirely local OSS (MIT).
+ */
+export function getOpenSlideSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const decksPath = workspaceRootPath ? join(workspaceRootPath, 'decks') : 'decks';
+  const config: FolderSourceConfig = {
+    id: 'builtin-open-slide',
+    name: 'Open Slide',
+    slug: OPEN_SLIDE_SLUG,
+    enabled: true,
+    provider: 'open-slide',
+    type: 'local',
+    local: {
+      path: decksPath,
+      format: 'cli-tool',
+    },
+    tagline: 'React-based slide decks authored by the agent and exported to in-app HTML/PDF.',
+    icon: '🎞️',
+    isAuthenticated: true,
+    connectionStatus: 'connected',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: decksPath,
+    config,
+    guide: {
+      raw: [
+        '# Open Slide',
+        '',
+        'Use this source to create, edit, and export React-based slide decks (open-slide framework).',
+        'Decks live per-workspace at `<workspace>/decks/<deck-id>/`. No API keys; pure local CLI.',
+        '',
+        '## First-run setup (per deck)',
+        '',
+        '1. From `<workspace>/decks/`, scaffold a deck: `npx -y @open-slide/cli@latest init <deck-id> --name <deck-id>`.',
+        '2. `cd <deck-id>` and install deps: `pnpm install` (or `npm install` if pnpm is unavailable).',
+        '3. The deck is ready. Author slides at `slides/<page-id>/index.tsx`.',
+        '',
+        '## CLI inside a deck',
+        '',
+        '- `npx open-slide dev` — start the local dev server (default :5173).',
+        '- `npx open-slide build --out-dir dist` — build a static site to `dist/`.',
+        '- `npx open-slide preview` — preview the production build.',
+        '',
+        '## Authoring rules (1920x1080 canvas)',
+        '',
+        '- Slides are `Page` components, default-exported as an array from `slides/<id>/index.tsx`.',
+        '- Each slide renders into a fixed 1920x1080 canvas; the framework scales for the viewport.',
+        '- Read the scaffolded `.claude/skills/slide-authoring/` reference before writing slide layouts.',
+        '',
+        '## In-app preview',
+        '',
+        'After `open-slide build`, publish the generated `dist/index.html` (or zipped `dist/`) as a workspace Output with `showInCanvas: true`. The Visual sidecar will render the static deck inline. Re-build and re-publish to refresh the preview.',
+        '',
+        'For interactive editing, start `open-slide dev` and load `http://localhost:<port>` in a browser surface; stop the dev server when done.',
+        '',
+        '## Hard rules',
+        '',
+        '- Never commit secrets, API keys, or analytics IDs into a deck.',
+        '- Do not deploy/publish to external hosts (Vercel, Netlify, etc.) without explicit user approval of the target.',
+        '- Keep deck folders flat under `<workspace>/decks/`; do not nest decks.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
  * Get the built-in Runner docs source.
  *
  * @deprecated docs are now provided by an optional configured MCP server
@@ -535,5 +612,6 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === PRINTING_PRESS_SOCIAL_SLUG
     || slug === HYPERMOTION_SLUG
     || slug === GOOGLE_ADS_SLUG
-    || slug === YOUTUBE_RESEARCH_SLUG;
+    || slug === YOUTUBE_RESEARCH_SLUG
+    || slug === OPEN_SLIDE_SLUG;
 }

@@ -168,3 +168,6 @@ export const CONCIERGE_SLUG = 'concierge';
 
 /** Built-in social channel execution agent slug. */
 export const SOCIAL_PUBLISHER_SLUG = 'social-publisher';
+
+/** Built-in open-slide deck authoring agent slug. */
+export const OPEN_SLIDE_AGENT_SLUG = 'open-slide-agent';
