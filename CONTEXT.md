@@ -276,6 +276,50 @@ The custom URL scheme `mdp://` registered by the Electron app for OS-level deep 
 
 Avoid: craftagents protocol, custom protocol.
 
+### Update Ready Prompt
+The transient notification shown when a downloaded app update is ready to install.
+
+Dismissal of the Update Ready Prompt means the user has dismissed the interruption, not the update itself.
+
+Avoid: restart modal, update modal.
+
+### App Update Routine
+The background app-owned check that periodically looks for an app update while the app remains open.
+
+The App Update Routine is separate from the launch-time app update check and from manual checks in Settings or the app menu.
+
+The App Update Routine uses a fixed interval after the launch-time app update check rather than a wall-clock time.
+
+The App Update Routine may discover a version whose Update Ready Prompt was already dismissed, but that dismissal still suppresses repeat prompts for the same version.
+
+The App Update Routine does not start a new check while another app update check is active or while an app update is already downloading, ready to install, or installing.
+
+Avoid: update cron, routine update check.
+
+### Launch-Time App Update Check
+The app-owned update check that runs once when a packaged app starts.
+
+Avoid: app start trigger, startup update cron.
+
+### Update Button
+The persistent titlebar affordance shown while a downloaded app update is ready to install.
+
+The Update Button remains available after the Update Ready Prompt disappears or is dismissed, until the user installs the update or the running app is already on that version.
+
+The Update Button uses localized visible text, not an icon-only treatment, and includes a tooltip with the restart/update detail.
+
+In the titlebar, the Update Button appears immediately to the right of the back/forward navigation controls.
+
+Its visible label is “Update”; its tooltip explains that clicking restarts the app to apply the downloaded version.
+
+The Update Button appears only after the update is downloaded and ready to install, not while the update is still downloading.
+
+The Update Button is a desktop titlebar affordance and is not shown in compact layout.
+
+When multiple desktop windows are open, every window shows the Update Button while the app-wide update is ready to install.
+
+Avoid: titlebar update prompt, restart chip.
+
 ### Environment Connection
 A virtual LLM connection auto-synthesized at startup from environment variables. Not persisted to `config.json`; re-derived on every launch. Appears pinned at the top of Settings → AI with the **Default** badge. Has a three-dot menu with exactly two actions: **Validate Connection** and **Mid-stream behavior** — no Edit, Delete, or Rename. Always set as the default connection when present.
 

@@ -103,7 +103,7 @@ import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
 import { getPiModelsForAuthProvider, getAllPiModels } from '@craft-agent/shared/config'
 import { initNotificationService, initBadgeIcon, initInstanceBadge, updateBadgeCount } from './notifications'
-import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating, setBeforeUpdateQuitHook } from './auto-update'
+import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating, setBeforeUpdateQuitHook, startAppUpdateRoutine } from './auto-update'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
 
@@ -1064,9 +1064,13 @@ app.whenReady().then(async () => {
     // window-state.json with an empty array.
     setBeforeUpdateQuitHook(() => captureAndSaveWindowState('pre-update'))
     if (app.isPackaged) {
-      checkForUpdatesOnLaunch().catch(err => {
-        mainLog.error('[auto-update] Launch check failed:', err)
-      })
+      checkForUpdatesOnLaunch()
+        .catch(err => {
+          mainLog.error('[auto-update] Launch check failed:', err)
+        })
+        .finally(() => {
+          startAppUpdateRoutine()
+        })
     } else {
       mainLog.info('[auto-update] Skipping auto-update in dev mode')
     }
