@@ -181,6 +181,9 @@ export interface LlmConnectionWithStatus extends LlmConnection {
   /** Whether the connection has valid credentials */
   isAuthenticated: boolean;
 
+  /** Where API-key credentials were resolved from, when known. */
+  credentialSource?: 'stored' | 'environment';
+
   /** Error message if authentication check failed */
   authError?: string;
 

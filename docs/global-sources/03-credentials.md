@@ -44,6 +44,10 @@ Priority:
 2. Read-only environment fallback.
 3. Missing credential / connect UI.
 
+Environment-backed credentials are surfaced as environment-backed in provider status. Deleting a
+provider credential in the app removes the encrypted app copy, but it cannot remove a matching env
+var; unset the env var or `.env.local` entry to fully disconnect that fallback.
+
 Supported fallback names:
 
 | Credential | Preferred env | Compatibility env |

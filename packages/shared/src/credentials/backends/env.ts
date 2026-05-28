@@ -20,7 +20,7 @@ export class EnvironmentBackend implements CredentialBackend {
     const names = getEnvironmentNamesForCredential(id);
     for (const name of names) {
       const value = process.env[name]?.trim();
-      if (value) return { value };
+      if (value) return { value, source: 'environment' };
     }
     return null;
   }

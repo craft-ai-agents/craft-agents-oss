@@ -31,7 +31,7 @@ describe('EnvironmentBackend', () => {
 
     const credential = await new EnvironmentBackend().get({ type: 'anthropic_api_key' });
 
-    expect(credential?.value).toBe('sk-test-anthropic');
+    expect(credential).toEqual({ value: 'sk-test-anthropic', source: 'environment' });
   });
 
   test('resolves LLM connection keys by runner prefix and provider alias', async () => {
@@ -40,9 +40,9 @@ describe('EnvironmentBackend', () => {
     process.env.OPENROUTER_API_KEY = 'openrouter-key';
 
     await expect(backend.get({ type: 'llm_api_key', connectionSlug: 'deepseek' }))
-      .resolves.toEqual({ value: 'deepseek-runner-key' });
+      .resolves.toEqual({ value: 'deepseek-runner-key', source: 'environment' });
     await expect(backend.get({ type: 'llm_api_key', connectionSlug: 'openrouter-owl-alpha' }))
-      .resolves.toEqual({ value: 'openrouter-key' });
+      .resolves.toEqual({ value: 'openrouter-key', source: 'environment' });
   });
 
   test('resolves source API keys from runner prefix before provider alias', async () => {
@@ -55,7 +55,7 @@ describe('EnvironmentBackend', () => {
       sourceId: 'youtube-research',
     });
 
-    expect(credential?.value).toBe('runner-youtube-key');
+    expect(credential).toEqual({ value: 'runner-youtube-key', source: 'environment' });
   });
 
   test('resolves source bearer and messaging tokens', async () => {
@@ -64,8 +64,8 @@ describe('EnvironmentBackend', () => {
     process.env.RUNNER_MESSAGING_TELEGRAM_TOKEN = 'telegram-token';
 
     await expect(backend.get({ type: 'source_bearer', workspaceId: 'ws', sourceId: 'foo' }))
-      .resolves.toEqual({ value: 'source-token' });
+      .resolves.toEqual({ value: 'source-token', source: 'environment' });
     await expect(backend.get({ type: 'messaging_bearer', workspaceId: 'ws', name: 'telegram' }))
-      .resolves.toEqual({ value: 'telegram-token' });
+      .resolves.toEqual({ value: 'telegram-token', source: 'environment' });
   });
 });
