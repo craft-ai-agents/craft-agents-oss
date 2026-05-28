@@ -13,3 +13,18 @@ Commercial Terms of Service: https://www.anthropic.com/legal/commercial-terms
 
 Third-party dependencies are listed in package.json files and are subject
 to their respective licenses.
+
+---
+
+This product includes vendored source code from:
+
+  @tencent-weixin/openclaw-weixin
+  Copyright (C) 2026 Tencent. All rights reserved.
+  Licensed under the MIT License.
+  https://www.npmjs.com/package/@tencent-weixin/openclaw-weixin
+
+The vendored snapshot lives under:
+  packages/messaging-gateway/src/adapters/wechat/ilink/
+
+See that directory's LICENSE and README.md for the full license text,
+the pinned upstream version, and the list of local adaptations.

@@ -406,6 +406,9 @@ export const CHANNEL_MAP = {
   startWhatsAppConnect: invoke(RPC_CHANNELS.messaging.WA_START_CONNECT),
   submitWhatsAppPhone: invoke(RPC_CHANNELS.messaging.WA_SUBMIT_PHONE),
   onWhatsAppEvent: listener(RPC_CHANNELS.messaging.WA_UI_EVENT),
+  startWeChatConnect: invoke(RPC_CHANNELS.messaging.WECHAT_START_CONNECT),
+  submitWeChatVerifyCode: invoke(RPC_CHANNELS.messaging.WECHAT_SUBMIT_CODE),
+  onWeChatEvent: listener(RPC_CHANNELS.messaging.WECHAT_UI_EVENT),
 
   // Messaging access control (Phase 3)
   getMessagingPlatformOwners: invoke(RPC_CHANNELS.messaging.GET_PLATFORM_OWNERS),

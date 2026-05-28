@@ -18,7 +18,8 @@
     "@craft-agent/server-core": "workspace:*",
     "@craft-agent/shared": "workspace:*",
     "@larksuiteoapi/node-sdk": "^1.62.1",
-    "grammy": "^1.35.0"
+    "grammy": "^1.35.0",
+    "qrcode-terminal": "0.12.0"
   },
   "devDependencies": {
     "typescript": "^5.8.2",
