@@ -27,16 +27,25 @@ export function registerBrowserHandlers(server: RpcServer, deps: HandlerDeps): v
   const { browserPaneManager, platform } = deps
   if (!browserPaneManager) return
 
-  server.handle(RPC_CHANNELS.browserPane.CREATE, (_ctx, input?: string | BrowserPaneCreateOptions) => {
+  server.handle(RPC_CHANNELS.browserPane.CREATE, (ctx, input?: string | BrowserPaneCreateOptions) => {
+    // Stamp the window with the requester's workspace so manual UI-opened
+    // tabs stay scoped to the workspace where the user clicked. If
+    // ctx.workspaceId is null (no workspace context — e.g. CLI / agent
+    // harness), the window stays globally visible (legacy behavior).
+    const workspaceId = ctx.workspaceId ?? null
+
     if (typeof input === 'string') {
-      return browserPaneManager.createInstance(input)
+      return browserPaneManager.createInstance(input, { workspaceId })
     }
 
     if (input?.bindToSessionId) {
-      return browserPaneManager.createForSession(input.bindToSessionId, { show: input.show ?? false })
+      return browserPaneManager.createForSession(input.bindToSessionId, {
+        show: input.show ?? false,
+        workspaceId,
+      })
     }
 
-    return browserPaneManager.createInstance(input?.id, { show: input?.show })
+    return browserPaneManager.createInstance(input?.id, { show: input?.show, workspaceId })
   })
 
   server.handle(RPC_CHANNELS.browserPane.DESTROY, (_ctx, id: string) => {
@@ -44,6 +53,11 @@ export function registerBrowserHandlers(server: RpcServer, deps: HandlerDeps): v
   })
 
   server.handle(RPC_CHANNELS.browserPane.LIST, () => {
+    // Return all instances. Workspace isolation is enforced renderer-side
+    // (filterInstancesForWorkspace), which knows BOTH the local workspace id
+    // and the remote-mirror workspace id for the active workspace. A server-
+    // side filter on ctx.workspaceId would miss remote-stamped tabs because
+    // ctx.workspaceId is always the local id (set by updateClientWorkspace).
     return browserPaneManager.listInstances()
   })
 
@@ -167,17 +181,26 @@ export function registerBrowserHandlers(server: RpcServer, deps: HandlerDeps): v
     }
   })
 
-  // Forward browser state changes to all windows
+  // Forward browser events to all locally-connected renderers. Workspace
+  // isolation is enforced renderer-side (filterInstancesForWorkspace), which
+  // handles both the local workspace id and the remote-mirror workspace id.
+  //
+  // We can't route STATE_CHANGED to `{ to: 'workspace', workspaceId }` here
+  // because the broadcast routing uses the client's transport-level workspaceId
+  // (the local Craft Agents window's id, set by `updateClientWorkspace`),
+  // while remote-bridged instances are stamped with the remote server's
+  // workspaceId. The two never match, so a workspace-targeted broadcast would
+  // silently fail to reach the renderer. Broadcast to all + filter in the
+  // renderer is the contract that actually works in both local-only and
+  // remote-mirror deployments.
   browserPaneManager.onStateChange((info) => {
     pushTyped(server, RPC_CHANNELS.browserPane.STATE_CHANGED, { to: 'all' }, info)
   })
 
-  // Forward browser removals so renderer can immediately drop stale tabs
   browserPaneManager.onRemoved((id) => {
     pushTyped(server, RPC_CHANNELS.browserPane.REMOVED, { to: 'all' }, id)
   })
 
-  // Forward browser interaction/focus events so renderer can align panel focus.
   browserPaneManager.onInteracted((id) => {
     pushTyped(server, RPC_CHANNELS.browserPane.INTERACTED, { to: 'all' }, id)
   })

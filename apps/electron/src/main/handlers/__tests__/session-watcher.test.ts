@@ -61,6 +61,8 @@ function createTestHarness(sessionPaths: Map<string, string>) {
       pushCalls.push({ channel, target, args })
     },
     async invokeClient() {},
+    hasClientCapability() { return false },
+    findClientsWithCapability() { return [] },
   }
 
   const deps: HandlerDeps = {

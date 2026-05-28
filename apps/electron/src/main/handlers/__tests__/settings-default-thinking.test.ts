@@ -27,6 +27,8 @@ describe('settings default thinking RPC handlers', () => {
       async invokeClient() {
         return null
       },
+      hasClientCapability() { return false },
+      findClientsWithCapability() { return [] },
     }
 
     const deps: HandlerDeps = {
