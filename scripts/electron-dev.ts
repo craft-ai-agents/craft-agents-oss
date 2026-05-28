@@ -37,6 +37,23 @@ const BIN_EXT = IS_WINDOWS ? ".exe" : "";
 const VITE_BIN = join(ROOT_DIR, `node_modules/.bin/vite${BIN_EXT}`);
 const ELECTRON_BIN = join(ROOT_DIR, `node_modules/.bin/electron${BIN_EXT}`);
 
+function getElectronDebugArgs(): string[] {
+  const args: string[] = []
+  const inspectPort = process.env.CRAFT_ELECTRON_INSPECT_PORT?.trim()
+  const remoteDebuggingPort =
+    process.env.CRAFT_ELECTRON_REMOTE_DEBUG_PORT?.trim()
+
+  if (inspectPort) {
+    args.push(`--inspect=${inspectPort}`)
+  }
+
+  if (remoteDebuggingPort) {
+    args.push(`--remote-debugging-port=${remoteDebuggingPort}`)
+  }
+
+  return args
+}
+
 function resolveBuildPlatform(): Platform {
   if (process.platform === "darwin") return "darwin";
   if (process.platform === "win32") return "win32";
@@ -304,6 +321,7 @@ async function runEsbuild(
       bundle: true,
       platform: "node",
       format: "cjs",
+      sourcemap: 'linked',
       outfile: join(ROOT_DIR, outfile),
       external: ["electron"],
       ...(options.packagesExternal ? { packages: "external" as const } : {}),
@@ -427,6 +445,11 @@ async function main(): Promise<void> {
 
   const vitePort = process.env.CRAFT_VITE_PORT || "5173";
   const oauthDefines = getOAuthDefines();
+  const electronDebugArgs = getElectronDebugArgs()
+
+  if (electronDebugArgs.length > 0) {
+    console.log(`🐞 Electron debug flags: ${electronDebugArgs.join(' ')}`)
+  }
 
   // Kill any existing process on the Vite port
   await killProcessOnPort(vitePort);
@@ -541,6 +564,7 @@ async function main(): Promise<void> {
     bundle: true,
     platform: "node",
     format: "cjs",
+    sourcemap: 'linked',
     outfile: join(ROOT_DIR, "apps/electron/dist/main.cjs"),
     external: ["electron"],
     alias: MAIN_PROCESS_ALIAS,
@@ -557,6 +581,7 @@ async function main(): Promise<void> {
     bundle: true,
     platform: "node",
     format: "cjs",
+    sourcemap: 'linked',
     outfile: join(ROOT_DIR, "apps/electron/dist/bootstrap-preload.cjs"),
     external: ["electron"],
     logLevel: "info",
@@ -571,6 +596,7 @@ async function main(): Promise<void> {
     bundle: true,
     platform: "node",
     format: "cjs",
+    sourcemap: 'linked',
     outfile: join(ROOT_DIR, "apps/electron/dist/browser-toolbar-preload.cjs"),
     external: ["electron"],
     logLevel: "info",
@@ -583,7 +609,7 @@ async function main(): Promise<void> {
   console.log("🚀 Starting Electron...\n");
 
   const electronProc = spawn({
-    cmd: [ELECTRON_BIN, "apps/electron"],
+    cmd: [ELECTRON_BIN, ...electronDebugArgs, "apps/electron"],
     cwd: ROOT_DIR,
     stdin: "ignore",
     stdout: "inherit",
