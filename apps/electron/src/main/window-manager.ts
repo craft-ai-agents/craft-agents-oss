@@ -1,4 +1,4 @@
-import { BrowserWindow, shell, nativeTheme, Menu, app } from 'electron'
+import { BrowserWindow, shell, nativeTheme, Menu } from 'electron'
 import { windowLog } from './logger'
 import { join, resolve, sep } from 'path'
 import { existsSync } from 'fs'
@@ -34,6 +34,51 @@ function getWindowsBackgroundMaterial(): 'mica' | 'acrylic' | undefined {
 
   windowLog.info('Older Windows detected (build ' + buildNumber + '), no transparency')
   return undefined
+}
+
+function buildContextMenuTemplate(window: BrowserWindow, params: Electron.ContextMenuParams): Electron.MenuItemConstructorOptions[] {
+  const template: Electron.MenuItemConstructorOptions[] = []
+  const misspelledWord = params.misspelledWord?.trim()
+
+  if (misspelledWord) {
+    for (const suggestion of params.dictionarySuggestions ?? []) {
+      template.push({
+        label: suggestion,
+        click: () => window.webContents.replaceMisspelling(suggestion),
+      })
+    }
+
+    if (template.length > 0) {
+      template.push({ type: 'separator' })
+    }
+
+    template.push({
+      label: 'Learn Spelling',
+      click: () => window.webContents.session.addWordToSpellCheckerDictionary(misspelledWord),
+    })
+  }
+
+  const editItems: Electron.MenuItemConstructorOptions[] = []
+  if (params.editFlags.canCut) {
+    editItems.push({ label: 'Cut', accelerator: 'CommandOrControl+X', click: () => window.webContents.cut() })
+  }
+  if (params.editFlags.canCopy) {
+    editItems.push({ label: 'Copy', accelerator: 'CommandOrControl+C', click: () => window.webContents.copy() })
+  }
+  if (params.editFlags.canPaste) {
+    editItems.push({ label: 'Paste', accelerator: 'CommandOrControl+V', click: () => window.webContents.paste() })
+  }
+  if (params.editFlags.canSelectAll) {
+    editItems.push({ label: 'Select All', accelerator: 'CommandOrControl+A', click: () => window.webContents.selectAll() })
+  }
+
+  if (template.length > 0 && editItems.length > 0) {
+    template.push({ type: 'separator' })
+  }
+
+  template.push(...editItems)
+
+  return template
 }
 
 
@@ -258,7 +303,8 @@ export class WindowManager {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: false,
-        webviewTag: false // Browser integration uses WebContentsView, not <webview>
+        webviewTag: false, // Browser integration uses WebContentsView, not <webview>
+        spellcheck: true,
       }
     })
 
@@ -286,18 +332,10 @@ export class WindowManager {
       this.openExternalFromRenderer(url, 'will-navigate', window)
     })
 
-    // Enable right-click context menu in development
-    if (!app.isPackaged) {
-      window.webContents.on('context-menu', (_event, params) => {
-        Menu.buildFromTemplate([
-          { label: 'Inspect Element', click: () => window.webContents.inspectElement(params.x, params.y) },
-          { type: 'separator' },
-          { label: 'Cut', role: 'cut', enabled: params.editFlags.canCut },
-          { label: 'Copy', role: 'copy', enabled: params.editFlags.canCopy },
-          { label: 'Paste', role: 'paste', enabled: params.editFlags.canPaste },
-        ]).popup()
-      })
-    }
+    // Enable right-click edit and spellcheck context menu in all builds.
+    window.webContents.on('context-menu', (_event, params) => {
+      Menu.buildFromTemplate(buildContextMenuTemplate(window, params)).popup({ window })
+    })
 
     // The renderer's index.html ships with `<title>Craft Agents</title>`, so
     // without this Electron auto-syncs every window's title back to that on
