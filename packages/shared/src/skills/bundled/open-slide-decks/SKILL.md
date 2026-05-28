@@ -79,22 +79,65 @@ npx open-slide build --out-dir dist
 
 This produces a self-contained `dist/` folder with `index.html`. No server required.
 
-## 5. Show the deck in Canvas (Visual sidecar)
+## 5. Export — use the bundled export tool
 
-After every build, publish the export so the user sees the deck in-app:
+The `open-slide` source guide exposes the absolute path to the bundled export tool. The tool has three formats:
 
-1. Identify the deck artifact:
-   - **Single HTML file** when possible: `dist/index.html`.
-   - **Zipped folder** if multiple files are required: `zip -r dist.zip dist/` then publish `dist.zip`.
+```bash
+# Always start with a health check.
+node "<export-tool>/bin/export.mjs" doctor
+
+# HTML — uses the existing dist/. Best for fast iteration and in-app preview.
+node "<export-tool>/bin/export.mjs" export <workspace>/decks/<deck-id> --format html
+
+# PDF — multi-page 1920x1080 PDF via headless Chromium. Best for sharing.
+node "<export-tool>/bin/export.mjs" export <workspace>/decks/<deck-id> --format pdf
+
+# PNG — one PNG per slide at 1920x1080 @2x. Best for thumbnails / social.
+node "<export-tool>/bin/export.mjs" export <workspace>/decks/<deck-id> --format png
+```
+
+Each command prints a JSON receipt with the absolute output path(s). Example:
+
+```json
+{
+  "success": true,
+  "format": "pdf",
+  "file": "/abs/path/decks/<deck-id>/dist/slides.pdf",
+  "distDir": "/abs/path/decks/<deck-id>/dist",
+  "count": 12,
+  "canvasKind": "pdf"
+}
+```
+
+Use the `file` (or `files` for PNG) value as the input to `create_output`.
+
+If `doctor` reports `playwright: NOT installed`, PDF/PNG export will fail. Tell the user to run inside the deck:
+
+```bash
+npm install -D playwright
+npx playwright install chromium
+```
+
+…then retry. HTML export does not require Playwright.
+
+## 6. Show the deck in Canvas (Visual sidecar)
+
+After every export, publish the artifact:
+
+1. Pick the artifact based on intent:
+   - HTML → `dist/index.html` (live preview, smallest file, fast)
+   - PDF → `dist/slides.pdf` (shareable, one file)
+   - PNG → array of `dist/png/slide-NNN.png` (thumbnails, social)
 2. Call `create_output` with:
-   - `kind: 'html'` for the static export (or `kind: 'document'` if the runtime expects it)
+   - `kind: 'html' | 'pdf' | 'png'` matching the format
    - `showInCanvas: true`
    - `title: '<deck-id> — v<n>'`
-   - `path: <absolute path to dist/index.html>`
+   - `path: <absolute artifact path from the export receipt>`
 
-Re-build and re-publish after each significant edit. Treat the latest output as the canonical preview.
+Re-export and re-publish after each significant edit. Treat the latest output as the canonical preview.
 
-## 6. Interactive editing (optional)
+## 7. Interactive editing (optional)
 
 For tight live-edit loops, start the dev server in the background:
 
@@ -104,18 +147,6 @@ npx open-slide dev --port 5173
 ```
 
 Tell the user the URL (`http://localhost:5173`). The Visual sidecar can load it as a browser surface. Stop the dev server when the user finishes editing — do not leave it running across sessions.
-
-## 7. Export to PDF (when the user asks)
-
-open-slide's static build is print-ready via the browser's print dialog. To produce a PDF programmatically:
-
-1. Build the deck (`npx open-slide build`).
-2. Start preview: `npx open-slide preview --port 4173`.
-3. Use a headless browser (Playwright/Chromium if available) to print `http://localhost:4173/?print=true` to a PDF file in `<deck-id>/dist/<deck-id>.pdf`.
-4. Stop the preview server.
-5. Publish the PDF as an output with `showInCanvas: true`.
-
-If Playwright/Chromium is not installed, tell the user and offer the browser-based print path instead.
 
 ## Approval gates
 

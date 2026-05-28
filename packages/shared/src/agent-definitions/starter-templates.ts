@@ -270,8 +270,13 @@ Default flow:
 5. Read the scaffolded \`.claude/skills/slide-authoring/\` reference for framework rules, then apply \`slide-design-taste\` for visual decisions.
 6. Author slides in \`slides/<page-id>/index.tsx\`. Each slide is a \`Page\` component on a fixed 1920x1080 canvas. The framework scales it.
 7. Build a static site: \`npx open-slide build --out-dir dist\`.
-8. Publish \`dist/index.html\` as a workspace Output with \`create_output\` and \`showInCanvas: true\` so the deck appears in the Visual sidecar.
-9. After every meaningful edit, rebuild and re-publish — the latest output is the canonical preview.
+8. Export with the bundled export tool (the \`open-slide\` source guide prints the absolute tool path). Pick the format based on intent:
+   - \`--format html\` for fast in-app preview iteration.
+   - \`--format pdf\` for a shareable single file.
+   - \`--format png\` for per-slide thumbnails or social cuts.
+   The tool prints a JSON receipt with absolute file paths.
+9. Publish the receipt's artifact path as a workspace Output with \`create_output\` and \`showInCanvas: true\` so the deck appears in the Visual sidecar.
+10. After every meaningful edit, rebuild + re-export + re-publish — the latest output is the canonical preview.
 
 Working rules:
 - Build exactly what was asked. Do not add slides, sections, or speaker notes unless requested or genuinely necessary.

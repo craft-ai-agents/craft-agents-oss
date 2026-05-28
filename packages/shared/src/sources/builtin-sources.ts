@@ -63,6 +63,20 @@ function getPrintingPressSocialPath(): string {
   );
 }
 
+function getOpenSlideExportPath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'open-slide-export') : '',
+      join(appRoot, 'tools', 'open-slide-export'),
+      join(process.cwd(), 'tools', 'open-slide-export'),
+    ],
+    join('tools', 'open-slide-export')
+  );
+}
+
 function getHypermotionPath(): string {
   const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
   const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
@@ -499,6 +513,8 @@ export function getYouTubeResearchSource(workspaceId: string, workspaceRootPath:
  */
 export function getOpenSlideSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
   const decksPath = workspaceRootPath ? join(workspaceRootPath, 'decks') : 'decks';
+  const exportToolPath = getOpenSlideExportPath();
+  const exportToolReady = existsSync(exportToolPath);
   const config: FolderSourceConfig = {
     id: 'builtin-open-slide',
     name: 'Open Slide',
@@ -510,11 +526,13 @@ export function getOpenSlideSource(workspaceId: string, workspaceRootPath: strin
       path: decksPath,
       format: 'cli-tool',
     },
-    tagline: 'React-based slide decks authored by the agent and exported to in-app HTML/PDF.',
+    tagline: 'React-based slide decks authored by the agent and exported to in-app HTML/PDF/PNG.',
     icon: '🎞️',
     isAuthenticated: true,
     connectionStatus: 'connected',
   };
+
+  const exportBin = join(exportToolPath, 'bin', 'export.mjs');
 
   return {
     workspaceId,
@@ -528,6 +546,18 @@ export function getOpenSlideSource(workspaceId: string, workspaceRootPath: strin
         'Use this source to create, edit, and export React-based slide decks (open-slide framework).',
         'Decks live per-workspace at `<workspace>/decks/<deck-id>/`. No API keys; pure local CLI.',
         '',
+        '## Bundled export tool',
+        '',
+        `- Tool path: \`${exportToolPath}\``,
+        `- Status: ${exportToolReady ? 'ready' : 'NOT FOUND — falling back to manual `open-slide build` only'}`,
+        `- Health check: \`node "${exportBin}" doctor\``,
+        '',
+        'Always health-check before exporting:',
+        '',
+        '```bash',
+        `node "${exportBin}" doctor`,
+        '```',
+        '',
         '## First-run setup (per deck)',
         '',
         '1. From `<workspace>/decks/`, scaffold a deck: `npx -y @open-slide/cli@latest init <deck-id> --name <deck-id>`.',
@@ -540,6 +570,17 @@ export function getOpenSlideSource(workspaceId: string, workspaceRootPath: strin
         '- `npx open-slide build --out-dir dist` — build a static site to `dist/`.',
         '- `npx open-slide preview` — preview the production build.',
         '',
+        '## Export pipeline (canonical)',
+        '',
+        '1. `npx open-slide build --out-dir dist` (inside the deck folder).',
+        `2. \`node "${exportBin}" export <deck-path> --format html|pdf|png\``,
+        '   - `html` — returns `<deck>/dist/index.html` (already produced by `open-slide build`). Best for live in-app preview.',
+        '   - `pdf` — produces `<deck>/dist/slides.pdf` (multi-page, 1920×1080) using bundled Playwright. Best for sharing.',
+        '   - `png` — produces `<deck>/dist/png/slide-NNN.png` per slide. Best for thumbnails or social.',
+        '3. Each command prints a JSON receipt with the absolute output path(s). Pass that path into `create_output` with `showInCanvas: true` to render in the Visual sidecar.',
+        '',
+        'PDF/PNG export requires Playwright and Chromium. If `doctor` reports playwright missing, the user must install it: `npm i -D playwright && npx playwright install chromium` (per deck).',
+        '',
         '## Authoring rules (1920x1080 canvas)',
         '',
         '- Slides are `Page` components, default-exported as an array from `slides/<id>/index.tsx`.',
@@ -548,15 +589,16 @@ export function getOpenSlideSource(workspaceId: string, workspaceRootPath: strin
         '',
         '## In-app preview',
         '',
-        'After `open-slide build`, publish the generated `dist/index.html` (or zipped `dist/`) as a workspace Output with `showInCanvas: true`. The Visual sidecar will render the static deck inline. Re-build and re-publish to refresh the preview.',
+        'After every meaningful edit, run the export pipeline (`html` for fast iteration, `pdf` when finalizing) and publish the resulting file as a workspace Output with `showInCanvas: true`. The Visual sidecar renders HTML and PDF outputs inline. Re-export and re-publish to refresh the preview.',
         '',
-        'For interactive editing, start `open-slide dev` and load `http://localhost:<port>` in a browser surface; stop the dev server when done.',
+        'For interactive editing, start `npx open-slide dev` and load `http://localhost:5173` in a browser surface; stop the dev server when authoring ends.',
         '',
         '## Hard rules',
         '',
         '- Never commit secrets, API keys, or analytics IDs into a deck.',
         '- Do not deploy/publish to external hosts (Vercel, Netlify, etc.) without explicit user approval of the target.',
         '- Keep deck folders flat under `<workspace>/decks/`; do not nest decks.',
+        '- Never claim a build or export succeeded until the actual file exists on disk.',
       ].join('\n'),
     },
     isBuiltin: true,
