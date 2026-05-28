@@ -263,7 +263,7 @@ export function EntityRow({
 
   // Build the inner content (shared between with-context-menu and without)
   const titleTextClassName = wrapTitle
-    ? "min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere] leading-[1.25]"
+    ? "min-w-0 flex-1 whitespace-normal break-words overflow-hidden text-ellipsis line-clamp-2 [overflow-wrap:anywhere] leading-[1.25]"
     : "min-w-0"
 
   const innerContent = (
