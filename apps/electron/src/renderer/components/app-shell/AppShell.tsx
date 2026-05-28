@@ -1381,14 +1381,21 @@ function AppShellContent({
       ).length
       counts[label.id] = directCount
     }
-    // Add descendant counts to parents (cumulative)
+    // Add descendant counts to parents (cumulative).
+    // Only count sessions that have a descendant label but NOT the parent itself,
+    // to avoid double-counting sessions that already carry the parent label.
     for (const label of allLabels) {
       const descendants = getDescendantIds(labelConfigs, label.id)
       if (descendants.length > 0) {
-        const descendantCount = activeSessionMetas.filter(
-          s => s.labels?.some(l => descendants.includes(extractLabelId(l)))
+        const descendantOnlyCount = activeSessionMetas.filter(
+          s => {
+            const sessionLabelIds = s.labels?.map(l => extractLabelId(l)) ?? []
+            const hasDescendant = sessionLabelIds.some(id => descendants.includes(id))
+            const hasParent = sessionLabelIds.includes(label.id)
+            return hasDescendant && !hasParent
+          }
         ).length
-        counts[label.id] = (counts[label.id] || 0) + descendantCount
+        counts[label.id] = (counts[label.id] || 0) + descendantOnlyCount
       }
     }
     return counts
