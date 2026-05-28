@@ -57,6 +57,16 @@ export function detectTurnEnd(prev: boolean, next: boolean): boolean {
   return prev && !next
 }
 
+/**
+ * Returns paths that appeared after the session file watcher has a baseline.
+ * A null previous set means the watcher has not been primed yet, so the
+ * current file list becomes the baseline without opening editor tabs.
+ */
+export function getNewSessionFilePaths(previous: ReadonlySet<string> | null, current: readonly string[]): string[] {
+  if (!previous) return []
+  return current.filter((path) => !previous.has(path))
+}
+
 /** Re-reads the content of all open file tabs from disk and updates the atom. */
 export const refreshAllTabsAtom = atom(null, async (get, set) => {
   const tabs = get(editorTabsAtom)

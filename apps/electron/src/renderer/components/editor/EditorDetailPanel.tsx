@@ -12,6 +12,7 @@ import {
   openFileTabAtom,
   refreshAllTabsAtom,
   detectTurnEnd,
+  getNewSessionFilePaths,
   type EditorTab,
 } from '@/atoms/editor-tabs'
 import { sessionAtomFamily } from '@/atoms/sessions'
@@ -140,7 +141,7 @@ export function EditorDetailPanel({ workspaceId, sessionId, isOpen = true }: Edi
   const isProcessing = session?.isProcessing ?? false
   const prevIsProcessingRef = useRef(false)
   const isProcessingRef = useRef(false)
-  const knownFilePathsRef = useRef<Set<string>>(new Set())
+  const knownFilePathsRef = useRef<Set<string> | null>(null)
 
   useEffect(() => {
     isProcessingRef.current = isProcessing
@@ -154,16 +155,18 @@ export function EditorDetailPanel({ workspaceId, sessionId, isOpen = true }: Edi
   }, [isProcessing, refreshAllTabs])
 
   useEffect(() => {
+    knownFilePathsRef.current = null
+  }, [sessionId])
+
+  useEffect(() => {
     if (!sessionId) return
     const unsubscribe = window.electronAPI.onSessionFilesChanged((changedSessionId) => {
       if (changedSessionId !== sessionId || !isProcessingRef.current) return
       void (async () => {
         const files = await window.electronAPI.getSessionFiles(sessionId)
         const paths = flattenFilePaths(files)
-        for (const path of paths) {
-          if (!knownFilePathsRef.current.has(path)) {
-            void openFileTab(path)
-          }
+        for (const path of getNewSessionFilePaths(knownFilePathsRef.current, paths)) {
+          void openFileTab(path)
         }
         knownFilePathsRef.current = new Set(paths)
       })()
