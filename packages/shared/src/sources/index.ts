@@ -123,6 +123,7 @@ export type {
 export {
   getComputerUseSource,
   getFieldTheorySource,
+  getZeroSource,
   getDocsSource,
   getBuiltinSources,
   isBuiltinSource,

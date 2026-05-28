@@ -6,6 +6,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { delimiter } from 'node:path';
 import { join, resolve } from 'node:path';
 import type { LoadedSource, FolderSourceConfig } from './types.ts';
 
@@ -16,6 +17,7 @@ const HYPERMOTION_SLUG = 'hypermotion';
 const GOOGLE_ADS_SLUG = 'google-ads';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
 const OPEN_SLIDE_SLUG = 'open-slide';
+const ZERO_SLUG = 'zero';
 
 function firstExistingPath(candidates: string[], fallback: string): string {
   for (const candidate of candidates) {
@@ -75,6 +77,20 @@ function getOpenSlideExportPath(): string {
     ],
     join('tools', 'open-slide-export')
   );
+}
+
+function findExecutableOnPath(command: string): string | null {
+  const pathEnv = process.env.PATH ?? '';
+  for (const dir of pathEnv.split(delimiter)) {
+    if (!dir) continue;
+    const candidate = join(dir, command);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function getZeroCliPath(): string {
+  return process.env.ZERO_CLI_PATH || findExecutableOnPath('zero') || 'zero';
 }
 
 function getHypermotionPath(): string {
@@ -166,6 +182,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getGoogleAdsSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
     getOpenSlideSource(workspaceId, workspaceRootPath),
+    getZeroSource(workspaceId, workspaceRootPath),
   ];
 }
 
@@ -606,6 +623,67 @@ export function getOpenSlideSource(workspaceId: string, workspaceRootPath: strin
 }
 
 /**
+ * Built-in source for the Zero CLI capability marketplace.
+ *
+ * Zero is intentionally modeled as a local CLI source. Its live capability
+ * catalog, payment rails, and schemas churn, so agents must search and inspect
+ * at run time rather than relying on baked-in endpoint lists.
+ */
+export function getZeroSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const cliPath = getZeroCliPath();
+  const cliInstalled = existsSync(cliPath);
+  const config: FolderSourceConfig = {
+    id: 'builtin-zero',
+    name: 'Zero',
+    slug: ZERO_SLUG,
+    enabled: true,
+    provider: 'zero',
+    type: 'local',
+    local: {
+      path: cliPath,
+      format: 'cli-tool',
+    },
+    tagline: 'Discover and call paid external API capabilities through the Zero CLI marketplace.',
+    icon: '0',
+    isAuthenticated: cliInstalled,
+    connectionStatus: cliInstalled ? 'untested' : 'failed',
+    connectionError: cliInstalled ? undefined : 'Zero CLI not found. Install with `npm i -g @zeroxyz/cli` or run the Zero install script.',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# Zero',
+        '',
+        'Use this source when the user wants an external capability that RunnerOS does not provide natively: paid APIs, image generation, translation, weather/location data, audio/video processing, web scraping, enrichment, geolocation, restaurant/business lookup, currency conversion, market data, or other real-world retrieval.',
+        '',
+        'Canonical loop:',
+        '1. Check setup: `command -v zero && zero --version`.',
+        '2. If missing, ask the user before installing. Recommended install: `npm i -g @zeroxyz/cli`.',
+        '3. Search every time: `ZERO_AGENT=codex zero search "<capability>"`.',
+        '4. Inspect before calling: `zero get <result-number> --formatted` or `zero get <result-number>`.',
+        '5. Skip results with `bodySchema: null`; do not invent parameters.',
+        '6. Fetch with a spend cap: `zero fetch "<url>" --max-pay 0.50 --json`.',
+        '7. For binary outputs, redirect stdout to a file and publish it as an output when useful.',
+        '8. Review paid calls with `zero review <runId> --accuracy N --value N --reliability N --content "<specific observation>"`.',
+        '',
+        'Hard rules:',
+        '- Never reuse stale capability URLs, schemas, or prices from memory.',
+        '- Always run `zero get` before `zero fetch`.',
+        '- Use `--max-pay` on unfamiliar paid calls.',
+        '- Use `--no-open` for funding URLs inside agents; hand the URL to the user.',
+        '- Ask before funding wallets, installing CLIs, spending meaningful money, or making external write/mutation calls.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
  * Get the built-in Runner docs source.
  *
  * @deprecated docs are now provided by an optional configured MCP server
@@ -655,5 +733,6 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === HYPERMOTION_SLUG
     || slug === GOOGLE_ADS_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG
-    || slug === OPEN_SLIDE_SLUG;
+    || slug === OPEN_SLIDE_SLUG
+    || slug === ZERO_SLUG;
 }

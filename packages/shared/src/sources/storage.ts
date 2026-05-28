@@ -21,7 +21,7 @@ import type {
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync } from '../utils/files.ts';
-import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getGoogleAdsSource, getYouTubeResearchSource } from './builtin-sources.ts';
+import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getGoogleAdsSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 import {
@@ -511,6 +511,10 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
         sources.push({ ...getGoogleAdsSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'youtube-research') {
         sources.push({ ...getYouTubeResearchSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'open-slide') {
+        sources.push({ ...getOpenSlideSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'zero') {
+        sources.push({ ...getZeroSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'runner-docs' || slug === 'craft-agents-docs') {
         sources.push({ ...getDocsSource(workspaceId, workspaceRootPath), tier: 'project' });
       }

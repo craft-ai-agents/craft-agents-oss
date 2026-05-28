@@ -486,6 +486,30 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.local?.path).toContain('tools/youtube-research');
   });
 
+  test('resolves open-slide by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['open-slide']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('open-slide');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.type).toBe('local');
+  });
+
+  test('resolves zero by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['zero']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('zero');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.type).toBe('local');
+    expect(sources[0]!.config.local?.format).toBe('cli-tool');
+    expect(sources[0]!.guide?.raw).toContain('zero search');
+  });
+
   test('marks saved youtube-research key as untested until runtime validation', () => {
     const cacheDir = join(sandboxHome, '.config', 'runneros', 'youtube-research');
     mkdirSync(cacheDir, { recursive: true });
