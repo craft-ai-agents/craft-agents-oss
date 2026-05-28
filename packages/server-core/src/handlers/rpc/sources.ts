@@ -23,6 +23,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.SAVE_CREDENTIALS,
   RPC_CHANNELS.sources.GET_PERMISSIONS,
   RPC_CHANNELS.workspace.GET_PERMISSIONS,
+  RPC_CHANNELS.permissions.CHECK_ADMIN,
   RPC_CHANNELS.permissions.GET_DEFAULTS,
   RPC_CHANNELS.sources.GET_MCP_TOOLS,
   RPC_CHANNELS.sources.REFRESH_MCP_TOOLS,
@@ -246,6 +247,28 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
       log.error('Error reading workspace permissions config:', error)
       return null
     }
+  })
+
+  server.handle(RPC_CHANNELS.permissions.CHECK_ADMIN, async () => {
+    const { SsoCredentialStore } = await import('@craft-agent/shared/auth')
+    const session = await new SsoCredentialStore().load()
+    if (!session) return false
+
+    const baseUrl =
+      process.env.VITE_PERMISSION_API_URL ||
+      process.env.MDP_API_URL ||
+      ''
+
+    if (!baseUrl) return false
+
+    const url = `${baseUrl.replace(/\/+$/, '')}/api/mdp/permission/checkAdmin?employeeId=${encodeURIComponent(session.employeeId)}`
+    const res = await fetch(url, {
+      headers: { authorization: session.token },
+    })
+    if (!res.ok) return false
+
+    const json = await res.json() as { body?: boolean }
+    return json.body === true
   })
 
   // Get default permissions from ~/.mdp-agent/permissions/default.json

@@ -262,6 +262,7 @@ export const RPC_CHANNELS = {
     SETTINGS_UPDATE: 'workspaceSettings:update',
   },
   permissions: {
+    CHECK_ADMIN: 'permissions:checkAdmin',
     GET_DEFAULTS: 'permissions:getDefaults',
     DEFAULTS_CHANGED: 'permissions:defaultsChanged',
   },

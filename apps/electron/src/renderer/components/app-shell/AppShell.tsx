@@ -458,17 +458,9 @@ function AppShellContent({
   // Admin permission check
   const [isAdmin, setIsAdmin] = React.useState(false)
   React.useEffect(() => {
-    const permissionApiBase: string = import.meta.env.VITE_PERMISSION_API_URL ?? ''
-    window.electronAPI.getSsoSession().then((session) => {
-      if (!session.authenticated) return
-      const employeeId = session.employeeId
-      fetch(`${permissionApiBase}/api/mdp/permission/checkAdmin?employeeId=${encodeURIComponent(employeeId)}`, {
-        headers: { authorization: session.token },
-      })
-        .then((res) => res.json())
-        .then((json: { body: boolean }) => { if (json.body) setIsAdmin(true) })
-        .catch(() => {})
-    }).catch(() => {})
+    window.electronAPI.checkAdminPermission()
+      .then((isAdminUser) => { if (isAdminUser) setIsAdmin(true) })
+      .catch(() => {})
   }, [])
 
   // Enabled permission modes for Shift+Tab cycling (min 2 modes)

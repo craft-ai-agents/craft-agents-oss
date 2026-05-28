@@ -370,6 +370,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workspace.SETTINGS_UPDATE,
 
   // permissions — workspace permissions
+  RPC_CHANNELS.permissions.CHECK_ADMIN,
   RPC_CHANNELS.permissions.GET_DEFAULTS,
   RPC_CHANNELS.permissions.DEFAULTS_CHANGED,
 
