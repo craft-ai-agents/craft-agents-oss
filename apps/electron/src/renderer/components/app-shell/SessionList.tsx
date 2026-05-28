@@ -82,7 +82,7 @@ interface SessionListProps {
   /** Override which session is highlighted (for multi-panel focused panel tracking) */
   focusedSessionId?: string | null
   /** Override navigation target (for multi-panel: focuses existing panel or navigates focused panel) */
-  onNavigateToSession?: (sessionId: string) => void
+  onNavigateToSession?: (sessionId: string, session?: SessionMeta) => void
   /** Session-level pending prompt marker (permission/admin approval) */
   hasPendingPrompt?: (sessionId: string) => boolean
   /** DOM-verified match info for the active session (from ChatDisplay) */
@@ -478,12 +478,12 @@ export function SessionList({
     getId: (row) => row.item.id,
     keyboard: {
       onNavigate: useCallback((row: SessionListRow) => {
-        navigateToSession(row.item.id)
+        navigateToSession(row.item.id, row.item)
       }, [navigateToSession]),
       onActivate: useCallback((row: SessionListRow) => {
         // Only navigate when not in multi-select (matches original behavior)
         if (!MultiSelect.isMultiSelectActive(selectionStore.state)) {
-          navigateToSession(row.item.id)
+          navigateToSession(row.item.id, row.item)
         }
         onFocusChatInput?.(row.item.id)
       }, [selectionStore.state, navigateToSession, onFocusChatInput]),
@@ -522,15 +522,15 @@ export function SessionList({
   useAction('navigator.clearSelection', () => {
     const selectedId = selectionStore.state.selected
     interactions.selection.clear()
-    if (selectedId) navigateToSession(selectedId)
+    if (selectedId) navigateToSession(selectedId, items.find(item => item.id === selectedId))
   }, {
     enabled: () => isMultiSelectActive && !showEscapeOverlay,
-  }, [isMultiSelectActive, showEscapeOverlay, interactions.selection, selectionStore.state.selected, navigateToSession])
+  }, [isMultiSelectActive, showEscapeOverlay, interactions.selection, selectionStore.state.selected, navigateToSession, items])
 
   // --- Click handlers ---
   const handleSelectSession = useCallback((row: SessionListRow, index: number) => {
     selectSession(row.item.id, index)
-    navigateToSession(row.item.id)
+    navigateToSession(row.item.id, row.item)
   }, [selectSession, navigateToSession])
 
   const handleSelectSessionById = useCallback((sessionId: string) => {
@@ -540,8 +540,8 @@ export function SessionList({
     } else {
       selectSession(sessionId, 0)
     }
-    navigateToSession(sessionId)
-  }, [rowIndexMap, selectSession, navigateToSession])
+    navigateToSession(sessionId, items.find(item => item.id === sessionId))
+  }, [items, rowIndexMap, selectSession, navigateToSession])
 
   const handleToggleSelect = useCallback((row: SessionListRow, index: number) => {
     focusZone('navigator', { intent: 'click', moveFocus: false })

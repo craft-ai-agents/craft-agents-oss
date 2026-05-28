@@ -352,10 +352,11 @@ function AppShellContent({
   )
 
   const openFileTab = useSetAtom(openFileTabAtom)
-  const navigateToSessionInPanel = useCallback((sessionId: string) => {
+  const navigateToSessionInPanel = useCallback((sessionId: string, sessionMeta?: SessionMeta) => {
     navigate(getSessionClickRoute({
       navState,
       sessionId,
+      isArchived: sessionMeta?.isArchived,
     }))
   }, [navState])
 
@@ -2066,7 +2067,7 @@ function AppShellContent({
               /* Archived Sessions List */
               <ArchivedSessionsPanel
                 sessions={archivedSessions}
-                onSessionClick={(session) => navigateToSessionInPanel(session.id)}
+                onSessionClick={(session) => navigateToSessionInPanel(session.id, session)}
                 selectedSessionId={focusedSessionId}
               />
             )}
