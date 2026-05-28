@@ -64,6 +64,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.skills.OPEN_FINDER,
   RPC_CHANNELS.skills.EXTRACT_ZIP,
   RPC_CHANNELS.skills.INSTALL_LOCAL_ZIP,
+  RPC_CHANNELS.skills.TRIGGER_UPDATE_CHECK,
   // Remote skill resolver runs on the local machine; discovered skills are
   // installed separately via REMOTE_ELIGIBLE createSkill/forceWriteSkill.
   RPC_CHANNELS.skills.RESOLVE_REMOTE,
@@ -311,8 +312,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // settings — workspace-level settings
   RPC_CHANNELS.settings.SETUP_LLM_CONNECTION,
   RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP,
-  RPC_CHANNELS.settings.GET_DEFAULT_THINKING_LEVEL,
-  RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL,
+  RPC_CHANNELS.settings.GET_DEFAULT_THINKING_ENABLED,
+  RPC_CHANNELS.settings.SET_DEFAULT_THINKING_ENABLED,
 
   // pi — provider config on workspace server
   RPC_CHANNELS.pi.GET_API_KEY_PROVIDERS,
@@ -341,6 +342,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.sources.CHANGED,
   RPC_CHANNELS.sources.GET_PERMISSIONS,
   RPC_CHANNELS.sources.GET_MCP_TOOLS,
+  RPC_CHANNELS.sources.REFRESH_MCP_TOOLS,
+  RPC_CHANNELS.sources.GENERATE_GUIDE,
 
   // oauth — OAuth state management
   RPC_CHANNELS.oauth.START,
@@ -437,12 +440,12 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.userProfile.REFRESH,
   RPC_CHANNELS.userProfile.GET,
 
-  // teamKnowledge — workspace-scoped team knowledge cache
-  RPC_CHANNELS.teamKnowledge.GET_CONFIG,
-  RPC_CHANNELS.teamKnowledge.UPDATE_CONFIG,
-  RPC_CHANNELS.teamKnowledge.REFRESH,
-  RPC_CHANNELS.teamKnowledge.CHANGED,
-  RPC_CHANNELS.teamKnowledge.GET_PREVIEW,
+  // teamPublicKnowledge — workspace-scoped team public knowledge cache
+  RPC_CHANNELS.teamPublicKnowledge.GET_CONFIG,
+  RPC_CHANNELS.teamPublicKnowledge.UPDATE_CONFIG,
+  RPC_CHANNELS.teamPublicKnowledge.REFRESH,
+  RPC_CHANNELS.teamPublicKnowledge.CHANGED,
+  RPC_CHANNELS.teamPublicKnowledge.GET_PREVIEW,
 
   // messaging — gateway channels run on workspace server
   RPC_CHANNELS.messaging.WA_REGISTER,

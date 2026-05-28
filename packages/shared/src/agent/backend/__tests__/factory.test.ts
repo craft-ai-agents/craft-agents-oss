@@ -368,7 +368,7 @@ describe('phase4 backend abstraction APIs', () => {
       expect(agent).toBeInstanceOf(PiAgent);
       expect(agent.config.provider).toBe('pi');
       expect(agent.config.providerType).toBe('openllm');
-      expect(agent.config.runtime?.baseUrl).toBe('http://myserver:8000/llm/llama-3/v1');
+      expect(agent.config.runtime?.baseUrl).toBe('http://myserver:8000/v1');
       agent.destroy();
     } finally {
       if (previousHost === undefined) delete process.env.OPENLLM_HOST;

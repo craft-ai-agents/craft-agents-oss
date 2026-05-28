@@ -1,10 +1,9 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel } from '@craft-agent/shared/config'
-import { isValidThinkingLevel, normalizeThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
+import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingEnabled, setDefaultThinkingEnabled } from '@craft-agent/shared/config'
+import { normalizeThinkingEnabled } from '@craft-agent/shared/agent/thinking-toggle'
 
-const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
 import { getWorkspaceOrThrow } from '@craft-agent/server-core/handlers'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -39,8 +38,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.rtk.GET_GAIN,
   RPC_CHANNELS.sessions.GET_MODEL,
   RPC_CHANNELS.sessions.SET_MODEL,
-  RPC_CHANNELS.settings.GET_DEFAULT_THINKING_LEVEL,
-  RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL,
+  RPC_CHANNELS.settings.GET_DEFAULT_THINKING_ENABLED,
+  RPC_CHANNELS.settings.SET_DEFAULT_THINKING_ENABLED,
   RPC_CHANNELS.tools.GET_BROWSER_TOOL_ENABLED,
   RPC_CHANNELS.tools.SET_BROWSER_TOOL_ENABLED,
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
@@ -51,22 +50,27 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.rtk.GET_GAIN,
 ] as const
 
+export const defaultThinkingSettingsStorage = {
+  getDefaultThinkingEnabled,
+  setDefaultThinkingEnabled,
+}
+
 export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): void {
   // ============================================================
-  // Settings - Default Thinking Level (App-Level)
+  // Settings - Default Thinking Toggle (App-Level)
   // ============================================================
 
-  server.handle(RPC_CHANNELS.settings.GET_DEFAULT_THINKING_LEVEL, async () => {
-    return getDefaultThinkingLevel()
+  server.handle(RPC_CHANNELS.settings.GET_DEFAULT_THINKING_ENABLED, async () => {
+    return defaultThinkingSettingsStorage.getDefaultThinkingEnabled()
   })
 
-  server.handle(RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL, async (_ctx, level: string) => {
-    if (!isValidThinkingLevel(level)) {
-      throw new Error(`Invalid thinking level: ${level}. Valid values: ${VALID_THINKING_LEVELS_LIST}`)
+  server.handle(RPC_CHANNELS.settings.SET_DEFAULT_THINKING_ENABLED, async (_ctx, enabled: boolean) => {
+    if (typeof enabled !== 'boolean') {
+      throw new Error(`Invalid thinking toggle: ${String(enabled)}. Valid values: true, false`)
     }
-    const success = setDefaultThinkingLevel(level)
+    const success = defaultThinkingSettingsStorage.setDefaultThinkingEnabled(enabled)
     if (!success) {
-      throw new Error('Failed to persist default thinking level')
+      throw new Error('Failed to persist default thinking toggle')
     }
     return { success: true }
   })
@@ -117,13 +121,13 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       model: config?.defaults?.model,
       permissionMode: config?.defaults?.permissionMode,
       cyclablePermissionModes: config?.defaults?.cyclablePermissionModes,
-      thinkingLevel: normalizeThinkingLevel(config?.defaults?.thinkingLevel),
+      thinkingEnabled: normalizeThinkingEnabled(config?.defaults?.thinkingEnabled),
       workingDirectory: config?.defaults?.workingDirectory,
       localMcpEnabled: config?.localMcpServers?.enabled ?? true,
       defaultLlmConnection: config?.defaults?.defaultLlmConnection,
       enabledSourceSlugs: config?.defaults?.enabledSourceSlugs ?? [],
       teamPublicKnowledgeEnabled: config?.teamPublicKnowledge?.enabled ?? false,
-      teamKnowledgeDocumentsCount: config?.teamPublicKnowledge?.documents?.length ?? 0,
+      teamPublicKnowledgeDocumentsCount: config?.teamPublicKnowledge?.documents?.length ?? 0,
     }
   })
 
@@ -135,7 +139,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       : value
 
     // Validate key is a known workspace setting
-    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection', 'teamPublicKnowledgeEnabled']
+    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingEnabled', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection', 'teamPublicKnowledgeEnabled']
     if (!validKeys.includes(key)) {
       throw new Error(`Invalid workspace setting key: ${key}. Valid keys: ${validKeys.join(', ')}`)
     }
@@ -170,7 +174,13 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       config.localMcpServers.enabled = Boolean(normalizedValue)
     } else if (key === 'teamPublicKnowledgeEnabled') {
       // Store in teamPublicKnowledge.enabled (top-level, not in defaults)
-      config.teamPublicKnowledge = config.teamPublicKnowledge || { enabled: false, documents: [] }
+      const { DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH } = await import('@craft-agent/shared/workspaces')
+      config.teamPublicKnowledge = config.teamPublicKnowledge || {
+        enabled: false,
+        manifestPath: DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH,
+        documents: [],
+      }
+      config.teamPublicKnowledge.manifestPath ||= DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH
       config.teamPublicKnowledge.enabled = Boolean(normalizedValue)
     } else {
       // Update the setting in defaults

@@ -5,20 +5,15 @@
  * Extracted here to avoid circular imports between pi-agent.ts and event-adapter.ts.
  */
 
+import type { ThinkingEnabled } from '../../thinking-toggle.ts';
 import type { ThinkingLevel as PiThinkingLevel } from '@mariozechner/pi-agent-core';
-import type { ThinkingLevel } from '../../thinking-levels.ts';
 
 /**
- * Map Craft's {@link ThinkingLevel} to Pi's `ThinkingLevel`.
- * Pi's ceiling is `xhigh`; Craft's `max` saturates there.
+ * Map Craft's boolean thinking toggle to Pi's reasoning setting.
  */
-export const THINKING_TO_PI: Record<ThinkingLevel, PiThinkingLevel> = {
-  off: 'off',
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  xhigh: 'xhigh',
-  max: 'xhigh',
+export const THINKING_ENABLED_TO_PI: Record<`${ThinkingEnabled}`, PiThinkingLevel> = {
+  false: 'off',
+  true: 'medium',
 };
 
 /**

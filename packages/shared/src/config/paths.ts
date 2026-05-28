@@ -14,6 +14,17 @@
 import { homedir } from 'os';
 import { join } from 'path';
 
+// Expand leading ~ in a path. On Windows, ~ is not expanded by the shell or Node.js,
+// so a user-set CRAFT_CONFIG_DIR=~/.mdp-agent would create a literal "~" directory.
+function expandTilde(p: string): string {
+  if (p === '~') return homedir();
+  if (p.startsWith('~/') || p.startsWith('~\\')) return join(homedir(), p.slice(2));
+  return p;
+}
+
 // Allow override via environment variable for multi-instance dev
 // Falls back to default ~/.mdp-agent/ for production and non-numbered dev folders
-export const CONFIG_DIR = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.mdp-agent');
+const rawConfigDir = process.env.CRAFT_CONFIG_DIR;
+export const CONFIG_DIR = rawConfigDir
+  ? expandTilde(rawConfigDir)
+  : join(homedir(), '.mdp-agent');

@@ -147,8 +147,8 @@ export const CHANNEL_MAP = {
   // Settings - API Setup
   setupLlmConnection: invoke(RPC_CHANNELS.settings.SETUP_LLM_CONNECTION),
   testLlmConnectionSetup: invoke(RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP),
-  getDefaultThinkingLevel: invoke(RPC_CHANNELS.settings.GET_DEFAULT_THINKING_LEVEL),
-  setDefaultThinkingLevel: invoke(RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL),
+  getDefaultThinkingEnabled: invoke(RPC_CHANNELS.settings.GET_DEFAULT_THINKING_ENABLED),
+  setDefaultThinkingEnabled: invoke(RPC_CHANNELS.settings.SET_DEFAULT_THINKING_ENABLED),
   getNetworkProxySettings: invoke(RPC_CHANNELS.settings.GET_NETWORK_PROXY),
   setNetworkProxySettings: invoke(RPC_CHANNELS.settings.SET_NETWORK_PROXY),
 
@@ -223,6 +223,8 @@ export const CHANNEL_MAP = {
   getDefaultPermissionsConfig: invoke(RPC_CHANNELS.permissions.GET_DEFAULTS),
   onDefaultPermissionsChanged: listener(RPC_CHANNELS.permissions.DEFAULTS_CHANGED),
   getMcpTools: invoke(RPC_CHANNELS.sources.GET_MCP_TOOLS),
+  refreshMcpTools: invoke(RPC_CHANNELS.sources.REFRESH_MCP_TOOLS),
+  generateSourceGuide: invoke(RPC_CHANNELS.sources.GENERATE_GUIDE),
 
   // Session content search
   searchSessionContent: invoke(RPC_CHANNELS.sessions.SEARCH_CONTENT),
@@ -264,12 +266,12 @@ export const CHANNEL_MAP = {
   reorderStatuses: invoke(RPC_CHANNELS.statuses.REORDER),
   onStatusesChanged: listener(RPC_CHANNELS.statuses.CHANGED),
 
-  // Team Knowledge
-  getTeamKnowledgeConfig: invoke(RPC_CHANNELS.teamKnowledge.GET_CONFIG),
-  updateTeamKnowledgeConfig: invoke(RPC_CHANNELS.teamKnowledge.UPDATE_CONFIG),
-  refreshTeamKnowledge: invoke(RPC_CHANNELS.teamKnowledge.REFRESH),
-  onTeamKnowledgeChanged: listener(RPC_CHANNELS.teamKnowledge.CHANGED),
-  getTeamContextPreview: invoke(RPC_CHANNELS.teamKnowledge.GET_PREVIEW),
+  // Team Public Knowledge
+  getTeamPublicKnowledgeConfig: invoke(RPC_CHANNELS.teamPublicKnowledge.GET_CONFIG),
+  updateTeamPublicKnowledgeConfig: invoke(RPC_CHANNELS.teamPublicKnowledge.UPDATE_CONFIG),
+  refreshTeamPublicKnowledge: invoke(RPC_CHANNELS.teamPublicKnowledge.REFRESH),
+  onTeamPublicKnowledgeChanged: listener(RPC_CHANNELS.teamPublicKnowledge.CHANGED),
+  getTeamContextPreview: invoke(RPC_CHANNELS.teamPublicKnowledge.GET_PREVIEW),
 
   // Labels
   listLabels: invoke(RPC_CHANNELS.labels.LIST),

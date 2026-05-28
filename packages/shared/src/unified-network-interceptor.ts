@@ -1334,6 +1334,11 @@ const openAiAdapter: ApiAdapter = {
     validateOpenAiChatBody(body);
   },
 
+  modifyRequest(_url: string, init: RequestInit, body: Record<string, unknown>): { init: RequestInit; body: Record<string, unknown> } {
+    applyPiThinkingChatTemplateKwargs(body, getPiThinkingEnabledHint());
+    return { init, body };
+  },
+
   createSseProcessor(): TransformStream<Uint8Array, Uint8Array> {
     return createOpenAiSseStrippingStream();
   },
@@ -1857,6 +1862,24 @@ const adapters: ApiAdapter[] = [anthropicAdapter, openAiResponsesAdapter, openAi
 function getPiApiHint(): string | undefined {
   const hint = process.env.CRAFT_PI_MODEL_API?.trim();
   return hint || undefined;
+}
+
+function getPiThinkingEnabledHint(): boolean | undefined {
+  const hint = process.env.CRAFT_PI_THINKING_ENABLED?.trim();
+  if (hint === 'true') return true;
+  if (hint === 'false') return false;
+  return undefined;
+}
+
+/**
+ * Applies Pi's Qwen/OpenAI-compatible chat-template thinking switch.
+ * Enabled requests include the top-level chat_template_kwargs field; disabled
+ * requests omit it so the provider falls back to non-thinking output.
+ */
+export function applyPiThinkingChatTemplateKwargs(body: Record<string, unknown>, thinkingEnabled: boolean | undefined): void {
+  if (thinkingEnabled === undefined) return;
+
+  body.chat_template_kwargs = { enable_thinking: Boolean(thinkingEnabled) };
 }
 
 /**

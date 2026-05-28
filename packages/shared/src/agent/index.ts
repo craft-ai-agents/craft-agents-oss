@@ -72,16 +72,12 @@ export {
 export type { Plan, PlanStep, PlanState, PlanReviewRequest, PlanReviewResult } from './plan-types.ts';
 export { PERMISSION_MODE_MESSAGES, PERMISSION_MODE_PROMPTS } from './plan-types.ts';
 
-// Export thinking-levels - extended reasoning configuration
+// Export thinking-toggle - boolean reasoning configuration
 export {
-  type ThinkingLevel,
-  type ThinkingLevelDefinition,
-  THINKING_LEVELS,
-  DEFAULT_THINKING_LEVEL,
-  getThinkingTokens,
-  getThinkingLevelNameKey,
-  isValidThinkingLevel,
-} from './thinking-levels.ts';
+  type ThinkingEnabled,
+  DEFAULT_THINKING_ENABLED,
+  normalizeThinkingEnabled,
+} from './thinking-toggle.ts';
 
 // Export permissions-config - customizable permissions per workspace/source (permissions.json)
 export {

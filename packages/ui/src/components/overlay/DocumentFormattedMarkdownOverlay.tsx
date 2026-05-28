@@ -102,7 +102,7 @@ export function DocumentFormattedMarkdownOverlay({
 
           {/* Content area */}
           <div className="px-10 pt-8 pb-8">
-            <div className="text-sm">
+            <div className="text-[14px]">
               {messageId && onAddAnnotation ? (
                 <AnnotatableMarkdownDocument
                   content={content}

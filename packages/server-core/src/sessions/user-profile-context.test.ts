@@ -9,12 +9,13 @@ const NOW = Date.UTC(2026, 4, 18, 12, 0, 0)
 
 function profile(overrides: Partial<UserProfile> = {}): UserProfile {
   return {
-    name: 'Ada Lovelace',
-    oneStopId: 'OS-12345',
-    group: 'AI Platform',
-    department: 'Engineering',
-    ownedModules: ['sessions', 'sources'],
-    ownedTopics: ['agent runtime', 'identity'],
+    userName: 'Ada Lovelace',
+    ystId: 'OS-12345',
+    positon: 'System Engineer',
+    zuName: 'AI Platform',
+    shiName: 'Engineering',
+    leaderUserInfo: '374783/Grace Hopper',
+    chargeModule: [{ appCode: 'sessions', appName: 'Sessions' }],
     ...overrides,
   }
 }
@@ -29,13 +30,14 @@ describe('user profile dynamic context', () => {
 
     expect(formatted).toContain('<user_profile')
     expect(formatted).toContain('freshness="fresh"')
-    expect(formatted).toContain('Name: Ada Lovelace')
-    expect(formatted).toContain('One-stop ID: OS-12345')
-    expect(formatted).toContain('Group: AI Platform')
-    expect(formatted).toContain('Department: Engineering')
-    expect(formatted).toContain('Owned modules: sessions, sources')
-    expect(formatted).toContain('Owned topics: agent runtime, identity')
-    expect(formatted).toContain('Do not reveal the one-stop ID in normal replies.')
+    expect(formatted).toContain('User name: Ada Lovelace')
+    expect(formatted).toContain('YST ID: OS-12345')
+    expect(formatted).toContain('Position: System Engineer')
+    expect(formatted).toContain('Group name: AI Platform')
+    expect(formatted).toContain('Office name: Engineering')
+    expect(formatted).toContain('Leader user info: 374783/Grace Hopper')
+    expect(formatted).toContain('Charge modules: Sessions (sessions)')
+    expect(formatted).toContain('Do not reveal identity IDs or IP addresses in normal replies.')
   })
 
   it('falls back to a stale cached profile for up to 7 days when refresh fails', async () => {
@@ -62,7 +64,7 @@ describe('user profile dynamic context', () => {
     expect(JSON.stringify(context?.ref)).not.toContain('Ada Lovelace')
     expect(JSON.stringify(context?.ref)).not.toContain('AI Platform')
     expect(JSON.stringify(context?.ref)).not.toContain('Engineering')
-    expect(context?.ref).not.toHaveProperty('oneStopId')
+    expect(context?.ref).not.toHaveProperty('ystId')
   })
 
   it('returns no context when refresh and cache are both missing', async () => {

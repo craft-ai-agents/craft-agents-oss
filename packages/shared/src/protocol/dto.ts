@@ -15,7 +15,7 @@ import type {
   PermissionRequest as BasePermissionRequest,
 } from '@craft-agent/core/types'
 import type { PermissionMode } from '../agent/mode-types'
-import type { ThinkingLevel } from '../agent/thinking-levels'
+import type { ThinkingEnabled } from '../agent/thinking-toggle'
 import type { CustomEndpointConfig } from '../config/llm-connections'
 import type {
   AuthRequest as SharedAuthRequest,
@@ -73,7 +73,7 @@ export interface Session {
   sharedId?: string
   model?: string
   llmConnection?: string
-  thinkingLevel?: ThinkingLevel
+  thinkingEnabled?: ThinkingEnabled
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   lastFinalMessageId?: string
   isAsyncOperationOngoing?: boolean
@@ -108,12 +108,12 @@ export interface CreateSessionOptions {
   name?: string
   permissionMode?: PermissionMode
   /**
-   * Reasoning/thinking level override. When set, takes precedence over workspace
+   * Reasoning/thinking toggle override. When set, takes precedence over workspace
    * and global defaults. Silently ignored by the underlying SDK on non-reasoning
    * models (e.g. gpt-4o) — provider drivers don't attach the reasoning param to
    * the API request for models with `reasoning: false` in the Pi SDK catalog.
    */
-  thinkingLevel?: ThinkingLevel
+  thinkingEnabled?: ThinkingEnabled
   /**
    * Working directory for the session:
    * - 'user_default' or undefined: Use workspace's configured default working directory
@@ -234,7 +234,7 @@ export type SessionCommand =
   | { type: 'markUnread' }
   | { type: 'setActiveViewing'; workspaceId: string }
   | { type: 'setPermissionMode'; mode: PermissionMode }
-  | { type: 'setThinkingLevel'; level: ThinkingLevel }
+  | { type: 'setThinkingEnabled'; enabled: ThinkingEnabled }
   | { type: 'updateWorkingDirectory'; dir: string }
   | { type: 'setSources'; sourceSlugs: string[] }
   | { type: 'setLabels'; labels: string[] }
@@ -533,7 +533,7 @@ export interface WorkspaceSettings {
   model?: string
   permissionMode?: PermissionMode
   cyclablePermissionModes?: PermissionMode[]
-  thinkingLevel?: ThinkingLevel
+  thinkingEnabled?: ThinkingEnabled
   workingDirectory?: string
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
@@ -541,7 +541,7 @@ export interface WorkspaceSettings {
   /** Whether team public knowledge is enabled for this workspace. */
   teamPublicKnowledgeEnabled?: boolean
   /** Number of configured team public knowledge documents. */
-  teamKnowledgeDocumentsCount?: number
+  teamPublicKnowledgeDocumentsCount?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -593,7 +593,7 @@ export interface ClaudeOAuthResult {
 // ---------------------------------------------------------------------------
 
 export type TestAutomationAction =
-  | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
+  | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingEnabled?: ThinkingEnabled }
   | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string>; bodyFormat?: 'json' | 'form' | 'raw'; body?: unknown; captureResponse?: boolean; auth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string } }
 
 export interface TestAutomationPayload {

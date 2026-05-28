@@ -6,6 +6,7 @@
 import { spawn, type Subprocess } from "bun";
 import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "fs";
 import { join, basename } from "path";
+import { homedir } from "os";
 import * as esbuild from "esbuild";
 import { downloadUv, downloadRtk, type Platform, type Arch } from "./build/common";
 
@@ -112,7 +113,7 @@ function detectInstance(): void {
     process.env.CRAFT_INSTANCE_NUMBER = instanceNum;
     process.env.CRAFT_VITE_PORT = `${instanceNum}173`;
     process.env.CRAFT_APP_NAME = `MDP [${instanceNum}]`;
-    process.env.CRAFT_CONFIG_DIR = join(process.env.HOME || "", `.mdp-agent-${instanceNum}`);
+    process.env.CRAFT_CONFIG_DIR = join(homedir(), `.mdp-agent-${instanceNum}`);
     process.env.CRAFT_DEEPLINK_SCHEME = `mdp${instanceNum}`;
     console.log(`🔢 Instance ${instanceNum} detected: port=${process.env.CRAFT_VITE_PORT}, config=${process.env.CRAFT_CONFIG_DIR}`);
   }

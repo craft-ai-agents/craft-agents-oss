@@ -9,7 +9,7 @@
 import type { Workspace, WorkspaceInfo, ActiveSessionInfo } from '@craft-agent/core/types'
 import type { StoredAttachment, AnnotationV1 } from '@craft-agent/core/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/mode-types'
-import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
+import type { ThinkingEnabled } from '@craft-agent/shared/agent/thinking-toggle'
 import type { AuthResult } from '@craft-agent/shared/agent'
 import type {
   Session,
@@ -68,7 +68,7 @@ export interface ISessionManager {
   // ---------------------------------------------------------------------------
 
   setSessionPermissionMode(sessionId: string, mode: PermissionMode): void
-  setSessionThinkingLevel(sessionId: string, level: ThinkingLevel): void
+  setSessionThinkingEnabled(sessionId: string, enabled: ThinkingEnabled): void
   updateWorkingDirectory(sessionId: string, path: string): void
   setSessionSources(sessionId: string, sourceSlugs: string[]): Promise<void>
   setSessionLabels(sessionId: string, labels: string[]): void
@@ -201,6 +201,10 @@ export interface ISessionManager {
   /** Return client-safe workspace list (no rootPath) for remote clients. */
   getWorkspacesInfo(): WorkspaceInfo[]
   setupConfigWatcher(workspaceRootPath: string, workspaceId: string): void
+  /** Tear down workspace-scoped infrastructure such as config watchers, MCP pools, and automations. */
+  closeWorkspace(workspaceRootPath: string): Promise<void>
+  /** Re-sync all workspace MCP pools from disk — call after SSO login to pick up the fresh identity token. */
+  syncAllWorkspaceMcpPools(): Promise<void>
   /**
    * Manually notify the ConfigWatcher of a file change.
    * Workaround for Bun's fs.watch on Linux not detecting atomic renames.
@@ -257,7 +261,7 @@ export interface ISessionManager {
 /**
  * Input for executePromptAutomation. Options-object form replaces the
  * previous positional-args signature once the param list grew past
- * readability — new optional fields (thinkingLevel, future cwd/permissions
+ * readability — new optional fields (thinkingEnabled, future cwd/permissions
  * overrides) can be added without churn at every call site.
  */
 export interface ExecutePromptAutomationInput {
@@ -269,8 +273,8 @@ export interface ExecutePromptAutomationInput {
   mentions?: string[]
   llmConnection?: string
   model?: string
-  /** Override the workspace default thinking level for the spawned session. */
-  thinkingLevel?: ThinkingLevel
+  /** Override the workspace default thinking toggle for the spawned session. */
+  thinkingEnabled?: ThinkingEnabled
   automationName?: string
   /**
    * Optional Telegram forum-topic name. When set and the workspace has a

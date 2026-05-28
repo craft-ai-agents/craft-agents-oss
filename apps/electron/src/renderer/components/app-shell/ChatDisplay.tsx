@@ -53,7 +53,7 @@ import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
 import type { PermissionMode } from "@craft-agent/shared/agent/modes"
-import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
+import type { ThinkingEnabled } from "@craft-agent/shared/agent/thinking-toggle"
 import {
   TurnCard,
   UserMessageBubble,
@@ -82,7 +82,7 @@ import { useAppShellContext } from "@/context/AppShellContext"
 import { navigate, routes } from "@/lib/navigate"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from "@/lib/file-changes"
-import { resolveBranchNewPanelOption } from "./branching"
+import { createBranchSessionAndNavigate } from "./branch-session-navigation"
 import { handleErrorMessageAction } from "./error-message-actions"
 import {
   applySavedFeedbackId,
@@ -188,11 +188,11 @@ interface ChatDisplayProps {
   pendingCredential?: CredentialRequest
   /** Callback to respond to credential request */
   onRespondToCredential?: (sessionId: string, requestId: string, response: CredentialResponse) => void
-  // Thinking level (session-level setting)
-  /** Current thinking level ('off', 'think', 'max') */
-  thinkingLevel?: ThinkingLevel
-  /** Callback when thinking level changes */
-  onThinkingLevelChange?: (level: ThinkingLevel) => void
+  // Thinking toggle (session-level setting)
+  /** Current thinking toggle */
+  thinkingEnabled?: ThinkingEnabled
+  /** Callback when thinking toggle changes */
+  onThinkingEnabledChange?: (enabled: ThinkingEnabled) => void
   // Advanced options
   /** Current permission mode */
   permissionMode?: PermissionMode
@@ -480,9 +480,9 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   onRespondToPermission,
   pendingCredential,
   onRespondToCredential,
-  // Thinking level
-  thinkingLevel = 'medium',
-  onThinkingLevelChange,
+  // Thinking toggle
+  thinkingEnabled = true,
+  onThinkingEnabledChange,
   // Advanced options
   permissionMode = 'ask',
   onPermissionModeChange,
@@ -2099,24 +2099,15 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                                       openAnnotationRequest={openAnnotationRequest}
                                       feedbackValue={canShowFeedback && responseMessageId ? feedbackByMessageId[responseMessageId]?.rating ?? null : null}
                                       onFeedback={canShowFeedback && responseMessageId ? (rating: FeedbackRating) => handleFeedback(turn, responseMessageId, rating) : undefined}
-                                      onBranch={session?.supportsBranching ? async (messageId: string, options?: { newPanel?: boolean }) => {
+                                      onBranch={session?.supportsBranching ? async (messageId: string) => {
                                         if (!session) return
                                         try {
-                                          const child = await appShellContext.onCreateSession(
-                                            session.workspaceId,
-                                            {
-                                              branchFromMessageId: messageId,
-                                              branchFromSessionId: session.id,
-                                              name: `Branch of ${session.name || 'Untitled'}`,
-                                              // Keep branch on the same backend/provider by inheriting parent session settings.
-                                              llmConnection: session.llmConnection,
-                                              model: session.model,
-                                              permissionMode: session.permissionMode,
-                                              workingDirectory: session.workingDirectory,
-                                              enabledSourceSlugs: session.enabledSourceSlugs,
-                                            }
-                                          )
-                                          navigate(routes.view.allSessions(child.id), { newPanel: resolveBranchNewPanelOption(options) })
+                                          await createBranchSessionAndNavigate({
+                                            session,
+                                            messageId,
+                                            createSession: appShellContext.onCreateSession,
+                                            navigate,
+                                          })
                                         } catch (error) {
                                           const rawMessage = error instanceof Error ? error.message : 'Failed to create branch'
                                           const message = rawMessage.includes('source and target providers must match')
@@ -2310,8 +2301,8 @@ const ChatDisplayContent = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                   textareaRef,
                   currentModel,
                   onModelChange,
-                  thinkingLevel,
-                  onThinkingLevelChange,
+                  thinkingEnabled,
+                  onThinkingEnabledChange,
                   enabledModes,
                   enableCompactModelPicker,
                   structuredInput,

@@ -10,4 +10,6 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Bug Fixes
 
+- **Branch sessions navigate in place** — Branching from a message now opens the child session in the current content area instead of creating a side-by-side panel. (RPI-170)
+
 ## Breaking Changes

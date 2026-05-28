@@ -161,7 +161,7 @@ describe('Settings AI environment connection', () => {
     )
 
     expect(view.getByText((content) => content.includes('env.example.test'))).toBeTruthy()
-    expect(getText(view, 'common.default', 'Default')).toBeTruthy()
+    expect(getText(view, 'common.builtIn', 'Built-in', 'Built in')).toBeTruthy()
     expect(view.getAllByText('Environment')).toHaveLength(1)
 
     fireEvent.pointerDown(view.getByRole('button'), { button: 0, ctrlKey: false })

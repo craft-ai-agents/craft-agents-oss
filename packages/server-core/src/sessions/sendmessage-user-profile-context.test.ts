@@ -25,12 +25,11 @@ describe('sendMessage user profile context', () => {
     let chatMessage = ''
     const provider: UserProfileProvider = {
       fetchUserProfile: async () => ({
-        name: 'Ada Lovelace',
-        oneStopId: 'OS-12345',
-        group: 'AI Platform',
-        department: 'Engineering',
-        ownedModules: ['sessions'],
-        ownedTopics: ['identity'],
+        userName: 'Ada Lovelace',
+        ystId: 'OS-12345',
+        zuName: 'AI Platform',
+        shiName: 'Engineering',
+        chargeModule: [{ appCode: 'sessions', appName: 'Sessions' }],
       }),
     }
 
@@ -69,7 +68,7 @@ describe('sendMessage user profile context', () => {
 
     expect(chatMessage).toContain('hello')
     expect(chatMessage).toContain('<user_profile')
-    expect(chatMessage).toContain('One-stop ID: OS-12345')
+    expect(chatMessage).toContain('YST ID: OS-12345')
 
     const lines = readFileSync(getSessionFilePath(tmpRoot, managed.id), 'utf-8').trim().split('\n')
     const storedUserMessage = JSON.parse(lines[1]!)
@@ -90,16 +89,16 @@ describe('sendMessage user profile context', () => {
   it('preserves safe branch history refs while recomputing fresh profile context for new branch messages', async () => {
     const profiles = [
       {
-        name: 'Original User',
-        oneStopId: 'OS-OLD',
-        group: 'Old Group',
-        department: 'Old Department',
+        userName: 'Original User',
+        ystId: 'OS-OLD',
+        zuName: 'Old Group',
+        shiName: 'Old Department',
       },
       {
-        name: 'Current User',
-        oneStopId: 'OS-NEW',
-        group: 'New Group',
-        department: 'New Department',
+        userName: 'Current User',
+        ystId: 'OS-NEW',
+        zuName: 'New Group',
+        shiName: 'New Department',
       },
     ]
     let chatMessage = ''
@@ -154,11 +153,11 @@ describe('sendMessage user profile context', () => {
     await sm.sendMessage(managed.id, 'branch follow-up')
 
     expect(chatMessage).toContain('branch follow-up')
-    expect(chatMessage).toContain('One-stop ID: OS-OLD')
+    expect(chatMessage).toContain('YST ID: OS-OLD')
     expect(chatMessage).not.toContain('OS-NEW')
 
     await sm.sendMessage(managed.id, 'second branch follow-up')
-    expect(chatMessage).toContain('One-stop ID: OS-NEW')
+    expect(chatMessage).toContain('YST ID: OS-NEW')
 
     const lines = readFileSync(getSessionFilePath(tmpRoot, managed.id), 'utf-8').trim().split('\n')
     const serialized = lines.slice(1).map(line => JSON.parse(line))
@@ -210,7 +209,7 @@ describe('sendMessage user profile context', () => {
           status: 'fresh',
           fetchedAt: 3,
           summary: 'Ada Lovelace, AI Platform, Engineering',
-          dynamicContext: '<user_profile>One-stop ID: OS-12345</user_profile>',
+          dynamicContext: '<user_profile>YST ID: OS-12345</user_profile>',
         } as never,
       }],
     } as never)

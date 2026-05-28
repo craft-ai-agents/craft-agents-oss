@@ -1,4 +1,4 @@
-import { DEFAULT_DEEPLINK_PROTOCOL } from '../protocol/deep-link-scheme.ts'
+import { getConfiguredDeepLinkProtocol } from '../protocol/deep-link-scheme.ts'
 
 /**
  * Classification of external URLs for `shell.openExternal`-style handlers.
@@ -51,7 +51,7 @@ export function classifyExternalUrl(rawUrl: string): UrlClassification {
     return { kind: 'dangerous', scheme: protocol, reason: blockedReason }
   }
 
-  if (protocol === DEFAULT_DEEPLINK_PROTOCOL) {
+  if (protocol === getConfiguredDeepLinkProtocol().toLowerCase()) {
     return { kind: 'internal-deeplink' }
   }
 

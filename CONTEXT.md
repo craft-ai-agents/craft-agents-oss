@@ -15,6 +15,11 @@ Note: `workspace.rootPath` is an internal metadata directory (`labels/`, `sessio
 ### Workspace File Browser
 The `WorkspaceFilesSection` panel rendered in the right sidebar's `workspace` tab. Provides a lazy-loaded, per-folder tree view rooted at the active session's **CWD Root**. Shows an empty state ("No working directory set") when no valid CWD Root exists. Shares icon/thumbnail helpers with `SessionFilesSection` but manages its own loading-state machine for per-node fetching.
 
+### User Profile
+The authenticated user's enterprise identity and organization metadata as returned by the user profile API.
+
+Avoid: normalized profile, one-stop profile.
+
 ### CWD Root
 The effective root directory shown in the Workspace File Browser. Resolved from the focused session's `workingDirectory`: returned as-is if it is a real path (not `undefined`, `'none'`, or `'user_default'`); `undefined` otherwise. No workspace-containment check — `workingDirectory` is always outside `workspace.rootPath`.
 
@@ -232,6 +237,21 @@ For Bearer-authenticated MCP Sources, MCP connection setup, tool discovery, and 
 
 Avoid: default token, default auth.
 
+### MCP Source Refresh
+An explicit retry of an MCP Source's connection and tool discovery. Used after MCP Source connection details change, or when the user manually refreshes the MCP Source detail page.
+
+MCP Source Refresh updates the source's connection status and available tools. It is distinct from re-reading source documentation; source guide files are optional reference material, not a prerequisite for using a configured MCP Source.
+
+### Team Public Knowledge
+Workspace-scoped, team-maintained public Markdown reference data that can be cached and surfaced to the agent as untrusted context.
+
+Avoid: teamknowledge, Team Knowledge, teamKnowledge.
+
+### MCP Source Guide Generation
+Creation-time or user-triggered generation of an MCP Source's `guide.md`. The generated guide gives the agent source-specific context, usage guidelines, and API notes derived from MCP Source metadata, connection shape, and discovered tool names when the server can be reached.
+
+MCP Source Guide Generation uses the configured mini-completion model to produce concrete, operational content instead of placeholder text. If AI generation is unavailable or returns an invalid guide, source creation still succeeds with a deterministic fallback guide. It runs once when an MCP Source is created from manual input, JSON import, or skill metadata, and can be run again from the MCP Source detail page when the user wants to refresh the guide.
+
 ### SSO Login Flow
 The browser-based OIDC authorization code flow used to establish an SSO Session. The OIDC provider only accepts `http/https` redirect URIs, so the app routes through the shared OAuth relay instead of using the `mdp://` scheme directly as `redirect_uri`.
 
@@ -287,3 +307,23 @@ Required env var: `OPENLLM_BASE_HOST` (deployment-owned base host for the OpenLL
 Distinct from `OPENLLM_HOST`: `OPENLLM_BASE_HOST` is deployment-owned and triggers the built-in virtual connection; `OPENLLM_HOST` is user-owned and powers user-configured OpenLLM Connections. Neither falls back to the other.
 
 Avoid: OpenLLM env provider, synthesized OpenLLM connection.
+
+### Thinking Toggle
+A per-session on/off control that enables or disables extended reasoning for the active session. Replaces the former six-tier think level system. Persisted as a boolean (`thinkingEnabled`); workspace settings provide the default. The toggle appears as an icon button in the `FreeFormInput` toolbar.
+
+Migration: legacy `thinkingLevel: 'off'` maps to `false`; any other persisted value maps to `true`.
+
+Avoid: think level, thinking level, reasoning level.
+
+### Thinking Block
+The collapsible UI element that shows the model's raw reasoning text when the **Thinking Toggle** is on. Labelled **"Thinking"** in the UI (i18n key `chat.reasoning`); the chevron communicates expand/collapse state — no second label variant.
+
+Appears in two places:
+- **Turn level** — below the activities section, for the final response. Streams expanded while the model is actively reasoning (pending phase); auto-collapses the moment the first response text becomes visible. After collapse, the user can re-expand via the "Reasoning" toggle.
+- **Intermediate activity level** — inline inside any intermediate activity row (pre-tool-call commentary) that carries reasoning content. Collapsed by default once complete.
+
+Supports three extraction formats via `extractReasoningContent`: Anthropic-style `thinking` content blocks, a top-level `reasoning_content` field, and `<think>…</think>` tags embedded in the message content string. `<think>` tags are always stripped before any content is shown in an activity row or the ResponseCard.
+
+Streaming behaviour: the pending message (while `isPending: true`) drives both the intermediate activity spinner **and** `currentTurn.response`. This dual-path is what allows the ThinkingBlock and ResponseCard to stream progressively in parallel, rather than appearing all at once after `text_complete`.
+
+Avoid: thinking panel, reasoning panel, reasoning block.

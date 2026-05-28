@@ -7,6 +7,7 @@ import { loadWorkspaceSources } from '@craft-agent/shared/sources'
 import { loadWorkspaceConfig, saveWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { createMcpSourceGuideGenerator } from './sources'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.GET,
@@ -27,6 +28,9 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.INSTALL_MARKET,
   RPC_CHANNELS.skills.DELETE_MARKET,
   RPC_CHANNELS.skills.FETCH_MARKET_CONTENT,
+  RPC_CHANNELS.skills.CHECK_MARKET_UPDATES,
+  RPC_CHANNELS.skills.UPDATE_MARKET_BATCH,
+  RPC_CHANNELS.skills.DEVOPS_AUTO_INSTALL,
   RPC_CHANNELS.skills.INSTALL_LOCAL_ZIP,
 ] as const
 
@@ -38,6 +42,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
   }
 
   async function installSkillMcpSources(workspaceId: string, workspaceRoot: string, metadata: SkillMetadata): Promise<void> {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
     const {
       createMcpSourcesFromCandidates,
       defaultMcpPostCreateConnectionTester,
@@ -64,6 +69,7 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const result = await createMcpSourcesFromCandidates(workspaceRoot, importCandidates, {
       connectionTester: defaultMcpPostCreateConnectionTester,
       confirmedStdioCommands: Object.keys(confirmedStdioCommands).length > 0 ? confirmedStdioCommands : undefined,
+      guideGenerator: workspace ? createMcpSourceGuideGenerator(deps, workspace) : undefined,
     })
 
     for (const created of result.results) {

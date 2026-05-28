@@ -109,12 +109,14 @@ export function handleTeamKnowledgeApiRequest(request: Request): Response {
   }
 
   if (url.pathname === '/api/team/knowledge') {
-    return jsonResponse(TEAM_KNOWLEDGE_DOCUMENTS.map(document => ({
-      id: document.id,
-      title: document.title,
-      priority: document.priority,
-      url: `http://localhost:${TEAM_KNOWLEDGE_API_PORT}/api/team/knowledge/${document.id}`,
-    })));
+    return jsonResponse({
+      documents: TEAM_KNOWLEDGE_DOCUMENTS.map(document => ({
+        id: document.id,
+        title: document.title,
+        url: `/api/team/knowledge/${document.id}`,
+        priority: document.priority,
+      })),
+    });
   }
 
   const match = url.pathname.match(/^\/api\/team\/knowledge\/([^/]+)$/);
@@ -145,10 +147,24 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function logRequest(request: Request, response: Response, startTime: number): void {
+  const duration = Date.now() - startTime;
+  const url = new URL(request.url);
+  const timestamp = new Date().toISOString();
+  console.log(
+    `[${timestamp}] ${request.method} ${url.pathname}${url.search} → ${response.status} (${duration}ms)`,
+  );
+}
+
 if (import.meta.main) {
   const server = Bun.serve({
     port: TEAM_KNOWLEDGE_API_PORT,
-    fetch: handleTeamKnowledgeApiRequest,
+    fetch: (request) => {
+      const startTime = Date.now();
+      const response = handleTeamKnowledgeApiRequest(request);
+      logRequest(request, response, startTime);
+      return response;
+    },
   });
 
   console.log(`Team knowledge test API listening on http://localhost:${server.port}`);
