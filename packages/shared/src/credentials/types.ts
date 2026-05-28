@@ -96,8 +96,8 @@ export interface StoredCredential {
   clientSecret?: string;
   /** Token type (e.g., "Bearer") */
   tokenType?: string;
-  /** Where the credential came from: 'native' (our OAuth), 'cli' (Claude CLI import) */
-  source?: 'native' | 'cli';
+  /** Where the credential came from: stored OAuth/import flow, or read-only env fallback. */
+  source?: 'native' | 'cli' | 'environment';
   /**
    * OIDC id_token (JWT with user identity claims).
    * Used by OpenAI/Codex which returns both id_token and access_token.

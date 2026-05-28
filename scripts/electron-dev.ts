@@ -94,28 +94,36 @@ function detectInstance(): void {
   }
 }
 
-// Load .env file if it exists
+// Load .env files if they exist. Later files override earlier files.
 function loadEnvFile(): void {
-  const envPath = join(ROOT_DIR, ".env");
-  if (existsSync(envPath)) {
-    const content = readFileSync(envPath, "utf-8");
-    for (const line of content.split("\n")) {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith("#")) {
-        const eqIndex = trimmed.indexOf("=");
-        if (eqIndex > 0) {
-          const key = trimmed.slice(0, eqIndex).trim();
-          let value = trimmed.slice(eqIndex + 1).trim();
-          // Remove surrounding quotes if present
-          if ((value.startsWith('"') && value.endsWith('"')) ||
-              (value.startsWith("'") && value.endsWith("'"))) {
-            value = value.slice(1, -1);
+  const envPaths = [join(ROOT_DIR, ".env"), join(ROOT_DIR, ".env.local")];
+  const loaded: string[] = [];
+
+  for (const envPath of envPaths) {
+    if (existsSync(envPath)) {
+      const content = readFileSync(envPath, "utf-8");
+      for (const line of content.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith("#")) {
+          const eqIndex = trimmed.indexOf("=");
+          if (eqIndex > 0) {
+            const key = trimmed.slice(0, eqIndex).trim();
+            let value = trimmed.slice(eqIndex + 1).trim();
+            // Remove surrounding quotes if present
+            if ((value.startsWith('"') && value.endsWith('"')) ||
+                (value.startsWith("'") && value.endsWith("'"))) {
+              value = value.slice(1, -1);
+            }
+            process.env[key] = value;
           }
-          process.env[key] = value;
         }
       }
+      loaded.push(envPath);
     }
-    console.log("📄 Loaded .env file");
+  }
+
+  if (loaded.length) {
+    console.log(`📄 Loaded env files: ${loaded.map((path) => basename(path)).join(", ")}`);
   }
 }
 

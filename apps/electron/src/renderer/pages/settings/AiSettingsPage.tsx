@@ -262,8 +262,9 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
     if (validationState === 'success') return { tone: 'good', label: t("settings.ai.connectionValid") }
     if (validationState === 'error') return { tone: 'bad', label: validationError || t("settings.ai.validationFailed") }
     if (!connection.isAuthenticated) return { tone: 'bad', label: t("settings.ai.notAuthenticated") }
+    if (connection.credentialSource === 'environment') return { tone: 'muted', label: 'Env' }
     return { tone: 'good', label: 'Ready' }
-  }, [connection.isAuthenticated, t, validationError, validationState])
+  }, [connection.credentialSource, connection.isAuthenticated, t, validationError, validationState])
 
   const modelSummary = getConnectionModelSummary(connection)
   const providerLabel = getConnectionProviderLabel(connection)
@@ -291,6 +292,7 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
             {providerLabel} · {endpointLabel}
+            {connection.credentialSource === 'environment' && ' · Read from environment'}
           </div>
 
           {modelSummary.length > 0 && (

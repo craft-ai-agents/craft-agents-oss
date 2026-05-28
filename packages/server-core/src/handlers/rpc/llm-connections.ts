@@ -398,9 +398,13 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     return Promise.all(connections.map(async (conn): Promise<LlmConnectionWithStatus> => {
       // Check if credentials exist for this connection
       const hasCredentials = await credentialManager.hasLlmCredentials(conn.slug, conn.authType)
+      const credential = (conn.authType === 'api_key' || conn.authType === 'api_key_with_endpoint' || conn.authType === 'bearer_token')
+        ? await credentialManager.get({ type: 'llm_api_key', connectionSlug: conn.slug })
+        : null
       return {
         ...conn,
         isAuthenticated: conn.authType === 'none' || hasCredentials,
+        credentialSource: credential ? (credential.source === 'environment' ? 'environment' : 'stored') : undefined,
         isDefault: conn.slug === defaultSlug,
       }
     }))
@@ -414,8 +418,10 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // Get stored API key for an LLM connection (masked — for edit form display only)
   server.handle(RPC_CHANNELS.llmConnections.GET_API_KEY, async (_ctx, slug: string): Promise<string | null> => {
     const manager = getCredentialManager()
-    const key = await manager.getLlmApiKey(slug)
+    const credential = await manager.get({ type: 'llm_api_key', connectionSlug: slug })
+    const key = credential?.value
     if (!key) return null
+    if (credential?.source === 'environment') return 'Environment variable ••••'
     // Show provider prefix (first 7 chars) + last 4 chars, mask the middle
     if (key.length > 15) {
       return key.slice(0, 7) + '••••••••' + key.slice(-4)
