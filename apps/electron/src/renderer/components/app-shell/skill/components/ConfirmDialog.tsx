@@ -26,12 +26,12 @@ export function ConfirmDialog({
     <Dialog open onOpenChange={(v) => { if (!v) onCancel() }}>
       <DialogContent className="w-full max-w-[360px] sm:max-w-[360px] gap-0 p-6">
         <p className="text-[15px] font-semibold text-foreground">{title}</p>
-        <p className="mt-2 text-[13px] text-muted-foreground leading-relaxed">{description}</p>
+        <p className="mt-2 text-[14px] text-muted-foreground leading-relaxed">{description}</p>
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-border px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-muted"
+            className="rounded-lg border border-border px-4 py-2 text-[14px] font-medium text-foreground transition-colors hover:bg-muted"
           >
             {cancelLabel}
           </button>
@@ -39,7 +39,7 @@ export function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             className={cn(
-              'rounded-lg px-4 py-2 text-[13px] font-medium transition-colors',
+              'rounded-lg px-4 py-2 text-[14px] font-medium transition-colors',
               destructive
                 ? 'bg-red-500 text-white hover:bg-red-600'
                 : 'bg-foreground text-background hover:opacity-85',

@@ -71,7 +71,7 @@ export function GitBashWarning({
           <h3 className="text-sm font-medium text-foreground">
             {t("onboarding.gitBash.installTitle")}
           </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             {t("onboarding.gitBash.installDesc")}
           </p>
           <Button
@@ -89,7 +89,7 @@ export function GitBashWarning({
           <h3 className="text-sm font-medium text-foreground">
             {t("onboarding.gitBash.alreadyInstalled")}
           </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             {t("onboarding.gitBash.customPath")}
           </p>
 
@@ -102,7 +102,7 @@ export function GitBashWarning({
                   onClearError?.()
                 }}
                 placeholder={t("onboarding.gitBash.pathPlaceholder")}
-                className="text-xs"
+                className="text-sm"
               />
               <Button
                 onClick={handleUsePath}
@@ -113,7 +113,7 @@ export function GitBashWarning({
                 {t("onboarding.gitBash.useThisPath")}
               </Button>
               {errorMessage && (
-                <p className="text-xs text-red-500">{errorMessage}</p>
+                <p className="text-sm text-red-500">{errorMessage}</p>
               )}
             </div>
           ) : (

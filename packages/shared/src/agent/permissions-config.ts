@@ -17,7 +17,7 @@ import { join } from 'path';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync, safeJsonParse } from '../utils/files.ts';
 import { CONFIG_DIR } from '../config/paths.ts';
-import { getBundledAssetsDir } from '../utils/paths.ts';
+import { getBundledAssetsDir, expandPath } from '../utils/paths.ts';
 import { getSourcePath } from '../sources/storage.ts';
 import { isValidPermissionsFile } from '../config/validators.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
@@ -46,7 +46,10 @@ let permissionsInitialized = false;
  * Reads env var dynamically so tests can override via CRAFT_CONFIG_DIR.
  */
 export function getAppPermissionsDir(): string {
-  const configDir = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.mdp-agent');
+  const raw = process.env.CRAFT_CONFIG_DIR;
+  const configDir = raw
+    ? expandPath(raw)
+    : join(homedir(), '.mdp-agent');
   return join(configDir, 'permissions');
 }
 

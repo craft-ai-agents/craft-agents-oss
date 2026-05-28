@@ -12,7 +12,7 @@ export const settingsUI = {
   description: 'text-sm text-muted-foreground',
 
   /** Smaller description for compact contexts (e.g., menu options) */
-  descriptionSmall: 'text-xs text-muted-foreground',
+  descriptionSmall: 'text-sm text-muted-foreground',
 
   /** Gap between label and description (applied to description as margin-top) */
   labelDescriptionGap: 'mt-0',

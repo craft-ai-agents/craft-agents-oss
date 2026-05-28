@@ -14,7 +14,6 @@ import { SessionBadges } from "./SessionBadges"
 import { getSessionTitle, getSessionPreviewText, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
 import { useSessionListContext } from "@/context/SessionListContext"
 import { useAppShellContext } from "@/context/AppShellContext"
-import { navigate, routes } from "@/lib/navigate"
 import type { SessionMeta } from "@/atoms/sessions"
 
 export interface SessionItemProps {
@@ -60,9 +59,9 @@ export function SessionItem({
       return
     }
     if ((e.metaKey || e.ctrlKey) && e.shiftKey) {
-      // Cmd+Shift+Click: open session in a new panel
+      // Cmd+Shift+Click: open session in a new OS window
       e.preventDefault()
-      navigate(routes.view.allSessions(item.id), { newPanel: true })
+      ctx.onOpenInNewWindow(item)
       return
     }
     if ((e.metaKey || e.ctrlKey) && onToggleSelect) {
@@ -85,7 +84,7 @@ export function SessionItem({
       className="session-item"
       dataAttributes={{ 'data-session-id': item.id }}
       showSeparator={!isFirstInGroup}
-      separatorClassName="pl-[38px] pr-4"
+      separatorClassName="pl-[22px] pr-3"
       isSelected={isSelected}
       isInMultiSelect={isInMultiSelect}
       onMouseDown={handleClick}
@@ -161,7 +160,8 @@ export function SessionItem({
         </div>
       }
       title={ctx.searchQuery ? highlightMatch(title, ctx.searchQuery) : title}
-      titleClassName={cn("text-[13px]", item.isAsyncOperationOngoing && "animate-shimmer-text")}
+      wrapTitle
+      titleClassName={cn("text-[14px]", item.isAsyncOperationOngoing && "animate-shimmer-text")}
       subtitle={previewText}
       titleTrailing={hasMatch ? (
         <span

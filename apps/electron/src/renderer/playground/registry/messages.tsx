@@ -49,7 +49,7 @@ function AssistantMessage({ content }: { content: string }) {
 /** Status message - spinner with text, used during compaction etc (playground demo) */
 function StatusMessage({ content }: { content: string }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-1 text-[13px] text-muted-foreground">
+    <div className="flex items-center gap-2 px-3 py-1 text-[14px] text-muted-foreground">
       <div className="w-3 h-3 flex items-center justify-center shrink-0">
         <Spinner className="text-[10px]" />
       </div>
@@ -178,7 +178,7 @@ function ProcessingIndicator({ cycleMs = 10000, counting = true, elapsed: initia
   }, [currentMessage])
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1 text-[13px] text-muted-foreground">
+    <div className="flex items-center gap-2 px-3 py-1 text-[14px] text-muted-foreground">
       {/* Spinner */}
       <div className="w-3 h-3 flex items-center justify-center shrink-0">
         <Spinner className="text-[10px]" />

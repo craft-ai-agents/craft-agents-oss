@@ -1,0 +1,3 @@
+# Remote Manifest for Team Public Knowledge
+
+Team Public Knowledge is driven by a remote manifest rather than a manually edited local document list. The workspace config stores the manifest path and the last successfully synced document list, while `MDP_TEAM_PUBLIC_KNOWLEDGE_BASE_URL` supplies the environment-specific origin; refreshes fetch the manifest, replace the document list on success, then update the document cache. If manifest fetch fails, the app preserves the last successful document list and cache so agents keep using fresh cached reference data instead of losing context during a transient service outage.

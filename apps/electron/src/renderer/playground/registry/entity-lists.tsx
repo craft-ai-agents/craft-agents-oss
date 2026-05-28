@@ -233,7 +233,7 @@ function EntityRowPreview({
             <TypeBadge label="MCP" colorClass="bg-accent/10 text-accent" />
             <span className="truncate">{subtitle}</span>
           </>
-        ) : subtitle ? <span className="truncate text-xs text-foreground/70">{subtitle}</span> : undefined}
+        ) : subtitle ? <span className="truncate text-sm text-foreground/70">{subtitle}</span> : undefined}
         trailing={showTrailing ? <span className="text-[11px] text-foreground/40">3m</span> : undefined}
         isSelected={isSelected}
         isInMultiSelect={isInMultiSelect}
@@ -740,7 +740,7 @@ function InteractiveEntityListPreview({
   return (
     <div className="w-[340px] flex flex-col gap-3">
       {/* Status bar */}
-      <div className="flex items-center gap-2 text-xs text-foreground/50 px-1">
+      <div className="flex items-center gap-2 text-sm text-foreground/50 px-1">
         <span>{items.length} items</span>
         {selection.isMultiSelectActive && (
           <>

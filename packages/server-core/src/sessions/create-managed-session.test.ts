@@ -10,22 +10,32 @@ describe('createManagedSession', () => {
     createdAt: Date.now(),
   }
 
-  it('normalizes legacy thinkingLevel=think on restore', () => {
+  it('normalizes legacy thinkingEnabled=think on restore', () => {
     const managed = createManagedSession({
       id: 'session_legacy',
-      thinkingLevel: 'think' as any,
+      thinkingEnabled: 'think' as any,
     }, workspace as any)
 
-    expect(managed.thinkingLevel).toBe('medium')
+    expect(managed.thinkingEnabled).toBe(true)
   })
 
-  it('drops invalid thinking levels instead of leaking them into runtime state', () => {
+  it('normalizes legacy thinkingEnabled=off on restore', () => {
     const managed = createManagedSession({
-      id: 'session_invalid',
-      thinkingLevel: 'ultra' as any,
+      id: 'session_off',
+      thinkingEnabled: 'off' as any,
     }, workspace as any)
 
-    expect(managed.thinkingLevel).toBeUndefined()
+    expect(managed.thinkingEnabled).toBe(false)
+  })
+
+  it('migrates legacy thinkingLevel=off on restore', () => {
+    const managed = createManagedSession({
+      id: 'session_legacy_off',
+      thinkingLevel: 'off',
+    } as any, workspace as any)
+
+    expect(managed.thinkingEnabled).toBe(false)
+    expect((managed as Record<string, unknown>).thinkingLevel).toBeUndefined()
   })
 })
 

@@ -600,7 +600,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     )
   }, [isCompactMode, sessionId, session?.sessionFolderPath, sessionMeta])
 
-  const headerActions = isCompactMode ? compactInfoButton : shareButton
+  const headerActions = isCompactMode ? compactInfoButton : null
 
   // Build title menu content for chat sessions using shared SessionMenu.
   // Desktop uses Radix DropdownMenu via PanelHeader; compact mode uses a
@@ -704,8 +704,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 onRespondToPermission={onRespondToPermission}
                 pendingCredential={undefined}
                 onRespondToCredential={onRespondToCredential}
-                thinkingLevel={sessionOpts.thinkingLevel}
-                onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
+                thinkingEnabled={sessionOpts.thinkingEnabled}
+                onThinkingEnabledChange={(enabled) => setOption('thinkingEnabled', enabled)}
                 permissionMode={sessionOpts.permissionMode}
                 onPermissionModeChange={setPermissionMode}
                 enabledModes={enabledModes}
@@ -782,8 +782,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             onRespondToPermission={onRespondToPermission}
             pendingCredential={pendingCredential}
             onRespondToCredential={onRespondToCredential}
-            thinkingLevel={sessionOpts.thinkingLevel}
-            onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
+            thinkingEnabled={sessionOpts.thinkingEnabled}
+            onThinkingEnabledChange={(enabled) => setOption('thinkingEnabled', enabled)}
             permissionMode={sessionOpts.permissionMode}
             onPermissionModeChange={setPermissionMode}
             enabledModes={enabledModes}

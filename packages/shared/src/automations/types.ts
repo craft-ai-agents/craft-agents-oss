@@ -5,7 +5,7 @@
  */
 
 import type { PermissionMode } from '../agent/mode-types.ts';
-import type { ThinkingLevel } from '../agent/thinking-levels.ts';
+import type { ThinkingEnabled } from '../agent/thinking-toggle.ts';
 
 // ============================================================================
 // Event Types
@@ -63,10 +63,10 @@ export interface PromptAction {
   /** Model ID for the created session (falls back to provider default if invalid) */
   model?: string;
   /**
-   * Thinking level for the created session.
-   * When omitted, falls back to the workspace default (then DEFAULT_THINKING_LEVEL).
+   * Thinking toggle for the created session.
+   * When omitted, falls back to the workspace default (then DEFAULT_THINKING_ENABLED).
    */
-  thinkingLevel?: ThinkingLevel;
+  thinkingEnabled?: ThinkingEnabled;
 }
 
 /** HTTP method for webhook actions */
@@ -254,8 +254,8 @@ export interface PendingPrompt {
   llmConnection?: string;
   /** Model ID for the created session (falls back to provider default if invalid) */
   model?: string;
-  /** Thinking level for the created session (falls back to workspace default when omitted) */
-  thinkingLevel?: ThinkingLevel;
+  /** Thinking toggle for the created session (falls back to workspace default when omitted) */
+  thinkingEnabled?: ThinkingEnabled;
   /** Forum-topic name to bind the new session to (Telegram supergroup, when paired). */
   telegramTopic?: string;
 }

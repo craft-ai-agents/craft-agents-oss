@@ -52,7 +52,7 @@ export function DiffViewerControls({
   return (
     <div className={cn('flex items-center gap-1.5', className)}>
       {/* Stats display: -X +Y */}
-      <div className="flex items-center gap-2 mr-0.5 text-[13px] font-medium font-mono">
+      <div className="flex items-center gap-2 mr-0.5 text-[14px] font-medium font-mono">
         <span className="text-destructive">-{deletions}</span>
         <span className="text-success">+{additions}</span>
       </div>

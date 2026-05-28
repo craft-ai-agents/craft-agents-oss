@@ -167,7 +167,7 @@ function FileTreeItem({
       className={cn(
         // Base styles matching LeftSidebar exactly
         // min-w-0 and overflow-hidden required for truncation to work in grid context
-        "group flex w-full min-w-0 overflow-hidden items-center gap-2 rounded-[6px] py-[5px] text-[13px] select-none outline-none text-left",
+        "group flex w-full min-w-0 overflow-hidden items-center gap-2 rounded-[6px] py-[5px] text-[14px] select-none outline-none text-left",
         "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
         "hover:bg-sidebar-hover transition-colors",
         // Same padding for all items - nested indentation handled by container
@@ -446,12 +446,12 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
       {/* Header - matches sidebar styling with select-none, extra top padding for visual balance */}
       {!hideHeader && (
         <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
-          <span className="text-xs font-medium text-muted-foreground">{t("chat.sessionFiles")}</span>
+          <span className="text-sm font-medium text-muted-foreground">{t("chat.sessionFiles")}</span>
           {sessionFolderPath && (
             <button
               type="button"
               onClick={() => window.electronAPI.showInFolder(sessionFolderPath)}
-              className="text-xs text-foreground/50 hover:text-foreground/80 hover:underline underline-offset-2 transition-colors"
+              className="text-sm text-foreground/50 hover:text-foreground/80 hover:underline underline-offset-2 transition-colors"
             >
               {t("chat.viewInFileManager", { fileManager: fileManagerName })}
             </button>
@@ -464,7 +464,7 @@ export function SessionFilesSection({ sessionId, className, sessionFolderPath, h
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-2 min-h-0">
         {files.length === 0 ? (
           <div className="px-4 text-muted-foreground select-none">
-            <p className="text-xs">
+            <p className="text-sm">
               {isLoading ? t('chat.sessionFilesLoading') : t('chat.sessionFilesEmpty')}
             </p>
           </div>

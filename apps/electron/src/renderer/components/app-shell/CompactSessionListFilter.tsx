@@ -204,7 +204,7 @@ export function CompactSessionListFilter({
                 setListFilter(new Map())
                 setLabelFilter(new Map())
               }}
-              className="text-xs text-muted-foreground hover:text-foreground"
+              className="text-sm text-muted-foreground hover:text-foreground"
             >
               {t('common.clear')}
             </button>
@@ -421,7 +421,7 @@ function FilterRow({
             onModeTap?.()
           }}
           className={cn(
-            'shrink-0 h-7 px-2.5 rounded-[6px] text-xs font-medium flex items-center gap-1 shadow-tinted',
+            'shrink-0 h-7 px-2.5 rounded-[6px] text-sm font-medium flex items-center gap-1 shadow-tinted',
             mode === 'include'
               ? 'bg-background text-foreground'
               : 'bg-destructive/10 text-destructive',
@@ -487,7 +487,7 @@ function PinnedSummary({
 
 function PinnedChip({ icon, label }: { icon: React.ReactNode; label: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5 h-7 pl-2 pr-2.5 rounded-[6px] bg-foreground/5 text-xs text-foreground/70">
+    <span className="inline-flex items-center gap-1.5 h-7 pl-2 pr-2.5 rounded-[6px] bg-foreground/5 text-sm text-foreground/70">
       <span className="shrink-0 inline-flex items-center justify-center">{icon}</span>
       <span className="truncate">{label}</span>
       <Check className="h-3 w-3 shrink-0 text-muted-foreground" />

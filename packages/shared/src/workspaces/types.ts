@@ -12,7 +12,7 @@
  */
 
 import type { PermissionMode } from '../agent/mode-manager.ts';
-import type { ThinkingLevel } from '../agent/thinking-levels.ts';
+import type { ThinkingEnabled } from '../agent/thinking-toggle.ts';
 
 /**
  * Local MCP server configuration
@@ -37,11 +37,14 @@ export interface TeamPublicKnowledgeDocumentConfig {
   priority: number;
 }
 
+export const DEFAULT_TEAM_PUBLIC_KNOWLEDGE_MANIFEST_PATH = '/api/team/knowledge';
+
 /**
  * Workspace configuration for team public knowledge refresh and lookup.
  */
 export interface TeamPublicKnowledgeConfig {
   enabled: boolean;
+  manifestPath?: string;
   documents: TeamPublicKnowledgeDocumentConfig[];
 }
 
@@ -64,7 +67,7 @@ export interface WorkspaceConfig {
     permissionMode?: PermissionMode; // Default permission mode ('safe', 'ask', 'allow-all')
     cyclablePermissionModes?: PermissionMode[]; // Which modes can be cycled with SHIFT+TAB (min 2, default: all 3)
     workingDirectory?: string;
-    thinkingLevel?: ThinkingLevel; // Default thinking level for new sessions (default: 'medium')
+    thinkingEnabled?: ThinkingEnabled; // Default thinking toggle for new sessions (default: true)
     colorTheme?: string; // Color theme override for this workspace (preset ID). Undefined = inherit from app default.
   };
 

@@ -77,6 +77,7 @@ export function loadSourceConfig(
     if (config.type === 'local' && config.local?.path) {
       config.local.path = expandPath(config.local.path);
     }
+    normalizeMcpTransport(config);
 
     return config;
   } catch {
@@ -138,6 +139,7 @@ export function saveSourceConfig(
       path: toPortablePath(storageConfig.local.path),
     };
   }
+  normalizeMcpTransport(storageConfig);
 
   writeFileSync(join(dir, 'config.json'), JSON.stringify(storageConfig, null, 2));
 
@@ -148,6 +150,18 @@ export function saveSourceConfig(
   // override defaultHeaders on a future config change. Delete it here.
   if (storageConfig.type === 'api' && storageConfig.api?.authType === 'none') {
     deleteApiKeyCredentialBestEffort(workspaceRootPath, storageConfig);
+  }
+}
+
+function normalizeMcpTransport(config: FolderSourceConfig): void {
+  if (config.type !== 'mcp' || !config.mcp) return;
+  if (
+    config.mcp.transport === undefined ||
+    config.mcp.transport === 'http' ||
+    config.mcp.transport === 'sse' ||
+    config.mcp.transport === 'streamable-http'
+  ) {
+    config.mcp.transport = 'streamable_http';
   }
 }
 
@@ -620,4 +634,3 @@ export function sourceExists(workspaceRootPath: string, sourceSlug: string): boo
 // ============================================================
 
 export { parseGuideMarkdown };
-

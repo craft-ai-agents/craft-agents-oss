@@ -27,10 +27,10 @@ import type { PermissionMode } from '@craft-agent/shared/agent/modes';
 export type { PermissionMode };
 export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 
-// Thinking level types
-import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
-export type { ThinkingLevel };
-export { THINKING_LEVELS, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels';
+// Thinking toggle types
+import type { ThinkingEnabled } from '@craft-agent/shared/agent/thinking-toggle';
+export type { ThinkingEnabled };
+export { DEFAULT_THINKING_ENABLED } from '@craft-agent/shared/agent/thinking-toggle';
 
 export type {
   CoreMessage as Message,
@@ -58,13 +58,48 @@ import type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIss
 export type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType };
 
 // Source types for session source selection
-import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@craft-agent/shared/sources/types';
+import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, SourceGuide } from '@craft-agent/shared/sources/types';
 import type { McpImportBatchCreateResult, McpImportCandidate, McpImportParseResult } from '@craft-agent/shared/sources';
-export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, McpImportBatchCreateResult, McpImportCandidate, McpImportParseResult };
+export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, SourceGuide, McpImportBatchCreateResult, McpImportCandidate, McpImportParseResult };
 
 // Skill types
 import type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult } from '@craft-agent/shared/skills';
 export type { LoadedSkill, SkillMetadata, DiscoveredSkill, CreateSkillResult, RemoteResolveResult, MarketplaceSkillInstallInput, MarketplaceSkillUpdateInput, MarketplaceInstallResult, MarketplaceLocalSkillPublishInput, MarketplacePublishLocalResult, MarketplaceDirectSkillPublishInput, MarketplacePublishDirectResult, CopawMarketSkill, CopawMarketUploadInput, CopawMarketUploadResult, CopawInstallConflict, CopawInstallSkillResult };
+
+export interface SkillUpdateCandidate {
+  slug: string
+  name: string
+  chineseName: string
+  description: string
+  currentVersion: string
+  newVersion: string
+  ownerId: string
+  ownerName: string
+}
+
+export interface SkillOrphan {
+  slug: string
+  name: string
+}
+
+export interface SkillUpdateCheckResult {
+  toUpdate: SkillUpdateCandidate[]
+  orphans: SkillOrphan[]
+}
+
+export interface SkillUpdateItem {
+  slug: string
+  chineseName: string
+  description: string
+  newVersion?: string
+  ownerId?: string
+  ownerName?: string
+}
+
+export interface SkillBatchUpdateResult {
+  updated: string[]
+  failed: Array<{ slug: string; error: string }>
+}
 
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
@@ -106,12 +141,22 @@ export interface ToolIconMapping {
 
 /** User profile data shown in workspace settings. */
 export interface UserProfile {
-  name?: string
-  oneStopId?: string
-  group?: string
-  department?: string
-  ownedModules?: string[]
-  ownedTopics?: string[]
+  zhaohuOpenId?: string
+  userName?: string
+  ystId?: string
+  positon?: string
+  zuName?: string
+  leaderUserInfo?: string
+  shiName?: string
+  pathName?: string
+  sex?: string
+  ip?: string
+  chargeModule?: Array<{
+    appCode?: string
+    appName?: string
+  }>
+  ingProjectInfo?: unknown[]
+  onlineInfo?: unknown[]
 }
 
 /**
@@ -227,6 +272,8 @@ import type {
   ImportRemoteSessionTransferResult,
   TeamContextPreview,
 } from '@craft-agent/shared/protocol'
+import type { TeamPublicKnowledgeRefreshSummary } from '@craft-agent/shared/team-public-knowledge'
+import type { TeamPublicKnowledgeConfig } from '@craft-agent/shared/workspaces'
 
 export interface ElectronAPI {
   // Session management
@@ -432,6 +479,10 @@ export interface ElectronAPI {
 
   // Team context debug/preview
   getTeamContextPreview(workspaceId: string, sampleMessage?: string): Promise<TeamContextPreview>
+  refreshTeamPublicKnowledge(workspaceId: string): Promise<TeamPublicKnowledgeRefreshSummary>
+  getTeamPublicKnowledgeConfig(workspaceId: string): Promise<TeamPublicKnowledgeConfig>
+  updateTeamPublicKnowledgeConfig(workspaceId: string, config: TeamPublicKnowledgeConfig): Promise<void>
+  onTeamPublicKnowledgeChanged(callback: (workspaceId: string) => void): () => void
 
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
@@ -481,6 +532,8 @@ export interface ElectronAPI {
   getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
   getDefaultPermissionsConfig(): Promise<{ config: import('@craft-agent/shared/agent').PermissionsConfigFile | null; path: string }>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
+  refreshMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
+  generateSourceGuide(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string; guide?: SourceGuide }>
 
   // OAuth (server-owned credentials, client-orchestrated flow)
   performOAuth(args: { sourceSlug: string; sessionId?: string; authRequestId?: string }): Promise<{ success: boolean; error?: string; email?: string }>
@@ -512,10 +565,14 @@ export interface ElectronAPI {
   // CoPaw market service
   listMarketSkills(): Promise<CopawMarketSkill[]>
   uploadMarketSkill(input: CopawMarketUploadInput): Promise<CopawMarketUploadResult>
-  installMarketSkill(workspaceId: string, skillName: string, chineseName: string, description: string, version?: string): Promise<CopawInstallSkillResult>
+  installMarketSkill(workspaceId: string, skillName: string, chineseName: string, description: string, version?: string, ownerId?: string, ownerName?: string): Promise<CopawInstallSkillResult>
   installLocalZip(workspaceId: string, skillName: string, zipBytes: Uint8Array): Promise<{ slug: string }>
   deleteMarketSkill(skillName: string): Promise<{ success: true }>
   fetchMarketSkillContent(skillName: string, version?: string): Promise<{ content: string; extraMetadata?: Record<string, unknown> }>
+  checkMarketSkillUpdates(workspaceId: string): Promise<SkillUpdateCheckResult>
+  updateMarketSkillsBatch(workspaceId: string, items: SkillUpdateItem[]): Promise<SkillBatchUpdateResult>
+  devopsAutoInstall(workspaceId: string): Promise<{ status: 'done' | 'not-logged-in'; installed: string[]; skipped: string[]; failed: Array<{ slug: string; error: string }> }>
+  onSkillUpdateCheck(callback: (reason: string) => void): () => void
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void
@@ -680,8 +737,8 @@ export interface ElectronAPI {
   testLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   setDefaultLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   setEnvConnectionMidStreamBehavior(behavior: MidStreamBehavior): Promise<{ success: boolean; error?: string }>
-  getDefaultThinkingLevel(): Promise<ThinkingLevel>
-  setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>
+  getDefaultThinkingEnabled(): Promise<ThinkingEnabled>
+  setDefaultThinkingEnabled(enabled: ThinkingEnabled): Promise<{ success: boolean; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
 
   // Automations

@@ -30,6 +30,8 @@ import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { RefreshCw } from 'lucide-react'
 
 import {
   SettingsSection,
@@ -69,7 +71,8 @@ export default function WorkspaceSettingsPage() {
 
   // Team public knowledge state
   const [teamPublicKnowledgeEnabled, setTeamPublicKnowledgeEnabled] = useState(false)
-  const [teamKnowledgeDocumentsCount, setTeamKnowledgeDocumentsCount] = useState(0)
+  const [teamPublicKnowledgeDocumentsCount, setTeamPublicKnowledgeDocumentsCount] = useState(0)
+  const [teamPublicKnowledgeRefreshing, setTeamPublicKnowledgeRefreshing] = useState(false)
 
   // Team context preview state
   const [teamContextPreview, setTeamContextPreview] = useState<TeamContextPreview | null>(null)
@@ -117,7 +120,7 @@ export default function WorkspaceSettingsPage() {
 
           // Load team public knowledge config
           setTeamPublicKnowledgeEnabled(settings.teamPublicKnowledgeEnabled ?? false)
-          setTeamKnowledgeDocumentsCount(settings.teamKnowledgeDocumentsCount ?? 0)
+          setTeamPublicKnowledgeDocumentsCount(settings.teamPublicKnowledgeDocumentsCount ?? 0)
 
           // Load available sources and auto-heal stale slugs
           const sources = await window.electronAPI.getSources(activeWorkspaceId)
@@ -348,6 +351,27 @@ export default function WorkspaceSettingsPage() {
     [updateWorkspaceSetting]
   )
 
+  const handleTeamPublicKnowledgeRefresh = useCallback(async () => {
+    if (!window.electronAPI || !activeWorkspaceId) return
+    setTeamPublicKnowledgeRefreshing(true)
+    try {
+      const summary = await window.electronAPI.refreshTeamPublicKnowledge(activeWorkspaceId)
+      const settings = await window.electronAPI.getWorkspaceSettings(activeWorkspaceId)
+      setTeamPublicKnowledgeDocumentsCount(settings?.teamPublicKnowledgeDocumentsCount ?? 0)
+      const preview = await window.electronAPI.getTeamContextPreview(activeWorkspaceId, previewSampleMessage || undefined)
+      setTeamContextPreview(preview)
+      const description = summary?.manifestError
+        ? summary.manifestError
+        : `Added ${summary?.added ?? 0}, updated ${summary?.updated ?? 0}, removed ${summary?.removed ?? 0}, stale ${summary?.stale ?? 0}`
+      toast.success('Team knowledge refreshed', { description })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      toast.error('Failed to refresh team knowledge', { description: message })
+    } finally {
+      setTeamPublicKnowledgeRefreshing(false)
+    }
+  }, [activeWorkspaceId, previewSampleMessage])
+
   const handleSourceToggle = useCallback(
     async (slug: string, checked: boolean) => {
       const newSlugs = checked
@@ -485,7 +509,7 @@ export default function WorkspaceSettingsPage() {
                     ) : wsIconUrl ? (
                       <img src={wsIconUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <span className="text-xs font-medium text-muted-foreground">
+                      <span className="text-sm font-medium text-muted-foreground">
                         {wsName?.charAt(0)?.toUpperCase() || 'W'}
                       </span>
                     )}
@@ -560,7 +584,7 @@ export default function WorkspaceSettingsPage() {
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
                     transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                    className="text-xs text-destructive mt-1 overflow-hidden"
+                    className="text-sm text-destructive mt-1 overflow-hidden"
                   >
                     {modeCyclingError}
                   </motion.p>
@@ -604,13 +628,35 @@ export default function WorkspaceSettingsPage() {
                 <SettingsToggle
                   label={t("settings.workspace.teamPublicKnowledgeToggle")}
                   description={
-                    teamKnowledgeDocumentsCount > 0
-                      ? t("settings.workspace.teamPublicKnowledgeDocsCount", { count: teamKnowledgeDocumentsCount })
+                    teamPublicKnowledgeDocumentsCount > 0
+                      ? t("settings.workspace.teamPublicKnowledgeDocsCount", { count: teamPublicKnowledgeDocumentsCount })
                       : t("settings.workspace.teamPublicKnowledgeNoDocs")
                   }
                   checked={teamPublicKnowledgeEnabled}
                   onCheckedChange={handleTeamPublicKnowledgeEnabledChange}
                 />
+                {teamPublicKnowledgeEnabled && (
+                  <SettingsRow
+                    label="Refresh"
+                    description="Fetch the team knowledge manifest and update all documents."
+                    action={
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-2"
+                        disabled={teamPublicKnowledgeRefreshing}
+                        onClick={handleTeamPublicKnowledgeRefresh}
+                      >
+                        {teamPublicKnowledgeRefreshing ? (
+                          <Spinner className="h-4 w-4" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                        Refresh now
+                      </Button>
+                    }
+                  />
+                )}
               </SettingsCard>
             </SettingsSection>
 
@@ -629,7 +675,7 @@ export default function WorkspaceSettingsPage() {
                         {teamContextPreview.triggerTerms.map((t, i) => (
                           <span
                             key={i}
-                            className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-foreground/5 text-foreground/70 font-mono"
+                            className="inline-flex items-center px-2 py-0.5 text-sm rounded-full bg-foreground/5 text-foreground/70 font-mono"
                           >
                             {t.term}
                             <span className="ml-1 text-foreground/40">({t.kind})</span>
@@ -643,14 +689,14 @@ export default function WorkspaceSettingsPage() {
                   <div className="border-t border-border/50 px-4 py-3">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="text-sm font-medium">Policy Block</h4>
-                      <span className="text-xs text-muted-foreground">{teamContextPreview.documentsCount} document(s)</span>
+                      <span className="text-sm text-muted-foreground">{teamContextPreview.documentsCount} document(s)</span>
                     </div>
                     {teamContextPreview.policyXml ? (
-                      <pre className="text-xs font-mono text-foreground/70 bg-foreground/[0.03] rounded-lg p-3 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto">
+                      <pre className="text-sm font-mono text-foreground/70 bg-foreground/[0.03] rounded-lg p-3 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto">
                         {teamContextPreview.policyXml}
                       </pre>
                     ) : (
-                      <p className="text-xs text-muted-foreground">No policy generated (no valid entries).</p>
+                      <p className="text-sm text-muted-foreground">No policy generated (no valid entries).</p>
                     )}
                   </div>
 
@@ -667,13 +713,13 @@ export default function WorkspaceSettingsPage() {
                     {previewLoading && (
                       <div className="flex items-center gap-2 py-2">
                         <Spinner className="text-muted-foreground text-[8px]" />
-                        <span className="text-xs text-muted-foreground">Matching...</span>
+                        <span className="text-sm text-muted-foreground">Matching...</span>
                       </div>
                     )}
                     {!previewLoading && teamContextPreview.prefetchResults && teamContextPreview.prefetchResults.length > 0 && (
                       <div className="space-y-2 mt-1">
                         {teamContextPreview.prefetchResults.map((r, i) => (
-                          <div key={i} className="text-xs bg-foreground/[0.03] rounded-lg p-3 space-y-1">
+                          <div key={i} className="text-sm bg-foreground/[0.03] rounded-lg p-3 space-y-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-medium">{r.kind}</span>
                               <span className={cn(
@@ -696,7 +742,7 @@ export default function WorkspaceSettingsPage() {
                       </div>
                     )}
                     {!previewLoading && previewSampleMessage && (!teamContextPreview.prefetchResults || teamContextPreview.prefetchResults.length === 0) && (
-                      <p className="text-xs text-muted-foreground">No matching entries found.</p>
+                      <p className="text-sm text-muted-foreground">No matching entries found.</p>
                     )}
                   </div>
                 </SettingsCard>
@@ -713,30 +759,32 @@ export default function WorkspaceSettingsPage() {
                   <>
                     <SettingsRow
                       label={t("settings.workspace.userProfileName")}
-                      description={userProfile.name || t("settings.workspace.userProfileNotConfigured")}
+                      description={userProfile.userName || t("settings.workspace.userProfileNotConfigured")}
                     />
                     <SettingsRow
-                      label={t("settings.workspace.userProfileOneStopId")}
-                      description={userProfile.oneStopId || t("settings.workspace.userProfileNotConfigured")}
+                      label={t("settings.workspace.userProfileYstId")}
+                      description={userProfile.ystId || t("settings.workspace.userProfileNotConfigured")}
                     />
                     <SettingsRow
-                      label={t("settings.workspace.userProfileGroup")}
-                      description={userProfile.group || t("settings.workspace.userProfileNotConfigured")}
+                      label={t("settings.workspace.userProfilePosition")}
+                      description={userProfile.positon || t("settings.workspace.userProfileNotConfigured")}
                     />
                     <SettingsRow
-                      label={t("settings.workspace.userProfileDepartment")}
-                      description={userProfile.department || t("settings.workspace.userProfileNotConfigured")}
+                      label={t("settings.workspace.userProfileZuName")}
+                      description={userProfile.zuName || t("settings.workspace.userProfileNotConfigured")}
                     />
-                    {userProfile.ownedModules && userProfile.ownedModules.length > 0 && (
+                    <SettingsRow
+                      label={t("settings.workspace.userProfileShiName")}
+                      description={userProfile.shiName || t("settings.workspace.userProfileNotConfigured")}
+                    />
+                    <SettingsRow
+                      label={t("settings.workspace.userProfileLeader")}
+                      description={userProfile.leaderUserInfo || t("settings.workspace.userProfileNotConfigured")}
+                    />
+                    {userProfile.chargeModule && userProfile.chargeModule.length > 0 && (
                       <SettingsRow
-                        label={t("settings.workspace.userProfileOwnedModules")}
-                        description={userProfile.ownedModules.join(', ')}
-                      />
-                    )}
-                    {userProfile.ownedTopics && userProfile.ownedTopics.length > 0 && (
-                      <SettingsRow
-                        label={t("settings.workspace.userProfileOwnedTopics")}
-                        description={userProfile.ownedTopics.join(', ')}
+                        label={t("settings.workspace.userProfileChargeModule")}
+                        description={userProfile.chargeModule.map(module => module.appName || module.appCode).filter(Boolean).join(', ')}
                       />
                     )}
                   </>
@@ -746,7 +794,7 @@ export default function WorkspaceSettingsPage() {
                   </div>
                 )}
                 <div className="border-t border-border/50 px-4 py-3 flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-sm text-muted-foreground">
                     {userProfileFetchedAt
                       ? t("settings.workspace.userProfileLastRefresh", { time: new Date(userProfileFetchedAt).toLocaleString() })
                       : t("settings.workspace.userProfileNotConfigured")

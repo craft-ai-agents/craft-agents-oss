@@ -57,7 +57,7 @@ export function MobileMenuItem({
       <span className="flex-1 min-w-0">
         <span className="block text-base leading-tight">{label}</span>
         {description && (
-          <span className="block text-[13px] text-foreground/50 truncate mt-0.5">
+          <span className="block text-[14px] text-foreground/50 truncate mt-0.5">
             {description}
           </span>
         )}

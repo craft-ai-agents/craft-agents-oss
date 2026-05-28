@@ -42,6 +42,7 @@ import type {
   CreateAgentSessionOptions,
   ToolDefinition,
 } from '@mariozechner/pi-coding-agent';
+import type { ThinkingLevel as PiThinkingLevel } from '@mariozechner/pi-agent-core';
 
 // Pi AI types
 import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
@@ -71,7 +72,7 @@ import { handleLargeResponse, estimateTokens, tokenLimitFor } from '../../shared
 import { getSessionPlansPath, getSessionPath } from '../../shared/src/sessions/storage.ts';
 import { buildCallLlmRequest, withTimeout, LLM_QUERY_TIMEOUT_MS } from '../../shared/src/agent/llm-tool.ts';
 import type { LLMQueryRequest, LLMQueryResult } from '../../shared/src/agent/llm-tool.ts';
-import { PI_TOOL_NAME_MAP, THINKING_TO_PI } from '../../shared/src/agent/backend/pi/constants.ts';
+import { PI_TOOL_NAME_MAP, THINKING_ENABLED_TO_PI } from '../../shared/src/agent/backend/pi/constants.ts';
 import { getDefaultSummarizationModel } from '../../shared/src/config/models.ts';
 import { ENV_CONNECTION_SSO_TOKEN_ENV_VAR } from '../../shared/src/config/llm-connections.ts';
 import { createWebFetchTool } from './tools/web-fetch.ts';
@@ -99,7 +100,7 @@ interface InitMessage {
   apiKey: string;
   model: string;
   cwd: string;
-  thinkingLevel: string;
+  thinkingEnabled: boolean;
   workspaceRootPath: string;
   sessionId: string;
   sessionPath: string;
@@ -142,13 +143,15 @@ type InboundMessage =
   | { type: 'llm_query'; id: string; request: LLMQueryRequest }
   | { type: 'ensure_session_ready'; id: string }
   | { type: 'set_model'; model: string }
-  | { type: 'set_thinking_level'; level: string }
+  | { type: 'set_thinking_enabled'; enabled: boolean }
   | { type: 'compact'; id: string; customInstructions?: string }
   | { type: 'set_auto_compaction'; id: string; enabled: boolean }
   | RuntimeConfigUpdateMessage
   | { type: 'steer'; message: string }
   | { type: 'token_update'; piAuth: { provider: string; credential: PiCredential } }
   | { type: 'shutdown' };
+
+type PiThinkingEnabledKey = keyof typeof THINKING_ENABLED_TO_PI;
 
 /** Proxy tool definition from main process */
 interface ProxyToolDef {
@@ -393,6 +396,14 @@ function setInterceptorApiHints(model: { api?: string; provider?: string; baseUr
   debugLog(
     `[interceptor-hint] api=${process.env.CRAFT_PI_MODEL_API || '-'} provider=${process.env.CRAFT_PI_MODEL_PROVIDER || '-'} baseUrl=${process.env.CRAFT_PI_MODEL_BASE_URL || '-'}`,
   );
+}
+
+function setInterceptorThinkingEnabled(enabled: boolean): void {
+  process.env.CRAFT_PI_THINKING_ENABLED = String(enabled);
+}
+
+function mapThinkingEnabledToPi(enabled: boolean): PiThinkingLevel {
+  return THINKING_ENABLED_TO_PI[String(enabled) as PiThinkingEnabledKey];
 }
 
 /**
@@ -675,11 +686,7 @@ async function ensureSession(): Promise<AgentSession> {
     setInterceptorApiHints(undefined);
   }
 
-  // Set thinking level
-  const piThinkingLevel = THINKING_TO_PI[initConfig.thinkingLevel as keyof typeof THINKING_TO_PI];
-  if (piThinkingLevel) {
-    sessionOptions.thinkingLevel = piThinkingLevel;
-  }
+  sessionOptions.thinkingLevel = mapThinkingEnabledToPi(initConfig.thinkingEnabled);
 
   // Create the session — tools flow through customTools + allowlist (see comment above).
   const { session } = await createAgentSession(sessionOptions);
@@ -1285,6 +1292,7 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
   }
 
   initConfig = msg;
+  setInterceptorThinkingEnabled(msg.thinkingEnabled);
 
   // Azure OpenAI requires a tenant-specific endpoint URL.
   // The Pi SDK (via Vercel AI SDK) reads AZURE_OPENAI_BASE_URL from env.
@@ -1629,26 +1637,26 @@ async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }
   }
 }
 
-async function handleSetThinkingLevel(msg: Extract<InboundMessage, { type: 'set_thinking_level' }>): Promise<void> {
-  debugLog(`[set_thinking_level] Received: ${msg.level}`);
+async function handleSetThinkingEnabled(msg: Extract<InboundMessage, { type: 'set_thinking_enabled' }>): Promise<void> {
+  debugLog(`[set_thinking_enabled] Received: ${msg.enabled}`);
+  if (initConfig) {
+    initConfig = { ...initConfig, thinkingEnabled: msg.enabled };
+  }
+  setInterceptorThinkingEnabled(msg.enabled);
 
   if (!piSession) {
-    debugLog('[set_thinking_level] No active session, ignoring');
+    debugLog('[set_thinking_enabled] No active session, ignoring');
     return;
   }
 
-  const piLevel = THINKING_TO_PI[msg.level as keyof typeof THINKING_TO_PI];
-  if (!piLevel) {
-    debugLog(`[set_thinking_level] No Pi mapping for level: ${msg.level}`);
-    return;
-  }
+  const piLevel = mapThinkingEnabledToPi(msg.enabled);
 
   try {
     piSession.setThinkingLevel(piLevel);
-    debugLog(`[set_thinking_level] Thinking level changed to: ${msg.level} (mapped: ${piLevel})`);
+    debugLog(`[set_thinking_enabled] Thinking toggle changed to: ${msg.enabled} (mapped: ${piLevel})`);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    debugLog(`[set_thinking_level] Failed to set thinking level: ${errorMsg}`);
+    debugLog(`[set_thinking_enabled] Failed to set thinking toggle: ${errorMsg}`);
   }
 }
 
@@ -1730,8 +1738,8 @@ async function processMessage(msg: InboundMessage): Promise<void> {
       await handleSetModel(msg);
       break;
 
-    case 'set_thinking_level':
-      await handleSetThinkingLevel(msg);
+    case 'set_thinking_enabled':
+      await handleSetThinkingEnabled(msg);
       break;
 
     case 'compact':

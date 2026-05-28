@@ -204,7 +204,7 @@ export function PlaygroundApp() {
         <div className="flex items-center gap-2">
           <ThemeToggle />
           <Select value={effectiveColorTheme ?? 'default'} onValueChange={handleThemeChange}>
-            <SelectTrigger className="h-8 w-[170px] bg-foreground/5 border-border/50 text-xs">
+            <SelectTrigger className="h-8 w-[170px] bg-foreground/5 border-border/50 text-sm">
               <SelectValue placeholder="Theme" />
             </SelectTrigger>
             <SelectContent>

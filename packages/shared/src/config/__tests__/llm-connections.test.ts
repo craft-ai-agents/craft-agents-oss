@@ -12,6 +12,7 @@ import {
   fromBedrockNativeId,
   normalizeBedrockModelId,
   deriveBedrockRegionPrefix,
+  getMiniModel,
 } from '../llm-connections'
 import { ANTHROPIC_MODELS, getModelDisplayName, getModelContextWindow, getModelShortName, isClaudeModel } from '../models'
 
@@ -350,5 +351,30 @@ describe('Bedrock-native model display', () => {
     expect(isClaudeModel('us.anthropic.claude-opus-4-7-v1')).toBe(true)
     expect(isClaudeModel('anthropic.claude-sonnet-4-6')).toBe(true)
     expect(isClaudeModel('eu.anthropic.claude-haiku-4-5-20251001-v1:0')).toBe(true)
+  })
+})
+
+describe('getMiniModel', () => {
+  const piConn = (models: string[]) => ({
+    models,
+    providerType: 'openllm' as const,
+    piAuthProvider: 'openai',
+  })
+
+  it('picks gpt-4o-mini over a larger model', () => {
+    expect(getMiniModel(piConn(['gpt-4o', 'gpt-4o-mini']))).toBe('gpt-4o-mini')
+  })
+
+  it('falls back to last model when only MiniMax models are present', () => {
+    // "mini" in "MiniMax" must not be treated as a small-model keyword match
+    expect(getMiniModel(piConn(['MiniMax-Text-01', 'MiniMax-01']))).toBe('MiniMax-01')
+  })
+
+  it('falls back to last model when no keyword matches', () => {
+    expect(getMiniModel(piConn(['MiniMax-Text-01', 'large-model']))).toBe('large-model')
+  })
+
+  it('does not match gemini as containing mini', () => {
+    expect(getMiniModel(piConn(['gemini-2.5-pro', 'gemini-2.5-flash']))).toBe('gemini-2.5-flash')
   })
 })

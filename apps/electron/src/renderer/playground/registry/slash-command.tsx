@@ -48,7 +48,7 @@ function SlashCommandDemo() {
         <h2 className="text-sm font-medium text-foreground/80 mb-2">
           Slash Command Menu Demo
         </h2>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Type <code className="px-1 py-0.5 bg-muted rounded">/</code> to trigger inline autocomplete in the real input component, or click the button to open the standalone menu.
           Active commands in the standalone menu show a checkmark.
         </p>
@@ -57,7 +57,7 @@ function SlashCommandDemo() {
       {/* Active Commands Display */}
       {activeCommands.length > 0 && (
         <div className="shrink-0 px-4 py-2 border-b border-border/50 flex flex-wrap gap-2">
-          <span className="text-xs text-muted-foreground">Standalone menu active:</span>
+          <span className="text-sm text-muted-foreground">Standalone menu active:</span>
           {activeCommands.map(id => {
             const cmd = DEFAULT_SLASH_COMMANDS.find(c => c.id === id)
             const color = cmd?.color || '#888'
@@ -85,7 +85,7 @@ function SlashCommandDemo() {
       <div className="flex-1 flex gap-4 p-4">
         {/* Left: Button Menu with Filter */}
         <div className="flex-1">
-          <div className="text-xs font-medium text-muted-foreground mb-2">
+          <div className="text-sm font-medium text-muted-foreground mb-2">
             Button Menu (with filter input)
           </div>
           <div className="relative">
@@ -114,7 +114,7 @@ function SlashCommandDemo() {
 
         {/* Right: Static Menu (no filter) */}
         <div className="flex-1">
-          <div className="text-xs font-medium text-muted-foreground mb-2">
+          <div className="text-sm font-medium text-muted-foreground mb-2">
             Static Menu (no filter)
           </div>
           <SlashCommandMenu
@@ -128,7 +128,7 @@ function SlashCommandDemo() {
 
       {/* Input Area using the real app input component */}
       <div className="shrink-0 p-4 border-t border-border/50">
-        <div className="text-xs font-medium text-muted-foreground mb-2">
+        <div className="text-sm font-medium text-muted-foreground mb-2">
           Real FreeFormInput (type / in the input)
         </div>
         <FreeFormInput

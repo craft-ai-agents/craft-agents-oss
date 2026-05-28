@@ -104,8 +104,8 @@ describe('serializeSession', () => {
             status: 'fresh',
             fetchedAt: 1000,
             summary: 'Ada Lovelace, AI Platform, Engineering',
-            oneStopId: 'OS-12345',
-            dynamicContext: '<user_profile>One-stop ID: OS-12345</user_profile>',
+            ystId: 'OS-12345',
+            dynamicContext: '<user_profile>YST ID: OS-12345</user_profile>',
           } as any,
         },
         {

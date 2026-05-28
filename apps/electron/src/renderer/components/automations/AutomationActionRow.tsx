@@ -5,13 +5,13 @@
  * Used within the "Then" section of AutomationInfoPage.
  *
  * Prompt actions surface optional per-action overrides (llmConnection,
- * model, thinkingLevel) as low-emphasis badges below the prompt text.
+ * model, thinkingEnabled) as low-emphasis badges below the prompt text.
  */
 
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
+import type { ThinkingEnabled } from '@craft-agent/shared/agent/thinking-toggle'
 import type { AutomationAction, PromptAction } from './types'
 import { ActionTypeIcon } from './ActionTypeIcon'
 import { DEFAULT_WEBHOOK_METHOD } from './constants'
@@ -54,8 +54,12 @@ function WebhookText({ action }: { action: Extract<AutomationAction, { type: 'we
   )
 }
 
+export function getPromptThinkingBadgeKey(thinkingEnabled: ThinkingEnabled): string {
+  return thinkingEnabled ? 'automations.thinkingEnabled' : 'automations.thinkingDisabled'
+}
+
 /**
- * Render the per-action override chips (connection / model / thinking level).
+ * Render the per-action override chips (connection / model / thinking toggle).
  * Each chip is conditional on its field being set on the action.
  *
  * The connection slug is shown verbatim (no display-name resolution) — that
@@ -64,11 +68,12 @@ function WebhookText({ action }: { action: Extract<AutomationAction, { type: 'we
  * stale, executePromptAutomation already logs a warning at run time.
  */
 function PromptActionBadges({ action, t }: { action: PromptAction; t: (key: string) => string }) {
-  const { llmConnection, model, thinkingLevel } = action
-  if (!llmConnection && !model && !thinkingLevel) return null
+  const { llmConnection, model, thinkingEnabled } = action
+  if (!llmConnection && !model && thinkingEnabled === undefined) return null
 
-  const thinkingDef = thinkingLevel ? THINKING_LEVELS.find((l) => l.id === thinkingLevel) : undefined
-  const thinkingLabel = thinkingDef ? t(thinkingDef.nameKey) : thinkingLevel
+  const thinkingLabel = thinkingEnabled === undefined
+    ? undefined
+    : t(getPromptThinkingBadgeKey(thinkingEnabled))
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
@@ -90,7 +95,7 @@ function PromptActionBadges({ action, t }: { action: PromptAction; t: (key: stri
           {model}
         </Badge>
       )}
-      {thinkingLevel && (
+      {thinkingLabel !== undefined && (
         <Badge
           variant="secondary"
           className="text-[10px] px-1.5 py-0 font-normal"
@@ -111,7 +116,7 @@ export function AutomationActionRow({ action, index, className }: AutomationActi
     <div className={cn('flex items-start gap-3 px-4 py-3', className)}>
       {/* Index + icon — h-5 matches the first line height of text-sm content */}
       <div className="flex items-center gap-2 shrink-0 h-5 mt-[3px]">
-        <span className="text-xs text-muted-foreground tabular-nums w-4 text-right">
+        <span className="text-sm text-muted-foreground tabular-nums w-4 text-right">
           {index + 1}.
         </span>
         <ActionTypeIcon type={action.type} className="h-3.5 w-3.5" />

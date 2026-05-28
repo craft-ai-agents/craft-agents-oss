@@ -160,7 +160,7 @@ function loadSkillFromDir(skillsDir: string, slug: string, source: SkillSource):
     iconPath: findIconFile(skillDir),
     path: skillDir,
     source,
-    marketplaceOrigin: source === 'workspace' ? readMarketplaceOriginSidecar(skillDir) : undefined,
+    marketplaceOrigin: (source === 'workspace' || source === 'global') ? readMarketplaceOriginSidecar(skillDir) : undefined,
   };
 }
 

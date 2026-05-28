@@ -27,11 +27,11 @@ function ShortcutRow({ actionId }: { actionId: ActionId }) {
       <div>
         <div className="text-sm">{label}</div>
         {description && (
-          <div className="text-xs text-muted-foreground">{description}</div>
+          <div className="text-sm text-muted-foreground">{description}</div>
         )}
       </div>
       {hotkey && (
-        <kbd className="px-2 py-1 text-xs bg-muted rounded">{hotkey}</kbd>
+        <kbd className="px-2 py-1 text-sm bg-muted rounded">{hotkey}</kbd>
       )}
     </div>
   )

@@ -28,7 +28,7 @@ export interface BroadcastEventMap {
   [RPC_CHANNELS.statuses.CHANGED]: [workspaceId: string]
   [RPC_CHANNELS.automations.CHANGED]: [workspaceId: string]
   [RPC_CHANNELS.skills.CHANGED]: [workspaceId: string, skills: LoadedSkill[]]
-  [RPC_CHANNELS.teamKnowledge.CHANGED]: [workspaceId: string]
+  [RPC_CHANNELS.teamPublicKnowledge.CHANGED]: [workspaceId: string]
   [RPC_CHANNELS.llmConnections.CHANGED]: []
   [RPC_CHANNELS.permissions.DEFAULTS_CHANGED]: [value: null]
 

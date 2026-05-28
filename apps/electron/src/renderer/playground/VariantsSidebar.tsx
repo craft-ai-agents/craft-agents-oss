@@ -33,7 +33,7 @@ export function VariantsSidebar({
       {/* Variants Section */}
       {hasVariants && (
         <div className="p-4 border-b border-border">
-          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
             Variants
           </h2>
           <div className="space-y-1">
@@ -50,7 +50,7 @@ export function VariantsSidebar({
               >
                 <div>{variant.name}</div>
                 {variant.description && (
-                  <div className="text-xs mt-0.5 line-clamp-2 text-muted-foreground">
+                  <div className="text-sm mt-0.5 line-clamp-2 text-muted-foreground">
                     {variant.description}
                   </div>
                 )}
@@ -63,7 +63,7 @@ export function VariantsSidebar({
       {/* Props Section */}
       {hasProps && (
         <div className="p-4">
-          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
             Props
           </h2>
           <div className="space-y-3">
@@ -111,7 +111,7 @@ function PropControl({ definition, value, onChange }: PropControlProps) {
           {name}
         </label>
         {description && (
-          <span className="text-xs text-muted-foreground">{description}</span>
+          <span className="text-sm text-muted-foreground">{description}</span>
         )}
       </div>
 
@@ -119,7 +119,7 @@ function PropControl({ definition, value, onChange }: PropControlProps) {
         <button
           onClick={() => onChange(!value)}
           className={cn(
-            'px-3 py-1.5 rounded-md text-xs font-mono transition-colors',
+            'px-3 py-1.5 rounded-md text-sm font-mono transition-colors',
             value
               ? 'bg-green-500/20 text-green-600 dark:text-green-400'
               : 'bg-foreground/5 text-muted-foreground'

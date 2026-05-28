@@ -12,7 +12,7 @@ import { Spinner } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 
 const groupHeaderVariants = cva(
-  'px-4 py-2 border-b border-border/30 text-xs font-semibold uppercase tracking-wide',
+  'px-4 py-2 border-b border-border/30 text-sm font-semibold uppercase tracking-wide',
   {
     variants: {
       variant: {

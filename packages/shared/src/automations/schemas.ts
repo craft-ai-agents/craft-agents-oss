@@ -8,26 +8,40 @@
 import { z } from 'zod';
 import type { ValidationIssue } from '../config/validators.ts';
 import { APP_EVENTS, AGENT_EVENTS } from './types.ts';
-import { THINKING_LEVEL_IDS, normalizeThinkingLevel } from '../agent/thinking-levels.ts';
+import { normalizeThinkingEnabled } from '../agent/thinking-toggle.ts';
 
 // ============================================================================
 // Zod Schemas
 // ============================================================================
 
 // Mirrors the workspace-default pattern in `config/storage.ts` so that the
-// legacy 'think' value is silently migrated to a current thinking level.
-const ThinkingLevelInputSchema = z
-  .enum([...THINKING_LEVEL_IDS, 'think'])
-  .transform((value) => normalizeThinkingLevel(value))
-  .optional();
+// legacy 'think' value is silently migrated to a current thinking toggle.
+const ThinkingEnabledInputSchema = z.preprocess(
+  (value) => normalizeThinkingEnabled(value),
+  z.boolean().optional(),
+);
 
-export const PromptActionSchema = z.object({
+function normalizePromptActionInput(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const action = value as Record<string, unknown>;
+  if ('thinkingEnabled' in action) return value;
+
+  const legacyThinkingKey = 'thinking' + 'Level';
+  if (!(legacyThinkingKey in action)) return value;
+
+  return {
+    ...action,
+    thinkingEnabled: action[legacyThinkingKey],
+  };
+}
+
+export const PromptActionSchema = z.preprocess(normalizePromptActionInput, z.object({
   type: z.literal('prompt'),
   prompt: z.string().min(1, 'Prompt cannot be empty'),
   llmConnection: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
-  thinkingLevel: ThinkingLevelInputSchema,
-});
+  thinkingEnabled: ThinkingEnabledInputSchema,
+}));
 
 export const WebhookActionSchema = z.object({
   type: z.literal('webhook'),

@@ -196,8 +196,8 @@ export const RPC_CHANNELS = {
   settings: {
     SETUP_LLM_CONNECTION: 'settings:setupLlmConnection',
     TEST_LLM_CONNECTION_SETUP: 'settings:testLlmConnectionSetup',
-    GET_DEFAULT_THINKING_LEVEL: 'settings:getDefaultThinkingLevel',
-    SET_DEFAULT_THINKING_LEVEL: 'settings:setDefaultThinkingLevel',
+    GET_DEFAULT_THINKING_ENABLED: 'settings:getDefaultThinkingEnabled',
+    SET_DEFAULT_THINKING_ENABLED: 'settings:setDefaultThinkingEnabled',
     GET_NETWORK_PROXY: 'settings:getNetworkProxy',
     SET_NETWORK_PROXY: 'settings:setNetworkProxy',
     GET_SERVER_CONFIG: 'settings:getServerConfig',
@@ -234,6 +234,8 @@ export const RPC_CHANNELS = {
     CHANGED: 'sources:changed',
     GET_PERMISSIONS: 'sources:getPermissions',
     GET_MCP_TOOLS: 'sources:getMcpTools',
+    REFRESH_MCP_TOOLS: 'sources:refreshMcpTools',
+    GENERATE_GUIDE: 'sources:generateGuide',
   },
   oauth: {
     START: 'oauth:start',
@@ -283,6 +285,10 @@ export const RPC_CHANNELS = {
     INSTALL_LOCAL_ZIP: 'skills:installLocalZip',
     DELETE_MARKET: 'skills:deleteMarket',
     FETCH_MARKET_CONTENT: 'skills:fetchMarketContent',
+    CHECK_MARKET_UPDATES: 'skills:checkMarketUpdates',
+    UPDATE_MARKET_BATCH: 'skills:updateMarketBatch',
+    DEVOPS_AUTO_INSTALL: 'skills:devopsAutoInstall',
+    TRIGGER_UPDATE_CHECK: 'skills:triggerUpdateCheck',
     CHANGED: 'skills:changed',
   },
   statuses: {
@@ -399,12 +405,12 @@ export const RPC_CHANNELS = {
     REPLAY: 'automations:replay',
     CHANGED: 'automations:changed',
   },
-  teamKnowledge: {
-    GET_CONFIG: 'teamKnowledge:getConfig',
-    UPDATE_CONFIG: 'teamKnowledge:updateConfig',
-    REFRESH: 'teamKnowledge:refresh',
-    CHANGED: 'teamKnowledge:changed',
-    GET_PREVIEW: 'teamKnowledge:getPreview',
+  teamPublicKnowledge: {
+    GET_CONFIG: 'teamPublicKnowledge:getConfig',
+    UPDATE_CONFIG: 'teamPublicKnowledge:updateConfig',
+    REFRESH: 'teamPublicKnowledge:refresh',
+    CHANGED: 'teamPublicKnowledge:changed',
+    GET_PREVIEW: 'teamPublicKnowledge:getPreview',
   },
   userProfile: {
     REFRESH: 'userProfile:refresh',

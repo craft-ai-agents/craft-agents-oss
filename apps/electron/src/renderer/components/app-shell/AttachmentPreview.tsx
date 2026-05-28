@@ -119,7 +119,7 @@ function AttachmentBubble({ attachment, onRemove, disabled }: AttachmentBubblePr
           </div>
           {/* 2-line filename + type */}
           <div className="flex flex-col min-w-0 max-w-[120px]">
-            <span className="text-xs font-medium line-clamp-2 break-all" title={attachment.name}>
+            <span className="text-sm font-medium line-clamp-2 break-all" title={attachment.name}>
               {attachment.name}
             </span>
             <span className="text-[10px] text-muted-foreground">

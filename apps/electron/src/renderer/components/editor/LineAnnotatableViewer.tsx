@@ -98,7 +98,7 @@ export function LineAnnotatableViewer({
         filePath={filePath}
         language={language}
         startLine={startLine}
-        className="h-full text-xs"
+        className="h-full text-sm"
       />
 
       {hoveredLine !== null && !widget && (

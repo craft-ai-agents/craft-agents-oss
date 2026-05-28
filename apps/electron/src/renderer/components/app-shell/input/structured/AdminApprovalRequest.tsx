@@ -58,7 +58,7 @@ export function AdminApprovalRequest({
             <ShieldAlert className="h-3.5 w-3.5 text-info" />
             <span>{t('chat.adminApprovalRequired')}</span>
           </div>
-          <div className="text-xs leading-[18px] text-muted-foreground">
+          <div className="text-sm leading-[18px] text-muted-foreground">
             Installing <span className="font-medium text-foreground">{request.appName}</span> needs your Mac admin approval.
             {request.requiresSystemPrompt ? " You’ll see your regular macOS password/Touch ID prompt." : ''}
             <br />
@@ -72,7 +72,7 @@ export function AdminApprovalRequest({
           </div>
         </div>
 
-        <div className="bg-foreground/5 rounded-md p-3 font-mono text-xs text-foreground/90 whitespace-pre-wrap break-all max-h-24 overflow-y-auto">
+        <div className="bg-foreground/5 rounded-md p-3 font-mono text-sm text-foreground/90 whitespace-pre-wrap break-all max-h-24 overflow-y-auto">
           {request.command}
         </div>
       </div>

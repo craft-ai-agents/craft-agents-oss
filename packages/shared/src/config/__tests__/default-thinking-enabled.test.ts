@@ -3,7 +3,6 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { pathToFileURL } from 'url'
-import { THINKING_LEVEL_IDS } from '../../agent/thinking-levels.ts'
 
 const STORAGE_MODULE_PATH = pathToFileURL(join(import.meta.dir, '..', 'storage.ts')).href
 
@@ -49,9 +48,10 @@ function setupWorkspaceConfigDir() {
         spellCheck: false,
         keepAwakeWhileRunning: false,
         richToolDescriptions: true,
+        browserToolEnabled: true,
       },
       workspaceDefaults: {
-        thinkingLevel: 'off',
+        thinkingEnabled: true,
         permissionMode: 'ask',
         cyclablePermissionModes: ['safe', 'ask', 'allow-all'],
         localMcpServers: { enabled: true },
@@ -67,7 +67,7 @@ function runEval(configDir: string, code: string): string {
   const run = Bun.spawnSync([
     process.execPath,
     '--eval',
-    `import { getDefaultThinkingLevel, setDefaultThinkingLevel } from '${STORAGE_MODULE_PATH}'; ${code}`,
+    `import { getDefaultThinkingEnabled, setDefaultThinkingEnabled } from '${STORAGE_MODULE_PATH}'; ${code}`,
   ], {
     env: { ...process.env, CRAFT_CONFIG_DIR: configDir },
     stdout: 'pipe',
@@ -81,46 +81,29 @@ function runEval(configDir: string, code: string): string {
   return run.stdout.toString().trim()
 }
 
-describe('default thinking level storage', () => {
+describe('default thinking toggle storage', () => {
   it('falls back to bundled default when no app-level default is set', () => {
     const { configDir } = setupWorkspaceConfigDir()
-    const output = runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")
-    expect(output).toBe('off')
+    const output = runEval(configDir, 'console.log(String(getDefaultThinkingEnabled()))')
+    expect(output).toBe('true')
   })
 
-  it('persists defaultThinkingLevel to config.json', () => {
+  it('persists defaultThinkingEnabled to config.json', () => {
     const { configDir, configPath } = setupWorkspaceConfigDir()
 
-    runEval(configDir, "setDefaultThinkingLevel('max'); console.log(String(getDefaultThinkingLevel()))")
+    runEval(configDir, 'setDefaultThinkingEnabled(false); console.log(String(getDefaultThinkingEnabled()))')
 
     const config = JSON.parse(readFileSync(configPath, 'utf-8'))
-    expect(config.defaultThinkingLevel).toBe('max')
+    expect(config.defaultThinkingEnabled).toBe(false)
   })
 
-  it('round-trips persisted value across processes', () => {
-    const { configDir } = setupWorkspaceConfigDir()
-    runEval(configDir, "setDefaultThinkingLevel('medium')")
-    const output = runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")
-    expect(output).toBe('medium')
-  })
-
-  it('supports every thinking level', () => {
-    const { configDir } = setupWorkspaceConfigDir()
-    for (const level of THINKING_LEVEL_IDS) {
-      runEval(configDir, `setDefaultThinkingLevel('${level}')`)
-      const output = runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")
-      expect(output).toBe(level)
-    }
-  })
-
-  it('migrates legacy "think" value to "medium"', () => {
+  it('migrates legacy defaultThinkingLevel=off to disabled', () => {
     const { configDir, configPath } = setupWorkspaceConfigDir()
-    // Manually write the legacy 'think' value to config
     const config = JSON.parse(readFileSync(configPath, 'utf-8'))
-    config.defaultThinkingLevel = 'think'
+    config.defaultThinkingLevel = 'off'
     writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
 
-    const output = runEval(configDir, "console.log(String(getDefaultThinkingLevel()))")
-    expect(output).toBe('medium')
+    const output = runEval(configDir, 'console.log(String(getDefaultThinkingEnabled()))')
+    expect(output).toBe('false')
   })
 })

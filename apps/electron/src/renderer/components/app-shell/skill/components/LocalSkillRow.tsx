@@ -10,7 +10,7 @@ export function LocalSkillIcon({ skill }: { skill: LoadedSkill }) {
   const colorClass = skillIconBg(skill.slug)
 
   return (
-    <div className={cn('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white', colorClass)}>
+    <div className={cn('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white', colorClass)}>
       {label}
     </div>
   )
@@ -39,7 +39,7 @@ export function LocalSkillRow({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <p className="truncate text-[13px] font-semibold text-foreground">{name}</p>
+          <p className="truncate text-[14px] font-semibold text-foreground">{name}</p>
           {author && <span className="flex-shrink-0 text-[11px] text-muted-foreground/70">{author}</span>}
         </div>
         {description.length > 20 ? (
@@ -49,7 +49,7 @@ export function LocalSkillRow({
                 {description.slice(0, 20)}...
               </p>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-[240px] text-xs">
+            <TooltipContent side="bottom" className="max-w-[240px] text-sm">
               {description}
             </TooltipContent>
           </Tooltip>

@@ -53,7 +53,7 @@ export function AcceptPlanDropdown({
         <button
           type="button"
           className={cn(
-            'h-[28px] pl-2.5 pr-2 text-xs font-medium rounded-[6px] flex items-center gap-1.5 transition-all',
+            'h-[28px] pl-2.5 pr-2 text-sm font-medium rounded-[6px] flex items-center gap-1.5 transition-all',
             'bg-success/5 text-success hover:bg-success/10 shadow-tinted',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
             className,
@@ -71,8 +71,8 @@ export function AcceptPlanDropdown({
       <StyledDropdownMenuContent align="end" minWidth="min-w-64" sideOffset={6}>
         <StyledDropdownMenuItem onSelect={() => onAccept()} className="items-start py-2">
           <div className="flex flex-col gap-0.5">
-            <span className="text-[13px] leading-tight">{effectiveAcceptOptionLabel}</span>
-            <span className="max-w-[220px] whitespace-normal text-xs leading-tight text-muted-foreground">
+            <span className="text-[14px] leading-tight">{effectiveAcceptOptionLabel}</span>
+            <span className="max-w-[220px] whitespace-normal text-sm leading-tight text-muted-foreground">
               {t('plan.executeImmediately')}
             </span>
           </div>
@@ -80,8 +80,8 @@ export function AcceptPlanDropdown({
 
         <StyledDropdownMenuItem onSelect={() => onAcceptWithCompact()} className="items-start py-2">
           <div className="flex flex-col gap-0.5">
-            <span className="text-[13px] leading-tight">{t('plan.acceptAndCompact')}</span>
-            <span className="max-w-[220px] whitespace-normal text-xs leading-tight text-muted-foreground">
+            <span className="text-[14px] leading-tight">{t('plan.acceptAndCompact')}</span>
+            <span className="max-w-[220px] whitespace-normal text-sm leading-tight text-muted-foreground">
               {t('plan.worksForComplex')}
             </span>
           </div>

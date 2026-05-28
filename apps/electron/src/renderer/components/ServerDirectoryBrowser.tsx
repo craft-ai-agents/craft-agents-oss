@@ -191,7 +191,7 @@ export function ServerDirectoryBrowser({
             if (e.key === 'Enter') handlePathSubmit()
           }}
           placeholder={t("common.enterPath")}
-          className="flex-1 font-mono text-xs"
+          className="flex-1 font-mono text-sm"
         />
         <Button variant="outline" size="sm" onClick={handlePathSubmit} disabled={loading}>
           Go
@@ -200,7 +200,7 @@ export function ServerDirectoryBrowser({
 
       {/* Breadcrumbs */}
       {listing && (
-        <div className="flex items-center gap-0.5 text-xs text-muted-foreground overflow-x-auto py-1 min-h-[24px]">
+        <div className="flex items-center gap-0.5 text-sm text-muted-foreground overflow-x-auto py-1 min-h-[24px]">
           {listing.breadcrumbs.map((crumb, i) => (
             <span key={crumb.path} className="flex items-center gap-0.5 shrink-0">
               {i > 0 && <ChevronRightIcon className="size-3 text-muted-foreground/50" />}
@@ -233,7 +233,7 @@ export function ServerDirectoryBrowser({
           )}
 
           {!loading && !error && listing?.truncated && (
-            <div className="border-b border-foreground/10 px-3 py-2 text-xs text-muted-foreground">
+            <div className="border-b border-foreground/10 px-3 py-2 text-sm text-muted-foreground">
               Showing the first {listing.entries.length} folders out of {listing.totalEntries}. Narrow the path if the folder you want is missing.
             </div>
           )}
@@ -260,7 +260,7 @@ export function ServerDirectoryBrowser({
               }
               <span className="truncate">{entry.name}</span>
               {entry.isSymlink && (
-                <span className="text-xs text-muted-foreground/60 shrink-0">symlink</span>
+                <span className="text-sm text-muted-foreground/60 shrink-0">symlink</span>
               )}
             </button>
           ))}
@@ -283,7 +283,7 @@ export function ServerDirectoryBrowser({
           if (e.key === 'Enter') handleSelect()
         }}
         placeholder="/Users/username/projects/my-project"
-        className="font-mono text-xs"
+        className="font-mono text-sm"
         autoFocus
       />
     </>

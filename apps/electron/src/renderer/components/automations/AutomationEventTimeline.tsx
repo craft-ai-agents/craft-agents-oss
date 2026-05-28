@@ -132,12 +132,12 @@ export function AutomationEventTimeline({ entries, className, onReplay }: Automa
               <StatusIcon className={cn('h-3.5 w-3.5 shrink-0', config.classes)} />
 
               {/* Time */}
-              <span className="text-xs text-muted-foreground w-16 shrink-0 tabular-nums">
+              <span className="text-sm text-muted-foreground w-16 shrink-0 tabular-nums">
                 {formatShortRelativeTime(entry.timestamp)}
               </span>
 
               {/* Action summary — truncated prompt text */}
-              <span className="flex-1 min-w-0 truncate text-xs text-foreground/70">
+              <span className="flex-1 min-w-0 truncate text-sm text-foreground/70">
                 {entry.actionSummary || entry.error || '—'}
               </span>
 
@@ -172,7 +172,7 @@ export function AutomationEventTimeline({ entries, className, onReplay }: Automa
 
             {/* Expanded webhook details */}
             {isExpanded && entry.webhookDetails && (
-              <div className="mx-4 mb-3 mt-0.5 rounded-md border border-border/40 bg-foreground/[0.02] px-3 py-2.5 text-xs relative">
+              <div className="mx-4 mb-3 mt-0.5 rounded-md border border-border/40 bg-foreground/[0.02] px-3 py-2.5 text-sm relative">
                 <div className="absolute top-2 right-2">
                   <CopyButton details={entry.webhookDetails} />
                 </div>

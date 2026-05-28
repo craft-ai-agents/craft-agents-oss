@@ -78,7 +78,7 @@ export function SimpleDropdownItem({
       onMouseEnter={handleMouseEnter}
       onFocus={() => dropdownCtx?.setHighlightedId(itemId)}
       className={cn(
-        'flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-[13px] rounded-[4px]',
+        'flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-[14px] rounded-[4px]',
         'hover:bg-foreground/[0.05] focus:bg-foreground/[0.05] focus:outline-none',
         'transition-colors',
         isHighlighted && 'bg-foreground/[0.05]',

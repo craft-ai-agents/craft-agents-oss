@@ -381,7 +381,7 @@ export function McpSourceFormDialog({ workspaceId, trigger, editSource, onEditCo
                     {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
                     {t('mcpForm.importSelected')}
                   </Button>
-                  <span className="text-xs text-muted-foreground">{t('mcpForm.selectedCount', { count: selectedImportCandidates.length })}</span>
+                  <span className="text-sm text-muted-foreground">{t('mcpForm.selectedCount', { count: selectedImportCandidates.length })}</span>
                 </div>
                 {jsonErrors.length > 0 && (
                   <FieldErrors fieldErrors={jsonErrors} />
@@ -490,7 +490,7 @@ function McpJsonCandidatePreview(props: {
           />
           <span className="truncate">{candidate.key}</span>
         </label>
-        <span className={isValid ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
+        <span className={isValid ? 'text-sm text-muted-foreground' : 'text-sm text-destructive'}>
           {isValid ? 'Ready' : 'Blocked'}
         </span>
       </div>
@@ -598,9 +598,9 @@ function McpJsonCandidatePreview(props: {
 
       {candidate.secrets && candidate.secrets.length > 0 && (
         <div className="mt-3 space-y-2">
-          <div className="text-xs font-medium text-muted-foreground">Secret handling</div>
+          <div className="text-sm font-medium text-muted-foreground">Secret handling</div>
           {candidate.secrets.map((secret) => (
-            <div key={secret.id} className="grid grid-cols-1 gap-2 rounded-md bg-muted/40 p-2 text-xs sm:grid-cols-[1fr_auto]">
+            <div key={secret.id} className="grid grid-cols-1 gap-2 rounded-md bg-muted/40 p-2 text-sm sm:grid-cols-[1fr_auto]">
               <span>{secret.location}:{secret.name} = {secret.previewValue}</span>
               <Select
                 value={secret.handling}
@@ -618,7 +618,7 @@ function McpJsonCandidatePreview(props: {
       )}
 
       {candidate.duplicate && (
-        <div className="mt-3 space-y-2 rounded-md bg-muted/40 p-2 text-xs">
+        <div className="mt-3 space-y-2 rounded-md bg-muted/40 p-2 text-sm">
           <div>Duplicate of {candidate.duplicate.sourceName}: {candidate.duplicate.reasons.join(', ')}</div>
           <Select
             value={actionValue(candidate.action)}
@@ -648,7 +648,7 @@ function McpJsonCandidatePreview(props: {
 
 function FieldErrors({ fieldErrors }: { fieldErrors: McpImportFieldError[] }) {
   return (
-    <ul className="mt-2 space-y-1 text-xs text-destructive">
+    <ul className="mt-2 space-y-1 text-sm text-destructive">
       {fieldErrors.map((fieldError, index) => (
         <li key={`${fieldError.field}:${index}`}>{fieldError.field}: {fieldError.message}</li>
       ))}
@@ -828,7 +828,7 @@ function RemoteFields(props: {
       </Field>
       {props.authType === 'bearer' && (
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">
+          <Label className="text-sm text-muted-foreground">
             Bearer Token
             {showBearerBadge && <CredentialConfiguredBadge />}
           </Label>
@@ -846,7 +846,7 @@ function RemoteFields(props: {
             <Input value={props.apiKeyHeader} onChange={(event) => props.setApiKeyHeader(event.target.value)} />
           </Field>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">
+            <Label className="text-sm text-muted-foreground">
               Header Value
               {showApiKeyBadge && <CredentialConfiguredBadge />}
             </Label>
@@ -869,7 +869,7 @@ function RemoteFields(props: {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Label className="text-sm text-muted-foreground">{label}</Label>
       {children}
     </div>
   )

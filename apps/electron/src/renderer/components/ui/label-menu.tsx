@@ -37,7 +37,7 @@ export interface InlineLabelMenuProps {
 
 const MENU_CONTAINER_STYLE = 'overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small'
 const MENU_LIST_STYLE = 'max-h-[240px] overflow-y-auto py-1'
-const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2.5 rounded-[6px] mx-1 px-2 py-1.5 text-[13px]'
+const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2.5 rounded-[6px] mx-1 px-2 py-1.5 text-[14px]'
 const MENU_ITEM_SELECTED = 'bg-foreground/5'
 
 // ============================================================================
@@ -213,7 +213,7 @@ export function InlineLabelMenu({
             <div className="shrink-0 text-muted-foreground">
               <Plus className="h-3.5 w-3.5" />
             </div>
-            <span className="text-[13px]">Add New Label</span>
+            <span className="text-[14px]">Add New Label</span>
           </div>
         ) : (
           <>

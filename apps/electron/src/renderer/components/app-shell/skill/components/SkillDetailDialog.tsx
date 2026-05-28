@@ -24,20 +24,18 @@ export function SkillDetailDialog({
 }) {
   const [skillContent, setSkillContent] = React.useState<string | null>(null)
   const [skillExtraMetadata, setSkillExtraMetadata] = React.useState<Record<string, unknown> | null>(null)
-  const [showSpinner, setShowSpinner] = React.useState(false)
+  const [isLoading, setIsLoading] = React.useState(false)
 
   React.useEffect(() => {
     if (!skill) return
-    // 不立即清空旧内容，保留上一个技能的内容直到新内容加载完
-    // spinner 延迟 250ms 才显示，加载够快时完全不闪
+    setIsLoading(true)
+    setSkillContent(null)
+    setSkillExtraMetadata(null)
     let active = true
-    const spinnerTimer = setTimeout(() => { if (active) setShowSpinner(true) }, 250)
 
     if (USE_MOCK_MARKET) {
-      const t = setTimeout(() => {
-        if (active) { setSkillContent(null); setShowSpinner(false) }
-      }, 800)
-      return () => { active = false; clearTimeout(t); clearTimeout(spinnerTimer) }
+      const t = setTimeout(() => { if (active) setIsLoading(false) }, 600)
+      return () => { active = false; clearTimeout(t) }
     }
 
     window.electronAPI.fetchMarketSkillContent(skill.slug, skill.latestVersion)
@@ -48,8 +46,8 @@ export function SkillDetailDialog({
         }
       })
       .catch(() => { if (active) { setSkillContent(null); setSkillExtraMetadata(null) } })
-      .finally(() => { if (active) { setShowSpinner(false); clearTimeout(spinnerTimer) } })
-    return () => { active = false; clearTimeout(spinnerTimer) }
+      .finally(() => { if (active) setIsLoading(false) })
+    return () => { active = false }
   }, [skill?.slug])
 
   if (!skill) return null
@@ -213,7 +211,7 @@ ${skill.slug} config export --format json --output ./backup/
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="flex max-h-[85vh] w-full max-w-[660px] sm:max-w-[660px] flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[85vh] w-full max-w-[660px] sm:max-w-[660px] flex-col gap-0 overflow-hidden p-0">
 
         {/* 图标 + 标题行 */}
         <div className="flex items-start justify-between px-7 pt-7 pb-1">
@@ -224,7 +222,7 @@ ${skill.slug} config export --format json --output ./backup/
             <div>
               <div className="flex items-baseline gap-2">
                 <h2 className="text-[18px] font-bold text-foreground">{skill.name}</h2>
-                <span className="text-[13px] font-normal text-muted-foreground">Skill</span>
+                <span className="text-[14px] font-normal text-muted-foreground">Skill</span>
               </div>
               {skill.description ? <ExpandableDescription text={skill.description} /> : null}
             </div>
@@ -241,21 +239,24 @@ ${skill.slug} config export --format json --output ./backup/
         </div>
 
         {/* Markdown 内容区 */}
-        <div className="relative mx-7 mb-5 min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/20 px-6 py-5 text-[13px] leading-relaxed">
-          {skillExtraMetadata && (
-            <div className="mb-4">
-              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">Metadata</p>
-              <pre className="overflow-x-auto rounded-lg bg-muted/40 px-4 py-3 text-[12px] leading-relaxed text-foreground/80">
-                {JSON.stringify(skillExtraMetadata, null, 2)}
-              </pre>
-              <div className="my-4 border-t border-border" />
-            </div>
-          )}
-          <Markdown>{skillContent ?? mockMarkdown}</Markdown>
-          {showSpinner && (
-            <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-muted/60 backdrop-blur-[2px]">
+        <div className="relative mx-7 mb-5 min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/20 px-6 py-5 text-[14px] leading-relaxed">
+          {isLoading ? (
+            <div className="flex h-full min-h-[200px] items-center justify-center">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
+          ) : (
+            <>
+              {skillExtraMetadata && (
+                <div className="mb-4">
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">Metadata</p>
+                  <pre className="overflow-x-auto rounded-lg bg-muted/40 px-4 py-3 text-[12px] leading-relaxed text-foreground/80">
+                    {JSON.stringify(skillExtraMetadata, null, 2)}
+                  </pre>
+                  <div className="my-4 border-t border-border" />
+                </div>
+              )}
+              <Markdown>{skillContent ?? mockMarkdown}</Markdown>
+            </>
           )}
         </div>
 
@@ -266,14 +267,14 @@ ${skill.slug} config export --format json --output ./backup/
               <button
                 type="button"
                 onClick={() => onUninstall(skill)}
-                className="rounded-lg bg-red-50 px-4 py-2 text-[13px] font-medium text-red-500 transition-colors hover:bg-red-100 dark:bg-red-500/15 dark:text-red-400 dark:hover:bg-red-500/25"
+                className="rounded-lg bg-red-50 px-4 py-2 text-[14px] font-medium text-red-500 transition-colors hover:bg-red-100 dark:bg-red-500/15 dark:text-red-400 dark:hover:bg-red-500/25"
               >
                 删除
               </button>
             )}
           </div>
           {installed ? (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/50 px-4 py-2 text-[13px] font-medium text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/50 px-4 py-2 text-[14px] font-medium text-muted-foreground">
               <Check className="h-3.5 w-3.5" />
               已安装
             </span>
@@ -282,7 +283,7 @@ ${skill.slug} config export --format json --output ./backup/
               type="button"
               disabled={isInstalling}
               onClick={() => onInstall(skill)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-85 disabled:opacity-50 disabled:cursor-default"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-[14px] font-medium text-background transition-opacity hover:opacity-85 disabled:opacity-50 disabled:cursor-default"
             >
               {isInstalling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
               {isInstalling ? '安装中…' : '安装'}

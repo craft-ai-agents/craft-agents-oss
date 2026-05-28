@@ -149,7 +149,7 @@ const itemVariants: Variants = {
  * sidebar keyboard navigation. This component just renders the items.
  *
  * Styling matches agent items in the sidebar for consistency:
- * - py-[7px] px-2 text-[13px] rounded-md
+ * - py-[7px] px-2 text-[14px] rounded-md
  * - Icon: h-3.5 w-3.5
  *
  * Link variants:
@@ -501,7 +501,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
         onClick={isOverlay ? undefined : link.onClick}
         data-tutorial={link.dataTutorial}
         className={cn(
-          "group flex w-full items-center gap-2 rounded-[6px] text-[13px] select-none outline-none",
+          "group flex w-full items-center gap-2 rounded-[6px] text-[14px] select-none outline-none",
           "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
           // Compact mode: 4px less total height (py-[3px] vs py-[5px])
           link.compact ? "py-[3px]" : "py-[5px]",
@@ -552,7 +552,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
         )}
         {/* Label Badge: Shows count or status on the right, revealed on section hover */}
         {link.label && (
-          <span data-touch-reveal="true" className={cn(link.afterTitle ? 'ml-0' : 'ml-auto', 'text-xs text-foreground/30 opacity-0 group-hover/section:opacity-100 group-data-[state=open]:opacity-100 group-data-[edit-active=true]:opacity-100 transition-opacity')}>
+          <span data-touch-reveal="true" className={cn(link.afterTitle ? 'ml-0' : 'ml-auto', 'text-sm text-foreground/30 opacity-0 group-hover/section:opacity-100 group-data-[state=open]:opacity-100 group-data-[edit-active=true]:opacity-100 transition-opacity')}>
             {link.label}
           </span>
         )}

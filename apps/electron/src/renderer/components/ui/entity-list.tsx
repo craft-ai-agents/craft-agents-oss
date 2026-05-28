@@ -116,7 +116,7 @@ function CollapsibleGroupHeader({
           onClick={onToggle}
           className="w-full py-2 px-4 flex items-center gap-1.5 cursor-pointer group/header relative"
         >
-          <div className="absolute inset-y-0.5 left-2 right-2 rounded-[6px] group-hover/header:bg-foreground/2 transition-colors pointer-events-none" />
+          <div className="absolute inset-y-0.5 left-2 right-0 rounded-[6px] group-hover/header:bg-foreground/2 transition-colors pointer-events-none" />
           <ChevronRight
             className={cn(
               "h-3 w-3 text-muted-foreground/60 transition-transform relative",
@@ -185,10 +185,10 @@ export function EntityList<T>({
   return (
     <div className={cn('flex flex-col min-h-0', heightBehavior === 'fill' && 'flex-1', className)}>
       {header}
-      <ScrollArea className={cn(heightBehavior === 'fill' && 'flex-1', scrollAreaClassName)} viewportRef={viewportRef}>
+      <ScrollArea className={cn(heightBehavior === 'fill' && 'flex-1', scrollAreaClassName)} viewportRef={viewportRef} viewportClassName="overflow-x-hidden">
         <div
           ref={containerRef}
-          className="flex flex-col pb-2"
+          className="flex min-w-0 flex-col overflow-x-hidden pb-2"
           {...containerProps}
         >
           <div className="pt-1">

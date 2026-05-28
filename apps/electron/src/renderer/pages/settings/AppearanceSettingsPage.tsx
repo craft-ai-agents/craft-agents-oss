@@ -295,7 +295,7 @@ export default function AppearanceSettingsPage() {
                   </SettingsRow>
                 </SettingsCard>
                 {themeLoadError && (
-                  <p className="mt-2 text-xs text-info">
+                  <p className="mt-2 text-sm text-info">
                     {t("settings.appearance.themeWarning")} {themeLoadError} ({themeResolvedFrom === 'fallback' ? t("settings.appearance.usingBundledFallback") : t("settings.appearance.usingDefaultTheme")})
                   </p>
                 )}

@@ -119,7 +119,7 @@ export function AutomationInfoPage({
             </Info_Table.Row>
             {automation.matcher && (
               <Info_Table.Row label={t('automations.labelOnlyWhenMatching')}>
-                <code className="text-xs font-mono bg-foreground/5 px-1.5 py-0.5 rounded">
+                <code className="text-sm font-mono bg-foreground/5 px-1.5 py-0.5 rounded">
                   {automation.matcher}
                 </code>
               </Info_Table.Row>
@@ -128,7 +128,7 @@ export function AutomationInfoPage({
               <>
                 <Info_Table.Row label={t('automations.labelRepeats')} value={describeCron(automation.cron)} />
                 <Info_Table.Row label={t('automations.labelScheduleExpression')}>
-                  <code className="text-xs font-mono bg-foreground/5 px-1.5 py-0.5 rounded">
+                  <code className="text-sm font-mono bg-foreground/5 px-1.5 py-0.5 rounded">
                     {automation.cron}
                   </code>
                 </Info_Table.Row>

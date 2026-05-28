@@ -100,7 +100,7 @@ export function extractSessionMeta(session: Session): SessionMeta {
   // Destructure fields that don't exist on SessionMeta or need overrides
   const {
     messages: _msgs, sessionFolderPath: _sf, supportsBranching: _sb,
-    workspaceName: _wn, thinkingLevel: _tl, currentStatus: _cs,
+    workspaceName: _wn, thinkingEnabled: _tl, currentStatus: _cs,
     isAsyncOperationOngoing, isRegeneratingTitle,
     messageCount, lastFinalMessageId: sessionLastFinal,
     ...sessionFields

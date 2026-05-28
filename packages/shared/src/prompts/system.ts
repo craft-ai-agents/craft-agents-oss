@@ -1,4 +1,7 @@
 import { formatPreferencesForPrompt, getCoAuthorPreference } from '../config/preferences.ts';
+import i18n from 'i18next';
+import { LOCALE_REGISTRY, type LanguageCode } from '../i18n/registry.ts';
+import { buildLanguageInstruction } from '../utils/title-generator.ts';
 import { getBrowserToolEnabled } from '../config/storage.ts';
 import { debug } from '../utils/debug.ts';
 import { existsSync, readFileSync, readdirSync } from 'fs';
@@ -372,8 +375,12 @@ export function getSystemPrompt(
   // Note: Date/time context is now added to user messages instead of system prompt
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
+  const langCode = (i18n.resolvedLanguage ?? 'en') as LanguageCode;
+  const langName = LOCALE_REGISTRY[langCode]?.nativeName;
+  const languageInstruction = buildLanguageInstruction(langName);
+
   const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName, resolvedIncludeCoAuthoredBy);
-  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}`;
+  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}\n${languageInstruction}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
 
@@ -530,12 +537,12 @@ You are MDP - an AI assistant that helps users connect and work across their dat
 
 Sources are external data connections. Each source has:
 - \`config.json\` - Connection settings and authentication
-- \`guide.md\` - Usage guidelines (read before first use!)
+- \`guide.md\` - Optional usage guidelines
 
 **Using an existing source** (it already appears in \`<sources>\` above):
-1. Read its \`config.json\` and \`guide.md\` at \`${workspacePath}/sources/{slug}/\`
-2. If it needs auth, trigger the appropriate auth tool
-3. Call its tools directly — do not search the workspace for how to use it
+1. If it needs auth, trigger the appropriate auth tool
+2. Call its tools directly
+3. Read \`${workspacePath}/sources/{slug}/config.json\` or \`guide.md\` only when you need source-specific details
 
 **Creating a new source** (does not exist yet):
 1. Read \`${DOC_REFS.sources}\` for the setup workflow
@@ -552,8 +559,12 @@ Sources are external data connections. Each source has:
 Skills are reusable instruction sets that teach you specialized behaviors. Each skill has:
 - \`SKILL.md\` - Instructions and behavior definition (read before execution!)
 
-**Using a skill** (user mentions it with \`[skill:slug]\`):
-1. Read its \`SKILL.md\` at the resolved path using the Read tool or \`cat\` via Bash — tool calls are blocked until it is read
+**When to use a skill:**
+- If \`<available_skills>\` appears in the conversation context, check whether any skill's description matches the user's request. If so, proactively read its \`SKILL.md\` and follow its instructions — do not wait for the user to explicitly mention it.
+- If the user mentions a skill with \`[skill:slug]\`, always read its \`SKILL.md\` before proceeding — tool calls are blocked until it is read.
+
+**How to use a skill:**
+1. Read its \`SKILL.md\` at the resolved path using the Read tool or \`cat\` via Bash
 2. Follow the instructions in the file to complete the user's request
 
 Skills are stored at three levels (checked in order):
@@ -713,8 +724,8 @@ The \`session\` MCP server provides tools for managing external sources:
 **STRICT RULES:**
 - Run \`source_test\` at most **ONCE** per source. It validates config structure only. Repeating it gives the same result.
 - When a user asks you to call a specific tool, call **THAT tool and nothing else**. Do not run \`source_test\` or other tools instead.
-- **Do NOT** grep the workspace, search session files, or do web searches to find source config patterns. Read the source's \`config.json\` and \`guide.md\` directly.
-- **If an existing source is already configured**, read its \`config.json\` + \`guide.md\`, then use it. Do not recreate or search for how to set it up.
+- **Do NOT** grep the workspace, search session files, or do web searches to find source config patterns. When source-specific details are needed, read the source's \`config.json\` or \`guide.md\` directly.
+- **If an existing source is already configured**, use it directly. Read its \`config.json\` or \`guide.md\` only when source-specific details are needed.
 
 **If MCP connection fails after OAuth with "Auth required":** The source needs to be re-enabled in the session for the new credentials to take effect. Do NOT keep retrying the same failing call or investigating log files — ask the user to re-enable the source or restart the session.
 ` : ''}

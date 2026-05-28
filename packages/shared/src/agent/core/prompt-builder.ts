@@ -12,11 +12,13 @@
  * - Format user preferences for prompt injection
  */
 
+import { join } from 'node:path';
 import { isLocalMcpEnabled } from '../../workspaces/storage.ts';
 import { formatPreferencesForPrompt } from '../../config/preferences.ts';
 import { formatSessionState } from '../mode-manager.ts';
 import { getDateTimeContext, getWorkingDirectoryContext } from '../../prompts/system.ts';
 import { getSessionPlansPath, getSessionDataPath, getSessionPath } from '../../sessions/storage.ts';
+import { loadAllSkills } from '../../skills/storage.ts';
 import type {
   PromptBuilderConfig,
   ContextBlockOptions,
@@ -89,14 +91,20 @@ export class PromptBuilder {
       parts.push(sourceStateBlock);
     }
 
+    // Add installed skills state (mirrors source state pattern)
+    const skillsBlock = this.formatSkillsState();
+    if (skillsBlock) {
+      parts.push(skillsBlock);
+    }
+
     // Add team public knowledge policy (reference data, not instructions)
-    if (options.teamKnowledgePolicy) {
-      parts.push(options.teamKnowledgePolicy);
+    if (options.teamPublicKnowledgePolicy) {
+      parts.push(options.teamPublicKnowledgePolicy);
     }
 
     // Add team public knowledge prefetch results (reference data)
-    if (options.teamKnowledgePrefetchBlock) {
-      parts.push(options.teamKnowledgePrefetchBlock);
+    if (options.teamPublicKnowledgePrefetchBlock) {
+      parts.push(options.teamPublicKnowledgePrefetchBlock);
     }
 
     // Add workspace capabilities
@@ -109,6 +117,26 @@ export class PromptBuilder {
     }
 
     return parts;
+  }
+
+  /**
+   * Format installed skills as an XML block for injection into every user message.
+   * Mirrors the source state pattern: lists skill name, description, and SKILL.md path
+   * so the agent can proactively match user intent to available skills.
+   *
+   * Returns an empty string when no skills are installed.
+   */
+  formatSkillsState(): string {
+    const projectRoot = this.config.session?.workingDirectory;
+    const skills = loadAllSkills(this.workspaceRootPath, projectRoot);
+    if (skills.length === 0) return '';
+
+    const lines = skills.map(s => {
+      const desc = s.metadata.description ? `\n  description: ${s.metadata.description}` : '';
+      return `- slug: ${s.slug}\n  name: ${s.metadata.name}${desc}`;
+    });
+
+    return `<available_skills>\n${lines.join('\n')}\n</available_skills>`;
   }
 
   /**

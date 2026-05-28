@@ -24,7 +24,6 @@ import {
   StyledDropdownMenuSeparator,
 } from "@/components/ui/styled-dropdown"
 import type { SettingsMenuItem } from "../../../shared/menu-schema"
-import { SquarePenRounded } from "../icons/SquarePenRounded"
 import { SquareCode } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { BrowserTabStrip } from "../browser/BrowserTabStrip"
@@ -58,7 +57,6 @@ interface TopBarProps {
   onToggleSidebar: () => void
   onToggleRightSidebar: () => void
   onToggleFocusMode: () => void
-  onAddSessionPanel: () => void
   onAddBrowserPanel: () => void
   /** When true, shows the right sidebar toggle in the top bar */
   isRightSidebarToggleVisible: boolean
@@ -93,7 +91,6 @@ export function TopBar({
   onToggleSidebar,
   onToggleRightSidebar,
   onToggleFocusMode,
-  onAddSessionPanel,
   onAddBrowserPanel,
   isRightSidebarToggleVisible,
   isEditorPanelToggleVisible,
@@ -212,28 +209,30 @@ export function TopBar({
             </>
           )}
 
-          <div className="min-w-0 flex-1">
-            {isCompact ? (
-              <CompactWorkspaceSwitcher
-                workspaces={workspaces}
-                activeWorkspaceId={activeWorkspaceId}
-                onSelect={onSelectWorkspace}
-                onWorkspaceCreated={onWorkspaceCreated}
-                onWorkspaceRemoved={onWorkspaceRemoved}
-                workspaceUnreadMap={workspaceUnreadMap}
-              />
-            ) : (
-              <WorkspaceSwitcher
-                variant="topbar"
-                workspaces={workspaces}
-                activeWorkspaceId={activeWorkspaceId}
-                onSelect={onSelectWorkspace}
-                onWorkspaceCreated={onWorkspaceCreated}
-                onWorkspaceRemoved={onWorkspaceRemoved}
-                workspaceUnreadMap={workspaceUnreadMap}
-              />
-            )}
-          </div>
+          {workspaces.some(w => w.remoteServer) && (
+            <div className="min-w-0 flex-1">
+              {isCompact ? (
+                <CompactWorkspaceSwitcher
+                  workspaces={workspaces}
+                  activeWorkspaceId={activeWorkspaceId}
+                  onSelect={onSelectWorkspace}
+                  onWorkspaceCreated={onWorkspaceCreated}
+                  onWorkspaceRemoved={onWorkspaceRemoved}
+                  workspaceUnreadMap={workspaceUnreadMap}
+                />
+              ) : (
+                <WorkspaceSwitcher
+                  variant="topbar"
+                  workspaces={workspaces}
+                  activeWorkspaceId={activeWorkspaceId}
+                  onSelect={onSelectWorkspace}
+                  onWorkspaceCreated={onWorkspaceCreated}
+                  onWorkspaceRemoved={onWorkspaceRemoved}
+                  workspaceUnreadMap={workspaceUnreadMap}
+                />
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -250,10 +249,6 @@ export function TopBar({
             </TopBarButton>
           </DropdownMenuTrigger>
           <StyledDropdownMenuContent align="end" minWidth="min-w-56">
-            <StyledDropdownMenuItem onClick={onAddSessionPanel}>
-              <SquarePenRounded className="h-3.5 w-3.5" />
-              {t("session.newSessionInPanel")}
-            </StyledDropdownMenuItem>
             <StyledDropdownMenuItem onClick={onAddBrowserPanel}>
               <Icons.Globe className="h-3.5 w-3.5" />
               {t("browser.newWindow")}

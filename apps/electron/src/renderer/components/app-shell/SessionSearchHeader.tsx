@@ -89,7 +89,7 @@ export function SessionSearchHeader({
 
       {/* Search status row - shown when search mode is active (2+ characters) */}
       {searchQuery.length >= 2 && (
-        <div className="px-2 pt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="px-2 pt-2.5 flex items-center gap-1.5 text-sm text-muted-foreground">
           {isSearching ? (
             <>
               <Spinner className="text-[9px] text-foreground/50" />

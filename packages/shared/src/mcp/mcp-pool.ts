@@ -55,6 +55,13 @@ export interface McpToolResult {
   sourceSlug?: string;
 }
 
+export interface McpClientPoolCallOptions {
+  /** Session storage path used for binary response downloads and large-response files. */
+  sessionPath?: string;
+  /** Optional summarizer used when a successful tool response exceeds inline limits. */
+  summarize?: (prompt: string) => Promise<string | null>;
+}
+
 /**
  * Convert SdkMcpServerConfig (used by backend types) to CraftMcpClient config.
  */
@@ -117,27 +124,33 @@ export class McpClientPool {
   /** Workspace root path for local MCP filtering */
   private workspaceRootPath?: string;
 
-  /** Session storage path for saving large responses */
-  private sessionPath?: string;
+  /** Subscribers called after sync() connects/disconnects sources, so clients can be notified */
+  private toolsChangedListeners = new Set<() => void>();
 
-  /** Summarize callback for large response handling */
-  private summarizeCallback?: (prompt: string) => Promise<string | null>;
-
-  /** Called after sync() connects/disconnects sources, so clients can be notified */
-  onToolsChanged?: () => void;
-
-  constructor(options?: { debug?: (msg: string) => void; workspaceRootPath?: string; sessionPath?: string }) {
+  constructor(options?: { debug?: (msg: string) => void; workspaceRootPath?: string }) {
     this.debugFn = options?.debug;
     this.workspaceRootPath = options?.workspaceRootPath;
-    this.sessionPath = options?.sessionPath;
   }
 
   /**
-   * Set the summarize callback for large response handling.
-   * Typically called after agent creation: pool.setSummarizeCallback(agent.getSummarizeCallback())
+   * Subscribe to tool-list changes emitted after each sync reconciliation.
    */
-  setSummarizeCallback(fn: (prompt: string) => Promise<string | null>): void {
-    this.summarizeCallback = fn;
+  addToolsChangedListener(listener: () => void): void {
+    this.toolsChangedListeners.add(listener);
+  }
+
+  /**
+   * Remove a previously registered tool-list change listener.
+   */
+  removeToolsChangedListener(listener: () => void): void {
+    this.toolsChangedListeners.delete(listener);
+  }
+
+  private notifyToolsChanged(): void {
+    const listeners = Array.from(this.toolsChangedListeners);
+    for (const listener of listeners) {
+      listener();
+    }
   }
 
   private debug(msg: string): void {
@@ -303,7 +316,7 @@ export class McpClientPool {
       }
     }
 
-    this.onToolsChanged?.();
+    this.notifyToolsChanged();
     return failures;
   }
 
@@ -363,9 +376,16 @@ export class McpClientPool {
 
   /**
    * Execute an MCP tool by its proxy name (mcp__{slug}__{toolName}).
+   * Per-call options decide where binary/large responses are saved and which
+   * session-specific summarizer is used.
+   *
    * Returns a result matching the subprocess protocol format.
    */
-  async callTool(proxyName: string, args: Record<string, unknown>): Promise<McpToolResult> {
+  async callTool(
+    proxyName: string,
+    args: Record<string, unknown>,
+    options: McpClientPoolCallOptions = {}
+  ): Promise<McpToolResult> {
     const info = this.proxyTools.get(proxyName);
     if (!info) {
       return {
@@ -403,7 +423,7 @@ export class McpClientPool {
           } else if (block.text !== undefined && block.text !== null) {
             parts.push(JSON.stringify(block.text, null, 2));
           }
-        } else if ((block.type === 'image' || block.type === 'audio') && block.data && this.sessionPath) {
+        } else if ((block.type === 'image' || block.type === 'audio') && block.data && options.sessionPath) {
           // Decode base64 binary content and save to downloads/
           try {
             const buffer = Buffer.from(block.data, 'base64');
@@ -411,7 +431,7 @@ export class McpClientPool {
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
             const safeName = sanitizeFilename(proxyName);
             const filename = `${safeName}_${timestamp}${ext}`;
-            const saved = saveBinaryResponse(this.sessionPath, filename, buffer, block.mimeType ?? null);
+            const saved = saveBinaryResponse(options.sessionPath, filename, buffer, block.mimeType ?? null);
             if (saved.type === 'file_download') {
               parts.push(`[${block.type.charAt(0).toUpperCase() + block.type.slice(1)} saved: ${saved.path} (${saved.sizeHuman})]`);
             }
@@ -425,12 +445,12 @@ export class McpClientPool {
       const text = parts.join('\n') || JSON.stringify(result);
 
       // 3. Centralized binary + large response handling
-      if (!result.isError && this.sessionPath) {
+      if (!result.isError && options.sessionPath) {
         const guarded = await guardLargeResult(text, {
-          sessionPath: this.sessionPath,
+          sessionPath: options.sessionPath,
           toolName: proxyName,
           input: args,
-          summarize: this.summarizeCallback,
+          summarize: options.summarize,
         });
         if (guarded) {
           return { content: guarded, isError: false };

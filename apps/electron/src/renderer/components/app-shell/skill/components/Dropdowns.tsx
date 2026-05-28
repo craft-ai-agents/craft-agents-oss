@@ -24,7 +24,7 @@ export function LocalOriginDropdown({ value, onChange }: { value: LocalOriginFil
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-foreground/[0.04]"
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[14px] font-medium text-foreground transition-colors hover:bg-foreground/[0.04]"
       >
         {value}
         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
@@ -38,7 +38,7 @@ export function LocalOriginDropdown({ value, onChange }: { value: LocalOriginFil
               type="button"
               onClick={() => { onChange(opt); setOpen(false) }}
               className={cn(
-                'flex w-full items-center gap-2 px-3 py-2 text-[13px] transition-colors hover:bg-foreground/[0.06]',
+                'flex w-full items-center gap-2 px-3 py-2 text-[14px] transition-colors hover:bg-foreground/[0.06]',
                 opt === value ? 'font-semibold text-foreground' : 'text-foreground/70',
               )}
             >
@@ -74,7 +74,7 @@ export function LocalCreateDropdown({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3.5 py-1.5 text-[13px] font-medium text-foreground shadow-xs transition-colors hover:bg-foreground/[0.04]"
+        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3.5 py-1.5 text-[14px] font-medium text-foreground shadow-xs transition-colors hover:bg-foreground/[0.04]"
       >
         创建
         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
@@ -85,7 +85,7 @@ export function LocalCreateDropdown({
           <button
             type="button"
             onClick={() => { onUpload(); setOpen(false) }}
-            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[13px] text-foreground transition-colors hover:bg-foreground/[0.06]"
+            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[14px] text-foreground transition-colors hover:bg-foreground/[0.06]"
           >
             <FolderUp className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
             上传本地技能
@@ -93,7 +93,7 @@ export function LocalCreateDropdown({
           <button
             type="button"
             onClick={() => { onCreateSkill(); setOpen(false) }}
-            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[13px] text-foreground transition-colors hover:bg-foreground/[0.06]"
+            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[14px] text-foreground transition-colors hover:bg-foreground/[0.06]"
           >
             <FilePlus2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
             创建技能
@@ -120,7 +120,7 @@ export function CategoryDropdown({ value, onChange }: { value: Category; onChang
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-foreground/[0.04]"
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[14px] font-medium text-foreground transition-colors hover:bg-foreground/[0.04]"
       >
         {value}
         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
@@ -134,7 +134,7 @@ export function CategoryDropdown({ value, onChange }: { value: Category; onChang
               type="button"
               onClick={() => { onChange(cat); setOpen(false) }}
               className={cn(
-                'flex w-full items-center gap-2 px-3 py-2 text-[13px] transition-colors hover:bg-foreground/[0.06]',
+                'flex w-full items-center gap-2 px-3 py-2 text-[14px] transition-colors hover:bg-foreground/[0.06]',
                 cat === value ? 'font-semibold text-foreground' : 'text-foreground/70',
               )}
             >

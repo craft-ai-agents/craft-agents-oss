@@ -42,7 +42,7 @@ function isEditRequestBadge(badge: ContentBadge): boolean {
 function EditRequestBadge({ badge }: { badge: ContentBadge }) {
   const displayLabel = badge.collapsedLabel || badge.label
   return (
-    <span className="inline-flex items-center h-[28px] px-2.5 rounded-[8px] bg-background shadow-minimal text-[13px] text-muted-foreground">
+    <span className="inline-flex items-center h-[28px] px-2.5 rounded-[8px] bg-background shadow-minimal text-[14px] text-muted-foreground">
       {displayLabel}
     </span>
   )
@@ -455,7 +455,7 @@ export function UserMessageBubble({
                       )}
                     </div>
                     <div className="flex flex-col min-w-0 max-w-[120px]">
-                      <span className="text-xs font-medium line-clamp-2 break-all" title={att.name}>
+                      <span className="text-sm font-medium line-clamp-2 break-all" title={att.name}>
                         {att.name}
                       </span>
                       <span className="text-[10px] text-muted-foreground">

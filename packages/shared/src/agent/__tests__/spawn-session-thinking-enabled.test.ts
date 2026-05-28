@@ -1,10 +1,10 @@
 /**
- * Verifies that `spawn_session` forwards `thinkingLevel` through the
+ * Verifies that `spawn_session` forwards `thinkingEnabled` through the
  * `SpawnSessionRequest` object so `SessionManager.onSpawnSession` can
  * pass it along to `createSession()`.
  *
  * Pairs with the corresponding fix in SessionManager.createSession that
- * reads `options?.thinkingLevel` as the first-precedence source (before
+ * reads `options?.thinkingEnabled` as the first-precedence source (before
  * workspace default and global default). Without that fix, this field
  * on the request would be silently dropped.
  */
@@ -33,7 +33,7 @@ function setup() {
   return { agent, captured };
 }
 
-describe('spawn_session thinkingLevel forwarding', () => {
+describe('spawn_session thinkingEnabled forwarding', () => {
   let agent: SpawnTestAgent;
   let captured: SpawnSessionRequest[];
 
@@ -41,35 +41,35 @@ describe('spawn_session thinkingLevel forwarding', () => {
     ({ agent, captured } = setup());
   });
 
-  it('forwards an explicit thinkingLevel to onSpawnSession', async () => {
-    await agent.invokeSpawn({ prompt: 'hi', thinkingLevel: 'high' });
+  it('forwards an explicit thinkingEnabled to onSpawnSession', async () => {
+    await agent.invokeSpawn({ prompt: 'hi', thinkingEnabled: false });
     expect(captured).toHaveLength(1);
-    expect(captured[0]?.thinkingLevel).toBe('high');
+    expect(captured[0]?.thinkingEnabled).toBe(false);
   });
 
-  it('forwards each valid thinking level unchanged', async () => {
-    const levels = ['off', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
-    for (const level of levels) {
+  it('forwards each valid thinking toggle unchanged', async () => {
+    const values = [true, false] as const;
+    for (const value of values) {
       const { agent: a, captured: c } = setup();
-      await a.invokeSpawn({ prompt: 'hi', thinkingLevel: level });
-      expect(c[0]?.thinkingLevel).toBe(level);
+      await a.invokeSpawn({ prompt: 'hi', thinkingEnabled: value });
+      expect(c[0]?.thinkingEnabled).toBe(value);
     }
   });
 
-  it('passes through undefined when thinkingLevel is omitted', async () => {
+  it('passes through undefined when thinkingEnabled is omitted', async () => {
     await agent.invokeSpawn({ prompt: 'hi' });
-    expect(captured[0]?.thinkingLevel).toBeUndefined();
+    expect(captured[0]?.thinkingEnabled).toBeUndefined();
   });
 
-  it('does not drop thinkingLevel when other optional fields are also set', async () => {
+  it('does not drop thinkingEnabled when other optional fields are also set', async () => {
     await agent.invokeSpawn({
       prompt: 'hi',
-      thinkingLevel: 'xhigh',
+      thinkingEnabled: true,
       permissionMode: 'ask',
       model: 'claude-opus-4-7',
       labels: ['test'],
     });
-    expect(captured[0]?.thinkingLevel).toBe('xhigh');
+    expect(captured[0]?.thinkingEnabled).toBe(true);
     expect(captured[0]?.permissionMode).toBe('ask');
     expect(captured[0]?.model).toBe('claude-opus-4-7');
     expect(captured[0]?.labels).toEqual(['test']);

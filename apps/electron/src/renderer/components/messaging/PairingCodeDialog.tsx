@@ -93,7 +93,7 @@ export function PairingCodeDialog({
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-accent"
+                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-accent"
                   title={t('common.copy')}
                 >
                   <Copy className="h-3.5 w-3.5" />
@@ -105,7 +105,7 @@ export function PairingCodeDialog({
               </p>
 
               {platform === 'whatsapp' && (
-                <p className="text-center text-xs text-muted-foreground">
+                <p className="text-center text-sm text-muted-foreground">
                   {t('dialog.pairingCode.whatsappSelfHint')}
                 </p>
               )}
@@ -123,12 +123,12 @@ export function PairingCodeDialog({
               )}
 
               {secondsLeft > 0 && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   {t('dialog.pairingCode.expires')} ({minutes}:{seconds.toString().padStart(2, '0')})
                 </p>
               )}
               {secondsLeft === 0 && expiresAt && (
-                <p className="text-xs text-destructive">{t('dialog.pairingCode.expired')}</p>
+                <p className="text-sm text-destructive">{t('dialog.pairingCode.expired')}</p>
               )}
             </>
           ) : (

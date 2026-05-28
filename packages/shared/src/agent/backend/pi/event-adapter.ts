@@ -68,6 +68,9 @@ export class PiEventAdapter extends BaseEventAdapter {
   // Track whether streaming deltas have been received for the current message
   private hasStreamedDeltas: boolean = false;
 
+  // Track whether we are inside an open <think> block (thinking_start fired but thinking_end has not)
+  private inThinkingBlock: boolean = false;
+
   // Track whether a final (non-intermediate) text_complete has been emitted this turn
   private hasEmittedFinalText: boolean = false;
 
@@ -296,6 +299,7 @@ export class PiEventAdapter extends BaseEventAdapter {
         this.currentTurnId = null;
         this.hasStreamedDeltas = false;
         this.hasEmittedFinalText = false;
+        this.inThinkingBlock = false;
         this.subTurnCounter = 0;
         this.messageSubTurnId = null;
         break;
@@ -311,16 +315,26 @@ export class PiEventAdapter extends BaseEventAdapter {
       case 'message_update': {
         // Pi SDK emits message_update only for assistant messages (streaming deltas)
         const amEvent: AssistantMessageEvent = event.assistantMessageEvent;
-        if (amEvent.type === 'text_delta' && amEvent.delta) {
-          this.hasStreamedDeltas = true;
-          if (!this.messageSubTurnId) {
-            this.messageSubTurnId = this.nextSubTurnId('m');
+        if (!this.messageSubTurnId) {
+          this.messageSubTurnId = this.nextSubTurnId('m');
+        }
+        if (amEvent.type === 'thinking_start') {
+          this.inThinkingBlock = true;
+          yield { type: 'text_delta', text: '<think>\n', turnId: this.messageSubTurnId };
+        } else if (amEvent.type === 'thinking_delta' && amEvent.delta) {
+          yield { type: 'text_delta', text: amEvent.delta, turnId: this.messageSubTurnId };
+        } else if (amEvent.type === 'thinking_end') {
+          this.inThinkingBlock = false;
+          yield { type: 'text_delta', text: '\n</think>', turnId: this.messageSubTurnId };
+        } else if (amEvent.type === 'text_delta' && amEvent.delta) {
+          // Some models fire text_delta before thinking_end — auto-close the block so
+          // extractThinkTags can separate reasoning from response text during streaming.
+          if (this.inThinkingBlock) {
+            this.inThinkingBlock = false;
+            yield { type: 'text_delta', text: '\n</think>', turnId: this.messageSubTurnId };
           }
-          yield {
-            type: 'text_delta',
-            text: amEvent.delta,
-            turnId: this.messageSubTurnId,
-          };
+          this.hasStreamedDeltas = true;
+          yield { type: 'text_delta', text: amEvent.delta, turnId: this.messageSubTurnId };
         }
         break;
       }
@@ -753,7 +767,7 @@ export class PiEventAdapter extends BaseEventAdapter {
 
     const msg = message as {
       role?: string;
-      content?: string | Array<{ type: string; text?: string }>;
+      content?: string | Array<{ type: string; text?: string; thinking?: string }>;
     };
 
     if (typeof msg.content === 'string') {
@@ -761,10 +775,15 @@ export class PiEventAdapter extends BaseEventAdapter {
     }
 
     if (Array.isArray(msg.content)) {
-      const textParts = msg.content
-        .filter((c) => c.type === 'text' && c.text)
-        .map((c) => c.text!);
-      return textParts.length > 0 ? textParts.join('') : null;
+      const parts: string[] = [];
+      for (const c of msg.content) {
+        if (c.type === 'thinking' && c.thinking) {
+          parts.push(`<think>\n${c.thinking}\n</think>`);
+        } else if (c.type === 'text' && c.text) {
+          parts.push(c.text);
+        }
+      }
+      return parts.length > 0 ? parts.join('') : null;
     }
 
     return null;

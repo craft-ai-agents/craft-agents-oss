@@ -79,7 +79,7 @@ const USER_TYPE_LABELS: Record<string, { label: string; className: string }> = {
 function UserTypeBadge({ type }: { type: string }) {
   const cfg = USER_TYPE_LABELS[type] ?? { label: type, className: 'bg-foreground/10 text-foreground/70' }
   return (
-    <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', cfg.className)}>
+    <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-sm font-medium', cfg.className)}>
       {cfg.label}
     </span>
   )
@@ -105,7 +105,7 @@ function AddForm({ onAdd, submitting }: AddFormProps) {
   return (
     <div className="flex items-end gap-3 flex-wrap">
       <div className="flex flex-col gap-1">
-        <label className="text-xs text-foreground/60">工号</label>
+        <label className="text-sm text-foreground/60">工号</label>
         <input
           type="text"
           value={employeeId}
@@ -121,7 +121,7 @@ function AddForm({ onAdd, submitting }: AddFormProps) {
         />
       </div>
       <div className="flex flex-col gap-1">
-        <label className="text-xs text-foreground/60">权限类型</label>
+        <label className="text-sm text-foreground/60">权限类型</label>
         <select
           value={userType}
           onChange={(e) => setUserType(e.target.value as 'admin' | 'super_admin')}
@@ -136,7 +136,7 @@ function AddForm({ onAdd, submitting }: AddFormProps) {
         </select>
       </div>
       <div className="flex flex-col gap-1">
-        <label className="text-xs opacity-0 select-none">提交</label>
+        <label className="text-sm opacity-0 select-none">提交</label>
         <Button
           size="sm"
           disabled={submitting || !employeeId.trim()}
@@ -166,8 +166,8 @@ function PermissionRow({ record, deleting, onDelete }: PermissionRowProps) {
       <span className="w-32 shrink-0">
         <UserTypeBadge type={record.userType} />
       </span>
-      <span className="text-xs text-foreground/50 flex-1">{record.createTime}</span>
-      <span className="text-xs text-foreground/50 flex-1">{record.updateTime}</span>
+      <span className="text-sm text-foreground/50 flex-1">{record.createTime}</span>
+      <span className="text-sm text-foreground/50 flex-1">{record.updateTime}</span>
       <div className="w-20 shrink-0">
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
@@ -175,7 +175,7 @@ function PermissionRow({ record, deleting, onDelete }: PermissionRowProps) {
               type="button"
               disabled={deleting}
               className={cn(
-                'flex items-center gap-1 -mx-1 px-1 py-1 rounded-md text-xs text-destructive',
+                'flex items-center gap-1 -mx-1 px-1 py-1 rounded-md text-sm text-destructive',
                 'hover:bg-destructive/10 transition-colors disabled:opacity-40'
               )}
             >
@@ -184,12 +184,12 @@ function PermissionRow({ record, deleting, onDelete }: PermissionRowProps) {
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-3" side="top" align="end">
-            <p className="text-xs text-foreground/70 mb-2">确定删除 {record.employeeId} 的权限吗？</p>
+            <p className="text-sm text-foreground/70 mb-2">确定删除 {record.employeeId} 的权限吗？</p>
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-xs px-2 py-1 rounded-md hover:bg-foreground/5 text-foreground/50 transition-colors"
+                className="text-sm px-2 py-1 rounded-md hover:bg-foreground/5 text-foreground/50 transition-colors"
               >
                 取消
               </button>
@@ -197,7 +197,7 @@ function PermissionRow({ record, deleting, onDelete }: PermissionRowProps) {
                 type="button"
                 disabled={deleting}
                 onClick={() => { onDelete(record.employeeId); setOpen(false) }}
-                className="text-xs px-2 py-1 rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-40"
+                className="text-sm px-2 py-1 rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-40"
               >
                 删除
               </button>
@@ -329,7 +329,7 @@ export default function PermissionAdminPage() {
           <SettingsSection title="权限列表">
             <SettingsCard>
               {/* Table header */}
-              <div className="flex items-center gap-4 px-4 py-2 text-xs font-medium text-foreground/50 border-b border-border/50">
+              <div className="flex items-center gap-4 px-4 py-2 text-sm font-medium text-foreground/50 border-b border-border/50">
                 <span className="w-32 shrink-0">工号</span>
                 <span className="w-32 shrink-0">权限类型</span>
                 <span className="flex-1">创建时间</span>
@@ -352,7 +352,7 @@ export default function PermissionAdminPage() {
               )}
               {/* Pagination footer */}
               {list.length > 0 && (
-                <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/50 text-xs text-foreground/50">
+                <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/50 text-sm text-foreground/50">
                   <span>共 {list.length} 条</span>
                   <div className="flex items-center gap-2">
                     <button

@@ -113,9 +113,9 @@ export interface ContextBlockOptions {
   /** Whether local MCP is enabled */
   localMcpEnabled?: boolean;
   /** Pre-formatted team public knowledge policy block (null = disabled/no terms) */
-  teamKnowledgePolicy?: string | null;
+  teamPublicKnowledgePolicy?: string | null;
   /** Pre-formatted team public knowledge prefetch block (null = no matches) */
-  teamKnowledgePrefetchBlock?: string | null;
+  teamPublicKnowledgePrefetchBlock?: string | null;
 }
 
 /**
