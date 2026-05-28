@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from "react-i18next"
 import { Command as CommandPrimitive } from 'cmdk'
-import { Check, Minimize2 } from 'lucide-react'
+import { Check, ListChecks, Minimize2, Search, Trash2 } from 'lucide-react'
 import { Icon_Folder } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@craft-agent/shared/agent/modes'
@@ -10,7 +10,7 @@ import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } fr
 // Types
 // ============================================================================
 
-export type SlashCommandId = PermissionMode | 'compact'
+export type SlashCommandId = PermissionMode | 'compact' | 'win-shell-info' | 'win-processes' | 'win-cleanup'
 
 /** Union type for all item types in the slash menu */
 export type SlashItemType = 'command' | 'folder'
@@ -97,9 +97,33 @@ const compactCommand: SlashCommand = {
   icon: <Minimize2 className={MENU_ICON_SIZE} />,
 }
 
+const windowsShellInfoCommand: SlashCommand = {
+  id: 'win-shell-info',
+  label: 'Windows Shell Info',
+  description: 'Show discovered PowerShell and Windows shell data paths',
+  icon: <Search className={MENU_ICON_SIZE} />,
+}
+
+const windowsProcessesCommand: SlashCommand = {
+  id: 'win-processes',
+  label: 'Windows Processes',
+  description: 'Show tracked Windows background processes',
+  icon: <ListChecks className={MENU_ICON_SIZE} />,
+}
+
+const windowsCleanupCommand: SlashCommand = {
+  id: 'win-cleanup',
+  label: 'Windows Cleanup',
+  description: 'Clean up stale Windows process registry entries',
+  icon: <Trash2 className={MENU_ICON_SIZE} />,
+}
+
 export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
   ...permissionModeCommands,
   compactCommand,
+  windowsShellInfoCommand,
+  windowsProcessesCommand,
+  windowsCleanupCommand,
 ]
 
 export const DEFAULT_SLASH_COMMAND_GROUPS: CommandGroup[] = [
@@ -578,7 +602,12 @@ export function useInlineSlashCommand({
     result.push({
       id: 'commands',
       label: 'Commands',
-      items: [compactCommand],
+      items: [
+        compactCommand,
+        windowsShellInfoCommand,
+        windowsProcessesCommand,
+        windowsCleanupCommand,
+      ],
     })
 
     // Recent folders section - sorted alphabetically by folder name, show all

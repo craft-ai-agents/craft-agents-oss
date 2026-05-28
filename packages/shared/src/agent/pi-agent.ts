@@ -230,6 +230,12 @@ export class PiAgent extends BaseAgent {
     reject: (error: Error) => void;
   }> = new Map();
 
+  // Pending Windows shell slash command requests.
+  private pendingWindowsShellCommands: Map<string, {
+    resolve: (text: string) => void;
+    reject: (error: Error) => void;
+  }> = new Map();
+
   // Pending compact requests (manual compaction RPC)
   private pendingCompactions: Map<string, {
     resolve: (result: { summary: string; firstKeptEntryId: string; tokensBefore: number } | null) => void;
@@ -915,6 +921,10 @@ export class PiAgent extends BaseAgent {
       case 'ensure_session_ready_result':
         // Response to an ensure_session_ready request
         this.handleEnsureSessionReadyResult(msg);
+        break;
+
+      case 'windows_shell_command_result':
+        this.handleWindowsShellCommandResult(msg);
         break;
 
       case 'compact_result':
@@ -1608,6 +1618,20 @@ export class PiAgent extends BaseAgent {
     pending.resolve(sessionId);
   }
 
+  private handleWindowsShellCommandResult(msg: Record<string, unknown>): void {
+    const id = msg.id as string;
+    const pending = this.pendingWindowsShellCommands.get(id);
+    if (!pending) return;
+
+    this.pendingWindowsShellCommands.delete(id);
+    if (!msg.success) {
+      pending.reject(new Error(String(msg.errorMessage || 'Windows shell command failed')));
+      return;
+    }
+
+    pending.resolve(String(msg.text || ''));
+  }
+
   /**
    * Handle compact_result from subprocess.
    */
@@ -1714,6 +1738,11 @@ export class PiAgent extends BaseAgent {
     }
     this.pendingEnsureSessionReady.clear();
 
+    for (const [, pending] of this.pendingWindowsShellCommands) {
+      pending.reject(new Error(`Pi subprocess exited unexpectedly (${exitReason})`));
+    }
+    this.pendingWindowsShellCommands.clear();
+
     // Reject pending compact/toggle requests
     for (const [, pending] of this.pendingCompactions) {
       pending.reject(new Error(`Pi subprocess exited unexpectedly (${exitReason})`));
@@ -1768,6 +1797,38 @@ export class PiAgent extends BaseAgent {
       });
 
       this.send({ type: 'ensure_session_ready', id });
+    });
+  }
+
+  private async requestWindowsShellCommand(command: 'win-shell-info' | 'win-processes' | 'win-cleanup'): Promise<string> {
+    await this.ensureSubprocess();
+
+    const id = `windows-shell-command-${++this.rpcIdCounter}`;
+    const timeoutMs = 30_000;
+
+    return new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingWindowsShellCommands.delete(id);
+        reject(new Error(`${command} timed out after ${Math.floor(timeoutMs / 1000)}s`));
+      }, timeoutMs);
+
+      this.pendingWindowsShellCommands.set(id, {
+        resolve: (text) => {
+          clearTimeout(timer);
+          resolve(text);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+
+      this.send({
+        type: 'windows_shell_command',
+        id,
+        command,
+        cwd: this.config.session?.workingDirectory || this.config.workspace.rootPath,
+      });
     });
   }
 
@@ -1973,6 +2034,21 @@ export class PiAgent extends BaseAgent {
         } else {
           yield { type: 'info', message: 'Compacted context to fit within limits' };
         }
+        yield { type: 'complete' };
+        return;
+      }
+
+      const windowsCommandMatch = trimmedMessage.match(/^\/(win-shell-info|win-processes|win-cleanup)\s*$/i);
+      if (windowsCommandMatch) {
+        const rawCommand = windowsCommandMatch[1];
+        if (!rawCommand) {
+          yield { type: 'info', message: 'Unknown Windows shell command.' };
+          yield { type: 'complete' };
+          return;
+        }
+        const command = rawCommand.toLowerCase() as 'win-shell-info' | 'win-processes' | 'win-cleanup';
+        const text = await this.requestWindowsShellCommand(command);
+        yield { type: 'info', message: text || `${command} completed.` };
         yield { type: 'complete' };
         return;
       }

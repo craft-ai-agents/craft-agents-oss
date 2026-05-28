@@ -76,6 +76,8 @@ import { PI_TOOL_NAME_MAP, THINKING_ENABLED_TO_PI } from '../../shared/src/agent
 import { getDefaultSummarizationModel } from '../../shared/src/config/models.ts';
 import { ENV_CONNECTION_SSO_TOKEN_ENV_VAR } from '../../shared/src/config/llm-connections.ts';
 import { createWebFetchTool } from './tools/web-fetch.ts';
+import { createPowerShellTool } from './powershell-tool.ts';
+import { createWindowsProcessTools, runWindowsShellCommand, type WindowsShellCommandName } from './windows-process-tools.ts';
 import { resolveConfiguredGitBashShellPath } from './git-bash-shell.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
 import { applySystemPromptOverride } from './system-prompt-override.ts';
@@ -141,6 +143,7 @@ type InboundMessage =
   | { type: 'mini_completion'; id: string; prompt: string }
   | { type: 'llm_query'; id: string; request: LLMQueryRequest }
   | { type: 'ensure_session_ready'; id: string }
+  | { type: 'windows_shell_command'; id: string; command: WindowsShellCommandName; cwd?: string }
   | { type: 'set_model'; model: string }
   | { type: 'set_thinking_enabled'; enabled: boolean }
   | { type: 'compact'; id: string; customInstructions?: string }
@@ -197,6 +200,14 @@ interface OutboundLlmQueryResult {
   errorCode?: string;
 }
 interface OutboundEnsureSessionReadyResult { type: 'ensure_session_ready_result'; id: string; sessionId: string | null }
+interface OutboundWindowsShellCommandResult {
+  type: 'windows_shell_command_result';
+  id: string;
+  success: boolean;
+  text?: string;
+  details?: Record<string, unknown>;
+  errorMessage?: string;
+}
 interface OutboundCompactResult {
   type: 'compact_result';
   id: string;
@@ -230,6 +241,7 @@ type OutboundMessage =
   | OutboundMiniResult
   | OutboundLlmQueryResult
   | OutboundEnsureSessionReadyResult
+  | OutboundWindowsShellCommandResult
   | OutboundCompactResult
   | OutboundSetAutoCompactionResult
   | OutboundRuntimeConfigUpdateResult
@@ -555,11 +567,11 @@ async function ensureSession(): Promise<AgentSession> {
   // Store at module scope for set_model handler
   piModelRegistry = modelRegistry;
 
-  // Build tools: coding tools + fetch tool wrapped with permission hooks + proxy tools.
+  // Build tools: coding tools + server-local tools wrapped with permission hooks + proxy tools.
   const webFetchTool = createWebFetchTool(() =>
     initConfig ? getSessionPath(initConfig.workspaceRootPath, initConfig.sessionId) : null
   );
-  const webTools = [webFetchTool];
+  const serverTools = [webFetchTool, createPowerShellTool(), ...createWindowsProcessTools()];
 
   // Pi SDK 0.70.0 registration contract:
   //   - `customTools` accepts ToolDefinition[] — our hook-wrapped objects go here
@@ -581,9 +593,9 @@ async function ensureSession(): Promise<AgentSession> {
     createLsToolDefinition(cwd),
   ];
   const proxyTools = buildProxyTools();
-  const wrappedAll = wrapToolsWithHooks([...builtinDefs, ...webTools, ...proxyTools]);
+  const wrappedAll = wrapToolsWithHooks([...builtinDefs, ...serverTools, ...proxyTools]);
   const toolAllowlist = wrappedAll.map(t => t.name);
-  debugLog(`Session tools: ${builtinDefs.length} builtin + ${webTools.length} web + ${proxyTools.length} proxy = ${wrappedAll.length} total`);
+  debugLog(`Session tools: ${builtinDefs.length} builtin + ${serverTools.length} server + ${proxyTools.length} proxy = ${wrappedAll.length} total`);
 
   // Build session options
   const sessionOptions: CreateAgentSessionOptions = {
@@ -1476,6 +1488,26 @@ async function handleEnsureSessionReady(msg: Extract<InboundMessage, { type: 'en
   });
 }
 
+async function handleWindowsShellCommand(msg: Extract<InboundMessage, { type: 'windows_shell_command' }>): Promise<void> {
+  try {
+    const result = await runWindowsShellCommand(msg.command, msg.cwd || resolvedCwd());
+    send({
+      type: 'windows_shell_command_result',
+      id: msg.id,
+      success: true,
+      text: result.text,
+      details: result.details,
+    });
+  } catch (error) {
+    send({
+      type: 'windows_shell_command_result',
+      id: msg.id,
+      success: false,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 async function handleCompact(msg: Extract<InboundMessage, { type: 'compact' }>): Promise<void> {
   try {
     const session = await ensureSession();
@@ -1715,6 +1747,10 @@ async function processMessage(msg: InboundMessage): Promise<void> {
 
     case 'ensure_session_ready':
       await handleEnsureSessionReady(msg);
+      break;
+
+    case 'windows_shell_command':
+      await handleWindowsShellCommand(msg);
       break;
 
     case 'set_model':

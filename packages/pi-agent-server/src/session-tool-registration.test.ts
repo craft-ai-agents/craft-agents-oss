@@ -11,6 +11,8 @@ import {
   type CreateAgentSessionOptions,
 } from '@mariozechner/pi-coding-agent';
 import { createWebFetchTool } from './tools/web-fetch.ts';
+import { createPowerShellTool } from './powershell-tool.ts';
+import { createWindowsProcessTools } from './windows-process-tools.ts';
 
 /**
  * Regression contract for Pi SDK 0.70.0 tool registration.
@@ -47,6 +49,33 @@ describe('Pi subprocess tool shape contract', () => {
     expect(tool.name).toBe('web_fetch');
     expect(typeof tool.promptSnippet).toBe('string');
     expect((tool.promptSnippet as string).length).toBeGreaterThan(0);
+  });
+
+  it('createPowerShellTool returns a valid ToolDefinition with promptSnippet', () => {
+    const tool = createPowerShellTool();
+    assertValidToolDefinition(tool);
+    expect(tool.name).toBe('powershell');
+    expect(typeof tool.promptSnippet).toBe('string');
+    expect((tool.promptSnippet as string).length).toBeGreaterThan(0);
+  });
+
+  it('createWindowsProcessTools returns valid ToolDefinitions with promptSnippets', () => {
+    const tools = createWindowsProcessTools();
+    expect(tools.map(tool => tool.name)).toEqual([
+      'win_start_process',
+      'win_process_status',
+      'win_read_output',
+      'win_stop_process',
+      'win_list_processes',
+      'win_kill_port',
+      'win_which',
+      'win_cleanup_processes',
+    ]);
+    for (const tool of tools) {
+      assertValidToolDefinition(tool);
+      expect(typeof tool.promptSnippet).toBe('string');
+      expect((tool.promptSnippet as string).length).toBeGreaterThan(0);
+    }
   });
 
   it('Pi SDK builtin factories all return valid ToolDefinitions', () => {
@@ -95,6 +124,8 @@ describe('Pi SDK 0.70.0 CreateAgentSessionOptions contract', () => {
     // This is the invariant the subprocess must maintain when building sessionOptions.
     // If any customTool name is missing from `tools`, that tool gets filtered out.
     const webFetchTool = createWebFetchTool(() => null);
+    const powershellTool = createPowerShellTool();
+    const windowsProcessTools = createWindowsProcessTools();
     const customTools = [
       createReadToolDefinition('/tmp'),
       createBashToolDefinition('/tmp'),
@@ -104,6 +135,8 @@ describe('Pi SDK 0.70.0 CreateAgentSessionOptions contract', () => {
       createFindToolDefinition('/tmp'),
       createLsToolDefinition('/tmp'),
       webFetchTool,
+      powershellTool,
+      ...windowsProcessTools,
     ];
     const tools = customTools.map(t => t.name);
     const allowlistSet = new Set(tools);
