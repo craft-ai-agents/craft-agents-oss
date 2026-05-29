@@ -1454,5 +1454,7 @@
   "workspaceContextPage.statusBlocked": "Blocked",
   "workspaceContextPage.statusDone": "Done",
   "workspaceContextPage.statusNone": "(none)",
-  "workspaceContextPage.statusPaused": "Paused"
+  "workspaceContextPage.statusPaused": "Paused",
+  "settings.secrets.title": "Secrets",
+  "settings.secrets.description": "API keys and env vault"
 }

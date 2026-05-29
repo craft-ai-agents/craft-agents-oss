@@ -1,16 +1,82 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { execFile } from 'node:child_process'
 import { dirname } from 'path'
+import { promisify } from 'node:util'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel, resolveSelfEditTarget, validateSelfEditRepo } from '@craft-agent/shared/config'
 import { loadStoredConfig } from '@craft-agent/shared/config/storage'
 import { isValidThinkingLevel, normalizeThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
-
-const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
+import { getCredentialManager, isValidUserSecretName, normalizeUserSecretName } from '@craft-agent/shared/credentials'
 import { getWorkspaceOrThrow } from '@craft-agent/server-core/handlers'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 import { isValidWorkingDirectory } from '../../utils/path-validation'
+
+const execFileAsync = promisify(execFile)
+const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
+
+async function commandExists(command: string): Promise<string | null> {
+  if (process.platform !== 'win32') {
+    for (const entry of (process.env.PATH ?? '').split(':')) {
+      if (!entry) continue
+      const candidate = `${entry}/${command}`
+      if (existsSync(candidate)) return candidate
+    }
+  }
+
+  try {
+    const result = process.platform === 'win32'
+      ? await execFileAsync('where', [command])
+      : await execFileAsync('/usr/bin/env', ['which', command])
+    return result.stdout.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? null
+  } catch {
+    return null
+  }
+}
+
+async function applyStoredSecretsToProcessEnv(): Promise<void> {
+  const env = await getCredentialManager().exportUserSecretsEnv()
+  for (const [key, value] of Object.entries(env)) process.env[key] = value
+}
+
+async function getZeroCliStatus() {
+  const zeroPath = await commandExists('zero')
+  if (!zeroPath) {
+    return { installed: false, walletConfigured: Boolean(process.env.ZERO_PRIVATE_KEY), error: 'Zero CLI is not installed.' }
+  }
+
+  let version: string | undefined
+  let walletConfigured = Boolean(process.env.ZERO_PRIVATE_KEY)
+  let walletAddress: string | undefined
+  let balance: string | undefined
+  let error: string | undefined
+
+  try {
+    const result = await execFileAsync(zeroPath, ['--version'], { timeout: 10_000 })
+    version = result.stdout.trim() || result.stderr.trim() || undefined
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err)
+  }
+
+  try {
+    const result = await execFileAsync(zeroPath, ['wallet', 'address'], { timeout: 10_000 })
+    walletAddress = result.stdout.trim() || undefined
+    walletConfigured = walletConfigured || Boolean(walletAddress)
+  } catch {
+    // Missing wallet is normal before setup.
+  }
+
+  try {
+    const result = await execFileAsync(zeroPath, ['wallet', 'balance'], { timeout: 15_000 })
+    balance = result.stdout.trim() || undefined
+    walletConfigured = true
+  } catch {
+    // Balance requires wallet config; keep status non-fatal.
+  }
+
+  return { installed: true, version, path: zeroPath, walletConfigured, walletAddress, balance, error }
+}
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.SETTINGS_GET,
@@ -42,10 +108,61 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.tools.GET_BROWSER_TOOL_ENABLED,
   RPC_CHANNELS.tools.SET_BROWSER_TOOL_ENABLED,
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
+  RPC_CHANNELS.secrets.LIST,
+  RPC_CHANNELS.secrets.SAVE,
+  RPC_CHANNELS.secrets.DELETE,
+  RPC_CHANNELS.secrets.ZERO_STATUS,
+  RPC_CHANNELS.secrets.INSTALL_ZERO,
   RPC_CHANNELS.dialog.OPEN_FOLDER,
 ] as const
 
 export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): void {
+  void applyStoredSecretsToProcessEnv().catch((error) => {
+    deps.platform.logger.warn(`Failed to load stored secrets into environment: ${error instanceof Error ? error.message : String(error)}`)
+  })
+
+  server.handle(RPC_CHANNELS.secrets.LIST, async () => {
+    return getCredentialManager().listUserSecrets()
+  })
+
+  server.handle(RPC_CHANNELS.secrets.SAVE, async (_ctx, name: string, value: string) => {
+    const normalized = normalizeUserSecretName(name)
+    if (!isValidUserSecretName(normalized)) {
+      return { success: false, error: 'Use ENV_VAR format: uppercase letters, numbers, and underscores.' }
+    }
+    if (typeof value !== 'string' || value.length === 0) {
+      return { success: false, error: 'Secret value is required.' }
+    }
+    await getCredentialManager().setUserSecret(normalized, value)
+    process.env[normalized] = value
+    return { success: true }
+  })
+
+  server.handle(RPC_CHANNELS.secrets.DELETE, async (_ctx, name: string) => {
+    const normalized = normalizeUserSecretName(name)
+    const success = await getCredentialManager().deleteUserSecret(normalized)
+    delete process.env[normalized]
+    return { success }
+  })
+
+  server.handle(RPC_CHANNELS.secrets.ZERO_STATUS, async () => {
+    await applyStoredSecretsToProcessEnv()
+    return getZeroCliStatus()
+  })
+
+  server.handle(RPC_CHANNELS.secrets.INSTALL_ZERO, async () => {
+    try {
+      const npmPath = await commandExists('npm')
+      if (!npmPath) {
+        return { success: false, error: 'npm is required to install Zero CLI. Install Node.js/npm, then try again.' }
+      }
+      await execFileAsync(npmPath, ['i', '-g', '@zeroxyz/cli'], { timeout: 120_000 })
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
   // ============================================================
   // Settings - Default Thinking Level (App-Level)
   // ============================================================

@@ -54,6 +54,18 @@ export type { AuthState, SetupNeeds, AuthType };
 // Credential health types
 import type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType } from '@craft-agent/shared/credentials/types';
 export type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType };
+import type { UserSecretSummary } from '@craft-agent/shared/credentials';
+export type { UserSecretSummary };
+
+export interface ZeroStatus {
+  installed: boolean
+  version?: string
+  path?: string
+  walletConfigured: boolean
+  walletAddress?: string
+  balance?: string
+  error?: string
+}
 
 // Source types for session source selection
 import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, SourceTier } from '@craft-agent/shared/sources/types';
@@ -475,6 +487,11 @@ export interface ElectronAPI {
 
   // Credential health check (startup validation)
   getCredentialHealth(): Promise<CredentialHealthStatus>
+  listSecrets(): Promise<UserSecretSummary[]>
+  saveSecret(name: string, value: string): Promise<{ success: boolean; error?: string }>
+  deleteSecret(name: string): Promise<{ success: boolean }>
+  getZeroStatus(): Promise<ZeroStatus>
+  installZero(): Promise<{ success: boolean; error?: string }>
 
   // Onboarding
   getAuthState(): Promise<AuthState>

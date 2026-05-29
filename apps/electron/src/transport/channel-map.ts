@@ -123,6 +123,13 @@ export const CHANNEL_MAP = {
   logout: invoke(RPC_CHANNELS.auth.LOGOUT),
   getCredentialHealth: invoke(RPC_CHANNELS.credentials.HEALTH_CHECK),
 
+  // Secrets / app env vault
+  listSecrets: invoke(RPC_CHANNELS.secrets.LIST),
+  saveSecret: invoke(RPC_CHANNELS.secrets.SAVE),
+  deleteSecret: invoke(RPC_CHANNELS.secrets.DELETE),
+  getZeroStatus: invoke(RPC_CHANNELS.secrets.ZERO_STATUS),
+  installZero: invoke(RPC_CHANNELS.secrets.INSTALL_ZERO),
+
   // Onboarding
   getAuthState: invoke(RPC_CHANNELS.onboarding.GET_AUTH_STATE),
   getSetupNeeds: invoke(RPC_CHANNELS.onboarding.GET_AUTH_STATE, r => r.setupNeeds),

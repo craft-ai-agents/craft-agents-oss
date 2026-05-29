@@ -164,6 +164,13 @@ export const RPC_CHANNELS = {
   credentials: {
     HEALTH_CHECK: 'credentials:healthCheck',
   },
+  secrets: {
+    LIST: 'secrets:list',
+    SAVE: 'secrets:save',
+    DELETE: 'secrets:delete',
+    ZERO_STATUS: 'secrets:zeroStatus',
+    INSTALL_ZERO: 'secrets:installZero',
+  },
   onboarding: {
     GET_AUTH_STATE: 'onboarding:getAuthState',
     VALIDATE_MCP: 'onboarding:validateMcp',

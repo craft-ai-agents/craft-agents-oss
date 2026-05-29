@@ -10,6 +10,7 @@ interface SettingsPageSwitcherProps {
 
 const PRIMARY_ORDER: SettingsSubpage[] = [
   'ai',
+  'secrets',
   'appearance',
   'app',
   'workspace',

@@ -12,6 +12,30 @@ import { SecureStorageBackend } from './backends/secure-storage.ts';
 import { EnvironmentBackend } from './backends/env.ts';
 import { debug } from '../utils/debug.ts';
 
+export interface UserSecretSummary {
+  name: string;
+  maskedValue: string;
+  source?: 'native' | 'cli' | 'environment';
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+const USER_SECRET_NAME_RE = /^[A-Z_][A-Z0-9_]*$/;
+
+export function normalizeUserSecretName(name: string): string {
+  return name.trim().toUpperCase();
+}
+
+export function isValidUserSecretName(name: string): boolean {
+  return USER_SECRET_NAME_RE.test(name);
+}
+
+export function maskSecretValue(value: string): string {
+  if (!value) return '';
+  if (value.length <= 8) return '••••';
+  return `${value.slice(0, 4)}••••${value.slice(-4)}`;
+}
+
 export class CredentialManager {
   private backends: CredentialBackend[] = [];
   private writeBackend: CredentialBackend | null = null;
@@ -167,6 +191,66 @@ export class CredentialManager {
     }
 
     return results;
+  }
+
+  async getUserSecret(name: string): Promise<string | null> {
+    const normalized = normalizeUserSecretName(name);
+    if (!isValidUserSecretName(normalized)) return null;
+    const cred = await this.get({ type: 'user_secret', name: normalized });
+    return cred?.value || null;
+  }
+
+  async setUserSecret(name: string, value: string): Promise<void> {
+    const normalized = normalizeUserSecretName(name);
+    if (!isValidUserSecretName(normalized)) {
+      throw new Error('Secret names must use ENV_VAR format: uppercase letters, numbers, and underscores.');
+    }
+    const now = Date.now();
+    const existing = await this.get({ type: 'user_secret', name: normalized });
+    await this.set({ type: 'user_secret', name: normalized }, {
+      value,
+      source: 'native',
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    } as StoredCredential);
+  }
+
+  async deleteUserSecret(name: string): Promise<boolean> {
+    const normalized = normalizeUserSecretName(name);
+    if (!isValidUserSecretName(normalized)) return false;
+    return this.delete({ type: 'user_secret', name: normalized });
+  }
+
+  async listUserSecrets(): Promise<UserSecretSummary[]> {
+    const ids = await this.list({ type: 'user_secret' });
+    const summaries = await Promise.all(ids
+      .filter((id) => id.name && isValidUserSecretName(id.name))
+      .map(async (id): Promise<UserSecretSummary | null> => {
+        const cred = await this.get(id);
+        if (!cred || !id.name) return null;
+        const summary: UserSecretSummary = {
+          name: id.name,
+          maskedValue: maskSecretValue(cred.value),
+          source: cred.source,
+          createdAt: cred.createdAt,
+          updatedAt: cred.updatedAt,
+        };
+        return summary;
+      }));
+    return summaries
+      .filter((summary): summary is UserSecretSummary => Boolean(summary))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async exportUserSecretsEnv(): Promise<Record<string, string>> {
+    const ids = await this.list({ type: 'user_secret' });
+    const env: Record<string, string> = {};
+    await Promise.all(ids.map(async (id) => {
+      if (!id.name || !isValidUserSecretName(id.name)) return;
+      const cred = await this.get(id);
+      if (cred?.value) env[id.name] = cred.value;
+    }));
+    return env;
   }
 
   // ============================================================

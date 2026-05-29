@@ -32,6 +32,7 @@ export type CredentialType =
   | 'source_bearer'      // Bearer tokens
   | 'source_apikey'      // API keys
   | 'source_basic'       // Basic auth (base64 encoded user:pass)
+  | 'user_secret'        // User-managed app env secret, keyed by env var name
   // Messaging gateway credentials (keyed by workspaceId + platform)
   | 'messaging_bearer';  // Platform tokens (e.g., Telegram bot token)
 
@@ -48,6 +49,7 @@ const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'source_bearer',
   'source_apikey',
   'source_basic',
+  'user_secret',
   'messaging_bearer',
 ] as const;
 
@@ -128,6 +130,10 @@ export interface StoredCredential {
 
   /** When true at workspace tier, suppress fallback to the global tier on load. */
   override?: boolean;
+  /** Creation time for generic secret UI metadata. */
+  createdAt?: number;
+  /** Last update time for generic secret UI metadata. */
+  updatedAt?: number;
 }
 
 // Using "::" as delimiter instead of "/" because server names and API names
@@ -170,6 +176,10 @@ function isLlmCredential(type: CredentialType): boolean {
   return (LLM_CREDENTIAL_TYPES as readonly string[]).includes(type);
 }
 
+function isUserSecretCredential(type: CredentialType): boolean {
+  return type === 'user_secret';
+}
+
 /** Convert CredentialId to credential store account string */
 export function credentialIdToAccount(id: CredentialId): string {
   const parts: string[] = [id.type];
@@ -194,6 +204,13 @@ export function credentialIdToAccount(id: CredentialId): string {
   if (isSourceCredential(id.type) && id.workspaceId && id.sourceId) {
     parts.push(id.workspaceId);
     parts.push(id.sourceId);
+    return parts.join(CREDENTIAL_DELIMITER);
+  }
+
+  // User-managed app env secret:
+  // user_secret::{ENV_VAR_NAME}
+  if (isUserSecretCredential(id.type) && id.name) {
+    parts.push(id.name);
     return parts.join(CREDENTIAL_DELIMITER);
   }
 
@@ -265,6 +282,12 @@ export function accountToCredentialId(account: string): CredentialId | null {
   // Source credentials: source_oauth::{workspaceId}::{sourceId}
   if (isSourceCredential(type) && parts.length === 3) {
     return { type, workspaceId: parts[1], sourceId: parts[2] };
+  }
+
+  // User-managed app env secret:
+  // user_secret::{ENV_VAR_NAME}
+  if (isUserSecretCredential(type) && parts.length === 2) {
+    return { type, name: parts[1] };
   }
 
   // Messaging-scoped format:
