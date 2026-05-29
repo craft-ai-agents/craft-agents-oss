@@ -214,6 +214,14 @@ export interface SendMessageOptions {
   skillSlugs?: string[]
   badges?: ContentBadge[]
   optimisticMessageId?: string
+  /**
+   * Caller-supplied idempotency key. When set, the server dedupes a repeat send
+   * with the same {sessionId, idempotencyKey} BEFORE starting a turn: it re-acks
+   * the prior messageId (with `deduped: true`) instead of persisting a second
+   * user message or running the model again. Survives reconnects within a server
+   * process lifetime; NOT a server restart (in-memory map). See SessionManager.
+   */
+  idempotencyKey?: string
 }
 
 // ---------------------------------------------------------------------------

@@ -771,6 +771,12 @@ interface ManagedSession {
   // Incremented each time a new message starts processing.
   // Used to detect if a follow-up message has superseded the current one (stale-request guard).
   processingGeneration: number
+  // Caller-supplied idempotency keys accepted during this session's in-memory
+  // lifetime -> the messageId we acked for them. A repeat send with the same key
+  // re-acks the prior messageId instead of starting a second turn (see sendMessage).
+  // Lives in memory: survives WS reconnects (server process unchanged) but NOT a
+  // server restart. Lazily created on first keyed send.
+  idempotencyResults?: Map<string, string>  // key -> messageId
   // NOTE: Parent-child tracking state (pendingTools, parentToolStack, toolToParentMap,
   // pendingTextParent) has been removed. CraftAgent now provides parentToolUseId
   // directly on all events using the SDK's authoritative parent_tool_use_id field.
@@ -5426,8 +5432,12 @@ export class SessionManager implements ISessionManager {
      * work begins. The RPC handler uses this to send a synchronous "accepted"
      * ack to the client so a crash mid-stream doesn't lose the user message
      * (#616). Pre-persist errors still reject the outer promise as before.
+     *
+     * `deduped` is true only when this ack is a replay of a prior send that
+     * carried the same idempotencyKey — no new user message was persisted and no
+     * model turn was started. Fresh sends ack with `deduped` falsy.
      */
-    onAck?: (messageId: string) => void,
+    onAck?: (messageId: string, deduped?: boolean) => void,
     /**
      * Optional transport context. The `sessions.sendMessage` RPC handler passes
      * `{ callerClientId: ctx.clientId }` so the SM can pin the desktop client
@@ -5441,6 +5451,30 @@ export class SessionManager implements ISessionManager {
       throw new Error(`Session ${sessionId} not found`)
     }
     this.setLastMessageClientId(sessionId, rpcContext?.callerClientId)
+
+    // Server-enforced idempotency. A caller-supplied key (options.idempotencyKey)
+    // dedupes a repeat send with the same {sessionId, key} BEFORE any persist or
+    // turn-start: we re-ack the prior messageId and return without running the
+    // model again. Lives in SessionManager (not the RPC handler) so EVERY caller
+    // — RPC and intra-server — is deduped. The mapping is recorded post-persist at
+    // each onAck site below. In-memory only (survives reconnects, not a restart);
+    // the realistic trigger is crash-and-retry (sequential), so a genuinely
+    // concurrent same-key double-send is a known v1 limitation.
+    //
+    // Gated on !existingMessageId: an internal queued-message replay
+    // (processNextQueuedMessage) re-enters sendMessage with the SAME options
+    // (hence same key) plus existingMessageId. That message was already acked +
+    // key-recorded at enqueue time and now needs to actually run the model, so it
+    // must NOT be treated as a duplicate. Only fresh external sends dedupe.
+    const idempotencyKey = options?.idempotencyKey
+    if (idempotencyKey && !existingMessageId) {
+      const prior = managed.idempotencyResults?.get(idempotencyKey)
+      if (prior) {
+        sessionLog.info(`sendMessage: deduped idempotency key ${idempotencyKey} -> ${prior} for ${sessionId}`)
+        onAck?.(prior, true)
+        return
+      }
+    }
 
     // Source-activation auto-retry dedup (craft-agents-oss#804). When the server
     // has just scheduled or committed a "[<slug> activated]" retry, drop a matching
@@ -5528,6 +5562,9 @@ export class SessionManager implements ISessionManager {
       // before we tell the renderer "accepted" — `persistSession` only
       // enqueues with a 500ms debounce. (#616 reliability fix.)
       await this.flushSession(managed.id)
+      // Record the idempotency mapping AFTER persist so a same-key retry that
+      // arrives later re-acks this message instead of starting a fresh turn.
+      if (idempotencyKey) (managed.idempotencyResults ??= new Map()).set(idempotencyKey, userMessage.id)
       onAck?.(userMessage.id)
       return
     }
@@ -5561,6 +5598,9 @@ export class SessionManager implements ISessionManager {
       // `persistSession` is debounced (500ms). #616.
       this.persistSession(managed)
       await this.flushSession(managed.id)
+      // Record the idempotency mapping AFTER persist so a same-key retry that
+      // arrives later re-acks this message instead of starting a fresh turn.
+      if (idempotencyKey) (managed.idempotencyResults ??= new Map()).set(idempotencyKey, userMessage.id)
       onAck?.(userMessage.id)
 
       // Emit user_message event so UI can confirm the optimistic message

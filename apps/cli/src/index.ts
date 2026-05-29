@@ -602,6 +602,8 @@ interface AskControlHeader {
   complete: boolean
   timedOut: boolean
   success: boolean
+  /** True when the server deduped this send (same idempotencyKey as a prior). */
+  deduped?: boolean
 }
 
 interface AskResult {
@@ -721,7 +723,13 @@ async function cmdAsk(client: CliRpcClient, args: CliArgs): Promise<void> {
   })
 
   // Fire the message — returns immediately while the agent works server-side.
-  await client.invoke('sessions:sendMessage', sessionId, message)
+  // Forward --correlation-id as the server idempotency key so a crash-and-retry
+  // with the same id is deduped at the server (complements the client-side
+  // --dedupe-dir fast path, which short-circuits before we ever connect).
+  const sendResult = (await client.invoke('sessions:sendMessage', sessionId, message,
+    undefined, undefined,
+    args.correlationId ? { idempotencyKey: args.correlationId } : undefined
+  )) as { accepted: true; messageId: string; deduped?: boolean }
 
   // Bounded wait — ALWAYS exits at the deadline, never an unbounded await.
   const deadline = Date.now() + args.askTimeout
@@ -765,6 +773,7 @@ async function cmdAsk(client: CliRpcClient, args: CliArgs): Promise<void> {
       complete: completed,
       timedOut: !completed,
       success,
+      ...(sendResult.deduped ? { deduped: true } : {}),
     },
     payload: textOf(final),
   }
