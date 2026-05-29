@@ -1936,6 +1936,9 @@ export class SessionManager implements ISessionManager {
     const stored = loadStoredSession(managed.workspace.rootPath, managed.id)
     if (stored) {
       managed.messages = (stored.messages || []).map(storedToMessage)
+      // Rebuild the idempotency dedupe map from disk (see rebuildIdempotencyResults)
+      // so server-enforced idempotency survives a restart on this path too.
+      this.rebuildIdempotencyResults(managed)
       managed.tokenUsage = stored.tokenUsage
       // Deferred-load fields (intentionally undefined after startup, see
       // loadSessionsFromDisk). Populate from disk only if not already set in
@@ -2428,6 +2431,11 @@ export class SessionManager implements ISessionManager {
       managed.transferredSessionSummaryApplied = storedSession.transferredSessionSummaryApplied
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
 
+      // Rebuild the in-memory idempotency dedupe map from disk so a same-key
+      // retry that arrives AFTER a server restart still re-acks the original
+      // message instead of starting a fresh turn.
+      this.rebuildIdempotencyResults(managed)
+
       // Queue recovery: find orphaned queued messages from crash/restart and re-queue them
       const orphanedQueued = managed.messages.filter(m =>
         m.role === 'user' && m.isQueued === true
@@ -2453,6 +2461,27 @@ export class SessionManager implements ISessionManager {
       }
     }
     managed.messagesLoaded = true
+  }
+
+  /**
+   * Rebuild the per-session idempotency dedupe map (key -> messageId) from the
+   * messages just loaded from durable storage. Called from every session-load /
+   * hydrate path AFTER `managed.messages` is populated and BEFORE any new send
+   * can dedupe (sends go through ensureMessagesLoaded first). This makes
+   * server-enforced idempotency survive a restart: a persisted user message that
+   * carries an `idempotencyKey` repopulates the mapping it would have had in
+   * memory before the crash. If two persisted messages share a key (should not
+   * happen — the gate prevents a second persist), the earliest one wins, matching
+   * the in-memory "first send recorded, retries dedupe to it" semantics.
+   */
+  private rebuildIdempotencyResults(managed: ManagedSession): void {
+    for (const msg of managed.messages) {
+      if (msg.role !== 'user' || !msg.idempotencyKey) continue
+      managed.idempotencyResults ??= new Map()
+      if (!managed.idempotencyResults.has(msg.idempotencyKey)) {
+        managed.idempotencyResults.set(msg.idempotencyKey, msg.id)
+      }
+    }
   }
 
   /**
@@ -5535,6 +5564,9 @@ export class SessionManager implements ISessionManager {
         timestamp: this.monotonic(),
         attachments: storedAttachments,
         badges: options?.badges,
+        // Stamp the idempotency key so it round-trips to disk and the dedupe map
+        // can be rebuilt on session load after a restart.
+        ...(idempotencyKey ? { idempotencyKey } : {}),
       }
       managed.messages.push(userMessage)
 
@@ -5587,6 +5619,9 @@ export class SessionManager implements ISessionManager {
         timestamp: this.monotonic(),
         attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
         badges: options?.badges,  // Include content badges (sources, skills with embedded icons)
+        // Stamp the idempotency key so it round-trips to disk and the dedupe map
+        // can be rebuilt on session load after a restart.
+        ...(idempotencyKey ? { idempotencyKey } : {}),
       }
       managed.messages.push(userMessage)
 

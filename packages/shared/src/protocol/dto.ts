@@ -218,8 +218,10 @@ export interface SendMessageOptions {
    * Caller-supplied idempotency key. When set, the server dedupes a repeat send
    * with the same {sessionId, idempotencyKey} BEFORE starting a turn: it re-acks
    * the prior messageId (with `deduped: true`) instead of persisting a second
-   * user message or running the model again. Survives reconnects within a server
-   * process lifetime; NOT a server restart (in-memory map). See SessionManager.
+   * user message or running the model again. The key is stamped onto the persisted
+   * user message (Message.idempotencyKey in @craft-agent/core), so the dedupe map
+   * is rebuilt from disk on session load and survives a server restart. See
+   * SessionManager.
    */
   idempotencyKey?: string
 }
