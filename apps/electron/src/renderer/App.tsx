@@ -1063,8 +1063,23 @@ export default function App() {
 
   // Auto-delete handler for empty sessions (fire-and-forget, no confirmation)
   const handleAutoDeleteEmptySession = useCallback((sessionId: string) => {
-    window.electronAPI.deleteSession(sessionId)
-    removeSession(sessionId)
+    window.electronAPI.getSessionMessages(sessionId)
+      .then((session) => {
+        if (!session) {
+          removeSession(sessionId)
+          return
+        }
+
+        const messageCount = session.messageCount ?? session.messages?.length ?? 0
+        const isEmpty = messageCount === 0 && !session.isProcessing
+        if (!isEmpty) return
+
+        return window.electronAPI.deleteSession(sessionId)
+          .then(() => removeSession(sessionId))
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to verify empty session before auto-delete:', error)
+      })
   }, [removeSession])
 
   const handleFlagSession = useCallback((sessionId: string) => {
