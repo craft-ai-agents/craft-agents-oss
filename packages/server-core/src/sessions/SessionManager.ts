@@ -171,6 +171,12 @@ const MAX_ADMIN_REMEMBER_MINUTES = 60
 const MAX_ANNOTATIONS_PER_MESSAGE = 200
 const MAX_ANNOTATION_JSON_BYTES = 32 * 1024
 
+// Cadence of the in-turn liveness heartbeat (see startHeartbeat). Long-but-alive
+// turns (e.g. a 77s team spawn) emit this so clients can distinguish liveness
+// from a stall and extend their bounded wait. Kept well under typical client
+// ask-timeout windows so several heartbeats land before any deadline.
+const HEARTBEAT_INTERVAL_MS = 12_000
+
 // Window during which fs.watch metadata-revert events from our own atomic write
 // are ignored, so the watcher does not roll back the in-memory mutation we
 // just persisted. See onSessionMetadataChange.
@@ -766,11 +772,19 @@ interface ManagedSession {
   isProcessing: boolean
   /** Set when user requests stop - allows event loop to drain before clearing isProcessing */
   stopRequested?: boolean
+  /** Liveness heartbeat interval, running while isProcessing is true. Cleared on turn end. */
+  heartbeatTimer?: ReturnType<typeof setInterval>
   lastMessageAt: number
   streamingText: string
   // Incremented each time a new message starts processing.
   // Used to detect if a follow-up message has superseded the current one (stale-request guard).
   processingGeneration: number
+  // Caller-supplied idempotency keys accepted during this session's in-memory
+  // lifetime -> the messageId we acked for them. A repeat send with the same key
+  // re-acks the prior messageId instead of starting a second turn (see sendMessage).
+  // Lives in memory: survives WS reconnects (server process unchanged) but NOT a
+  // server restart. Lazily created on first keyed send.
+  idempotencyResults?: Map<string, string>  // key -> messageId
   // NOTE: Parent-child tracking state (pendingTools, parentToolStack, toolToParentMap,
   // pendingTextParent) has been removed. CraftAgent now provides parentToolUseId
   // directly on all events using the SDK's authoritative parent_tool_use_id field.
@@ -1171,8 +1185,42 @@ export class SessionManager implements ISessionManager {
     managed.isProcessing = processing
     if (!was && processing) {
       sessionRuntimeHooks.onSessionStarted()
+      this.startHeartbeat(managed)
     } else if (was && !processing) {
       sessionRuntimeHooks.onSessionStopped()
+      this.stopHeartbeat(managed)
+    }
+  }
+
+  /**
+   * While a turn is in progress, emit a lightweight workspace-scoped liveness
+   * event every HEARTBEAT_INTERVAL_MS so a long-but-alive turn is provably
+   * distinct from a stall. Cleaned up on any turn end (complete / interrupted /
+   * error / timeout / plan+auth handoff) because every path routes through
+   * setProcessing(managed, false).
+   */
+  private startHeartbeat(managed: ManagedSession): void {
+    // Defensive: never leak a prior timer.
+    this.stopHeartbeat(managed)
+    managed.heartbeatTimer = setInterval(() => {
+      // Stop self if processing ended without setProcessing(false) somehow.
+      if (!managed.isProcessing) {
+        this.stopHeartbeat(managed)
+        return
+      }
+      this.sendEvent(
+        { type: 'heartbeat', sessionId: managed.id, ts: Date.now() },
+        managed.workspace.id,
+      )
+    }, HEARTBEAT_INTERVAL_MS)
+    // Don't keep the process alive solely for the heartbeat.
+    managed.heartbeatTimer.unref?.()
+  }
+
+  private stopHeartbeat(managed: ManagedSession): void {
+    if (managed.heartbeatTimer) {
+      clearInterval(managed.heartbeatTimer)
+      managed.heartbeatTimer = undefined
     }
   }
 
@@ -1930,6 +1978,9 @@ export class SessionManager implements ISessionManager {
     const stored = loadStoredSession(managed.workspace.rootPath, managed.id)
     if (stored) {
       managed.messages = (stored.messages || []).map(storedToMessage)
+      // Rebuild the idempotency dedupe map from disk (see rebuildIdempotencyResults)
+      // so server-enforced idempotency survives a restart on this path too.
+      this.rebuildIdempotencyResults(managed)
       managed.tokenUsage = stored.tokenUsage
       // Deferred-load fields (intentionally undefined after startup, see
       // loadSessionsFromDisk). Populate from disk only if not already set in
@@ -2422,6 +2473,11 @@ export class SessionManager implements ISessionManager {
       managed.transferredSessionSummaryApplied = storedSession.transferredSessionSummaryApplied
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
 
+      // Rebuild the in-memory idempotency dedupe map from disk so a same-key
+      // retry that arrives AFTER a server restart still re-acks the original
+      // message instead of starting a fresh turn.
+      this.rebuildIdempotencyResults(managed)
+
       // Queue recovery: find orphaned queued messages from crash/restart and re-queue them
       const orphanedQueued = managed.messages.filter(m =>
         m.role === 'user' && m.isQueued === true
@@ -2447,6 +2503,27 @@ export class SessionManager implements ISessionManager {
       }
     }
     managed.messagesLoaded = true
+  }
+
+  /**
+   * Rebuild the per-session idempotency dedupe map (key -> messageId) from the
+   * messages just loaded from durable storage. Called from every session-load /
+   * hydrate path AFTER `managed.messages` is populated and BEFORE any new send
+   * can dedupe (sends go through ensureMessagesLoaded first). This makes
+   * server-enforced idempotency survive a restart: a persisted user message that
+   * carries an `idempotencyKey` repopulates the mapping it would have had in
+   * memory before the crash. If two persisted messages share a key (should not
+   * happen — the gate prevents a second persist), the earliest one wins, matching
+   * the in-memory "first send recorded, retries dedupe to it" semantics.
+   */
+  private rebuildIdempotencyResults(managed: ManagedSession): void {
+    for (const msg of managed.messages) {
+      if (msg.role !== 'user' || !msg.idempotencyKey) continue
+      managed.idempotencyResults ??= new Map()
+      if (!managed.idempotencyResults.has(msg.idempotencyKey)) {
+        managed.idempotencyResults.set(msg.idempotencyKey, msg.id)
+      }
+    }
   }
 
   /**
@@ -5426,8 +5503,12 @@ export class SessionManager implements ISessionManager {
      * work begins. The RPC handler uses this to send a synchronous "accepted"
      * ack to the client so a crash mid-stream doesn't lose the user message
      * (#616). Pre-persist errors still reject the outer promise as before.
+     *
+     * `deduped` is true only when this ack is a replay of a prior send that
+     * carried the same idempotencyKey — no new user message was persisted and no
+     * model turn was started. Fresh sends ack with `deduped` falsy.
      */
-    onAck?: (messageId: string) => void,
+    onAck?: (messageId: string, deduped?: boolean) => void,
     /**
      * Optional transport context. The `sessions.sendMessage` RPC handler passes
      * `{ callerClientId: ctx.clientId }` so the SM can pin the desktop client
@@ -5441,6 +5522,30 @@ export class SessionManager implements ISessionManager {
       throw new Error(`Session ${sessionId} not found`)
     }
     this.setLastMessageClientId(sessionId, rpcContext?.callerClientId)
+
+    // Server-enforced idempotency. A caller-supplied key (options.idempotencyKey)
+    // dedupes a repeat send with the same {sessionId, key} BEFORE any persist or
+    // turn-start: we re-ack the prior messageId and return without running the
+    // model again. Lives in SessionManager (not the RPC handler) so EVERY caller
+    // — RPC and intra-server — is deduped. The mapping is recorded post-persist at
+    // each onAck site below. In-memory only (survives reconnects, not a restart);
+    // the realistic trigger is crash-and-retry (sequential), so a genuinely
+    // concurrent same-key double-send is a known v1 limitation.
+    //
+    // Gated on !existingMessageId: an internal queued-message replay
+    // (processNextQueuedMessage) re-enters sendMessage with the SAME options
+    // (hence same key) plus existingMessageId. That message was already acked +
+    // key-recorded at enqueue time and now needs to actually run the model, so it
+    // must NOT be treated as a duplicate. Only fresh external sends dedupe.
+    const idempotencyKey = options?.idempotencyKey
+    if (idempotencyKey && !existingMessageId) {
+      const prior = managed.idempotencyResults?.get(idempotencyKey)
+      if (prior) {
+        sessionLog.info(`sendMessage: deduped idempotency key ${idempotencyKey} -> ${prior} for ${sessionId}`)
+        onAck?.(prior, true)
+        return
+      }
+    }
 
     // Source-activation auto-retry dedup (craft-agents-oss#804). When the server
     // has just scheduled or committed a "[<slug> activated]" retry, drop a matching
@@ -5501,6 +5606,9 @@ export class SessionManager implements ISessionManager {
         timestamp: this.monotonic(),
         attachments: storedAttachments,
         badges: options?.badges,
+        // Stamp the idempotency key so it round-trips to disk and the dedupe map
+        // can be rebuilt on session load after a restart.
+        ...(idempotencyKey ? { idempotencyKey } : {}),
       }
       managed.messages.push(userMessage)
 
@@ -5528,6 +5636,9 @@ export class SessionManager implements ISessionManager {
       // before we tell the renderer "accepted" — `persistSession` only
       // enqueues with a 500ms debounce. (#616 reliability fix.)
       await this.flushSession(managed.id)
+      // Record the idempotency mapping AFTER persist so a same-key retry that
+      // arrives later re-acks this message instead of starting a fresh turn.
+      if (idempotencyKey) (managed.idempotencyResults ??= new Map()).set(idempotencyKey, userMessage.id)
       onAck?.(userMessage.id)
       return
     }
@@ -5550,6 +5661,9 @@ export class SessionManager implements ISessionManager {
         timestamp: this.monotonic(),
         attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
         badges: options?.badges,  // Include content badges (sources, skills with embedded icons)
+        // Stamp the idempotency key so it round-trips to disk and the dedupe map
+        // can be rebuilt on session load after a restart.
+        ...(idempotencyKey ? { idempotencyKey } : {}),
       }
       managed.messages.push(userMessage)
 
@@ -5561,6 +5675,9 @@ export class SessionManager implements ISessionManager {
       // `persistSession` is debounced (500ms). #616.
       this.persistSession(managed)
       await this.flushSession(managed.id)
+      // Record the idempotency mapping AFTER persist so a same-key retry that
+      // arrives later re-acks this message instead of starting a fresh turn.
+      if (idempotencyKey) (managed.idempotencyResults ??= new Map()).set(idempotencyKey, userMessage.id)
       onAck?.(userMessage.id)
 
       // Emit user_message event so UI can confirm the optimistic message
