@@ -97,6 +97,18 @@ import {
 } from './model-picker-helpers'
 import { useModelVisionToggle } from './useModelVisionToggle'
 
+function dedupModelsById<T extends string | ModelDefinition>(models: T[]): T[] {
+  const seen = new Set<string>()
+  const result: T[] = []
+  for (const m of models) {
+    const id = typeof m === 'string' ? m : m.id
+    if (seen.has(id)) continue
+    seen.add(id)
+    result.push(m)
+  }
+  return result
+}
+
 function formatFollowUpChipText(text: string, fallback: string, maxLength = 50): string {
   const normalized = text.replace(/\s+/g, ' ').trim()
   if (!normalized) return fallback
@@ -369,7 +381,7 @@ export function FreeFormInput({
       return ANTHROPIC_MODELS // Safety net — shouldn't happen
     }
 
-    return connection.models || ANTHROPIC_MODELS
+    return dedupModelsById(connection.models || ANTHROPIC_MODELS)
   }, [llmConnections, currentConnection, workspaceDefaultConnection, connectionUnavailable])
 
   const availableThinkingLevels = THINKING_LEVELS
@@ -2164,7 +2176,7 @@ export function FreeFormInput({
                           {isAuthenticated && (
                             <StyledDropdownMenuSubContent className="min-w-[220px]">
                               {/* Show models for this connection - use provider-specific models as fallback */}
-                              {(conn.models || ANTHROPIC_MODELS).map((model) => {
+                              {dedupModelsById(conn.models || ANTHROPIC_MODELS).map((model) => {
                                 const modelId = typeof model === 'string' ? model : model.id
                                 const modelName = typeof model === 'string'
                                   ? stripPiPrefixForDisplay(getModelShortName(model))
