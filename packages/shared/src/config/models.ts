@@ -92,10 +92,21 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
   // Anthropic Claude Models
   // ----------------------------------------
   {
-    id: 'claude-opus-4-7',
-    name: 'Opus 4.7',
+    id: 'claude-opus-4-8',
+    name: 'Opus 4.8',
     shortName: 'Opus',
     description: 'Most capable for complex work',
+    descriptionKey: 'model.opusDesc',
+    provider: 'anthropic',
+    contextWindow: 1_000_000,
+  },
+  {
+    id: 'claude-opus-4-7',
+    name: 'Opus 4.7',
+    // shortName intentionally collides with 4.8. 4.8 is listed first, so
+    // findModelIdByShortName('Opus') resolves to 4.8.
+    shortName: 'Opus',
+    description: 'Previous Opus release',
     descriptionKey: 'model.opusDesc',
     provider: 'anthropic',
     contextWindow: 1_000_000,
@@ -107,8 +118,8 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
   {
     id: 'claude-opus-4-6',
     name: 'Opus 4.6',
-    // shortName intentionally collides with 4.7. 4.7 is listed first, so
-    // findModelIdByShortName('Opus') keeps returning 4.7 — zero behavior
+    // shortName intentionally collides with 4.8/4.7. 4.8 is listed first,
+    // so findModelIdByShortName('Opus') resolves to 4.8 — zero behavior
     // change for callers that reference "Opus" abstractly.
     shortName: 'Opus',
     description: 'Previous Opus release',
