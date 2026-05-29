@@ -731,6 +731,33 @@ async function cmdAsk(client: CliRpcClient, args: CliArgs): Promise<void> {
     args.correlationId ? { idempotencyKey: args.correlationId } : undefined
   )) as { accepted: true; messageId: string; deduped?: boolean }
 
+  // Server-enforced idempotency: a same-key resend returns synchronously with the
+  // prior messageId and starts NO new turn, so no `complete` push will ever arrive.
+  // Skip the wait loop entirely and resolve the prior final reply via a durable read.
+  if (sendResult.deduped) {
+    unsub()
+    const after = (await client.invoke('sessions:getMessages', sessionId)) as AskSession
+    const final = resolveFinalMessage(after)
+    const result: AskResult = {
+      control: {
+        correlationId: args.correlationId,
+        sessionId,
+        messageId: sendResult.messageId,
+        complete: true,
+        timedOut: false,
+        success: true,
+        deduped: true,
+      },
+      payload: textOf(final),
+    }
+    if (args.dedupeDir && args.correlationId) {
+      await writeDedupe(args.dedupeDir, args.correlationId, result)
+    }
+    emitAskResult(result, args.json)
+    client.destroy()
+    process.exit(0)
+  }
+
   // Bounded wait — ALWAYS exits at the deadline, never an unbounded await.
   const deadline = Date.now() + args.askTimeout
   while (!completed && Date.now() < deadline) {
