@@ -1148,11 +1148,6 @@ function flattenLabelTree(labels: Array<{ id: string; name?: string; children?: 
   return out
 }
 
-/** Default LLM connection slug for a model: opus → claude-max, else pi-api-key (gpt-5.5). */
-function defaultConnectionForModel(model: string): string {
-  return /opus/i.test(model) ? 'claude-max' : 'pi-api-key'
-}
-
 /**
  * Resolve (or create) a stable MAX-tier reviewer session carrying a label.
  *
@@ -1166,9 +1161,13 @@ function defaultConnectionForModel(model: string): string {
  * if the tier is wrong — never silently returns a downgraded session.
  */
 async function cmdEnsureReviewer(client: CliRpcClient, args: CliArgs): Promise<void> {
-  const labelName = args.label ?? 'cc-reviewer-max'
-  const model = args.model || 'gpt-5.5'
-  const connection = args.connection || defaultConnectionForModel(model)
+  const labelName = args.label
+  const model = args.model
+  const connection = args.connection
+  if (!labelName || !model || !connection) {
+    err('ensure-reviewer requires --label <name>, --model <id>, and --connection <slug>')
+    process.exit(2)
+  }
 
   await client.connect()
   const workspaceId = await resolveWorkspace(client, args.workspace)
@@ -2402,11 +2401,11 @@ Commands:
                                                 a same-id retry short-circuits the send.
                          --json prints { control: {correlationId, sessionId, messageId,
                          complete, timedOut, success}, payload: <reply> }
-  ensure-reviewer        Resolve or create a MAX-tier reviewer session by label,
-                         asserting the tier on read-back (fail-closed). Prints the sessionId.
-                         --label <name>      Label to resolve/create (default: cc-reviewer-max)
-                         --model <id>        Model (default: gpt-5.5)
-                         --connection <slug> LLM connection (default: pi-api-key, or claude-max for opus)
+  ensure-reviewer        Resolve or create a MAX-tier session by label, asserting the
+                         tier on read-back (fail-closed). Prints the sessionId.
+                         --label <name>      (required) label to resolve/create
+                         --model <id>        (required) model id
+                         --connection <slug> (required) LLM connection slug
   cancel <id>            Cancel in-progress processing
   invoke <channel> [...] Raw RPC call with JSON args
   listen <channel>       Subscribe to push events (Ctrl+C to stop)
