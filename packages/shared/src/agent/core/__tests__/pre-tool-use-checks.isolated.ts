@@ -1141,6 +1141,42 @@ describe('shouldPromptInAskMode', () => {
 
       expect(result).toBeNull();
     });
+
+    // Session self-management tools (set_session_status, set_session_labels) only
+    // mutate the current session's metadata — no external side effects. They must
+    // never prompt in ask mode, otherwise headless / webhook-dispatched sessions
+    // hang forever waiting on a UI that doesn't exist.
+    it('auto-allows mcp__session__set_session_status without prompting', () => {
+      mockShouldAllowToolInMode.mockImplementation(
+        (_tool: string, _input: Record<string, unknown>, mode: string) =>
+          mode === 'safe' ? { allowed: false, reason: 'mutation' } : { allowed: true, reason: '' }
+      );
+
+      const result = shouldPromptInAskMode(
+        'mcp__session__set_session_status',
+        { status: 'needs-review' },
+        pm,
+        { workspaceRootPath: '/test', activeSourceSlugs: [] },
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('auto-allows mcp__session__set_session_labels without prompting', () => {
+      mockShouldAllowToolInMode.mockImplementation(
+        (_tool: string, _input: Record<string, unknown>, mode: string) =>
+          mode === 'safe' ? { allowed: false, reason: 'mutation' } : { allowed: true, reason: '' }
+      );
+
+      const result = shouldPromptInAskMode(
+        'mcp__session__set_session_labels',
+        { labels: ['urgent'] },
+        pm,
+        { workspaceRootPath: '/test', activeSourceSlugs: [] },
+      );
+
+      expect(result).toBeNull();
+    });
   });
 
   // --- API mutations ---
