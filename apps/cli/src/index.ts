@@ -704,10 +704,19 @@ async function cmdAsk(client: CliRpcClient, args: CliArgs): Promise<void> {
   // Attach the listener BEFORE sending so we can't miss the complete push.
   let completed = false
   let failed = false
+  // Sliding liveness deadline: each server heartbeat for THIS session pushes the
+  // wait out by another --ask-timeout window, so a long-but-alive turn (e.g. a
+  // 77s team spawn or a long generation) does not hit the cap. Set after send.
+  let livenessDeadline = 0
   const unsub = client.on('session:event', (event: unknown) => {
     const ev = event as { type: string; sessionId: string; error?: unknown }
     if (ev.sessionId !== sessionId) return
     switch (ev.type) {
+      case 'heartbeat':
+        // Turn is provably alive — extend the bounded wait. The hard ceiling
+        // below still bounds total wall-clock if heartbeats stop.
+        livenessDeadline = Date.now() + args.askTimeout
+        break
       case 'complete':
         completed = true
         break
@@ -758,9 +767,18 @@ async function cmdAsk(client: CliRpcClient, args: CliArgs): Promise<void> {
     process.exit(0)
   }
 
-  // Bounded wait — ALWAYS exits at the deadline, never an unbounded await.
-  const deadline = Date.now() + args.askTimeout
-  while (!completed && Date.now() < deadline) {
+  // Bounded wait — ALWAYS exits at a deadline, never an unbounded await.
+  // Two bounds, whichever fires first:
+  //   1. livenessDeadline — a sliding --ask-timeout window from the last server
+  //      heartbeat (initialized here from the send). A turn that keeps emitting
+  //      heartbeats keeps pushing this out, so legitimately-long turns don't time
+  //      out; if heartbeats STOP, it lapses one --ask-timeout window later.
+  //   2. hardCeiling — an absolute cap so even a misbehaving heartbeat storm
+  //      cannot await forever. Generous multiple of --ask-timeout.
+  const now = Date.now()
+  livenessDeadline = now + args.askTimeout
+  const hardCeiling = now + args.askTimeout * 10
+  while (!completed && Date.now() < livenessDeadline && Date.now() < hardCeiling) {
     await new Promise((r) => setTimeout(r, 100))
   }
   unsub()

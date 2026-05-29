@@ -171,6 +171,12 @@ const MAX_ADMIN_REMEMBER_MINUTES = 60
 const MAX_ANNOTATIONS_PER_MESSAGE = 200
 const MAX_ANNOTATION_JSON_BYTES = 32 * 1024
 
+// Cadence of the in-turn liveness heartbeat (see startHeartbeat). Long-but-alive
+// turns (e.g. a 77s team spawn) emit this so clients can distinguish liveness
+// from a stall and extend their bounded wait. Kept well under typical client
+// ask-timeout windows so several heartbeats land before any deadline.
+const HEARTBEAT_INTERVAL_MS = 12_000
+
 // Window during which fs.watch metadata-revert events from our own atomic write
 // are ignored, so the watcher does not roll back the in-memory mutation we
 // just persisted. See onSessionMetadataChange.
@@ -766,6 +772,8 @@ interface ManagedSession {
   isProcessing: boolean
   /** Set when user requests stop - allows event loop to drain before clearing isProcessing */
   stopRequested?: boolean
+  /** Liveness heartbeat interval, running while isProcessing is true. Cleared on turn end. */
+  heartbeatTimer?: ReturnType<typeof setInterval>
   lastMessageAt: number
   streamingText: string
   // Incremented each time a new message starts processing.
@@ -1177,8 +1185,42 @@ export class SessionManager implements ISessionManager {
     managed.isProcessing = processing
     if (!was && processing) {
       sessionRuntimeHooks.onSessionStarted()
+      this.startHeartbeat(managed)
     } else if (was && !processing) {
       sessionRuntimeHooks.onSessionStopped()
+      this.stopHeartbeat(managed)
+    }
+  }
+
+  /**
+   * While a turn is in progress, emit a lightweight workspace-scoped liveness
+   * event every HEARTBEAT_INTERVAL_MS so a long-but-alive turn is provably
+   * distinct from a stall. Cleaned up on any turn end (complete / interrupted /
+   * error / timeout / plan+auth handoff) because every path routes through
+   * setProcessing(managed, false).
+   */
+  private startHeartbeat(managed: ManagedSession): void {
+    // Defensive: never leak a prior timer.
+    this.stopHeartbeat(managed)
+    managed.heartbeatTimer = setInterval(() => {
+      // Stop self if processing ended without setProcessing(false) somehow.
+      if (!managed.isProcessing) {
+        this.stopHeartbeat(managed)
+        return
+      }
+      this.sendEvent(
+        { type: 'heartbeat', sessionId: managed.id, ts: Date.now() },
+        managed.workspace.id,
+      )
+    }, HEARTBEAT_INTERVAL_MS)
+    // Don't keep the process alive solely for the heartbeat.
+    managed.heartbeatTimer.unref?.()
+  }
+
+  private stopHeartbeat(managed: ManagedSession): void {
+    if (managed.heartbeatTimer) {
+      clearInterval(managed.heartbeatTimer)
+      managed.heartbeatTimer = undefined
     }
   }
 
