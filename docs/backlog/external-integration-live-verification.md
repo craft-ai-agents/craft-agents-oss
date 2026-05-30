@@ -35,6 +35,19 @@ No integration is marked "fully end-to-end verified" until it passes:
 - [ ] With explicit approval, create one draft product or draft collection in a dev store.
 - [ ] Confirm receipt file can be published/displayed in Canvas.
 
+### Printify Agent
+
+- [ ] Save `PRINTIFY_API_TOKEN` through Settings -> Secrets.
+- [ ] Confirm the token persists after restart and is injected into agent/tool runtime.
+- [ ] Install or bundle `printify-pp-cli` with documented provenance/checksum.
+- [ ] Run `node tools/printify/bin/printify.mjs doctor --agent`.
+- [ ] Run read smoke: shops, catalog blueprints, print providers, variants, products, uploads, orders.
+- [ ] Run proofing smoke: margin matrix, placement matrix, personalization batch, product drift, asset reuse, fulfillment risk.
+- [ ] Run write-preview smoke for upload/product/order/webhook commands without `--confirm-runner`.
+- [ ] With explicit approval, create one smallest safe draft/test artifact in a dev Printify shop.
+- [ ] Confirm receipt/output can be published/displayed in Canvas.
+- [ ] Confirm no token values appear in logs, chat, receipts, or Canvas.
+
 ### Google Ads
 
 - [ ] Connect through the intended RunnerOS Google Ads UI path.

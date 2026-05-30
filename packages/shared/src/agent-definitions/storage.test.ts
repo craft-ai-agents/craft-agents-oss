@@ -527,6 +527,18 @@ body
     expect(shopifyAgent?.systemPrompt).toContain('explicitly approves')
   })
 
+  test('starter library includes the Printify Agent with bundled Printify source', () => {
+    const printifyAgent = STARTER_AGENTS.find((agent) => agent.slug === 'printify-agent')
+
+    expect(printifyAgent).toBeDefined()
+    expect(printifyAgent?.metadata.permissionMode).toBe('ask')
+    expect(printifyAgent?.metadata.skills).toContain('printify-commerce')
+    expect(printifyAgent?.metadata.sources).toContain('printify')
+    expect(printifyAgent?.metadata.visualAgent).toBe(true)
+    expect(printifyAgent?.systemPrompt).toContain('node bin/printify.mjs doctor')
+    expect(printifyAgent?.systemPrompt).toContain('--confirm-runner')
+  })
+
   test('starter library includes the Update System Agent as read-only maintenance', () => {
     const updateAgent = STARTER_AGENTS.find((agent) => agent.slug === 'update-system-agent')
 

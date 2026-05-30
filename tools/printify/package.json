@@ -1,0 +1,13 @@
+{
+  "name": "@runneros/printify-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "runner-printify": "bin/printify.mjs"
+  },
+  "scripts": {
+    "doctor": "node bin/printify.mjs doctor --agent",
+    "test": "bun test printify-cli.test.mjs"
+  }
+}

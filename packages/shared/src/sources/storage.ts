@@ -21,7 +21,7 @@ import type {
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync } from '../utils/files.ts';
-import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getGoogleAdsSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource, getShopifySource } from './builtin-sources.ts';
+import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getGoogleAdsSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 import {
@@ -517,6 +517,8 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
         sources.push({ ...getZeroSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'shopify') {
         sources.push({ ...getShopifySource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'printify') {
+        sources.push({ ...getPrintifySource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'runner-docs' || slug === 'craft-agents-docs') {
         sources.push({ ...getDocsSource(workspaceId, workspaceRootPath), tier: 'project' });
       }

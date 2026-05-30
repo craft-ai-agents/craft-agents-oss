@@ -19,6 +19,7 @@ const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
 const OPEN_SLIDE_SLUG = 'open-slide';
 const ZERO_SLUG = 'zero';
 const SHOPIFY_SLUG = 'shopify';
+const PRINTIFY_SLUG = 'printify';
 
 function firstExistingPath(candidates: string[], fallback: string): string {
   for (const candidate of candidates) {
@@ -150,6 +151,20 @@ function getShopifyPath(): string {
   );
 }
 
+function getPrintifyPath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'printify') : '',
+      join(appRoot, 'tools', 'printify'),
+      join(process.cwd(), 'tools', 'printify'),
+    ],
+    join('tools', 'printify')
+  );
+}
+
 function getGoogleAdsCachedAuthState(): { configured: boolean; expired: boolean } {
   const cachePath = join(homedir(), '.config', 'runneros', 'google-ads', 'credentials.json');
   if (!existsSync(cachePath)) return { configured: false, expired: false };
@@ -187,6 +202,10 @@ function getShopifyAuthState(): { configured: boolean; shopConfigured: boolean; 
   return { configured: shopConfigured && tokenConfigured, shopConfigured, tokenConfigured };
 }
 
+function getPrintifyAuthState(): { configured: boolean } {
+  return { configured: Boolean(process.env.PRINTIFY_API_TOKEN?.trim()) };
+}
+
 /**
  * Get all built-in sources for a workspace.
  *
@@ -205,6 +224,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getOpenSlideSource(workspaceId, workspaceRootPath),
     getZeroSource(workspaceId, workspaceRootPath),
     getShopifySource(workspaceId, workspaceRootPath),
+    getPrintifySource(workspaceId, workspaceRootPath),
   ];
 }
 
@@ -791,6 +811,88 @@ export function getShopifySource(workspaceId: string, workspaceRootPath: string)
 }
 
 /**
+ * Built-in source for Printify POD operations through Printing Press.
+ *
+ * The local wrapper resolves `printify-pp-cli`, injects RunnerOS secrets, and
+ * blocks write-like commands unless they are dry-run previews or explicitly
+ * confirmed through RunnerOS.
+ */
+export function getPrintifySource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getPrintifyPath();
+  const authState = getPrintifyAuthState();
+  const config: FolderSourceConfig = {
+    id: 'builtin-printify',
+    name: 'Printify',
+    slug: PRINTIFY_SLUG,
+    enabled: true,
+    provider: 'printify',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    api: {
+      baseUrl: 'https://api.printify.com/v1',
+      authType: 'bearer',
+    },
+    tagline: 'Printing Press Printify CLI for catalog, uploads, product proofing, orders, webhooks, and approval-gated POD operations.',
+    icon: 'P',
+    isAuthenticated: authState.configured,
+    connectionStatus: !existsSync(toolPath) ? 'failed' : authState.configured ? 'untested' : 'needs_auth',
+    connectionError: !existsSync(toolPath)
+      ? 'Bundled Printify tool folder not found'
+      : authState.configured
+        ? 'Printify token is saved but not validated. Run `node bin/printify.mjs doctor --agent` before store work.'
+        : undefined,
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# Printify',
+        '',
+        'Use this source for Printify print-on-demand catalog research, artwork uploads, product manifests, placement proofing, personalization audits, order checks, fulfillment risk, and approval-gated writes.',
+        '',
+        'Setup:',
+        '1. Open Settings -> Secrets.',
+        '2. Save `PRINTIFY_API_TOKEN` from Printify Connections / API settings.',
+        '3. Install or bundle `printify-pp-cli` when missing: `npx -y @mvanhorn/printing-press-library install printify --cli-only`.',
+        '',
+        'Workflow:',
+        '1. Use the displayed local path as the working directory.',
+        '2. Run `node bin/printify.mjs doctor --agent` before account work.',
+        '3. List shops first: `node bin/printify.mjs shops-json --agent --select id,title`.',
+        '4. Use catalog, margin, placement, personalization, drift, and risk commands before writes.',
+        '5. Use `--dry-run` for write-capable provider previews.',
+        '6. Only rerun with `--confirm-runner` after explicit approval in the current conversation.',
+        '',
+        'Core commands:',
+        '- `node bin/printify.mjs shops-json --agent --select id,title`',
+        '- `node bin/printify.mjs catalog retrieves-list-of-blueprints-in-the --agent --select id,title`',
+        '- `node bin/printify.mjs personalization-batch --template <template.json> --csv <rows.csv> --out <dir> --agent`',
+        '- `node bin/printify.mjs placement-matrix --product-file <product.json> --uploads-file <uploads.json> --agent`',
+        '- `node bin/printify.mjs product-drift --product-file <current.json> --manifest <manifest.json> --agent`',
+        '- `node bin/printify.mjs fulfillment-risk --orders-file <orders.json> --products-file <products.json> --agent`',
+        '- `node bin/printify.mjs <write-command> --dry-run --agent`',
+        '- `node bin/printify.mjs <write-command> --confirm-runner --agent`',
+        '',
+        'Hard rules:',
+        '- Never upload artwork, create/update/publish/delete products, submit orders, manage shops, or manage webhooks without explicit approval.',
+        '- Prefer manifest-driven product creation and proofing commands over raw endpoint calls.',
+        '- Use `--select` to keep large Printify responses tight.',
+        '- Do not print access tokens, customer PII, or raw order exports unless needed.',
+        '- Publish product plans, placement matrices, drift reports, fulfillment risk reports, and receipts as Canvas outputs when useful.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
  * Get the built-in Runner docs source.
  *
  * @deprecated docs are now provided by an optional configured MCP server
@@ -842,5 +944,6 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === YOUTUBE_RESEARCH_SLUG
     || slug === OPEN_SLIDE_SLUG
     || slug === ZERO_SLUG
-    || slug === SHOPIFY_SLUG;
+    || slug === SHOPIFY_SLUG
+    || slug === PRINTIFY_SLUG;
 }

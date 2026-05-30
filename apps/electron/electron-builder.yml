@@ -63,6 +63,7 @@ files:
   - tools/hypermotion/**/*
   - tools/google-ads/**/*
   - tools/shopify/**/*
+  - tools/printify/**/*
   # Exclude everything from node_modules (will use extraResources for SDK)
   - "!node_modules/**/*"
 
@@ -133,6 +134,11 @@ mac:
     # Managed local Shopify Admin GraphQL wrapper.
     - from: ../../tools/shopify
       to: app/tools/shopify
+      filter:
+        - "**/*"
+    # Managed local Printify Printing Press wrapper.
+    - from: ../../tools/printify
+      to: app/tools/printify
       filter:
         - "**/*"
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
@@ -232,6 +238,11 @@ win:
       to: app/tools/shopify
       filter:
         - "**/*"
+    # Managed local Printify Printing Press wrapper.
+    - from: ../../tools/printify
+      to: app/tools/printify
+      filter:
+        - "**/*"
     - from: vendor/bun/bun.exe
       to: vendor/bun/bun.exe
     - from: vendor/codex/win32-x64
@@ -290,6 +301,11 @@ linux:
     # Managed local Shopify Admin GraphQL wrapper.
     - from: ../../tools/shopify
       to: app/tools/shopify
+      filter:
+        - "**/*"
+    # Managed local Printify Printing Press wrapper.
+    - from: ../../tools/printify
+      to: app/tools/printify
       filter:
         - "**/*"
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
