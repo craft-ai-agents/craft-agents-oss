@@ -430,7 +430,7 @@ const ApiSourceConfigSchema = z.object({
       headers: z.record(z.string(), z.string()).optional(),
     })
     .optional(),
-  googleService: z.enum(['gmail', 'calendar', 'drive', 'docs', 'sheets', 'youtube', 'searchconsole']).optional(),
+  googleService: z.enum(['gmail', 'calendar', 'drive', 'docs', 'sheets', 'youtube', 'searchconsole', 'ads', 'tag-manager', 'analytics', 'slides']).optional(),
   googleScopes: z.array(z.string()).optional(),
   googleOAuthClientId: z.string().optional(),
   googleOAuthClientSecret: z.string().optional(),
