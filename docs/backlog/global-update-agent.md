@@ -46,3 +46,10 @@ Build `tools/update-audit` with:
 - checks for `tools/hypermotion`, `tools/printing-press-social`, Pi packages, and Codex/agents catalog freshness.
 
 Then create `Update Agent` that uses it.
+
+## Related Verification Backlog
+
+The Update Agent should also read and report unresolved items from
+[External Integration Live Verification Backlog](./external-integration-live-verification.md).
+Those items are not package updates; they are real-account smoke gates for
+integrations that local tests cannot fully prove.
