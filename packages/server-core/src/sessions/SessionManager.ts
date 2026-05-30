@@ -7576,9 +7576,25 @@ export class SessionManager implements ISessionManager {
       ? ensureLabelsExist(workspaceRootPath, labels)
       : labels
 
+    // Auto-increment session serial number
+    const counterPath = join(workspaceRootPath, 'session-counter.json')
+    let seq = 0
+    try {
+      const raw = await readFile(counterPath, 'utf-8')
+      seq = JSON.parse(raw).counter ?? 0
+    } catch { /* first run or missing file */ }
+    seq += 1
+    try {
+      await writeFile(counterPath, JSON.stringify({ counter: seq }), 'utf-8')
+    } catch (e) {
+      sessionLog.warn(`[Automations] Failed to write session counter: ${e}`)
+    }
+    const seqStr = String(seq).padStart(3, '0')
+
     // Use automation name if provided, otherwise fall back to prompt snippet
     const fallback = `Automation: ${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}`
-    const sessionName = automationName || fallback
+    const rawName = automationName || fallback
+    const sessionName = `#${seqStr} — ${rawName}`
 
     // Create a new session for this automation
     const session = await this.createSession(workspaceId, {
