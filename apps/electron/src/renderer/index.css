@@ -82,6 +82,11 @@
 
 /* Light Mode */
 :root {
+  /* Tells Chromium to render native UI (scrollbars, form controls, autofill,
+     default backgrounds before CSS loads) in the matching color scheme.
+     Without this, GNOME shows light scrollbars/inputs over dark backgrounds. */
+  color-scheme: light;
+
   /* === 6 BASE COLORS === */
   --background: oklch(0.98 0.003 265);
   --background-elevated: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
@@ -236,6 +241,8 @@
 
 /* Dark Mode */
 .dark {
+  color-scheme: dark;
+
   /* === 6 BASE COLORS (must match DEFAULT_THEME.dark in theme.ts) === */
   --background: oklch(0.145 0.015 270);
   --background-elevated: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
