@@ -404,6 +404,11 @@ export const RPC_CHANNELS = {
     SAVE_TELEGRAM: 'messaging:saveTelegram',
     TEST_LARK: 'messaging:testLark',
     SAVE_LARK: 'messaging:saveLark',
+    TEST_WECHAT: 'messaging:testWechat',
+    SAVE_WECHAT: 'messaging:saveWechat',
+    // UI ↔ Server — WeChat QR login flow
+    WECHAT_START_QR: 'messaging:wechat:startQR',
+    WECHAT_POLL_QR: 'messaging:wechat:pollQR',
     DISCONNECT: 'messaging:disconnect',
     FORGET: 'messaging:forget',
     GET_BINDINGS: 'messaging:getBindings',
