@@ -24,7 +24,7 @@ import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaul
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
-import { i18n, LOCALE_REGISTRY, type LanguageCode } from '@craft-agent/shared/i18n'
+import { LOCALE_REGISTRY, resolveAppLanguage } from '@craft-agent/shared/i18n'
 import {
   getWorkspaces,
   getWorkspaceByNameOrId,
@@ -4950,7 +4950,7 @@ export class SessionManager implements ISessionManager {
     const assistantResponse = lastAssistantMsg?.content ?? ''
 
     // Derive language from app's i18n setting for language-aware title generation
-    const titleLangCode = (i18n.resolvedLanguage ?? 'en') as LanguageCode
+    const titleLangCode = resolveAppLanguage()
     const titleLangEntry = LOCALE_REGISTRY[titleLangCode]
     const titleOptions = { language: titleLangEntry?.nativeName }
 
@@ -6753,7 +6753,7 @@ export class SessionManager implements ISessionManager {
     }
 
     try {
-      const genLangCode = (i18n.resolvedLanguage ?? 'en') as LanguageCode
+      const genLangCode = resolveAppLanguage()
       const genLangEntry = LOCALE_REGISTRY[genLangCode]
       const title = await agent.generateTitle(userMessage, { language: genLangEntry?.nativeName })
       if (title) {
