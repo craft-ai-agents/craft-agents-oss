@@ -262,6 +262,16 @@ export class WindowManager {
       }
     })
 
+    import('@craft-agent/shared/config/storage')
+      .then(({ getDefaultZoomLevel }) => {
+        if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+          window.webContents.setZoomFactor(getDefaultZoomLevel() / 100)
+        }
+      })
+      .catch((error) => {
+        windowLog.warn('Failed to apply default zoom level:', error)
+      })
+
     // Show window when first paint is ready (faster perceived startup)
     window.once('ready-to-show', () => {
       window.show()

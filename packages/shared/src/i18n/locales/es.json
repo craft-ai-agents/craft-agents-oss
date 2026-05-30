@@ -786,6 +786,8 @@
   "settings.appearance.commandsHeader": "Comandos",
   "settings.appearance.connectionIcons": "Iconos de conexión",
   "settings.appearance.connectionIconsDesc": "Muestra los iconos del proveedor en la lista de sesiones y el selector de modelos",
+  "settings.appearance.defaultZoomLevel": "Default zoom level",
+  "settings.appearance.defaultZoomLevelDesc": "Set the permanent app zoom level for all windows",
   "settings.appearance.dark": "Oscuro",
   "settings.appearance.defaultTheme": "Tema predeterminado",
   "settings.appearance.description": "Tema, fuente, iconos de herramientas",

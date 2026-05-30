@@ -62,6 +62,7 @@ export interface StoredConfig {
   notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
   // Appearance
   colorTheme?: string;  // ID of selected preset theme (e.g., 'dracula', 'nord'). Default: 'default'
+  defaultZoomLevel?: number;  // Default app zoom percentage (100-150, default: 100)
   // Auto-update
   dismissedUpdateVersion?: string;  // Version that user dismissed (skip notifications for this version)
   // Input settings
@@ -119,6 +120,7 @@ const FALLBACK_CONFIG_DEFAULTS: ConfigDefaults = {
     spellCheck: false,
     keepAwakeWhileRunning: false,
     richToolDescriptions: true,
+    defaultZoomLevel: 100,
     extendedPromptCache: false,
     browserToolEnabled: true,
     allowRemoteEvaluate: true,
@@ -429,6 +431,39 @@ export function setRichToolDescriptions(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.richToolDescriptions = enabled;
+  saveConfig(config);
+}
+
+const MIN_DEFAULT_ZOOM_LEVEL = 100;
+const MAX_DEFAULT_ZOOM_LEVEL = 150;
+const DEFAULT_ZOOM_STEP = 10;
+
+function normalizeDefaultZoomLevel(level: number): number {
+  if (!Number.isFinite(level)) return 100;
+  const stepped = Math.round(level / DEFAULT_ZOOM_STEP) * DEFAULT_ZOOM_STEP;
+  return Math.min(MAX_DEFAULT_ZOOM_LEVEL, Math.max(MIN_DEFAULT_ZOOM_LEVEL, stepped));
+}
+
+/**
+ * Get the default app zoom level as a percentage.
+ * Defaults to 100 if not set.
+ */
+export function getDefaultZoomLevel(): number {
+  const config = loadStoredConfig();
+  if (config?.defaultZoomLevel !== undefined) {
+    return normalizeDefaultZoomLevel(config.defaultZoomLevel);
+  }
+  const defaults = loadConfigDefaults();
+  return normalizeDefaultZoomLevel(defaults.defaults.defaultZoomLevel);
+}
+
+/**
+ * Set the default app zoom level as a percentage.
+ */
+export function setDefaultZoomLevel(level: number): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.defaultZoomLevel = normalizeDefaultZoomLevel(level);
   saveConfig(config);
 }
 

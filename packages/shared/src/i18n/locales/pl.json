@@ -786,6 +786,8 @@
   "settings.appearance.commandsHeader": "Polecenia",
   "settings.appearance.connectionIcons": "Ikony połączeń",
   "settings.appearance.connectionIconsDesc": "Pokaż ikony dostawców na liście sesji i w selektorze modeli",
+  "settings.appearance.defaultZoomLevel": "Default zoom level",
+  "settings.appearance.defaultZoomLevelDesc": "Set the permanent app zoom level for all windows",
   "settings.appearance.dark": "Ciemny",
   "settings.appearance.defaultTheme": "Domyślny motyw",
   "settings.appearance.description": "Motyw, czcionka, ikony narzędzi",
