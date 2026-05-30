@@ -18,6 +18,7 @@ const GOOGLE_ADS_SLUG = 'google-ads';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
 const OPEN_SLIDE_SLUG = 'open-slide';
 const ZERO_SLUG = 'zero';
+const SHOPIFY_SLUG = 'shopify';
 
 function firstExistingPath(candidates: string[], fallback: string): string {
   for (const candidate of candidates) {
@@ -135,6 +136,20 @@ function getYouTubeResearchPath(): string {
   );
 }
 
+function getShopifyPath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'shopify') : '',
+      join(appRoot, 'tools', 'shopify'),
+      join(process.cwd(), 'tools', 'shopify'),
+    ],
+    join('tools', 'shopify')
+  );
+}
+
 function getGoogleAdsCachedAuthState(): { configured: boolean; expired: boolean } {
   const cachePath = join(homedir(), '.config', 'runneros', 'google-ads', 'credentials.json');
   if (!existsSync(cachePath)) return { configured: false, expired: false };
@@ -166,6 +181,12 @@ function getYouTubeResearchCachedAuthState(): { configured: boolean } {
   }
 }
 
+function getShopifyAuthState(): { configured: boolean; shopConfigured: boolean; tokenConfigured: boolean } {
+  const shopConfigured = Boolean((process.env.SHOPIFY_SHOP || process.env.SHOPIFY_STORE_DOMAIN)?.trim());
+  const tokenConfigured = Boolean(process.env.SHOPIFY_ACCESS_TOKEN?.trim());
+  return { configured: shopConfigured && tokenConfigured, shopConfigured, tokenConfigured };
+}
+
 /**
  * Get all built-in sources for a workspace.
  *
@@ -183,6 +204,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
     getOpenSlideSource(workspaceId, workspaceRootPath),
     getZeroSource(workspaceId, workspaceRootPath),
+    getShopifySource(workspaceId, workspaceRootPath),
   ];
 }
 
@@ -684,6 +706,84 @@ export function getZeroSource(workspaceId: string, workspaceRootPath: string): L
 }
 
 /**
+ * Built-in source for Shopify Admin GraphQL operations.
+ *
+ * Reads can execute directly. Writes are routed through the bundled local
+ * wrapper, which emits an approval packet unless `--confirm` is present.
+ */
+export function getShopifySource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getShopifyPath();
+  const authState = getShopifyAuthState();
+  const config: FolderSourceConfig = {
+    id: 'builtin-shopify',
+    name: 'Shopify',
+    slug: SHOPIFY_SLUG,
+    enabled: true,
+    provider: 'shopify',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    api: {
+      baseUrl: 'https://admin.shopify.com',
+      authType: 'header',
+      headerName: 'X-Shopify-Access-Token',
+    },
+    tagline: 'Shopify Admin GraphQL reads and approval-gated product/store mutations.',
+    icon: 'S',
+    isAuthenticated: authState.configured,
+    connectionStatus: !existsSync(toolPath) ? 'failed' : authState.configured ? 'untested' : 'needs_auth',
+    connectionError: !existsSync(toolPath)
+      ? 'Bundled Shopify tool folder not found'
+      : authState.configured
+        ? 'Shopify credentials are saved but not validated. Run `node bin/shopify.mjs doctor --agent` before store work.'
+        : undefined,
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# Shopify',
+        '',
+        'Use this source for Shopify store inspection, product work, inventory checks, order/customer read workflows, and approval-gated store mutations through the bundled local Admin GraphQL wrapper.',
+        '',
+        'Setup:',
+        '1. Open Settings -> Secrets.',
+        '2. Save `SHOPIFY_SHOP` or `SHOPIFY_STORE_DOMAIN`.',
+        '3. Save `SHOPIFY_ACCESS_TOKEN` from a Shopify custom app.',
+        '4. Optional: save `SHOPIFY_API_VERSION`; default is `2026-04`.',
+        '',
+        'Workflow:',
+        '1. Use the displayed local path as the working directory.',
+        '2. Run `node bin/shopify.mjs doctor --agent` before store work.',
+        '3. Start read-only: `products list`, `products get`, or a GraphQL query.',
+        '4. Draft writes without `--confirm`; the wrapper returns an approval packet and makes no change.',
+        '5. Only rerun with `--confirm` after explicit approval in the current conversation.',
+        '',
+        'Core commands:',
+        '- `node bin/shopify.mjs products list --first 20 --agent`',
+        '- `node bin/shopify.mjs products get <productId> --agent`',
+        '- `node bin/shopify.mjs products create --input <json-or-file> --agent`',
+        '- `node bin/shopify.mjs products update <productId> --input <json-or-file> --agent`',
+        '- `node bin/shopify.mjs graphql --query-file <file> --variables <json-or-file> --write --agent`',
+        '',
+        'Hard rules:',
+        '- Never publish, delete, refund, fulfill, cancel, change inventory, or edit live products without explicit approval.',
+        '- Product creation defaults to `DRAFT` unless the user explicitly approves another status.',
+        '- For proposed changes, show object id/name, current value, proposed value, reason, risk, and exact approval command.',
+        '- Do not print access tokens or store secrets.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
  * Get the built-in Runner docs source.
  *
  * @deprecated docs are now provided by an optional configured MCP server
@@ -734,5 +834,6 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === GOOGLE_ADS_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG
     || slug === OPEN_SLIDE_SLUG
-    || slug === ZERO_SLUG;
+    || slug === ZERO_SLUG
+    || slug === SHOPIFY_SLUG;
 }

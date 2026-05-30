@@ -516,6 +516,17 @@ body
     expect(hypermotionAgent?.systemPrompt).toContain('showInCanvas')
   })
 
+  test('starter library includes the Shopify Agent with bundled Shopify source', () => {
+    const shopifyAgent = STARTER_AGENTS.find((agent) => agent.slug === 'shopify-agent')
+
+    expect(shopifyAgent).toBeDefined()
+    expect(shopifyAgent?.metadata.permissionMode).toBe('ask')
+    expect(shopifyAgent?.metadata.skills).toContain('shopify-commerce')
+    expect(shopifyAgent?.metadata.sources).toContain('shopify')
+    expect(shopifyAgent?.systemPrompt).toContain('node bin/shopify.mjs doctor')
+    expect(shopifyAgent?.systemPrompt).toContain('explicitly approves')
+  })
+
   test('starter library includes the Update System Agent as read-only maintenance', () => {
     const updateAgent = STARTER_AGENTS.find((agent) => agent.slug === 'update-system-agent')
 

@@ -1,0 +1,12 @@
+{
+  "name": "@runneros/shopify-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "runner-shopify": "bin/shopify.mjs"
+  },
+  "scripts": {
+    "doctor": "node bin/shopify.mjs doctor --agent"
+  }
+}
