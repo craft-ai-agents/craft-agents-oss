@@ -1,5 +1,7 @@
 {
   "apiSetup.authorizationCode": "Authorization Code",
+  "apiSetup.credentials.bedrockApiKey": "API Key",
+  "apiSetup.credentials.bedrockApiKeyHelp": "Use an AWS Bedrock API key for simplified single-token authentication. Generate one in the AWS Bedrock console.",
   "apiSetup.credentials.environment": "Environment (AWS CLI)",
   "apiSetup.credentials.iam": "IAM Credentials",
   "apiSetup.format.anthropicCompatible": "Anthropic Compatible",
