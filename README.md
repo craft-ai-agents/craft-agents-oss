@@ -608,6 +608,40 @@ Logs are written to:
 - **Windows:** `%APPDATA%\@craft-agent\electron\logs\main.log`
 - **Linux:** `~/.config/@craft-agent/electron/logs/main.log`
 
+### Common Issues
+
+**App won't start or shows a blank screen**
+- Check the logs at the paths above for error messages
+- Try clearing the app data at `~/.craft-agent/` (back up first)
+- Ensure your operating system meets the requirements (macOS 10.15+, Windows 10+, or a modern Linux distribution)
+
+**Connection issues with remote server**
+- Verify the server is running with `craft-cli ping`
+- Check that the WebSocket URL (ws:// or wss://) is correct
+- For self-signed certificates, ensure the `--tls-ca` flag points to the correct CA file
+- Firewall rules should allow traffic on the configured port (default: 9100)
+
+**Authentication or token errors**
+- Verify `CRAFT_SERVER_TOKEN` matches on both client and server
+- Tokens are case-sensitive — copy exactly as shown
+- For OAuth connections (Google, Slack, Microsoft), ensure credentials are correctly configured in your source settings
+
+**MCP server connection failures**
+- For stdio-based local MCPs, verify the command path exists and is executable
+- For network-based MCPs, ensure the server URL is reachable
+- Check that the MCP server is compatible with the Craft Agents SDK version
+- Environment variables explicitly passed to an MCP server via the `env` field in source config will override filtered defaults
+
+**Source sync or data refresh issues**
+- For Google sources, re-authenticate by removing and re-adding the source
+- For MCP-based sources, restart the MCP server and try again
+- Check the credentials store health with `craft-cli health`
+
+**Slow response times or high token usage**
+- Enable debug mode to see detailed request/response logs
+- Check if multiple sessions are running simultaneously
+- Consider using a more focused model for simple tasks to conserve tokens
+
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
