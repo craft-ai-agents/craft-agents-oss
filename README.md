@@ -4,6 +4,22 @@
 
 # Craft Agents
 
+
+## Quick Start
+
+Install with:
+```bash
+pip install craft-agents-oss
+```
+
+Or clone and run:
+```bash
+git clone https://github.com/craft-ai-agents/craft-agents-oss.git
+cd craft-agents-oss
+python setup.py install
+```
+
+
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -102,13 +118,6 @@ bun run electron:start
 - **File Attachments**: Drag-drop images, PDFs, Office documents with auto-conversion
 - **Automations**: Event-driven automation — create agent sessions on label changes, schedules, tool use, and more
 
-## Quick Start
-
-1. **Launch the app** after installation
-2. **Choose API Connection**: Use Anthropic (API key or Claude Max), Google AI Studio, ChatGPT Plus (Codex OAuth), or GitHub Copilot OAuth
-3. **Create a workspace**: Set up a workspace to organize your sessions
-4. **Connect sources** (optional): Add MCP servers, REST APIs, or local filesystems
-5. **Start chatting**: Create sessions and interact with Claude
 
 ## Desktop App Features
 
