@@ -40,6 +40,12 @@ export interface SessionStatus extends SessionStatusConfig {
 }
 
 // ============================================================================
+// Default Status IDs (built-in, non-deletable statuses)
+// ============================================================================
+
+export const DEFAULT_STATUS_IDS = new Set(['backlog', 'todo', 'needs-review', 'done', 'cancelled'])
+
+// ============================================================================
 // Status → SessionStatus Conversion
 // ============================================================================
 
@@ -152,6 +158,20 @@ export function getStateLabel(
 ): string {
   const state = states.find(s => s.id === stateId)
   return state?.label ?? stateId
+}
+
+/**
+ * Resolve the display label for a status, respecting user customizations.
+ *
+ * For default statuses, applies i18n translation only when the label
+ * hasn't been customized by the user. Custom statuses are returned as-is.
+ */
+export function resolveStatusDisplayLabel(
+  state: { id: string; label: string },
+  t: (key: string, fallback?: string) => string
+): string {
+  const defaultLabel = DEFAULT_STATUS_IDS.has(state.id) ? t(`status.${state.id}`) : null
+  return defaultLabel && state.label === defaultLabel ? t(`status.${state.id}`, state.label) : state.label
 }
 
 /**

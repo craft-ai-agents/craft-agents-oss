@@ -91,7 +91,7 @@ import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/ato
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
 import { panelStackAtom, panelCountAtom, focusedPanelIdAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom, parseSessionIdFromRoute } from "@/atoms/panel-stack"
-import { type SessionStatusId, type SessionStatus, statusConfigsToSessionStatuses } from "@/config/session-status-config"
+import { type SessionStatusId, type SessionStatus, statusConfigsToSessionStatuses, resolveStatusDisplayLabel } from "@/config/session-status-config"
 import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
 import { useViews } from "@/hooks/useViews"
@@ -2106,7 +2106,7 @@ function AppShellContent({
         return t("sidebar.flagged")
       case 'state': {
         const state = effectiveSessionStatuses.find(s => s.id === sessionFilter.stateId)
-        return state ? t(`status.${state.id}`, state.label) : t("sidebar.allSessions")
+        return state ? resolveStatusDisplayLabel(state, t) : t("sidebar.allSessions")
       }
       case 'label':
         return sessionFilter.labelId === '__all__' ? t("sidebar.labels") : getLabelDisplayName(labelConfigs, sessionFilter.labelId)
@@ -2298,7 +2298,7 @@ function AppShellContent({
                         // Status items (sortable via SortableStatusList)
                         ...effectiveSessionStatuses.map(state => ({
                           id: `nav:state:${state.id}`,
-                          title: t(`status.${state.id}`, state.label),
+                          title: resolveStatusDisplayLabel(state, t),
                           label: String(sessionStatusCounts[state.id] || 0),
                           icon: state.icon,
                           iconColor: state.resolvedColor,
