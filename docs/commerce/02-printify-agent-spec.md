@@ -27,6 +27,8 @@ RunnerOS owns:
 - Built-in source: `printify`
 - Bundled skill: `printify-commerce`
 - Starter agent: `printify-agent`
+- Bundled asset workflow skill: `print-product-assets`
+- User-facing store agent: `print-agent`
 
 ## Auth
 

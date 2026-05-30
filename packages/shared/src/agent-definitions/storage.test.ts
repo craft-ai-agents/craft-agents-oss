@@ -539,6 +539,19 @@ body
     expect(printifyAgent?.systemPrompt).toContain('--confirm-runner')
   })
 
+  test('starter library includes the Print Agent with print asset workflow skills', () => {
+    const printAgent = STARTER_AGENTS.find((agent) => agent.slug === 'print-agent')
+
+    expect(printAgent).toBeDefined()
+    expect(printAgent?.metadata.permissionMode).toBe('ask')
+    expect(printAgent?.metadata.skills).toContain('printify-commerce')
+    expect(printAgent?.metadata.skills).toContain('print-product-assets')
+    expect(printAgent?.metadata.sources).toContain('printify')
+    expect(printAgent?.metadata.visualAgent).toBe(true)
+    expect(printAgent?.systemPrompt).toContain('turn local image assets into real print-on-demand products')
+    expect(printAgent?.systemPrompt).toContain('--confirm-runner')
+  })
+
   test('starter library includes the Update System Agent as read-only maintenance', () => {
     const updateAgent = STARTER_AGENTS.find((agent) => agent.slug === 'update-system-agent')
 
