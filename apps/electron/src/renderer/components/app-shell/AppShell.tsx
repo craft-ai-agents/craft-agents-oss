@@ -1659,7 +1659,10 @@ function AppShellContent({
   const handleAllSessionsClick = useCallback(() => {
     navigate(routes.view.allSessions())
   }, [])
-  const [sessionsNavExpanded, setSessionsNavExpanded] = React.useState(false)
+  const [sessionsNavExpanded, setSessionsNavExpanded] = React.useState(() => isSessionsNavigation(navState))
+  React.useEffect(() => {
+    if (isSessionsNavigation(navState)) setSessionsNavExpanded(true)
+  }, [navState])
   const handleSessionsNavClick = useCallback(() => {
     setSessionsNavExpanded(prev => !prev)
     if (!isSessionsNavigation(navState)) {
@@ -2414,7 +2417,7 @@ function AppShellContent({
                       className="flex w-full items-center gap-1.5 rounded-[7px] px-2 py-1.5 text-left text-[11px] font-medium text-white/45 transition-colors hover:bg-white/[0.035] hover:text-white/75"
                     >
                       <Plus className="h-3 w-3" />
-                      <span className="min-w-0 truncate">New from Current</span>
+                      <span className="min-w-0 truncate">New Project</span>
                     </button>
                     {sidebarProjectGroups.map((project) => {
                       const projectCollapseKey = `session-project:${project.key}`
