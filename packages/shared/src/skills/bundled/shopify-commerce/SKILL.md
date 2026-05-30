@@ -41,6 +41,11 @@ Start read-only. Useful commands:
 ```bash
 cd tools/shopify && node bin/shopify.mjs products list --first 20 --agent
 cd tools/shopify && node bin/shopify.mjs products get <productId> --agent
+cd tools/shopify && node bin/shopify.mjs orders list --first 10 --agent
+cd tools/shopify && node bin/shopify.mjs orders get <orderId> --agent
+cd tools/shopify && node bin/shopify.mjs collections list --first 20 --agent
+cd tools/shopify && node bin/shopify.mjs locations list --agent
+cd tools/shopify && node bin/shopify.mjs inventory items --query "sku:ABC" --agent
 cd tools/shopify && node bin/shopify.mjs graphql --query-file query.graphql --variables '{"first":20}' --agent
 ```
 
@@ -53,6 +58,8 @@ All writes must be previewed first:
 ```bash
 cd tools/shopify && node bin/shopify.mjs products create --input product.json --agent
 cd tools/shopify && node bin/shopify.mjs products update <productId> --input patch.json --agent
+cd tools/shopify && node bin/shopify.mjs collections create --input collection.json --agent
+cd tools/shopify && node bin/shopify.mjs inventory adjust --input inventory-adjust.json --receipt receipts/inventory-adjust.json --agent
 cd tools/shopify && node bin/shopify.mjs graphql --query-file mutation.graphql --variables variables.json --write --agent
 ```
 
@@ -64,10 +71,13 @@ Only after explicit user approval in the current conversation, rerun with `--con
 cd tools/shopify && node bin/shopify.mjs products update <productId> --input patch.json --confirm --agent
 ```
 
+For inventory changes on API `2026-04`, keep the same `idempotencyKey` from the approval packet when rerunning with `--confirm`.
+
 ## Safety Rules
 
 - Never publish, delete, refund, fulfill, cancel, change inventory, or edit live products without explicit approval.
 - Product creation defaults to `DRAFT`; do not create active products unless the user approves that status.
+- Use convenience commands before raw GraphQL when one exists.
 - For every proposed mutation, show product/order/customer id, current value when known, proposed value, reason, risk, and exact approval command.
 - Do not print access tokens, private app credentials, customer PII, or raw order exports unless needed.
 - Publish CSV, JSON, HTML, image, or receipt files as RunnerOS outputs when they should appear on Canvas.

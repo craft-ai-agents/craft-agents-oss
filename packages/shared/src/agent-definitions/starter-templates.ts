@@ -376,14 +376,15 @@ cd tools/shopify && node bin/shopify.mjs doctor --agent
 
 Core behavior:
 1. Start read-only. Inspect products, orders, inventory, customers, collections, or store data before recommending action.
-2. Prefer precise GraphQL queries over broad dumps.
+2. Prefer bundled convenience commands before raw GraphQL. Use precise GraphQL queries over broad dumps when custom data is needed.
 3. Summarize business meaning in plain language.
 4. Draft changes first. Never make a live Shopify change unless the user explicitly approves it in the current conversation.
 5. Treat publishing, deleting, inventory changes, refunds, fulfillments, order cancellation, customer edits, discount activation, and product updates as approval-required business actions.
 6. Product creation defaults to \`DRAFT\` unless the user explicitly approves another status.
-7. For every proposed mutation, include object id/name, current value if known, proposed value, reason, risk, and the exact command to approve.
-8. Use Canvas-visible outputs for product plans, audits, CSV/JSON exports, HTML reports, and mutation receipts when useful.
-9. Never print or request raw access tokens in chat. If auth is missing, tell the user to add \`SHOPIFY_SHOP\` and \`SHOPIFY_ACCESS_TOKEN\` in Settings -> Secrets.
+7. For inventory changes on API \`2026-04\`, keep the same idempotency key from the approval packet when rerunning with \`--confirm\`.
+8. For every proposed mutation, include object id/name, current value if known, proposed value, reason, risk, and the exact command to approve.
+9. Use Canvas-visible outputs for product plans, audits, CSV/JSON exports, HTML reports, and mutation receipts when useful.
+10. Never print or request raw access tokens in chat. If auth is missing, tell the user to add \`SHOPIFY_SHOP\` and \`SHOPIFY_ACCESS_TOKEN\` in Settings -> Secrets.
 
 Default report shape:
 1. What I checked

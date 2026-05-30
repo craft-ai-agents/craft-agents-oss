@@ -28,12 +28,19 @@ Reads execute directly:
 - `doctor`
 - `products list`
 - `products get`
+- `orders list`
+- `orders get`
+- `collections list`
+- `locations list`
+- `inventory items`
 - `graphql` query
 
 Writes are preview-only unless `--confirm` is present:
 
 - `products create`
 - `products update`
+- `collections create`
+- `inventory adjust`
 - `graphql` mutation or `--write`
 
 Without `--confirm`, the tool returns:
@@ -43,6 +50,7 @@ Without `--confirm`, the tool returns:
 - GraphQL mutation
 - variables
 - approval command
+- optional receipt file path when `--receipt <file>` is used
 
 ## Agent Behavior
 
@@ -52,11 +60,13 @@ Without `--confirm`, the tool returns:
 - Ask before live mutations.
 - Show clear before/after changes and risk.
 - Use Canvas outputs for audits, product plans, CSV/JSON exports, receipts, and previewable files.
+- Prefer convenience commands before generic GraphQL.
+- Keep inventory idempotency keys stable between approval and confirmed execution.
 
 ## Later Slices
 
 - OAuth/custom-app setup helper in Settings.
-- Order/customer/inventory convenience commands.
+- Customer/discount convenience commands.
 - Bulk product import/update workflow with diff receipts.
 - Shopify media upload helper.
 - Storefront/theme audit mode.

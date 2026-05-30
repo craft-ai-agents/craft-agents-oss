@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 const DEFAULT_API_VERSION = '2026-04';
 
@@ -44,6 +47,24 @@ function readJsonInput(args, flag = '--input') {
   if (!raw) throw new Error(`${flag} is required`);
   if (existsSync(raw)) return JSON.parse(readFileSync(raw, 'utf8'));
   return JSON.parse(raw);
+}
+
+function firstNumber(args, flag, fallback, max = 100) {
+  return Math.min(Math.max(Number(valueFor(args, flag) || fallback), 1), max);
+}
+
+function optionalString(args, flag) {
+  const value = valueFor(args, flag);
+  return value && value.trim() ? value.trim() : undefined;
+}
+
+function writeReceiptIfRequested(args, payload) {
+  const receiptPath = valueFor(args, '--receipt');
+  if (!receiptPath) return payload;
+  const absolutePath = resolve(receiptPath);
+  mkdirSync(dirname(absolutePath), { recursive: true });
+  writeFileSync(absolutePath, `${JSON.stringify(payload, null, 2)}\n`);
+  return { ...payload, receiptPath: absolutePath };
 }
 
 async function graphqlRequest({ query, variables = {} }) {
@@ -125,6 +146,11 @@ function approvalPacket({ operation, query, variables, rerun }) {
 function asProductId(id) {
   if (!id) throw new Error('product id is required');
   return String(id).startsWith('gid://') ? String(id) : `gid://shopify/Product/${id}`;
+}
+
+function asOrderId(id) {
+  if (!id) throw new Error('order id is required');
+  return String(id).startsWith('gid://') ? String(id) : `gid://shopify/Order/${id}`;
 }
 
 function productListQuery() {
@@ -223,6 +249,177 @@ function productUpdateMutation() {
   `;
 }
 
+function orderListQuery() {
+  return `
+    query RunnerOrders($first: Int!, $query: String) {
+      orders(first: $first, query: $query, sortKey: UPDATED_AT, reverse: true) {
+        edges {
+          cursor
+          node {
+            id
+            name
+            createdAt
+            updatedAt
+            displayFinancialStatus
+            displayFulfillmentStatus
+            currentTotalPriceSet { shopMoney { amount currencyCode } }
+            customer { id displayName email }
+            lineItems(first: 10) {
+              edges {
+                node {
+                  id
+                  title
+                  quantity
+                  sku
+                  variant { id title sku }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+}
+
+function orderGetQuery() {
+  return `
+    query RunnerOrder($id: ID!) {
+      order(id: $id) {
+        id
+        name
+        createdAt
+        updatedAt
+        displayFinancialStatus
+        displayFulfillmentStatus
+        currentTotalPriceSet { shopMoney { amount currencyCode } }
+        subtotalPriceSet { shopMoney { amount currencyCode } }
+        totalShippingPriceSet { shopMoney { amount currencyCode } }
+        totalTaxSet { shopMoney { amount currencyCode } }
+        customer { id displayName email }
+        shippingAddress { name city province country zip }
+        billingAddress { name city province country zip }
+        lineItems(first: 50) {
+          edges {
+            node {
+              id
+              title
+              quantity
+              sku
+              discountedTotalSet { shopMoney { amount currencyCode } }
+              variant { id title sku inventoryItem { id sku tracked } }
+            }
+          }
+        }
+      }
+    }
+  `;
+}
+
+function collectionListQuery() {
+  return `
+    query RunnerCollections($first: Int!, $query: String) {
+      collections(first: $first, query: $query, sortKey: UPDATED_AT, reverse: true) {
+        edges {
+          cursor
+          node {
+            id
+            title
+            handle
+            updatedAt
+            sortOrder
+            productsCount { count }
+            ruleSet { appliedDisjunctively rules { column relation condition } }
+          }
+        }
+      }
+    }
+  `;
+}
+
+function collectionCreateMutation() {
+  return `
+    mutation RunnerCollectionCreate($input: CollectionInput!) {
+      collectionCreate(input: $input) {
+        collection {
+          id
+          title
+          descriptionHtml
+          handle
+          updatedAt
+          productsCount { count }
+        }
+        userErrors { field message }
+      }
+    }
+  `;
+}
+
+function locationListQuery() {
+  return `
+    query RunnerLocations($first: Int!) {
+      locations(first: $first, sortKey: NAME) {
+        edges {
+          node {
+            id
+            name
+            fulfillsOnlineOrders
+            hasActiveInventory
+            deactivatedAt
+          }
+        }
+      }
+    }
+  `;
+}
+
+function inventoryItemListQuery() {
+  return `
+    query RunnerInventoryItems($first: Int!, $query: String) {
+      inventoryItems(first: $first, query: $query) {
+        edges {
+          cursor
+          node {
+            id
+            sku
+            tracked
+            updatedAt
+            locationsCount { count }
+            inventoryLevels(first: 10) {
+              edges {
+                node {
+                  id
+                  location { id name }
+                  quantities(names: ["available", "on_hand", "committed"]) {
+                    name
+                    quantity
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+}
+
+function inventoryAdjustMutation() {
+  return `
+    mutation RunnerInventoryAdjust($input: InventoryAdjustQuantitiesInput!, $idempotencyKey: String!) {
+      inventoryAdjustQuantities(input: $input) @idempotent(key: $idempotencyKey) {
+        inventoryAdjustmentGroup {
+          createdAt
+          reason
+          referenceDocumentUri
+          changes { name delta }
+        }
+        userErrors { field message }
+      }
+    }
+  `;
+}
+
 function usage() {
   return {
     ok: false,
@@ -233,6 +430,13 @@ function usage() {
       'products get <productId> --agent',
       'products create --input <json-or-file> [--confirm] --agent',
       'products update <productId> --input <json-or-file> [--confirm] --agent',
+      'orders list --first 10 [--query <search>] --agent',
+      'orders get <orderId> --agent',
+      'collections list --first 20 [--query <search>] --agent',
+      'collections create --input <json-or-file> [--confirm] --agent',
+      'locations list --first 50 --agent',
+      'inventory items --first 20 [--query "sku:ABC"] --agent',
+      'inventory adjust --input <json-or-file> [--confirm] [--receipt <file>] --agent',
       'graphql --query <graphql>|--query-file <file> [--variables <json-or-file>] [--write] [--confirm] --agent',
     ],
   };
@@ -260,7 +464,7 @@ async function main() {
   }
 
   if (command === 'products' && subcommand === 'list') {
-    const first = Math.min(Math.max(Number(valueFor(args, '--first') || 10), 1), 100);
+    const first = firstNumber(args, '--first', 10);
     jsonOut(await graphqlRequest({ query: productListQuery(), variables: { first } }));
     return;
   }
@@ -277,15 +481,15 @@ async function main() {
     const query = productCreateMutation();
     const variables = { product: input };
     if (!confirmed) {
-      jsonOut(approvalPacket({
+      jsonOut(writeReceiptIfRequested(args, approvalPacket({
         operation: 'products.create',
         query,
         variables,
         rerun: 'node bin/shopify.mjs products create --input <same-json-or-file> --confirm --agent',
-      }));
+      })));
       return;
     }
-    jsonOut(await graphqlRequest({ query, variables }));
+    jsonOut(writeReceiptIfRequested(args, await graphqlRequest({ query, variables })));
     return;
   }
 
@@ -295,15 +499,78 @@ async function main() {
     const query = productUpdateMutation();
     const variables = { product: input };
     if (!confirmed) {
-      jsonOut(approvalPacket({
+      jsonOut(writeReceiptIfRequested(args, approvalPacket({
         operation: 'products.update',
         query,
         variables,
         rerun: 'node bin/shopify.mjs products update <productId> --input <same-json-or-file> --confirm --agent',
-      }));
+      })));
       return;
     }
-    jsonOut(await graphqlRequest({ query, variables }));
+    jsonOut(writeReceiptIfRequested(args, await graphqlRequest({ query, variables })));
+    return;
+  }
+
+  if (command === 'orders' && subcommand === 'list') {
+    const first = firstNumber(args, '--first', 10);
+    jsonOut(await graphqlRequest({ query: orderListQuery(), variables: { first, query: optionalString(args, '--query') } }));
+    return;
+  }
+
+  if (command === 'orders' && subcommand === 'get') {
+    jsonOut(await graphqlRequest({ query: orderGetQuery(), variables: { id: asOrderId(args[2]) } }));
+    return;
+  }
+
+  if (command === 'collections' && subcommand === 'list') {
+    const first = firstNumber(args, '--first', 20);
+    jsonOut(await graphqlRequest({ query: collectionListQuery(), variables: { first, query: optionalString(args, '--query') } }));
+    return;
+  }
+
+  if (command === 'collections' && subcommand === 'create') {
+    const input = readJsonInput(args);
+    const query = collectionCreateMutation();
+    const variables = { input };
+    if (!confirmed) {
+      jsonOut(writeReceiptIfRequested(args, approvalPacket({
+        operation: 'collections.create',
+        query,
+        variables,
+        rerun: 'node bin/shopify.mjs collections create --input <same-json-or-file> --confirm --agent',
+      })));
+      return;
+    }
+    jsonOut(writeReceiptIfRequested(args, await graphqlRequest({ query, variables })));
+    return;
+  }
+
+  if (command === 'locations' && subcommand === 'list') {
+    const first = firstNumber(args, '--first', 50);
+    jsonOut(await graphqlRequest({ query: locationListQuery(), variables: { first } }));
+    return;
+  }
+
+  if (command === 'inventory' && subcommand === 'items') {
+    const first = firstNumber(args, '--first', 20);
+    jsonOut(await graphqlRequest({ query: inventoryItemListQuery(), variables: { first, query: optionalString(args, '--query') } }));
+    return;
+  }
+
+  if (command === 'inventory' && subcommand === 'adjust') {
+    const input = readJsonInput(args);
+    const query = inventoryAdjustMutation();
+    const variables = { input, idempotencyKey: valueFor(args, '--idempotency-key') || randomUUID() };
+    if (!confirmed) {
+      jsonOut(writeReceiptIfRequested(args, approvalPacket({
+        operation: 'inventory.adjust',
+        query,
+        variables,
+        rerun: 'node bin/shopify.mjs inventory adjust --input <same-json-or-file> --idempotency-key <same-key> --confirm --agent',
+      })));
+      return;
+    }
+    jsonOut(writeReceiptIfRequested(args, await graphqlRequest({ query, variables })));
     return;
   }
 
@@ -315,15 +582,15 @@ async function main() {
     const variables = valueFor(args, '--variables') ? readJsonInput(args, '--variables') : {};
     const isWrite = hasFlag(args, '--write') || /^\s*mutation\b/i.test(query);
     if (isWrite && !confirmed) {
-      jsonOut(approvalPacket({
+      jsonOut(writeReceiptIfRequested(args, approvalPacket({
         operation: 'graphql.mutation',
         query,
         variables,
         rerun: 'node bin/shopify.mjs graphql --query-file <file> --variables <json-or-file> --write --confirm --agent',
-      }));
+      })));
       return;
     }
-    jsonOut(await graphqlRequest({ query, variables }));
+    jsonOut(writeReceiptIfRequested(args, await graphqlRequest({ query, variables })));
     return;
   }
 
