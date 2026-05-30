@@ -38,7 +38,7 @@ If setup is missing:
 ```bash
 cd tools/printify && node bin/printify.mjs shops-json --agent --select id,title
 cd tools/printify && node bin/printify.mjs catalog retrieves-list-of-blueprints-in-the --agent --select id,title
-cd tools/printify && node bin/printify.mjs catalog retrieve-alist-of-available-print-providers <blueprintId> --agent --select id,title
+cd tools/printify && node bin/printify.mjs catalog retrieve-alist-of-all-print-providers-that-fulfill-orders-for-aspecific-blueprint <blueprintId> --agent --select id,title
 cd tools/printify && node bin/printify.mjs catalog retrieve-alist-of-variants-of-ablueprint-from-aspecific-print-provider <blueprintId> <providerId> --agent
 cd tools/printify && node bin/printify.mjs catalog-margin-matrix --variants-file variants.json --shipping-file shipping.json --target-price 24.99 --agent
 ```

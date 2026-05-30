@@ -5,10 +5,10 @@ import { join } from 'node:path';
 const cli = join(import.meta.dir, 'bin', 'printify.mjs');
 
 function run(args) {
-  const result = spawnSync('node', [cli, ...args], {
+  const result = spawnSync(process.execPath, [cli, ...args], {
     encoding: 'utf8',
     env: {
-      PATH: process.env.PATH ?? '',
+      PATH: '',
       HOME: process.env.HOME ?? '',
     },
   });
@@ -47,6 +47,23 @@ describe('printify cli wrapper', () => {
     expect(result.stdout.approveCommand).toContain('--confirm-runner');
   });
 
+  test('product publish is approval-gated before binary resolution', () => {
+    const result = run(['shops', 'products-json', 'publish', '123', 'abc', '--agent']);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.requiresApproval).toBe(true);
+    expect(result.stdout.operation).toBe('printify.write');
+  });
+
+  test('approval command shell-quotes args and keeps argv form', () => {
+    const result = run(['products-json', 'create-anew-product', '--title', "Summer Tee's Best", '--agent']);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.command).toContain("'Summer Tee'\\''s Best'");
+    expect(result.stdout.argv).toContain("Summer Tee's Best");
+    expect(result.stdout.approveArgv).toContain('--confirm-runner');
+  });
+
   test('approval packet redacts token-like command args', () => {
     const result = run([
       'products-json',
@@ -60,6 +77,8 @@ describe('printify cli wrapper', () => {
     expect(result.stdout.requiresApproval).toBe(true);
     expect(result.stdout.command).not.toContain('secret-value');
     expect(result.stdout.approveCommand).not.toContain('secret-value');
+    expect(result.stdout.argv).not.toContain('secret-value');
+    expect(result.stdout.approveArgv).not.toContain('secret-value');
   });
 
   test('dry-run write-like upload is allowed to reach binary resolution', () => {

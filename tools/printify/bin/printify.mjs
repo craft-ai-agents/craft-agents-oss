@@ -69,6 +69,8 @@ function isWriteLike(args) {
     /\bdelete\b/,
     /\bdisconnect\b/,
     /\barchive\b/,
+    /\bpublish(?:ed|ing)?\b/,
+    /\bunpublish\b/,
     /\bsubmit\b/,
     /\bfulfill\b/,
     /\border\b.*\bwrite\b/,
@@ -83,14 +85,24 @@ function isWriteLike(args) {
 
 function approvalPacket(args) {
   const safeArgs = redactSensitiveArgs(args);
+  const commandArgv = ['node', 'bin/printify.mjs', ...safeArgs];
+  const approveArgv = [...commandArgv, '--confirm-runner'];
   return {
     ok: true,
     requiresApproval: true,
     operation: 'printify.write',
     message: 'No Printify changes were made. Run with --dry-run for provider preview or rerun with --confirm-runner after explicit user approval.',
-    command: `node bin/printify.mjs ${safeArgs.join(' ')}`,
-    approveCommand: `node bin/printify.mjs ${safeArgs.join(' ')} --confirm-runner`,
+    command: commandArgv.map(shellQuote).join(' '),
+    approveCommand: approveArgv.map(shellQuote).join(' '),
+    argv: commandArgv,
+    approveArgv,
   };
+}
+
+function shellQuote(arg) {
+  if (arg === '') return "''";
+  if (/^[A-Za-z0-9_/:=.,@%+-]+$/.test(arg)) return arg;
+  return `'${arg.replaceAll("'", "'\\''")}'`;
 }
 
 function redactSensitiveArgs(args) {
