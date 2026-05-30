@@ -281,6 +281,13 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       // Reinitialize auth for the connection that was just created/updated,
       // not the global default (which may be a different connection).
       await sessionManager.reinitializeAuth(setup.slug)
+      // Restore process env to the configured default when setup slug differs.
+      // Otherwise OAuth/API key env can leak to subsequent sessions (#546).
+      const defaultSlug = getDefaultLlmConnection()
+      if (defaultSlug && defaultSlug !== setup.slug) {
+        await sessionManager.reinitializeAuth(defaultSlug)
+        deps.platform.logger?.info(`Restored auth env to default connection: ${defaultSlug}`)
+      }
       deps.platform.logger?.info('Reinitialized auth after LLM connection setup')
 
       // Clear "Setup later" flag now that user has configured a provider
