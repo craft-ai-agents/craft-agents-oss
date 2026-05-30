@@ -139,6 +139,7 @@
   "chat.connectionUnavailableDescription": "La conexión usada por esta sesión se ha eliminado. Crea una nueva sesión para continuar.",
   "chat.context": "Contexto",
   "chat.contextBadge": "Insignia de contexto",
+  "chat.copyMessage": "Copiar mensaje",
   "chat.enterSessionName": "Introduce el nombre de la sesión...",
   "chat.failedToStopSharing": "Error al detener la compartición",
   "chat.failedToUpdateShare": "Error al actualizar el compartido",

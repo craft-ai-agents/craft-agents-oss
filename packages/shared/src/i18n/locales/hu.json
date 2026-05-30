@@ -139,6 +139,7 @@
   "chat.connectionUnavailableDescription": "A munkamenet által használt kapcsolatot eltávolították. A folytatáshoz hozz létre egy új munkamenetet.",
   "chat.context": "Kontextus",
   "chat.contextBadge": "Kontextus jelvény",
+  "chat.copyMessage": "Üzenet másolása",
   "chat.enterSessionName": "Add meg a munkamenet nevét...",
   "chat.failedToStopSharing": "A megosztás leállítása sikertelen",
   "chat.failedToUpdateShare": "A megosztás frissítése sikertelen",

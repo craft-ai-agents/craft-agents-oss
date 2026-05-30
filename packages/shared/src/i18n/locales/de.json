@@ -139,6 +139,7 @@
   "chat.connectionUnavailableDescription": "Die von dieser Sitzung verwendete Verbindung wurde entfernt. Erstellen Sie eine neue Sitzung, um fortzufahren.",
   "chat.context": "Kontext",
   "chat.contextBadge": "Kontext-Badge",
+  "chat.copyMessage": "Nachricht kopieren",
   "chat.enterSessionName": "Sitzungsname eingeben...",
   "chat.failedToStopSharing": "Freigabe konnte nicht beendet werden",
   "chat.failedToUpdateShare": "Freigabe konnte nicht aktualisiert werden",
