@@ -8,6 +8,8 @@ import type { PreparedOAuthFlow, OAuthExchangeParams, OAuthExchangeResult } from
 
 export interface OAuthConfig {
   mcpUrl: string; // Full MCP URL including path (e.g., https://mcp.craft.do/my/mcp)
+  clientName?: string; // Override client name for dynamic client registration
+  callbackPath?: string; // Override OAuth callback path (default: /oauth/callback)
 }
 
 export interface OAuthTokens {
@@ -52,6 +54,10 @@ export class CraftOAuth {
     this.sessionContext = sessionContext;
   }
 
+  private get callbackPath(): string {
+    return this.config.callbackPath || CALLBACK_PATH;
+  }
+
   // Get OAuth server metadata using progressive discovery
   private async getServerMetadata(): Promise<OAuthMetadata> {
     const metadata = await discoverOAuthMetadata(
@@ -71,13 +77,13 @@ export class CraftOAuth {
     client_id: string;
     client_secret?: string;
   }> {
-    const redirectUri = `http://localhost:${port}${CALLBACK_PATH}`;
+    const redirectUri = `http://localhost:${port}${this.callbackPath}`;
 
     const response = await fetch(registrationEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        client_name: CLIENT_NAME,
+        client_name: this.config.clientName || CLIENT_NAME,
         redirect_uris: [redirectUri],
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
@@ -102,9 +108,10 @@ export class CraftOAuth {
     code: string,
     codeVerifier: string,
     clientId: string,
-    port: number
+    port: number,
+    clientSecret?: string
   ): Promise<OAuthTokens> {
-    const redirectUri = `http://localhost:${port}${CALLBACK_PATH}`;
+    const redirectUri = `http://localhost:${port}${this.callbackPath}`;
 
     const params = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -113,6 +120,11 @@ export class CraftOAuth {
       client_id: clientId,
       code_verifier: codeVerifier,
     });
+
+    // Add client_secret if provided (some servers like Figma require it)
+    if (clientSecret) {
+      params.set('client_secret', clientSecret);
+    }
 
     const response = await fetch(tokenEndpoint, {
       method: 'POST',
@@ -249,11 +261,13 @@ export class CraftOAuth {
 
     // 4. Register client if endpoint available — now has the bound port
     let clientId: string;
+    let clientSecret: string | undefined;
     if (metadata.registration_endpoint) {
       this.callbacks.onStatus(`Registering client at ${metadata.registration_endpoint}...`);
       try {
         const client = await this.registerClient(metadata.registration_endpoint, port);
         clientId = client.client_id;
+        clientSecret = client.client_secret;
         this.callbacks.onStatus(`Registered as client: ${clientId}`);
       } catch (error) {
         // Clean up the callback server if registration fails
@@ -269,7 +283,7 @@ export class CraftOAuth {
     }
 
     // 5. Build authorization URL
-    const redirectUri = `http://localhost:${port}${CALLBACK_PATH}`;
+    const redirectUri = `http://localhost:${port}${this.callbackPath}`;
     const authUrl = new URL(metadata.authorization_endpoint);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('client_id', clientId);
@@ -294,7 +308,8 @@ export class CraftOAuth {
       authCode,
       pkce.verifier,
       clientId,
-      port
+      port,
+      clientSecret
     );
     this.callbacks.onStatus('Tokens received successfully!');
 
@@ -334,7 +349,7 @@ export class CraftOAuth {
       const candidate = createServer((req, res) => {
         const url = new URL(req.url || '/', `http://localhost:${port}`);
 
-        if (url.pathname === CALLBACK_PATH) {
+        if (url.pathname === this.callbackPath) {
           const code = url.searchParams.get('code');
           const state = url.searchParams.get('state');
           const error = url.searchParams.get('error');
