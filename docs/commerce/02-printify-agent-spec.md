@@ -1,4 +1,4 @@
-# Printify Agent Spec
+# Print Agent / Printify Source Spec
 
 ## Goal
 
@@ -26,9 +26,9 @@ RunnerOS owns:
 - Tool wrapper: `tools/printify/bin/printify.mjs`
 - Built-in source: `printify`
 - Bundled skill: `printify-commerce`
-- Starter agent: `printify-agent`
+- Starter agent: `print-agent`
 - Bundled asset workflow skill: `print-product-assets`
-- User-facing store agent: `print-agent`
+- Backend provider source/skill: `printify` / `printify-commerce`
 
 ## Auth
 
