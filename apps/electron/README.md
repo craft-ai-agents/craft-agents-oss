@@ -254,7 +254,7 @@ External apps can navigate using `craftagents://` URLs:
 craftagents://settings
 craftagents://allSessions/session/session123
 craftagents://sources/source/github
-craftagents://action/new-chat
+craftagents://action/new-session
 craftagents://workspace/{id}/allSessions/session/abc123
 ```
 
