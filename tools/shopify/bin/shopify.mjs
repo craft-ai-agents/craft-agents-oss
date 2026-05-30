@@ -143,6 +143,20 @@ function approvalPacket({ operation, query, variables, rerun }) {
   };
 }
 
+function stripGraphqlIgnoredTokens(query) {
+  return String(query)
+    .replace(/^\uFEFF/, '')
+    .split('\n')
+    .map((line) => line.replace(/#.*/, ''))
+    .join('\n')
+    .replace(/("""[\s\S]*?"""|"(?:\\.|[^"\\])*")/g, ' ');
+}
+
+function isGraphqlMutation(query) {
+  const stripped = stripGraphqlIgnoredTokens(query);
+  return /(^|[{\s])mutation(?:\s|[({@])/.test(stripped);
+}
+
 function asProductId(id) {
   if (!id) throw new Error('product id is required');
   return String(id).startsWith('gid://') ? String(id) : `gid://shopify/Product/${id}`;
@@ -560,13 +574,14 @@ async function main() {
   if (command === 'inventory' && subcommand === 'adjust') {
     const input = readJsonInput(args);
     const query = inventoryAdjustMutation();
-    const variables = { input, idempotencyKey: valueFor(args, '--idempotency-key') || randomUUID() };
+    const idempotencyKey = valueFor(args, '--idempotency-key') || randomUUID();
+    const variables = { input, idempotencyKey };
     if (!confirmed) {
       jsonOut(writeReceiptIfRequested(args, approvalPacket({
         operation: 'inventory.adjust',
         query,
         variables,
-        rerun: 'node bin/shopify.mjs inventory adjust --input <same-json-or-file> --idempotency-key <same-key> --confirm --agent',
+        rerun: `node bin/shopify.mjs inventory adjust --input <same-json-or-file> --idempotency-key ${idempotencyKey} --confirm --agent`,
       })));
       return;
     }
@@ -580,7 +595,7 @@ async function main() {
       : valueFor(args, '--query');
     if (!query) throw new Error('--query or --query-file is required');
     const variables = valueFor(args, '--variables') ? readJsonInput(args, '--variables') : {};
-    const isWrite = hasFlag(args, '--write') || /^\s*mutation\b/i.test(query);
+    const isWrite = hasFlag(args, '--write') || isGraphqlMutation(query);
     if (isWrite && !confirmed) {
       jsonOut(writeReceiptIfRequested(args, approvalPacket({
         operation: 'graphql.mutation',

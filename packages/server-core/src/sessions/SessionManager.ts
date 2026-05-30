@@ -2374,12 +2374,14 @@ export class SessionManager implements ISessionManager {
         }
         // Load-bearing agents must exist on every startup: Orchestrator
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
-        // Chat nav entry), Social Publisher, and Update System Agent.
+        // Chat nav entry), Social Publisher, Hypermotion, Shopify, and
+        // Update System Agent.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
             || a.slug === SOCIAL_PUBLISHER_SLUG
             || a.slug === 'hypermotion-agent'
+            || a.slug === 'shopify-agent'
             || a.slug === 'update-system-agent',
         )
         const { ensured } = ensureRequiredAgents(required)

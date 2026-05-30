@@ -67,9 +67,25 @@ describe('shopify cli safety gates', () => {
       expect(result.stdout.requiresApproval).toBe(true);
       expect(result.stdout.operation).toBe('inventory.adjust');
       expect(result.stdout.variables.idempotencyKey).toBeTruthy();
+      expect(result.stdout.approveCommand).toContain(`--idempotency-key ${result.stdout.variables.idempotencyKey}`);
+      expect(result.stdout.approveCommand).not.toContain('<same-key>');
       expect(written.variables.idempotencyKey).toBe(result.stdout.variables.idempotencyKey);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  test('generic graphql gates comment-prefixed mutations', () => {
+    const result = run([
+      'graphql',
+      '--query',
+      '#graphql\n# prepare write\nmutation TestMutation { shop { name } }',
+      '--agent',
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.ok).toBe(true);
+    expect(result.stdout.requiresApproval).toBe(true);
+    expect(result.stdout.operation).toBe('graphql.mutation');
   });
 });
