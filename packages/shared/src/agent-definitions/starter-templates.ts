@@ -396,7 +396,7 @@ Default report shape:
     slug: 'print-agent',
     metadata: {
       name: 'Print Agent',
-      description: 'Helps users run a print store: turn image folders into apparel/product plans, upload-ready artwork, Printify drafts, QA reports, and approval-gated store actions.',
+      description: 'Helps users run a print store by turning image folders into apparel/product plans, upload-ready artwork, Printify drafts, QA reports, and approval-gated store actions.',
       avatar: 'P',
       permissionMode: 'ask',
       thinkingLevel: 'high',
