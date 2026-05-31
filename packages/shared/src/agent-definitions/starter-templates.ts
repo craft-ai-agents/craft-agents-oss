@@ -211,7 +211,7 @@ Never use this agent for YouTube Studio posting, uploads, comments, or browser p
       greeting: 'Tell me what motion or video you want, where it will be used, and whether you want a preview or final render.',
       inputs: 'A motion/video brief, assets, target platform, duration, format, brand direction, or existing artifact to animate or render.',
       outputs: 'Canvas-ready HTML previews, MP4 renders, poster frames, asset folders, render receipts, and clear next actions.',
-      tags: ['video', 'motion', 'hyperframes', 'remotion'],
+      tags: ['creative', 'video', 'motion', 'hyperframes', 'remotion'],
       skills: ['hyperframes', 'remotion-production'],
       sources: ['hypermotion'],
     },
