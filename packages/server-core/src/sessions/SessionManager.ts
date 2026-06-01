@@ -1235,20 +1235,25 @@ export class SessionManager implements ISessionManager {
    * 2. A session-bound {@link RemoteBrowserPaneManager} when `rpcServer` is set.
    *    Cached in `remoteBpms` so repeat lookups don't allocate.
    * 3. `null` when there's neither a local BPM nor an RPC server.
+   *
+   * `opts.workspaceId` is a fallback used when the session is not yet registered
+   * in `this.sessions` (e.g. during eager agent creation for branch preflight,
+   * before the session is inserted). Without it the remote bridge could not be
+   * built and the caller's "passed the gate" invariant would be violated.
    */
-  getBrowserPaneManagerForSession(sid: string): IBrowserPaneManager | null {
+  getBrowserPaneManagerForSession(sid: string, opts?: { workspaceId?: string }): IBrowserPaneManager | null {
     if (this.browserPaneManager) return this.browserPaneManager
     if (!this.rpcServer) return null
 
     const cached = this.remoteBpms.get(sid)
     if (cached) return cached
 
-    const session = this.sessions.get(sid)
-    if (!session) return null
+    const workspaceId = this.sessions.get(sid)?.workspace.id ?? opts?.workspaceId
+    if (!workspaceId) return null
 
     const bridge = new RemoteBrowserPaneManager({
       sessionId: sid,
-      workspaceId: session.workspace.id,
+      workspaceId,
       rpcServer: this.rpcServer,
       getHostClient: () => this.getBrowserHostClient(sid),
     })
@@ -2822,6 +2827,15 @@ export class SessionManager implements ISessionManager {
       messagesLoaded: !isBranch,  // Branched sessions: lazy-load messages from JSONL
     })
 
+    // Register the session and initialize mode-manager state BEFORE any eager
+    // agent creation (branch preflight). getOrCreateAgent's browser-pane wiring
+    // resolves the session via this.sessions, so it must be present first.
+    setPermissionMode(storedSession.id, managed.permissionMode ?? 'ask', { changedBy: 'restore' })
+    if (managed.previousPermissionMode) {
+      hydratePreviousPermissionMode(storedSession.id, managed.previousPermissionMode)
+    }
+    this.sessions.set(storedSession.id, managed)
+
     // Eagerly load messages for branched sessions so the renderer gets the full
     // conversation immediately (needed for scroll-to-bottom on panel open)
     if (isBranch) {
@@ -2867,15 +2881,6 @@ export class SessionManager implements ISessionManager {
         }
       }
     }
-
-    // Initialize mode-manager state immediately to avoid UI/enforcement races
-    // before the agent instance is lazily created.
-    setPermissionMode(storedSession.id, managed.permissionMode ?? 'ask', { changedBy: 'restore' })
-    if (managed.previousPermissionMode) {
-      hydratePreviousPermissionMode(storedSession.id, managed.previousPermissionMode)
-    }
-
-    this.sessions.set(storedSession.id, managed)
 
     // Initialize session metadata in AutomationSystem for diffing
     const automationSystem = this.automationSystems.get(workspaceRootPath)
@@ -3454,7 +3459,7 @@ export class SessionManager implements ISessionManager {
       })
       if (this.browserPaneManager || this.rpcServer) {
         const sid = managed.id
-        const bpm = this.getBrowserPaneManagerForSession(sid)
+        const bpm = this.getBrowserPaneManagerForSession(sid, { workspaceId: managed.workspace.id })
         if (!bpm) {
           throw new Error('Browser pane manager unavailable despite passing the gate — this is a bug.')
         }
