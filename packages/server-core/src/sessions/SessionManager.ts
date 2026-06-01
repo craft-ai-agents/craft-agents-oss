@@ -2822,6 +2822,13 @@ export class SessionManager implements ISessionManager {
       messagesLoaded: !isBranch,  // Branched sessions: lazy-load messages from JSONL
     })
 
+    // Register the session before branch preflight runs getOrCreateAgent(): the
+    // browser-pane gate resolves a remote BrowserPaneManager via
+    // this.sessions.get(id), so an unregistered session trips the "passed the
+    // gate" guard under rpcServer (remote) deployments. rollbackFailedBranchCreation
+    // removes it again if preflight fails.
+    this.sessions.set(storedSession.id, managed)
+
     // Eagerly load messages for branched sessions so the renderer gets the full
     // conversation immediately (needed for scroll-to-bottom on panel open)
     if (isBranch) {
@@ -2874,8 +2881,6 @@ export class SessionManager implements ISessionManager {
     if (managed.previousPermissionMode) {
       hydratePreviousPermissionMode(storedSession.id, managed.previousPermissionMode)
     }
-
-    this.sessions.set(storedSession.id, managed)
 
     // Initialize session metadata in AutomationSystem for diffing
     const automationSystem = this.automationSystems.get(workspaceRootPath)
