@@ -777,6 +777,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
         <div
           ref={divRef}
           contentEditable={!disabled}
+          autoCapitalize="off"
           suppressContentEditableWarning
           tabIndex={disabled ? -1 : 0}
           className={cn(
