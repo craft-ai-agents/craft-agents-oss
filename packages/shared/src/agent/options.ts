@@ -18,9 +18,9 @@ const UTF8_BOM = '\uFEFF';
  * Ensure ~/.claude.json exists and contains valid, BOM-free JSON before
  * the SDK subprocess starts.
  *
- * Background: The SDK's cli.js reads this file on startup. If it's missing
+ * Background: The SDK's Claude Code executable reads this file on startup. If it's missing
  * (with a .backup file present), empty, BOM-prefixed, or contains invalid JSON,
- * the CLI writes plain-text error/recovery messages to process.stdout.
+ * the executable writes plain-text error/recovery messages to process.stdout.
  * The SDK transport expects only JSON on stdout, so any plain text causes:
  *   "CLI output was not valid JSON"
  *
@@ -40,8 +40,8 @@ function ensureClaudeConfig(): void {
     const configPath = join(homedir(), '.claude.json');
 
     // Clean up stale .backup file — if present and .claude.json is missing,
-    // the CLI writes "A backup file exists at..." to stdout, crashing the SDK.
-    // We remove it so the CLI sees a clean "missing file" state (which it handles silently).
+    // the Claude Code executable writes "A backup file exists at..." to stdout, crashing the SDK.
+    // We remove it so the executable sees a clean "missing file" state (which it handles silently).
     const backupPath = `${configPath}.backup`;
     if (existsSync(backupPath)) {
         try {
@@ -53,7 +53,7 @@ function ensureClaudeConfig(): void {
     }
 
     // Clean up .corrupted.* files — these accumulate on Windows and signal
-    // to the CLI that a previous corruption was detected, altering its stdout output.
+    // to Claude Code that a previous corruption was detected, altering its stdout output.
     try {
         const homeDir = homedir();
         const files = readdirSync(homeDir);

@@ -1,6 +1,6 @@
 import type { ProviderDriver, DriverTestConnectionArgs } from '../driver-types.ts';
 import type { ModelDefinition } from '../../../../config/models.ts';
-import { getAllPiModels, getPiModelsForAuthProvider } from '../../../../config/models-pi.ts';
+import { getAllPiModels, getPiModelsForAuthProvider, isDeprecatedClaudeOpus46Model } from '../../../../config/models-pi.ts';
 import { getPiProviderBaseUrl } from '../../../../config/models-pi.ts';
 
 // ── Copilot model types ────────────────────────────────────────────────
@@ -106,7 +106,8 @@ const EXCLUDED_MODEL_PREFIXES = ['gpt-4', 'gpt-3.5'];
 function filterEnabledModels(models: RawCopilotModel[]): RawCopilotModel[] {
   return models.filter(m =>
     m.policy?.state === 'enabled'
-    && !EXCLUDED_MODEL_PREFIXES.some(prefix => m.id.startsWith(prefix)),
+    && !EXCLUDED_MODEL_PREFIXES.some(prefix => m.id.startsWith(prefix))
+    && !isDeprecatedClaudeOpus46Model(m.id),
   );
 }
 

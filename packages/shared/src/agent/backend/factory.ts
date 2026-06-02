@@ -39,7 +39,7 @@ import {
 import { parseValidationError, type LlmValidationResult } from '../../config/llm-validation.ts';
 import type { ModelFetchResult } from '../../config/model-fetcher.ts';
 // Model resolution utilities
-import { getModelProvider, DEFAULT_MODEL } from '../../config/models.ts';
+import { getModelProvider, DEFAULT_MODEL, normalizeDeprecatedModelId } from '../../config/models.ts';
 import { homedir } from 'node:os';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -632,17 +632,32 @@ export function resolveModelForProvider(
   // Cross-provider guard: if the model belongs to a different provider, fall back
   // to the connection's default. This prevents e.g. sending a Claude model to Pi.
   if (managedModel) {
+    managedModel = normalizeDeprecatedModelId(managedModel);
     const modelProvider = getModelProvider(managedModel);
     if (modelProvider && modelProvider !== provider) {
       managedModel = undefined; // Clear — will fall through to connection default
     }
   }
 
+  let connectionDefault = connection?.defaultModel
+    ? normalizeDeprecatedModelId(connection.defaultModel)
+    : undefined;
+
+  if (provider === 'pi' && connection?.models?.length) {
+    const connectionModelIds = connection.models.map(m => typeof m === 'string' ? m : m.id);
+    if (managedModel && !connectionModelIds.includes(managedModel)) {
+      managedModel = undefined;
+    }
+    if (connectionDefault && !connectionModelIds.includes(connectionDefault)) {
+      connectionDefault = connectionModelIds[0];
+    }
+  }
+
   switch (provider) {
     case 'pi':
-      return managedModel || connection?.defaultModel || '';
+      return managedModel || connectionDefault || '';
     default:
-      return managedModel || connection?.defaultModel || DEFAULT_MODEL;
+      return managedModel || connectionDefault || DEFAULT_MODEL;
   }
 }
 

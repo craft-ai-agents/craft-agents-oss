@@ -4,18 +4,17 @@
 import { describe, it, expect } from 'bun:test';
 import {
   isClaudeModel,
-  isOpusModel,
   getModelShortName,
-  getModelDisplayName,
   ANTHROPIC_MODELS,
   getModelIdByShortName,
+  normalizeDeprecatedModelId,
 } from '../src/config/models.ts';
 
 describe('isClaudeModel', () => {
   // Direct Anthropic model IDs
   it('detects direct Anthropic Claude model IDs', () => {
     expect(isClaudeModel('claude-sonnet-4-6')).toBe(true);
-    expect(isClaudeModel('claude-opus-4-7')).toBe(true);
+    expect(isClaudeModel('claude-opus-4-8')).toBe(true);
     expect(isClaudeModel('claude-haiku-4-5-20251001')).toBe(true);
     expect(isClaudeModel('claude-3-5-sonnet-20241022')).toBe(true);
   });
@@ -48,7 +47,7 @@ describe('isClaudeModel', () => {
 
   // Bedrock-native model IDs
   it('detects Bedrock-native Claude model IDs', () => {
-    expect(isClaudeModel('anthropic.claude-opus-4-7-v1')).toBe(true);
+    expect(isClaudeModel('anthropic.claude-opus-4-8')).toBe(true);
     expect(isClaudeModel('anthropic.claude-sonnet-4-6')).toBe(true);
     expect(isClaudeModel('anthropic.claude-haiku-4-5-20251001-v1:0')).toBe(true);
   });
@@ -56,14 +55,14 @@ describe('isClaudeModel', () => {
   // Case insensitivity
   it('handles case variations', () => {
     expect(isClaudeModel('Claude-Sonnet-4-6')).toBe(true);
-    expect(isClaudeModel('CLAUDE-OPUS-4-7')).toBe(true);
+    expect(isClaudeModel('CLAUDE-OPUS-4-8')).toBe(true);
     expect(isClaudeModel('Anthropic/Claude-Sonnet-4')).toBe(true);
   });
 });
 
 describe('getModelShortName', () => {
   it('returns registry shortName for known models', () => {
-    expect(getModelShortName('claude-opus-4-7')).toBe('Opus');
+    expect(getModelShortName('claude-opus-4-8')).toBe('Opus');
     expect(getModelShortName('claude-sonnet-4-6')).toBe('Sonnet');
     expect(getModelShortName('claude-haiku-4-5-20251001')).toBe('Haiku');
   });
@@ -94,32 +93,22 @@ describe('getModelShortName', () => {
   });
 });
 
-// TODO(opus-4.6-sunset): drop this block when Opus 4.6 is deprecated.
-describe('Opus 4.6 registry presence', () => {
-  it('recognizes claude-opus-4-6 as a Claude model', () => {
-    expect(isClaudeModel('claude-opus-4-6')).toBe(true);
-  });
-
-  it('recognizes claude-opus-4-6 as an Opus model', () => {
-    expect(isOpusModel('claude-opus-4-6')).toBe(true);
-  });
-
-  it('returns Opus shortName for claude-opus-4-6', () => {
-    expect(getModelShortName('claude-opus-4-6')).toBe('Opus');
-  });
-
-  it('returns "Opus 4.6" display name for claude-opus-4-6', () => {
-    expect(getModelDisplayName('claude-opus-4-6')).toBe('Opus 4.6');
-  });
-
-  it('includes both claude-opus-4-7 and claude-opus-4-6 in ANTHROPIC_MODELS', () => {
+describe('Opus registry', () => {
+  it('includes Opus 4.8 and keeps Opus 4.7, but excludes deprecated Opus 4.6', () => {
     const ids = ANTHROPIC_MODELS.map(m => m.id);
+    expect(ids).toContain('claude-opus-4-8');
     expect(ids).toContain('claude-opus-4-7');
-    expect(ids).toContain('claude-opus-4-6');
+    expect(ids).not.toContain('claude-opus-4-6');
   });
 
-  it('resolves "Opus" shortName to 4.7 (first match wins)', () => {
-    // 4.7 is listed first in MODEL_REGISTRY so default Opus callers unchanged.
-    expect(getModelIdByShortName('Opus')).toBe('claude-opus-4-7');
+  it('resolves "Opus" shortName to 4.8', () => {
+    expect(getModelIdByShortName('Opus')).toBe('claude-opus-4-8');
+  });
+
+  it('normalizes deprecated Opus IDs to Opus 4.8 without migrating Opus 4.7', () => {
+    expect(normalizeDeprecatedModelId('claude-opus-4-6')).toBe('claude-opus-4-8');
+    expect(normalizeDeprecatedModelId('pi/claude-opus-4-6')).toBe('pi/claude-opus-4-8');
+    expect(normalizeDeprecatedModelId('us.anthropic.claude-opus-4-6-v1')).toBe('us.anthropic.claude-opus-4-8');
+    expect(normalizeDeprecatedModelId('claude-opus-4-7')).toBe('claude-opus-4-7');
   });
 });

@@ -6,13 +6,13 @@
  * - Low: Light reasoning, faster responses
  * - Medium: Balanced speed and reasoning (default)
  * - High: Deep reasoning for complex tasks
- * - XHigh: Extra-high reasoning — Anthropic's recommended level for Opus 4.7 agentic/coding work
+ * - XHigh: Extra-high reasoning — Anthropic's recommended level for Opus agentic/coding work
  * - Max: Maximum effort reasoning
  *
  * Session-level setting with workspace defaults.
  *
  * Provider mappings:
- * - Anthropic: adaptive thinking + effort levels (Opus 4.7+). On models that
+ * - Anthropic: adaptive thinking + effort levels (current Opus models). On models that
  *   don't accept `xhigh`, the Anthropic SDK silently falls back to `high`.
  * - Pi/OpenAI: reasoning_effort via Pi SDK levels. Pi's ceiling is `xhigh`,
  *   so Craft's `max` saturates there.

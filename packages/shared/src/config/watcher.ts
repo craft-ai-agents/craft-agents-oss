@@ -100,7 +100,6 @@ export interface UserPreferences {
     region?: string;
     country?: string;
   };
-  language?: string;
   notes?: string;
   diffViewer?: {
     diffStyle?: 'unified' | 'split';
@@ -115,6 +114,8 @@ export interface UserPreferences {
     noRepeat?: boolean;
     categories?: Record<string, { enabled: boolean; overrideFilePath?: string; volume?: number }>;
   };
+  /** Internal: mirrors Appearance → Language. Maintained by the main-process i18n IPC handler. */
+  uiLanguage?: string;
   updatedAt?: number;
 }
 

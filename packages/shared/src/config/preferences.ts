@@ -3,7 +3,7 @@ import { join } from 'path';
 import { ensureConfigDir } from './storage.ts';
 import { CONFIG_DIR } from './paths.ts';
 import { readJsonFileSync } from '../utils/files.ts';
-import { i18n } from '../i18n/index.ts';
+import { i18n, SUPPORTED_LANGUAGE_CODES } from '../i18n/index.ts';
 import { LOCALE_REGISTRY, type LanguageCode } from '../i18n/registry.ts';
 import type { SoundSettings } from '../audio/types.ts';
 
@@ -28,7 +28,6 @@ export interface UserPreferences {
   name?: string;
   timezone?: string;
   location?: UserLocation;
-  language?: string;
   // Free-form notes the agent learns about the user
   notes?: string;
   // Diff viewer display preferences
@@ -37,6 +36,12 @@ export interface UserPreferences {
   includeCoAuthoredBy?: boolean;
   // Sound notification settings (persisted across restarts)
   sound?: Partial<SoundSettings>;
+  /**
+   * Internal: persisted UI language code (mirrors Appearance → Language).
+   * Maintained only by the main-process `i18n:changeLanguage` IPC handler.
+   * Not user-editable; not exposed via the `update_user_preferences` tool.
+   */
+  uiLanguage?: LanguageCode;
   // When the preferences were last updated
   updatedAt?: number;
 }
@@ -48,7 +53,14 @@ export function loadPreferences(): UserPreferences {
     if (!existsSync(PREFERENCES_FILE)) {
       return {};
     }
-    return readJsonFileSync<UserPreferences>(PREFERENCES_FILE);
+    const raw = readJsonFileSync<UserPreferences & { language?: unknown }>(PREFERENCES_FILE);
+    // Scrub legacy free-text `language` field on read so it never leaks
+    // back into a write. Old values were free-text ("Hungarian", "English") —
+    // not language codes — so we drop them rather than migrate.
+    if (raw && typeof raw === 'object' && 'language' in raw) {
+      delete (raw as { language?: unknown }).language;
+    }
+    return raw;
   } catch {
     return {};
   }
@@ -87,13 +99,35 @@ export function getPreferencesPath(): string {
 }
 
 /**
+ * Read the persisted UI language code (validated against the supported set).
+ * Returns `undefined` when the field is missing or holds an unrecognised value.
+ */
+export function getPersistedUiLanguage(): LanguageCode | undefined {
+  const prefs = loadPreferences();
+  const candidate = prefs.uiLanguage;
+  if (!candidate) return undefined;
+  if (!SUPPORTED_LANGUAGE_CODES.includes(candidate)) return undefined;
+  return candidate;
+}
+
+/**
+ * Persist the UI language code. Idempotent — does not rewrite the file
+ * (or bump `updatedAt`) when the value is unchanged. This avoids re-triggering
+ * the config watcher on startup syncs and duplicate IPC calls.
+ */
+export function setPersistedUiLanguage(code: LanguageCode): void {
+  const current = loadPreferences();
+  if (current.uiLanguage === code) return;
+  savePreferences({ ...current, uiLanguage: code });
+}
+
+/**
  * Format preferences for inclusion in system prompt
  */
 export function formatPreferencesForPrompt(): string {
   const prefs = loadPreferences();
 
   // Derive language from the app's i18n setting (Appearance > Language).
-  // This replaces the old prefs.language field which is now ignored.
   const langCode = (i18n.resolvedLanguage ?? 'en') as LanguageCode;
   const langEntry = LOCALE_REGISTRY[langCode];
   const langName = langEntry?.nativeName ?? 'English';
@@ -122,7 +156,6 @@ export function formatPreferencesForPrompt(): string {
   }
 
   // Always include language so the AI knows which language to respond in.
-  // Derived from the Appearance language setting, not the old prefs.language field.
   lines.push(`- Preferred language: ${langName}`);
 
   if (prefs.notes) {

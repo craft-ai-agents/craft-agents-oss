@@ -5004,6 +5004,12 @@ export class SessionManager implements ISessionManager {
     const titleLangCode = (i18n.resolvedLanguage ?? 'en') as LanguageCode
     const titleLangEntry = LOCALE_REGISTRY[titleLangCode]
     const titleOptions = { language: titleLangEntry?.nativeName }
+    sessionLog.info(`[refreshTitle] language at call time`, {
+      sessionId,
+      resolvedLanguage: i18n.resolvedLanguage ?? null,
+      titleLangCode,
+      nativeName: titleLangEntry?.nativeName ?? null,
+    })
 
     // Use existing agent or create temporary one
     let agent: AgentInstance | null = managed.agent
@@ -6823,6 +6829,12 @@ export class SessionManager implements ISessionManager {
     try {
       const genLangCode = (i18n.resolvedLanguage ?? 'en') as LanguageCode
       const genLangEntry = LOCALE_REGISTRY[genLangCode]
+      sessionLog.info(`[generateTitle] language at call time`, {
+        sessionId: managed.id,
+        resolvedLanguage: i18n.resolvedLanguage ?? null,
+        genLangCode,
+        nativeName: genLangEntry?.nativeName ?? null,
+      })
       const title = await agent.generateTitle(userMessage, { language: genLangEntry?.nativeName })
       if (title) {
         managed.name = title

@@ -1289,8 +1289,9 @@ export const chatComponents: ComponentEntry[] = [
         control: {
           type: 'select',
           options: [
-            { label: 'Sonnet 4.6', value: 'claude-sonnet-4-6' },
+            { label: 'Opus 4.8', value: 'claude-opus-4-8' },
             { label: 'Opus 4.7', value: 'claude-opus-4-7' },
+            { label: 'Sonnet 4.6', value: 'claude-sonnet-4-6' },
             { label: 'Haiku 3.5', value: 'claude-3-5-haiku-20241022' },
           ],
         },

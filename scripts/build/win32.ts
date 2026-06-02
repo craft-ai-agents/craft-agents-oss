@@ -126,6 +126,13 @@ function buildMainProcess(config: BuildConfig): void {
     '--format=cjs',
     '--outfile=apps/electron/dist/main.cjs',
     '--external:electron',
+    // SDK 0.3.x is pure ESM and calls createRequire(import.meta.url) at module init.
+    // esbuild's CJS bundling leaves import.meta.url undefined for inlined ESM, crashing
+    // the packaged app on load (ERR_INVALID_ARG_VALUE at sdk.mjs). Externalize so Node
+    // loads it natively as ESM; electron-builder.yml copies the SDK core into
+    // app/node_modules/@anthropic-ai/claude-agent-sdk (asar:false) so the require resolves.
+    // Must stay in sync with package.json build:main, electron-dev.ts, electron-build-main.ts.
+    '--external:@anthropic-ai/claude-agent-sdk',
     // Replace grammY's bundled polyfills (node-fetch@2 + abort-controller@3)
     // with native Node globals. Keeps parity with electron-dev.ts,
     // electron-build-main.ts, and apps/electron/package.json build:main.

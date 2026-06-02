@@ -284,6 +284,10 @@ export default function AppearanceSettingsPage() {
                     <SettingsMenuSelect
                       value={(i18n.resolvedLanguage ?? i18n.language) as LanguageCode}
                       onValueChange={(value) => {
+                        console.info('[i18n] Appearance dropdown change', {
+                          from: i18n.resolvedLanguage ?? null,
+                          to: value,
+                        })
                         i18n.changeLanguage(value)
                         window.electronAPI?.changeLanguage?.(value)
                       }}

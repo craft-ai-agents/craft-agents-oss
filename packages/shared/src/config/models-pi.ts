@@ -67,14 +67,25 @@ const PI_EXCLUDED_MODEL_PREFIXES: string[] = [
   'gpt-4',
 ];
 
+export function isDeprecatedClaudeOpus46Model(modelId: string): boolean {
+  const lower = modelId.toLowerCase().replace(/^pi\//, '');
+  return lower === 'claude-opus-4-6'
+    || lower === 'claude-opus-4.6'
+    || lower === 'anthropic/claude-opus-4-6'
+    || lower === 'anthropic/claude-opus-4.6'
+    || lower.endsWith('.anthropic.claude-opus-4-6-v1')
+    || lower === 'anthropic.claude-opus-4-6-v1';
+}
+
 function isExcludedPiModel(modelId: string): boolean {
   if (PI_EXCLUDED_MODELS.has(modelId)) return true;
+  if (isDeprecatedClaudeOpus46Model(modelId)) return true;
   return PI_EXCLUDED_MODEL_PREFIXES.some(prefix => modelId.startsWith(prefix));
 }
 
 /**
  * Check if a Bedrock model ID is a bare Claude model without a region prefix.
- * Bare IDs like `anthropic.claude-opus-4-7-v1` are rejected by Bedrock which
+ * Bare IDs like `anthropic.claude-opus-4-8` are rejected by Bedrock which
  * requires inference profile IDs with a region prefix (`us.`, `eu.`, `global.`).
  * The Pi SDK catalog includes proper regional variants, so filtering bare models
  * doesn't remove any usable entries.
