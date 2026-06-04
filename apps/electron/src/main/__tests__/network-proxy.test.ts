@@ -2,7 +2,75 @@
  * Tests for network proxy bypass rules (NO_PROXY parsing and matching).
  */
 import { describe, it, expect } from 'bun:test';
-import { parseNoProxyRules, shouldBypassProxy } from '../network-proxy-utils';
+import {
+  normalizeProxyUrl,
+  parseNoProxyRules,
+  parseWindowsInternetSettings,
+  parseWindowsProxyOverride,
+  parseWindowsProxyServer,
+  shouldBypassProxy,
+} from '../network-proxy-utils';
+
+describe('normalizeProxyUrl', () => {
+  it('adds an HTTP scheme when Windows stores only host and port', () => {
+    expect(normalizeProxyUrl('proxy.example:8080')).toBe('http://proxy.example:8080');
+  });
+
+  it('preserves an existing scheme and trims whitespace', () => {
+    expect(normalizeProxyUrl('  https://proxy.example:8443  ')).toBe('https://proxy.example:8443');
+  });
+});
+
+describe('parseWindowsProxyServer', () => {
+  it('uses one proxy value for both HTTP and HTTPS', () => {
+    expect(parseWindowsProxyServer('proxy.example:8080')).toEqual({
+      httpProxy: 'http://proxy.example:8080',
+      httpsProxy: 'http://proxy.example:8080',
+    });
+  });
+
+  it('parses protocol-specific proxy values', () => {
+    expect(parseWindowsProxyServer('http=http-proxy.example:8080;https=https-proxy.example:8443')).toEqual({
+      httpProxy: 'http://http-proxy.example:8080',
+      httpsProxy: 'http://https-proxy.example:8443',
+    });
+  });
+});
+
+describe('parseWindowsProxyOverride', () => {
+  it('converts separators and expands the Windows local-host marker', () => {
+    expect(parseWindowsProxyOverride('*.example.test;<local>')).toBe(
+      '.example.test,localhost,127.0.0.1,::1',
+    );
+  });
+});
+
+describe('parseWindowsInternetSettings', () => {
+  it('parses enabled Windows Internet Settings registry output', () => {
+    const output = `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyEnable    REG_DWORD    0x1
+    ProxyServer    REG_SZ       proxy.example:8080
+    ProxyOverride  REG_SZ       <local>;*.example.test
+`;
+
+    expect(parseWindowsInternetSettings(output)).toEqual({
+      enabled: true,
+      httpProxy: 'http://proxy.example:8080',
+      httpsProxy: 'http://proxy.example:8080',
+      noProxy: 'localhost,127.0.0.1,::1,.example.test',
+    });
+  });
+
+  it('ignores disabled Windows proxy settings', () => {
+    const output = `
+    ProxyEnable    REG_DWORD    0x0
+    ProxyServer    REG_SZ       proxy.example:8080
+`;
+
+    expect(parseWindowsInternetSettings(output)).toBeUndefined();
+  });
+});
 
 describe('parseNoProxyRules', () => {
   it('returns empty array for undefined/empty input', () => {
