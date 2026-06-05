@@ -1,4 +1,4 @@
-import type { ModelRegistry as PiModelRegistry } from '@mariozechner/pi-coding-agent';
+import type { ModelRegistry as PiModelRegistry } from '@earendil-works/pi-coding-agent';
 import { resolvePiModel, isDeniedMiniModelId } from './model-resolution.ts';
 import { PI_PREFERRED_DEFAULTS } from '../../shared/src/config/llm-connections.ts';
 

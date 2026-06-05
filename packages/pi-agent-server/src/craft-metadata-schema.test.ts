@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createEditToolDefinition } from '@mariozechner/pi-coding-agent';
+import { createEditToolDefinition } from '@earendil-works/pi-coding-agent';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
 
 describe('Craft metadata schema compatibility for Pi tools', () => {

@@ -8,7 +8,7 @@
 
 // Import model types and lists from centralized registry
 // NOTE: Pi SDK functions (getPiModelsForAuthProvider, getAllPiModels) are NOT imported
-// here because @mariozechner/pi-ai transitively pulls in @aws-sdk which uses Node.js
+// here because @earendil-works/pi-ai transitively pulls in @aws-sdk which uses Node.js
 // `stream` module — breaking the Vite renderer build. Instead, Pi model resolution is
 // injected at app startup via registerPiModelResolver().
 import {
@@ -28,7 +28,7 @@ let _piModelResolver: PiModelResolver = () => [];
 /**
  * Register the Pi model resolver function.
  * Must be called from main process at app startup (before any Pi connections are used).
- * This avoids pulling @mariozechner/pi-ai into the renderer bundle.
+ * This avoids pulling @earendil-works/pi-ai into the renderer bundle.
  */
 export function registerPiModelResolver(resolver: PiModelResolver): void {
   _piModelResolver = resolver;
@@ -43,7 +43,7 @@ export function registerPiModelResolver(resolver: PiModelResolver): void {
  * This is separate from auth mechanism - a provider may support multiple auth types.
  *
  * - 'anthropic': Direct Anthropic API (api.anthropic.com) — uses Claude Agent SDK
- * - 'pi': Pi unified LLM API (20+ providers via @mariozechner/pi-ai)
+ * - 'pi': Pi unified LLM API (20+ providers via @earendil-works/pi-ai)
  * - 'pi_compat': Pi with custom endpoint (Ollama, self-hosted models, Anthropic-compat endpoints)
  *
  * Legacy values (bedrock, vertex, anthropic_compat) are migrated on startup

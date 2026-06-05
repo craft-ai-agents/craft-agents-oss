@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { AgentSession } from '@mariozechner/pi-coding-agent';
+import type { AgentSession } from '@earendil-works/pi-coding-agent';
 import { applySystemPromptOverride } from './system-prompt-override.ts';
 
 /**

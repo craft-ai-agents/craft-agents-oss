@@ -1,7 +1,7 @@
 /**
  * Pi Model & Provider Discovery (from SDK)
  *
- * Separated from models.ts because @mariozechner/pi-ai transitively pulls in
+ * Separated from models.ts because @earendil-works/pi-ai transitively pulls in
  * @aws-sdk/client-bedrock-runtime → @smithy/node-http-handler → Node.js `stream`,
  * which breaks the Vite renderer build (browser context, no Node.js modules).
  *
@@ -13,8 +13,8 @@
  * NEVER import this file from renderer components or from files that the renderer imports.
  */
 
-import { getProviders, getModels } from '@mariozechner/pi-ai';
-import type { KnownProvider, Model, Api } from '@mariozechner/pi-ai';
+import { getProviders, getModels } from '@earendil-works/pi-ai';
+import type { KnownProvider, Model, Api } from '@earendil-works/pi-ai';
 import type { ModelDefinition } from './models.ts';
 
 // ============================================
