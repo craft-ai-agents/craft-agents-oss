@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import type { CespCategory, SoundPack, SoundSettings } from '@craft-agent/shared/audio'
-import { DEFAULT_SOUND_SETTINGS } from '@craft-agent/shared/audio'
+import { DEFAULT_SOUND_SETTINGS, SessionStartGate } from '@craft-agent/shared/audio'
 import { loadPreferences, updatePreferences as updatePrefs } from '@craft-agent/shared/config'
 import { discoverPacks, resolveCategory, pickRandomSound } from './PackLoader.js'
 
@@ -230,6 +230,9 @@ export class SoundEngine {
   // Per-session active pack
   private sessionPacks = new Map<string, string>()
 
+  // Per-session session.start gate (once-per-session sound)
+  private sessionStartGate = new SessionStartGate()
+
   constructor() {}
 
   // -----------------------------------------------------------------------
@@ -409,6 +412,7 @@ export class SoundEngine {
   /** Remove all session-specific state (call after session is deleted). */
   removeSession(sessionId: string): void {
     this.sessionPacks.delete(sessionId)
+    this.sessionStartGate.clear(sessionId)
   }
 
   private getActivePack(sessionId?: string): SoundPack | undefined {
@@ -465,6 +469,16 @@ export class SoundEngine {
         console.info(`[sound] Skipped: session ${sessionId} has No Sounds selected`)
         return
       }
+    }
+
+    // session.start is a once-per-session sound — gate by sessionId.
+    // Runs after the silenced check so silenced sessions do not consume the gate.
+    if (category === 'session.start' && sessionId) {
+      if (!this.sessionStartGate.shouldPlay(sessionId)) {
+        console.info(`[sound] Skipped: session.start already played for session ${sessionId}`)
+        return
+      }
+      this.sessionStartGate.markPlayed(sessionId)
     }
 
     const pack = this.getActivePack(sessionId)
