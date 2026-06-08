@@ -67,6 +67,13 @@ export interface PromptAction {
    * When omitted, falls back to the workspace default (then DEFAULT_THINKING_LEVEL).
    */
   thinkingLevel?: ThinkingLevel;
+  /**
+   * Sound pack for the created session. Overrides the matcher-level `soundPack`.
+   * Accepts the `'__none__'` sentinel to explicitly silence the session.
+   * When omitted, falls back to the matcher-level default, then to the
+   * engine's default pack.
+   */
+  soundPack?: string;
 }
 
 /** HTTP method for webhook actions */
@@ -179,6 +186,11 @@ export interface AutomationMatcher {
    *   - The bot lacks "Manage Topics" permission in the supergroup
    */
   telegramTopic?: string;
+  /**
+   * Default sound pack for sessions created by prompt actions in this matcher.
+   * Per-action `soundPack` overrides this. Accepts `'__none__'` to silence.
+   */
+  soundPack?: string;
   actions: AutomationAction[];
 }
 
@@ -256,6 +268,12 @@ export interface PendingPrompt {
   model?: string;
   /** Thinking level for the created session (falls back to workspace default when omitted) */
   thinkingLevel?: ThinkingLevel;
+  /**
+   * Sound pack for the created session, resolved from action-level then
+   * matcher-level fields. Accepts `'__none__'` to silence. Undefined means
+   * use the engine's default pack.
+   */
+  soundPack?: string;
   /** Forum-topic name to bind the new session to (Telegram supergroup, when paired). */
   telegramTopic?: string;
 }
