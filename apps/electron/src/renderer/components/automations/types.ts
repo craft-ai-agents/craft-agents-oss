@@ -66,6 +66,8 @@ export interface PromptAction {
   model?: string
   /** Thinking level override for the spawned session */
   thinkingLevel?: ThinkingLevel
+  /** Sound pack override for the spawned session. `'__none__'` silences. */
+  soundPack?: string
 }
 
 export interface WebhookAction {

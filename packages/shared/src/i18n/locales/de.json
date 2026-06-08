@@ -58,6 +58,8 @@
   "automations.labelOnlyWhenMatching": "Nur bei Übereinstimmung",
   "automations.labelRepeats": "Wiederholungen",
   "automations.labelScheduleExpression": "Zeitplanausdruck",
+  "automations.labelSoundPack": "Sound pack",
+  "automations.labelNoSounds": "No sounds",
   "automations.labelStatus": "Status",
   "automations.labelTelegramTopic": "Telegram-Thema",
   "automations.labelThinking": "Denken",

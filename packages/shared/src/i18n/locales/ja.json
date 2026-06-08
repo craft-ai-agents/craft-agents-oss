@@ -58,6 +58,8 @@
   "automations.labelOnlyWhenMatching": "一致する場合のみ",
   "automations.labelRepeats": "繰り返し",
   "automations.labelScheduleExpression": "スケジュール式",
+  "automations.labelSoundPack": "サウンドパック",
+  "automations.labelNoSounds": "音なし",
   "automations.labelStatus": "ステータス",
   "automations.labelTelegramTopic": "Telegramトピック",
   "automations.labelThinking": "思考",

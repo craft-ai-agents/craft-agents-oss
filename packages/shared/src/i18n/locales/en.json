@@ -58,6 +58,8 @@
   "automations.labelOnlyWhenMatching": "Only when matching",
   "automations.labelRepeats": "Repeats",
   "automations.labelScheduleExpression": "Schedule expression",
+  "automations.labelSoundPack": "Sound pack",
+  "automations.labelNoSounds": "No sounds",
   "automations.labelStatus": "Status",
   "automations.labelTelegramTopic": "Telegram topic",
   "automations.labelThinking": "Thinking",

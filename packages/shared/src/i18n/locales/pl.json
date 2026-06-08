@@ -58,6 +58,8 @@
   "automations.labelOnlyWhenMatching": "Tylko przy dopasowaniu",
   "automations.labelRepeats": "Powtórzenia",
   "automations.labelScheduleExpression": "Wyrażenie harmonogramu",
+  "automations.labelSoundPack": "Pakiet dźwięków",
+  "automations.labelNoSounds": "Brak dźwięków",
   "automations.labelStatus": "Status",
   "automations.labelTelegramTopic": "Temat Telegrama",
   "automations.labelThinking": "Myślenie",

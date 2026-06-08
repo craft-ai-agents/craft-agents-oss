@@ -58,6 +58,8 @@
   "automations.labelOnlyWhenMatching": "Csak egyezés esetén",
   "automations.labelRepeats": "Ismétlések",
   "automations.labelScheduleExpression": "Ütemezési kifejezés",
+  "automations.labelSoundPack": "Hangcsomag",
+  "automations.labelNoSounds": "Nincs hang",
   "automations.labelStatus": "Állapot",
   "automations.labelTelegramTopic": "Telegram téma",
   "automations.labelThinking": "Gondolkodás",

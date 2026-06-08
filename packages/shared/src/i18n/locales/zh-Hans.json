@@ -58,6 +58,8 @@
   "automations.labelOnlyWhenMatching": "仅在匹配时",
   "automations.labelRepeats": "重复",
   "automations.labelScheduleExpression": "计划表达式",
+  "automations.labelSoundPack": "声音包",
+  "automations.labelNoSounds": "无声音",
   "automations.labelStatus": "状态",
   "automations.labelTelegramTopic": "Telegram 话题",
   "automations.labelThinking": "思考",
