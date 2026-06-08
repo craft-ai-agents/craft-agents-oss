@@ -268,4 +268,9 @@ export interface ExecutePromptAutomationInput {
    * (created on first use). Silently ignored when prerequisites aren't met.
    */
   telegramTopic?: string
+  /**
+   * Sound pack for the created session, resolved by the PromptHandler from
+   * the action-level or matcher-level `soundPack`. Accepts `'__none__'` to silence.
+   */
+  soundPack?: string
 }

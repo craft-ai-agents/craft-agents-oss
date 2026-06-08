@@ -1601,6 +1601,7 @@ export class SessionManager implements ISessionManager {
                 llmConnection: pending.llmConnection,
                 model: pending.model,
                 thinkingLevel: pending.thinkingLevel,
+                soundPack: pending.soundPack,
                 automationName: pending.automationName,
                 telegramTopic: pending.telegramTopic,
               })
@@ -2743,6 +2744,7 @@ export class SessionManager implements ISessionManager {
       sessionStatus: options?.sessionStatus,
       labels: options?.labels,
       isFlagged: options?.isFlagged,
+      soundPack: options?.soundPack,
     })
 
     // Branch: copy messages from source session up to and including the branch point
@@ -7636,6 +7638,7 @@ export class SessionManager implements ISessionManager {
       llmConnection,
       model,
       thinkingLevel,
+      soundPack,
       automationName,
       telegramTopic,
     } = input
@@ -7669,6 +7672,7 @@ export class SessionManager implements ISessionManager {
       llmConnection,
       model,
       thinkingLevel,
+      soundPack,
     })
 
     // Populate triggeredBy metadata so title generation is explicitly skipped

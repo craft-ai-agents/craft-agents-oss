@@ -137,6 +137,12 @@ export interface CreateSessionOptions {
   branchFromMessageId?: string
   /** Parent session ID used together with branchFromMessageId. */
   branchFromSessionId?: string
+  /**
+   * Sound pack for the new session. Accepts `'__none__'` to explicitly silence
+   * the session. When omitted, the engine uses its default pack resolution.
+   * Used by automations to assign a specific pack to sessions they create.
+   */
+  soundPack?: string
 }
 
 export interface RemoteSessionTransferPayload {
