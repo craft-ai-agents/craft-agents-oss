@@ -644,4 +644,140 @@ describe('PromptHandler', () => {
       expect(onPromptsReady).not.toHaveBeenCalled();
     });
   });
+
+  describe('soundPack passthrough', () => {
+    it('should pass soundPack from prompt action to pending prompt', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          actions: [{
+            type: 'prompt',
+            prompt: 'Do something',
+            soundPack: 'alert-pack',
+          }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'test',
+      });
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.soundPack).toBe('alert-pack');
+
+      handler.dispose();
+    });
+
+    it('should pass soundPack from matcher to pending prompt when action does not set it', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          soundPack: 'matcher-default-pack',
+          actions: [{ type: 'prompt', prompt: 'Do something' }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'test',
+      });
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.soundPack).toBe('matcher-default-pack');
+
+      handler.dispose();
+    });
+
+    it('should let action-level soundPack override matcher-level', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          soundPack: 'matcher-default-pack',
+          actions: [{
+            type: 'prompt',
+            prompt: 'Do something',
+            soundPack: 'action-specific-pack',
+          }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'test',
+      });
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.soundPack).toBe('action-specific-pack');
+
+      handler.dispose();
+    });
+
+    it('should leave soundPack undefined when neither matcher nor action sets it', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          actions: [{ type: 'prompt', prompt: 'Do something' }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'test',
+      });
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.soundPack).toBeUndefined();
+
+      handler.dispose();
+    });
+
+    it('should pass __none__ sentinel through unchanged', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{
+          actions: [{
+            type: 'prompt',
+            prompt: 'Silent automation',
+            soundPack: '__none__',
+          }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'test',
+      });
+
+      expect(onPromptsReady).toHaveBeenCalledTimes(1);
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]!.soundPack).toBe('__none__');
+
+      handler.dispose();
+    });
+  });
 });
