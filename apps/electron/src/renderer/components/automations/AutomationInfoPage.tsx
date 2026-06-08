@@ -227,6 +227,15 @@ export function AutomationInfoPage({
                 </div>
               </Info_Table.Row>
             )}
+            {automation.soundPack && (
+              <Info_Table.Row label={t('automations.labelSoundPack')}>
+                <span className="font-mono text-xs">
+                  {automation.soundPack === '__none__'
+                    ? t('automations.labelNoSounds')
+                    : automation.soundPack}
+                </span>
+              </Info_Table.Row>
+            )}
             {automation.telegramTopic && (
               <Info_Table.Row label={t('automations.labelTelegramTopic')}>
                 <div className="flex flex-col gap-1">
@@ -266,6 +275,7 @@ export function AutomationInfoPage({
                 permissionMode: automation.permissionMode,
                 labels: automation.labels,
                 telegramTopic: automation.telegramTopic,
+                soundPack: automation.soundPack,
                 enabled: automation.enabled,
                 actions: automation.actions,
               }, null, 2)}\n\`\`\``}

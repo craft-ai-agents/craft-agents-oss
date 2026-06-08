@@ -231,6 +231,8 @@ export interface AutomationListItem {
    * supergroup (created on first use).
    */
   telegramTopic?: string
+  /** Default sound pack for sessions created by prompt actions. `'__none__'` silences. */
+  soundPack?: string
   /** Timestamp of last execution (ms since epoch) */
   lastExecutedAt?: number
 }
@@ -467,6 +469,10 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
       const telegramTopic =
         typeof rawTopic === 'string' && rawTopic.trim().length > 0 ? rawTopic.trim() : undefined
 
+      const rawSoundPack = (matcher as { soundPack?: unknown }).soundPack
+      const soundPack =
+        typeof rawSoundPack === 'string' && rawSoundPack.length > 0 ? rawSoundPack : undefined
+
       items.push({
         id: matcher.id ?? `${eventName}-${index}`,
         event,
@@ -482,6 +488,7 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
         conditions: matcher.conditions,
         actions,
         telegramTopic,
+        soundPack,
       })
       index++
     }
