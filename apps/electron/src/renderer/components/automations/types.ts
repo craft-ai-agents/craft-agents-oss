@@ -372,7 +372,7 @@ interface AutomationsConfigFile {
 }
 
 type RawAction =
-  | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
+  | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel; soundPack?: string }
   | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string>; bodyFormat?: 'json' | 'form' | 'raw'; body?: unknown; captureResponse?: boolean; auth?: WebhookAction['auth'] }
 
 interface AutomationsConfigMatcher {
@@ -383,6 +383,7 @@ interface AutomationsConfigMatcher {
   timezone?: string
   permissionMode?: PermissionMode
   labels?: string[]
+  soundPack?: string
   conditions?: AutomationConditionUI[]
   enabled?: boolean
   actions?: RawAction[]
