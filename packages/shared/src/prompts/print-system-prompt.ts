@@ -90,6 +90,13 @@ console.log(`${colors.dim}With debug mode: ${systemPromptWithDebug.length.toLoca
 printHeader('PART 2: DYNAMIC USER MESSAGE CONTEXT (per message)');
 printAnnotation('These components are prepended to every user message');
 printAnnotation('Placed in user messages (not system prompt) to enable prompt caching');
+printAnnotation('');
+printAnnotation('Volatile vs stable (issue #862): blocks 1-3 (date/time, session_state, sources)');
+printAnnotation('change per turn and are VOLATILE; blocks 4-5 (workspace capabilities, working');
+printAnnotation('directory) are STABLE for the session.');
+printAnnotation('  - Claude path: all blocks ride the user-message tail (system prompt stays cacheable).');
+printAnnotation('  - Pi path: STABLE blocks fold into the system prefix, VOLATILE blocks ride the');
+printAnnotation('    user tail — so the cached prefix is not re-stamped every turn.');
 
 // 1. Date/Time
 printSection('1. DATE/TIME CONTEXT - getDateTimeContext()', getDateTimeContext(), colors.magenta);
@@ -210,14 +217,17 @@ ${colors.bold}Static System Prompt Components:${colors.reset}
   7. Debug Mode Context (if enabled)     ${colors.dim}// formatDebugModeContext()${colors.reset}
 
 ${colors.bold}Dynamic User Message Components (per message):${colors.reset}
-  1. Date/Time Context                   ${colors.dim}// getDateTimeContext()${colors.reset}
-  2. Session State                       ${colors.dim}// formatSessionState()${colors.reset}
-  3. Source State                        ${colors.dim}// formatSourceState()${colors.reset}
-  4. Workspace Capabilities              ${colors.dim}// formatWorkspaceCapabilities()${colors.reset}
-  5. Working Directory + project_context_file  ${colors.dim}// getWorkingDirectoryContext()${colors.reset}
+  1. Date/Time Context                   ${colors.dim}// getDateTimeContext()         [VOLATILE]${colors.reset}
+  2. Session State                       ${colors.dim}// formatSessionState()         [VOLATILE]${colors.reset}
+  3. Source State                        ${colors.dim}// formatSourceState()          [VOLATILE]${colors.reset}
+  4. Workspace Capabilities              ${colors.dim}// formatWorkspaceCapabilities()  [STABLE]${colors.reset}
+  5. Working Directory + project_context_file  ${colors.dim}// getWorkingDirectoryContext()  [STABLE]${colors.reset}
   6. Recovery Context (on resume only)   ${colors.dim}// buildRecoveryContext()${colors.reset}
   7. File Attachments                    ${colors.dim}// Inline paths or base64${colors.reset}
   8. User Message Text                   ${colors.dim}// The actual user input${colors.reset}
+
+  ${colors.dim}Claude: 1-5 ride the user tail. Pi (#862): STABLE 4-5 -> system prefix, VOLATILE 1-3 -> user tail.${colors.reset}
+  ${colors.dim}Builders: PromptBuilder.buildVolatileContextParts() / buildStableContextParts() (composed by buildContextParts())${colors.reset}
 
 ${colors.bold}Key Files:${colors.reset}
   packages/shared/src/prompts/system.ts          ${colors.dim}// Main prompt assembly${colors.reset}

@@ -63,7 +63,7 @@ export interface LabelConfig {
    * what input widget to show and tells the agent what format to write.
    * Omit for boolean (presence-only) labels.
    */
-  valueType?: 'string' | 'number' | 'date';
+  valueType?: 'string' | 'number' | 'date' | 'link';
 
   /**
    * Auto-label rules: regex patterns that scan user messages and automatically
@@ -92,7 +92,7 @@ export interface CreateLabelInput {
   name: string;
   color?: EntityColor;
   parentId?: string; // Target parent label ID (null = root)
-  valueType?: 'string' | 'number' | 'date';
+  valueType?: 'string' | 'number' | 'date' | 'link';
 }
 
 /**
@@ -101,7 +101,7 @@ export interface CreateLabelInput {
 export interface UpdateLabelInput {
   name?: string;
   color?: EntityColor;
-  valueType?: 'string' | 'number' | 'date';
+  valueType?: 'string' | 'number' | 'date' | 'link';
 }
 
 /**

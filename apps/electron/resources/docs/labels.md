@@ -94,7 +94,7 @@ Bug
 | `id` | string | Unique slug, globally unique across tree (e.g., `"bug"`, `"frontend"`). Lowercase alphanumeric + hyphens. |
 | `name` | string | Display name |
 | `color` | EntityColor? | Optional color. System color string (e.g., `"accent"`, `"info/80"`) or custom object (`{ "light": "#hex", "dark": "#hex" }`). Rendered as a colored circle in the UI. |
-| `valueType` | `'string' \| 'number' \| 'date'`? | Optional value type hint. Tells UI what input widget to show and agents what format to write. Omit for boolean (presence-only) labels. |
+| `valueType` | `'string' \| 'number' \| 'date' \| 'link'`? | Optional value type hint. Tells UI what input widget to show and agents what format to write. `link` values render as a clickable chip that opens in the browser. Omit for boolean (presence-only) labels. |
 | `children` | LabelConfig[]? | Optional nested child labels. Array position = display order. |
 
 ## Color Format
@@ -131,11 +131,12 @@ Values are inferred from the raw string at parse time:
 |------|--------|---------|
 | `number` | Finite number | `"priority::3"`, `"effort::0.5"` |
 | `date` | ISO date (YYYY-MM-DD) | `"due::2026-01-30"` |
-| `string` | Anything else | `"link::https://example.com"` |
+| `link` | URL (opens in browser on click; scheme optional) | `"docs::https://example.com"` |
+| `string` | Anything else | `"team::platform"` |
 
 **Inference order:** ISO date check → number check → string fallback.
 
-The optional `valueType` in config is a hint only — the parser always infers from the raw value regardless.
+The optional `valueType` in config is a hint only — the parser always infers from the raw value regardless. `link` is a display/affordance hint (clickable, scheme-stripped chip, opens in the browser); a link value still stores and parses as a plain string.
 
 ## Adding Labels
 
@@ -145,6 +146,7 @@ Prefer `craft-agent` commands:
 craft-agent label create --name "Bug" --color "destructive"
 craft-agent label create --name "Priority" --color "accent" --value-type number
 craft-agent label create --name "Due Date" --color "info" --value-type date
+craft-agent label create --name "Docs" --color "info" --value-type link
 craft-agent label create --name "Project" --color "foreground/60"
 craft-agent label create --name "Alpha" --color "info" --parent-id project
 craft-agent label create --name "Beta" --color "success" --parent-id project

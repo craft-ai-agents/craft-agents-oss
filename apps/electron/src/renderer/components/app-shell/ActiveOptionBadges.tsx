@@ -9,7 +9,7 @@ import type { BackgroundTask } from './ActiveTasksBar'
 import { LabelIcon, LabelValueTypeIcon } from '@/components/ui/label-icon'
 import { LabelValuePopover } from '@/components/ui/label-value-popover'
 import type { LabelConfig } from '@craft-agent/shared/labels'
-import { flattenLabels, parseLabelEntry, formatLabelEntry } from '@craft-agent/shared/labels'
+import { flattenLabels, parseLabelEntry, formatLabelEntry, formatDisplayValue } from '@craft-agent/shared/labels'
 import { resolveEntityColor } from '@craft-agent/shared/colors'
 import { useTheme } from '@/context/ThemeContext'
 import { useDynamicStack } from '@/hooks/useDynamicStack'
@@ -17,6 +17,7 @@ import type { SessionStatus } from '@/config/session-status-config'
 import { getState } from '@/config/session-status-config'
 import { SessionStatusMenu } from '@/components/ui/session-status-menu'
 import { MetadataBadge } from '@/components/ui/metadata-badge'
+import { openLabelLink } from '@/lib/open-label-link'
 import { SessionInfoPopover } from './SessionInfoPopover'
 
 // ============================================================================
@@ -231,20 +232,6 @@ export function ActiveOptionBadges({
 // ============================================================================
 
 /**
- * Format a raw value for display based on the label's valueType.
- * Dates render as locale short format; numbers and strings pass through.
- */
-function formatDisplayValue(rawValue: string, valueType?: 'string' | 'number' | 'date'): string {
-  if (valueType === 'date') {
-    const date = new Date(rawValue.includes('T') ? rawValue + ':00Z' : rawValue + 'T00:00:00Z')
-    if (!isNaN(date.getTime())) {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    }
-  }
-  return rawValue
-}
-
-/**
  * Renders a single label badge with LabelValuePopover for editing/removal.
  * No box-shadow on the badge itself — all shadows come from the parent
  * wrapper's drop-shadow filter (traces masked alpha without clipping).
@@ -300,6 +287,7 @@ function LabelBadge({
       <MetadataBadge
         label={label.name}
         value={displayValue}
+        onValueClick={label.valueType === 'link' && value ? () => openLabelLink(value) : undefined}
         icon={<LabelIcon label={label} size="lg" />}
         valueHintIcon={label.valueType ? <LabelValueTypeIcon valueType={label.valueType} /> : undefined}
         badgeColor={resolvedColor}

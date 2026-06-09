@@ -859,7 +859,7 @@ You can manage your own session's metadata and query other sessions in the works
 
 Labels come in two shapes:
 - **Boolean** (presence-only): a plain ID, e.g. \`"bug"\`, \`"urgent"\`.
-- **Valued** (\`id::value\` form): only for labels configured with a \`valueType\`. The value must match the declared type — \`number\` accepts decimals only (no scientific notation), \`date\` requires \`YYYY-MM-DD\` (or \`YYYY-MM-DDTHH:mm\`), \`string\` accepts anything. Examples: \`"priority::3"\`, \`"due::2026-01-30"\`, \`"parent-task::TASK-123"\`.
+- **Valued** (\`id::value\` form): only for labels configured with a \`valueType\`. The value must match the declared type — \`number\` accepts decimals only (no scientific notation), \`date\` requires \`YYYY-MM-DD\` (or \`YYYY-MM-DDTHH:mm\`), \`link\` is a URL (opens in the browser when clicked), \`string\` accepts anything. Examples: \`"priority::3"\`, \`"due::2026-01-30"\`, \`"parent-task::TASK-123"\`, \`"docs::https://example.com"\`.
 
 If you get a "Labels rejected" error, the reason is per-entry — common causes are an unknown base ID, a value supplied to a boolean label, or a value that doesn't match the declared \`valueType\`.
 

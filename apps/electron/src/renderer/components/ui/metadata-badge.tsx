@@ -7,6 +7,9 @@ export interface MetadataBadgeProps extends React.ButtonHTMLAttributes<HTMLButto
   label: string
   /** Optional secondary value text */
   value?: string
+  /** When set, the value text renders as a clickable link and calls this on click.
+   *  The handler stops propagation so the chip's surrounding popover/trigger doesn't toggle. */
+  onValueClick?: (e: React.MouseEvent) => void
   /** Optional leading icon */
   icon?: React.ReactNode
   /** Optional trailing hint icon when no value is set */
@@ -28,6 +31,7 @@ export const MetadataBadge = React.forwardRef<HTMLButtonElement, MetadataBadgePr
     {
       label,
       value,
+      onValueClick,
       icon,
       valueHintIcon,
       badgeColor = 'var(--foreground)',
@@ -67,7 +71,18 @@ export const MetadataBadge = React.forwardRef<HTMLButtonElement, MetadataBadgePr
         {value ? (
           <>
             <span className="opacity-30 mx-1">·</span>
-            <span className="opacity-60 whitespace-nowrap max-w-[140px] truncate">{value}</span>
+            <span
+              className={cn(
+                'whitespace-nowrap max-w-[140px] truncate',
+                onValueClick
+                  ? 'opacity-80 cursor-pointer hover:underline underline-offset-2'
+                  : 'opacity-60'
+              )}
+              title={onValueClick ? value : undefined}
+              onClick={onValueClick ? (e) => { e.stopPropagation(); onValueClick(e) } : undefined}
+            >
+              {value}
+            </span>
           </>
         ) : (
           valueHintIcon && (

@@ -25,6 +25,7 @@ const MOCK_LABELS: LabelConfig[] = [
   { id: 'sprint', name: 'Sprint', color: { light: '#8B5CF6', dark: '#A78BFA' }, valueType: 'string' },
   { id: 'feature', name: 'Feature', color: { light: '#10B981', dark: '#34D399' } },
   { id: 'estimate', name: 'Estimate', color: { light: '#EC4899', dark: '#F472B6' }, valueType: 'number' },
+  { id: 'docs', name: 'Docs', color: { light: '#0EA5E9', dark: '#38BDF8' }, valueType: 'link' },
 ]
 
 // ============================================================================
@@ -57,6 +58,9 @@ function LabelBadgeRowPlayground({ showValues, labelCount }: LabelBadgeRowPlaygr
             break
           case 'string':
             base.push(`${config.id}::Q1-Sprint-3`)
+            break
+          case 'link':
+            base.push(`${config.id}::https://example.com/docs/getting-started`)
             break
         }
       }

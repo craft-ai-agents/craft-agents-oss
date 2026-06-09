@@ -156,6 +156,23 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         updates.authType = setup.bedrockAuthMethod
       }
 
+      // Resolved Anthropic OAuth identity (issue #838). Threaded through SETUP so
+      // it persists on both the new-connection path (addLlmConnection) and the
+      // re-auth path (updateLlmConnection) via the shared pendingConnection/updates
+      // flow below. Fail-soft: only stamp when at least one identity block arrived.
+      const oauthIdentity = setup.oauthIdentity
+      if (oauthIdentity?.account || oauthIdentity?.organization) {
+        // Set only fields that are actually present, so `updates` never carries an
+        // explicit `undefined` (matches the guarded-assignment style used above and
+        // keeps the update intent clean). Missing sub-fields are simply not touched;
+        // on re-auth the storage allowlist then preserves any prior value.
+        if (oauthIdentity.account?.uuid) updates.oauthAccountUuid = oauthIdentity.account.uuid
+        if (oauthIdentity.account?.emailAddress) updates.oauthAccountEmail = oauthIdentity.account.emailAddress
+        if (oauthIdentity.organization?.uuid) updates.oauthOrganizationUuid = oauthIdentity.organization.uuid
+        if (oauthIdentity.organization?.name) updates.oauthOrganizationName = oauthIdentity.organization.name
+        updates.oauthProfileVerifiedAt = Date.now()
+      }
+
       const effectiveProviderType = updates.providerType ?? connection.providerType
       if (effectiveProviderType === 'pi') {
         const isBedrockPi = (updates.piAuthProvider ?? connection.piAuthProvider) === 'amazon-bedrock'

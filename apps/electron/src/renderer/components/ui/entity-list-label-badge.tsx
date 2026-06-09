@@ -2,6 +2,8 @@ import { useState } from "react"
 import { parseLabelEntry, formatLabelEntry, formatDisplayValue } from "@craft-agent/shared/labels"
 import { resolveEntityColor } from "@craft-agent/shared/colors"
 import { useTheme } from "@/context/ThemeContext"
+import { cn } from "@/lib/utils"
+import { openLabelLink } from "@/lib/open-label-link"
 import { LabelValuePopover } from "./label-value-popover"
 import { LabelValueTypeIcon } from "./label-icon"
 import type { LabelConfig } from "@craft-agent/shared/labels"
@@ -18,6 +20,7 @@ export function EntityListLabelBadge({ label, rawValue, sessionLabels, onLabelsC
   const { isDark } = useTheme()
   const color = label.color ? resolveEntityColor(label.color, isDark) : null
   const displayValue = rawValue ? formatDisplayValue(rawValue, label.valueType) : undefined
+  const isLink = label.valueType === 'link' && !!rawValue
 
   return (
     <LabelValuePopover
@@ -58,7 +61,12 @@ export function EntityListLabelBadge({ label, rawValue, sessionLabels, onLabelsC
         {displayValue ? (
           <>
             <span style={{ opacity: 0.4 }}>·</span>
-            <span className="font-normal truncate min-w-0" style={{ opacity: 0.75 }}>{displayValue}</span>
+            <span
+              className={cn('font-normal truncate min-w-0', isLink && 'cursor-pointer hover:underline underline-offset-2')}
+              style={{ opacity: isLink ? 0.9 : 0.75 }}
+              title={isLink ? rawValue : undefined}
+              onClick={isLink ? (e) => { e.stopPropagation(); openLabelLink(rawValue!) } : undefined}
+            >{displayValue}</span>
           </>
         ) : (
           label.valueType && (

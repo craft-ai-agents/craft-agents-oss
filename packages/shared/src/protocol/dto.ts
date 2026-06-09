@@ -351,6 +351,17 @@ export interface FileSearchResult {
 // LLM connection types
 // ---------------------------------------------------------------------------
 
+/**
+ * Resolved Anthropic OAuth identity (issue #838), captured from the
+ * token-exchange response. Shape mirrors `ClaudeOAuthIdentity` in
+ * `auth/claude-oauth.ts`; kept in the protocol layer so DTOs stay decoupled
+ * from the auth module. All fields optional and fail-soft.
+ */
+export interface ClaudeOAuthIdentityDto {
+  account?: { uuid?: string; emailAddress?: string }
+  organization?: { uuid?: string; name?: string }
+}
+
 export interface LlmConnectionSetup {
   slug: string
   credential?: string
@@ -373,6 +384,11 @@ export interface LlmConnectionSetup {
   awsRegion?: string
   /** Bedrock authentication method — determines auth type for Pi+Bedrock connections */
   bedrockAuthMethod?: 'iam_credentials' | 'environment'
+  /**
+   * Resolved Anthropic OAuth identity (issue #838), threaded through setup so it
+   * persists for both new and re-auth connections. Optional and fail-soft.
+   */
+  oauthIdentity?: ClaudeOAuthIdentityDto
 }
 
 export interface TestLlmConnectionParams {
@@ -531,6 +547,12 @@ export interface ClaudeOAuthResult {
   success: boolean
   token?: string
   error?: string
+  /**
+   * Resolved Anthropic identity (issue #838), forwarded to the renderer so it
+   * can thread it into the SETUP payload (which is what persists it). Present
+   * only when the token-exchange response carried identity.
+   */
+  identity?: ClaudeOAuthIdentityDto
 }
 
 // ---------------------------------------------------------------------------

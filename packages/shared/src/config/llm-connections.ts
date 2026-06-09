@@ -189,6 +189,16 @@ export interface LlmConnection {
    */
   midStreamBehavior?: MidStreamBehavior;
 
+  // --- Resolved Anthropic OAuth identity (issue #838) ---
+  // Captured from the token-exchange response; lets the UI flag two Claude
+  // connections that resolve to the same underlying account. All optional and
+  // fail-soft — absent identity simply means nothing is shown.
+  oauthAccountUuid?: string;
+  oauthAccountEmail?: string;
+  oauthOrganizationUuid?: string;
+  oauthOrganizationName?: string;
+  oauthProfileVerifiedAt?: number; // epoch ms
+
   // --- Timestamps ---
 
   /** Timestamp when connection was created */

@@ -142,7 +142,13 @@ export function registerOnboardingHandlers(server: RpcServer, deps: HandlerDeps)
 
       const expiresAtDate = tokens.expiresAt ? new Date(tokens.expiresAt).toISOString() : 'never'
       log.info(`[Onboarding] Claude OAuth saved to LLM connection (expires: ${expiresAtDate})`)
-      return { success: true, token: tokens.accessToken }
+      // Forward resolved identity (issue #838) so the renderer can thread it into
+      // the SETUP payload, which is where it actually gets persisted. Credentials
+      // are stored above via setLlmOAuth; identity is not a credential.
+      const identity = (tokens.account || tokens.organization)
+        ? { account: tokens.account, organization: tokens.organization }
+        : undefined
+      return { success: true, token: tokens.accessToken, identity }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       log.error('[Onboarding] Exchange Claude code error:', message)

@@ -5,7 +5,8 @@ import type { LabelConfig } from '../types.ts';
 // ----- Fixture -----
 // Represents a real workspace label config with every valueType shape:
 // - boolean (no valueType) → `bug`, `subagent`
-// - valueType: 'string'    → `parent-task`, `subtask-id`, `link`
+// - valueType: 'string'    → `parent-task`, `subtask-id`
+// - valueType: 'link'      → `link`
 // - valueType: 'number'    → `priority`, `effort`
 // - valueType: 'date'      → `due`
 // Nested child used to exercise flattenLabels traversal.
@@ -14,7 +15,7 @@ const LABELS: LabelConfig[] = [
   { id: 'subagent', name: 'Subagent' },
   { id: 'parent-task', name: 'Parent Task', valueType: 'string' },
   { id: 'subtask-id', name: 'Subtask ID', valueType: 'string' },
-  { id: 'link', name: 'Link', valueType: 'string' },
+  { id: 'link', name: 'Link', valueType: 'link' },
   { id: 'priority', name: 'Priority', valueType: 'number' },
   {
     id: 'work',
@@ -76,6 +77,12 @@ describe('resolveSessionLabels', () => {
     it('resolves date-typed values', () => {
       const r = resolveSessionLabels(['due::2026-01-30'], LABELS);
       expect(r.resolved).toEqual(['due::2026-01-30']);
+      expect(r.unknown).toEqual([]);
+    });
+
+    it('resolves link-typed URL values', () => {
+      const r = resolveSessionLabels(['link::https://example.com/path'], LABELS);
+      expect(r.resolved).toEqual(['link::https://example.com/path']);
       expect(r.unknown).toEqual([]);
     });
 
