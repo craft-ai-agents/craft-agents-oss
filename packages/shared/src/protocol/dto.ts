@@ -74,6 +74,8 @@ export interface Session {
   model?: string
   llmConnection?: string
   thinkingLevel?: ThinkingLevel
+  /** Sound pack override for this session (uses global default if unset) */
+  soundPack?: string
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   lastFinalMessageId?: string
   isAsyncOperationOngoing?: boolean
@@ -135,6 +137,12 @@ export interface CreateSessionOptions {
   branchFromMessageId?: string
   /** Parent session ID used together with branchFromMessageId. */
   branchFromSessionId?: string
+  /**
+   * Sound pack for the new session. Accepts `'__none__'` to explicitly silence
+   * the session. When omitted, the engine uses its default pack resolution.
+   * Used by automations to assign a specific pack to sessions they create.
+   */
+  soundPack?: string
 }
 
 export interface RemoteSessionTransferPayload {
@@ -199,6 +207,7 @@ export type SessionEvent =
   | { type: 'name_changed'; sessionId: string; name?: string }
   | { type: 'session_model_changed'; sessionId: string; model: string | null }
   | { type: 'session_status_changed'; sessionId: string; sessionStatus: SessionStatus }
+  | { type: 'sound_pack_changed'; sessionId: string; soundPack?: string }
   | { type: 'session_deleted'; sessionId: string }
   | { type: 'session_created'; sessionId: string }
   | { type: 'session_shared'; sessionId: string; sharedUrl: string }
@@ -524,6 +533,10 @@ export interface WorkspaceSettings {
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
   enabledSourceSlugs?: string[]
+  // Secondary Model: per-workspace overrides for call_llm tool calls
+  callLlmConnection?: string
+  callLlmModel?: string
+  callLlmThinkingLevel?: ThinkingLevel
 }
 
 // ---------------------------------------------------------------------------

@@ -208,6 +208,16 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 // ============================================================
 
 /**
+ * Options for customizing session-scoped tool behavior.
+ */
+export interface SessionScopedToolOptions {
+  /** Secondary Model override: force this model for all call_llm calls */
+  callLlmModelOverride?: string;
+  /** Secondary Model override: force this thinking level for all call_llm calls */
+  callLlmThinkingLevelOverride?: string;
+}
+
+/**
  * Get or create session-scoped tools for a session.
  * Returns an MCP server with all session-scoped tools registered.
  *
@@ -217,9 +227,10 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 export function getSessionScopedTools(
   sessionId: string,
   workspaceRootPath: string,
-  workspaceId?: string
+  workspaceId?: string,
+  toolOptions?: SessionScopedToolOptions
 ): ReturnType<typeof createSdkMcpServer> {
-  const cacheKey = `${sessionId}::${workspaceRootPath}`;
+  const cacheKey = `${sessionId}::${workspaceRootPath}::${toolOptions?.callLlmModelOverride ?? ''}::${toolOptions?.callLlmThinkingLevelOverride ?? ''}`;
 
   // Return cached tools if available, but always create a fresh MCP server wrapper
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -275,6 +286,8 @@ export function getSessionScopedTools(
           const callbacks = getSessionScopedToolCallbacks(sessionId);
           return callbacks?.queryFn;
         },
+        modelOverride: toolOptions?.callLlmModelOverride,
+        thinkingLevelOverride: toolOptions?.callLlmThinkingLevelOverride,
       }),
     );
 

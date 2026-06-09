@@ -27,6 +27,8 @@ export const PromptActionSchema = z.object({
   llmConnection: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
   thinkingLevel: ThinkingLevelInputSchema,
+  // Sound pack override for sessions created by this action. `'__none__'` silences.
+  soundPack: z.string().min(1).optional(),
 });
 
 export const WebhookActionSchema = z.object({
@@ -150,6 +152,9 @@ export const AutomationMatcherSchema = z.object({
   // Telegram forum-topic name (1–128 chars). Silently ignored at runtime when
   // no supergroup is paired or the Telegram adapter is not connected.
   telegramTopic: z.string().min(1).max(128).optional(),
+  // Default sound pack for sessions created by this matcher's prompt actions.
+  // Per-action `soundPack` overrides this. `'__none__'` silences.
+  soundPack: z.string().min(1).optional(),
   actions: z.array(ActionDefinitionSchema).min(1, 'At least one action required'),
 });
 

@@ -166,6 +166,8 @@ export interface BuildCallLlmOptions {
   validateModel?: (resolvedModelId: string) => string | undefined;
   /** Session directory for resolving relative attachment paths */
   sessionPath?: string;
+  /** Secondary Model override: force this model for all call_llm calls (ignores agent's model param) */
+  modelOverride?: string;
 }
 
 /**
@@ -207,8 +209,10 @@ export async function buildCallLlmRequest(
 
   textParts.push(prompt);
 
-  // Resolve model against registry, with optional backend-specific validation
-  let model = input.model as string | undefined;
+  // Resolve model against registry, with optional backend-specific validation.
+  // Apply Secondary Model override: when configured, always use the override model
+  // regardless of what the agent/prompt/skill requested.
+  let model = options.modelOverride ?? (input.model as string | undefined);
   if (model) {
     const modelDef = getModelById(model)
       || MODEL_REGISTRY.find(m => m.shortName.toLowerCase() === model!.toLowerCase())
@@ -357,6 +361,19 @@ export async function processAttachment(
   }
   const filename = filePath.split('/').pop() || filePath;
   const safeFilename = escapeXml(filename); // Escape for use in XML-like tags
+
+  // --- Detect unresolved template tokens ({{...}}, <SESSION_...>, <%...%>) ---
+  // These tokens are only replaced in session logs, never in tool calls.
+  // Catching them early produces a self-documenting error instead of "File not found".
+  const TEMPLATE_TOKEN_RE = /\{\{.*?\}\}|\<SESSION_.*?\>|<%.*?%>/;
+  if (typeof filePath === 'string' && TEMPLATE_TOKEN_RE.test(filePath)) {
+    return {
+      type: 'error',
+      message: `Attachment ${index + 1}: Path contains an unresolved template token: "${filePath}". ` +
+        `Use the actual absolute path from <session_state> (e.g., dataFolderPath), not a placeholder like {{SESSION_PATH}}. ` +
+        `Template tokens are only replaced in session logs, not in tool calls.`
+    };
+  }
 
   // --- Validate path exists and is a file ---
   if (!filePath || typeof filePath !== 'string') {
@@ -554,6 +571,10 @@ export interface LLMToolOptions {
    * Each backend implements queryLlm() with native structured output support.
    */
   getQueryFn: () => ((request: LLMQueryRequest) => Promise<LLMQueryResult>) | undefined;
+  /** Secondary Model override: force this model for all call_llm calls (ignores agent's model param) */
+  modelOverride?: string;
+  /** Secondary Model override: force this thinking level for all call_llm calls */
+  thinkingLevelOverride?: string;
 }
 
 export function createLLMTool(options: LLMToolOptions) {
@@ -691,7 +712,9 @@ For large files (>2000 lines), use {path, startLine, endLine} to select a portio
       // EXECUTE QUERY
       // ========================================
 
-      const model = args.model || getDefaultSummarizationModel();
+      // Apply Secondary Model override: when configured, always use the override model
+      // regardless of what the agent/prompt/skill requested.
+      const model = options.modelOverride ?? args.model ?? getDefaultSummarizationModel();
       const schema = args.outputSchema || (args.outputFormat ? OUTPUT_FORMATS[args.outputFormat] : null);
 
       try {

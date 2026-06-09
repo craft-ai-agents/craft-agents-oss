@@ -40,6 +40,7 @@ import {
   handlePermissionModeChanged,
   handleSessionModelChanged,
   handleConnectionChanged,
+  handleSoundPackChanged,
   handleUserMessage,
   handleMessageAnnotationsUpdated,
   handleSessionShared,
@@ -149,6 +150,9 @@ export function processEvent(
 
     case 'connection_changed':
       return handleConnectionChanged(state, event)
+
+    case 'sound_pack_changed':
+      return handleSoundPackChanged(state, event)
 
     case 'sources_changed':
       return handleSourcesChanged(state, event)

@@ -1,6 +1,7 @@
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
+import { resolveSessionId } from '../utils.ts';
 
 export interface GetSessionInfoArgs {
   sessionId?: string;
@@ -15,9 +16,10 @@ export async function handleGetSessionInfo(
   }
 
   try {
-    const info = ctx.getSessionInfo(args.sessionId);
+    const resolvedId = resolveSessionId(args.sessionId);
+    const info = ctx.getSessionInfo(resolvedId);
     if (!info) {
-      return errorResponse(`Session not found: ${args.sessionId ?? ctx.sessionId}`);
+      return errorResponse(`Session not found: ${resolvedId ?? ctx.sessionId}`);
     }
     return successResponse(JSON.stringify(info, null, 2));
   } catch (error) {

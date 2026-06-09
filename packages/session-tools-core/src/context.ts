@@ -316,6 +316,9 @@ export interface SessionToolContext {
   /** Set status on a session. Defaults to current session if no ID given. Injected by backend. */
   setSessionStatus?(sessionId: string | undefined, status: string): void | Promise<void>;
 
+  /** Archive or unarchive a session. Defaults to current session if no ID given. Injected by backend. */
+  archiveSession?(sessionId: string | undefined, archive: boolean): void | Promise<void>;
+
   /** Get detailed info about a session. Defaults to current session if no ID given. Injected by backend. */
   getSessionInfo?(sessionId?: string): SessionInfo | null;
 

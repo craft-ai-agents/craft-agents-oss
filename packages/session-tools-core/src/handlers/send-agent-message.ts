@@ -1,6 +1,7 @@
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
+import { resolveSessionId } from '../utils.ts';
 
 export interface SendAgentMessageArgs {
   sessionId: string;
@@ -16,7 +17,9 @@ export async function handleSendAgentMessage(
     return errorResponse('send_agent_message is not available in this context.');
   }
 
-  if (!args.sessionId?.trim()) {
+  const resolvedId = resolveSessionId(args.sessionId);
+
+  if (!resolvedId?.trim()) {
     return errorResponse('sessionId is required.');
   }
 
@@ -25,7 +28,7 @@ export async function handleSendAgentMessage(
   }
 
   // Prevent self-send (would create a recursive loop)
-  if (args.sessionId === ctx.sessionId) {
+  if (resolvedId === ctx.sessionId) {
     return errorResponse('Cannot send a message to your own session. Use a different sessionId.');
   }
 
@@ -41,10 +44,10 @@ export async function handleSendAgentMessage(
       args.message,
     ].join('\n');
 
-    await ctx.sendAgentMessage(args.sessionId, wrappedMessage, args.attachments);
+    await ctx.sendAgentMessage(resolvedId, wrappedMessage, args.attachments);
 
     return successResponse(
-      `Message sent to session ${args.sessionId}. The session will process it independently.`
+      `Message sent to session ${resolvedId}. The session will process it independently.`
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

@@ -73,6 +73,7 @@ import { CompactSourceSelector } from '@/components/ui/CompactSourceSelector'
 import { CompactWorkingDirectorySelector } from '@/components/ui/CompactWorkingDirectorySelector'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
+import { SoundPackBadge } from './SoundPackBadge'
 import { derivePickerMode } from './picker-mode'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
@@ -243,6 +244,8 @@ export interface FreeFormInputProps {
   onConnectionChange?: (connectionSlug: string) => void
   /** When true, the session's locked connection has been removed */
   connectionUnavailable?: boolean
+  /** Sound pack name for this session (overrides global default) */
+  soundPack?: string
   /**
    * True when the input is collapsed because the agent is processing in
    * compact mode and the user hasn't expanded it yet. Owned by
@@ -308,6 +311,7 @@ export function FreeFormInput({
   currentConnection,
   onConnectionChange,
   connectionUnavailable = false,
+  soundPack,
   isCollapsedInCompact = false,
   onRequestExpand,
 }: FreeFormInputProps) {
@@ -1897,6 +1901,14 @@ export function FreeFormInput({
               workspaceId={workspaceId}
             />
           )}
+          {sessionId && (
+            <SoundPackBadge
+              sessionId={sessionId}
+              activePack={soundPack}
+              isEmptySession={false}
+              disabled={disabled}
+            />
+          )}
           </div>
           )}
 
@@ -2003,6 +2015,16 @@ export function FreeFormInput({
               sessionFolderPath={sessionFolderPath}
               isEmptySession={isEmptySession}
               workspaceId={workspaceId}
+            />
+          )}
+
+          {/* 4. Sound Pack Selector Badge */}
+          {sessionId && (
+            <SoundPackBadge
+              sessionId={sessionId}
+              activePack={soundPack}
+              isEmptySession={isEmptySession}
+              disabled={disabled}
             />
           )}
           </div>

@@ -218,6 +218,85 @@ describe('buildCallLlmRequest()', () => {
     );
     expect(result.model).toBe('corrected-model');
   });
+
+  // --- Template token detection in attachment paths ---
+
+  describe('template token detection in attachments', () => {
+    it('rejects {{SESSION_PATH}} in attachment paths with helpful error', async () => {
+      await expect(
+        buildCallLlmRequest(
+          { prompt: 'test', attachments: ['{{SESSION_PATH}}/data/file.json'] },
+          { backendName: 'Test' }
+        )
+      ).rejects.toThrow('unresolved template token');
+    });
+
+    it('rejects {{SESSION_PATH}} with backslashes', async () => {
+      await expect(
+        buildCallLlmRequest(
+          { prompt: 'test', attachments: ['{{SESSION_PATH}}\\data\\file.json'] },
+          { backendName: 'Test' }
+        )
+      ).rejects.toThrow('unresolved template token');
+    });
+
+    it('rejects <SESSION_DATA_FOLDER> in attachment paths', async () => {
+      await expect(
+        buildCallLlmRequest(
+          { prompt: 'test', attachments: ['<SESSION_DATA_FOLDER>/file.json'] },
+          { backendName: 'Test' }
+        )
+      ).rejects.toThrow('unresolved template token');
+    });
+
+    it('rejects ERB-style <% %> tokens in attachment paths', async () => {
+      await expect(
+        buildCallLlmRequest(
+          { prompt: 'test', attachments: ['<%= session_path %>/data/file.json'] },
+          { backendName: 'Test' }
+        )
+      ).rejects.toThrow('unresolved template token');
+    });
+
+    it('preserves normal absolute paths that happen to contain braces', async () => {
+      // Paths like "C:\Users\{GUID}\file.txt" — curly braces without double-braces are fine
+      const result = await buildCallLlmRequest(
+        { prompt: 'Summarize', attachments: [join(TMP_DIR, 'test.ts')] },
+        { backendName: 'Test' }
+      );
+      // The file should load successfully (no template token error)
+      expect(result.prompt).toContain('const x = 1;');
+      expect(result.prompt).toContain('Summarize');
+    });
+  });
+
+  // --- modelOverride option ---
+
+  describe('modelOverride option', () => {
+    it('uses modelOverride when provided, ignoring input.model', async () => {
+      const result = await buildCallLlmRequest(
+        { prompt: 'test', model: 'agent-requested-model' },
+        { backendName: 'Test', modelOverride: 'configured-override-model' }
+      );
+      expect(result.model).toBe('configured-override-model');
+    });
+
+    it('falls back to input.model when modelOverride is not set', async () => {
+      const result = await buildCallLlmRequest(
+        { prompt: 'test', model: 'agent-requested-model' },
+        { backendName: 'Test' }
+      );
+      expect(result.model).toBe('agent-requested-model');
+    });
+
+    it('leaves model undefined when neither modelOverride nor input.model is set', async () => {
+      const result = await buildCallLlmRequest(
+        { prompt: 'test' },
+        { backendName: 'Test' }
+      );
+      expect(result.model).toBeUndefined();
+    });
+  });
 });
 
 // Cleanup

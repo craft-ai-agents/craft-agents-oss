@@ -30,6 +30,7 @@ import {
   RefreshCw,
   Tag,
   Send,
+  Hash,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getStateColor, getStateIcon, type SessionStatusId } from '@/config/session-status-config'
@@ -98,7 +99,7 @@ export function SessionMenu({
   const _hasMessages = hasMessagesMeta(item)
   const _hasUnread = hasUnreadMeta(item)
 
-  const actions = useSessionMenuActions({ item, onLabelsChange })
+  const { copySessionId, ...menuActions } = useSessionMenuActions({ item, onLabelsChange })
 
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
@@ -107,7 +108,7 @@ export function SessionMenu({
     <>
       {/* Share/Shared based on shared state */}
       {!sharedUrl ? (
-        <MenuItem onClick={actions.share}>
+        <MenuItem onClick={menuActions.share}>
           <CloudUpload className="h-3.5 w-3.5" />
           <span className="flex-1">{t("sessionMenu.share")}</span>
         </MenuItem>
@@ -119,10 +120,10 @@ export function SessionMenu({
           </SubTrigger>
           <SubContent>
             <ShareMenuItems
-              onOpenInBrowser={actions.openSharedInBrowser}
-              onCopyLink={actions.copySharedLink}
-              onUpdateShare={actions.updateShare}
-              onRevokeShare={actions.revokeShare}
+              onOpenInBrowser={menuActions.openSharedInBrowser}
+              onCopyLink={menuActions.copySharedLink}
+              onUpdateShare={menuActions.updateShare}
+              onRevokeShare={menuActions.revokeShare}
               menu={{ MenuItem, Separator }}
             />
           </SubContent>
@@ -180,8 +181,8 @@ export function SessionMenu({
           <SubContent>
             <LabelMenuItems
               labels={labels}
-              appliedLabelIds={actions.appliedLabelIds}
-              onToggle={actions.toggleLabel}
+              appliedLabelIds={menuActions.appliedLabelIds}
+              onToggle={menuActions.toggleLabel}
               menu={{ MenuItem, Separator, Sub, SubTrigger, SubContent }}
             />
           </SubContent>
@@ -231,7 +232,7 @@ export function SessionMenu({
       </MenuItem>
 
       {/* Regenerate Title - AI-generate based on recent messages */}
-      <MenuItem onClick={actions.refreshTitle}>
+      <MenuItem onClick={menuActions.refreshTitle}>
         <RefreshCw className="h-3.5 w-3.5" />
         <span className="flex-1">{t("sessionMenu.regenerateTitle")}</span>
       </MenuItem>
@@ -239,7 +240,7 @@ export function SessionMenu({
       <Separator />
 
       {/* Open in New Panel */}
-      <MenuItem onClick={actions.openInNewPanel}>
+      <MenuItem onClick={menuActions.openInNewPanel}>
         <Columns2 className="h-3.5 w-3.5" />
         <span className="flex-1">{t("sessionMenu.openInNewPanel")}</span>
       </MenuItem>
@@ -251,15 +252,21 @@ export function SessionMenu({
       </MenuItem>
 
       {/* Show in file manager */}
-      <MenuItem onClick={actions.showInFinder}>
+      <MenuItem onClick={menuActions.showInFinder}>
         <FolderOpen className="h-3.5 w-3.5" />
         <span className="flex-1">{t("sessionMenu.showInFileManager", { fileManager: getFileManagerName() })}</span>
       </MenuItem>
 
       {/* Copy Path */}
-      <MenuItem onClick={actions.copyPath}>
+      <MenuItem onClick={menuActions.copyPath}>
         <Copy className="h-3.5 w-3.5" />
         <span className="flex-1">{t("sessionMenu.copyPath")}</span>
+      </MenuItem>
+
+      {/* Copy Session ID */}
+      <MenuItem onClick={copySessionId}>
+        <Hash className="h-3.5 w-3.5" />
+        <span className="flex-1">{t("sessionMenu.copySessionId")}</span>
       </MenuItem>
 
       <Separator />

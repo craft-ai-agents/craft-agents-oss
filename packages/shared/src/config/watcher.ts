@@ -101,6 +101,19 @@ export interface UserPreferences {
     country?: string;
   };
   notes?: string;
+  diffViewer?: {
+    diffStyle?: 'unified' | 'split';
+    disableBackground?: boolean;
+  };
+  includeCoAuthoredBy?: boolean;
+  sound?: {
+    enabled?: boolean;
+    defaultPack?: string;
+    volume?: number;
+    cooldownMs?: number;
+    noRepeat?: boolean;
+    categories?: Record<string, { enabled: boolean; overrideFilePath?: string; volume?: number }>;
+  };
   /** Internal: mirrors Appearance → Language. Maintained by the main-process i18n IPC handler. */
   uiLanguage?: string;
   updatedAt?: number;

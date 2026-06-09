@@ -323,6 +323,15 @@ export interface LLMConnectionChangedEvent {
 }
 
 /**
+ * Sound pack changed event - syncs session.soundPack to renderer
+ */
+export interface SoundPackChangedEvent {
+  type: 'sound_pack_changed'
+  sessionId: string
+  soundPack?: string
+}
+
+/**
  * Credential request event - prompts user for credentials
  */
 export interface CredentialRequestEvent {
@@ -502,6 +511,7 @@ export type AgentEvent =
   | PermissionModeChangedEvent
   | SessionModelChangedEvent
   | LLMConnectionChangedEvent
+  | SoundPackChangedEvent
   | TaskBackgroundedEvent
   | ShellBackgroundedEvent
   | TaskProgressEvent

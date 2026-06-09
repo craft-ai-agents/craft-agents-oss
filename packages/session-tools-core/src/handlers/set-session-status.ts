@@ -1,6 +1,7 @@
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
+import { resolveSessionId } from '../utils.ts';
 
 export interface SetSessionStatusArgs {
   sessionId?: string;
@@ -29,8 +30,9 @@ export async function handleSetSessionStatus(
       status = resolved;
     }
 
-    await ctx.setSessionStatus(args.sessionId, status);
-    const target = args.sessionId ? `session ${args.sessionId}` : 'current session';
+    const resolvedId = resolveSessionId(args.sessionId);
+    await ctx.setSessionStatus(resolvedId, status);
+    const target = resolvedId ? `session ${resolvedId}` : 'current session';
     return successResponse(`Status set to "${status}" on ${target}.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

@@ -44,6 +44,8 @@ export interface SessionMenuActions {
   share: () => Promise<void>
   showInFinder: () => void
   copyPath: () => Promise<void>
+  /** Copy the session ID to the clipboard. */
+  copySessionId: () => Promise<void>
   refreshTitle: () => Promise<void>
   openInNewPanel: () => void
   /** Open the session's published share URL in the system browser (no-op if not shared). */
@@ -155,6 +157,11 @@ export function useSessionMenuActions({
     }
   }, [sessionId, t])
 
+  const copySessionId = React.useCallback(async () => {
+    await navigator.clipboard.writeText(sessionId)
+    toast.success(t('toast.sessionIdCopied'))
+  }, [sessionId, t])
+
   const refreshTitle = React.useCallback(async () => {
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'refreshTitle' }) as { success: boolean; title?: string; error?: string } | undefined
     if (result?.success) {
@@ -205,6 +212,7 @@ export function useSessionMenuActions({
     share,
     showInFinder,
     copyPath,
+    copySessionId,
     refreshTitle,
     openInNewPanel,
     openSharedInBrowser,

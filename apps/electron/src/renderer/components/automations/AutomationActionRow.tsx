@@ -64,11 +64,16 @@ function WebhookText({ action }: { action: Extract<AutomationAction, { type: 'we
  * stale, executePromptAutomation already logs a warning at run time.
  */
 function PromptActionBadges({ action, t }: { action: PromptAction; t: (key: string) => string }) {
-  const { llmConnection, model, thinkingLevel } = action
-  if (!llmConnection && !model && !thinkingLevel) return null
+  const { llmConnection, model, thinkingLevel, soundPack } = action
+  if (!llmConnection && !model && !thinkingLevel && !soundPack) return null
 
   const thinkingDef = thinkingLevel ? THINKING_LEVELS.find((l) => l.id === thinkingLevel) : undefined
   const thinkingLabel = thinkingDef ? t(thinkingDef.nameKey) : thinkingLevel
+
+  // '__none__' sentinel — show a friendly label instead of the raw sentinel
+  const soundPackDisplay = soundPack === '__none__'
+    ? t('automations.labelNoSounds')
+    : soundPack
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
@@ -97,6 +102,15 @@ function PromptActionBadges({ action, t }: { action: PromptAction; t: (key: stri
           title={`${t('automations.labelThinking')}: ${thinkingLabel}`}
         >
           {thinkingLabel}
+        </Badge>
+      )}
+      {soundPack && (
+        <Badge
+          variant="secondary"
+          className="font-mono text-[10px] px-1.5 py-0 font-normal max-w-[14rem] truncate"
+          title={`${t('automations.labelSoundPack')}: ${soundPackDisplay}`}
+        >
+          {soundPackDisplay}
         </Badge>
       )}
     </div>

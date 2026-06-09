@@ -5,6 +5,7 @@ import { CONFIG_DIR } from './paths.ts';
 import { readJsonFileSync } from '../utils/files.ts';
 import { i18n, SUPPORTED_LANGUAGE_CODES } from '../i18n/index.ts';
 import { LOCALE_REGISTRY, type LanguageCode } from '../i18n/registry.ts';
+import type { SoundSettings } from '../audio/types.ts';
 
 export interface UserLocation {
   city?: string;
@@ -33,6 +34,8 @@ export interface UserPreferences {
   diffViewer?: DiffViewerPreferences;
   // Whether to include Co-Authored-By trailer on git commits (default: true)
   includeCoAuthoredBy?: boolean;
+  // Sound notification settings (persisted across restarts)
+  sound?: Partial<SoundSettings>;
   /**
    * Internal: persisted UI language code (mirrors Appearance → Language).
    * Maintained only by the main-process `i18n:changeLanguage` IPC handler.
@@ -82,6 +85,10 @@ export function updatePreferences(updates: Partial<UserPreferences>): UserPrefer
     diffViewer: updates.diffViewer
       ? { ...current.diffViewer, ...updates.diffViewer }
       : current.diffViewer,
+    // Deep merge sound settings
+    sound: updates.sound
+      ? { ...(current.sound ?? {}), ...updates.sound }
+      : current.sound,
   };
   savePreferences(updated);
   return updated;

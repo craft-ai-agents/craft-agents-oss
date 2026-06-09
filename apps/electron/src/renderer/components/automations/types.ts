@@ -66,6 +66,8 @@ export interface PromptAction {
   model?: string
   /** Thinking level override for the spawned session */
   thinkingLevel?: ThinkingLevel
+  /** Sound pack override for the spawned session. `'__none__'` silences. */
+  soundPack?: string
 }
 
 export interface WebhookAction {
@@ -229,6 +231,8 @@ export interface AutomationListItem {
    * supergroup (created on first use).
    */
   telegramTopic?: string
+  /** Default sound pack for sessions created by prompt actions. `'__none__'` silences. */
+  soundPack?: string
   /** Timestamp of last execution (ms since epoch) */
   lastExecutedAt?: number
 }
@@ -372,7 +376,7 @@ interface AutomationsConfigFile {
 }
 
 type RawAction =
-  | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
+  | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel; soundPack?: string }
   | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string>; bodyFormat?: 'json' | 'form' | 'raw'; body?: unknown; captureResponse?: boolean; auth?: WebhookAction['auth'] }
 
 interface AutomationsConfigMatcher {
@@ -383,6 +387,7 @@ interface AutomationsConfigMatcher {
   timezone?: string
   permissionMode?: PermissionMode
   labels?: string[]
+  soundPack?: string
   conditions?: AutomationConditionUI[]
   enabled?: boolean
   actions?: RawAction[]
@@ -464,6 +469,10 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
       const telegramTopic =
         typeof rawTopic === 'string' && rawTopic.trim().length > 0 ? rawTopic.trim() : undefined
 
+      const rawSoundPack = (matcher as { soundPack?: unknown }).soundPack
+      const soundPack =
+        typeof rawSoundPack === 'string' && rawSoundPack.length > 0 ? rawSoundPack : undefined
+
       items.push({
         id: matcher.id ?? `${eventName}-${index}`,
         event,
@@ -479,6 +488,7 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
         conditions: matcher.conditions,
         actions,
         telegramTopic,
+        soundPack,
       })
       index++
     }
