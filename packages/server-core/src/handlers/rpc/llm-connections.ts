@@ -376,7 +376,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   })
 
   server.handle(RPC_CHANNELS.pi.GET_PROVIDER_MODELS, async (_ctx, provider: string) => {
-    const { getModels } = await import('@mariozechner/pi-ai')
+    const { getModels } = await import('@earendil-works/pi-ai')
     try {
       const models = getModels(provider as Parameters<typeof getModels>[0])
       const sorted = [...models].sort((a, b) => b.cost.output - a.cost.output || b.cost.input - a.cost.input)
@@ -763,7 +763,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     error?: string
   }> => {
     try {
-      const { loginGitHubCopilot } = await import('@mariozechner/pi-ai/oauth')
+      const { loginGitHubCopilot } = await import('@earendil-works/pi-ai/oauth')
       const credentialManager = getCredentialManager()
 
       // Cancel any previous in-flight flow
@@ -776,17 +776,18 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       // the critical Copilot token exchange that determines the correct
       // API endpoint for the user's subscription tier (individual/business/enterprise).
       const credentials = await loginGitHubCopilot({
-        onAuth: (url, instructions) => {
-          // Extract user code from instructions (format: "Enter code: XXXX-YYYY")
-          const codeMatch = instructions?.match(/:\s*(\S+)/)
-          const userCode = codeMatch?.[1] ?? ''
+        // earendil pi-ai 0.78+ surfaces the device flow via onDeviceCode with a
+        // structured OAuthDeviceCodeInfo ({ userCode, verificationUri }), replacing
+        // the older onAuth(url, instructions) string-parsing callback.
+        onDeviceCode: (info) => {
+          const userCode = info.userCode ?? ''
           deps.platform.logger?.info(`[GitHub OAuth] Device code: ${userCode}`)
           pushTyped(server, RPC_CHANNELS.copilot.DEVICE_CODE, { to: 'client', clientId: ctx.clientId }, {
             userCode,
-            verificationUri: url,
+            verificationUri: info.verificationUri,
           })
           // Open GitHub device code page on the client's machine
-          server.invokeClient(ctx.clientId, CLIENT_OPEN_EXTERNAL, url).catch(err => {
+          server.invokeClient(ctx.clientId, CLIENT_OPEN_EXTERNAL, info.verificationUri).catch(err => {
             deps.platform.logger?.warn(`Failed to open browser for GitHub OAuth: ${err}`)
           })
         },

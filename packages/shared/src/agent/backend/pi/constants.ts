@@ -5,7 +5,7 @@
  * Extracted here to avoid circular imports between pi-agent.ts and event-adapter.ts.
  */
 
-import type { ThinkingLevel as PiThinkingLevel } from '@mariozechner/pi-agent-core';
+import type { ThinkingLevel as PiThinkingLevel } from '@earendil-works/pi-agent-core';
 import type { ThinkingLevel } from '../../thinking-levels.ts';
 
 /**

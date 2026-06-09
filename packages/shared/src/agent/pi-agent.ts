@@ -4,7 +4,7 @@
  * Thin subprocess client for the Pi coding agent. Spawns a pi-agent-server
  * subprocess and communicates via JSONL over stdin/stdout.
  *
- * The subprocess runs the Pi SDK (@mariozechner/pi-coding-agent) in-process,
+ * The subprocess runs the Pi SDK (@earendil-works/pi-coding-agent) in-process,
  * handles tool wrapping, permission enforcement, and LLM queries.
  * This file manages subprocess lifecycle, JSONL protocol, event forwarding,
  * and proxy tool routing for MCP/API sources.
@@ -759,7 +759,7 @@ export class PiAgent extends BaseAgent {
       try {
         if (piAuthProvider === 'github-copilot') {
           // Copilot: refresh the short-lived Copilot token using the GitHub access token
-          const { refreshGitHubCopilotToken } = await import('@mariozechner/pi-ai/oauth');
+          const { refreshGitHubCopilotToken } = await import('@earendil-works/pi-ai/oauth');
           const newCreds = await refreshGitHubCopilotToken(stored.refreshToken);
           await credentialManager.setLlmOAuth(slug, {
             accessToken: newCreds.access,

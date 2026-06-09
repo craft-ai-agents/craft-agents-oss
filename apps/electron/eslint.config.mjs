@@ -196,11 +196,11 @@ export default [
           message: 'Provider SDK usage must stay in backend drivers under packages/shared/src/agent/backend/internal/drivers.',
         },
         {
-          selector: "ImportDeclaration[source.value='@mariozechner/pi-ai']",
+          selector: "ImportDeclaration[source.value='@earendil-works/pi-ai']",
           message: 'Provider SDK usage must stay in backend drivers under packages/shared/src/agent/backend/internal/drivers.',
         },
         {
-          selector: "ImportDeclaration[source.value='@mariozechner/pi-coding-agent']",
+          selector: "ImportDeclaration[source.value='@earendil-works/pi-coding-agent']",
           message: 'Provider SDK usage must stay in backend drivers under packages/shared/src/agent/backend/internal/drivers.',
         },
       ],

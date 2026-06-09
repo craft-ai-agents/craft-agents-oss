@@ -3,7 +3,7 @@
  * Pi Agent Server
  *
  * Out-of-process Pi agent server communicating via JSONL over stdio.
- * Wraps @mariozechner/pi-coding-agent SDK and communicates with the main
+ * Wraps @earendil-works/pi-coding-agent SDK and communicates with the main
  * Electron process using a line-delimited JSON protocol.
  *
  * The main process spawns this as a child process. All Pi SDK interactions
@@ -33,7 +33,7 @@ import {
   createGrepToolDefinition,
   createFindToolDefinition,
   createLsToolDefinition,
-} from '@mariozechner/pi-coding-agent';
+} from '@earendil-works/pi-coding-agent';
 import type {
   AgentSession,
   AgentSessionEvent,
@@ -41,18 +41,18 @@ import type {
   AuthCredential,
   CreateAgentSessionOptions,
   ToolDefinition,
-} from '@mariozechner/pi-coding-agent';
+} from '@earendil-works/pi-coding-agent';
 
 // Pi AI types
-import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
+import type { TextContent as PiTextContent } from '@earendil-works/pi-ai';
 
 // Pre-register the Bedrock provider module so the Pi SDK doesn't attempt a
 // dynamic import of "./amazon-bedrock.js" — which fails in the bundled output
 // because bun collapses everything into a single file.
 // With the current Pi SDK (0.70.0 here), pi-ai is deduped (single hoisted
 // copy), so one registration covers both pi-ai and pi-agent-core module scopes.
-import { setBedrockProviderModule } from '@mariozechner/pi-ai';
-import { bedrockProviderModule } from '@mariozechner/pi-ai/bedrock-provider';
+import { setBedrockProviderModule } from '@earendil-works/pi-ai';
+import { bedrockProviderModule } from '@earendil-works/pi-ai/bedrock-provider';
 setBedrockProviderModule(bedrockProviderModule);
 
 // Model resolution (extracted for testability + custom-endpoint precedence)

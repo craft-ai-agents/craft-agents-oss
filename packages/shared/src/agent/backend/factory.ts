@@ -4,7 +4,7 @@
  * Creates the appropriate AI agent based on configuration.
  * Supports two agents:
  * - ClaudeAgent (Anthropic) - Default, using @anthropic-ai/claude-agent-sdk
- * - PiAgent (Pi) - Using @mariozechner/pi-ai SDK
+ * - PiAgent (Pi) - Using @earendil-works/pi-ai SDK
  *
  * All agents implement AgentBackend directly.
  *

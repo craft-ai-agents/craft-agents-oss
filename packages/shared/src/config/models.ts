@@ -161,7 +161,7 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
   // ----------------------------------------
   // Pi Models
   // No hardcoded entries — models are discovered dynamically:
-  //   - Pi: getModels(provider) from @mariozechner/pi-ai SDK
+  //   - Pi: getModels(provider) from @earendil-works/pi-ai SDK
   // See ModelRefreshService in apps/electron/src/main/model-fetchers/
   // ----------------------------------------
 ];

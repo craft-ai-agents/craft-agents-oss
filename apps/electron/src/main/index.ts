@@ -198,7 +198,7 @@ if (isDebugMode) {
 }
 
 // Register Pi model resolver so llm-connections.ts can resolve Pi models
-// without importing @mariozechner/pi-ai (which breaks the Vite renderer build)
+// without importing @earendil-works/pi-ai (which breaks the Vite renderer build)
 registerPiModelResolver((piAuthProvider) =>
   piAuthProvider ? getPiModelsForAuthProvider(piAuthProvider) : getAllPiModels()
 )

@@ -12,12 +12,12 @@
 import type { AgentEvent as CraftAgentEvent } from '@craft-agent/core/types';
 import type {
   AgentEvent as PiAgentEvent,
-} from '@mariozechner/pi-agent-core';
+} from '@earendil-works/pi-agent-core';
 import type {
   AgentSessionEvent,
-} from '@mariozechner/pi-coding-agent';
-import type { AssistantMessage, AssistantMessageEvent } from '@mariozechner/pi-ai';
-import { isContextOverflow } from '@mariozechner/pi-ai';
+} from '@earendil-works/pi-coding-agent';
+import type { AssistantMessage, AssistantMessageEvent } from '@earendil-works/pi-ai';
+import { isContextOverflow } from '@earendil-works/pi-ai';
 import { BaseEventAdapter } from '../base-event-adapter.ts';
 import { PI_TOOL_NAME_MAP } from './constants.ts';
 import { toolMetadataStore } from '../../../interceptor-common.ts';
@@ -25,7 +25,7 @@ import { parseError } from '../../errors.ts';
 
 /**
  * Pi SDK auto-compaction race signature — the AbortController crash described
- * in `_runAutoCompaction` (`@mariozechner/pi-coding-agent` agent-session.ts).
+ * in `_runAutoCompaction` (`@earendil-works/pi-coding-agent` agent-session.ts).
  * When two `_runAutoCompaction` calls overlap, one's `finally` clears the
  * shared `_autoCompactionAbortController` field while the other is still
  * suspended on an await; the next `.signal` read crashes. Matched against
