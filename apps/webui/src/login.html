@@ -259,6 +259,8 @@
     const subtitle = document.getElementById('subtitle');
 
     let feishuConfig = null;
+    const oauthStateKey = 'feishu_oauth_state';
+    const oauthAppKeyKey = 'feishu_oauth_appKey';
 
     function showError(message) {
       errorEl.textContent = message;
@@ -267,6 +269,109 @@
 
     function clearError() {
       errorEl.classList.remove('visible');
+    }
+
+    function isFeishuWebviewUnavailable(err) {
+      return err?.code === 'FEISHU_WEBVIEW_UNAVAILABLE';
+    }
+
+    function isPasswordOnlyRequested() {
+      return new URLSearchParams(window.location.search).get('pw') === '1';
+    }
+
+    function setFeishuButtonIdleText() {
+      feishuBtn.textContent = feishuConfig?.domain === 'lark'
+        ? 'Continue with Lark'
+        : 'Continue with Feishu / 飞书登录';
+    }
+
+    function showPasswordFallback(message) {
+      form.style.display = '';
+      subtitle.textContent = message || 'Enter your server token to continue';
+    }
+
+    function cleanOAuthCallbackUrl() {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('code');
+      url.searchParams.delete('state');
+      const next = url.pathname + (url.search ? url.search : '') + url.hash;
+      window.history.replaceState({}, document.title, next);
+    }
+
+    function generateOAuthState() {
+      const bytes = new Uint8Array(16);
+      window.crypto.getRandomValues(bytes);
+      return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    function startFeishuOAuthRedirect(active) {
+      if (!active?.appId) {
+        showError('Feishu application is not configured.');
+        return;
+      }
+      const state = generateOAuthState();
+      sessionStorage.setItem(oauthStateKey, state);
+      sessionStorage.setItem(oauthAppKeyKey, active.key || '');
+
+      const authorizeUrl = new URL(feishuConfig?.domain === 'lark'
+        ? 'https://accounts.larksuite.com/open-apis/authen/v1/authorize'
+        : 'https://accounts.feishu.cn/open-apis/authen/v1/authorize');
+      authorizeUrl.searchParams.set('client_id', active.appId);
+      authorizeUrl.searchParams.set('redirect_uri', location.origin + '/login');
+      authorizeUrl.searchParams.set('response_type', 'code');
+      authorizeUrl.searchParams.set('state', state);
+
+      window.location.href = authorizeUrl.toString();
+    }
+
+    async function handleFeishuOAuthCallback() {
+      const params = new URLSearchParams(window.location.search);
+      if (!params.has('code')) return false;
+
+      const code = params.get('code');
+      const returnedState = params.get('state');
+      const storedState = sessionStorage.getItem(oauthStateKey);
+      const storedAppKey = sessionStorage.getItem(oauthAppKeyKey) || undefined;
+
+      cleanOAuthCallbackUrl();
+      sessionStorage.removeItem(oauthStateKey);
+      sessionStorage.removeItem(oauthAppKeyKey);
+
+      if (!code || !storedState || returnedState !== storedState) {
+        showPasswordFallback('Enter your server token to continue');
+        showError('Feishu OAuth state mismatch. Please try again.');
+        return true;
+      }
+
+      subtitle.textContent = 'Completing Feishu sign in...';
+      feishuBtn.style.display = 'none';
+      form.style.display = 'none';
+      clearError();
+
+      try {
+        const res = await fetch('/api/auth/feishu/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            code,
+            appKey: storedAppKey,
+            flow: 'oauth',
+            redirectUri: location.origin + '/login',
+          }),
+        });
+        if (res.ok) {
+          window.location.href = '/';
+          return true;
+        }
+        const data = await res.json().catch(() => ({}));
+        showPasswordFallback('Enter your server token to continue');
+        showError(data.error || 'Feishu authentication failed');
+      } catch (err) {
+        showPasswordFallback('Enter your server token to continue');
+        showError('Network error — is the server running?');
+      }
+      return true;
     }
 
     function loadScript(src) {
@@ -299,7 +404,9 @@
         const run = () => {
           const tt = window.tt;
           if (!tt?.requestAccess) {
-            reject(new Error('Feishu login is only available inside the Feishu/Lark client.'));
+            const err = new Error('Feishu login is only available inside the Feishu/Lark client.');
+            err.code = 'FEISHU_WEBVIEW_UNAVAILABLE';
+            reject(err);
             return;
           }
           tt.requestAccess({
@@ -343,14 +450,19 @@
       if (!feishuConfig?.enabled || !active) return;
       clearError();
       feishuBtn.disabled = true;
-      feishuBtn.textContent = 'Signing in with Feishu...';
+      feishuBtn.textContent = window.tt?.requestAccess ? 'Signing in with Feishu...' : 'Redirecting to Feishu...';
 
       try {
+        if (!window.tt?.requestAccess) {
+          startFeishuOAuthRedirect(active);
+          return;
+        }
         await ensureFeishuSdk(feishuConfig.domain);
         const code = await requestFeishuCode(active.appId);
         const res = await fetch('/api/auth/feishu/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
           body: JSON.stringify({ code, appKey: active.key }),
         });
         if (res.ok) {
@@ -363,7 +475,43 @@
         showError(err instanceof Error ? err.message : 'Feishu authentication failed');
       } finally {
         feishuBtn.disabled = false;
-        feishuBtn.textContent = feishuConfig.domain === 'lark' ? 'Continue with Lark' : 'Continue with Feishu';
+        setFeishuButtonIdleText();
+      }
+    }
+
+    async function signInWithFeishuInWebview() {
+      const active = resolveActiveApp(feishuConfig);
+      if (!feishuConfig?.enabled || !active) return;
+      clearError();
+      feishuBtn.disabled = true;
+      feishuBtn.textContent = 'Signing in with Feishu...';
+
+      try {
+        await ensureFeishuSdk(feishuConfig.domain);
+        const code = await requestFeishuCode(active.appId);
+        const res = await fetch('/api/auth/feishu/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ code, appKey: active.key }),
+        });
+        if (res.ok) {
+          window.location.href = '/';
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        showError(data.error || 'Feishu authentication failed');
+      } catch (err) {
+        if (isFeishuWebviewUnavailable(err) || !window.tt?.requestAccess) {
+          showPasswordFallback(feishuConfig.domain === 'lark'
+            ? 'Use Lark to continue or enter your server token'
+            : 'Use Feishu to continue or enter your server token');
+        } else {
+          showError(err instanceof Error ? err.message : 'Feishu authentication failed');
+        }
+      } finally {
+        feishuBtn.disabled = false;
+        setFeishuButtonIdleText();
       }
     }
 
@@ -376,16 +524,21 @@
       }
 
       if (feishuConfig.enabled) {
+        if (isPasswordOnlyRequested()) {
+          feishuBtn.style.display = 'none';
+          showPasswordFallback('Enter your server token to continue');
+          return;
+        }
+
         feishuBtn.style.display = '';
-        feishuBtn.textContent = feishuConfig.domain === 'lark' ? 'Continue with Lark' : 'Continue with Feishu';
-        form.style.display = feishuConfig.passwordFallback ? '' : 'none';
+        setFeishuButtonIdleText();
+        form.style.display = feishuConfig.passwordFallback || !window.tt?.requestAccess ? '' : 'none';
         subtitle.textContent = feishuConfig.domain === 'lark'
           ? 'Use Lark to continue'
           : 'Use Feishu to continue';
-        void signInWithFeishu();
+        void signInWithFeishuInWebview();
       } else {
-        form.style.display = '';
-        subtitle.textContent = 'Enter your server token to continue';
+        showPasswordFallback('Enter your server token to continue');
       }
     }
 
@@ -423,7 +576,12 @@
       }
     });
 
-    loadAuthConfig();
+    (async () => {
+      const handledOAuthCallback = await handleFeishuOAuthCallback();
+      if (!handledOAuthCallback) {
+        await loadAuthConfig();
+      }
+    })();
   </script>
 </body>
 </html>

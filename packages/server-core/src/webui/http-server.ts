@@ -262,6 +262,50 @@ async function exchangeFeishuCode(options: Required<Pick<FeishuAuthOptions, 'dom
   }
 }
 
+async function exchangeFeishuCodeOAuth(
+  options: Required<Pick<FeishuAuthOptions, 'domain' | 'appId' | 'appSecret'>>,
+  code: string,
+  redirectUri: string,
+): Promise<FeishuUserInfo> {
+  const base = getFeishuOpenApiBase(options.domain)
+  const tokenRes = await fetch(`${base}/open-apis/authen/v2/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({
+      grant_type: 'authorization_code',
+      client_id: options.appId,
+      client_secret: options.appSecret,
+      code,
+      redirect_uri: redirectUri,
+    }),
+  })
+  const tokenJson = await tokenRes.json().catch(() => ({})) as any
+  const tokenData = tokenJson.data ?? tokenJson
+  if (!tokenRes.ok || tokenJson.code !== 0 || !tokenData?.access_token) {
+    throw new Error(tokenJson.msg || tokenJson.message || tokenData?.error_description || tokenData?.error || `Feishu OAuth token request failed: HTTP ${tokenRes.status}`)
+  }
+
+  const userRes = await fetch(`${base}/open-apis/authen/v1/user_info`, {
+    headers: {
+      Authorization: `Bearer ${tokenData.access_token}`,
+    },
+  })
+  const userJson = await userRes.json().catch(() => ({})) as any
+  const data = userJson.data ?? userJson
+  if (!userRes.ok || userJson.code !== 0 || !data) {
+    throw new Error(userJson.msg || userJson.message || data?.error_description || data?.error || `Feishu user_info request failed: HTTP ${userRes.status}`)
+  }
+
+  return {
+    openId: data.open_id,
+    userId: data.user_id,
+    unionId: data.union_id,
+    name: data.name || data.en_name,
+    email: data.email,
+    tenantKey: data.tenant_key,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Handler factory — the core request handler
 // ---------------------------------------------------------------------------
@@ -427,25 +471,32 @@ export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
         return Response.json({ error: 'Feishu auth is not enabled' }, { status: 404 })
       }
 
-      let body: { code?: string; appKey?: string }
+      let body: { code?: string; appKey?: string; flow?: string; redirectUri?: string }
       try {
-        body = await req.json() as { code?: string; appKey?: string }
+        body = await req.json() as { code?: string; appKey?: string; flow?: string; redirectUri?: string }
       } catch {
         return Response.json({ error: 'Invalid request body' }, { status: 400 })
       }
       if (!body.code || typeof body.code !== 'string') {
         return Response.json({ error: 'Feishu code is required' }, { status: 400 })
       }
+      const useOAuthFlow = body.flow === 'oauth' || body.redirectUri != null
+      if (useOAuthFlow && (!body.redirectUri || typeof body.redirectUri !== 'string')) {
+        return Response.json({ error: 'Feishu OAuth redirectUri is required' }, { status: 400 })
+      }
 
       // Pick the app the code was issued by; fall back to the first when unspecified.
       const app = (body.appKey && apps.find((a) => a.key === body.appKey)) || apps[0]!
 
       try {
-        const user = await exchangeFeishuCode({
+        const appOptions = {
           domain: feishuAuth.domain,
           appId: app.appId,
           appSecret: app.appSecret,
-        }, body.code)
+        }
+        const user = useOAuthFlow
+          ? await exchangeFeishuCodeOAuth(appOptions, body.code, body.redirectUri!)
+          : await exchangeFeishuCode(appOptions, body.code)
         const sub = user.openId ?? user.userId ?? user.unionId
         if (!sub) {
           return Response.json({ error: 'Feishu did not return a user identity' }, { status: 401 })
