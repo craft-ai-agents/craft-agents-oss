@@ -18,7 +18,7 @@
     },
     {
       "pattern": "^cd\\s+tools/video-studio\\s+&&\\s+node\\s+bin/video-studio\\.mjs\\s+export\\s+.+\\s+--json$",
-      "comment": "Create a placeholder export receipt"
+      "comment": "Create a Video Studio export or receipt"
     }
   ]
 }

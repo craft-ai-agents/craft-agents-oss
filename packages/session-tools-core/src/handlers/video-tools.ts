@@ -230,48 +230,119 @@ function escapeDrawText(value: string): string {
     .replace(/\\/g, '\\\\')
     .replace(/:/g, '\\:')
     .replace(/'/g, "\\'")
+    .replace(/%/g, '\\%')
+    .replace(/\r?\n/g, ' ')
     .replace(/\[/g, '\\[')
     .replace(/\]/g, '\\]')
     .slice(0, 180);
 }
 
-function renderSimpleMp4(project: VideoProject, outputPath: string): void {
-  const unsupportedClips = project.timeline.tracks
-    .flatMap((track) => track.clips)
-    .filter((clip) => clip.mediaId && clip.type !== 'text');
-  if (unsupportedClips.length > 0) {
-    const labels = unsupportedClips.slice(0, 3).map((clip) => clip.label ?? clip.id).join(', ');
-    throw new Error(`Simple MP4 renderer does not support media-backed clips yet: ${labels}. Export a text/title timeline or use a placeholder export.`);
+function seconds(ms: number | undefined, fallbackMs = 0): number {
+  return Math.max(0, (ms ?? fallbackMs) / 1000);
+}
+
+function ffmpegNumber(value: number): string {
+  return value.toFixed(3).replace(/\.?0+$/, '');
+}
+
+function textForClip(clip: VideoProject['timeline']['tracks'][number]['clips'][number], fallback: string): string {
+  const textPayload = clip.text;
+  if (typeof textPayload === 'object' && textPayload && 'text' in textPayload && typeof textPayload.text === 'string') {
+    return textPayload.text;
   }
+  return typeof clip.label === 'string' ? clip.label : fallback;
+}
+
+function renderSimpleMp4(project: VideoProject, outputPath: string): void {
   const width = typeof project.settings.width === 'number' ? project.settings.width : 1080;
   const height = typeof project.settings.height === 'number' ? project.settings.height : 1920;
   const fps = typeof project.settings.fps === 'number' ? project.settings.fps : 30;
   const durationSeconds = Math.max(1, Math.ceil((project.timeline.durationMs || 3000) / 1000));
+  const mediaById = new Map(project.media.map((media) => [media.id, media]));
+  const clips = project.timeline.tracks.flatMap((track) => track.clips).sort((a, b) => a.startMs - b.startMs);
+  const mediaClips = clips
+    .map((clip) => ({ clip, media: clip.mediaId ? mediaById.get(clip.mediaId) : undefined }))
+    .filter((item): item is { clip: typeof clips[number]; media: VideoProject['media'][number] } => Boolean(item.media));
+  const unsupportedClips = mediaClips.filter(({ media }) => !['video', 'image', 'audio'].includes(media.type));
+  if (unsupportedClips.length > 0) {
+    const labels = unsupportedClips.slice(0, 3).map(({ clip }) => clip.label ?? clip.id).join(', ');
+    throw new Error(`Simple MP4 renderer only supports video, image, audio, and text clips right now: ${labels}.`);
+  }
+
+  const args = ['-y', '-f', 'lavfi', '-i', `color=c=#111111:s=${width}x${height}:r=${fps}:d=${durationSeconds}`];
+  const inputClips: Array<{ clip: typeof clips[number]; media: VideoProject['media'][number]; inputIndex: number }> = [];
+  for (const { clip, media } of mediaClips) {
+    if (!existsSync(media.path)) throw new Error(`Media file not found for clip "${clip.label ?? clip.id}": ${media.path}`);
+    const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
+    const sourceIn = seconds(typeof clip.sourceInMs === 'number' ? clip.sourceInMs : 0);
+    if (media.type === 'image') {
+      args.push('-loop', '1', '-t', clipDuration, '-i', media.path);
+    } else {
+      if (sourceIn > 0) args.push('-ss', ffmpegNumber(sourceIn));
+      args.push('-t', clipDuration, '-i', media.path);
+    }
+    inputClips.push({ clip, media, inputIndex: inputClips.length + 1 });
+  }
+
+  const filters: string[] = [`[0:v]format=rgba[base0]`];
+  let currentVideo = '[base0]';
+  let overlayIndex = 0;
+  for (const { clip, media, inputIndex } of inputClips.filter((item) => item.media.type === 'video' || item.media.type === 'image')) {
+    const start = ffmpegNumber(seconds(clip.startMs));
+    const end = ffmpegNumber(seconds(clip.startMs + clip.durationMs));
+    const prepared = `v${overlayIndex}`;
+    const next = `base${overlayIndex + 1}`;
+    filters.push(
+      `[${inputIndex}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1,format=rgba,setpts=PTS-STARTPTS+${start}/TB[${prepared}]`,
+    );
+    filters.push(`${currentVideo}[${prepared}]overlay=0:0:enable='between(t,${start},${end})'[${next}]`);
+    currentVideo = `[${next}]`;
+    overlayIndex += 1;
+  }
+
   const textClips = project.timeline.tracks
     .flatMap((track) => track.clips)
     .filter((clip) => clip.type === 'text' || clip.text || !clip.mediaId)
     .slice(0, 8);
-  const overlays = textClips.length > 0
-    ? textClips.map((clip, index) => {
-        const textPayload = clip.text;
-        const text = typeof textPayload === 'object' && textPayload && 'text' in textPayload && typeof textPayload.text === 'string'
-          ? textPayload.text
-          : typeof clip.label === 'string' ? clip.label : project.title;
-        const start = Math.max(0, (clip.startMs ?? 0) / 1000);
-        const end = Math.max(start + 0.2, start + ((clip.durationMs ?? 3000) / 1000));
-        const y = Math.round(height * 0.42) + (index % 3) * 86;
-        return `drawtext=text='${escapeDrawText(text)}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 24))}:x=(w-text_w)/2:y=${y}:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`;
-      })
-    : [`drawtext=text='${escapeDrawText(project.title)}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 22))}:x=(w-text_w)/2:y=(h-text_h)/2`];
-  const args = [
-    '-y',
-    '-f', 'lavfi',
-    '-i', `color=c=#111111:s=${width}x${height}:r=${fps}:d=${durationSeconds}`,
-    '-vf', overlays.join(','),
-    '-pix_fmt', 'yuv420p',
-    '-movflags', '+faststart',
-    outputPath,
-  ];
+  for (const [index, clip] of textClips.entries()) {
+    const start = seconds(clip.startMs);
+    const end = Math.max(start + 0.2, start + seconds(clip.durationMs, 3000));
+    const y = Math.round(height * 0.42) + (index % 3) * 86;
+    const next = `text${index}`;
+    filters.push(
+      `${currentVideo}drawtext=text='${escapeDrawText(textForClip(clip, project.title))}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 24))}:x=(w-text_w)/2:y=${y}:enable='between(t,${ffmpegNumber(start)},${ffmpegNumber(end)})'[${next}]`,
+    );
+    currentVideo = `[${next}]`;
+  }
+  if (textClips.length === 0 && inputClips.length === 0) {
+    filters.push(`${currentVideo}drawtext=text='${escapeDrawText(project.title)}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 22))}:x=(w-text_w)/2:y=(h-text_h)/2[title0]`);
+    currentVideo = '[title0]';
+  }
+
+  const audioLabels: string[] = [];
+  inputClips.filter((item) => item.media.type === 'audio').forEach(({ clip, inputIndex }, index) => {
+    const delayMs = Math.max(0, Math.round(clip.startMs ?? 0));
+    const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
+    const label = `a${index}`;
+    filters.push(`[${inputIndex}:a]atrim=duration=${clipDuration},asetpts=PTS-STARTPTS,adelay=${delayMs}:all=1[${label}]`);
+    audioLabels.push(`[${label}]`);
+  });
+  if (audioLabels.length > 0) {
+    filters.push(`${audioLabels.join('')}amix=inputs=${audioLabels.length}:duration=longest:dropout_transition=0,atrim=duration=${durationSeconds}[aout]`);
+  }
+
+  filters.push(`${currentVideo}format=yuv420p[vout]`);
+  args.push(
+    '-filter_complex', filters.join(';'),
+    '-map', '[vout]',
+  );
+  if (audioLabels.length > 0) args.push('-map', '[aout]');
+  args.push('-t', String(durationSeconds), '-r', String(fps), '-pix_fmt', 'yuv420p');
+  if (['.mp4', '.mov', '.m4v'].includes(extname(outputPath).toLowerCase())) {
+    args.push('-movflags', '+faststart');
+  }
+  args.push(outputPath);
+
   const result = spawnSync('ffmpeg', args, { encoding: 'utf-8' });
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout || 'ffmpeg failed to render video.');
@@ -369,7 +440,10 @@ export async function handleVideoClipAdd(ctx: SessionToolContext, args: VideoCli
   const project = readProject(projectPath);
   const media = args.mediaId ? project.media.find((asset) => asset.id === args.mediaId) : undefined;
   if (args.mediaId && !media) return errorResponse(`Media not found in project: ${args.mediaId}`);
-  const clipType = args.type ?? (media?.type === 'audio' ? 'audio' : media?.type === 'image' ? 'image' : media?.type === 'caption' ? 'caption' : args.text ? 'text' : 'video');
+  const clipType = args.type ?? (media?.type === 'audio' ? 'audio' : media?.type === 'image' ? 'image' : media?.type === 'caption' ? 'caption' : args.text ? 'text' : 'text');
+  if (!media && ['video', 'audio', 'image'].includes(clipType)) {
+    return errorResponse(`${clipType} clips require a mediaId. Use type: "text" for generated title/text clips.`);
+  }
   const durationMs = args.durationMs ?? (clipType === 'image' || clipType === 'text' ? 3000 : 1000);
   if (durationMs <= 0) return errorResponse('durationMs must be positive.');
   const startMs = args.startMs ?? project.timeline.durationMs;

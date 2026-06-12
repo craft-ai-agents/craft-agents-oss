@@ -507,7 +507,7 @@ export const VideoClipAddSchema = z.object({
   projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
   mediaId: z.string().optional().describe('Existing media asset id to place on the timeline. Omit for generated text clips.'),
   trackId: z.string().optional().describe('Target track id. Creates a simple track if the id does not exist.'),
-  type: z.enum(['video', 'audio', 'image', 'text', 'caption', 'shape', 'lottie', 'html']).optional().describe('Clip type. Defaults from media type or text.'),
+  type: z.enum(['video', 'audio', 'image', 'text', 'caption', 'shape', 'lottie', 'html']).optional().describe('Clip type. Defaults from media type or text. Video, audio, and image clips require mediaId.'),
   startMs: z.number().nonnegative().optional().describe('Timeline start time in milliseconds. Defaults to current timeline end.'),
   durationMs: z.number().positive().optional().describe('Clip duration in milliseconds. Defaults to 3000 for text/image or 1000 otherwise.'),
   sourceInMs: z.number().nonnegative().optional().describe('Optional source in-point in milliseconds.'),
@@ -518,7 +518,7 @@ export const VideoClipAddSchema = z.object({
 
 export const VideoExportSchema = z.object({
   projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
-  outputPath: z.string().optional().describe('Output path. Defaults to renders/preview.placeholder.txt next to the project. Use .mp4 for the simple FFmpeg renderer, currently for text/title timelines only. Non-video paths write a placeholder text receipt.'),
+  outputPath: z.string().optional().describe('Output path. Defaults to renders/preview.placeholder.txt next to the project. Use .mp4 for the simple FFmpeg renderer. It supports video, image, audio, and text clips. Non-video paths write a placeholder text receipt.'),
   preset: z.string().optional().describe('Export preset label. Defaults to placeholder.'),
   publishOutput: z.boolean().optional().describe('Also publish a Runner Output receipt if create_output is available. Defaults to false.'),
   showInCanvas: z.boolean().optional().describe('When publishOutput is true, request immediate Canvas display.'),
@@ -1012,7 +1012,7 @@ Use this for the first agent-editable timeline operations: place imported media 
 
   video_export: `Create a Video Studio export.
 
-Use an .mp4 output path for the simple FFmpeg renderer. It currently supports text/title timelines and fails loudly on media-backed clips. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
+Use an .mp4 output path for the simple FFmpeg renderer. It supports video, image, audio, and text clips, and fails loudly on unsupported media types like SVG/Lottie/HTML until the fuller renderer lands. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
 
   visual_surface: `Update the current session Canvas through a safe structured operation.
 

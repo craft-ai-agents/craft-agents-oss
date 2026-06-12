@@ -182,6 +182,22 @@ describe('video studio session tools', () => {
     expect(result.content[0]?.type === 'text' ? result.content[0].text : '').toContain('sourceOutMs');
   });
 
+  test('rejects media clip types when mediaId is missing', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Missing Media' });
+
+    const result = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'video',
+      startMs: 0,
+      durationMs: 1000,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.type === 'text' ? result.content[0].text : '').toContain('require a mediaId');
+  });
+
   test('renders a playable mp4 when output path uses a video extension', async () => {
     const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' });
     if (ffmpeg.status !== 0) return;
@@ -210,12 +226,48 @@ describe('video studio session tools', () => {
     expect(readFileSync(outputPath).subarray(4, 8).toString()).toBe('ftyp');
   });
 
-  test('rejects simple mp4 export for media-backed clips', async () => {
+  test('renders imported video media into a playable mp4', async () => {
+    const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' });
+    if (ffmpeg.status !== 0) return;
     const ctx = makeCtx();
     const projectPath = join(root, 'project', 'video.runner-video.json');
     await handleVideoProjectCreate(ctx, { projectPath, title: 'Media Backed' });
     const mediaPath = join(root, 'clip.mp4');
-    writeFileSync(mediaPath, 'fake fixture media', 'utf-8');
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=320x180:rate=30',
+      '-t', '1',
+      '-pix_fmt', 'yuv420p',
+      mediaPath,
+    ], { encoding: 'utf-8' });
+    if (fixture.status !== 0) throw new Error(fixture.stderr || fixture.stdout || 'failed to create fixture video');
+    const imported = await handleVideoMediaImport(ctx, { projectPath, mediaPath });
+    const mediaId = (imported.structuredContent as { mediaId: string }).mediaId;
+    await handleVideoClipAdd(ctx, {
+      projectPath,
+      mediaId,
+      startMs: 0,
+      durationMs: 1000,
+    });
+
+    const result = await handleVideoExport(ctx, {
+      projectPath,
+      outputPath: join(root, 'project', 'renders', 'preview.mp4'),
+    });
+
+    expect(result.isError).toBe(false);
+    const outputPath = (result.structuredContent as { outputPath: string }).outputPath;
+    expect(existsSync(outputPath)).toBe(true);
+    expect(readFileSync(outputPath).subarray(4, 8).toString()).toBe('ftyp');
+  });
+
+  test('rejects unsupported media-backed clips for real mp4 export', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Unsupported Media' });
+    const mediaPath = join(root, 'shape.svg');
+    writeFileSync(mediaPath, '<svg xmlns="http://www.w3.org/2000/svg" />', 'utf-8');
     const imported = await handleVideoMediaImport(ctx, { projectPath, mediaPath });
     const mediaId = (imported.structuredContent as { mediaId: string }).mediaId;
     await handleVideoClipAdd(ctx, {
@@ -231,6 +283,6 @@ describe('video studio session tools', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.type === 'text' ? result.content[0].text : '').toContain('does not support media-backed clips');
+    expect(result.content[0]?.type === 'text' ? result.content[0].text : '').toContain('only supports video, image, audio, and text');
   });
 });

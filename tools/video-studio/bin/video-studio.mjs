@@ -151,45 +151,115 @@ function escapeDrawText(value) {
     .replace(/\\/g, '\\\\')
     .replace(/:/g, '\\:')
     .replace(/'/g, "\\'")
+    .replace(/%/g, '\\%')
+    .replace(/\r?\n/g, ' ')
     .replace(/\[/g, '\\[')
     .replace(/\]/g, '\\]')
     .slice(0, 180);
 }
 
+function seconds(ms, fallbackMs = 0) {
+  return Math.max(0, (ms ?? fallbackMs) / 1000);
+}
+
+function ffmpegNumber(value) {
+  return value.toFixed(3).replace(/\.?0+$/, '');
+}
+
+function textForClip(clip, fallback) {
+  return typeof clip.text?.text === 'string' ? clip.text.text : (clip.label || fallback);
+}
+
 function renderSimpleMp4(project, outputPath) {
-  const unsupportedClips = (project.timeline?.tracks || [])
-    .flatMap((track) => track.clips || [])
-    .filter((clip) => clip.mediaId && clip.type !== 'text');
-  if (unsupportedClips.length > 0) {
-    const labels = unsupportedClips.slice(0, 3).map((clip) => clip.label || clip.id).join(', ');
-    fail(`Simple MP4 renderer does not support media-backed clips yet: ${labels}. Export a text/title timeline or use a placeholder export.`);
-  }
   const width = typeof project.settings?.width === 'number' ? project.settings.width : 1080;
   const height = typeof project.settings?.height === 'number' ? project.settings.height : 1920;
   const fps = typeof project.settings?.fps === 'number' ? project.settings.fps : 30;
   const durationSeconds = Math.max(1, Math.ceil((project.timeline?.durationMs || 3000) / 1000));
+  const mediaById = new Map((project.media || []).map((media) => [media.id, media]));
+  const clips = (project.timeline?.tracks || [])
+    .flatMap((track) => track.clips || [])
+    .sort((a, b) => (a.startMs || 0) - (b.startMs || 0));
+  const mediaClips = clips
+    .map((clip) => ({ clip, media: clip.mediaId ? mediaById.get(clip.mediaId) : undefined }))
+    .filter((item) => item.media);
+  const unsupportedClips = mediaClips.filter(({ media }) => !['video', 'image', 'audio'].includes(media.type));
+  if (unsupportedClips.length > 0) {
+    const labels = unsupportedClips.slice(0, 3).map(({ clip }) => clip.label || clip.id).join(', ');
+    fail(`Simple MP4 renderer only supports video, image, audio, and text clips right now: ${labels}.`);
+  }
+
+  const args = ['-y', '-f', 'lavfi', '-i', `color=c=#111111:s=${width}x${height}:r=${fps}:d=${durationSeconds}`];
+  const inputClips = [];
+  for (const { clip, media } of mediaClips) {
+    if (!existsSync(media.path)) fail(`Media file not found for clip "${clip.label || clip.id}": ${media.path}`);
+    const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
+    const sourceIn = seconds(typeof clip.sourceInMs === 'number' ? clip.sourceInMs : 0);
+    if (media.type === 'image') {
+      args.push('-loop', '1', '-t', clipDuration, '-i', media.path);
+    } else {
+      if (sourceIn > 0) args.push('-ss', ffmpegNumber(sourceIn));
+      args.push('-t', clipDuration, '-i', media.path);
+    }
+    inputClips.push({ clip, media, inputIndex: inputClips.length + 1 });
+  }
+
+  const filters = [`[0:v]format=rgba[base0]`];
+  let currentVideo = '[base0]';
+  let overlayIndex = 0;
+  for (const { clip, media, inputIndex } of inputClips.filter((item) => item.media.type === 'video' || item.media.type === 'image')) {
+    const start = ffmpegNumber(seconds(clip.startMs));
+    const end = ffmpegNumber(seconds((clip.startMs || 0) + (clip.durationMs || 1000)));
+    const prepared = `v${overlayIndex}`;
+    const next = `base${overlayIndex + 1}`;
+    filters.push(
+      `[${inputIndex}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1,format=rgba,setpts=PTS-STARTPTS+${start}/TB[${prepared}]`,
+    );
+    filters.push(`${currentVideo}[${prepared}]overlay=0:0:enable='between(t,${start},${end})'[${next}]`);
+    currentVideo = `[${next}]`;
+    overlayIndex += 1;
+  }
+
   const textClips = (project.timeline?.tracks || [])
     .flatMap((track) => track.clips || [])
     .filter((clip) => clip.type === 'text' || clip.text || !clip.mediaId)
     .slice(0, 8);
-  const overlays = textClips.length > 0
-    ? textClips.map((clip, index) => {
-        const text = typeof clip.text?.text === 'string' ? clip.text.text : (clip.label || project.title);
-        const start = Math.max(0, (clip.startMs || 0) / 1000);
-        const end = Math.max(start + 0.2, start + ((clip.durationMs || 3000) / 1000));
-        const y = Math.round(height * 0.42) + (index % 3) * 86;
-        return `drawtext=text='${escapeDrawText(text)}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 24))}:x=(w-text_w)/2:y=${y}:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`;
-      })
-    : [`drawtext=text='${escapeDrawText(project.title)}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 22))}:x=(w-text_w)/2:y=(h-text_h)/2`];
-  const result = spawnSync('ffmpeg', [
-    '-y',
-    '-f', 'lavfi',
-    '-i', `color=c=#111111:s=${width}x${height}:r=${fps}:d=${durationSeconds}`,
-    '-vf', overlays.join(','),
-    '-pix_fmt', 'yuv420p',
-    '-movflags', '+faststart',
-    outputPath,
-  ], { encoding: 'utf-8' });
+  for (const [index, clip] of textClips.entries()) {
+    const start = seconds(clip.startMs);
+    const end = Math.max(start + 0.2, start + seconds(clip.durationMs, 3000));
+    const y = Math.round(height * 0.42) + (index % 3) * 86;
+    const next = `text${index}`;
+    filters.push(
+      `${currentVideo}drawtext=text='${escapeDrawText(textForClip(clip, project.title))}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 24))}:x=(w-text_w)/2:y=${y}:enable='between(t,${ffmpegNumber(start)},${ffmpegNumber(end)})'[${next}]`,
+    );
+    currentVideo = `[${next}]`;
+  }
+  if (textClips.length === 0 && inputClips.length === 0) {
+    filters.push(`${currentVideo}drawtext=text='${escapeDrawText(project.title)}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 22))}:x=(w-text_w)/2:y=(h-text_h)/2[title0]`);
+    currentVideo = '[title0]';
+  }
+
+  const audioLabels = [];
+  inputClips.filter((item) => item.media.type === 'audio').forEach(({ clip, inputIndex }, index) => {
+    const delayMs = Math.max(0, Math.round(clip.startMs || 0));
+    const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
+    const label = `a${index}`;
+    filters.push(`[${inputIndex}:a]atrim=duration=${clipDuration},asetpts=PTS-STARTPTS,adelay=${delayMs}:all=1[${label}]`);
+    audioLabels.push(`[${label}]`);
+  });
+  if (audioLabels.length > 0) {
+    filters.push(`${audioLabels.join('')}amix=inputs=${audioLabels.length}:duration=longest:dropout_transition=0,atrim=duration=${durationSeconds}[aout]`);
+  }
+
+  filters.push(`${currentVideo}format=yuv420p[vout]`);
+  args.push('-filter_complex', filters.join(';'), '-map', '[vout]');
+  if (audioLabels.length > 0) args.push('-map', '[aout]');
+  args.push('-t', String(durationSeconds), '-r', String(fps), '-pix_fmt', 'yuv420p');
+  if (['.mp4', '.mov', '.m4v'].includes(extname(outputPath).toLowerCase())) {
+    args.push('-movflags', '+faststart');
+  }
+  args.push(outputPath);
+
+  const result = spawnSync('ffmpeg', args, { encoding: 'utf-8' });
   if (result.status !== 0) fail(result.stderr || result.stdout || 'ffmpeg failed to render video.');
 }
 
@@ -213,9 +283,9 @@ function runDoctor() {
   const ffmpegAvailable = ffmpeg.status === 0;
   const lines = [
     `✓ Node: ${nodeVersion}`,
-    ffmpegAvailable ? '✓ ffmpeg available for simple MP4 exports' : '• ffmpeg not found; placeholder exports still work.',
+    ffmpegAvailable ? '✓ ffmpeg available for video/image/audio/text MP4 exports' : '• ffmpeg not found; placeholder exports still work.',
     `• Tool root: ${resolve(join(import.meta.dirname, '..'))}`,
-    '• Simple timeline renderer enabled for .mp4 outputs.',
+    '• Simple media timeline renderer enabled for .mp4 outputs.',
   ];
   print({
     ok: true,
@@ -323,7 +393,7 @@ function runExport() {
     outputPath: outPath,
     createdAt: new Date().toISOString(),
     engine: realVideo ? 'runneros-video-studio-ffmpeg-simple' : 'runneros-video-studio-placeholder',
-    note: realVideo ? 'Playable MP4 rendered by the simple FFmpeg engine.' : 'Placeholder export written by foundation CLI.',
+    note: realVideo ? 'Playable MP4 rendered by the simple FFmpeg media timeline engine.' : 'Placeholder export written by foundation CLI.',
   };
   writeJsonAtomic(receiptPath, receipt);
   project.exports.push({
@@ -347,7 +417,7 @@ function runExport() {
     lines: [
       realVideo ? `✓ MP4 export rendered: ${outPath}` : `✓ Placeholder export written: ${outPath}`,
       `✓ Receipt written: ${receiptPath}`,
-      realVideo ? '• Playable MP4 created by the simple renderer.' : '• Use an .mp4 output path for the simple renderer.',
+      realVideo ? '• Playable MP4 created by the simple media renderer.' : '• Use an .mp4 output path for the simple renderer.',
     ],
   });
 }

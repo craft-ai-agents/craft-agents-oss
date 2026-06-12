@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, FileVideo, FolderOpen, Save } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, FileVideo, FolderOpen, History, Minus, Plus, RefreshCw, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
@@ -92,6 +92,16 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     })
   }, [selectedClipId, updateProject])
 
+  const nudgeSelectedClip = React.useCallback((deltaMs: number) => {
+    if (!selectedClip) return
+    updateSelectedClip({ startMs: Math.max(0, (selectedClip.startMs ?? 0) + deltaMs) })
+  }, [selectedClip, updateSelectedClip])
+
+  const resizeSelectedClip = React.useCallback((deltaMs: number) => {
+    if (!selectedClip) return
+    updateSelectedClip({ durationMs: Math.max(100, (selectedClip.durationMs ?? 1000) + deltaMs) })
+  }, [selectedClip, updateSelectedClip])
+
   const save = async () => {
     if (!projectAsset) return
     setSaving(true)
@@ -153,6 +163,10 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                 Show
               </Button>
             )}
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void load()}>
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              Reload
+            </Button>
             <Button size="sm" onClick={save} disabled={saving}>
               <Save className="mr-1.5 h-3.5 w-3.5" />
               {saving ? 'Saving' : 'Save'}
@@ -214,8 +228,18 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
             {selectedClip ? (
               <div className="mt-3 grid gap-3">
                 <Field label="Label" value={selectedClip.label ?? ''} onChange={(value) => updateSelectedClip({ label: value })} />
+                <div className="grid gap-1 text-xs text-white/42">
+                  Clip Tools
+                  <div className="grid grid-cols-4 gap-1">
+                    <IconButton label="-250 ms" onClick={() => nudgeSelectedClip(-250)}><ChevronLeft className="h-3.5 w-3.5" /></IconButton>
+                    <IconButton label="+250 ms" onClick={() => nudgeSelectedClip(250)}><ChevronRight className="h-3.5 w-3.5" /></IconButton>
+                    <IconButton label="Trim -" onClick={() => resizeSelectedClip(-250)}><Minus className="h-3.5 w-3.5" /></IconButton>
+                    <IconButton label="Trim +" onClick={() => resizeSelectedClip(250)}><Plus className="h-3.5 w-3.5" /></IconButton>
+                  </div>
+                </div>
                 <NumberField label="Start ms" value={selectedClip.startMs ?? 0} onChange={(value) => updateSelectedClip({ startMs: Math.max(0, value) })} />
                 <NumberField label="Duration ms" value={selectedClip.durationMs ?? 1000} onChange={(value) => updateSelectedClip({ durationMs: Math.max(1, value) })} />
+                {selectedClip.mediaId && <ReadOnlyValue label="Media ID" value={selectedClip.mediaId} />}
               </div>
             ) : <EmptyText>Select a clip to inspect</EmptyText>}
 
@@ -236,6 +260,21 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                   <div key={event.id ?? index} className="rounded-md border border-white/[0.08] bg-white/[0.035] p-2 text-xs">
                     <div className="text-white/72">{event.summary ?? event.toolName ?? 'Agent edit'}</div>
                     <div className="mt-1 text-white/38">{event.agentSlug ?? 'agent'} · {event.createdAt ?? ''}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <PanelTitle title="Versions" value={`${project.versions?.length ?? 0}`} />
+              <div className="mt-2 grid gap-2">
+                {(project.versions ?? []).slice(-6).reverse().map((version) => (
+                  <div key={version.id} className="rounded-md border border-white/[0.08] bg-white/[0.035] p-2 text-xs">
+                    <div className="flex items-center gap-1.5 text-white/72">
+                      <History className="h-3.5 w-3.5 text-white/38" />
+                      <span className="truncate">{version.summary}</span>
+                    </div>
+                    <div className="mt-1 text-white/38">{version.actor}{version.agentSlug ? ` · ${version.agentSlug}` : ''} · {version.createdAt}</div>
                   </div>
                 ))}
               </div>
@@ -299,6 +338,28 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
       {label}
       <input value={value} onChange={(event) => onChange(event.target.value)} className="h-8 rounded-md border border-white/[0.08] bg-black/35 px-2 text-sm text-white/72 outline-none focus:border-[#f97316]/50" />
     </label>
+  )
+}
+
+function ReadOnlyValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1 text-xs text-white/42">
+      {label}
+      <div className="h-8 truncate rounded-md border border-white/[0.08] bg-black/25 px-2 py-1.5 text-sm text-white/55">{value}</div>
+    </div>
+  )
+}
+
+function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      title={label}
+      onClick={onClick}
+      className="flex h-8 items-center justify-center rounded-md border border-white/[0.08] bg-black/35 text-white/68 outline-none hover:border-[#f97316]/40 hover:text-white"
+    >
+      {children}
+    </button>
   )
 }
 

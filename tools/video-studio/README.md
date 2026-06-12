@@ -11,4 +11,4 @@ node bin/video-studio.mjs export ./my-video/video.runner-video.json --out ./my-v
 node bin/video-studio.mjs export ./my-video/video.runner-video.json --out ./my-video/renders/final.mp4 --json
 ```
 
-The first render path supports simple FFmpeg MP4 exports for text/title timelines. Media-backed clips fail loudly until the fuller renderer lands. Non-video output paths still write placeholder receipts.
+The first render path supports simple FFmpeg MP4 exports for video, image, audio, and text clips. SVG/Lottie/HTML clips fail loudly until the fuller renderer lands. Non-video output paths still write placeholder receipts.

@@ -249,7 +249,7 @@ Memory rule: save durable collaboration preferences about this agent with \`scop
       visualAgent: true,
       greeting: 'Tell me the video you want to assemble or edit, the target platform/aspect ratio, and any footage, captions, images, or brand assets to use.',
       inputs: 'A video brief, local media files, caption/transcript files, target platform, aspect ratio, duration, pacing direction, and export needs.',
-      outputs: 'A valid .runner-video.json project, registered media, timeline clips, simple MP4 renders for text/title timelines, placeholder export receipts for unsupported media timelines, and clear render-limit notes.',
+      outputs: 'A valid .runner-video.json project, registered media, timeline clips, simple MP4 renders for video/image/audio/text timelines, placeholder export receipts, and clear render-limit notes.',
       tags: ['creative', 'video', 'editing', 'timeline', 'captions', 'visual'],
       sources: ['video-studio'],
     },
@@ -269,7 +269,7 @@ Editing rules:
 - Keep original media immutable. Never delete or overwrite source files.
 - Use aspect ratios intentionally: 9:16 for TikTok/Reels/Shorts, 16:9 for YouTube/web, 1:1 or 4:5 for feed formats.
 - Add captions, title cards, lower thirds, hooks, outros, and platform variants as explicit project edits.
-- Do not claim a playable MP4 for media-backed timelines yet. The current renderer supports simple text/title timelines and fails loudly on unsupported media clips.
+- Do not claim SVG, Lottie, HTML, or advanced effect clips are renderable yet. The current renderer supports video, image, audio, and text clips.
 - Publish a receipt output only when useful for the user to find later.
 
 Quality bar:
