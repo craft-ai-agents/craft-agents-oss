@@ -21,7 +21,7 @@ import type {
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync } from '../utils/files.ts';
-import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getGoogleAdsSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
+import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getVideoStudioSource, getGoogleAdsSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 import {
@@ -507,6 +507,8 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
         sources.push({ ...getPrintingPressSocialSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'hypermotion') {
         sources.push({ ...getHypermotionSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'video-studio') {
+        sources.push({ ...getVideoStudioSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'google-ads') {
         sources.push({ ...getGoogleAdsSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'youtube-research') {

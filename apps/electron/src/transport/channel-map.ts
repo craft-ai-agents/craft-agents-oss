@@ -481,6 +481,7 @@ export const CHANNEL_MAP = {
   openOutputFile: invoke(RPC_CHANNELS.outputs.OPEN_FILE),
   showOutputInFolder: invoke(RPC_CHANNELS.outputs.SHOW_IN_FOLDER),
   readOutputAssetText: invoke(RPC_CHANNELS.outputs.READ_ASSET_TEXT),
+  writeOutputAssetText: invoke(RPC_CHANNELS.outputs.WRITE_ASSET_TEXT),
   readOutputAssetDataUrl: invoke(RPC_CHANNELS.outputs.READ_ASSET_DATA_URL),
   onOutputsUpdated: listener(RPC_CHANNELS.outputs.UPDATED),
 

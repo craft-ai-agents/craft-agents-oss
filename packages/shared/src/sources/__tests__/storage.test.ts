@@ -389,6 +389,18 @@ describe('loadAllSources', () => {
     expect(found!.config.local?.format).toBe('cli-tool');
   });
 
+  test('includes video-studio as a project local source', () => {
+    const ws = makeWorkspace();
+    const all = loadAllSources(ws);
+    const found = all.find((s: LoadedSource) => s.config.slug === 'video-studio');
+
+    expect(found).toBeDefined();
+    expect(found!.tier).toBe('project');
+    expect(found!.config.type).toBe('local');
+    expect(found!.config.local?.format).toBe('cli-tool');
+    expect(found!.config.local?.path).toContain('tools/video-studio');
+  });
+
   test('includes shopify as a project local source', () => {
     const ws = makeWorkspace();
     const all = loadAllSources(ws);
@@ -482,6 +494,18 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.slug).toBe('hypermotion');
     expect(sources[0]!.config.enabled).toBe(true);
     expect(sources[0]!.config.type).toBe('local');
+  });
+
+  test('resolves video-studio by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['video-studio']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('video-studio');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.type).toBe('local');
+    expect(sources[0]!.config.local?.path).toContain('tools/video-studio');
   });
 
   test('resolves google-ads by slug without workspace activation', () => {

@@ -218,6 +218,7 @@ const EXPECTED_CHANNELS: string[] = [
   "outputs:saveVisualBoard",
   "outputs:showInFolder",
   "outputs:updated",
+  "outputs:writeAssetText",
   "permissions:defaultsChanged",
   "permissions:getDefaults",
   "pi:getApiKeyProviders",

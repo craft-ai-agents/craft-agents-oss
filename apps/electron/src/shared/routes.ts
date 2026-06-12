@@ -211,6 +211,9 @@ export const routes = {
     /** Output detail page */
     output: (outputId: string) => `outputs/${outputId}` as const,
 
+    /** Native Video Studio page for an output-backed video project */
+    videoStudio: (outputId: string) => `video-studio/${outputId}` as const,
+
     /** Cross-workflow run history */
     recentRuns: () => 'workflows/runs' as const,
 

@@ -36,7 +36,7 @@ import {
   isWorkspaceContextNavigation,
   isOutputsNavigation,
 } from '@/contexts/NavigationContext'
-import { isDeepResearchRunNavigation, isWorkflowsNavigation, isWorkflowRunNavigation } from '../../../shared/types'
+import { isDeepResearchRunNavigation, isVideoStudioNavigation, isWorkflowsNavigation, isWorkflowRunNavigation } from '../../../shared/types'
 import type { LoadedSkill, LoadedSource } from '../../../shared/types'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
@@ -53,6 +53,7 @@ import WorkflowRunPage from '@/pages/WorkflowRunPage'
 import DeepResearchRunPage from '@/pages/DeepResearchRunPage'
 import RecentRunsPage from '@/pages/RecentRunsPage'
 import OutputDetailPage from '@/pages/OutputDetailPage'
+import VideoStudioPage from '@/pages/VideoStudioPage'
 import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { SettingsPageSwitcher } from '@/pages/settings/SettingsPageSwitcher'
@@ -451,6 +452,14 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <OutputDetailPage outputId={navState.outputId} workspaceId={activeWorkspaceId || ''} />
+      </Panel>
+    )
+  }
+
+  if (isVideoStudioNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <VideoStudioPage outputId={navState.outputId} workspaceId={activeWorkspaceId || ''} />
       </Panel>
     )
   }

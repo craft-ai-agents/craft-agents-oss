@@ -153,6 +153,14 @@ export type {
   CreateOutputReceiptInput,
 } from './outputs.ts';
 
+// Video Studio
+export {
+  handleVideoProjectCreate,
+  handleVideoMediaImport,
+  handleVideoClipAdd,
+  handleVideoExport,
+} from './video-tools.ts';
+
 // Visual surface
 export { handleVisualSurface } from './visual-surface.ts';
 export type {

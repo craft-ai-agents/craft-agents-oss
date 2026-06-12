@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, ExternalLink, Eye, FileText, FolderOpen, Link2, PanelTopOpen, ReceiptText, Route } from 'lucide-react'
+import { AlertTriangle, ExternalLink, Eye, FileText, FileVideo, FolderOpen, Link2, PanelTopOpen, ReceiptText, Route } from 'lucide-react'
 import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { StatusPill } from '@/components/outputs/OutputsListPanel'
 import { OutputInlinePreview } from '@/components/outputs/OutputInlinePreview'
 import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
 import { openDemoVisualSurfaceAtom, openOutputVisualSurfaceAtom } from '@/atoms/visual-surfaces'
+import { findVideoProjectAsset } from '@/components/outputs/video-project-output'
 
 interface Props {
   workspaceId: string
@@ -88,6 +89,7 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
   }
 
   const primary = manifest.primary ?? manifest.assets.find((asset) => asset.role === 'primary') ?? manifest.assets[0]
+  const videoProjectAsset = findVideoProjectAsset(manifest)
   const sessionId = manifest.origin.sessionId
   const canSendToCanvas = manifest.kind === 'image' || manifest.kind === 'video' || manifest.kind === 'model'
 
@@ -117,6 +119,12 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
               <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => sendOutputToCanvas(workspaceId, manifest, sessionId, openDemoVisualSurface)}>
                 <PanelTopOpen className="mr-1.5 h-3.5 w-3.5" />
                 Canvas
+              </Button>
+            )}
+            {videoProjectAsset && (
+              <Button size="sm" variant="outline" className="border-[#f97316]/25 bg-[#f97316]/12 text-white/82 hover:bg-[#f97316]/20 hover:text-white" onClick={() => navigate(routes.view.videoStudio(manifest.id))}>
+                <FileVideo className="mr-1.5 h-3.5 w-3.5" />
+                Video Studio
               </Button>
             )}
             {primary && (

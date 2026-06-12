@@ -105,4 +105,18 @@ describe('route-parser: library routes', () => {
     expect(buildCompoundRoute(parsed!)).toBe('workspace-context')
     expect(parseRouteToNavigationState('workspace-context')).toEqual({ navigator: 'workspaceContext' })
   })
+
+  it('parses video studio output routes', () => {
+    const parsed = parseCompoundRoute('video-studio/output-1')
+    expect(parsed).toEqual({
+      navigator: 'videoStudio',
+      videoStudioOutputId: 'output-1',
+      details: { type: 'video-studio-output', id: 'output-1' },
+    })
+    expect(buildCompoundRoute(parsed!)).toBe('video-studio/output-1')
+    expect(parseRouteToNavigationState('video-studio/output-1')).toEqual({
+      navigator: 'videoStudio',
+      outputId: 'output-1',
+    })
+  })
 })

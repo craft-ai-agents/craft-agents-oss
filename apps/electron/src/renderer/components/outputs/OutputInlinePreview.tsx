@@ -1,6 +1,8 @@
 import * as React from 'react'
-import { AlertTriangle, ExternalLink, FileText, Link2, Presentation, ReceiptText } from 'lucide-react'
+import { AlertTriangle, ExternalLink, FileText, FileVideo, Link2, Presentation, ReceiptText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useNavigation } from '@/contexts/NavigationContext'
+import { routes } from '../../../shared/routes'
 import { StreamingMarkdown } from '@/components/markdown'
 import { ShikiCodeViewer } from '@/components/shiki/ShikiCodeViewer'
 import { OutputWebPreview } from './OutputWebPreview'
@@ -9,6 +11,7 @@ import { resolvePresentationPreviewAsset } from './presentation-preview'
 import { parseDelimitedTablePreview } from './table-preview'
 import { buildRunnerOutputAssetUrl } from '@craft-agent/shared/outputs/web-preview'
 import type { OutputAssetDTO, OutputManifestDTO, OutputPreviewMode } from '@/hooks/useOutputs'
+import { findVideoProjectAsset, formatDuration, summarizeVideoProject } from './video-project-output'
 
 const OutputModelPreview = React.lazy(() => import('./OutputModelPreview').then((module) => ({ default: module.OutputModelPreview })))
 const OutputExcalidrawPreview = React.lazy(() => import('./OutputExcalidrawPreview').then((module) => ({ default: module.OutputExcalidrawPreview })))
@@ -39,8 +42,11 @@ export function OutputInlinePreview({
   compact = false,
   onPreviewSettled,
 }: OutputInlinePreviewProps) {
+  const { navigate } = useNavigation()
   const previewAsset = resolvePreviewAsset(manifest, primary)
+  const videoProjectAsset = findVideoProjectAsset(manifest)
   const mode = manifest.preview?.mode ?? inferPreviewMode(previewAsset)
+  const shouldShowVideoProjectPreview = Boolean(videoProjectAsset && mode !== 'video')
   const presentationPreviewAsset = mode === 'presentation'
     ? resolvePresentationPreviewAsset(manifest, previewAsset, inferPreviewMode)
     : undefined
@@ -48,8 +54,8 @@ export function OutputInlinePreview({
   const webPreviewTarget = resolveWebPreviewTarget(manifest, { blockedOrigins: blockedWebPreviewOrigins })
   const inlineText = manifest.preview?.inlineText ?? null
   const assetId = manifest.preview?.assetId ?? previewAsset?.id
-  const shouldReadAssetData = Boolean(assetId && (mode === 'image' || mode === 'video' || mode === 'audio'))
-  const shouldReadAssetText = Boolean(assetId && (mode === 'markdown' || mode === 'text' || mode === 'json' || mode === 'receipt' || mode === 'excalidraw' || mode === 'table' || mode === 'chart' || mode === 'workflow'))
+  const shouldReadAssetData = Boolean(!shouldShowVideoProjectPreview && assetId && (mode === 'image' || mode === 'video' || mode === 'audio'))
+  const shouldReadAssetText = Boolean(!shouldShowVideoProjectPreview && assetId && (mode === 'markdown' || mode === 'text' || mode === 'json' || mode === 'receipt' || mode === 'excalidraw' || mode === 'table' || mode === 'chart' || mode === 'workflow'))
   const [content, setContent] = React.useState<string | null>(shouldReadAssetText ? null : inlineText)
   const [dataUrl, setDataUrl] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
@@ -115,6 +121,19 @@ export function OutputInlinePreview({
     }
   }, [assetId, error, hasStaticPreview, mode, onPreviewSettled, presentationPreviewAsset, shouldReadAssetData, shouldReadAssetText, webPreviewTarget])
 
+  if (shouldShowVideoProjectPreview && videoProjectAsset) {
+    return (
+      <OutputVideoProjectPreview
+        workspaceId={workspaceId}
+        manifest={manifest}
+        asset={videoProjectAsset}
+        className={className}
+        onOpen={() => navigate(routes.view.videoStudio(manifest.id))}
+        onPreviewSettled={onPreviewSettled}
+      />
+    )
+  }
+
   if (error) {
     return (
       <EmptyPreview className={className}>
@@ -151,8 +170,19 @@ export function OutputInlinePreview({
 
   if (mode === 'video' && dataUrl) {
     return (
-      <div className={className}>
+      <div className={`relative ${className ?? ''}`}>
         <video src={dataUrl} controls className="max-h-full w-full rounded-md" />
+        {videoProjectAsset && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="absolute right-2 top-2 border-white/[0.12] bg-black/70 text-white/80 hover:bg-black/85 hover:text-white"
+            onClick={() => navigate(routes.view.videoStudio(manifest.id))}
+          >
+            <FileVideo className="mr-1.5 h-3.5 w-3.5" />
+            Open in Video Studio
+          </Button>
+        )}
       </div>
     )
   }
@@ -344,6 +374,71 @@ export function OutputInlinePreview({
       <FileText className="h-4 w-4" />
       <span>No preview available</span>
     </EmptyPreview>
+  )
+}
+
+function OutputVideoProjectPreview({
+  workspaceId,
+  manifest,
+  asset,
+  className,
+  onOpen,
+  onPreviewSettled,
+}: {
+  workspaceId: string
+  manifest: OutputManifestDTO
+  asset: OutputAssetDTO
+  className?: string
+  onOpen: () => void
+  onPreviewSettled?: OutputPreviewSettledHandler
+}) {
+  const [summary, setSummary] = React.useState<ReturnType<typeof summarizeVideoProject>>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    let mounted = true
+    window.electronAPI.readOutputAssetText(workspaceId, manifest.id, asset.id).then((text) => {
+      if (!mounted) return
+      setSummary(summarizeVideoProject(JSON.parse(text)))
+      onPreviewSettled?.('ready')
+    }).catch((err) => {
+      if (!mounted) return
+      setError(err instanceof Error ? err.message : String(err))
+      onPreviewSettled?.('error')
+    })
+    return () => { mounted = false }
+  }, [asset.id, manifest.id, onPreviewSettled, workspaceId])
+
+  if (error) {
+    return (
+      <EmptyPreview className={className}>
+        <AlertTriangle className="h-4 w-4" />
+        <span>Video project unavailable: {error}</span>
+      </EmptyPreview>
+    )
+  }
+
+  return (
+    <div className={className ?? 'rounded-md border border-white/[0.08] bg-white/[0.035] p-3'}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-medium text-white/78">
+            <FileVideo className="h-4 w-4 text-white/42" />
+            <span className="truncate">{summary?.title ?? manifest.title}</span>
+          </div>
+          <div className="mt-2 grid grid-cols-4 gap-2 text-xs text-white/52">
+            <span>{summary?.mediaCount ?? 0} media</span>
+            <span>{summary?.clipCount ?? 0} clips</span>
+            <span>{summary?.trackCount ?? 0} tracks</span>
+            <span>{formatDuration(summary?.durationMs ?? 0)}</span>
+          </div>
+          {summary?.latestEvent && <div className="mt-2 truncate text-xs text-white/38">{summary.latestEvent}</div>}
+        </div>
+        <Button size="sm" variant="outline" className="shrink-0 border-[#f97316]/25 bg-[#f97316]/12 text-white/82 hover:bg-[#f97316]/20 hover:text-white" onClick={onOpen}>
+          Open
+        </Button>
+      </div>
+    </div>
   )
 }
 

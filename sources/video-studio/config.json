@@ -1,0 +1,16 @@
+{
+  "id": "video-studio_20260612",
+  "name": "Video Studio",
+  "slug": "video-studio",
+  "enabled": true,
+  "provider": "runner-video-studio",
+  "type": "local",
+  "tagline": "Bundled local CLI wrapper for RunnerOS video projects and simple MP4 exports.",
+  "local": {
+    "path": "tools/video-studio",
+    "format": "cli-tool"
+  },
+  "icon": "🎞️",
+  "isAuthenticated": true,
+  "connectionStatus": "untested"
+}

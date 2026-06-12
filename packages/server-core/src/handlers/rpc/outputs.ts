@@ -1,8 +1,10 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
 import type { OutputManifest, OutputSummary } from '@craft-agent/shared/outputs';
+import { validateRunnerVideoProject } from '@craft-agent/shared/video';
 import type { VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
 import type { ApplyVisualSurfaceEventResult, VisualSurfaceEventInput, VisualSurfaceEventRecord } from '@craft-agent/shared/visual-surface-events';
 import type { RpcServer } from '@craft-agent/server-core/transport';
@@ -23,6 +25,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.outputs.OPEN_FILE,
   RPC_CHANNELS.outputs.SHOW_IN_FOLDER,
   RPC_CHANNELS.outputs.READ_ASSET_TEXT,
+  RPC_CHANNELS.outputs.WRITE_ASSET_TEXT,
   RPC_CHANNELS.outputs.READ_ASSET_DATA_URL,
 ] as const;
 
@@ -103,6 +106,36 @@ function mimeTypeForPath(path: string): string {
     txt: 'text/plain',
   };
   return mimeMap[ext] ?? 'application/octet-stream';
+}
+
+function isVideoProjectAssetPath(path: string): boolean {
+  return path.toLowerCase().endsWith('.runner-video.json');
+}
+
+function parseAndValidateVideoProject(content: string): unknown {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new Error('Video project asset content must be valid JSON.');
+  }
+  const validation = validateRunnerVideoProject(parsed);
+  if (!validation.ok) {
+    const first = validation.errors[0];
+    throw new Error(first ? `Invalid video project: ${first.path} ${first.message}` : 'Invalid video project.');
+  }
+  return parsed;
+}
+
+async function writeTextAtomic(path: string, content: string): Promise<void> {
+  const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(tempPath, content, 'utf-8');
+    await rename(tempPath, path);
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): void {
@@ -202,6 +235,27 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
       assertLocalWorkspace(workspaceId, 'Read output asset');
       const safePath = await resolveSafeOutputAssetPath(workspaceId, outputId, assetId, serviceFor(server));
       return readFile(safePath, 'utf-8');
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.WRITE_ASSET_TEXT,
+    async (_ctx, workspaceId: string, outputId: string, assetId: string, content: string): Promise<boolean> => {
+      assertLocalWorkspace(workspaceId, 'Write output asset');
+      if (typeof content !== 'string') throw new Error('Output asset content must be a string.');
+      const service = serviceFor(server);
+      const output = service.get(workspaceId, outputId);
+      if (!output) throw new Error(`Output not found: ${outputId}`);
+      const asset = output.assets.find((item) => item.id === assetId);
+      if (!asset) throw new Error(`Output "${outputId}" has no asset with id "${assetId}".`);
+      if (!isVideoProjectAssetPath(asset.path)) {
+        throw new Error(`Output asset "${assetId}" is not a writable Video Studio project asset.`);
+      }
+      const parsed = parseAndValidateVideoProject(content);
+      const safePath = await resolveSafeOutputAssetPath(workspaceId, outputId, assetId, service);
+      await writeTextAtomic(safePath, `${JSON.stringify(parsed, null, 2)}\n`);
+      pushOutputsUpdated(server, workspaceId);
+      return true;
     },
   );
 

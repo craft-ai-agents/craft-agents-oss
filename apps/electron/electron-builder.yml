@@ -61,6 +61,7 @@ files:
   # Include bundled local CLI tools
   - tools/printing-press-social/**/*
   - tools/hypermotion/**/*
+  - tools/video-studio/**/*
   - tools/google-ads/**/*
   - tools/shopify/**/*
   - tools/printify/**/*
@@ -119,6 +120,11 @@ mac:
         - "**/*"
     - from: ../../tools/hypermotion/node_modules
       to: app/tools/hypermotion/node_modules
+      filter:
+        - "**/*"
+    # Managed local Video Studio project/render wrapper.
+    - from: ../../tools/video-studio
+      to: app/tools/video-studio
       filter:
         - "**/*"
     # Managed local Google Ads CLI wrapper and bundled platform binary.
@@ -223,6 +229,11 @@ win:
       to: app/tools/hypermotion/node_modules
       filter:
         - "**/*"
+    # Managed local Video Studio project/render wrapper.
+    - from: ../../tools/video-studio
+      to: app/tools/video-studio
+      filter:
+        - "**/*"
     # Managed local Google Ads CLI wrapper and bundled platform binary.
     - from: ../../tools/google-ads
       to: app/tools/google-ads
@@ -286,6 +297,11 @@ linux:
         - "**/*"
     - from: ../../tools/hypermotion/node_modules
       to: app/tools/hypermotion/node_modules
+      filter:
+        - "**/*"
+    # Managed local Video Studio project/render wrapper.
+    - from: ../../tools/video-studio
+      to: app/tools/video-studio
       filter:
         - "**/*"
     # Managed local Google Ads CLI wrapper and bundled platform binary.

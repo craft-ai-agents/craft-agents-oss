@@ -900,6 +900,7 @@ export interface ElectronAPI {
   openOutputFile(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
   showOutputInFolder(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
   readOutputAssetText(workspaceId: string, outputId: string, assetId?: string): Promise<string>
+  writeOutputAssetText(workspaceId: string, outputId: string, assetId: string, content: string): Promise<boolean>
   readOutputAssetDataUrl(workspaceId: string, outputId: string, assetId?: string): Promise<string>
   recordVisualCapture(input: {
     workspaceId: string
@@ -1143,6 +1144,12 @@ export interface OutputsNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export interface VideoStudioNavigationState {
+  navigator: 'videoStudio'
+  outputId: string
+  rightSidebar?: RightSidebarPanel
+}
+
 /**
  * Unified navigation state
  */
@@ -1158,6 +1165,7 @@ export type NavigationState =
   | WorkflowRunNavigationState
   | DeepResearchRunNavigationState
   | OutputsNavigationState
+  | VideoStudioNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -1202,6 +1210,10 @@ export const isDeepResearchRunNavigation = (
 export const isOutputsNavigation = (
   state: NavigationState
 ): state is OutputsNavigationState => state.navigator === 'outputs'
+
+export const isVideoStudioNavigation = (
+  state: NavigationState
+): state is VideoStudioNavigationState => state.navigator === 'videoStudio'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -1253,6 +1265,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'outputs') {
     return state.outputId ? `outputs/${state.outputId}` : 'outputs'
+  }
+  if (state.navigator === 'videoStudio') {
+    return `video-studio/${state.outputId}`
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -1340,6 +1355,10 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   if (key.startsWith('outputs/')) {
     const outputId = key.slice('outputs/'.length)
     if (outputId) return { navigator: 'outputs', outputId }
+  }
+  if (key.startsWith('video-studio/')) {
+    const outputId = key.slice('video-studio/'.length)
+    if (outputId) return { navigator: 'videoStudio', outputId }
   }
 
   // Handle settings

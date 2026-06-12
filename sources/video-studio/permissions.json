@@ -1,0 +1,24 @@
+{
+  "allowedCommands": [
+    {
+      "pattern": "^cd\\s+tools/video-studio\\s+&&\\s+node\\s+bin/video-studio\\.mjs\\s+doctor\\s+--json$",
+      "comment": "Check bundled Video Studio source readiness"
+    },
+    {
+      "pattern": "^cd\\s+tools/video-studio\\s+&&\\s+node\\s+bin/video-studio\\.mjs\\s+create\\s+.+\\s+--json$",
+      "comment": "Create a RunnerOS video project file"
+    },
+    {
+      "pattern": "^cd\\s+tools/video-studio\\s+&&\\s+node\\s+bin/video-studio\\.mjs\\s+probe\\s+.+\\s+--json$",
+      "comment": "Probe a local media file"
+    },
+    {
+      "pattern": "^cd\\s+tools/video-studio\\s+&&\\s+node\\s+bin/video-studio\\.mjs\\s+validate\\s+.+\\s+--json$",
+      "comment": "Validate a RunnerOS video project file"
+    },
+    {
+      "pattern": "^cd\\s+tools/video-studio\\s+&&\\s+node\\s+bin/video-studio\\.mjs\\s+export\\s+.+\\s+--json$",
+      "comment": "Create a placeholder export receipt"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@runneros/video-studio-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "runner-video-studio": "bin/video-studio.mjs"
+  },
+  "scripts": {
+    "doctor": "node bin/video-studio.mjs doctor --json",
+    "create": "node bin/video-studio.mjs create",
+    "validate": "node bin/video-studio.mjs validate",
+    "probe": "node bin/video-studio.mjs probe",
+    "export": "node bin/video-studio.mjs export"
+  }
+}

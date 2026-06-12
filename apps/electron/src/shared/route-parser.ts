@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'videoStudio' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -52,6 +52,8 @@ export interface ParsedCompoundRoute {
   runId?: string
   /** Output id for outputs navigator. */
   outputId?: string
+  /** Output id for Video Studio navigator. */
+  videoStudioOutputId?: string
   /** Details page info (null for empty state) */
   details: {
     type: string
@@ -67,7 +69,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'workflows', 'runs', 'deep-research', 'outputs', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'workflows', 'runs', 'deep-research', 'outputs', 'video-studio', 'settings'
 ]
 
 /**
@@ -271,6 +273,16 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     }
   }
 
+  if (first === 'video-studio') {
+    const outputId = segments[1]
+    if (!outputId) return null
+    return {
+      navigator: 'videoStudio',
+      videoStudioOutputId: outputId,
+      details: { type: 'video-studio-output', id: outputId },
+    }
+  }
+
   // Sessions navigator (allSessions, flagged, state)
   let sessionFilter: SessionFilter
   let detailsStartIndex: number
@@ -397,6 +409,10 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
 
   if (parsed.navigator === 'outputs') {
     return parsed.outputId ? `outputs/${parsed.outputId}` : 'outputs'
+  }
+
+  if (parsed.navigator === 'videoStudio') {
+    return parsed.videoStudioOutputId ? `video-studio/${parsed.videoStudioOutputId}` : 'outputs'
   }
 
   // Sessions navigator
@@ -560,6 +576,10 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
       return { type: 'view', name: 'output-info', id: compound.outputId, params: {} }
     }
     return { type: 'view', name: 'outputs', params: {} }
+  }
+
+  if (compound.navigator === 'videoStudio') {
+    return { type: 'view', name: 'video-studio', id: compound.videoStudioOutputId, params: {} }
   }
 
   // Sessions
@@ -737,6 +757,10 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
       : { navigator: 'outputs' }
   }
 
+  if (compound.navigator === 'videoStudio') {
+    return { navigator: 'videoStudio', outputId: compound.videoStudioOutputId ?? '' }
+  }
+
   // Sessions
   const filter = compound.sessionFilter || { kind: 'allSessions' as const }
   if (compound.details) {
@@ -851,6 +875,9 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'outputs' }
     case 'output-info':
       if (parsed.id) return { navigator: 'outputs', outputId: parsed.id }
+      return { navigator: 'outputs' }
+    case 'video-studio':
+      if (parsed.id) return { navigator: 'videoStudio', outputId: parsed.id }
       return { navigator: 'outputs' }
     case 'session':
       if (parsed.id) {
@@ -997,6 +1024,13 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
       navigator: 'outputs',
       outputId: state.outputId,
       details: state.outputId ? { type: 'output', id: state.outputId } : null,
+    }
+  }
+  if (state.navigator === 'videoStudio') {
+    return {
+      navigator: 'videoStudio',
+      videoStudioOutputId: state.outputId,
+      details: { type: 'video-studio-output', id: state.outputId },
     }
   }
 

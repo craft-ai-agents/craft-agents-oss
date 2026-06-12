@@ -503,6 +503,7 @@ export const RPC_CHANNELS = {
     OPEN_FILE: 'outputs:openFile',
     SHOW_IN_FOLDER: 'outputs:showInFolder',
     READ_ASSET_TEXT: 'outputs:readAssetText',
+    WRITE_ASSET_TEXT: 'outputs:writeAssetText',
     READ_ASSET_DATA_URL: 'outputs:readAssetDataUrl',
     UPDATED: 'outputs:updated',
   },

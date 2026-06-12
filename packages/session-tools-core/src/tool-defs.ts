@@ -62,6 +62,12 @@ import {
   handleGetWorkflowRun,
   handleCancelWorkflowRun,
 } from './handlers/workflows.ts';
+import {
+  handleVideoProjectCreate,
+  handleVideoMediaImport,
+  handleVideoClipAdd,
+  handleVideoExport,
+} from './handlers/video-tools.ts';
 
 // ============================================================
 // Canonical Zod Schemas
@@ -477,6 +483,45 @@ export const CreateOutputSchema = z.object({
   tags: z.array(z.string()).optional(),
   showInCanvas: z.boolean().optional().describe('Set true when the user should see this Output in Canvas immediately. The backend marks and pins the same-session Output when Canvas is available.'),
   show_in_canvas: z.boolean().optional().describe('Alias for showInCanvas. Prefer showInCanvas in new calls.'),
+});
+
+export const VideoProjectCreateSchema = z.object({
+  projectPath: z.string().optional().describe('Project JSON path. Relative paths resolve from the session working directory. Defaults to .runneros/video-projects/<title>/video.runner-video.json.'),
+  projectDir: z.string().optional().describe('Project folder. Ignored when projectPath is set.'),
+  title: z.string().min(1).describe('Human-readable video project title.'),
+  aspectRatio: z.enum(['9:16', '1:1', '16:9', '4:5']).optional().describe('Default 9:16.'),
+  width: z.number().positive().optional().describe('Custom output width.'),
+  height: z.number().positive().optional().describe('Custom output height.'),
+  fps: z.number().positive().optional().describe('Frames per second. Defaults to 30.'),
+  overwrite: z.boolean().optional().describe('Replace an existing project file. Defaults to false.'),
+});
+
+export const VideoMediaImportSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  mediaPath: z.string().min(1).describe('Path to local media file to register in the project.'),
+  label: z.string().optional().describe('Optional display label for the media asset.'),
+  mediaType: z.enum(['video', 'audio', 'image', 'caption', 'svg', 'lottie', 'html', 'unknown']).optional().describe('Override inferred media type.'),
+});
+
+export const VideoClipAddSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  mediaId: z.string().optional().describe('Existing media asset id to place on the timeline. Omit for generated text clips.'),
+  trackId: z.string().optional().describe('Target track id. Creates a simple track if the id does not exist.'),
+  type: z.enum(['video', 'audio', 'image', 'text', 'caption', 'shape', 'lottie', 'html']).optional().describe('Clip type. Defaults from media type or text.'),
+  startMs: z.number().nonnegative().optional().describe('Timeline start time in milliseconds. Defaults to current timeline end.'),
+  durationMs: z.number().positive().optional().describe('Clip duration in milliseconds. Defaults to 3000 for text/image or 1000 otherwise.'),
+  sourceInMs: z.number().nonnegative().optional().describe('Optional source in-point in milliseconds.'),
+  sourceOutMs: z.number().nonnegative().optional().describe('Optional source out-point in milliseconds.'),
+  label: z.string().optional().describe('Optional timeline clip label.'),
+  text: z.string().optional().describe('Text payload for text clips.'),
+});
+
+export const VideoExportSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  outputPath: z.string().optional().describe('Output path. Defaults to renders/preview.placeholder.txt next to the project. Use .mp4 for the simple FFmpeg renderer, currently for text/title timelines only. Non-video paths write a placeholder text receipt.'),
+  preset: z.string().optional().describe('Export preset label. Defaults to placeholder.'),
+  publishOutput: z.boolean().optional().describe('Also publish a Runner Output receipt if create_output is available. Defaults to false.'),
+  showInCanvas: z.boolean().optional().describe('When publishOutput is true, request immediate Canvas display.'),
 });
 
 export const VisualSurfaceSchema = z.object({
@@ -951,6 +996,24 @@ Use Browser Pane or browser tools, not Canvas, when the user wants to test, debu
 
 Do NOT use this for ordinary chat replies, scratch notes, temporary plans, or files that are not intended as final deliverables. Prefer one concise primary output over dumping every intermediate artifact.`,
 
+  video_project_create: `Create a local RunnerOS Video Studio project file.
+
+Use this before timeline edits. The project file is the source of truth for both agents and the future Video Studio UI.
+
+This tool writes \`video.runner-video.json\`, initializes default video/audio/caption tracks, and records an initial version.`,
+
+  video_media_import: `Register a local media file in a RunnerOS Video Studio project.
+
+Use this after video_project_create and before adding media-backed clips to the timeline. The tool probes basic file metadata, adds the asset to the project media bin, and records a version/event.`,
+
+  video_clip_add: `Add a clip to a RunnerOS Video Studio project timeline.
+
+Use this for the first agent-editable timeline operations: place imported media on a track, or create a simple text clip. This mutates the project JSON and records a version/event.`,
+
+  video_export: `Create a Video Studio export.
+
+Use an .mp4 output path for the simple FFmpeg renderer. It currently supports text/title timelines and fails loudly on media-backed clips. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
+
   visual_surface: `Update the current session Canvas through a safe structured operation.
 
 Use this when the user asks you to show work visually, open the Canvas, add a note card, or pin an existing session Output to the Canvas.
@@ -1065,6 +1128,10 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'forget_memory', description: TOOL_DESCRIPTIONS.forget_memory, inputSchema: ForgetMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleForgetMemory },
   { name: 'recall_memory', description: TOOL_DESCRIPTIONS.recall_memory, inputSchema: RecallMemorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleRecallMemory },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
+  { name: 'video_project_create', description: TOOL_DESCRIPTIONS.video_project_create, inputSchema: VideoProjectCreateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectCreate },
+  { name: 'video_media_import', description: TOOL_DESCRIPTIONS.video_media_import, inputSchema: VideoMediaImportSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoMediaImport },
+  { name: 'video_clip_add', description: TOOL_DESCRIPTIONS.video_clip_add, inputSchema: VideoClipAddSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipAdd },
+  { name: 'video_export', description: TOOL_DESCRIPTIONS.video_export, inputSchema: VideoExportSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoExport },
   { name: 'visual_surface_state', description: TOOL_DESCRIPTIONS.visual_surface_state, inputSchema: VisualSurfaceStateSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVisualSurfaceState },
   { name: 'visual_surface', description: TOOL_DESCRIPTIONS.visual_surface, inputSchema: VisualSurfaceSchema, executionMode: 'registry', safeMode: 'block', handler: handleVisualSurface },
 ];

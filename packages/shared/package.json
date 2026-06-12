@@ -64,6 +64,7 @@
     "./visual-board": "./src/visual-board/index.ts",
     "./visual-surface-events": "./src/visual-surface-events/index.ts",
     "./validation": "./src/validation/index.ts",
+    "./video": "./src/video/index.ts",
     "./version": "./src/version/index.ts",
     "./branding": "./src/branding.ts",
     "./feature-flags": "./src/feature-flags.ts",

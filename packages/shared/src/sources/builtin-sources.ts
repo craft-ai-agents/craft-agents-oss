@@ -14,6 +14,7 @@ const COMPUTER_USE_SLUG = 'computer-use';
 const FIELD_THEORY_SLUG = 'field-theory';
 const PRINTING_PRESS_SOCIAL_SLUG = 'printing-press-social';
 const HYPERMOTION_SLUG = 'hypermotion';
+const VIDEO_STUDIO_SLUG = 'video-studio';
 const GOOGLE_ADS_SLUG = 'google-ads';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
 const OPEN_SLIDE_SLUG = 'open-slide';
@@ -106,6 +107,20 @@ function getHypermotionPath(): string {
       join(process.cwd(), 'tools', 'hypermotion'),
     ],
     join('tools', 'hypermotion')
+  );
+}
+
+function getVideoStudioPath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'video-studio') : '',
+      join(appRoot, 'tools', 'video-studio'),
+      join(process.cwd(), 'tools', 'video-studio'),
+    ],
+    join('tools', 'video-studio')
   );
 }
 
@@ -219,6 +234,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getFieldTheorySource(workspaceId, workspaceRootPath),
     getPrintingPressSocialSource(workspaceId, workspaceRootPath),
     getHypermotionSource(workspaceId, workspaceRootPath),
+    getVideoStudioSource(workspaceId, workspaceRootPath),
     getGoogleAdsSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
     getOpenSlideSource(workspaceId, workspaceRootPath),
@@ -426,6 +442,57 @@ export function getHypermotionSource(workspaceId: string, workspaceRootPath: str
         '5. Publish generated HTML previews, poster frames, MP4s, and receipts as Canvas-visible outputs when useful.',
         '',
         'Do not claim a render succeeded until the output file exists. Confirm before paid API/provider calls or long renders.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
+ * Built-in source for the RunnerOS Video Studio project/renderer wrapper.
+ *
+ * This is a local CLI source that gives agents a portable path to the bundled
+ * Video Studio project tools in dev and packaged Electron builds.
+ */
+export function getVideoStudioSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getVideoStudioPath();
+  const config: FolderSourceConfig = {
+    id: 'builtin-video-studio',
+    name: 'Video Studio',
+    slug: VIDEO_STUDIO_SLUG,
+    enabled: true,
+    provider: 'runner-video-studio',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    tagline: 'Bundled local CLI wrapper for RunnerOS video projects and simple MP4 exports.',
+    icon: '🎞️',
+    isAuthenticated: true,
+    connectionStatus: existsSync(toolPath) ? 'connected' : 'failed',
+    connectionError: existsSync(toolPath) ? undefined : 'Bundled Video Studio tool folder not found',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# Video Studio',
+        '',
+        'Use this source for native RunnerOS video project files, media registration, timeline JSON edits, validation, simple MP4 exports, and placeholder receipts for unsupported media timelines.',
+        '',
+        'Workflow:',
+        '1. Use session tools like `video_project_create`, `video_media_import`, `video_clip_add`, and `video_export` for agent edits.',
+        '2. Use the displayed local path as the CLI tool directory when direct doctor/validation commands are needed.',
+        '3. Run `node bin/video-studio.mjs doctor --json` before production work.',
+        '4. Run `node bin/video-studio.mjs validate <project-path> --json` before claiming a project is structurally sound.',
+        '5. `node bin/video-studio.mjs export` can render simple text/title MP4s. Media-backed timelines fail loudly until the fuller renderer lands.',
+        '',
+        'Do not use Computer Use to click a video editor UI unless the user explicitly asks. The project JSON is the source of truth.',
       ].join('\n'),
     },
     isBuiltin: true,
@@ -940,6 +1007,7 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === FIELD_THEORY_SLUG
     || slug === PRINTING_PRESS_SOCIAL_SLUG
     || slug === HYPERMOTION_SLUG
+    || slug === VIDEO_STUDIO_SLUG
     || slug === GOOGLE_ADS_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG
     || slug === OPEN_SLIDE_SLUG
