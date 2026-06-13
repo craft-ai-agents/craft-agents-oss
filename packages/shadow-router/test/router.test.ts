@@ -70,3 +70,17 @@ test("sanitizeBody strips temperature/top_p for claude models, keeps for others"
   const gpt = sanitizeBody({ model: "gpt-5.5", temperature: 0, messages: [] } as any);
   expect((gpt as any).temperature).toBe(0);
 });
+
+import { isQuotaError, resolveProvider } from "../src/providers.ts";
+test("isQuotaError detects quota/limit/429, ignores normal errors", () => {
+  expect(isQuotaError(429, {})).toBe(true);
+  expect(isQuotaError(200, { error: { message: "weekly limit reached" } })).toBe(true);
+  expect(isQuotaError(400, { error: { message: "insufficient balance" } })).toBe(true);
+  expect(isQuotaError(400, { error: { message: "invalid model" } })).toBe(false);
+  expect(isQuotaError(200, { choices: [{}] })).toBe(false);
+});
+test("command lane is off unless explicitly enabled", () => {
+  const base = { type: "command" as const, command: ["echo"], apiKeyEnv: null, privacyTier: "opt_out" as const, jurisdiction: "us", piiSafe: false, costModel: "subscription" };
+  expect(resolveProvider("x", base, {}).enabled).toBe(false);
+  expect(resolveProvider("x", { ...base, enabled: true }, {}).enabled).toBe(true);
+});

@@ -14,11 +14,15 @@ export type ContentCategory =
   | "identity";
 
 export interface ProviderConfig {
-  type: "openai";
-  baseUrl: string;
+  // "openai" = OpenAI-compatible HTTP endpoint; "command" = shell out to an adapter
+  // (e.g. a headless web session driving chatgpt.com) that speaks OpenAI JSON over stdin/stdout.
+  type: "openai" | "command";
+  baseUrl?: string;
+  command?: string[]; // for type:"command" — argv; request JSON on stdin, OpenAI JSON on stdout
   apiKeyEnv: string | null;
   apiKeyDefault?: string;
   enabledIfKey?: boolean;
+  enabled?: boolean; // explicit on/off (command lanes default off until validated)
   privacyTier: PrivacyTier;
   jurisdiction: string; // "us" | "sg" | "cn" | "local" | ...
   piiSafe: boolean;
@@ -47,7 +51,12 @@ export interface RouterConfig {
   providers: Record<string, ProviderConfig>;
   hiddenModels?: string[];
   virtualModels: Record<string, VirtualModel>;
-  routing: { byTask: Record<string, { provider: string; model: string }> };
+  routing: {
+    byTask: Record<string, { provider: string; model: string }>;
+    // When a provider returns a quota/limit error, retry the request on these providers in order.
+    // This is how subscription overflow works: Codex weekly-limited → chatgpt-web → openrouter.
+    fallbacks?: Record<string, string[]>;
+  };
 }
 
 export interface ChatMessage {

@@ -40,6 +40,17 @@
       "piiSafe": true,
       "costModel": "free",
       "note": "Local inference — the only lane allowed for restricted / sensitive content."
+    },
+    "chatgpt-web": {
+      "type": "command",
+      "command": ["bun", "run", "adapters/chatgpt-web/adapter.ts"],
+      "apiKeyEnv": null,
+      "enabled": false,
+      "privacyTier": "opt_out",
+      "jurisdiction": "us",
+      "piiSafe": false,
+      "costModel": "subscription",
+      "note": "OVERFLOW lane — drives chatgpt.com (ChatGPT Pro web, SEPARATE quota from the Codex API + Pro-only models) via headless browser. Disabled until the adapter is validated against a logged-in session. Then it serves as GPT overflow when the Codex lane hits weekly limits."
     }
   },
   "hiddenModels": [
@@ -80,6 +91,10 @@
       "vision": { "provider": "vibeproxy", "model": "gemini-3-pro-high" },
       "default": { "provider": "vibeproxy", "model": "claude-sonnet-4-6" }
     },
-    "byTaskNote": "Models re-picked from the probe-verified catalog 2026-06-13. Opus 4.8 = latest. cheap uses lean gemini (Claude lanes carry ~1.4-1.9k token system-prompt overhead). Thinking levels are id suffixes: *-high / *-thinking."
+    "byTaskNote": "Models re-picked from the probe-verified catalog 2026-06-13. Opus 4.8 = latest. cheap uses lean gemini (Claude lanes carry ~1.4-1.9k token system-prompt overhead). Thinking levels are id suffixes: *-high / *-thinking.",
+    "fallbacks": {
+      "vibeproxy": ["chatgpt-web/gpt-5.5"]
+    },
+    "fallbacksNote": "On a quota/limit error, retry on these lanes in order (non-streaming). chatgpt-web is disabled until validated, so this is currently inert — when enabled it gives free GPT overflow from the ChatGPT Pro web sub when the Codex lane is weekly-limited. List SAME-FAMILY lanes (the chain fires on any quota error from the keyed provider). For metered last-resort, append openrouter/openai/gpt-5.5-pro."
   }
 }

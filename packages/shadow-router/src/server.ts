@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // Shadow unified gateway — one OpenAI-compatible endpoint over all lanes.
 
-import { resolveAll, forward, listModels, type ResolvedProvider } from "./providers.ts";
+import { resolveAll, forward, listModels, isQuotaError, type ResolvedProvider } from "./providers.ts";
 import { resolveModel } from "./router.ts";
 import { runFusion } from "./fusion.ts";
 import { checkAuth, resolveAuthKey } from "./auth.ts";
@@ -52,17 +52,53 @@ async function handleChat(req: Request): Promise<Response> {
   if (!decision.provider) {
     return json({ error: { message: `no route: ${decision.reason}`, shadow_route: decision } }, 503);
   }
-  const provider = providers.get(decision.provider);
-  if (!provider || !provider.enabled) {
-    return json({ error: { message: `provider ${decision.provider} unavailable` } }, 503);
+
+  // Build the overflow chain: the chosen lane, then its quota fallbacks. This is how
+  // subscription overflow works — Codex weekly-limited → chatgpt-web → openrouter.
+  const chain: Array<{ provider: string; model: string }> = [{ provider: decision.provider, model: decision.model }];
+  for (const spec of config.routing.fallbacks?.[decision.provider] ?? []) {
+    const [p, ...m] = spec.split("/");
+    chain.push({ provider: p, model: m.join("/") });
+  }
+  const usable = chain.filter((l) => providers.get(l.provider)?.enabled);
+  if (usable.length === 0) return json({ error: { message: `provider ${decision.provider} unavailable` } }, 503);
+
+  // Streaming: single-lane passthrough (can't re-stream after a quota error mid-flight).
+  if (body.stream) {
+    const prov = providers.get(usable[0].provider)!;
+    const upstream = await forward(prov, { ...body, model: usable[0].model });
+    const headers = new Headers(upstream.headers);
+    headers.set("x-shadow-route", `${usable[0].provider}/${usable[0].model}`);
+    headers.set("x-shadow-reason", decision.reason);
+    return new Response(upstream.body, { status: upstream.status, headers });
   }
 
-  const upstream = await forward(provider, { ...body, model: decision.model });
-  // Pass through (streaming SSE or JSON) with a header trace of the routing decision.
-  const headers = new Headers(upstream.headers);
-  headers.set("x-shadow-route", `${decision.provider}/${decision.model}`);
-  headers.set("x-shadow-reason", decision.reason);
-  return new Response(upstream.body, { status: upstream.status, headers });
+  // Non-streaming: walk the chain, overflowing only on quota/empty.
+  let lastText = "{}", lastStatus = 502;
+  for (let i = 0; i < usable.length; i++) {
+    const lane = usable[i];
+    const prov = providers.get(lane.provider)!;
+    const upstream = await forward(prov, { ...body, model: lane.model, stream: false });
+    lastText = await upstream.text();
+    lastStatus = upstream.status;
+    let parsed: any = {};
+    try { parsed = JSON.parse(lastText); } catch { /* keep {} */ }
+    const served = upstream.ok && Array.isArray(parsed.choices) && parsed.choices.length > 0;
+    const overflow = isQuotaError(upstream.status, parsed) || (upstream.ok && !served);
+    if (served) {
+      return new Response(lastText, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-shadow-route": `${lane.provider}/${lane.model}`,
+          "x-shadow-reason": decision.reason,
+          "x-shadow-overflow": String(i), // 0 = primary served; >0 = how many lanes we overflowed past
+        },
+      });
+    }
+    if (!overflow) break; // real (non-quota) error — surface it, don't mask by falling back
+  }
+  return new Response(lastText, { status: lastStatus, headers: { "content-type": "application/json", "x-shadow-overflow": "exhausted" } });
 }
 
 async function handleModels(): Promise<Response> {

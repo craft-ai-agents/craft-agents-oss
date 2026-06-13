@@ -82,6 +82,8 @@ Provider keys come from env: `VIBEPROXY_KEY` (default `vibe-factory-local-2026`)
       (quality·latency·cost), LLM-judge, factory-compatible `doe-results.jsonl`. Drove a real
       gateway fix (param sanitization for Claude lanes). PI ranking still **preliminary** — judge
       reliability needs a hardened full run before acting on weights.
+- [x] **Overflow** — quota-aware fallback chains (`routing.fallbacks`) + `command` provider type;
+      `chatgpt-web` lane (headless chatgpt.com, separate quota) scaffolded + plumbing-verified (mock), disabled until session-validated. See SUBSCRIPTION-VALUE.md.
 - [ ] **Phase 3** — fusion tuning (diverse-pool selection, cost caps)
 - [ ] **Phase 5** — global on sentry (OCI) via `tailscale serve` (TLS + tailnet identity, ACL `tag:devices`)
 

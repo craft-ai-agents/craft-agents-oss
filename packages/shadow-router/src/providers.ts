@@ -42,8 +42,10 @@ export function resolveProvider(
   } else {
     apiKey = cfg.apiKeyDefault ?? null;
   }
-  // A provider gated by `enabledIfKey` is dark until its key is present.
-  const enabled = cfg.enabledIfKey ? Boolean(apiKey) : true;
+  // command lanes (web sessions) default OFF until explicitly enabled (adapter must exist).
+  // openai lanes gated by enabledIfKey are dark until their key resolves.
+  const enabled =
+    cfg.type === "command" ? cfg.enabled === true : cfg.enabledIfKey ? Boolean(apiKey) : true;
   return { ...cfg, name, apiKey, enabled };
 }
 
@@ -71,6 +73,35 @@ export function sanitizeBody(body: ChatRequest): ChatRequest {
   return body;
 }
 
+/** True if a response is a quota/limit/rate error — the trigger to overflow to the next lane. */
+export function isQuotaError(status: number, body: unknown): boolean {
+  if (status === 429) return true;
+  const msg = JSON.stringify(body ?? "").toLowerCase();
+  return /quota|rate.?limit|exhaust|weekly limit|insufficient|too many requests|capacity/.test(msg);
+}
+
+/** Run a command-type provider: argv with request JSON on stdin → OpenAI JSON on stdout. */
+async function forwardCommand(provider: ResolvedProvider, body: ChatRequest): Promise<Response> {
+  const cmd = provider.command;
+  if (!cmd || cmd.length === 0) {
+    return new Response(JSON.stringify({ error: { message: `command provider ${provider.name} has no command` } }), { status: 503 });
+  }
+  try {
+    const proc = Bun.spawn(cmd, { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { ...process.env } });
+    proc.stdin.write(JSON.stringify(body));
+    await proc.stdin.end();
+    const out = await new Response(proc.stdout).text();
+    const code = await proc.exited;
+    if (code !== 0) {
+      const err = await new Response(proc.stderr).text();
+      return new Response(JSON.stringify({ error: { message: `adapter exit ${code}: ${err.slice(0, 300)}` } }), { status: 502 });
+    }
+    return new Response(out, { status: 200, headers: { "content-type": "application/json" } });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: { message: `adapter failed: ${(e as Error).message}` } }), { status: 502 });
+  }
+}
+
 /** Forward an OpenAI chat request to a provider. Returns the raw upstream Response (streaming passes through). */
 export async function forward(
   provider: ResolvedProvider,
@@ -78,6 +109,7 @@ export async function forward(
   signal?: AbortSignal,
 ): Promise<Response> {
   body = sanitizeBody(body);
+  if (provider.type === "command") return forwardCommand(provider, body);
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (provider.apiKey) headers["authorization"] = `Bearer ${provider.apiKey}`;
   // OpenRouter uses these for app attribution / rankings (optional but recommended).
