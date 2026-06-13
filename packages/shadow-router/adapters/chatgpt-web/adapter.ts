@@ -44,32 +44,49 @@ if (process.env.SHADOW_CHATGPT_MOCK) {
   process.exit(0);
 }
 
-// ── Real lane: drive chatgpt.com via a logged-in persistent browser context ──────────
+// ── Real lane: drive chatgpt.com in a logged-in browser ──────────────────────────────
+// Preferred: connect to your REAL Chrome over CDP (SHADOW_CHATGPT_CDP, e.g.
+// http://127.0.0.1:9222). Your real session is human-looking and passes chatgpt.com's
+// anti-bot — a fresh Playwright-launched Chrome gets blocked. Fallback: a dedicated
+// persistent profile (SHADOW_CHATGPT_PROFILE) — works only if anti-bot lets it through.
+const cdp = process.env.SHADOW_CHATGPT_CDP;
 const profile = process.env.SHADOW_CHATGPT_PROFILE;
-if (!profile) {
-  fail("chatgpt-web not configured: set SHADOW_CHATGPT_PROFILE to a Chrome userDataDir logged into chatgpt.com (or SHADOW_CHATGPT_MOCK=1 to test plumbing).");
+if (!cdp && !profile) {
+  fail("chatgpt-web not configured: set SHADOW_CHATGPT_CDP (connect to your logged-in Chrome — start it with --remote-debugging-port=9222) or SHADOW_CHATGPT_PROFILE (dedicated profile). Or SHADOW_CHATGPT_MOCK=1 to test plumbing.");
 }
 
 let chromium: any;
 try {
   ({ chromium } = await import("playwright"));
 } catch {
-  fail("playwright not installed for chatgpt-web. `bun add -d playwright && bunx playwright install chromium`, then log into chatgpt.com once in SHADOW_CHATGPT_PROFILE.");
+  fail("playwright not installed for chatgpt-web. `bun add -d playwright`, then connect via CDP or a logged-in profile.");
 }
 
+let ctx: any, ownsBrowser = false;
 try {
-  const ctx = await chromium.launchPersistentContext(profile, {
-    headless: process.env.SHADOW_CHATGPT_HEADLESS === "1",
-    channel: "chrome",
-    viewport: { width: 1280, height: 900 },
-  });
-  const page = ctx.pages()[0] ?? (await ctx.newPage());
-  await page.goto("https://chatgpt.com/", { waitUntil: "domcontentloaded", timeout: 45000 });
+  if (cdp) {
+    const browser = await chromium.connectOverCDP(cdp);
+    ctx = browser.contexts()[0] ?? (await browser.newContext());
+  } else {
+    ctx = await chromium.launchPersistentContext(profile, {
+      headless: process.env.SHADOW_CHATGPT_HEADLESS === "1",
+      channel: "chrome",
+      viewport: { width: 1280, height: 900 },
+    });
+    ownsBrowser = true;
+  }
 
-  // Auth check — if redirected to login, the profile isn't authenticated.
+  // Reuse an existing chatgpt.com tab if one is open; else open one.
+  let page = ctx.pages().find((p: any) => /chatgpt\.com|chat\.openai\.com/.test(p.url()));
+  if (!page) {
+    page = ctx.pages()[0] ?? (await ctx.newPage());
+    await page.goto("https://chatgpt.com/", { waitUntil: "domcontentloaded", timeout: 45000 });
+  }
+
+  // Auth check — if redirected to login, the session isn't authenticated.
   if (/auth|login/.test(page.url())) {
-    await ctx.close();
-    fail("chatgpt.com session not authenticated — log into chatgpt.com once in SHADOW_CHATGPT_PROFILE, then retry.");
+    if (ownsBrowser) await ctx.close();
+    fail("chatgpt.com not authenticated — log into chatgpt.com in that Chrome, then retry.");
   }
 
   // Select the requested model in the web UI — this is what unlocks sub-exclusive
@@ -104,7 +121,7 @@ try {
 
   const assistant = page.locator("[data-message-author-role='assistant']").last();
   const text = (await assistant.innerText().catch(() => "")) || "";
-  await ctx.close();
+  if (ownsBrowser) await ctx.close(); // never close the operator's real (CDP) Chrome
   if (!text.trim()) fail("chatgpt-web returned empty (selector drift or model still generating). Inspect chatgpt.com DOM and update selectors.");
   emit(text, selectedModel);
 } catch (e) {

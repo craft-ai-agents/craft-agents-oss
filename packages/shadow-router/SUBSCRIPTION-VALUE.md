@@ -46,13 +46,22 @@ until its adapter is validated against a logged-in session, so the chain is curr
 inert (safe). List **same-family** lanes only — the chain fires on any quota error
 from the keyed provider.
 
-## Enabling the chatgpt-web overflow lane
+## gpt-5.5-pro RIGHT NOW (metered)
 
-1. Make a dedicated Chrome profile dir and log into chatgpt.com once in it.
-2. `bun add -d playwright && bunx playwright install chromium` (in this package).
-3. Set `SHADOW_CHATGPT_PROFILE=<that userDataDir>` in the gateway's launchd env.
-4. Flip `providers.chatgpt-web.enabled = true` (edit while the gateway restarts).
-5. Validate: `echo '{"model":"gpt-5.5","messages":[{"role":"user","content":"hi"}]}' | SHADOW_CHATGPT_MOCK=1 bun run adapters/chatgpt-web/adapter.ts` (plumbing), then without the mock (live).
+`openrouter/openai/gpt-5.5-pro` routes through the gateway today — verified (OpenAI
+served `gpt-5.5-pro-20260423`). Metered (OR credits); reliable; no browser. Use this
+for Pro models until the free web lane is activated.
+
+## Enabling the chatgpt-web lane (free Pro models)
+
+**Preferred — CDP to your real Chrome** (human session, passes chatgpt.com anti-bot; a fresh
+Playwright Chrome gets blocked):
+1. `bash adapters/chatgpt-web/cdp-launch.sh` — relaunches your Chrome with `--remote-debugging-port=9222` (tabs preserved).
+2. Be logged into chatgpt.com in that Chrome.
+3. Set `SHADOW_CHATGPT_CDP=http://127.0.0.1:9222` in the gateway launchd env, flip `providers.chatgpt-web.enabled=true`, restart the gateway.
+4. The adapter drives your real session and selects the requested model (gpt-5.5-pro, o3-pro).
+
+Fallback — dedicated profile (`SHADOW_CHATGPT_PROFILE` + `auth-setup.ts`): only works if anti-bot lets the automated browser through (often it doesn't).
 
 Selectors on chatgpt.com drift — the adapter (`adapters/chatgpt-web/adapter.ts`) is
 best-effort and may need updating. It is a `command` provider: any future web session
