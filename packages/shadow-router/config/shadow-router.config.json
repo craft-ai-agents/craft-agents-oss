@@ -1,6 +1,12 @@
 {
   "$schema": "./shadow-router.schema.json",
   "listen": { "host": "127.0.0.1", "port": 8787 },
+  "auth": {
+    "required": true,
+    "keyEnv": "SHADOW_ROUTER_KEY",
+    "allowedHosts": ["127.0.0.1", "localhost", "[::1]"],
+    "note": "Bearer key required on /v1/*. Host allowlist blocks DNS-rebinding; on the tailnet add the MagicDNS name + 100.x IP."
+  },
   "defaultProvider": "vibeproxy",
   "providers": {
     "vibeproxy": {

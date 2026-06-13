@@ -34,8 +34,15 @@ export interface VirtualModel {
   synthesizer?: { provider: string; model: string };
 }
 
+export interface AuthConfig {
+  required: boolean;
+  keyEnv: string;
+  allowedHosts: string[];
+}
+
 export interface RouterConfig {
   listen: { host: string; port: number };
+  auth?: AuthConfig;
   defaultProvider: string;
   providers: Record<string, ProviderConfig>;
   virtualModels: Record<string, VirtualModel>;

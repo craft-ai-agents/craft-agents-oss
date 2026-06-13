@@ -4,6 +4,7 @@
 import { resolveAll, forward, listModels, type ResolvedProvider } from "./providers.ts";
 import { resolveModel } from "./router.ts";
 import { runFusion } from "./fusion.ts";
+import { checkAuth, resolveAuthKey } from "./auth.ts";
 import type { ChatRequest, RouterConfig } from "./types.ts";
 
 const CONFIG_PATH =
@@ -12,6 +13,7 @@ const CONFIG_PATH =
 
 const config = (await Bun.file(CONFIG_PATH).json()) as RouterConfig;
 const providers = resolveAll(config);
+const authKey = config.auth ? resolveAuthKey(config.auth) : null;
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -81,8 +83,14 @@ const server = Bun.serve({
     if (url.pathname === "/healthz") {
       return json({
         ok: true,
+        auth: config.auth?.required ? "required" : "off",
         providers: [...providers.values()].map((p) => ({ name: p.name, enabled: p.enabled, tier: p.privacyTier })),
       });
+    }
+    // Everything below /v1 requires auth (bearer + host allowlist).
+    if (url.pathname.startsWith("/v1")) {
+      const a = checkAuth(req, config.auth, authKey);
+      if (!a.ok) return json({ error: { message: `unauthorized: ${a.reason}` } }, a.status);
     }
     if (url.pathname === "/v1/route" && req.method === "POST") {
       const body = (await req.json()) as ChatRequest;
