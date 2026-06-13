@@ -113,7 +113,7 @@ function isImportableMediaType(type: VideoMediaType): boolean {
   return type === 'video' || type === 'audio' || type === 'image';
 }
 
-function collectImportableFiles(paths: string[], maxFiles = 500): { files: string[]; skipped: number } {
+export function collectImportableVideoStudioFiles(paths: string[], maxFiles = 500): { files: string[]; skipped: number } {
   const files: string[] = [];
   let skipped = 0;
   const visit = (path: string): void => {
@@ -238,7 +238,7 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
 
       const imported: VideoStudioImportResult['imported'] = [];
       const nextAssets = [...output.assets];
-      const collected = collectImportableFiles(result.filePaths);
+      const collected = collectImportableVideoStudioFiles(result.filePaths);
       for (const sourcePath of collected.files) {
         const mediaId = randomUUID();
         const mediaType = inferMediaType(sourcePath);
