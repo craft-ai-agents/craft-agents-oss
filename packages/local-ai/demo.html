@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Craft local-ai — transformers.js WebGPU demo</title>
+  <style>
+    body { font: 15px/1.6 system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 20px; font-weight: 500; }
+    .row { display: flex; gap: .5rem; align-items: center; margin: .75rem 0; flex-wrap: wrap; }
+    button { padding: .5rem .9rem; border: 1px solid #ccc; border-radius: 8px; background: #fafafa; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: default; }
+    pre { background: #f4f4f4; padding: .75rem; border-radius: 8px; white-space: pre-wrap; overflow-x: auto; }
+    input { flex: 1; min-width: 220px; padding: .5rem; border: 1px solid #ccc; border-radius: 8px; }
+    .badge { padding: .15rem .5rem; border-radius: 6px; font-size: 12px; }
+    .gpu { background: #e6f4ea; color: #137333; } .cpu { background: #fef7e0; color: #b06000; }
+  </style>
+</head>
+<body>
+  <h1>Craft local-ai — transformers.js on <span id="device" class="badge">…</span></h1>
+  <p>Everything below runs on-device (no network after the model downloads). This is exactly
+     how <code>@craft-agent/local-ai</code> runs inside Craft's Electron renderer.</p>
+
+  <div class="row">
+    <input id="pii" value="Email Dr. Sarah Chen in Boston about the patient's MRI results." />
+    <button id="run-ner">Detect entities (NER)</button>
+  </div>
+  <pre id="out-ner">—</pre>
+
+  <div class="row">
+    <input id="a" value="How do I reset my password?" />
+    <input id="b" value="What's the procedure to recover my login?" />
+    <button id="run-embed">Embed + cosine similarity</button>
+  </div>
+  <pre id="out-embed">—</pre>
+
+  <div class="row">
+    <input id="gen" value="In one sentence, what is WebGPU?" />
+    <button id="run-gen">Generate (Qwen2.5-0.5B q4)</button>
+  </div>
+  <pre id="out-gen">—</pre>
+
+  <script type="module">
+    import { pipeline } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3";
+
+    const device = navigator.gpu ? "webgpu" : "wasm";
+    const badge = document.getElementById("device");
+    badge.textContent = device.toUpperCase();
+    badge.className = "badge " + (device === "webgpu" ? "gpu" : "cpu");
+
+    const cache = {};
+    const get = async (task, model, extra = {}) =>
+      (cache[task] ??= pipeline(task, model, { device, ...extra }));
+
+    const busy = (btn, on) => { btn.disabled = on; btn.textContent = on ? "loading…" : btn.dataset.label; };
+    document.querySelectorAll("button").forEach((b) => (b.dataset.label = b.textContent));
+
+    document.getElementById("run-ner").onclick = async (e) => {
+      busy(e.target, true);
+      const ner = await get("token-classification", "Xenova/bert-base-NER");
+      const ents = await ner(document.getElementById("pii").value);
+      document.getElementById("out-ner").textContent = JSON.stringify(
+        ents.map((x) => ({ entity: x.entity_group || x.entity, word: x.word, score: +x.score.toFixed(2) })), null, 2);
+      busy(e.target, false);
+    };
+
+    document.getElementById("run-embed").onclick = async (e) => {
+      busy(e.target, true);
+      const ex = await get("feature-extraction", "mixedbread-ai/mxbai-embed-xsmall-v1");
+      const out = await ex([document.getElementById("a").value, document.getElementById("b").value],
+        { pooling: "mean", normalize: true });
+      const [u, v] = out.tolist();
+      const cos = u.reduce((s, x, i) => s + x * v[i], 0);
+      document.getElementById("out-embed").textContent = `cosine similarity = ${cos.toFixed(4)}  (dim ${u.length})`;
+      busy(e.target, false);
+    };
+
+    document.getElementById("run-gen").onclick = async (e) => {
+      busy(e.target, true);
+      const gen = await get("text-generation", "onnx-community/Qwen2.5-0.5B-Instruct", { dtype: "q4" });
+      const out = await gen([{ role: "user", content: document.getElementById("gen").value }], { max_new_tokens: 96 });
+      document.getElementById("out-gen").textContent = out[0].generated_text.at(-1).content;
+      busy(e.target, false);
+    };
+  </script>
+</body>
+</html>

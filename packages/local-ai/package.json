@@ -1,0 +1,15 @@
+{
+  "name": "@craft-agent/local-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WebGPU-accelerated local AI for Craft via transformers.js — embeddings, PII/NER, and small-LLM generation in the renderer, with a WASM fallback.",
+  "module": "src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "peerDependencies": {
+    "@huggingface/transformers": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@huggingface/transformers": { "optional": false }
+  }
+}
