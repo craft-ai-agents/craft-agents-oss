@@ -5,7 +5,8 @@ import { resolveAll, forward, listModels, isQuotaError, type ResolvedProvider } 
 import { resolveModel } from "./router.ts";
 import { runFusion } from "./fusion.ts";
 import { checkAuth, resolveAuthKey } from "./auth.ts";
-import type { ChatRequest, RouterConfig } from "./types.ts";
+import { nerEnabled, hasIdentityPII } from "./privacy-ner.ts";
+import type { ChatRequest, ContentCategory, RouterConfig } from "./types.ts";
 
 const CONFIG_PATH =
   process.env.SHADOW_ROUTER_CONFIG ??
@@ -47,8 +48,16 @@ async function handleChat(req: Request): Promise<Response> {
     }
   }
 
+  // Optional NER pass: escalate sensitivity for identity entities the keyword classifier
+  // misses (a named person/location), so they're forced to a privacy-safe lane.
+  let override: ContentCategory | undefined;
+  if (nerEnabled()) {
+    const text = body.messages.map((m) => (typeof m.content === "string" ? m.content : "")).join("\n");
+    if (await hasIdentityPII(text)) override = "identity";
+  }
+
   // Route to a concrete lane.
-  const decision = resolveModel(body, config, providers);
+  const decision = resolveModel(body, config, providers, override);
   if (!decision.provider) {
     return json({ error: { message: `no route: ${decision.reason}`, shadow_route: decision } }, 503);
   }
@@ -133,7 +142,12 @@ const server = Bun.serve({
     }
     if (url.pathname === "/v1/route" && req.method === "POST") {
       const body = (await req.json()) as ChatRequest;
-      return json(resolveModel(body, config, providers));
+      let override: ContentCategory | undefined;
+      if (nerEnabled()) {
+        const text = body.messages.map((m) => (typeof m.content === "string" ? m.content : "")).join("\n");
+        if (await hasIdentityPII(text)) override = "identity";
+      }
+      return json({ ...resolveModel(body, config, providers, override), ner: nerEnabled() });
     }
     if (url.pathname === "/v1/models") return handleModels();
     if (url.pathname === "/v1/chat/completions" && req.method === "POST") return handleChat(req);

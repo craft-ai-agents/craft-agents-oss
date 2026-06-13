@@ -84,6 +84,9 @@ Provider keys come from env: `VIBEPROXY_KEY` (default `vibe-factory-local-2026`)
       reliability needs a hardened full run before acting on weights.
 - [x] **Overflow** — quota-aware fallback chains (`routing.fallbacks`) + `command` provider type;
       `chatgpt-web` lane (headless chatgpt.com, separate quota) scaffolded + plumbing-verified (mock), disabled until session-validated. See SUBSCRIPTION-VALUE.md.
+- [x] **NER privacy floor** — optional `SHADOW_ROUTER_NER=1` runs a local NER model
+      (transformers.js, WASM/WebGPU) so a named person/location escalates `general` → `identity`
+      and is forced off training lanes. Fixes the keyword-only weakness. Lazy, cached, fail-open.
 - [ ] **Phase 3** — fusion tuning (diverse-pool selection, cost caps)
 - [ ] **Phase 5** — global on sentry (OCI) via `tailscale serve` (TLS + tailnet identity, ACL `tag:devices`)
 

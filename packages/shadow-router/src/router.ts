@@ -2,8 +2,14 @@
 // enforcing the privacy floor for the detected content category.
 
 import { classifyContentSensitivity, checkConnectionPrivacy, privacySafeProviders } from "./privacy.ts";
-import type { ChatRequest, RouteDecision, RouterConfig } from "./types.ts";
+import type { ChatRequest, ContentCategory, RouteDecision, RouterConfig } from "./types.ts";
 import type { ResolvedProvider } from "./providers.ts";
+
+// An optional category override lets an async classifier (NER) escalate sensitivity
+// before routing — e.g. flagging a person/location the keyword classifier missed.
+function categoryOf(req: ChatRequest, override?: ContentCategory): ContentCategory {
+  return override ?? classifyContentSensitivity(req);
+}
 
 function classifyTask(req: ChatRequest): keyof RouterConfig["routing"]["byTask"] {
   const text = req.messages.map((m) => (typeof m.content === "string" ? m.content : "")).join(" ").toLowerCase();
@@ -19,8 +25,9 @@ export function resolveAuto(
   req: ChatRequest,
   config: RouterConfig,
   providers: Map<string, ResolvedProvider>,
+  override?: ContentCategory,
 ): RouteDecision {
-  const category = classifyContentSensitivity(req);
+  const category = categoryOf(req, override);
   const safe = privacySafeProviders(config.providers, category).filter((n) => providers.get(n)?.enabled);
   const task = classifyTask(req);
   const pref = config.routing.byTask[task] ?? config.routing.byTask.default;
@@ -51,8 +58,9 @@ export function resolvePrivate(
   req: ChatRequest,
   config: RouterConfig,
   providers: Map<string, ResolvedProvider>,
+  override?: ContentCategory,
 ): RouteDecision {
-  const category = classifyContentSensitivity(req);
+  const category = categoryOf(req, override);
   const local = Object.entries(config.providers)
     .filter(([, p]) => p.privacyTier === "local_only")
     .map(([n]) => n)
@@ -71,13 +79,14 @@ export function resolveModel(
   req: ChatRequest,
   config: RouterConfig,
   providers: Map<string, ResolvedProvider>,
+  override?: ContentCategory,
 ): RouteDecision {
   const id = req.model;
 
-  if (id === "auto") return resolveAuto(req, config, providers);
-  if (id === "private") return resolvePrivate(req, config, providers);
+  if (id === "auto") return resolveAuto(req, config, providers, override);
+  if (id === "private") return resolvePrivate(req, config, providers, override);
 
-  const category = classifyContentSensitivity(req);
+  const category = categoryOf(req, override);
 
   // Explicit provider/model addressing.
   let providerName = config.defaultProvider;
@@ -91,7 +100,7 @@ export function resolveModel(
     const check = checkConnectionPrivacy(pcfg, category);
     if (!check.ok) {
       // Privacy violation on an explicit pick → fall back to auto rather than leak.
-      const auto = resolveAuto(req, config, providers);
+      const auto = resolveAuto(req, config, providers, override);
       return { ...auto, reason: `blocked:${providerName}:${check.reason}->auto` };
     }
   }

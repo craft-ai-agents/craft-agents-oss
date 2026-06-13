@@ -13,5 +13,8 @@
   },
   "bin": {
     "shadow-router": "src/server.ts"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^4.2.0"
   }
 }
