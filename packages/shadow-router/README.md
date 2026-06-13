@@ -74,7 +74,10 @@ Provider keys come from env: `VIBEPROXY_KEY` (default `vibe-factory-local-2026`)
 
 - [x] **Phase 1** — gateway core, tri-harness routing, `auto`/`private`, fusion, OR-ready
 - [x] **Phase 2** — OpenRouter BYOK live (env → Keychain key resolution); OR + fusion verified end-to-end
+- [x] **Auth** — bearer key (env → Keychain `SHADOW_ROUTER_KEY`) + anti-DNS-rebinding host allowlist on `/v1/*`
+- [x] **Run** — persistent via launchd `com.shadow.shadow-router` (127.0.0.1:8787)
+- [x] **Phase 4** — `shadow-router` connection in Craft (default `auto`); dead 8318 lane disabled.
+      One-time: validate the connection's key in Craft Settings → AI → Connections (same quirk as any CLI-added key).
 - [ ] **Phase 3** — fusion tuning (diverse-pool selection, cost caps)
-- [ ] **Phase 4** — single `shadow-router` connection in Craft; retire dead 8318 lane
-- [ ] **Phase 5** — global via `tailscale serve` (TLS + tailnet identity, ACL `tag:devices`)
+- [ ] **Phase 5** — global on sentry (OCI) via `tailscale serve` (TLS + tailnet identity, ACL `tag:devices`)
 - [ ] **Phase 6** — routing-weight DOE (lane × model × thinking × fusion → PI quality·latency·cost)
