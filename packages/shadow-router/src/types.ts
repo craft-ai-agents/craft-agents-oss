@@ -45,6 +45,7 @@ export interface RouterConfig {
   auth?: AuthConfig;
   defaultProvider: string;
   providers: Record<string, ProviderConfig>;
+  hiddenModels?: string[];
   virtualModels: Record<string, VirtualModel>;
   routing: { byTask: Record<string, { provider: string; model: string }> };
 }

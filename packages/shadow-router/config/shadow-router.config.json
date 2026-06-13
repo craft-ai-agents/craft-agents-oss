@@ -42,6 +42,14 @@
       "note": "Local inference — the only lane allowed for restricted / sensitive content."
     }
   },
+  "hiddenModels": [
+    "claude-3-5-haiku-20241022",
+    "claude-3-7-sonnet-20250219",
+    "glm-5.1",
+    "gpt-image-2",
+    "gemini-3.1-flash-image"
+  ],
+  "hiddenModelsNote": "Vetted broken via tools/model-probe (404 / empty / image-only). Dropped from /v1/models. Re-probe: python3 tools/model-probe/probe.py.",
   "virtualModels": {
     "auto": {
       "strategy": "route",
@@ -55,21 +63,23 @@
     "fusion": {
       "strategy": "fusion",
       "members": [
-        { "provider": "vibeproxy", "model": "claude-opus-4-7" },
+        { "provider": "vibeproxy", "model": "claude-opus-4-8" },
         { "provider": "vibeproxy", "model": "gpt-5.5" },
-        { "provider": "vibeproxy", "model": "gemini-3-pro-low" }
+        { "provider": "vibeproxy", "model": "gemini-3-pro-high" }
       ],
-      "synthesizer": { "provider": "vibeproxy", "model": "claude-opus-4-7" },
-      "description": "Fan-out to diverse lanes, synthesize the best answer (OpenRouter-Fusion style, local)."
+      "synthesizer": { "provider": "vibeproxy", "model": "claude-opus-4-8" },
+      "description": "Fan-out to the 3 strongest diverse lanes (Opus 4.8 / GPT-5.5 / Gemini 3 Pro High), synthesize. Probe-verified working 2026-06-13."
     }
   },
   "routing": {
     "byTask": {
       "code": { "provider": "vibeproxy", "model": "gpt-5.5" },
-      "reasoning": { "provider": "vibeproxy", "model": "claude-opus-4-7" },
-      "cheap": { "provider": "vibeproxy", "model": "claude-haiku-4-5-20251001" },
-      "vision": { "provider": "vibeproxy", "model": "gemini-3-pro-low" },
+      "reasoning": { "provider": "vibeproxy", "model": "claude-opus-4-8" },
+      "reasoning_high": { "provider": "vibeproxy", "model": "gemini-3-pro-high" },
+      "cheap": { "provider": "vibeproxy", "model": "gemini-2.5-flash-lite" },
+      "vision": { "provider": "vibeproxy", "model": "gemini-3-pro-high" },
       "default": { "provider": "vibeproxy", "model": "claude-sonnet-4-6" }
-    }
+    },
+    "byTaskNote": "Models re-picked from the probe-verified catalog 2026-06-13. Opus 4.8 = latest. cheap uses lean gemini (Claude lanes carry ~1.4-1.9k token system-prompt overhead). Thinking levels are id suffixes: *-high / *-thinking."
   }
 }

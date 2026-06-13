@@ -16,7 +16,7 @@ const KEY = await resolveKey();
 // Relative cost weights per lane (subscription marginal ≈ low, local = 0, metered = high).
 const LANE_COST: Record<string, number> = {
   ollama: 0.0,
-  "vibeproxy/claude-opus-4-7": 1.0,
+  "vibeproxy/claude-opus-4-8": 1.0,
   "vibeproxy/gpt-5.5": 0.8,
   "vibeproxy/gemini-3-pro-low": 0.5,
   "vibeproxy/claude-haiku-4-5-20251001": 0.2,
@@ -82,7 +82,7 @@ function arg(name: string, def: string): string {
   return i > -1 && process.argv[i + 1] ? process.argv[i + 1] : def;
 }
 
-const strategies = arg("strategies", "auto,fusion,vibeproxy/gpt-5.5,vibeproxy/claude-opus-4-7").split(",");
+const strategies = arg("strategies", "auto,fusion,vibeproxy/gpt-5.5,vibeproxy/claude-opus-4-8").split(",");
 const temps = arg("temps", "0").split(",").map(Number);
 const outPath = arg("out", "/tmp/doe-results.jsonl");
 const tasks: Task[] = (await Bun.file(new URL("./eval-set.json", import.meta.url).pathname).json()).tasks;

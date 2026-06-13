@@ -66,10 +66,13 @@ async function handleChat(req: Request): Promise<Response> {
 }
 
 async function handleModels(): Promise<Response> {
+  const hidden = new Set(config.hiddenModels ?? []);
   const virtual = Object.keys(config.virtualModels).map((id) => ({ id, object: "model", owned_by: "shadow-router" }));
   const real = await Promise.all(
     [...providers.values()].map(async (p: ResolvedProvider) =>
-      (await listModels(p)).map((id) => ({ id: `${p.name}/${id}`, object: "model", owned_by: p.name })),
+      (await listModels(p))
+        .filter((id) => !hidden.has(id)) // drop probe-vetted broken/deprecated lanes
+        .map((id) => ({ id: `${p.name}/${id}`, object: "model", owned_by: p.name })),
     ),
   );
   return json({ object: "list", data: [...virtual, ...real.flat()] });
