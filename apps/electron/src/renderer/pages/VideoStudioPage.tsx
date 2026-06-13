@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight, FileVideo, FolderOpen, History, Minus, Plus, RefreshCw, Save } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, Download, FileVideo, FolderOpen, History, Loader2, Minus, Plus, RefreshCw, Save, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
@@ -15,6 +15,8 @@ type VideoProject = RunnerVideoProject
 
 type VideoStudioElectronAPI = typeof window.electronAPI & {
   writeOutputAssetText?: (workspaceId: string, outputId: string, assetId: string, content: string) => Promise<boolean>
+  importVideoStudioMedia?: (workspaceId: string, outputId: string, options?: { mode?: 'files' | 'folder' }) => Promise<{ imported: Array<{ label: string }>; skipped?: number }>
+  exportVideoStudio?: (workspaceId: string, outputId: string, preset?: string) => Promise<{ assetId: string }>
 }
 
 export default function VideoStudioPage({ workspaceId, outputId }: Props) {
@@ -24,8 +26,11 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [project, setProject] = React.useState<VideoProject | null>(null)
   const [rawJson, setRawJson] = React.useState('')
   const [selectedClipId, setSelectedClipId] = React.useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
+  const [importing, setImporting] = React.useState(false)
+  const [exporting, setExporting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
   const load = React.useCallback(async () => {
@@ -42,6 +47,13 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       setProjectAsset(asset)
       setProject(parsed)
       setRawJson(JSON.stringify(parsed, null, 2))
+      const latestRender = findLatestVideoRenderAsset(loaded)
+      if (latestRender) {
+        const url = await window.electronAPI.readOutputAssetDataUrl(workspaceId, outputId, latestRender.id)
+        setPreviewUrl(url)
+      } else {
+        setPreviewUrl(null)
+      }
       const firstClip = parsed.timeline?.tracks?.flatMap((track) => track.clips ?? [])[0]
       setSelectedClipId(firstClip?.id ?? null)
     } catch (err) {
@@ -54,6 +66,13 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   React.useEffect(() => {
     void load()
   }, [load])
+
+  React.useEffect(() => {
+    const cleanup = window.electronAPI.onOutputsUpdated?.((changedWorkspaceId) => {
+      if (changedWorkspaceId === workspaceId) void load()
+    })
+    return cleanup
+  }, [load, workspaceId])
 
   const selectedClip = React.useMemo(() => {
     if (!project || !selectedClipId) return null
@@ -102,11 +121,11 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     updateSelectedClip({ durationMs: Math.max(100, (selectedClip.durationMs ?? 1000) + deltaMs) })
   }, [selectedClip, updateSelectedClip])
 
-  const save = async () => {
+  const persistProject = async (summary = 'Edited in Video Studio') => {
     if (!projectAsset) return
     setSaving(true)
     try {
-      const parsed = addUserEditVersion(JSON.parse(rawJson) as VideoProject)
+      const parsed = addUserEditVersion(JSON.parse(rawJson) as VideoProject, summary)
       await (window.electronAPI as VideoStudioElectronAPI).writeOutputAssetText?.(
         workspaceId,
         outputId,
@@ -115,11 +134,50 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       )
       setProject(parsed)
       setRawJson(JSON.stringify(parsed, null, 2))
-      toast.success('Video project saved.')
+      return parsed
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+      throw err
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const save = async () => {
+    await persistProject()
+    toast.success('Video project saved.')
+  }
+
+  const importMedia = async (mode: 'files' | 'folder') => {
+    setImporting(true)
+    try {
+      const result = await (window.electronAPI as VideoStudioElectronAPI).importVideoStudioMedia?.(workspaceId, outputId, { mode })
+      if (!result || result.imported.length === 0) {
+        toast.info('No supported media files found.')
+        return
+      }
+      const skipped = result.skipped ? ` Skipped ${result.skipped}.` : ''
+      toast.success(`Imported ${result.imported.length} media file${result.imported.length === 1 ? '' : 's'}.${skipped}`)
+      await load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     } finally {
-      setSaving(false)
+      setImporting(false)
+    }
+  }
+
+  const exportProject = async () => {
+    setExporting(true)
+    try {
+      await persistProject('Saved before export')
+      const result = await (window.electronAPI as VideoStudioElectronAPI).exportVideoStudio?.(workspaceId, outputId, 'simple-mp4')
+      if (!result) throw new Error('Video Studio export bridge is unavailable.')
+      toast.success('Video export rendered.')
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -167,6 +225,18 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
               Reload
             </Button>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void importMedia('files')} disabled={importing}>
+              {importing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
+              Files
+            </Button>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void importMedia('folder')} disabled={importing}>
+              <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+              Folder
+            </Button>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={exportProject} disabled={exporting || saving}>
+              {exporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
+              Export
+            </Button>
             <Button size="sm" onClick={save} disabled={saving}>
               <Save className="mr-1.5 h-3.5 w-3.5" />
               {saving ? 'Saving' : 'Save'}
@@ -193,6 +263,16 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
               <Metric label="Canvas" value={`${summary?.width ?? '-'} x ${summary?.height ?? '-'}`} />
               <Metric label="FPS" value={String(summary?.fps ?? '-')} />
               <Metric label="Versions" value={String(summary?.versionCount ?? 0)} />
+            </div>
+            <div className="shrink-0 border-b border-white/[0.08] bg-black/25 p-3">
+              <PanelTitle title="Preview" value={previewUrl ? 'latest export' : 'not rendered'} />
+              <div className="mt-2 flex aspect-video max-h-[280px] items-center justify-center overflow-hidden rounded-md border border-white/[0.08] bg-black">
+                {previewUrl ? (
+                  <video src={previewUrl} controls className="h-full w-full object-contain" />
+                ) : (
+                  <div className="text-sm text-white/38">Export once to preview rendered video</div>
+                )}
+              </div>
             </div>
             <div className="min-h-0 flex-1 overflow-auto p-4">
               <PanelTitle title="Timeline" value={`${summary?.clipCount ?? 0} clips`} />
@@ -293,7 +373,16 @@ function computeTimelineDuration(tracks: VideoProject['timeline']['tracks']): nu
   ), 0)
 }
 
-function addUserEditVersion(project: VideoProject): VideoProject {
+function findLatestVideoRenderAsset(manifest: OutputManifestDTO): OutputAssetDTO | null {
+  const primary = manifest.primary
+  if (primary?.mimeType?.startsWith('video/')) return primary
+  return [...manifest.assets].reverse().find((asset) =>
+    asset.mimeType?.startsWith('video/')
+    || /\.(mp4|mov|m4v|webm)$/i.test(asset.path)
+  ) ?? null
+}
+
+function addUserEditVersion(project: VideoProject, summary: string): VideoProject {
   const now = new Date().toISOString()
   return {
     ...project,
@@ -303,7 +392,7 @@ function addUserEditVersion(project: VideoProject): VideoProject {
       {
         id: crypto.randomUUID(),
         createdAt: now,
-        summary: 'Edited in Video Studio',
+        summary,
         actor: 'user',
       },
     ],

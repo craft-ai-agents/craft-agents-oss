@@ -101,4 +101,34 @@ describe('handleDeepLink routing', () => {
     expect(sent.length).toBe(1)
     expect(sent[0]?.target).toEqual({ to: 'workspace', workspaceId: 'ws-target' })
   })
+
+  it('routes video studio deep links as compound view routes', async () => {
+    const targetWindow = createMockWindow(55)
+
+    const windowManager = {
+      focusOrCreateWindow: () => targetWindow,
+      getFocusedWindow: () => targetWindow,
+      getLastActiveWindow: () => targetWindow,
+      getWorkspaceForWindow: () => 'ws-target',
+    } as unknown as WindowManager
+
+    const sent: Array<{ channel: string; target: unknown; args: unknown[] }> = []
+    const sink: EventSink = (channel, target, ...args) => {
+      sent.push({ channel, target, args })
+    }
+
+    await handleDeepLink(
+      'craftagents://workspace/ws-target/video-studio/287e951c-09aa-4c42-b3e7-30ad0c7bc77f',
+      windowManager,
+      sink,
+      () => 'client-target',
+    )
+
+    expect(sent.length).toBe(1)
+    expect(sent[0]?.channel).toBe(RPC_CHANNELS.deeplink.NAVIGATE)
+    expect(sent[0]?.target).toEqual({ to: 'client', clientId: 'client-target' })
+    expect((sent[0]?.args[0] as { view?: string } | undefined)?.view).toBe(
+      'video-studio/287e951c-09aa-4c42-b3e7-30ad0c7bc77f',
+    )
+  })
 })

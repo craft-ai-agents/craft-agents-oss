@@ -507,6 +507,11 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.outputs.READ_ASSET_DATA_URL,
   RPC_CHANNELS.outputs.UPDATED,
 
+  // video studio — workspace-local project/media/render operations
+  RPC_CHANNELS.videoStudio.IMPORT_MEDIA,
+  RPC_CHANNELS.videoStudio.EXPORT,
+  RPC_CHANNELS.videoStudio.RUN_AGENT,
+
   // messaging — gateway channels run on workspace server
   RPC_CHANNELS.messaging.WA_REGISTER,
   RPC_CHANNELS.messaging.WA_INCOMING,

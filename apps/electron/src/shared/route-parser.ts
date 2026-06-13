@@ -68,16 +68,16 @@ export interface ParsedCompoundRoute {
 /**
  * Known prefixes that indicate a compound route
  */
-const COMPOUND_ROUTE_PREFIXES = [
+export const COMPOUND_ROUTE_PREFIXES = [
   'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'workflows', 'runs', 'deep-research', 'outputs', 'video-studio', 'settings'
-]
+] as const
 
 /**
  * Check if a route is a compound route (new format)
  */
 export function isCompoundRoute(route: string): boolean {
   const firstSegment = route.split('/')[0]
-  return COMPOUND_ROUTE_PREFIXES.includes(firstSegment)
+  return COMPOUND_ROUTE_PREFIXES.includes(firstSegment as typeof COMPOUND_ROUTE_PREFIXES[number])
 }
 
 /**

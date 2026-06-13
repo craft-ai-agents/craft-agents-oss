@@ -38,6 +38,7 @@ import type { BrowserWindow } from 'electron'
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
 import { RPC_CHANNELS } from '../shared/types'
+import { COMPOUND_ROUTE_PREFIXES } from '../shared/route-parser'
 import type { EventSink } from '@craft-agent/server-core/transport'
 
 export interface DeepLinkTarget {
@@ -113,13 +114,8 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
       return null
     }
 
-    // Compound route prefixes
-    const COMPOUND_ROUTE_PREFIXES = [
-      'allSessions', 'flagged', 'state', 'sources', 'settings', 'skills'
-    ]
-
     // craftagents://allSessions/..., craftagents://settings/..., etc. (compound routes)
-    if (COMPOUND_ROUTE_PREFIXES.includes(host)) {
+    if (COMPOUND_ROUTE_PREFIXES.includes(host as typeof COMPOUND_ROUTE_PREFIXES[number])) {
       // Reconstruct the full compound route from host + pathname
       const viewRoute = pathParts.length > 0 ? `${host}/${pathParts.join('/')}` : host
       return {
@@ -142,7 +138,7 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
 
       // Parse compound routes: /workspace/{id}/{compoundRoute}
       // e.g., /workspace/ws123/allSessions/session/abc123
-      if (routeType && COMPOUND_ROUTE_PREFIXES.includes(routeType)) {
+      if (routeType && COMPOUND_ROUTE_PREFIXES.includes(routeType as typeof COMPOUND_ROUTE_PREFIXES[number])) {
         const viewRoute = pathParts.slice(1).join('/')
         result.view = viewRoute
         return result

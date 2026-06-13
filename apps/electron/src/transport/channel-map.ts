@@ -485,6 +485,10 @@ export const CHANNEL_MAP = {
   readOutputAssetDataUrl: invoke(RPC_CHANNELS.outputs.READ_ASSET_DATA_URL),
   onOutputsUpdated: listener(RPC_CHANNELS.outputs.UPDATED),
 
+  importVideoStudioMedia: invoke(RPC_CHANNELS.videoStudio.IMPORT_MEDIA),
+  exportVideoStudio: invoke(RPC_CHANNELS.videoStudio.EXPORT),
+  runVideoStudioAgent: invoke(RPC_CHANNELS.videoStudio.RUN_AGENT),
+
   getAutomationHistory: invoke(RPC_CHANNELS.automations.GET_HISTORY),
   getAutomationLastExecuted: invoke(RPC_CHANNELS.automations.GET_LAST_EXECUTED),
   replayAutomation: invoke(RPC_CHANNELS.automations.REPLAY),

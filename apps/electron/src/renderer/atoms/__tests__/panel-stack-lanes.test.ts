@@ -47,6 +47,21 @@ describe('panel stack single-lane behavior', () => {
     expect(stack.some((p) => p.route === 'allSessions/session/s1')).toBe(true)
   })
 
+  it('opens video studio as an exclusive workspace surface', () => {
+    const store = createStore()
+
+    store.set(pushPanelAtom, { route: 'allSessions/session/s1' })
+    store.set(pushPanelAtom, { route: 'outputs/output-1' })
+
+    store.set(updateFocusedPanelRouteAtom, 'video-studio/output-1')
+
+    const stack = getStack(store)
+    expect(stack).toHaveLength(1)
+    expect(stack[0].route).toBe('video-studio/output-1')
+    expect(stack[0].proportion).toBe(1)
+    expect(store.get(focusedPanelIdAtom)).toBe(stack[0].id)
+  })
+
   it('pushPanel afterIndex inserts immediately after the given panel', () => {
     const store = createStore()
 

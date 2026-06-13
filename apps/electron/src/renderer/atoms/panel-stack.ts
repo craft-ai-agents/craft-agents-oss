@@ -114,6 +114,10 @@ export function parseSessionIdFromRoute(route: ViewRoute): string | null {
   return null
 }
 
+function isExclusiveWorkspaceRoute(route: ViewRoute): boolean {
+  return route.startsWith('video-studio/')
+}
+
 export const focusedSessionIdAtom = atom((get) => {
   const route = get(focusedPanelRouteAtom)
   if (!route) return null
@@ -260,6 +264,13 @@ export const updateFocusedPanelRouteAtom = atom(
   null,
   (get, set, route: ViewRoute) => {
     const stack = get(panelStackAtom)
+
+    if (isExclusiveWorkspaceRoute(route)) {
+      const newEntry = createEntry(route, 1)
+      set(panelStackAtom, [newEntry])
+      set(focusedPanelIdAtom, newEntry.id)
+      return
+    }
 
     if (stack.length === 0) {
       const newEntry = createEntry(route, 1)

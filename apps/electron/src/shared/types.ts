@@ -67,6 +67,31 @@ export interface ZeroStatus {
   error?: string
 }
 
+export interface VideoStudioImportResult {
+  ok: boolean
+  outputId: string
+  imported: Array<{ mediaId: string; assetId: string; label: string; type: string; path: string }>
+  skipped: number
+  projectAssetId: string
+}
+
+export interface VideoStudioExportResult {
+  ok: boolean
+  outputId: string
+  assetId: string
+  receiptAssetId: string
+  outputPath: string
+  receiptPath: string
+  rendered: boolean
+}
+
+export interface VideoStudioAgentRunResult {
+  ok: boolean
+  outputId: string
+  status: 'not-implemented'
+  message: string
+}
+
 // Source types for session source selection
 import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, SourceTier } from '@craft-agent/shared/sources/types';
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, SourceTier };
@@ -902,6 +927,9 @@ export interface ElectronAPI {
   readOutputAssetText(workspaceId: string, outputId: string, assetId?: string): Promise<string>
   writeOutputAssetText(workspaceId: string, outputId: string, assetId: string, content: string): Promise<boolean>
   readOutputAssetDataUrl(workspaceId: string, outputId: string, assetId?: string): Promise<string>
+  importVideoStudioMedia(workspaceId: string, outputId: string, options?: { mode?: 'files' | 'folder' }): Promise<VideoStudioImportResult>
+  exportVideoStudio(workspaceId: string, outputId: string, preset?: string): Promise<VideoStudioExportResult>
+  runVideoStudioAgent(workspaceId: string, outputId: string, prompt: string): Promise<VideoStudioAgentRunResult>
   recordVisualCapture(input: {
     workspaceId: string
     sessionId: string

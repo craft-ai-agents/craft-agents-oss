@@ -507,6 +507,11 @@ export const RPC_CHANNELS = {
     READ_ASSET_DATA_URL: 'outputs:readAssetDataUrl',
     UPDATED: 'outputs:updated',
   },
+  videoStudio: {
+    IMPORT_MEDIA: 'video-studio:importMedia',
+    EXPORT: 'video-studio:export',
+    RUN_AGENT: 'video-studio:runAgent',
+  },
   resources: {
     EXPORT: 'resources:export',
     IMPORT: 'resources:import',
