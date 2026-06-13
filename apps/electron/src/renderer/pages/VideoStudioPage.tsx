@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight, Download, FileVideo, FolderOpen, History, Loader2, Minus, Plus, RefreshCw, Save, Upload } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, Copy, Download, FileVideo, FolderOpen, History, Loader2, Magnet, Minus, Plus, RefreshCw, Save, Scissors, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
@@ -27,6 +27,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [rawJson, setRawJson] = React.useState('')
   const [selectedClipId, setSelectedClipId] = React.useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null)
+  const [playheadMs, setPlayheadMs] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [importing, setImporting] = React.useState(false)
@@ -120,6 +121,139 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     if (!selectedClip) return
     updateSelectedClip({ durationMs: Math.max(100, (selectedClip.durationMs ?? 1000) + deltaMs) })
   }, [selectedClip, updateSelectedClip])
+
+  const packTimeline = React.useCallback(() => {
+    updateProject((current) => {
+      const tracks = (current.timeline?.tracks ?? []).map((track) => {
+        let cursor = 0
+        const clips = [...(track.clips ?? [])]
+          .sort((a, b) => (a.startMs ?? 0) - (b.startMs ?? 0))
+          .map((clip) => {
+            const nextClip = { ...clip, startMs: cursor }
+            cursor += Math.max(1, clip.durationMs ?? 1)
+            return nextClip
+          })
+        return { ...track, clips }
+      })
+      return {
+        ...current,
+        timeline: {
+          ...current.timeline,
+          durationMs: computeTimelineDuration(tracks),
+          tracks,
+        },
+      }
+    })
+    toast.success('Timeline packed.')
+  }, [updateProject])
+
+  const duplicateSelectedClip = React.useCallback(() => {
+    if (!selectedClipId) return
+    let createdId: string | null = null
+    updateProject((current) => {
+      const tracks = (current.timeline?.tracks ?? []).map((track) => {
+        const index = (track.clips ?? []).findIndex((clip) => clip.id === selectedClipId)
+        if (index === -1) return track
+        const clips = [...(track.clips ?? [])]
+        const clip = clips[index]
+        if (!clip) return track
+        createdId = crypto.randomUUID()
+        const insertStart = (clip.startMs ?? 0) + Math.max(1, clip.durationMs ?? 1)
+        const clipDuration = Math.max(1, clip.durationMs ?? 1)
+        for (let nextIndex = index + 1; nextIndex < clips.length; nextIndex += 1) {
+          const nextClip = clips[nextIndex]
+          if (nextClip && (nextClip.startMs ?? 0) >= insertStart) {
+            clips[nextIndex] = { ...nextClip, startMs: (nextClip.startMs ?? 0) + clipDuration }
+          }
+        }
+        clips.splice(index + 1, 0, {
+          ...clip,
+          id: createdId,
+          startMs: insertStart,
+          label: clip.label ? `${clip.label} copy` : undefined,
+        })
+        return { ...track, clips }
+      })
+      return {
+        ...current,
+        timeline: {
+          ...current.timeline,
+          durationMs: computeTimelineDuration(tracks),
+          tracks,
+        },
+      }
+    })
+    if (createdId) setSelectedClipId(createdId)
+  }, [selectedClipId, updateProject])
+
+  const deleteSelectedClip = React.useCallback(() => {
+    if (!selectedClipId) return
+    let nextSelection: string | null = null
+    updateProject((current) => {
+      const tracks = (current.timeline?.tracks ?? []).map((track) => {
+        const clips = (track.clips ?? []).filter((clip) => clip.id !== selectedClipId)
+        if (!nextSelection) nextSelection = clips[0]?.id ?? null
+        return { ...track, clips }
+      })
+      return {
+        ...current,
+        timeline: {
+          ...current.timeline,
+          durationMs: computeTimelineDuration(tracks),
+          tracks,
+        },
+      }
+    })
+    setSelectedClipId(nextSelection)
+  }, [selectedClipId, updateProject])
+
+  const splitSelectedClip = React.useCallback(() => {
+    if (!selectedClipId || !selectedClip) return
+    const clipStart = selectedClip.startMs ?? 0
+    const clipDuration = selectedClip.durationMs ?? 0
+    const splitAt = Math.round(playheadMs)
+    const clipEnd = clipStart + clipDuration
+    if (splitAt <= clipStart || splitAt >= clipEnd) {
+      toast.error('Playhead must be inside the selected clip.')
+      return
+    }
+    let createdId: string | null = null
+    updateProject((current) => {
+      const tracks = (current.timeline?.tracks ?? []).map((track) => {
+        const index = (track.clips ?? []).findIndex((clip) => clip.id === selectedClipId)
+        if (index === -1) return track
+        const clips = [...(track.clips ?? [])]
+        const clip = clips[index]
+        if (!clip) return track
+        const firstDuration = splitAt - (clip.startMs ?? 0)
+        const secondDuration = (clip.durationMs ?? 0) - firstDuration
+        const sourceInMs = clip.sourceInMs ?? 0
+        createdId = crypto.randomUUID()
+        clips.splice(index, 1, {
+          ...clip,
+          durationMs: firstDuration,
+          sourceOutMs: clip.sourceOutMs !== undefined ? sourceInMs + firstDuration : clip.sourceOutMs,
+        }, {
+          ...clip,
+          id: createdId,
+          startMs: splitAt,
+          durationMs: secondDuration,
+          sourceInMs: sourceInMs + firstDuration,
+          label: clip.label ? `${clip.label} split` : undefined,
+        })
+        return { ...track, clips }
+      })
+      return {
+        ...current,
+        timeline: {
+          ...current.timeline,
+          durationMs: computeTimelineDuration(tracks),
+          tracks,
+        },
+      }
+    })
+    if (createdId) setSelectedClipId(createdId)
+  }, [playheadMs, selectedClip, selectedClipId, updateProject])
 
   const persistProject = async (summary = 'Edited in Video Studio') => {
     if (!projectAsset) return
@@ -275,7 +409,16 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-auto p-4">
-              <PanelTitle title="Timeline" value={`${summary?.clipCount ?? 0} clips`} />
+              <div className="flex items-center justify-between gap-3">
+                <PanelTitle title="Timeline" value={`${summary?.clipCount ?? 0} clips`} />
+                <div className="flex items-center gap-2">
+                  <NumberField compact label="Playhead" value={playheadMs} onChange={(value) => setPlayheadMs(Math.max(0, value))} />
+                  <Button size="sm" variant="outline" className="h-8 border-white/[0.08] bg-white/[0.045] px-2 text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={packTimeline}>
+                    <Magnet className="mr-1.5 h-3.5 w-3.5" />
+                    Pack
+                  </Button>
+                </div>
+              </div>
               <div className="mt-3 grid gap-3">
                 {tracks.map((track) => (
                   <div key={track.id} className="rounded-md border border-white/[0.08] bg-black/30">
@@ -315,6 +458,10 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                     <IconButton label="+250 ms" onClick={() => nudgeSelectedClip(250)}><ChevronRight className="h-3.5 w-3.5" /></IconButton>
                     <IconButton label="Trim -" onClick={() => resizeSelectedClip(-250)}><Minus className="h-3.5 w-3.5" /></IconButton>
                     <IconButton label="Trim +" onClick={() => resizeSelectedClip(250)}><Plus className="h-3.5 w-3.5" /></IconButton>
+                    <IconButton label="Split at playhead" onClick={splitSelectedClip}><Scissors className="h-3.5 w-3.5" /></IconButton>
+                    <IconButton label="Duplicate" onClick={duplicateSelectedClip}><Copy className="h-3.5 w-3.5" /></IconButton>
+                    <IconButton label="Delete" onClick={deleteSelectedClip}><Trash2 className="h-3.5 w-3.5" /></IconButton>
+                    <IconButton label="Pack timeline" onClick={packTimeline}><Magnet className="h-3.5 w-3.5" /></IconButton>
                   </div>
                 </div>
                 <NumberField label="Start ms" value={selectedClip.startMs ?? 0} onChange={(value) => updateSelectedClip({ startMs: Math.max(0, value) })} />
@@ -452,11 +599,11 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
   )
 }
 
-function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+function NumberField({ label, value, onChange, compact = false }: { label: string; value: number; onChange: (value: number) => void; compact?: boolean }) {
   return (
-    <label className="grid gap-1 text-xs text-white/42">
+    <label className={`${compact ? 'flex items-center gap-1' : 'grid gap-1'} text-xs text-white/42`}>
       {label}
-      <input type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} className="h-8 rounded-md border border-white/[0.08] bg-black/35 px-2 text-sm text-white/72 outline-none focus:border-[#f97316]/50" />
+      <input type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} className={`${compact ? 'w-24' : 'w-full'} h-8 rounded-md border border-white/[0.08] bg-black/35 px-2 text-sm text-white/72 outline-none focus:border-[#f97316]/50`} />
     </label>
   )
 }

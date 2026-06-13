@@ -54,6 +54,10 @@ function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf-8'));
 }
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function defaultSettings(aspectRatio = '9:16') {
   if (aspectRatio === '16:9') return { aspectRatio, width: 1920, height: 1080, fps: 30 };
   if (aspectRatio === '1:1') return { aspectRatio, width: 1080, height: 1080, fps: 30 };
@@ -129,6 +133,158 @@ function validateProject(project) {
     }
   }
   return { ok: errors.length === 0, errors };
+}
+
+function timelineDuration(tracks) {
+  return (tracks || []).reduce((duration, track) => {
+    const trackEnd = (track.clips || []).reduce((end, clip) => Math.max(end, (clip.startMs || 0) + (clip.durationMs || 0)), 0);
+    return Math.max(duration, trackEnd);
+  }, 0);
+}
+
+function orderedClips(track) {
+  return [...(track.clips || [])].sort((a, b) => (a.startMs || 0) - (b.startMs || 0));
+}
+
+function addProjectVersion(project, summary) {
+  const now = new Date().toISOString();
+  project.updatedAt = now;
+  project.versions = Array.isArray(project.versions) ? project.versions : [];
+  project.versions.push({ id: randomUUID(), createdAt: now, summary, actor: 'user' });
+}
+
+function findClip(project, clipId) {
+  for (const track of project.timeline?.tracks || []) {
+    const index = (track.clips || []).findIndex((clip) => clip.id === clipId);
+    if (index !== -1) return { track, clip: track.clips[index], index };
+  }
+  return null;
+}
+
+function packProjectTimeline(project) {
+  const next = cloneJson(project);
+  let moved = 0;
+  for (const track of next.timeline.tracks || []) {
+    let cursor = 0;
+    track.clips = orderedClips(track).map((clip) => {
+      const previous = clip.startMs || 0;
+      const updated = { ...clip, startMs: cursor };
+      if (previous !== cursor) moved += 1;
+      cursor += Math.max(1, clip.durationMs || 1);
+      return updated;
+    });
+  }
+  next.timeline.durationMs = timelineDuration(next.timeline.tracks);
+  addProjectVersion(next, `Packed timeline (${moved} clip${moved === 1 ? '' : 's'} moved)`);
+  return { project: next, changed: moved };
+}
+
+function splitProjectClip(project, clipId, atMs) {
+  if (!Number.isFinite(atMs) || atMs < 0) fail('--at-ms must be a non-negative number.');
+  const next = cloneJson(project);
+  const found = findClip(next, clipId);
+  if (!found) fail(`Clip not found: ${clipId}`);
+  const { track, clip, index } = found;
+  const start = clip.startMs || 0;
+  const duration = clip.durationMs || 0;
+  const end = start + duration;
+  if (atMs <= start || atMs >= end) fail(`Split time must be inside the clip (${start}-${end} ms).`);
+  const firstDuration = atMs - start;
+  const secondDuration = end - atMs;
+  const sourceIn = clip.sourceInMs || 0;
+  const first = {
+    ...clip,
+    durationMs: firstDuration,
+    sourceOutMs: clip.sourceOutMs !== undefined ? sourceIn + firstDuration : clip.sourceOutMs,
+  };
+  const second = {
+    ...clip,
+    id: randomUUID(),
+    startMs: atMs,
+    durationMs: secondDuration,
+    label: clip.label ? `${clip.label} copy` : undefined,
+    sourceInMs: sourceIn + firstDuration,
+    sourceOutMs: clip.sourceOutMs,
+  };
+  track.clips.splice(index, 1, first, second);
+  next.timeline.durationMs = timelineDuration(next.timeline.tracks);
+  addProjectVersion(next, `Split clip ${clip.label || clip.id}`);
+  return { project: next, createdClipId: second.id };
+}
+
+function deleteProjectClip(project, clipId, ripple = false) {
+  const next = cloneJson(project);
+  const found = findClip(next, clipId);
+  if (!found) fail(`Clip not found: ${clipId}`);
+  const { track, clip, index } = found;
+  const removedDuration = clip.durationMs || 0;
+  const removedStart = clip.startMs || 0;
+  track.clips.splice(index, 1);
+  if (ripple) {
+    track.clips = (track.clips || []).map((item) => (item.startMs || 0) > removedStart
+      ? { ...item, startMs: Math.max(0, (item.startMs || 0) - removedDuration) }
+      : item);
+  }
+  next.timeline.durationMs = timelineDuration(next.timeline.tracks);
+  addProjectVersion(next, `Deleted clip ${clip.label || clip.id}${ripple ? ' with ripple' : ''}`);
+  return { project: next, deletedClipId: clipId };
+}
+
+function duplicateProjectClip(project, clipId) {
+  const next = cloneJson(project);
+  const found = findClip(next, clipId);
+  if (!found) fail(`Clip not found: ${clipId}`);
+  const { track, clip, index } = found;
+  const insertStart = (clip.startMs || 0) + Math.max(1, clip.durationMs || 1);
+  const clipDuration = Math.max(1, clip.durationMs || 1);
+  const duplicate = {
+    ...clip,
+    id: randomUUID(),
+    startMs: insertStart,
+    label: clip.label ? `${clip.label} copy` : undefined,
+  };
+  track.clips = (track.clips || []).map((item, itemIndex) => itemIndex > index && (item.startMs || 0) >= insertStart
+    ? { ...item, startMs: (item.startMs || 0) + clipDuration }
+    : item);
+  track.clips.splice(index + 1, 0, duplicate);
+  next.timeline.durationMs = timelineDuration(next.timeline.tracks);
+  addProjectVersion(next, `Duplicated clip ${clip.label || clip.id}`);
+  return { project: next, createdClipId: duplicate.id };
+}
+
+function inspectProject(project) {
+  const issues = [];
+  const warnings = [];
+  const mediaById = new Map((project.media || []).map((media) => [media.id, media]));
+  for (const [trackIndex, track] of (project.timeline?.tracks || []).entries()) {
+    const clips = orderedClips(track);
+    let cursor = 0;
+    for (const [clipIndex, clip] of clips.entries()) {
+      const label = clip.label || clip.id || `track ${trackIndex} clip ${clipIndex}`;
+      const start = clip.startMs || 0;
+      const end = start + (clip.durationMs || 0);
+      if (start > cursor) warnings.push({ type: 'gap', trackId: track.id, clipId: clip.id, message: `${label} starts after a ${start - cursor} ms gap.` });
+      if (start < cursor) issues.push({ type: 'overlap', trackId: track.id, clipId: clip.id, message: `${label} overlaps the previous clip by ${cursor - start} ms.` });
+      if (clip.mediaId) {
+        const media = mediaById.get(clip.mediaId);
+        if (!media) issues.push({ type: 'missing-media', trackId: track.id, clipId: clip.id, message: `${label} references missing media ${clip.mediaId}.` });
+        else if (!['video', 'image', 'audio'].includes(media.type)) warnings.push({ type: 'unsupported-simple-render', trackId: track.id, clipId: clip.id, message: `${label} uses ${media.type}, which the simple MP4 renderer cannot render yet.` });
+        else if (!existsSync(media.path)) issues.push({ type: 'missing-file', trackId: track.id, clipId: clip.id, message: `${label} media file is missing: ${media.path}` });
+      }
+      cursor = Math.max(cursor, end);
+    }
+  }
+  return {
+    ok: issues.length === 0,
+    issues,
+    warnings,
+    stats: {
+      tracks: project.timeline?.tracks?.length || 0,
+      clips: (project.timeline?.tracks || []).reduce((count, track) => count + (track.clips?.length || 0), 0),
+      media: project.media?.length || 0,
+      durationMs: project.timeline?.durationMs || 0,
+    },
+  };
 }
 
 function inferType(path) {
@@ -351,10 +507,90 @@ function runValidate() {
   });
 }
 
+function readValidProject(projectPath) {
+  const resolved = resolve(projectPath);
+  if (!existsSync(resolved)) fail(`Project file not found: ${projectPath}`);
+  let project;
+  try {
+    project = readJson(resolved);
+  } catch (error) {
+    fail(`Project JSON is invalid: ${error.message}`);
+  }
+  const validation = validateProject(project);
+  if (!validation.ok) fail('Project validation failed.', { projectPath: resolved, errors: validation.errors });
+  return { resolved, project };
+}
+
 function runProbe() {
   const mediaPath = positional(0);
   if (!mediaPath) fail('Usage: video-studio probe <media-path> [--json]');
   print(probeMedia(mediaPath));
+}
+
+function runInspect() {
+  const projectPath = positional(0);
+  if (!projectPath) fail('Usage: video-studio inspect <project-path> [--json]');
+  const { resolved, project } = readValidProject(projectPath);
+  const report = inspectProject(project);
+  print({
+    ok: report.ok,
+    projectPath: resolved,
+    ...report,
+    lines: [
+      report.ok ? `✓ Project inspect passed: ${resolved}` : `✕ Project inspect found ${report.issues.length} issue(s).`,
+      `• ${report.stats.clips} clips across ${report.stats.tracks} tracks`,
+      `• ${report.warnings.length} warning(s)`,
+    ],
+  });
+  if (!report.ok) process.exit(1);
+}
+
+function runDryRun() {
+  const projectPath = positional(0);
+  if (!projectPath) fail('Usage: video-studio dry-run <project-path> [--json]');
+  const { resolved, project } = readValidProject(projectPath);
+  const report = inspectProject(project);
+  const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' });
+  const ffmpegAvailable = ffmpeg.status === 0;
+  const renderable = report.ok && ffmpegAvailable && report.warnings.every((warning) => warning.type !== 'unsupported-simple-render');
+  print({
+    ok: renderable,
+    projectPath: resolved,
+    renderable,
+    ffmpegAvailable,
+    inspect: report,
+    lines: [
+      renderable ? `✓ Dry-run export passed: ${resolved}` : `✕ Dry-run export failed: ${resolved}`,
+      ffmpegAvailable ? '✓ ffmpeg available' : '✕ ffmpeg unavailable',
+      `• ${report.issues.length} issue(s), ${report.warnings.length} warning(s)`,
+    ],
+  });
+  if (!renderable) process.exit(1);
+}
+
+function runEdit() {
+  const projectPath = positional(0);
+  if (!projectPath) fail('Usage: video-studio edit <project-path> --action pack|split|delete|duplicate [--clip-id <id>] [--at-ms <ms>] [--ripple] [--json]');
+  const action = opt('--action', '');
+  const clipId = opt('--clip-id', '');
+  const { resolved, project } = readValidProject(projectPath);
+  let result;
+  if (action === 'pack') result = packProjectTimeline(project);
+  else if (action === 'split') result = splitProjectClip(project, clipId, Number(opt('--at-ms', Number.NaN)));
+  else if (action === 'delete') result = deleteProjectClip(project, clipId, hasFlag('--ripple'));
+  else if (action === 'duplicate') result = duplicateProjectClip(project, clipId);
+  else fail('Unknown edit action. Use pack, split, delete, or duplicate.');
+  const validation = validateProject(result.project);
+  if (!validation.ok) fail('Edit produced an invalid project.', { errors: validation.errors });
+  writeJsonAtomic(resolved, result.project);
+  print({
+    ok: true,
+    projectPath: resolved,
+    action,
+    ...Object.fromEntries(Object.entries(result).filter(([key]) => key !== 'project')),
+    durationMs: result.project.timeline.durationMs,
+    lines: [`✓ Applied ${action} edit: ${resolved}`],
+  });
 }
 
 function runExport() {
@@ -429,6 +665,9 @@ Usage:
   video-studio doctor [--json]
   video-studio create <project-dir-or-file> [--title <title>] [--aspect-ratio 9:16|1:1|16:9|4:5] [--force] [--json]
   video-studio probe <media-path> [--json]
+  video-studio inspect <project-path> [--json]
+  video-studio dry-run <project-path> [--json]
+  video-studio edit <project-path> --action pack|split|delete|duplicate [--clip-id <id>] [--at-ms <ms>] [--ripple] [--json]
   video-studio validate <project-path> [--json]
   video-studio export <project-path> --out <output-path> [--preset <name>] [--json]
 `);
@@ -438,5 +677,8 @@ if (command === 'doctor') runDoctor();
 else if (command === 'create') runCreate();
 else if (command === 'validate') runValidate();
 else if (command === 'probe') runProbe();
+else if (command === 'inspect') runInspect();
+else if (command === 'dry-run') runDryRun();
+else if (command === 'edit') runEdit();
 else if (command === 'export') runExport();
 else usage();

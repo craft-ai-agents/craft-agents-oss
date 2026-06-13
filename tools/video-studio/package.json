@@ -11,6 +11,9 @@
     "create": "node bin/video-studio.mjs create",
     "validate": "node bin/video-studio.mjs validate",
     "probe": "node bin/video-studio.mjs probe",
+    "inspect": "node bin/video-studio.mjs inspect",
+    "dry-run": "node bin/video-studio.mjs dry-run",
+    "edit": "node bin/video-studio.mjs edit",
     "export": "node bin/video-studio.mjs export"
   }
 }
