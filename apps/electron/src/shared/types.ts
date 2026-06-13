@@ -85,6 +85,16 @@ export interface VideoStudioExportResult {
   rendered: boolean
 }
 
+export interface VideoStudioReportResult {
+  ok: boolean
+  outputId: string
+  command: 'inspect' | 'dry-run'
+  assetId: string
+  reportPath: string
+  status: number
+  report: unknown
+}
+
 export interface VideoStudioAgentRunResult {
   ok: boolean
   outputId: string
@@ -928,6 +938,8 @@ export interface ElectronAPI {
   writeOutputAssetText(workspaceId: string, outputId: string, assetId: string, content: string): Promise<boolean>
   readOutputAssetDataUrl(workspaceId: string, outputId: string, assetId?: string): Promise<string>
   importVideoStudioMedia(workspaceId: string, outputId: string, options?: { mode?: 'files' | 'folder' }): Promise<VideoStudioImportResult>
+  inspectVideoStudio(workspaceId: string, outputId: string): Promise<VideoStudioReportResult>
+  dryRunVideoStudio(workspaceId: string, outputId: string): Promise<VideoStudioReportResult>
   exportVideoStudio(workspaceId: string, outputId: string, preset?: string): Promise<VideoStudioExportResult>
   runVideoStudioAgent(workspaceId: string, outputId: string, prompt: string): Promise<VideoStudioAgentRunResult>
   recordVisualCapture(input: {

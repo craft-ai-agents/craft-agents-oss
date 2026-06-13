@@ -509,6 +509,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
 
   // video studio — workspace-local project/media/render operations
   RPC_CHANNELS.videoStudio.IMPORT_MEDIA,
+  RPC_CHANNELS.videoStudio.INSPECT,
+  RPC_CHANNELS.videoStudio.DRY_RUN,
   RPC_CHANNELS.videoStudio.EXPORT,
   RPC_CHANNELS.videoStudio.RUN_AGENT,
 

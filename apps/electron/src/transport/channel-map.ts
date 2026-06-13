@@ -486,6 +486,8 @@ export const CHANNEL_MAP = {
   onOutputsUpdated: listener(RPC_CHANNELS.outputs.UPDATED),
 
   importVideoStudioMedia: invoke(RPC_CHANNELS.videoStudio.IMPORT_MEDIA),
+  inspectVideoStudio: invoke(RPC_CHANNELS.videoStudio.INSPECT),
+  dryRunVideoStudio: invoke(RPC_CHANNELS.videoStudio.DRY_RUN),
   exportVideoStudio: invoke(RPC_CHANNELS.videoStudio.EXPORT),
   runVideoStudioAgent: invoke(RPC_CHANNELS.videoStudio.RUN_AGENT),
 

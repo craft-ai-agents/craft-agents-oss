@@ -15,6 +15,8 @@ import { OutputService, pushOutputsUpdated } from '../../outputs/OutputService';
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.videoStudio.IMPORT_MEDIA,
+  RPC_CHANNELS.videoStudio.INSPECT,
+  RPC_CHANNELS.videoStudio.DRY_RUN,
   RPC_CHANNELS.videoStudio.EXPORT,
   RPC_CHANNELS.videoStudio.RUN_AGENT,
 ] as const;
@@ -35,6 +37,16 @@ interface VideoStudioExportResult {
   outputPath: string;
   receiptPath: string;
   rendered: boolean;
+}
+
+interface VideoStudioReportResult {
+  ok: boolean;
+  outputId: string;
+  command: 'inspect' | 'dry-run';
+  assetId: string;
+  reportPath: string;
+  status: number;
+  report: unknown;
 }
 
 function resolveRootPath(workspaceId: string): string {
@@ -209,6 +221,73 @@ function videoStudioCli(workspaceId: string): string {
   return join(source.folderPath, 'bin', 'video-studio.mjs');
 }
 
+function parseJsonOutput(stdout: string, fallback: Record<string, unknown>): unknown {
+  try {
+    return JSON.parse(stdout);
+  } catch {
+    return fallback;
+  }
+}
+
+function runVideoStudioReport(server: RpcServer, workspaceId: string, outputId: string, command: 'inspect' | 'dry-run'): VideoStudioReportResult {
+  assertLocalWorkspace(workspaceId, `${command === 'inspect' ? 'Inspect' : 'Dry-run'} Video Studio project`);
+  const service = serviceFor(server);
+  const root = resolveRootPath(workspaceId);
+  const output = service.get(workspaceId, outputId);
+  if (!output) throw new Error(`Output not found: ${outputId}`);
+  const projectAsset = videoProjectAsset(output);
+  const projectPath = service.resolveAssetPath(workspaceId, outputId, projectAsset.path);
+  const cliPath = videoStudioCli(workspaceId);
+  if (!existsSync(cliPath)) throw new Error(`Video Studio CLI not found: ${cliPath}`);
+  const child = spawnSync('node', [cliPath, command, projectPath, '--json'], {
+    encoding: 'utf-8',
+    cwd: dirname(projectPath),
+  });
+  const report = parseJsonOutput(child.stdout, {
+    ok: false,
+    error: child.stderr || child.stdout || `Video Studio ${command} failed.`,
+    status: child.status ?? 1,
+  });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const reportName = command === 'inspect' ? 'video-inspect' : 'video-dry-run';
+  const reportAssetPath = `reports/${reportName}-${stamp}.json`;
+  const reportPath = service.resolveAssetPath(workspaceId, outputId, reportAssetPath);
+  mkdirSync(dirname(reportPath), { recursive: true });
+  writeFileSync(reportPath, `${JSON.stringify({
+    command,
+    status: child.status ?? 1,
+    stdout: child.stdout,
+    stderr: child.stderr,
+    report,
+  }, null, 2)}\n`, 'utf-8');
+  const assetId = `video-${reportName}-${stamp}`;
+  const reportAsset: OutputAsset = {
+    id: assetId,
+    label: basename(reportPath),
+    role: 'supporting',
+    path: relativeAssetPath(root, outputId, reportPath),
+    ...fileMetadata(reportPath),
+  };
+  writeOutputManifest(root, {
+    ...output,
+    updatedAt: new Date().toISOString(),
+    assets: [
+      ...output.assets.filter((asset) => asset.id !== assetId),
+      reportAsset,
+    ],
+  });
+  pushOutputsUpdated(server, workspaceId);
+  return {
+    ok: child.status === 0,
+    outputId,
+    command,
+    assetId,
+    reportPath,
+    status: child.status ?? 1,
+    report,
+  };
+}
+
 export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDeps): void {
   server.handle(
     RPC_CHANNELS.videoStudio.IMPORT_MEDIA,
@@ -293,6 +372,16 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
 
       return { ok: true, outputId, imported, skipped: collected.skipped, projectAssetId: projectAsset.id };
     },
+  );
+
+  server.handle(
+    RPC_CHANNELS.videoStudio.INSPECT,
+    async (_ctx, workspaceId: string, outputId: string): Promise<VideoStudioReportResult> => runVideoStudioReport(server, workspaceId, outputId, 'inspect'),
+  );
+
+  server.handle(
+    RPC_CHANNELS.videoStudio.DRY_RUN,
+    async (_ctx, workspaceId: string, outputId: string): Promise<VideoStudioReportResult> => runVideoStudioReport(server, workspaceId, outputId, 'dry-run'),
   );
 
   server.handle(

@@ -509,6 +509,8 @@ export const RPC_CHANNELS = {
   },
   videoStudio: {
     IMPORT_MEDIA: 'video-studio:importMedia',
+    INSPECT: 'video-studio:inspect',
+    DRY_RUN: 'video-studio:dryRun',
     EXPORT: 'video-studio:export',
     RUN_AGENT: 'video-studio:runAgent',
   },

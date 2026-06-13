@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight, Copy, Download, FileVideo, FolderOpen, History, Loader2, Magnet, Minus, Plus, RefreshCw, Save, Scissors, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardCheck, Copy, Download, FileVideo, FolderOpen, History, Loader2, Magnet, Minus, Plus, RefreshCw, Save, Scissors, ShieldCheck, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
@@ -16,6 +16,8 @@ type VideoProject = RunnerVideoProject
 type VideoStudioElectronAPI = typeof window.electronAPI & {
   writeOutputAssetText?: (workspaceId: string, outputId: string, assetId: string, content: string) => Promise<boolean>
   importVideoStudioMedia?: (workspaceId: string, outputId: string, options?: { mode?: 'files' | 'folder' }) => Promise<{ imported: Array<{ label: string }>; skipped?: number }>
+  inspectVideoStudio?: (workspaceId: string, outputId: string) => Promise<{ ok: boolean; assetId: string; status: number }>
+  dryRunVideoStudio?: (workspaceId: string, outputId: string) => Promise<{ ok: boolean; assetId: string; status: number }>
   exportVideoStudio?: (workspaceId: string, outputId: string, preset?: string) => Promise<{ assetId: string }>
 }
 
@@ -31,6 +33,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [importing, setImporting] = React.useState(false)
+  const [checking, setChecking] = React.useState<'inspect' | 'dry-run' | null>(null)
   const [exporting, setExporting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -315,6 +318,25 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     }
   }
 
+  const runReport = async (command: 'inspect' | 'dry-run') => {
+    setChecking(command)
+    try {
+      await persistProject(command === 'inspect' ? 'Saved before inspect' : 'Saved before dry run')
+      const api = window.electronAPI as VideoStudioElectronAPI
+      const result = command === 'inspect'
+        ? await api.inspectVideoStudio?.(workspaceId, outputId)
+        : await api.dryRunVideoStudio?.(workspaceId, outputId)
+      if (!result) throw new Error('Video Studio report bridge is unavailable.')
+      if (result.ok) toast.success(command === 'inspect' ? 'Inspect report passed.' : 'Dry run passed.')
+      else toast.error(command === 'inspect' ? 'Inspect found issues. Report saved.' : 'Dry run failed. Report saved.')
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setChecking(null)
+    }
+  }
+
   if (loading) {
     return <div className="runneros-glass-route flex h-full items-center justify-center text-sm text-white/50">Loading Video Studio</div>
   }
@@ -366,6 +388,14 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
             <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void importMedia('folder')} disabled={importing}>
               <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
               Folder
+            </Button>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void runReport('inspect')} disabled={checking !== null || saving}>
+              {checking === 'inspect' ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />}
+              Inspect
+            </Button>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void runReport('dry-run')} disabled={checking !== null || saving}>
+              {checking === 'dry-run' ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />}
+              Dry Run
             </Button>
             <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={exportProject} disabled={exporting || saving}>
               {exporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
