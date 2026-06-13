@@ -64,3 +64,19 @@ in the Electron renderer. For the Bun gateway (no WebGPU), the same module runs 
 
 `demo.html` loads transformers.js from CDN (no local install needed). For production,
 Vite bundles `@huggingface/transformers` (declared as a peer dep here).
+
+## Wired into the Craft renderer (apps/electron)
+
+Additive, opt-in — `bun install` then import where you want it:
+
+- dep added: `@craft-agent/local-ai` (workspace) + `@huggingface/transformers` in `apps/electron/package.json`
+- `vite.config.ts` `optimizeDeps.exclude` updated (transformers.js WASM/worker assets)
+- `apps/electron/src/renderer/local-ai/` — `useLocalAi()` hook + `<LocalAiBadge text={draft} />`
+
+```tsx
+import { LocalAiBadge } from "@/local-ai/LocalAiBadge";
+// next to the composer: <LocalAiBadge text={draftText} />  // device chip + local identity-PII pre-check
+```
+
+> Not yet build-verified in the Electron app (run `bun install` + `bun run dev` in apps/electron).
+> The badge/hook are not imported anywhere by default, so they can't affect the running UI until you add them.

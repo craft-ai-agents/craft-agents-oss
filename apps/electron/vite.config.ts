@@ -61,7 +61,8 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'jotai', 'pdfjs-dist'],
-    exclude: ['@craft-agent/ui'],
+    // transformers.js ships ONNX/WASM assets + workers; pre-bundling breaks asset resolution.
+    exclude: ['@craft-agent/ui', '@craft-agent/local-ai', '@huggingface/transformers'],
     esbuildOptions: {
       supported: { 'top-level-await': true },
       target: 'esnext'

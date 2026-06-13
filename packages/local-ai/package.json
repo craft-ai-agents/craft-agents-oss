@@ -7,7 +7,7 @@
   "module": "src/index.ts",
   "exports": { ".": "./src/index.ts" },
   "peerDependencies": {
-    "@huggingface/transformers": "^3.0.0"
+    "@huggingface/transformers": "^3.0.0 || ^4.0.0"
   },
   "peerDependenciesMeta": {
     "@huggingface/transformers": { "optional": false }
