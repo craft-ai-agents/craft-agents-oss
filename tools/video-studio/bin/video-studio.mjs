@@ -243,10 +243,11 @@ function duplicateProjectClip(project, clipId) {
     startMs: insertStart,
     label: clip.label ? `${clip.label} copy` : undefined,
   };
-  track.clips = (track.clips || []).map((item, itemIndex) => itemIndex > index && (item.startMs || 0) >= insertStart
+  track.clips = (track.clips || []).map((item) => item.id !== clip.id && (item.startMs || 0) >= insertStart
     ? { ...item, startMs: (item.startMs || 0) + clipDuration }
     : item);
   track.clips.splice(index + 1, 0, duplicate);
+  track.clips = orderedClips(track);
   next.timeline.durationMs = timelineDuration(next.timeline.tracks);
   addProjectVersion(next, `Duplicated clip ${clip.label || clip.id}`);
   return { project: next, createdClipId: duplicate.id };
@@ -326,6 +327,17 @@ function textForClip(clip, fallback) {
   return typeof clip.text?.text === 'string' ? clip.text.text : (clip.label || fallback);
 }
 
+function hasAudioStream(path) {
+  const result = spawnSync('ffprobe', [
+    '-v', 'error',
+    '-select_streams', 'a',
+    '-show_entries', 'stream=index',
+    '-of', 'csv=p=0',
+    path,
+  ], { encoding: 'utf-8' });
+  return result.status === 0 && result.stdout.trim().length > 0;
+}
+
 function renderSimpleMp4(project, outputPath) {
   const width = typeof project.settings?.width === 'number' ? project.settings.width : 1080;
   const height = typeof project.settings?.height === 'number' ? project.settings.height : 1920;
@@ -395,7 +407,7 @@ function renderSimpleMp4(project, outputPath) {
   }
 
   const audioLabels = [];
-  inputClips.filter((item) => item.media.type === 'audio').forEach(({ clip, inputIndex }, index) => {
+  inputClips.filter((item) => item.media.type === 'audio' || (item.media.type === 'video' && hasAudioStream(item.media.path))).forEach(({ clip, inputIndex }, index) => {
     const delayMs = Math.max(0, Math.round(clip.startMs || 0));
     const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
     const label = `a${index}`;

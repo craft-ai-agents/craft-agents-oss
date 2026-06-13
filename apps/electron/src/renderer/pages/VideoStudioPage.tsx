@@ -163,9 +163,9 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
         createdId = crypto.randomUUID()
         const insertStart = (clip.startMs ?? 0) + Math.max(1, clip.durationMs ?? 1)
         const clipDuration = Math.max(1, clip.durationMs ?? 1)
-        for (let nextIndex = index + 1; nextIndex < clips.length; nextIndex += 1) {
+        for (let nextIndex = 0; nextIndex < clips.length; nextIndex += 1) {
           const nextClip = clips[nextIndex]
-          if (nextClip && (nextClip.startMs ?? 0) >= insertStart) {
+          if (nextClip && nextClip.id !== clip.id && (nextClip.startMs ?? 0) >= insertStart) {
             clips[nextIndex] = { ...nextClip, startMs: (nextClip.startMs ?? 0) + clipDuration }
           }
         }
@@ -175,7 +175,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
           startMs: insertStart,
           label: clip.label ? `${clip.label} copy` : undefined,
         })
-        return { ...track, clips }
+        return { ...track, clips: sortClipsByStart(clips) }
       })
       return {
         ...current,
@@ -354,6 +354,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const tracks = project.timeline?.tracks ?? []
   const media = project.media ?? []
   const duration = project.timeline?.durationMs ?? 0
+  const isBusy = saving || importing || checking !== null || exporting
 
   return (
     <div className="runneros-glass-route h-full overflow-hidden">
@@ -381,27 +382,27 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
               Reload
             </Button>
-            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void importMedia('files')} disabled={importing}>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void importMedia('files')} disabled={isBusy}>
               {importing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
               Files
             </Button>
-            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void importMedia('folder')} disabled={importing}>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void importMedia('folder')} disabled={isBusy}>
               <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
               Folder
             </Button>
-            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void runReport('inspect')} disabled={checking !== null || saving}>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void runReport('inspect')} disabled={isBusy}>
               {checking === 'inspect' ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />}
               Inspect
             </Button>
-            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void runReport('dry-run')} disabled={checking !== null || saving}>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void runReport('dry-run')} disabled={isBusy}>
               {checking === 'dry-run' ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />}
               Dry Run
             </Button>
-            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={exportProject} disabled={exporting || saving}>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={exportProject} disabled={isBusy}>
               {exporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
               Export
             </Button>
-            <Button size="sm" onClick={save} disabled={saving}>
+            <Button size="sm" onClick={save} disabled={isBusy}>
               <Save className="mr-1.5 h-3.5 w-3.5" />
               {saving ? 'Saving' : 'Save'}
             </Button>
@@ -457,18 +458,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                       <span>{track.type ?? 'track'}</span>
                     </div>
                     <div className="flex min-h-[58px] items-center gap-2 overflow-x-auto p-2">
-                      {(track.clips ?? []).length === 0 ? <span className="text-xs text-white/35">No clips</span> : track.clips!.map((clip) => (
-                        <button
-                          key={clip.id}
-                          type="button"
-                          onClick={() => setSelectedClipId(clip.id)}
-                          className={`h-10 min-w-[112px] rounded-md border px-2 text-left text-xs ${selectedClipId === clip.id ? 'border-[#f97316]/70 bg-[#f97316]/18 text-white' : 'border-white/[0.08] bg-white/[0.045] text-white/68'}`}
-                          style={{ width: `${Math.max(112, Math.min(320, (clip.durationMs ?? 1000) / 12))}px` }}
-                        >
-                          <span className="block truncate font-medium">{clip.label ?? clip.type ?? 'clip'}</span>
-                          <span className="block truncate text-white/42">{formatDuration(clip.startMs ?? 0)} · {formatDuration(clip.durationMs ?? 0)}</span>
-                        </button>
-                      ))}
+                      {(track.clips ?? []).length === 0 ? <span className="text-xs text-white/35">No clips</span> : renderTimelineClips(track.clips ?? [], selectedClipId, setSelectedClipId)}
                     </div>
                   </div>
                 ))}
@@ -548,6 +538,53 @@ function computeTimelineDuration(tracks: VideoProject['timeline']['tracks']): nu
     duration,
     ...(track.clips ?? []).map((clip) => (clip.startMs ?? 0) + (clip.durationMs ?? 0)),
   ), 0)
+}
+
+function sortClipsByStart(clips: VideoClip[]): VideoClip[] {
+  return [...clips].sort((a, b) => (a.startMs ?? 0) - (b.startMs ?? 0))
+}
+
+function timelinePixels(ms: number): number {
+  return Math.max(12, Math.min(320, ms / 12))
+}
+
+function renderTimelineClips(
+  clips: VideoClip[],
+  selectedClipId: string | null,
+  setSelectedClipId: (clipId: string) => void,
+): React.ReactNode[] {
+  const nodes: React.ReactNode[] = []
+  let cursor = 0
+  for (const clip of sortClipsByStart(clips)) {
+    const startMs = clip.startMs ?? 0
+    const durationMs = clip.durationMs ?? 1000
+    const gapMs = Math.max(0, startMs - cursor)
+    if (gapMs > 0) {
+      nodes.push(
+        <div
+          key={`gap-${clip.id}`}
+          className="flex h-10 shrink-0 items-center justify-center rounded-md border border-dashed border-white/[0.06] bg-black/25 px-2 text-[10px] uppercase tracking-wide text-white/28"
+          style={{ width: `${timelinePixels(gapMs)}px` }}
+        >
+          Gap
+        </div>,
+      )
+    }
+    nodes.push(
+      <button
+        key={clip.id}
+        type="button"
+        onClick={() => setSelectedClipId(clip.id)}
+        className={`h-10 min-w-[112px] rounded-md border px-2 text-left text-xs ${selectedClipId === clip.id ? 'border-[#f97316]/70 bg-[#f97316]/18 text-white' : 'border-white/[0.08] bg-white/[0.045] text-white/68'}`}
+        style={{ width: `${Math.max(112, timelinePixels(durationMs))}px` }}
+      >
+        <span className="block truncate font-medium">{clip.label ?? clip.type ?? 'clip'}</span>
+        <span className="block truncate text-white/42">{formatDuration(startMs)} · {formatDuration(durationMs)}</span>
+      </button>,
+    )
+    cursor = Math.max(cursor, startMs + durationMs)
+  }
+  return nodes
 }
 
 function findLatestVideoRenderAsset(manifest: OutputManifestDTO): OutputAssetDTO | null {

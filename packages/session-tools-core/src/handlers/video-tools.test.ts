@@ -51,6 +51,11 @@ function makeCtx(overrides: Partial<SessionToolContext> = {}): SessionToolContex
   } as SessionToolContext;
 }
 
+function hasFfmpeg(): boolean {
+  return spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' }).status === 0
+    && spawnSync('ffprobe', ['-version'], { encoding: 'utf-8' }).status === 0;
+}
+
 describe('video studio session tools', () => {
   test('create -> import -> add clip -> export placeholder', async () => {
     const ctx = makeCtx();
@@ -122,6 +127,43 @@ describe('video studio session tools', () => {
     expect(result.isError).toBe(false);
     expect(publishedTitle).toContain('Publish Cut');
     expect((result.structuredContent as { outputId?: string }).outputId).toBe('output-1');
+  });
+
+  test('video_export preserves audio from video clips', async () => {
+    if (!hasFfmpeg()) return;
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Audio Export' });
+    const mediaPath = join(root, 'source.mp4');
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=160x90:rate=10',
+      '-f', 'lavfi',
+      '-i', 'sine=frequency=440:duration=1',
+      '-t', '1',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      mediaPath,
+    ], { encoding: 'utf-8' });
+    expect(fixture.status, fixture.stderr || fixture.stdout).toBe(0);
+    const imported = await handleVideoMediaImport(ctx, { projectPath, mediaPath });
+    const clip = await handleVideoClipAdd(ctx, {
+      projectPath,
+      mediaId: (imported.structuredContent as { mediaId: string }).mediaId,
+      startMs: 0,
+      durationMs: 1000,
+    });
+    expect(clip.isError).toBe(false);
+    const outputPath = join(root, 'project', 'renders', 'with-audio.mp4');
+
+    const exported = await handleVideoExport(ctx, { projectPath, outputPath });
+
+    expect(exported.isError).toBe(false);
+    const audioProbe = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', outputPath], { encoding: 'utf-8' });
+    expect(audioProbe.status).toBe(0);
+    expect(audioProbe.stdout.trim()).not.toBe('');
   });
 
   test('rejects project and export paths outside the working directory', async () => {

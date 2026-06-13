@@ -253,6 +253,17 @@ function textForClip(clip: VideoProject['timeline']['tracks'][number]['clips'][n
   return typeof clip.label === 'string' ? clip.label : fallback;
 }
 
+function hasAudioStream(path: string): boolean {
+  const result = spawnSync('ffprobe', [
+    '-v', 'error',
+    '-select_streams', 'a',
+    '-show_entries', 'stream=index',
+    '-of', 'csv=p=0',
+    path,
+  ], { encoding: 'utf-8' });
+  return result.status === 0 && result.stdout.trim().length > 0;
+}
+
 function renderSimpleMp4(project: VideoProject, outputPath: string): void {
   const width = typeof project.settings.width === 'number' ? project.settings.width : 1080;
   const height = typeof project.settings.height === 'number' ? project.settings.height : 1920;
@@ -320,7 +331,7 @@ function renderSimpleMp4(project: VideoProject, outputPath: string): void {
   }
 
   const audioLabels: string[] = [];
-  inputClips.filter((item) => item.media.type === 'audio').forEach(({ clip, inputIndex }, index) => {
+  inputClips.filter((item) => item.media.type === 'audio' || (item.media.type === 'video' && hasAudioStream(item.media.path))).forEach(({ clip, inputIndex }, index) => {
     const delayMs = Math.max(0, Math.round(clip.startMs ?? 0));
     const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
     const label = `a${index}`;

@@ -214,6 +214,13 @@ function relativeAssetPath(root: string, outputId: string, absolutePath: string)
   return relative(join(root, 'outputs', outputId), absolutePath).replace(/\\/g, '/');
 }
 
+function mergeAssetsById(existing: OutputAsset[], next: OutputAsset[]): OutputAsset[] {
+  const merged = new Map<string, OutputAsset>();
+  for (const asset of existing) merged.set(asset.id, asset);
+  for (const asset of next) merged.set(asset.id, asset);
+  return Array.from(merged.values());
+}
+
 function videoStudioCli(workspaceId: string): string {
   const workspace = getWorkspaceByNameOrId(workspaceId);
   const root = workspace?.rootPath ?? process.cwd();
@@ -268,13 +275,11 @@ function runVideoStudioReport(server: RpcServer, workspaceId: string, outputId: 
     path: relativeAssetPath(root, outputId, reportPath),
     ...fileMetadata(reportPath),
   };
+  const latestOutput = service.get(workspaceId, outputId) ?? output;
   writeOutputManifest(root, {
-    ...output,
+    ...latestOutput,
     updatedAt: new Date().toISOString(),
-    assets: [
-      ...output.assets.filter((asset) => asset.id !== assetId),
-      reportAsset,
-    ],
+    assets: mergeAssetsById(latestOutput.assets, [reportAsset]),
   });
   pushOutputsUpdated(server, workspaceId);
   return {
@@ -362,10 +367,11 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
       if (imported.length > 0) {
         addVersion(project, `Imported ${imported.length} media file${imported.length === 1 ? '' : 's'}`);
         writeProject(projectPath, project);
+        const latestOutput = service.get(workspaceId, outputId) ?? output;
         writeOutputManifest(root, {
-          ...output,
+          ...latestOutput,
           updatedAt: new Date().toISOString(),
-          assets: nextAssets,
+          assets: mergeAssetsById(latestOutput.assets, nextAssets),
         });
         pushOutputsUpdated(server, workspaceId);
       }
@@ -425,8 +431,9 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
         path: receiptAssetPath,
         ...fileMetadata(receiptPath),
       };
+      const latestOutput = service.get(workspaceId, outputId) ?? output;
       writeOutputManifest(root, {
-        ...output,
+        ...latestOutput,
         kind: 'video',
         status: 'published',
         updatedAt: new Date().toISOString(),
@@ -434,11 +441,7 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
         summary: `Video Studio export rendered to ${basename(renderPath)}.`,
         primary: renderAsset,
         preview: { mode: 'video', assetId },
-        assets: [
-          ...output.assets.filter((asset) => asset.id !== assetId && asset.id !== receiptAssetId),
-          renderAsset,
-          receiptAsset,
-        ],
+        assets: mergeAssetsById(latestOutput.assets, [renderAsset, receiptAsset]),
       });
       pushOutputsUpdated(server, workspaceId);
       return { ok: true, outputId, assetId, receiptAssetId, outputPath: renderPath, receiptPath, rendered: true };
