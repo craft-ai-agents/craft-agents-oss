@@ -8,13 +8,40 @@ export interface ResolvedProvider extends ProviderConfig {
   enabled: boolean;
 }
 
-/** Resolve a provider's key from env (falling back to a baked default), and decide if it's enabled. */
+/**
+ * macOS Keychain fallback so secrets never live in env/argv/config.
+ * No-op off darwin or if `security` is unavailable (e.g. the OCI/Linux host,
+ * where the env var is the source of truth).
+ */
+function keychainLookup(service: string): string | null {
+  if (process.platform !== "darwin") return null;
+  try {
+    const out = Bun.spawnSync(["security", "find-generic-password", "-s", service, "-w"]);
+    if (out.exitCode !== 0) return null;
+    const v = out.stdout.toString().trim();
+    return v.length ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Resolve a provider's key: env → Keychain (by the env-var name) → baked default. */
 export function resolveProvider(
   name: string,
   cfg: ProviderConfig,
   env: Record<string, string | undefined> = process.env,
 ): ResolvedProvider {
-  const apiKey = cfg.apiKeyEnv ? (env[cfg.apiKeyEnv] ?? cfg.apiKeyDefault ?? null) : (cfg.apiKeyDefault ?? null);
+  const allowKeychain = !env.SHADOW_ROUTER_NO_KEYCHAIN;
+  let apiKey: string | null = null;
+  if (cfg.apiKeyEnv) {
+    apiKey =
+      env[cfg.apiKeyEnv] ??
+      (allowKeychain ? keychainLookup(cfg.apiKeyEnv) : null) ??
+      cfg.apiKeyDefault ??
+      null;
+  } else {
+    apiKey = cfg.apiKeyDefault ?? null;
+  }
   // A provider gated by `enabledIfKey` is dark until its key is present.
   const enabled = cfg.enabledIfKey ? Boolean(apiKey) : true;
   return { ...cfg, name, apiKey, enabled };
@@ -39,6 +66,11 @@ export async function forward(
 ): Promise<Response> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (provider.apiKey) headers["authorization"] = `Bearer ${provider.apiKey}`;
+  // OpenRouter uses these for app attribution / rankings (optional but recommended).
+  if (provider.name === "openrouter") {
+    headers["http-referer"] = "https://shadowlab.cc";
+    headers["x-title"] = "shadow-router";
+  }
   return fetch(`${provider.baseUrl}/chat/completions`, {
     method: "POST",
     headers,

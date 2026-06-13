@@ -10,8 +10,9 @@ function req(text: string, model = "auto"): ChatRequest {
   return { model, messages: [{ role: "user", content: text }] };
 }
 
-// env without OPENROUTER key → openrouter disabled, vibeproxy + ollama enabled
-const env = { VIBEPROXY_KEY: "k" } as Record<string, string | undefined>;
+// env without OPENROUTER key → openrouter disabled, vibeproxy + ollama enabled.
+// SHADOW_ROUTER_NO_KEYCHAIN keeps the test hermetic (no macOS Keychain lookup).
+const env = { VIBEPROXY_KEY: "k", SHADOW_ROUTER_NO_KEYCHAIN: "1" } as Record<string, string | undefined>;
 
 test("content classifier flags sensitive categories", () => {
   expect(classifyContentSensitivity(req("write a python function"))).toBe("general");

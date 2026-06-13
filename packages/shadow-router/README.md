@@ -73,7 +73,7 @@ Provider keys come from env: `VIBEPROXY_KEY` (default `vibe-factory-local-2026`)
 ## Phase status
 
 - [x] **Phase 1** — gateway core, tri-harness routing, `auto`/`private`, fusion, OR-ready
-- [ ] **Phase 2** — OpenRouter BYOK wired (needs `OPENROUTER_API_KEY`); fallback ordering
+- [x] **Phase 2** — OpenRouter BYOK live (env → Keychain key resolution); OR + fusion verified end-to-end
 - [ ] **Phase 3** — fusion tuning (diverse-pool selection, cost caps)
 - [ ] **Phase 4** — single `shadow-router` connection in Craft; retire dead 8318 lane
 - [ ] **Phase 5** — global via `tailscale serve` (TLS + tailnet identity, ACL `tag:devices`)
