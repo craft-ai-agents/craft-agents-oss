@@ -1,0 +1,69 @@
+{
+  "$schema": "./shadow-router.schema.json",
+  "listen": { "host": "127.0.0.1", "port": 8787 },
+  "defaultProvider": "vibeproxy",
+  "providers": {
+    "vibeproxy": {
+      "type": "openai",
+      "baseUrl": "http://127.0.0.1:8319/v1",
+      "apiKeyEnv": "VIBEPROXY_KEY",
+      "apiKeyDefault": "vibe-factory-local-2026",
+      "privacyTier": "never_trains",
+      "jurisdiction": "us",
+      "piiSafe": true,
+      "costModel": "subscription",
+      "note": "BYOM — your OAuth subscriptions (Claude / Codex / Gemini / Antigravity) + Z.AI."
+    },
+    "openrouter": {
+      "type": "openai",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "enabledIfKey": true,
+      "privacyTier": "opt_out",
+      "jurisdiction": "us",
+      "piiSafe": false,
+      "costModel": "metered",
+      "note": "BYOK — your provider keys + 356-model catalog. Lights up when OPENROUTER_API_KEY is set."
+    },
+    "ollama": {
+      "type": "openai",
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "apiKeyEnv": null,
+      "privacyTier": "local_only",
+      "jurisdiction": "local",
+      "piiSafe": true,
+      "costModel": "free",
+      "note": "Local inference — the only lane allowed for restricted / sensitive content."
+    }
+  },
+  "virtualModels": {
+    "auto": {
+      "strategy": "route",
+      "description": "Tri-harness router picks the cheapest privacy-safe lane for the request."
+    },
+    "private": {
+      "strategy": "route",
+      "forcePrivacyTier": "local_only",
+      "description": "Forces a local-only lane regardless of content."
+    },
+    "fusion": {
+      "strategy": "fusion",
+      "members": [
+        { "provider": "vibeproxy", "model": "claude-opus-4-7" },
+        { "provider": "vibeproxy", "model": "gpt-5.5" },
+        { "provider": "vibeproxy", "model": "gemini-3-pro-low" }
+      ],
+      "synthesizer": { "provider": "vibeproxy", "model": "claude-opus-4-7" },
+      "description": "Fan-out to diverse lanes, synthesize the best answer (OpenRouter-Fusion style, local)."
+    }
+  },
+  "routing": {
+    "byTask": {
+      "code": { "provider": "vibeproxy", "model": "gpt-5.5" },
+      "reasoning": { "provider": "vibeproxy", "model": "claude-opus-4-7" },
+      "cheap": { "provider": "vibeproxy", "model": "claude-haiku-4-5-20251001" },
+      "vision": { "provider": "vibeproxy", "model": "gemini-3-pro-low" },
+      "default": { "provider": "vibeproxy", "model": "claude-sonnet-4-6" }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@shadow/router",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shadow unified gateway — one OpenAI-compatible API over VibeProxy subscriptions, OpenRouter BYOK, Ollama, and Dewey lanes, with tri-harness privacy routing and local fusion.",
+  "module": "src/server.ts",
+  "scripts": {
+    "start": "bun run src/server.ts",
+    "dev": "bun --watch run src/server.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "bin": {
+    "shadow-router": "src/server.ts"
+  }
+}
