@@ -22,6 +22,15 @@ separate quota).
 No standalone OpenAI/Anthropic/Google API keys exist — those subscriptions are
 reachable only through VibeProxy OAuth or (for ChatGPT) the web overflow lane.
 
+## Access to sub-exclusive models (not just overflow)
+
+The bigger value: chatgpt.com web reaches models the API/OAuth lane **cannot** —
+`gpt-5.5-pro`, `o3-pro`, `gpt-5.5-thinking` — at **zero metered cost** (they're in the
+Pro sub). The gateway advertises them as first-class lanes via the command provider's
+static `models` list, so any client can pick `chatgpt-web/gpt-5.5-pro` directly. The
+adapter selects that model in the web UI. Same models via OpenRouter would be metered;
+here they're free with the sub.
+
 ## Overflow chains (`routing.fallbacks`)
 
 On a quota/limit error (`isQuotaError`: 429, "weekly limit", "quota", "exhausted",

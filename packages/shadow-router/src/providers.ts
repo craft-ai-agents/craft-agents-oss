@@ -128,6 +128,9 @@ export async function forward(
 /** List models a provider advertises (best-effort; empty on failure). */
 export async function listModels(provider: ResolvedProvider): Promise<string[]> {
   if (!provider.enabled) return [];
+  // command lanes (web sessions) have no /models endpoint — use their static catalog,
+  // which is how sub-exclusive models (gpt-5.5-pro, o3-pro) become selectable.
+  if (provider.type === "command") return provider.models ?? [];
   try {
     const headers: Record<string, string> = {};
     if (provider.apiKey) headers["authorization"] = `Bearer ${provider.apiKey}`;

@@ -24,11 +24,11 @@ const prompt = [...messages].reverse().find((m) => m.role === "user")?.content ?
 const model = req.model || "gpt-5.5";
 const stamp = Number(process.env.SHADOW_NOW ?? "0") || 0;
 
-function emit(content: string): void {
+function emit(content: string, servedModel: string = model): void {
   process.stdout.write(JSON.stringify({
     id: `chatgpt-web-${stamp}`,
     object: "chat.completion",
-    model,
+    model: servedModel,
     choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
     usage: { prompt_tokens: Math.ceil(prompt.length / 4), completion_tokens: Math.ceil(content.length / 4), total_tokens: 0 },
     shadow_lane: "chatgpt-web",
@@ -72,6 +72,23 @@ try {
     fail("chatgpt.com session not authenticated — log into chatgpt.com once in SHADOW_CHATGPT_PROFILE, then retry.");
   }
 
+  // Select the requested model in the web UI — this is what unlocks sub-exclusive
+  // models (gpt-5.5-pro, o3-pro) that the API/OAuth lane can't reach. Best-effort:
+  // open the model switcher, click the matching menu item. Selectors drift — on
+  // failure we proceed with whatever model is active and tag it.
+  let selectedModel = model;
+  try {
+    const want = model.toLowerCase().replace(/[-_\s]+/g, " ").replace(/^gpt /, "gpt-"); // "gpt-5.5-pro" → "gpt-5.5 pro"
+    const switcher = page.locator("button[data-testid='model-switcher-dropdown-button'], button[aria-label*='model' i]").first();
+    await switcher.click({ timeout: 8000 });
+    const item = page.getByRole("menuitemradio", { name: new RegExp(want.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") })
+      .or(page.getByRole("menuitem", { name: new RegExp(want.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") })).first();
+    await item.click({ timeout: 8000 });
+  } catch {
+    selectedModel = `${model}?active`; // couldn't confirm selection
+    await page.keyboard.press("Escape").catch(() => {});
+  }
+
   const box = page.locator("#prompt-textarea, textarea[data-id], div[contenteditable='true']").first();
   await box.waitFor({ timeout: 30000 });
   await box.click();
@@ -89,7 +106,7 @@ try {
   const text = (await assistant.innerText().catch(() => "")) || "";
   await ctx.close();
   if (!text.trim()) fail("chatgpt-web returned empty (selector drift or model still generating). Inspect chatgpt.com DOM and update selectors.");
-  emit(text);
+  emit(text, selectedModel);
 } catch (e) {
   fail(`chatgpt-web adapter error: ${(e as Error).message}`);
 }

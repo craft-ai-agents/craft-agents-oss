@@ -19,6 +19,7 @@ export interface ProviderConfig {
   type: "openai" | "command";
   baseUrl?: string;
   command?: string[]; // for type:"command" — argv; request JSON on stdin, OpenAI JSON on stdout
+  models?: string[]; // static catalog for command lanes (e.g. web-only / sub-exclusive models)
   apiKeyEnv: string | null;
   apiKeyDefault?: string;
   enabledIfKey?: boolean;

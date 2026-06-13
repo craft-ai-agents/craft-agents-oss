@@ -44,13 +44,14 @@
     "chatgpt-web": {
       "type": "command",
       "command": ["bun", "run", "adapters/chatgpt-web/adapter.ts"],
+      "models": ["gpt-5.5-pro", "gpt-5.5-thinking", "o3-pro", "o3", "gpt-5.5"],
       "apiKeyEnv": null,
       "enabled": false,
       "privacyTier": "opt_out",
       "jurisdiction": "us",
       "piiSafe": false,
       "costModel": "subscription",
-      "note": "OVERFLOW lane — drives chatgpt.com (ChatGPT Pro web, SEPARATE quota from the Codex API + Pro-only models) via headless browser. Disabled until the adapter is validated against a logged-in session. Then it serves as GPT overflow when the Codex lane hits weekly limits."
+      "note": "Drives chatgpt.com (ChatGPT Pro web) via headless browser. Two kinds of value: (1) ACCESS to sub-exclusive models the API/OAuth lane can't reach at all (gpt-5.5-pro, o3-pro) at zero metered cost; (2) GPT overflow (separate quota) when the Codex lane is weekly-limited. The adapter selects the model in the web UI. Disabled until validated against a logged-in session."
     }
   },
   "hiddenModels": [
