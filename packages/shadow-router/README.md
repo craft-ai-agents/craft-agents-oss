@@ -78,6 +78,20 @@ Provider keys come from env: `VIBEPROXY_KEY` (default `vibe-factory-local-2026`)
 - [x] **Run** — persistent via launchd `com.shadow.shadow-router` (127.0.0.1:8787)
 - [x] **Phase 4** — `shadow-router` connection in Craft (default `auto`); dead 8318 lane disabled.
       One-time: validate the connection's key in Craft Settings → AI → Connections (same quirk as any CLI-added key).
+- [x] **Phase 6** — routing DOE harness (`doe/run-doe.ts`): strategy × temp × eval-set → PI
+      (quality·latency·cost), LLM-judge, factory-compatible `doe-results.jsonl`. Drove a real
+      gateway fix (param sanitization for Claude lanes). PI ranking still **preliminary** — judge
+      reliability needs a hardened full run before acting on weights.
 - [ ] **Phase 3** — fusion tuning (diverse-pool selection, cost caps)
 - [ ] **Phase 5** — global on sentry (OCI) via `tailscale serve` (TLS + tailnet identity, ACL `tag:devices`)
-- [ ] **Phase 6** — routing-weight DOE (lane × model × thinking × fusion → PI quality·latency·cost)
+
+### Routing DOE
+
+```bash
+bun run doe/run-doe.ts --strategies auto,fusion,vibeproxy/gpt-5.5 --temps 0 --out /tmp/doe.jsonl
+```
+
+Each cell calls the gateway, the judge scores against a rubric, PI =
+`0.6·quality + 0.25·(1/latency) + 0.15·(1/cost)`. Errored generations and
+unparseable judge verdicts are excluded (never scored 0). Pilot finding: Claude
+thinking lanes 400 on `temperature` → now stripped in `forward()`.

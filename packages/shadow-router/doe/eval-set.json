@@ -1,0 +1,23 @@
+{
+  "note": "Small representative eval set for the routing DOE. Each task has a rubric the judge scores against (0-10).",
+  "tasks": [
+    {
+      "id": "code-bugfix",
+      "category": "code",
+      "prompt": "This JS returns the wrong result for empty arrays: `const avg = a => a.reduce((x,y)=>x+y)/a.length`. Give the corrected one-liner and one sentence on the bug.",
+      "rubric": "Correctly handles empty array (no NaN/throw), keeps it a one-liner, names the bug (reduce with no initial value / divide by zero)."
+    },
+    {
+      "id": "reasoning-tradeoff",
+      "category": "reasoning",
+      "prompt": "A team must choose between a localhost-only AI gateway and a tailnet-exposed one. Give the single most important security trade-off in 2 sentences.",
+      "rubric": "Identifies the real trade-off (broader reach vs larger attack surface / need for auth+identity), concise, technically accurate."
+    },
+    {
+      "id": "extract-structured",
+      "category": "extraction",
+      "prompt": "From 'Invoice 4471 dated 2026-03-02 for $1,240.50 to Acme Corp, net 30', return strict JSON with keys invoice_no, date, amount, vendor, terms_days.",
+      "rubric": "Valid JSON, all five keys correct (4471, 2026-03-02, 1240.5, Acme Corp, 30), no extra prose."
+    }
+  ]
+}

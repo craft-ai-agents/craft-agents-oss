@@ -58,12 +58,26 @@ export function resolveAll(
   return m;
 }
 
+/**
+ * Drop sampling params a given model rejects. Claude (and other reasoning models)
+ * 400 on `temperature`/`top_p` ("deprecated for this model"). Surfaced by the routing DOE.
+ */
+export function sanitizeBody(body: ChatRequest): ChatRequest {
+  const m = String(body.model ?? "");
+  if (/claude|opus|sonnet|haiku|thinking|reasoning/i.test(m)) {
+    const { temperature, top_p, ...rest } = body as ChatRequest & { top_p?: unknown };
+    return rest as ChatRequest;
+  }
+  return body;
+}
+
 /** Forward an OpenAI chat request to a provider. Returns the raw upstream Response (streaming passes through). */
 export async function forward(
   provider: ResolvedProvider,
   body: ChatRequest,
   signal?: AbortSignal,
 ): Promise<Response> {
+  body = sanitizeBody(body);
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (provider.apiKey) headers["authorization"] = `Bearer ${provider.apiKey}`;
   // OpenRouter uses these for app attribution / rankings (optional but recommended).

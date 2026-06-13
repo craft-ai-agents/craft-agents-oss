@@ -61,3 +61,12 @@ test("explicit pick that violates privacy falls back to auto, never leaks", () =
   expect(d.provider).not.toBe("badcn");
   expect(d.reason).toContain("blocked");
 });
+
+import { sanitizeBody } from "../src/providers.ts";
+test("sanitizeBody strips temperature/top_p for claude models, keeps for others", () => {
+  const claude = sanitizeBody({ model: "vibeproxy/claude-opus-4-7", temperature: 0, top_p: 1, messages: [] } as any);
+  expect((claude as any).temperature).toBeUndefined();
+  expect((claude as any).top_p).toBeUndefined();
+  const gpt = sanitizeBody({ model: "gpt-5.5", temperature: 0, messages: [] } as any);
+  expect((gpt as any).temperature).toBe(0);
+});
