@@ -47,6 +47,9 @@ function validateClip(clip: VideoClip, path: string, errors: VideoValidationIssu
   if (clip.text && !isNonEmptyString(clip.text.text)) {
     push(errors, `${path}.text.text`, 'Text clips require non-empty text.');
   }
+  if (clip.adjustments !== undefined && !isRecord(clip.adjustments)) {
+    push(errors, `${path}.adjustments`, 'Clip adjustments must be an object.');
+  }
 }
 
 export function validateRunnerVideoProject(value: unknown): VideoValidationResult {

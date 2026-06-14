@@ -64,6 +64,23 @@ interface VideoClipEditInput {
   snap?: boolean;
 }
 
+interface VideoClipAdjustInput {
+  projectPath: string;
+  clipId: string;
+  preset?: 'neutral' | 'clean' | 'cinematic' | 'warm' | 'punchy' | 'black-and-white';
+  exposure?: number;
+  contrast?: number;
+  saturation?: number;
+  highlights?: number;
+  shadows?: number;
+  temperature?: number;
+  tint?: number;
+  sharpen?: number;
+  vignette?: number;
+  grain?: number;
+  reset?: boolean;
+}
+
 interface VideoExportInput {
   projectPath: string;
   outputPath?: string;
@@ -83,7 +100,7 @@ interface VideoProject {
   media: Array<Record<string, unknown> & { id: string; type: MediaType; label: string; path: string }>;
   timeline: {
     durationMs: number;
-    tracks: Array<{ id: string; type: TrackType; label: string; clips: Array<Record<string, unknown> & { id: string; type: ClipType; startMs: number; durationMs: number; mediaId?: string }> }>;
+    tracks: Array<{ id: string; type: TrackType; label: string; clips: Array<Record<string, unknown> & { id: string; type: ClipType; startMs: number; durationMs: number; mediaId?: string; adjustments?: VideoClipAdjustments }> }>;
     markers: unknown[];
   };
   captions: unknown[];
@@ -93,6 +110,20 @@ interface VideoProject {
   exports: Array<Record<string, unknown>>;
   versions: Array<Record<string, unknown>>;
   agentEvents: Array<Record<string, unknown>>;
+}
+
+interface VideoClipAdjustments {
+  exposure?: number;
+  contrast?: number;
+  saturation?: number;
+  highlights?: number;
+  shadows?: number;
+  temperature?: number;
+  tint?: number;
+  sharpen?: number;
+  vignette?: number;
+  grain?: number;
+  preset?: string;
 }
 
 function baseDir(ctx: SessionToolContext): string {
@@ -292,6 +323,61 @@ function ffmpegNumber(value: number): string {
   return value.toFixed(3).replace(/\.?0+$/, '');
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+const ADJUSTMENT_PRESETS: Record<NonNullable<VideoClipAdjustInput['preset']>, VideoClipAdjustments> = {
+  neutral: {},
+  clean: { exposure: 0.03, contrast: 1.05, saturation: 1.04, grain: 0, preset: 'clean' },
+  cinematic: { exposure: -0.03, contrast: 1.18, saturation: 0.92, highlights: -0.12, shadows: 0.08, grain: 0.12, preset: 'cinematic' },
+  warm: { exposure: 0.02, contrast: 1.05, saturation: 1.08, temperature: 0.18, grain: 0.04, preset: 'warm' },
+  punchy: { exposure: 0.04, contrast: 1.25, saturation: 1.22, highlights: -0.05, shadows: -0.04, grain: 0.02, preset: 'punchy' },
+  'black-and-white': { exposure: 0, contrast: 1.16, saturation: 0, grain: 0.1, preset: 'black-and-white' },
+};
+
+function sanitizedAdjustments(input: Partial<VideoClipAdjustments>): VideoClipAdjustments {
+  const next: VideoClipAdjustments = {};
+  if (input.exposure !== undefined) next.exposure = clamp(Number(input.exposure), -1, 1);
+  if (input.contrast !== undefined) next.contrast = clamp(Number(input.contrast), 0, 3);
+  if (input.saturation !== undefined) next.saturation = clamp(Number(input.saturation), 0, 3);
+  if (input.highlights !== undefined) next.highlights = clamp(Number(input.highlights), -1, 1);
+  if (input.shadows !== undefined) next.shadows = clamp(Number(input.shadows), -1, 1);
+  if (input.temperature !== undefined) next.temperature = clamp(Number(input.temperature), -1, 1);
+  if (input.tint !== undefined) next.tint = clamp(Number(input.tint), -1, 1);
+  if (input.sharpen !== undefined) next.sharpen = clamp(Number(input.sharpen), 0, 1);
+  if (input.vignette !== undefined) next.vignette = clamp(Number(input.vignette), 0, 1);
+  if (input.grain !== undefined) next.grain = clamp(Number(input.grain), 0, 1);
+  if (input.preset !== undefined) next.preset = input.preset;
+  return Object.fromEntries(Object.entries(next).filter(([, value]) => Number.isFinite(value as number) || typeof value === 'string')) as VideoClipAdjustments;
+}
+
+function hasAdjustments(adjustments: VideoClipAdjustments | undefined): boolean {
+  return Boolean(adjustments && Object.keys(adjustments).some((key) => key !== 'preset'));
+}
+
+function adjustmentFilter(inputLabel: string, outputLabel: string, adjustments: VideoClipAdjustments | undefined): string {
+  if (!hasAdjustments(adjustments)) return `${inputLabel}null${outputLabel}`;
+  const brightness = clamp((adjustments?.exposure ?? 0) + ((adjustments?.highlights ?? 0) * 0.08) + ((adjustments?.shadows ?? 0) * 0.06), -1, 1);
+  const contrast = clamp(adjustments?.contrast ?? 1, 0, 3);
+  const saturation = clamp((adjustments?.saturation ?? 1) + ((adjustments?.temperature ?? 0) * 0.04) - Math.abs(adjustments?.tint ?? 0) * 0.02, 0, 3);
+  const gamma = clamp(1 - ((adjustments?.shadows ?? 0) * 0.12) + ((adjustments?.highlights ?? 0) * 0.08), 0.1, 10);
+  const parts = [`eq=brightness=${ffmpegNumber(brightness)}:contrast=${ffmpegNumber(contrast)}:saturation=${ffmpegNumber(saturation)}:gamma=${ffmpegNumber(gamma)}`];
+  if ((adjustments?.grain ?? 0) > 0) {
+    const strength = Math.round(clamp(adjustments?.grain ?? 0, 0, 1) * 18);
+    parts.push(`noise=alls=${strength}:allf=t`);
+  }
+  if ((adjustments?.sharpen ?? 0) > 0) {
+    const amount = ffmpegNumber(clamp(adjustments?.sharpen ?? 0, 0, 1) * 1.2);
+    parts.push(`unsharp=5:5:${amount}:3:3:0`);
+  }
+  if ((adjustments?.vignette ?? 0) > 0) {
+    const angle = ffmpegNumber(Math.PI / 5 + clamp(adjustments?.vignette ?? 0, 0, 1) * 0.45);
+    parts.push(`vignette=angle=${angle}`);
+  }
+  return `${inputLabel}${parts.join(',')}${outputLabel}`;
+}
+
 function textForClip(clip: VideoProject['timeline']['tracks'][number]['clips'][number], fallback: string): string {
   const textPayload = clip.text;
   if (typeof textPayload === 'object' && textPayload && 'text' in textPayload && typeof textPayload.text === 'string') {
@@ -350,10 +436,13 @@ function renderSimpleMp4(project: VideoProject, outputPath: string): void {
     const end = ffmpegNumber(seconds(clip.startMs + clip.durationMs));
     const prepared = `v${overlayIndex}`;
     const next = `base${overlayIndex + 1}`;
+    const adjusted = `adj${overlayIndex}`;
     filters.push(
-      `[${inputIndex}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1,format=rgba,setpts=PTS-STARTPTS+${start}/TB[${prepared}]`,
+      `[${inputIndex}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1,format=rgba[${adjusted}]`,
     );
-    filters.push(`${currentVideo}[${prepared}]overlay=0:0:enable='between(t,${start},${end})'[${next}]`);
+    filters.push(adjustmentFilter(`[${adjusted}]`, `[${prepared}]`, clip.adjustments));
+    filters.push(`[${prepared}]setpts=PTS-STARTPTS+${start}/TB[${prepared}t]`);
+    filters.push(`${currentVideo}[${prepared}t]overlay=0:0:enable='between(t,${start},${end})'[${next}]`);
     currentVideo = `[${next}]`;
     overlayIndex += 1;
   }
@@ -753,6 +842,54 @@ export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoCl
     trackId,
     startMs,
     durationMs,
+    versionId,
+  });
+}
+
+export async function handleVideoClipAdjust(ctx: SessionToolContext, args: VideoClipAdjustInput): Promise<ToolResult> {
+  if (!args.projectPath) return errorResponse('projectPath is required.');
+  if (!args.clipId) return errorResponse('clipId is required.');
+  const projectPathResult = resolveWorkspacePath(ctx, args.projectPath, 'projectPath');
+  if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
+  const projectPath = projectPathResult.path;
+  if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
+  const project = readProject(projectPath);
+  const found = findClip(project, args.clipId);
+  if (!found) return errorResponse(`Clip not found: ${args.clipId}`);
+  const { clip, track } = found;
+
+  if (args.reset) {
+    delete clip.adjustments;
+  } else {
+    const preset = args.preset ? ADJUSTMENT_PRESETS[args.preset] : undefined;
+    if (args.preset && !preset) return errorResponse(`Unknown adjustment preset: ${args.preset}`);
+    clip.adjustments = sanitizedAdjustments({
+      ...(clip.adjustments ?? {}),
+      ...(preset ?? {}),
+      exposure: args.exposure ?? preset?.exposure ?? clip.adjustments?.exposure,
+      contrast: args.contrast ?? preset?.contrast ?? clip.adjustments?.contrast,
+      saturation: args.saturation ?? preset?.saturation ?? clip.adjustments?.saturation,
+      highlights: args.highlights ?? preset?.highlights ?? clip.adjustments?.highlights,
+      shadows: args.shadows ?? preset?.shadows ?? clip.adjustments?.shadows,
+      temperature: args.temperature ?? preset?.temperature ?? clip.adjustments?.temperature,
+      tint: args.tint ?? preset?.tint ?? clip.adjustments?.tint,
+      sharpen: args.sharpen ?? preset?.sharpen ?? clip.adjustments?.sharpen,
+      vignette: args.vignette ?? preset?.vignette ?? clip.adjustments?.vignette,
+      grain: args.grain ?? preset?.grain ?? clip.adjustments?.grain,
+      preset: args.preset ?? preset?.preset ?? clip.adjustments?.preset,
+    });
+  }
+
+  const errors = validateProject(project);
+  if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
+  const versionId = addVersion(project, `${args.reset ? 'Reset' : 'Adjusted'} ${clip.label ?? clip.id} clip look`, ctx, 'video_clip_adjust');
+  writeJsonAtomic(projectPath, project);
+  return ok(`${args.reset ? 'Reset' : 'Applied'} adjustments for clip "${clip.label ?? clip.id}".`, {
+    ok: true,
+    projectPath,
+    clipId: clip.id,
+    trackId: track.id,
+    adjustments: clip.adjustments ?? {},
     versionId,
   });
 }

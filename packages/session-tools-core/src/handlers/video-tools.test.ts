@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { SessionToolContext } from '../context.ts';
 import {
+  handleVideoClipAdjust,
   handleVideoClipAdd,
   handleVideoClipEdit,
   handleVideoExport,
@@ -386,6 +387,38 @@ describe('video studio session tools', () => {
     expect(trimmed.content[0]?.type === 'text' ? trimmed.content[0].text : '').toContain('overlaps');
   });
 
+  test('video_clip_adjust stores presets and clamps manual values', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Look Test' });
+    const clip = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'A',
+      startMs: 0,
+      durationMs: 1000,
+      label: 'A',
+    });
+    const clipId = (clip.structuredContent as { clipId: string }).clipId;
+
+    const adjusted = await handleVideoClipAdjust(ctx, {
+      projectPath,
+      clipId,
+      preset: 'cinematic',
+      exposure: 2,
+      grain: 2,
+    });
+
+    expect(adjusted.isError).toBe(false);
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      timeline: { tracks: Array<{ clips: Array<{ id: string; adjustments?: { preset?: string; exposure?: number; contrast?: number; saturation?: number; grain?: number } }> }> };
+      agentEvents: Array<{ toolName?: string }>;
+    };
+    const stored = project.timeline.tracks[0]!.clips.find((item) => item.id === clipId)?.adjustments;
+    expect(stored).toMatchObject({ preset: 'cinematic', exposure: 1, contrast: 1.18, saturation: 0.92, grain: 1 });
+    expect(project.agentEvents.some((event) => event.toolName === 'video_clip_adjust')).toBe(true);
+  });
+
   test('video_clip_edit packs, splits, duplicates, and deletes clips', async () => {
     const ctx = makeCtx();
     const projectPath = join(root, 'project', 'video.runner-video.json');
@@ -509,6 +542,49 @@ describe('video studio session tools', () => {
     const result = await handleVideoExport(ctx, {
       projectPath,
       outputPath: join(root, 'project', 'renders', 'preview.mp4'),
+    });
+
+    expect(result.isError).toBe(false);
+    const outputPath = (result.structuredContent as { outputPath: string }).outputPath;
+    expect(existsSync(outputPath)).toBe(true);
+    expect(readFileSync(outputPath).subarray(4, 8).toString()).toBe('ftyp');
+  });
+
+  test('renders adjusted video media into a playable mp4', async () => {
+    const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' });
+    if (ffmpeg.status !== 0) return;
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Adjusted Media' });
+    const mediaPath = join(root, 'clip.mp4');
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=320x180:rate=30',
+      '-t', '1',
+      '-pix_fmt', 'yuv420p',
+      mediaPath,
+    ], { encoding: 'utf-8' });
+    if (fixture.status !== 0) throw new Error(fixture.stderr || fixture.stdout || 'failed to create fixture video');
+    const imported = await handleVideoMediaImport(ctx, { projectPath, mediaPath });
+    const mediaId = (imported.structuredContent as { mediaId: string }).mediaId;
+    const clip = await handleVideoClipAdd(ctx, {
+      projectPath,
+      mediaId,
+      startMs: 0,
+      durationMs: 1000,
+    });
+    await handleVideoClipAdjust(ctx, {
+      projectPath,
+      clipId: (clip.structuredContent as { clipId: string }).clipId,
+      preset: 'punchy',
+      sharpen: 0.4,
+      vignette: 0.2,
+    });
+
+    const result = await handleVideoExport(ctx, {
+      projectPath,
+      outputPath: join(root, 'project', 'renders', 'adjusted.mp4'),
     });
 
     expect(result.isError).toBe(false);

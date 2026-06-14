@@ -68,6 +68,7 @@ import {
   handleVideoMediaImport,
   handleVideoClipAdd,
   handleVideoClipEdit,
+  handleVideoClipAdjust,
   handleVideoExport,
 } from './handlers/video-tools.ts';
 
@@ -538,6 +539,23 @@ export const VideoClipEditSchema = z.object({
   atMs: z.number().nonnegative().optional().describe('Timeline timestamp in milliseconds. Required for split.'),
   ripple: z.boolean().optional().describe('For delete, pull later clips on the same track left by the removed duration.'),
   snap: z.boolean().optional().describe('For move, snap near previous clip end points on the same track.'),
+});
+
+export const VideoClipAdjustSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  clipId: z.string().min(1).describe('Existing visual timeline clip id to adjust.'),
+  preset: z.enum(['neutral', 'clean', 'cinematic', 'warm', 'punchy', 'black-and-white']).optional().describe('Optional look preset. Explicit numeric values override preset values.'),
+  exposure: z.number().min(-1).max(1).optional().describe('Exposure adjustment. 0 is neutral.'),
+  contrast: z.number().min(0).max(3).optional().describe('Contrast multiplier. 1 is neutral.'),
+  saturation: z.number().min(0).max(3).optional().describe('Saturation multiplier. 1 is neutral.'),
+  highlights: z.number().min(-1).max(1).optional().describe('Highlight recovery/boost. 0 is neutral.'),
+  shadows: z.number().min(-1).max(1).optional().describe('Shadow lift/crush. 0 is neutral.'),
+  temperature: z.number().min(-1).max(1).optional().describe('Warm/cool intent stored for preview-grade rendering. 0 is neutral.'),
+  tint: z.number().min(-1).max(1).optional().describe('Green/magenta intent stored for preview-grade rendering. 0 is neutral.'),
+  sharpen: z.number().min(0).max(1).optional().describe('Sharpen amount. 0 is neutral.'),
+  vignette: z.number().min(0).max(1).optional().describe('Vignette amount. 0 is neutral.'),
+  grain: z.number().min(0).max(1).optional().describe('Film grain amount. 0 is neutral.'),
+  reset: z.boolean().optional().describe('Remove all adjustments from the clip.'),
 });
 
 export const VideoExportSchema = z.object({
@@ -1042,6 +1060,10 @@ Use this for the first agent-editable timeline operations: place imported media 
 
 Use move with startMs to reposition a clip. Pass snap: true when you want magnet behavior near another clip's end point. Use trim with durationMs and optional sourceInMs/sourceOutMs to change clip length/source bounds. Use split with atMs, duplicate, delete with optional ripple, or pack to remove gaps on each track. This mutates the project JSON and records a version/event for the agent change log.`,
 
+  video_clip_adjust: `Apply footage look adjustments to a RunnerOS Video Studio clip.
+
+Use this for exposure, contrast, saturation, highlights, shadows, temperature, tint, sharpen, vignette, grain, or a preset look such as clean, cinematic, warm, punchy, or black-and-white. The simple FFmpeg renderer applies the practical subset now and stores the rest for richer preview/render engines later. This mutates the project JSON and records a version/event for the agent change log.`,
+
   video_export: `Create a Video Studio export.
 
 Use an .mp4 output path for the simple FFmpeg renderer. It supports video, image, audio, and text clips, and fails loudly on unsupported media types like SVG/Lottie/HTML until the fuller renderer lands. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
@@ -1165,6 +1187,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'video_media_import', description: TOOL_DESCRIPTIONS.video_media_import, inputSchema: VideoMediaImportSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoMediaImport },
   { name: 'video_clip_add', description: TOOL_DESCRIPTIONS.video_clip_add, inputSchema: VideoClipAddSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipAdd },
   { name: 'video_clip_edit', description: TOOL_DESCRIPTIONS.video_clip_edit, inputSchema: VideoClipEditSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipEdit },
+  { name: 'video_clip_adjust', description: TOOL_DESCRIPTIONS.video_clip_adjust, inputSchema: VideoClipAdjustSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipAdjust },
   { name: 'video_export', description: TOOL_DESCRIPTIONS.video_export, inputSchema: VideoExportSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoExport },
   { name: 'visual_surface_state', description: TOOL_DESCRIPTIONS.visual_surface_state, inputSchema: VisualSurfaceStateSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVisualSurfaceState },
   { name: 'visual_surface', description: TOOL_DESCRIPTIONS.visual_surface, inputSchema: VisualSurfaceSchema, executionMode: 'registry', safeMode: 'block', handler: handleVisualSurface },

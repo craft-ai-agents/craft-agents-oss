@@ -21,6 +21,16 @@ const ASPECT_PRESETS: Array<{ value: Exclude<VideoAspectRatio, 'custom'>; label:
 ]
 
 type AspectSelectValue = VideoAspectRatio
+type LookPreset = 'neutral' | 'clean' | 'cinematic' | 'warm' | 'punchy' | 'black-and-white'
+
+const LOOK_PRESETS: Array<{ value: LookPreset; label: string; adjustments: NonNullable<VideoClip['adjustments']> }> = [
+  { value: 'neutral', label: 'Neutral', adjustments: {} },
+  { value: 'clean', label: 'Clean', adjustments: { exposure: 0.03, contrast: 1.05, saturation: 1.04, grain: 0, preset: 'clean' } },
+  { value: 'cinematic', label: 'Cinematic', adjustments: { exposure: -0.03, contrast: 1.18, saturation: 0.92, highlights: -0.12, shadows: 0.08, grain: 0.12, preset: 'cinematic' } },
+  { value: 'warm', label: 'Warm', adjustments: { exposure: 0.02, contrast: 1.05, saturation: 1.08, temperature: 0.18, grain: 0.04, preset: 'warm' } },
+  { value: 'punchy', label: 'Punchy', adjustments: { exposure: 0.04, contrast: 1.25, saturation: 1.22, highlights: -0.05, shadows: -0.04, grain: 0.02, preset: 'punchy' } },
+  { value: 'black-and-white', label: 'B&W', adjustments: { exposure: 0, contrast: 1.16, saturation: 0, grain: 0.1, preset: 'black-and-white' } },
+]
 
 interface TimelineDragState {
   clipId: string
@@ -213,6 +223,25 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     if (!selectedClip) return
     updateSelectedClip({ durationMs: Math.max(100, (selectedClip.durationMs ?? 1000) + deltaMs) })
   }, [selectedClip, updateSelectedClip])
+
+  const updateSelectedClipAdjustment = React.useCallback((patch: NonNullable<VideoClip['adjustments']>) => {
+    updateSelectedClip({
+      adjustments: {
+        ...(selectedClip?.adjustments ?? {}),
+        ...patch,
+      },
+    })
+  }, [selectedClip, updateSelectedClip])
+
+  const applyLookPreset = React.useCallback((preset: LookPreset) => {
+    const found = LOOK_PRESETS.find((item) => item.value === preset)
+    if (!found) return
+    updateSelectedClip({ adjustments: found.adjustments })
+  }, [updateSelectedClip])
+
+  const resetLook = React.useCallback(() => {
+    updateSelectedClip({ adjustments: undefined })
+  }, [updateSelectedClip])
 
   const changeAspectRatio = React.useCallback((aspectRatio: AspectSelectValue) => {
     if (aspectRatio === 'custom') return
@@ -625,6 +654,27 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                 </div>
                 <NumberField label="Start ms" value={selectedClip.startMs ?? 0} onChange={(value) => updateSelectedClip({ startMs: Math.max(0, value) })} />
                 <NumberField label="Duration ms" value={selectedClip.durationMs ?? 1000} onChange={(value) => updateSelectedClip({ durationMs: Math.max(1, value) })} />
+                <div className="grid gap-2 rounded-md border border-white/[0.08] bg-black/25 p-2">
+                  <PanelTitle title="Look" value={selectedClip.adjustments?.preset ? String(selectedClip.adjustments.preset) : 'manual'} />
+                  <select
+                    value={selectedClip.adjustments?.preset ?? 'neutral'}
+                    onChange={(event) => applyLookPreset(event.target.value as LookPreset)}
+                    className="h-8 rounded-md border border-white/[0.08] bg-black/35 px-2 text-sm text-white/72 outline-none focus:border-[#f97316]/50"
+                  >
+                    {LOOK_PRESETS.map((preset) => (
+                      <option key={preset.value} value={preset.value}>{preset.label}</option>
+                    ))}
+                  </select>
+                  <AdjustmentField label="Exposure" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.exposure ?? 0} onChange={(value) => updateSelectedClipAdjustment({ exposure: value, preset: 'manual' })} />
+                  <AdjustmentField label="Contrast" min={0} max={3} step={0.01} value={selectedClip.adjustments?.contrast ?? 1} onChange={(value) => updateSelectedClipAdjustment({ contrast: value, preset: 'manual' })} />
+                  <AdjustmentField label="Saturation" min={0} max={3} step={0.01} value={selectedClip.adjustments?.saturation ?? 1} onChange={(value) => updateSelectedClipAdjustment({ saturation: value, preset: 'manual' })} />
+                  <AdjustmentField label="Highlights" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.highlights ?? 0} onChange={(value) => updateSelectedClipAdjustment({ highlights: value, preset: 'manual' })} />
+                  <AdjustmentField label="Shadows" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.shadows ?? 0} onChange={(value) => updateSelectedClipAdjustment({ shadows: value, preset: 'manual' })} />
+                  <AdjustmentField label="Grain" min={0} max={1} step={0.01} value={selectedClip.adjustments?.grain ?? 0} onChange={(value) => updateSelectedClipAdjustment({ grain: value, preset: 'manual' })} />
+                  <Button size="sm" variant="outline" className="h-8 border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={resetLook}>
+                    Reset Look
+                  </Button>
+                </div>
                 {selectedClip.mediaId && <ReadOnlyValue label="Media ID" value={selectedClip.mediaId} />}
               </div>
             ) : <EmptyText>Select a clip to inspect</EmptyText>}
@@ -848,6 +898,26 @@ function NumberField({ label, value, onChange, compact = false }: { label: strin
     <label className={`${compact ? 'flex items-center gap-1' : 'grid gap-1'} text-xs text-white/42`}>
       {label}
       <input type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} className={`${compact ? 'w-24' : 'w-full'} h-8 rounded-md border border-white/[0.08] bg-black/35 px-2 text-sm text-white/72 outline-none focus:border-[#f97316]/50`} />
+    </label>
+  )
+}
+
+function AdjustmentField({ label, min, max, step, value, onChange }: { label: string; min: number; max: number; step: number; value: number; onChange: (value: number) => void }) {
+  return (
+    <label className="grid gap-1 text-xs text-white/42">
+      <span className="flex items-center justify-between gap-2">
+        <span>{label}</span>
+        <span className="tabular-nums text-white/55">{value.toFixed(2)}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full accent-[#f97316]"
+      />
     </label>
   )
 }

@@ -95,12 +95,27 @@ export interface VideoClip {
   opacity?: number;
   volume?: number;
   speed?: number;
+  adjustments?: VideoClipAdjustments;
   effects?: string[];
   transitionIn?: VideoTransition;
   transitionOut?: VideoTransition;
   keyframes?: VideoKeyframe[];
   text?: VideoTextPayload;
   captionCueIds?: string[];
+}
+
+export interface VideoClipAdjustments {
+  exposure?: number;
+  contrast?: number;
+  saturation?: number;
+  highlights?: number;
+  shadows?: number;
+  temperature?: number;
+  tint?: number;
+  sharpen?: number;
+  vignette?: number;
+  grain?: number;
+  preset?: string;
 }
 
 export interface VideoTransform {
