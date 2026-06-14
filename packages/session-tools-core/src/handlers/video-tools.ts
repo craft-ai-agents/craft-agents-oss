@@ -43,12 +43,14 @@ interface VideoClipAddInput {
 
 interface VideoClipEditInput {
   projectPath: string;
-  clipId: string;
-  action: 'move' | 'trim';
+  clipId?: string;
+  action: 'move' | 'trim' | 'pack' | 'split' | 'delete' | 'duplicate';
   startMs?: number;
   durationMs?: number;
   sourceInMs?: number;
   sourceOutMs?: number;
+  atMs?: number;
+  ripple?: boolean;
   snap?: boolean;
 }
 
@@ -418,6 +420,22 @@ function snapClipStart(track: VideoProject['timeline']['tracks'][number], clipId
   return Math.max(0, best);
 }
 
+function packTimeline(project: VideoProject): number {
+  let changed = 0;
+  for (const track of project.timeline.tracks) {
+    let cursor = 0;
+    track.clips = orderedClips(track.clips).map((clip) => {
+      const startMs = cursor;
+      cursor += Math.max(1, clip.durationMs);
+      if (clip.startMs === startMs) return clip;
+      changed += 1;
+      return { ...clip, startMs };
+    });
+  }
+  project.timeline.durationMs = timelineDuration(project.timeline.tracks);
+  return changed;
+}
+
 function ok(text: string, structuredContent: Record<string, unknown>): ToolResult {
   return { content: [{ type: 'text', text }], structuredContent, isError: false };
 }
@@ -534,47 +552,124 @@ export async function handleVideoClipAdd(ctx: SessionToolContext, args: VideoCli
 
 export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoClipEditInput): Promise<ToolResult> {
   if (!args.projectPath) return errorResponse('projectPath is required.');
-  if (!args.clipId) return errorResponse('clipId is required.');
   const projectPathResult = resolveWorkspacePath(ctx, args.projectPath, 'projectPath');
   if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
   const projectPath = projectPathResult.path;
   if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
   const project = readProject(projectPath);
-  const found = findClip(project, args.clipId);
-  if (!found) return errorResponse(`Clip not found: ${args.clipId}`);
-  const { track, clip } = found;
+  let trackId: string | undefined;
+  let clipId: string | undefined = args.clipId;
+  let label = args.clipId;
+  let startMs: number | undefined;
+  let durationMs: number | undefined;
+  let createdClipId: string | undefined;
+  let deletedClipId: string | undefined;
+  let changed = 0;
 
-  if (args.action === 'move') {
-    if (typeof args.startMs !== 'number' || !Number.isFinite(args.startMs) || args.startMs < 0) return errorResponse('startMs must be a non-negative number.');
-    clip.startMs = args.snap ? snapClipStart(track, clip.id, args.startMs) : Math.max(0, Math.round(args.startMs));
-    track.clips = orderedClips(track.clips);
-  } else if (args.action === 'trim') {
-    if (typeof args.durationMs !== 'number' || !Number.isFinite(args.durationMs) || args.durationMs <= 0) return errorResponse('durationMs must be a positive number.');
-    clip.durationMs = Math.max(1, Math.round(args.durationMs));
-    if (args.sourceInMs !== undefined) {
-      if (!Number.isFinite(args.sourceInMs) || args.sourceInMs < 0) return errorResponse('sourceInMs must be a non-negative number.');
-      clip.sourceInMs = Math.round(args.sourceInMs);
-    }
-    if (args.sourceOutMs !== undefined) {
-      if (!Number.isFinite(args.sourceOutMs) || args.sourceOutMs < 0) return errorResponse('sourceOutMs must be a non-negative number.');
-      clip.sourceOutMs = Math.round(args.sourceOutMs);
-    }
+  if (args.action === 'pack') {
+    changed = packTimeline(project);
+    label = 'timeline';
   } else {
-    return errorResponse('Unknown video clip edit action.');
+    if (!args.clipId) return errorResponse('clipId is required for this action.');
+    const found = findClip(project, args.clipId);
+    if (!found) return errorResponse(`Clip not found: ${args.clipId}`);
+    const { track, clip } = found;
+    trackId = track.id;
+    label = typeof clip.label === 'string' ? clip.label : clip.id;
+
+    if (args.action === 'move') {
+      if (typeof args.startMs !== 'number' || !Number.isFinite(args.startMs) || args.startMs < 0) return errorResponse('startMs must be a non-negative number.');
+      clip.startMs = args.snap ? snapClipStart(track, clip.id, args.startMs) : Math.max(0, Math.round(args.startMs));
+      track.clips = orderedClips(track.clips);
+      startMs = clip.startMs;
+      durationMs = clip.durationMs;
+    } else if (args.action === 'trim') {
+      if (typeof args.durationMs !== 'number' || !Number.isFinite(args.durationMs) || args.durationMs <= 0) return errorResponse('durationMs must be a positive number.');
+      clip.durationMs = Math.max(1, Math.round(args.durationMs));
+      if (args.sourceInMs !== undefined) {
+        if (!Number.isFinite(args.sourceInMs) || args.sourceInMs < 0) return errorResponse('sourceInMs must be a non-negative number.');
+        clip.sourceInMs = Math.round(args.sourceInMs);
+      }
+      if (args.sourceOutMs !== undefined) {
+        if (!Number.isFinite(args.sourceOutMs) || args.sourceOutMs < 0) return errorResponse('sourceOutMs must be a non-negative number.');
+        clip.sourceOutMs = Math.round(args.sourceOutMs);
+      }
+      startMs = clip.startMs;
+      durationMs = clip.durationMs;
+    } else if (args.action === 'split') {
+      if (typeof args.atMs !== 'number' || !Number.isFinite(args.atMs) || args.atMs < 0) return errorResponse('atMs must be a non-negative number.');
+      const splitAt = Math.round(args.atMs);
+      if (splitAt <= clip.startMs || splitAt >= clip.startMs + clip.durationMs) return errorResponse('atMs must be inside the clip bounds.');
+      const firstDuration = splitAt - clip.startMs;
+      const secondDuration = clip.durationMs - firstDuration;
+      const sourceInMs = typeof clip.sourceInMs === 'number' ? clip.sourceInMs : 0;
+      const secondClip = {
+        ...clip,
+        id: randomUUID(),
+        startMs: splitAt,
+        durationMs: secondDuration,
+        sourceInMs: sourceInMs + firstDuration,
+        label: typeof clip.label === 'string' ? `${clip.label} split` : undefined,
+      };
+      clip.durationMs = firstDuration;
+      if (clip.sourceOutMs !== undefined) clip.sourceOutMs = sourceInMs + firstDuration;
+      const index = track.clips.findIndex((item) => item.id === clip.id);
+      track.clips.splice(index + 1, 0, secondClip);
+      createdClipId = secondClip.id;
+      startMs = clip.startMs;
+      durationMs = clip.durationMs;
+    } else if (args.action === 'delete') {
+      const deletedStartMs = clip.startMs;
+      const deletedDurationMs = clip.durationMs;
+      track.clips = track.clips.filter((item) => item.id !== clip.id);
+      if (args.ripple) {
+        track.clips = track.clips.map((item) => item.startMs >= deletedStartMs + deletedDurationMs ? {
+          ...item,
+          startMs: Math.max(0, item.startMs - deletedDurationMs),
+        } : item);
+      }
+      deletedClipId = clip.id;
+      clipId = undefined;
+    } else if (args.action === 'duplicate') {
+      const newClip = {
+        ...clip,
+        id: randomUUID(),
+        startMs: clip.startMs + Math.max(1, clip.durationMs),
+        label: typeof clip.label === 'string' ? `${clip.label} copy` : undefined,
+      };
+      for (let index = 0; index < track.clips.length; index += 1) {
+        const item = track.clips[index];
+        if (item && item.id !== clip.id && item.startMs >= newClip.startMs) {
+          track.clips[index] = { ...item, startMs: item.startMs + Math.max(1, clip.durationMs) };
+        }
+      }
+      track.clips.push(newClip);
+      track.clips = orderedClips(track.clips);
+      createdClipId = newClip.id;
+      clipId = newClip.id;
+      startMs = newClip.startMs;
+      durationMs = newClip.durationMs;
+    } else {
+      return errorResponse('Unknown video clip edit action.');
+    }
   }
 
   project.timeline.durationMs = timelineDuration(project.timeline.tracks);
   const errors = validateProject(project);
   if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
-  const versionId = addVersion(project, `${args.action === 'move' ? 'Moved' : 'Trimmed'} ${clip.label ?? clip.id} clip`, ctx, 'video_clip_edit');
+  const actionLabel = args.action[0]!.toUpperCase() + args.action.slice(1);
+  const versionId = addVersion(project, `${actionLabel} ${label ?? 'clip'}${args.action === 'pack' ? '' : ' clip'}`, ctx, 'video_clip_edit');
   writeJsonAtomic(projectPath, project);
-  return ok(`${args.action === 'move' ? 'Moved' : 'Trimmed'} clip "${clip.label ?? clip.id}".`, {
+  return ok(`Applied ${args.action} edit to "${label ?? 'timeline'}".`, {
     ok: true,
     projectPath,
-    clipId: clip.id,
-    trackId: track.id,
-    startMs: clip.startMs,
-    durationMs: clip.durationMs,
+    clipId,
+    createdClipId,
+    deletedClipId,
+    changed,
+    trackId,
+    startMs,
+    durationMs,
     versionId,
   });
 }

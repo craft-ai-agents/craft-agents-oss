@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardCheck, Copy, Download, FileVideo, FolderOpen, History, Loader2, Magnet, Minus, Plus, RefreshCw, Save, Scissors, ShieldCheck, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardCheck, Copy, Download, FileVideo, FolderOpen, History, Loader2, Magnet, Minus, Plus, Redo2, RefreshCw, Save, Scissors, ShieldCheck, Trash2, Undo2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
@@ -43,6 +43,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [checking, setChecking] = React.useState<'inspect' | 'dry-run' | null>(null)
   const [exporting, setExporting] = React.useState(false)
   const [timelineDrag, setTimelineDrag] = React.useState<TimelineDragState | null>(null)
+  const [undoStack, setUndoStack] = React.useState<VideoProject[]>([])
+  const [redoStack, setRedoStack] = React.useState<VideoProject[]>([])
   const [error, setError] = React.useState<string | null>(null)
 
   const load = React.useCallback(async () => {
@@ -59,6 +61,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       setProjectAsset(asset)
       setProject(parsed)
       setRawJson(JSON.stringify(parsed, null, 2))
+      setUndoStack([])
+      setRedoStack([])
       const latestRender = findLatestVideoRenderAsset(loaded)
       if (latestRender) {
         const url = await window.electronAPI.readOutputAssetDataUrl(workspaceId, outputId, latestRender.id)
@@ -95,14 +99,47 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     return null
   }, [project, selectedClipId])
 
-  const updateProject = React.useCallback((updater: (current: VideoProject) => VideoProject) => {
+  const updateProject = React.useCallback((updater: (current: VideoProject) => VideoProject, options: { recordHistory?: boolean } = {}) => {
     setProject((current) => {
       if (!current) return current
       const next = updater(current)
+      if (next === current) return current
+      if (options.recordHistory !== false) {
+        setUndoStack((items) => [...items.slice(-49), current])
+        setRedoStack([])
+      }
       setRawJson(JSON.stringify(next, null, 2))
       return next
     })
   }, [])
+
+  const restoreProject = React.useCallback((next: VideoProject) => {
+    setProject(next)
+    setRawJson(JSON.stringify(next, null, 2))
+    const clipStillExists = selectedClipId && next.timeline?.tracks?.some((track) => track.clips?.some((clip) => clip.id === selectedClipId))
+    if (!clipStillExists) {
+      const firstClip = next.timeline?.tracks?.flatMap((track) => track.clips ?? [])[0]
+      setSelectedClipId(firstClip?.id ?? null)
+    }
+  }, [selectedClipId])
+
+  const undo = React.useCallback(() => {
+    if (!project || undoStack.length === 0) return
+    const previous = undoStack[undoStack.length - 1]
+    if (!previous) return
+    setUndoStack((items) => items.slice(0, -1))
+    setRedoStack((items) => [...items.slice(-49), project])
+    restoreProject(previous)
+  }, [project, restoreProject, undoStack])
+
+  const redo = React.useCallback(() => {
+    if (!project || redoStack.length === 0) return
+    const next = redoStack[redoStack.length - 1]
+    if (!next) return
+    setRedoStack((items) => items.slice(0, -1))
+    setUndoStack((items) => [...items.slice(-49), project])
+    restoreProject(next)
+  }, [project, redoStack, restoreProject])
 
   const updateSelectedClip = React.useCallback((patch: Partial<VideoClip>) => {
     if (!selectedClipId) return
@@ -123,8 +160,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     })
   }, [selectedClipId, updateProject])
 
-  const moveClip = React.useCallback((clipId: string, startMs: number, snap = true) => {
-    updateProject((current) => moveClipInProject(current, clipId, startMs, snap))
+  const moveClip = React.useCallback((clipId: string, startMs: number, snap = true, recordHistory = true) => {
+    updateProject((current) => moveClipInProject(current, clipId, startMs, snap), { recordHistory })
   }, [updateProject])
 
   React.useEffect(() => {
@@ -133,9 +170,18 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     const handlePointerMove = (event: PointerEvent) => {
       const deltaX = event.clientX - timelineDrag.startX
       if (!timelineDrag.active && Math.abs(deltaX) < 4) return
-      if (!timelineDrag.active) setTimelineDrag((current) => current ? { ...current, active: true } : current)
+      if (!timelineDrag.active) {
+        setProject((current) => {
+          if (current) {
+            setUndoStack((items) => [...items.slice(-49), current])
+            setRedoStack([])
+          }
+          return current
+        })
+        setTimelineDrag((current) => current ? { ...current, active: true } : current)
+      }
       const deltaMs = Math.round(deltaX * 12)
-      moveClip(timelineDrag.clipId, timelineDrag.initialStartMs + deltaMs, true)
+      moveClip(timelineDrag.clipId, timelineDrag.initialStartMs + deltaMs, true, false)
     }
     const handlePointerUp = () => {
       setTimelineDrag(null)
@@ -415,6 +461,14 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
             <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void load()}>
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
               Reload
+            </Button>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={undo} disabled={isBusy || undoStack.length === 0}>
+              <Undo2 className="mr-1.5 h-3.5 w-3.5" />
+              Undo
+            </Button>
+            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={redo} disabled={isBusy || redoStack.length === 0}>
+              <Redo2 className="mr-1.5 h-3.5 w-3.5" />
+              Redo
             </Button>
             <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void importMedia('files')} disabled={isBusy}>
               {importing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}

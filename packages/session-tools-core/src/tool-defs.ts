@@ -519,12 +519,14 @@ export const VideoClipAddSchema = z.object({
 
 export const VideoClipEditSchema = z.object({
   projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
-  clipId: z.string().min(1).describe('Existing timeline clip id to edit.'),
-  action: z.enum(['move', 'trim']).describe('Use move to reposition the clip; use trim to change duration/source bounds.'),
+  clipId: z.string().min(1).optional().describe('Existing timeline clip id to edit. Required except for pack.'),
+  action: z.enum(['move', 'trim', 'pack', 'split', 'delete', 'duplicate']).describe('Timeline edit to apply.'),
   startMs: z.number().nonnegative().optional().describe('New timeline start in milliseconds. Required for move.'),
   durationMs: z.number().positive().optional().describe('New clip duration in milliseconds. Required for trim.'),
   sourceInMs: z.number().nonnegative().optional().describe('Optional source in-point in milliseconds for trim.'),
   sourceOutMs: z.number().nonnegative().optional().describe('Optional source out-point in milliseconds for trim.'),
+  atMs: z.number().nonnegative().optional().describe('Timeline timestamp in milliseconds. Required for split.'),
+  ripple: z.boolean().optional().describe('For delete, pull later clips on the same track left by the removed duration.'),
   snap: z.boolean().optional().describe('For move, snap near previous clip end points on the same track.'),
 });
 
@@ -1022,9 +1024,9 @@ Use this after video_project_create and before adding media-backed clips to the 
 
 Use this for the first agent-editable timeline operations: place imported media on a track, or create a simple text clip. This mutates the project JSON and records a version/event.`,
 
-  video_clip_edit: `Move or trim an existing RunnerOS Video Studio timeline clip.
+  video_clip_edit: `Edit a RunnerOS Video Studio timeline.
 
-Use move with startMs to reposition a clip. Pass snap: true when you want magnet behavior near another clip's end point. Use trim with durationMs and optional sourceInMs/sourceOutMs to change clip length/source bounds. This mutates the project JSON and records a version/event for the agent change log.`,
+Use move with startMs to reposition a clip. Pass snap: true when you want magnet behavior near another clip's end point. Use trim with durationMs and optional sourceInMs/sourceOutMs to change clip length/source bounds. Use split with atMs, duplicate, delete with optional ripple, or pack to remove gaps on each track. This mutates the project JSON and records a version/event for the agent change log.`,
 
   video_export: `Create a Video Studio export.
 

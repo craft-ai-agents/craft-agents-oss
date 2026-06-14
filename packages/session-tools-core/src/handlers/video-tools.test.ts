@@ -293,6 +293,73 @@ describe('video studio session tools', () => {
     expect(project.agentEvents.some((event) => event.toolName === 'video_clip_edit')).toBe(true);
   });
 
+  test('video_clip_edit packs, splits, duplicates, and deletes clips', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Advanced Edits' });
+    const first = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'A',
+      startMs: 1000,
+      durationMs: 1000,
+      label: 'A',
+    });
+    const second = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'B',
+      startMs: 3500,
+      durationMs: 1000,
+      label: 'B',
+    });
+    const firstClipId = (first.structuredContent as { clipId: string }).clipId;
+    const secondClipId = (second.structuredContent as { clipId: string }).clipId;
+
+    const packed = await handleVideoClipEdit(ctx, { projectPath, action: 'pack' });
+    expect(packed.isError).toBe(false);
+    expect((packed.structuredContent as { changed: number }).changed).toBe(2);
+
+    const split = await handleVideoClipEdit(ctx, {
+      projectPath,
+      clipId: firstClipId,
+      action: 'split',
+      atMs: 500,
+    });
+    expect(split.isError).toBe(false);
+    const splitClipId = (split.structuredContent as { createdClipId: string }).createdClipId;
+    expect(splitClipId).toBeTruthy();
+
+    const duplicated = await handleVideoClipEdit(ctx, {
+      projectPath,
+      clipId: splitClipId,
+      action: 'duplicate',
+    });
+    expect(duplicated.isError).toBe(false);
+    const duplicatedClipId = (duplicated.structuredContent as { createdClipId: string }).createdClipId;
+    expect(duplicatedClipId).toBeTruthy();
+
+    const deleted = await handleVideoClipEdit(ctx, {
+      projectPath,
+      clipId: duplicatedClipId,
+      action: 'delete',
+      ripple: true,
+    });
+    expect(deleted.isError).toBe(false);
+
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      timeline: { durationMs: number; tracks: Array<{ clips: Array<{ id: string; startMs: number; durationMs: number }> }> };
+      agentEvents: Array<{ toolName?: string }>;
+    };
+    const clips = project.timeline.tracks[0]!.clips;
+    expect(clips.find((clip) => clip.id === firstClipId)).toMatchObject({ startMs: 0, durationMs: 500 });
+    expect(clips.find((clip) => clip.id === splitClipId)).toMatchObject({ startMs: 500, durationMs: 500 });
+    expect(clips.find((clip) => clip.id === duplicatedClipId)).toBeUndefined();
+    expect(clips.find((clip) => clip.id === secondClipId)).toMatchObject({ startMs: 1000, durationMs: 1000 });
+    expect(project.timeline.durationMs).toBe(2000);
+    expect(project.agentEvents.filter((event) => event.toolName === 'video_clip_edit')).toHaveLength(4);
+  });
+
   test('renders a playable mp4 when output path uses a video extension', async () => {
     const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' });
     if (ffmpeg.status !== 0) return;
