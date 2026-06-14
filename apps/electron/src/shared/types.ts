@@ -380,6 +380,7 @@ export interface ElectronAPI {
   // Auth
   showLogoutConfirmation(): Promise<boolean>
   showDeleteSessionConfirmation(name: string): Promise<boolean>
+  showDeleteWorkspaceConfirmation(name: string): Promise<boolean>
   logout(): Promise<void>
 
   // Credential health check (startup validation)

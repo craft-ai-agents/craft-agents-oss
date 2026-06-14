@@ -11,6 +11,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.auth.LOGOUT,
   RPC_CHANNELS.auth.SHOW_LOGOUT_CONFIRMATION,
   RPC_CHANNELS.auth.SHOW_DELETE_SESSION_CONFIRMATION,
+  RPC_CHANNELS.auth.SHOW_DELETE_WORKSPACE_CONFIRMATION,
   RPC_CHANNELS.credentials.HEALTH_CHECK,
 ] as const
 
@@ -40,6 +41,22 @@ export function registerAuthHandlers(server: RpcServer, deps: HandlerDeps): void
       cancelId: 0,
       title: 'Delete Conversation',
       message: `Are you sure you want to delete: "${name}"?`,
+      detail: 'This action cannot be undone.',
+    })
+    // result.response is the index of the clicked button
+    // 0 = Cancel, 1 = Delete
+    return result.response === 1
+  })
+
+  // Show delete workspace confirmation dialog (routed to client)
+  server.handle(RPC_CHANNELS.auth.SHOW_DELETE_WORKSPACE_CONFIRMATION, async (ctx, name: string) => {
+    const result = await requestClientConfirmDialog(server, ctx.clientId, {
+      type: 'warning',
+      buttons: ['Cancel', 'Delete'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Delete Workspace',
+      message: `Are you sure you want to delete the workspace "${name}"?`,
       detail: 'This action cannot be undone.',
     })
     // result.response is the index of the clicked button

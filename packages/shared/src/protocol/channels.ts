@@ -159,6 +159,7 @@ export const RPC_CHANNELS = {
     LOGOUT: 'auth:logout',
     SHOW_LOGOUT_CONFIRMATION: 'auth:showLogoutConfirmation',
     SHOW_DELETE_SESSION_CONFIRMATION: 'auth:showDeleteSessionConfirmation',
+    SHOW_DELETE_WORKSPACE_CONFIRMATION: 'auth:showDeleteWorkspaceConfirmation',
   },
   credentials: {
     HEALTH_CHECK: 'credentials:healthCheck',

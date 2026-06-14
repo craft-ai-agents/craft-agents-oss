@@ -26,6 +26,7 @@ const EXPECTED_CHANNELS: string[] = [
   'appearance:setRichToolDescriptions',
   'auth:logout',
   'auth:showDeleteSessionConfirmation',
+  'auth:showDeleteWorkspaceConfirmation',
   'auth:showLogoutConfirmation',
   'automations:changed',
   'automations:delete',

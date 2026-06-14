@@ -119,6 +119,7 @@ export const CHANNEL_MAP = {
   // Auth
   showLogoutConfirmation: invoke(RPC_CHANNELS.auth.SHOW_LOGOUT_CONFIRMATION),
   showDeleteSessionConfirmation: invoke(RPC_CHANNELS.auth.SHOW_DELETE_SESSION_CONFIRMATION),
+  showDeleteWorkspaceConfirmation: invoke(RPC_CHANNELS.auth.SHOW_DELETE_WORKSPACE_CONFIRMATION),
   logout: invoke(RPC_CHANNELS.auth.LOGOUT),
   getCredentialHealth: invoke(RPC_CHANNELS.credentials.HEALTH_CHECK),
 
