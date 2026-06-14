@@ -41,6 +41,17 @@ interface VideoClipAddInput {
   text?: string;
 }
 
+interface VideoClipEditInput {
+  projectPath: string;
+  clipId: string;
+  action: 'move' | 'trim';
+  startMs?: number;
+  durationMs?: number;
+  sourceInMs?: number;
+  sourceOutMs?: number;
+  snap?: boolean;
+}
+
 interface VideoExportInput {
   projectPath: string;
   outputPath?: string;
@@ -372,6 +383,41 @@ function chooseTrack(project: VideoProject, mediaType: MediaType, requestedTrack
   return project.timeline.tracks.find((track) => track.id === preferred) ?? project.timeline.tracks[0]!;
 }
 
+function orderedClips<T extends { startMs: number }>(clips: T[]): T[] {
+  return [...clips].sort((a, b) => a.startMs - b.startMs);
+}
+
+function timelineDuration(tracks: VideoProject['timeline']['tracks']): number {
+  return tracks.reduce((duration, track) => {
+    const trackEnd = (track.clips || []).reduce((end, clip) => Math.max(end, clip.startMs + clip.durationMs), 0);
+    return Math.max(duration, trackEnd);
+  }, 0);
+}
+
+function findClip(project: VideoProject, clipId: string): { track: VideoProject['timeline']['tracks'][number]; clip: VideoProject['timeline']['tracks'][number]['clips'][number] } | null {
+  for (const track of project.timeline.tracks) {
+    const clip = track.clips.find((item) => item.id === clipId);
+    if (clip) return { track, clip };
+  }
+  return null;
+}
+
+function snapClipStart(track: VideoProject['timeline']['tracks'][number], clipId: string, proposedStartMs: number, thresholdMs = 250): number {
+  const snapPoints = track.clips
+    .filter((clip) => clip.id !== clipId)
+    .map((clip) => clip.startMs + Math.max(1, clip.durationMs));
+  let best = Math.max(0, Math.round(proposedStartMs));
+  let bestDistance = thresholdMs + 1;
+  for (const point of snapPoints) {
+    const distance = Math.abs(point - proposedStartMs);
+    if (distance < bestDistance) {
+      best = point;
+      bestDistance = distance;
+    }
+  }
+  return Math.max(0, best);
+}
+
 function ok(text: string, structuredContent: Record<string, unknown>): ToolResult {
   return { content: [{ type: 'text', text }], structuredContent, isError: false };
 }
@@ -482,6 +528,53 @@ export async function handleVideoClipAdd(ctx: SessionToolContext, args: VideoCli
     projectPath,
     clipId: clip.id,
     trackId: track.id,
+    versionId,
+  });
+}
+
+export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoClipEditInput): Promise<ToolResult> {
+  if (!args.projectPath) return errorResponse('projectPath is required.');
+  if (!args.clipId) return errorResponse('clipId is required.');
+  const projectPathResult = resolveWorkspacePath(ctx, args.projectPath, 'projectPath');
+  if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
+  const projectPath = projectPathResult.path;
+  if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
+  const project = readProject(projectPath);
+  const found = findClip(project, args.clipId);
+  if (!found) return errorResponse(`Clip not found: ${args.clipId}`);
+  const { track, clip } = found;
+
+  if (args.action === 'move') {
+    if (typeof args.startMs !== 'number' || !Number.isFinite(args.startMs) || args.startMs < 0) return errorResponse('startMs must be a non-negative number.');
+    clip.startMs = args.snap ? snapClipStart(track, clip.id, args.startMs) : Math.max(0, Math.round(args.startMs));
+    track.clips = orderedClips(track.clips);
+  } else if (args.action === 'trim') {
+    if (typeof args.durationMs !== 'number' || !Number.isFinite(args.durationMs) || args.durationMs <= 0) return errorResponse('durationMs must be a positive number.');
+    clip.durationMs = Math.max(1, Math.round(args.durationMs));
+    if (args.sourceInMs !== undefined) {
+      if (!Number.isFinite(args.sourceInMs) || args.sourceInMs < 0) return errorResponse('sourceInMs must be a non-negative number.');
+      clip.sourceInMs = Math.round(args.sourceInMs);
+    }
+    if (args.sourceOutMs !== undefined) {
+      if (!Number.isFinite(args.sourceOutMs) || args.sourceOutMs < 0) return errorResponse('sourceOutMs must be a non-negative number.');
+      clip.sourceOutMs = Math.round(args.sourceOutMs);
+    }
+  } else {
+    return errorResponse('Unknown video clip edit action.');
+  }
+
+  project.timeline.durationMs = timelineDuration(project.timeline.tracks);
+  const errors = validateProject(project);
+  if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
+  const versionId = addVersion(project, `${args.action === 'move' ? 'Moved' : 'Trimmed'} ${clip.label ?? clip.id} clip`, ctx, 'video_clip_edit');
+  writeJsonAtomic(projectPath, project);
+  return ok(`${args.action === 'move' ? 'Moved' : 'Trimmed'} clip "${clip.label ?? clip.id}".`, {
+    ok: true,
+    projectPath,
+    clipId: clip.id,
+    trackId: track.id,
+    startMs: clip.startMs,
+    durationMs: clip.durationMs,
     versionId,
   });
 }

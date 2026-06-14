@@ -158,6 +158,7 @@ export {
   handleVideoProjectCreate,
   handleVideoMediaImport,
   handleVideoClipAdd,
+  handleVideoClipEdit,
   handleVideoExport,
 } from './video-tools.ts';
 

@@ -97,6 +97,20 @@ describe('video-studio edit commands', () => {
     expect(readProject(projectPath).timeline.tracks[0].clips.map((clip) => clip.startMs)).toEqual([0, 1000, 2000]);
   });
 
+  test('moves with snap and trims clips', () => {
+    const projectPath = tempProject();
+
+    const moved = run(['edit', projectPath, '--action', 'move', '--clip-id', 'clip-b', '--start-ms', '1900', '--snap', '--json']);
+    expect(moved.startMs).toBe(2000);
+
+    const trimmed = run(['edit', projectPath, '--action', 'trim', '--clip-id', 'clip-a', '--duration-ms', '750', '--source-in-ms', '100', '--source-out-ms', '850', '--json']);
+    expect(trimmed.clipDurationMs).toBe(750);
+
+    const clips = readProject(projectPath).timeline.tracks[0].clips;
+    expect(clips.find((clip) => clip.id === 'clip-a')).toMatchObject({ durationMs: 750, sourceInMs: 100, sourceOutMs: 850 });
+    expect(run(['inspect', projectPath, '--json']).ok).toBe(true);
+  });
+
   test('simple MP4 export preserves audio from video clips', () => {
     if (!hasFfmpeg()) return;
     const projectPath = tempProject();

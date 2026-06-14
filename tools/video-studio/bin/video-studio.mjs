@@ -253,6 +253,56 @@ function duplicateProjectClip(project, clipId) {
   return { project: next, createdClipId: duplicate.id };
 }
 
+function snapClipStart(track, clipId, proposedStartMs, thresholdMs = 250) {
+  const starts = (track.clips || [])
+    .filter((clip) => clip.id !== clipId)
+    .map((clip) => (clip.startMs || 0) + Math.max(1, clip.durationMs || 1));
+  let best = Math.max(0, Math.round(proposedStartMs));
+  let bestDistance = thresholdMs + 1;
+  for (const start of starts) {
+    const distance = Math.abs(start - proposedStartMs);
+    if (distance < bestDistance) {
+      best = start;
+      bestDistance = distance;
+    }
+  }
+  return Math.max(0, best);
+}
+
+function moveProjectClip(project, clipId, startMs, snap = false) {
+  if (!Number.isFinite(startMs) || startMs < 0) fail('--start-ms must be a non-negative number.');
+  const next = cloneJson(project);
+  const found = findClip(next, clipId);
+  if (!found) fail(`Clip not found: ${clipId}`);
+  const { track, clip } = found;
+  const nextStart = snap ? snapClipStart(track, clipId, startMs) : Math.max(0, Math.round(startMs));
+  clip.startMs = nextStart;
+  track.clips = orderedClips(track);
+  next.timeline.durationMs = timelineDuration(next.timeline.tracks);
+  addProjectVersion(next, `Moved clip ${clip.label || clip.id} to ${nextStart} ms${snap ? ' with snap' : ''}`);
+  return { project: next, movedClipId: clipId, startMs: nextStart };
+}
+
+function trimProjectClip(project, clipId, durationMs, sourceInMs, sourceOutMs) {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) fail('--duration-ms must be a positive number.');
+  const next = cloneJson(project);
+  const found = findClip(next, clipId);
+  if (!found) fail(`Clip not found: ${clipId}`);
+  const { clip } = found;
+  clip.durationMs = Math.max(1, Math.round(durationMs));
+  if (sourceInMs !== undefined) {
+    if (!Number.isFinite(sourceInMs) || sourceInMs < 0) fail('--source-in-ms must be a non-negative number.');
+    clip.sourceInMs = Math.round(sourceInMs);
+  }
+  if (sourceOutMs !== undefined) {
+    if (!Number.isFinite(sourceOutMs) || sourceOutMs < 0) fail('--source-out-ms must be a non-negative number.');
+    clip.sourceOutMs = Math.round(sourceOutMs);
+  }
+  next.timeline.durationMs = timelineDuration(next.timeline.tracks);
+  addProjectVersion(next, `Trimmed clip ${clip.label || clip.id}`);
+  return { project: next, trimmedClipId: clipId, clipDurationMs: clip.durationMs };
+}
+
 function inspectProject(project) {
   const issues = [];
   const warnings = [];
@@ -582,7 +632,7 @@ function runDryRun() {
 
 function runEdit() {
   const projectPath = positional(0);
-  if (!projectPath) fail('Usage: video-studio edit <project-path> --action pack|split|delete|duplicate [--clip-id <id>] [--at-ms <ms>] [--ripple] [--json]');
+  if (!projectPath) fail('Usage: video-studio edit <project-path> --action pack|split|delete|duplicate|move|trim [--clip-id <id>] [--at-ms <ms>] [--start-ms <ms>] [--duration-ms <ms>] [--source-in-ms <ms>] [--source-out-ms <ms>] [--snap] [--ripple] [--json]');
   const action = opt('--action', '');
   const clipId = opt('--clip-id', '');
   const { resolved, project } = readValidProject(projectPath);
@@ -591,7 +641,15 @@ function runEdit() {
   else if (action === 'split') result = splitProjectClip(project, clipId, Number(opt('--at-ms', Number.NaN)));
   else if (action === 'delete') result = deleteProjectClip(project, clipId, hasFlag('--ripple'));
   else if (action === 'duplicate') result = duplicateProjectClip(project, clipId);
-  else fail('Unknown edit action. Use pack, split, delete, or duplicate.');
+  else if (action === 'move') result = moveProjectClip(project, clipId, Number(opt('--start-ms', Number.NaN)), hasFlag('--snap'));
+  else if (action === 'trim') result = trimProjectClip(
+    project,
+    clipId,
+    Number(opt('--duration-ms', Number.NaN)),
+    args.includes('--source-in-ms') ? Number(opt('--source-in-ms', Number.NaN)) : undefined,
+    args.includes('--source-out-ms') ? Number(opt('--source-out-ms', Number.NaN)) : undefined,
+  );
+  else fail('Unknown edit action. Use pack, split, delete, duplicate, move, or trim.');
   const validation = validateProject(result.project);
   if (!validation.ok) fail('Edit produced an invalid project.', { errors: validation.errors });
   writeJsonAtomic(resolved, result.project);
@@ -679,7 +737,7 @@ Usage:
   video-studio probe <media-path> [--json]
   video-studio inspect <project-path> [--json]
   video-studio dry-run <project-path> [--json]
-  video-studio edit <project-path> --action pack|split|delete|duplicate [--clip-id <id>] [--at-ms <ms>] [--ripple] [--json]
+  video-studio edit <project-path> --action pack|split|delete|duplicate|move|trim [--clip-id <id>] [--at-ms <ms>] [--start-ms <ms>] [--duration-ms <ms>] [--snap] [--ripple] [--json]
   video-studio validate <project-path> [--json]
   video-studio export <project-path> --out <output-path> [--preset <name>] [--json]
 `);

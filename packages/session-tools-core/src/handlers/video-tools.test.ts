@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import type { SessionToolContext } from '../context.ts';
 import {
   handleVideoClipAdd,
+  handleVideoClipEdit,
   handleVideoExport,
   handleVideoMediaImport,
   handleVideoProjectCreate,
@@ -238,6 +239,58 @@ describe('video studio session tools', () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0]?.type === 'text' ? result.content[0].text : '').toContain('require a mediaId');
+  });
+
+  test('video_clip_edit moves with snap and trims clips', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Edit Clip' });
+    const first = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'A',
+      startMs: 0,
+      durationMs: 1000,
+      label: 'A',
+    });
+    const second = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'B',
+      startMs: 3000,
+      durationMs: 1000,
+      label: 'B',
+    });
+
+    const firstClipId = (first.structuredContent as { clipId: string }).clipId;
+    const secondClipId = (second.structuredContent as { clipId: string }).clipId;
+    const moved = await handleVideoClipEdit(ctx, {
+      projectPath,
+      clipId: secondClipId,
+      action: 'move',
+      startMs: 1100,
+      snap: true,
+    });
+    expect(moved.isError).toBe(false);
+    expect((moved.structuredContent as { startMs: number }).startMs).toBe(1000);
+
+    const trimmed = await handleVideoClipEdit(ctx, {
+      projectPath,
+      clipId: firstClipId,
+      action: 'trim',
+      durationMs: 750,
+      sourceInMs: 100,
+      sourceOutMs: 850,
+    });
+    expect(trimmed.isError).toBe(false);
+
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      timeline: { tracks: Array<{ clips: Array<{ id: string; startMs: number; durationMs: number; sourceInMs?: number; sourceOutMs?: number }> }> };
+      agentEvents: Array<{ toolName?: string }>;
+    };
+    expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === secondClipId)?.startMs).toBe(1000);
+    expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === firstClipId)).toMatchObject({ durationMs: 750, sourceInMs: 100, sourceOutMs: 850 });
+    expect(project.agentEvents.some((event) => event.toolName === 'video_clip_edit')).toBe(true);
   });
 
   test('renders a playable mp4 when output path uses a video extension', async () => {

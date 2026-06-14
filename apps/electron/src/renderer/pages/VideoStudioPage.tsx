@@ -13,6 +13,13 @@ interface Props {
 
 type VideoProject = RunnerVideoProject
 
+interface TimelineDragState {
+  clipId: string
+  startX: number
+  initialStartMs: number
+  active: boolean
+}
+
 type VideoStudioElectronAPI = typeof window.electronAPI & {
   writeOutputAssetText?: (workspaceId: string, outputId: string, assetId: string, content: string) => Promise<boolean>
   importVideoStudioMedia?: (workspaceId: string, outputId: string, options?: { mode?: 'files' | 'folder' }) => Promise<{ imported: Array<{ label: string }>; skipped?: number }>
@@ -35,6 +42,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [importing, setImporting] = React.useState(false)
   const [checking, setChecking] = React.useState<'inspect' | 'dry-run' | null>(null)
   const [exporting, setExporting] = React.useState(false)
+  const [timelineDrag, setTimelineDrag] = React.useState<TimelineDragState | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
   const load = React.useCallback(async () => {
@@ -114,6 +122,32 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       }
     })
   }, [selectedClipId, updateProject])
+
+  const moveClip = React.useCallback((clipId: string, startMs: number, snap = true) => {
+    updateProject((current) => moveClipInProject(current, clipId, startMs, snap))
+  }, [updateProject])
+
+  React.useEffect(() => {
+    if (!timelineDrag) return
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const deltaX = event.clientX - timelineDrag.startX
+      if (!timelineDrag.active && Math.abs(deltaX) < 4) return
+      if (!timelineDrag.active) setTimelineDrag((current) => current ? { ...current, active: true } : current)
+      const deltaMs = Math.round(deltaX * 12)
+      moveClip(timelineDrag.clipId, timelineDrag.initialStartMs + deltaMs, true)
+    }
+    const handlePointerUp = () => {
+      setTimelineDrag(null)
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp, { once: true })
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [moveClip, timelineDrag])
 
   const nudgeSelectedClip = React.useCallback((deltaMs: number) => {
     if (!selectedClip) return
@@ -359,7 +393,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   return (
     <div className="runneros-glass-route h-full overflow-hidden">
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex shrink-0 items-center justify-between border-b border-white/[0.08] px-5 py-3">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-white/[0.08] px-5 py-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/42">
               <FileVideo className="h-3.5 w-3.5" />
@@ -371,7 +405,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
               className="mt-1 w-full min-w-0 bg-transparent text-2xl font-semibold text-white outline-none"
             />
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2 [&>button]:min-w-0 [&>button]:w-full [&>button]:justify-center">
             {projectAsset && (
               <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => window.electronAPI.showOutputInFolder(workspaceId, outputId, projectAsset.id)}>
                 <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
@@ -409,8 +443,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)_300px] gap-0">
-          <aside className="min-h-0 overflow-auto border-r border-white/[0.08] p-3">
+        <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-1 gap-0 overflow-auto">
+          <aside className="min-h-0 min-w-0 overflow-auto border-r border-white/[0.08] p-3">
             <PanelTitle title="Media" value={`${media.length}`} />
             <div className="mt-2 grid gap-2">
               {media.length === 0 ? <EmptyText>No media yet</EmptyText> : media.map((item) => (
@@ -422,8 +456,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
             </div>
           </aside>
 
-          <main className="flex min-h-0 flex-col">
-            <div className="grid shrink-0 grid-cols-4 gap-2 border-b border-white/[0.08] p-3">
+          <main className="flex min-h-0 min-w-0 flex-col">
+            <div className="grid shrink-0 grid-cols-[repeat(auto-fit,minmax(4.75rem,1fr))] gap-2 border-b border-white/[0.08] p-3">
               <Metric label="Duration" value={formatDuration(duration)} />
               <Metric label="Canvas" value={`${summary?.width ?? '-'} x ${summary?.height ?? '-'}`} />
               <Metric label="FPS" value={String(summary?.fps ?? '-')} />
@@ -458,7 +492,13 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                       <span>{track.type ?? 'track'}</span>
                     </div>
                     <div className="flex min-h-[58px] items-center gap-2 overflow-x-auto p-2">
-                      {(track.clips ?? []).length === 0 ? <span className="text-xs text-white/35">No clips</span> : renderTimelineClips(track.clips ?? [], selectedClipId, setSelectedClipId)}
+                      {(track.clips ?? []).length === 0 ? <span className="text-xs text-white/35">No clips</span> : renderTimelineClips(track.clips ?? [], selectedClipId, (clip) => {
+                        setSelectedClipId(clip.id)
+                      }, (event, clip) => {
+                        event.preventDefault()
+                        setSelectedClipId(clip.id)
+                        setTimelineDrag({ clipId: clip.id, startX: event.clientX, initialStartMs: clip.startMs ?? 0, active: false })
+                      })}
                     </div>
                   </div>
                 ))}
@@ -466,7 +506,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
             </div>
           </main>
 
-          <aside className="min-h-0 overflow-auto border-l border-white/[0.08] p-3">
+          <aside className="min-h-0 min-w-0 overflow-auto border-l border-white/[0.08] p-3">
             <PanelTitle title="Inspector" value={selectedClip ? 'Clip' : 'Project'} />
             {selectedClip ? (
               <div className="mt-3 grid gap-3">
@@ -544,6 +584,42 @@ function sortClipsByStart(clips: VideoClip[]): VideoClip[] {
   return [...clips].sort((a, b) => (a.startMs ?? 0) - (b.startMs ?? 0))
 }
 
+function snapClipStart(clips: VideoClip[], clipId: string, proposedStartMs: number, thresholdMs = 250): number {
+  const snapPoints = clips
+    .filter((clip) => clip.id !== clipId)
+    .map((clip) => (clip.startMs ?? 0) + Math.max(1, clip.durationMs ?? 1))
+  let best = Math.max(0, Math.round(proposedStartMs))
+  let bestDistance = thresholdMs + 1
+  for (const point of snapPoints) {
+    const distance = Math.abs(point - proposedStartMs)
+    if (distance < bestDistance) {
+      best = point
+      bestDistance = distance
+    }
+  }
+  return Math.max(0, best)
+}
+
+function moveClipInProject(project: VideoProject, clipId: string, startMs: number, snap: boolean): VideoProject {
+  const tracks = (project.timeline?.tracks ?? []).map((track) => {
+    const hasClip = (track.clips ?? []).some((clip) => clip.id === clipId)
+    if (!hasClip) return track
+    const nextStartMs = snap ? snapClipStart(track.clips ?? [], clipId, startMs) : Math.max(0, Math.round(startMs))
+    return {
+      ...track,
+      clips: sortClipsByStart((track.clips ?? []).map((clip) => clip.id === clipId ? { ...clip, startMs: nextStartMs } : clip)),
+    }
+  })
+  return {
+    ...project,
+    timeline: {
+      ...project.timeline,
+      durationMs: computeTimelineDuration(tracks),
+      tracks,
+    },
+  }
+}
+
 function timelinePixels(ms: number): number {
   return Math.max(12, Math.min(320, ms / 12))
 }
@@ -551,7 +627,8 @@ function timelinePixels(ms: number): number {
 function renderTimelineClips(
   clips: VideoClip[],
   selectedClipId: string | null,
-  setSelectedClipId: (clipId: string) => void,
+  onSelectClip: (clip: VideoClip) => void,
+  onStartDrag: (event: React.PointerEvent<HTMLButtonElement>, clip: VideoClip) => void,
 ): React.ReactNode[] {
   const nodes: React.ReactNode[] = []
   let cursor = 0
@@ -574,8 +651,9 @@ function renderTimelineClips(
       <button
         key={clip.id}
         type="button"
-        onClick={() => setSelectedClipId(clip.id)}
-        className={`h-10 min-w-[112px] rounded-md border px-2 text-left text-xs ${selectedClipId === clip.id ? 'border-[#f97316]/70 bg-[#f97316]/18 text-white' : 'border-white/[0.08] bg-white/[0.045] text-white/68'}`}
+        onClick={() => onSelectClip(clip)}
+        onPointerDown={(event) => onStartDrag(event, clip)}
+        className={`h-10 min-w-[112px] cursor-grab rounded-md border px-2 text-left text-xs active:cursor-grabbing ${selectedClipId === clip.id ? 'border-[#f97316]/70 bg-[#f97316]/18 text-white' : 'border-white/[0.08] bg-white/[0.045] text-white/68'}`}
         style={{ width: `${Math.max(112, timelinePixels(durationMs))}px` }}
       >
         <span className="block truncate font-medium">{clip.label ?? clip.type ?? 'clip'}</span>
