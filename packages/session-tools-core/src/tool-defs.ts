@@ -491,7 +491,7 @@ export const VideoProjectCreateSchema = z.object({
   projectPath: z.string().optional().describe('Project JSON path. Relative paths resolve from the session working directory. Defaults to .runneros/video-projects/<title>/video.runner-video.json.'),
   projectDir: z.string().optional().describe('Project folder. Ignored when projectPath is set.'),
   title: z.string().min(1).describe('Human-readable video project title.'),
-  aspectRatio: z.enum(['9:16', '1:1', '16:9', '4:5']).optional().describe('Default 9:16.'),
+  aspectRatio: z.enum(['9:16', '1:1', '16:9', '4:5', 'custom']).optional().describe('Default 9:16. Use custom when width/height do not match a preset.'),
   width: z.number().positive().optional().describe('Custom output width.'),
   height: z.number().positive().optional().describe('Custom output height.'),
   fps: z.number().positive().optional().describe('Frames per second. Defaults to 30.'),
@@ -501,7 +501,7 @@ export const VideoProjectCreateSchema = z.object({
 export const VideoProjectUpdateSchema = z.object({
   projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
   title: z.string().min(1).optional().describe('Optional new project title.'),
-  aspectRatio: z.enum(['9:16', '1:1', '16:9', '4:5']).optional().describe('Preset canvas shape. Updates width and height unless custom width/height are also provided.'),
+  aspectRatio: z.enum(['9:16', '1:1', '16:9', '4:5', 'custom']).optional().describe('Preset canvas shape. Use custom when width/height do not match a preset.'),
   width: z.number().positive().optional().describe('Custom output width.'),
   height: z.number().positive().optional().describe('Custom output height.'),
   fps: z.number().positive().optional().describe('Frames per second.'),

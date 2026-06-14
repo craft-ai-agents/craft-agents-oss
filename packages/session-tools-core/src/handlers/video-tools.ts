@@ -9,12 +9,13 @@ import { errorResponse } from '../response.ts';
 type MediaType = 'video' | 'audio' | 'image' | 'caption' | 'svg' | 'lottie' | 'html' | 'unknown';
 type TrackType = 'video' | 'audio' | 'image' | 'text' | 'caption' | 'effect' | 'adjustment';
 type ClipType = 'video' | 'audio' | 'image' | 'text' | 'caption' | 'shape' | 'lottie' | 'html';
+type AspectRatio = '9:16' | '1:1' | '16:9' | '4:5' | 'custom';
 
 interface VideoProjectCreateInput {
   projectPath?: string;
   projectDir?: string;
   title: string;
-  aspectRatio?: '9:16' | '1:1' | '16:9' | '4:5';
+  aspectRatio?: AspectRatio;
   width?: number;
   height?: number;
   fps?: number;
@@ -24,7 +25,7 @@ interface VideoProjectCreateInput {
 interface VideoProjectUpdateInput {
   projectPath: string;
   title?: string;
-  aspectRatio?: '9:16' | '1:1' | '16:9' | '4:5';
+  aspectRatio?: AspectRatio;
   width?: number;
   height?: number;
   fps?: number;
@@ -121,20 +122,36 @@ function slugify(value: string): string {
   return slug || 'video-project';
 }
 
-function aspectSettings(aspectRatio: string | undefined): { aspectRatio: string; width: number; height: number; fps: number } {
+function aspectSettings(aspectRatio: string | undefined): { aspectRatio: AspectRatio; width: number; height: number; fps: number } {
   if (aspectRatio === '16:9') return { aspectRatio, width: 1920, height: 1080, fps: 30 };
   if (aspectRatio === '1:1') return { aspectRatio, width: 1080, height: 1080, fps: 30 };
   if (aspectRatio === '4:5') return { aspectRatio, width: 1080, height: 1350, fps: 30 };
   return { aspectRatio: '9:16', width: 1080, height: 1920, fps: 30 };
 }
 
-function compactSettings(settings: Partial<{ aspectRatio: string; width: number; height: number; fps: number }>): Partial<{ aspectRatio: string; width: number; height: number; fps: number }> {
-  return Object.fromEntries(Object.entries(settings).filter(([, value]) => value !== undefined)) as Partial<{ aspectRatio: string; width: number; height: number; fps: number }>;
+function aspectMatchesDimensions(aspectRatio: string | undefined, width: number | undefined, height: number | undefined): boolean {
+  if (!aspectRatio || aspectRatio === 'custom' || width === undefined || height === undefined) return true;
+  const preset = aspectSettings(aspectRatio);
+  return preset.width === width && preset.height === height;
 }
 
-function createProject(title: string, workspaceId: string, settings: Partial<{ aspectRatio: string; width: number; height: number; fps: number }>): VideoProject {
+function normalizeAspectRatio(aspectRatio: string | undefined, width: number | undefined, height: number | undefined): AspectRatio {
+  if (aspectRatio === '16:9' || aspectRatio === '1:1' || aspectRatio === '4:5' || aspectRatio === '9:16') {
+    return aspectMatchesDimensions(aspectRatio, width, height) ? aspectRatio : 'custom';
+  }
+  return 'custom';
+}
+
+function compactSettings(settings: Partial<{ aspectRatio: AspectRatio; width: number; height: number; fps: number }>): Partial<{ aspectRatio: AspectRatio; width: number; height: number; fps: number }> {
+  return Object.fromEntries(Object.entries(settings).filter(([, value]) => value !== undefined)) as Partial<{ aspectRatio: AspectRatio; width: number; height: number; fps: number }>;
+}
+
+function createProject(title: string, workspaceId: string, settings: Partial<{ aspectRatio: AspectRatio; width: number; height: number; fps: number }>): VideoProject {
   const now = new Date().toISOString();
   const defaults = aspectSettings(settings.aspectRatio);
+  const compacted = compactSettings(settings);
+  const mergedSettings = { ...defaults, ...compacted };
+  mergedSettings.aspectRatio = normalizeAspectRatio(mergedSettings.aspectRatio, mergedSettings.width, mergedSettings.height);
   return {
     version: 1,
     id: randomUUID(),
@@ -142,7 +159,7 @@ function createProject(title: string, workspaceId: string, settings: Partial<{ a
     createdAt: now,
     updatedAt: now,
     workspaceId,
-    settings: { ...defaults, ...compactSettings(settings) },
+    settings: mergedSettings,
     media: [],
     timeline: {
       durationMs: 0,
@@ -193,6 +210,8 @@ function validateProject(project: VideoProject): string[] {
   const mediaIds = new Set((project.media || []).map((asset) => asset.id));
   for (const [trackIndex, track] of (project.timeline?.tracks || []).entries()) {
     if (!Array.isArray(track.clips)) errors.push(`timeline.tracks[${trackIndex}].clips must be an array.`);
+    const ordered = [...(track.clips || [])].sort((a, b) => a.startMs - b.startMs);
+    let cursor = 0;
     for (const [clipIndex, clip] of (track.clips || []).entries()) {
       const path = `timeline.tracks[${trackIndex}].clips[${clipIndex}]`;
       if (!clip.id) errors.push(`${path}.id is required.`);
@@ -204,6 +223,12 @@ function validateProject(project: VideoProject): string[] {
       if (sourceInMs !== undefined && (typeof sourceInMs !== 'number' || !Number.isFinite(sourceInMs) || sourceInMs < 0)) errors.push(`${path}.sourceInMs must be non-negative.`);
       if (sourceOutMs !== undefined && (typeof sourceOutMs !== 'number' || !Number.isFinite(sourceOutMs) || sourceOutMs < 0)) errors.push(`${path}.sourceOutMs must be non-negative.`);
       if (typeof sourceInMs === 'number' && typeof sourceOutMs === 'number' && sourceOutMs <= sourceInMs) errors.push(`${path}.sourceOutMs must be greater than sourceInMs.`);
+    }
+    for (const clip of ordered) {
+      if (Number.isFinite(clip.startMs) && Number.isFinite(clip.durationMs) && clip.startMs < cursor) {
+        errors.push(`timeline.tracks[${trackIndex}].clips.${clip.id}.startMs overlaps the previous clip.`);
+      }
+      cursor = Math.max(cursor, (clip.startMs || 0) + (clip.durationMs || 0));
     }
   }
   return errors;
@@ -487,7 +512,12 @@ export async function handleVideoProjectUpdate(ctx: SessionToolContext, args: Vi
     if (!title) return errorResponse('title must not be empty.');
     project.title = title;
   }
-  const nextSettings: Partial<{ aspectRatio: string; width: number; height: number; fps: number }> = args.aspectRatio ? aspectSettings(args.aspectRatio) : {};
+  const preset = args.aspectRatio && args.aspectRatio !== 'custom' ? aspectSettings(args.aspectRatio) : undefined;
+  const nextSettings: Partial<{ aspectRatio: AspectRatio; width: number; height: number; fps: number }> = preset
+    ? { aspectRatio: preset.aspectRatio, width: preset.width, height: preset.height }
+    : args.aspectRatio === 'custom'
+      ? { aspectRatio: 'custom' }
+      : {};
   if (args.width !== undefined) {
     if (!Number.isFinite(args.width) || args.width <= 0) return errorResponse('width must be a positive number.');
     nextSettings.width = Math.round(args.width);
@@ -501,6 +531,9 @@ export async function handleVideoProjectUpdate(ctx: SessionToolContext, args: Vi
     nextSettings.fps = Math.round(args.fps);
   }
   project.settings = { ...project.settings, ...nextSettings };
+  const width = typeof project.settings.width === 'number' ? project.settings.width : undefined;
+  const height = typeof project.settings.height === 'number' ? project.settings.height : undefined;
+  project.settings.aspectRatio = normalizeAspectRatio(typeof project.settings.aspectRatio === 'string' ? project.settings.aspectRatio : undefined, width, height);
 
   const errors = validateProject(project);
   if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');

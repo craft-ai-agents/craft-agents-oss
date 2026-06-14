@@ -161,6 +161,25 @@ describe('video studio session tools', () => {
     expect(project.agentEvents.some((event) => event.toolName === 'video_project_update')).toBe(true);
   });
 
+  test('video_project_update marks inconsistent preset dimensions as custom', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Custom Cut' });
+
+    const updated = await handleVideoProjectUpdate(ctx, {
+      projectPath,
+      aspectRatio: '16:9',
+      width: 1000,
+      height: 1000,
+    });
+
+    expect(updated.isError).toBe(false);
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      settings: { aspectRatio: string; width: number; height: number };
+    };
+    expect(project.settings).toMatchObject({ aspectRatio: 'custom', width: 1000, height: 1000 });
+  });
+
   test('video_export preserves audio from video clips', async () => {
     if (!hasFfmpeg()) return;
     const ctx = makeCtx();
@@ -322,6 +341,49 @@ describe('video studio session tools', () => {
     expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === secondClipId)?.startMs).toBe(1000);
     expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === firstClipId)).toMatchObject({ durationMs: 750, sourceInMs: 100, sourceOutMs: 850 });
     expect(project.agentEvents.some((event) => event.toolName === 'video_clip_edit')).toBe(true);
+  });
+
+  test('video_clip_edit rejects moves and trims that create overlaps', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Overlap Guard' });
+    const first = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'A',
+      startMs: 0,
+      durationMs: 1000,
+      label: 'A',
+    });
+    const second = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'B',
+      startMs: 1500,
+      durationMs: 500,
+      label: 'B',
+    });
+    const firstClipId = (first.structuredContent as { clipId: string }).clipId;
+    const secondClipId = (second.structuredContent as { clipId: string }).clipId;
+
+    const moved = await handleVideoClipEdit(ctx, {
+      projectPath,
+      clipId: secondClipId,
+      action: 'move',
+      startMs: 500,
+      snap: false,
+    });
+    const trimmed = await handleVideoClipEdit(ctx, {
+      projectPath,
+      clipId: firstClipId,
+      action: 'trim',
+      durationMs: 1600,
+    });
+
+    expect(moved.isError).toBe(true);
+    expect(trimmed.isError).toBe(true);
+    expect(moved.content[0]?.type === 'text' ? moved.content[0].text : '').toContain('overlaps');
+    expect(trimmed.content[0]?.type === 'text' ? trimmed.content[0].text : '').toContain('overlaps');
   });
 
   test('video_clip_edit packs, splits, duplicates, and deletes clips', async () => {

@@ -20,6 +20,8 @@ const ASPECT_PRESETS: Array<{ value: Exclude<VideoAspectRatio, 'custom'>; label:
   { value: '4:5', label: 'Portrait 4:5', width: 1080, height: 1350 },
 ]
 
+type AspectSelectValue = VideoAspectRatio
+
 interface TimelineDragState {
   clipId: string
   startX: number
@@ -212,7 +214,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     updateSelectedClip({ durationMs: Math.max(100, (selectedClip.durationMs ?? 1000) + deltaMs) })
   }, [selectedClip, updateSelectedClip])
 
-  const changeAspectRatio = React.useCallback((aspectRatio: Exclude<VideoAspectRatio, 'custom'>) => {
+  const changeAspectRatio = React.useCallback((aspectRatio: AspectSelectValue) => {
+    if (aspectRatio === 'custom') return
     const preset = ASPECT_PRESETS.find((item) => item.value === aspectRatio)
     if (!preset) return
     updateProject((current) => ({
@@ -455,9 +458,13 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const tracks = project.timeline?.tracks ?? []
   const media = project.media ?? []
   const duration = project.timeline?.durationMs ?? 0
-  const currentAspectRatio = ASPECT_PRESETS.some((preset) => preset.value === project.settings.aspectRatio)
-    ? project.settings.aspectRatio as Exclude<VideoAspectRatio, 'custom'>
-    : '9:16'
+  const matchedAspectPreset = ASPECT_PRESETS.find((preset) =>
+    preset.value === project.settings.aspectRatio
+    && preset.width === project.settings.width
+    && preset.height === project.settings.height
+  )
+  const currentAspectRatio: AspectSelectValue = matchedAspectPreset?.value ?? 'custom'
+  const customAspectLabel = `Custom ${project.settings.width}x${project.settings.height}`
   const isBusy = saving || importing || checking !== null || exporting
 
   return (
@@ -480,10 +487,11 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
               <span className="shrink-0">Canvas</span>
               <select
                 value={currentAspectRatio}
-                onChange={(event) => changeAspectRatio(event.target.value as Exclude<VideoAspectRatio, 'custom'>)}
+                onChange={(event) => changeAspectRatio(event.target.value as AspectSelectValue)}
                 disabled={isBusy}
                 className="min-w-0 flex-1 bg-transparent text-sm text-white/78 outline-none"
               >
+                {currentAspectRatio === 'custom' && <option value="custom">{customAspectLabel}</option>}
                 {ASPECT_PRESETS.map((preset) => (
                   <option key={preset.value} value={preset.value}>{preset.label}</option>
                 ))}
