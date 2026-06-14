@@ -64,6 +64,7 @@ import {
 } from './handlers/workflows.ts';
 import {
   handleVideoProjectCreate,
+  handleVideoProjectUpdate,
   handleVideoMediaImport,
   handleVideoClipAdd,
   handleVideoClipEdit,
@@ -495,6 +496,15 @@ export const VideoProjectCreateSchema = z.object({
   height: z.number().positive().optional().describe('Custom output height.'),
   fps: z.number().positive().optional().describe('Frames per second. Defaults to 30.'),
   overwrite: z.boolean().optional().describe('Replace an existing project file. Defaults to false.'),
+});
+
+export const VideoProjectUpdateSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  title: z.string().min(1).optional().describe('Optional new project title.'),
+  aspectRatio: z.enum(['9:16', '1:1', '16:9', '4:5']).optional().describe('Preset canvas shape. Updates width and height unless custom width/height are also provided.'),
+  width: z.number().positive().optional().describe('Custom output width.'),
+  height: z.number().positive().optional().describe('Custom output height.'),
+  fps: z.number().positive().optional().describe('Frames per second.'),
 });
 
 export const VideoMediaImportSchema = z.object({
@@ -1016,6 +1026,10 @@ Use this before timeline edits. The project file is the source of truth for both
 
 This tool writes \`video.runner-video.json\`, initializes default video/audio/caption tracks, and records an initial version.`,
 
+  video_project_update: `Update RunnerOS Video Studio project-level settings.
+
+Use this to change title, aspect ratio, output width/height, or FPS on an existing project without touching timeline clips. Aspect presets are 9:16 vertical, 16:9 landscape, 1:1 square, and 4:5 portrait. This records a version/event for the agent change log.`,
+
   video_media_import: `Register a local media file in a RunnerOS Video Studio project.
 
 Use this after video_project_create and before adding media-backed clips to the timeline. The tool probes basic file metadata, adds the asset to the project media bin, and records a version/event.`,
@@ -1147,6 +1161,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'recall_memory', description: TOOL_DESCRIPTIONS.recall_memory, inputSchema: RecallMemorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleRecallMemory },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
   { name: 'video_project_create', description: TOOL_DESCRIPTIONS.video_project_create, inputSchema: VideoProjectCreateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectCreate },
+  { name: 'video_project_update', description: TOOL_DESCRIPTIONS.video_project_update, inputSchema: VideoProjectUpdateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectUpdate },
   { name: 'video_media_import', description: TOOL_DESCRIPTIONS.video_media_import, inputSchema: VideoMediaImportSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoMediaImport },
   { name: 'video_clip_add', description: TOOL_DESCRIPTIONS.video_clip_add, inputSchema: VideoClipAddSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipAdd },
   { name: 'video_clip_edit', description: TOOL_DESCRIPTIONS.video_clip_edit, inputSchema: VideoClipEditSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipEdit },

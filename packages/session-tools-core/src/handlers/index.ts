@@ -156,6 +156,7 @@ export type {
 // Video Studio
 export {
   handleVideoProjectCreate,
+  handleVideoProjectUpdate,
   handleVideoMediaImport,
   handleVideoClipAdd,
   handleVideoClipEdit,

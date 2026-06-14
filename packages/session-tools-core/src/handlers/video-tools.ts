@@ -21,6 +21,15 @@ interface VideoProjectCreateInput {
   overwrite?: boolean;
 }
 
+interface VideoProjectUpdateInput {
+  projectPath: string;
+  title?: string;
+  aspectRatio?: '9:16' | '1:1' | '16:9' | '4:5';
+  width?: number;
+  height?: number;
+  fps?: number;
+}
+
 interface VideoMediaImportInput {
   projectPath: string;
   mediaPath: string;
@@ -462,6 +471,47 @@ export async function handleVideoProjectCreate(ctx: SessionToolContext, args: Vi
     projectPath,
     projectId: project.id,
     versionId: project.versions[0]?.id,
+  });
+}
+
+export async function handleVideoProjectUpdate(ctx: SessionToolContext, args: VideoProjectUpdateInput): Promise<ToolResult> {
+  if (!args.projectPath) return errorResponse('projectPath is required.');
+  const projectPathResult = resolveWorkspacePath(ctx, args.projectPath, 'projectPath');
+  if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
+  const projectPath = projectPathResult.path;
+  if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
+  const project = readProject(projectPath);
+
+  if (args.title !== undefined) {
+    const title = args.title.trim();
+    if (!title) return errorResponse('title must not be empty.');
+    project.title = title;
+  }
+  const nextSettings: Partial<{ aspectRatio: string; width: number; height: number; fps: number }> = args.aspectRatio ? aspectSettings(args.aspectRatio) : {};
+  if (args.width !== undefined) {
+    if (!Number.isFinite(args.width) || args.width <= 0) return errorResponse('width must be a positive number.');
+    nextSettings.width = Math.round(args.width);
+  }
+  if (args.height !== undefined) {
+    if (!Number.isFinite(args.height) || args.height <= 0) return errorResponse('height must be a positive number.');
+    nextSettings.height = Math.round(args.height);
+  }
+  if (args.fps !== undefined) {
+    if (!Number.isFinite(args.fps) || args.fps <= 0) return errorResponse('fps must be a positive number.');
+    nextSettings.fps = Math.round(args.fps);
+  }
+  project.settings = { ...project.settings, ...nextSettings };
+
+  const errors = validateProject(project);
+  if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
+  const versionId = addVersion(project, 'Updated project settings', ctx, 'video_project_update');
+  writeJsonAtomic(projectPath, project);
+  return ok(`Updated video project "${project.title}".`, {
+    ok: true,
+    projectPath,
+    projectId: project.id,
+    settings: project.settings,
+    versionId,
   });
 }
 

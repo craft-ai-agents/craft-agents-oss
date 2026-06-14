@@ -10,6 +10,7 @@ import {
   handleVideoExport,
   handleVideoMediaImport,
   handleVideoProjectCreate,
+  handleVideoProjectUpdate,
 } from './video-tools.ts';
 
 let root: string;
@@ -128,6 +129,36 @@ describe('video studio session tools', () => {
     expect(result.isError).toBe(false);
     expect(publishedTitle).toContain('Publish Cut');
     expect((result.structuredContent as { outputId?: string }).outputId).toBe('output-1');
+  });
+
+  test('video_project_update changes aspect ratio and output settings', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Aspect Cut' });
+    const clip = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'Title',
+      startMs: 0,
+      durationMs: 1000,
+    });
+    const clipId = (clip.structuredContent as { clipId: string }).clipId;
+
+    const updated = await handleVideoProjectUpdate(ctx, {
+      projectPath,
+      aspectRatio: '16:9',
+      fps: 60,
+    });
+
+    expect(updated.isError).toBe(false);
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      settings: { aspectRatio: string; width: number; height: number; fps: number };
+      timeline: { tracks: Array<{ clips: Array<{ id: string; startMs: number; durationMs: number }> }> };
+      agentEvents: Array<{ toolName?: string }>;
+    };
+    expect(project.settings).toMatchObject({ aspectRatio: '16:9', width: 1920, height: 1080, fps: 60 });
+    expect(project.timeline.tracks[0]!.clips).toContainEqual(expect.objectContaining({ id: clipId, startMs: 0, durationMs: 1000 }));
+    expect(project.agentEvents.some((event) => event.toolName === 'video_project_update')).toBe(true);
   });
 
   test('video_export preserves audio from video clips', async () => {

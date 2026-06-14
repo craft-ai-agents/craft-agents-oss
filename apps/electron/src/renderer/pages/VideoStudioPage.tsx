@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
 import { findVideoProjectAsset, formatDuration, summarizeVideoProject } from '@/components/outputs/video-project-output'
-import type { RunnerVideoProject, VideoClip } from '@craft-agent/shared/video'
+import type { RunnerVideoProject, VideoAspectRatio, VideoClip } from '@craft-agent/shared/video'
 
 interface Props {
   workspaceId: string
@@ -12,6 +12,13 @@ interface Props {
 }
 
 type VideoProject = RunnerVideoProject
+
+const ASPECT_PRESETS: Array<{ value: Exclude<VideoAspectRatio, 'custom'>; label: string; width: number; height: number }> = [
+  { value: '9:16', label: 'Vertical 9:16', width: 1080, height: 1920 },
+  { value: '16:9', label: 'Landscape 16:9', width: 1920, height: 1080 },
+  { value: '1:1', label: 'Square 1:1', width: 1080, height: 1080 },
+  { value: '4:5', label: 'Portrait 4:5', width: 1080, height: 1350 },
+]
 
 interface TimelineDragState {
   clipId: string
@@ -204,6 +211,20 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     if (!selectedClip) return
     updateSelectedClip({ durationMs: Math.max(100, (selectedClip.durationMs ?? 1000) + deltaMs) })
   }, [selectedClip, updateSelectedClip])
+
+  const changeAspectRatio = React.useCallback((aspectRatio: Exclude<VideoAspectRatio, 'custom'>) => {
+    const preset = ASPECT_PRESETS.find((item) => item.value === aspectRatio)
+    if (!preset) return
+    updateProject((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        aspectRatio: preset.value,
+        width: preset.width,
+        height: preset.height,
+      },
+    }))
+  }, [updateProject])
 
   const packTimeline = React.useCallback(() => {
     updateProject((current) => {
@@ -434,6 +455,9 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const tracks = project.timeline?.tracks ?? []
   const media = project.media ?? []
   const duration = project.timeline?.durationMs ?? 0
+  const currentAspectRatio = ASPECT_PRESETS.some((preset) => preset.value === project.settings.aspectRatio)
+    ? project.settings.aspectRatio as Exclude<VideoAspectRatio, 'custom'>
+    : '9:16'
   const isBusy = saving || importing || checking !== null || exporting
 
   return (
@@ -452,6 +476,19 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
             />
           </div>
           <div className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2 [&>button]:min-w-0 [&>button]:w-full [&>button]:justify-center">
+            <label className="flex h-9 min-w-0 items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.045] px-2 text-xs text-white/55">
+              <span className="shrink-0">Canvas</span>
+              <select
+                value={currentAspectRatio}
+                onChange={(event) => changeAspectRatio(event.target.value as Exclude<VideoAspectRatio, 'custom'>)}
+                disabled={isBusy}
+                className="min-w-0 flex-1 bg-transparent text-sm text-white/78 outline-none"
+              >
+                {ASPECT_PRESETS.map((preset) => (
+                  <option key={preset.value} value={preset.value}>{preset.label}</option>
+                ))}
+              </select>
+            </label>
             {projectAsset && (
               <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => window.electronAPI.showOutputInFolder(workspaceId, outputId, projectAsset.id)}>
                 <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
