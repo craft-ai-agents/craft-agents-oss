@@ -42,6 +42,24 @@ function readProject(projectPath) {
   return JSON.parse(readFileSync(projectPath, 'utf-8'));
 }
 
+function averageFrameLuma(videoPath) {
+  const frame = spawnSync('ffmpeg', [
+    '-v', 'error',
+    '-i', videoPath,
+    '-frames:v', '1',
+    '-f', 'rawvideo',
+    '-pix_fmt', 'rgb24',
+    '-',
+  ]);
+  expect(frame.status, frame.stderr?.toString() || frame.stdout?.toString()).toBe(0);
+  const bytes = frame.stdout;
+  let total = 0;
+  for (let index = 0; index < bytes.length; index += 3) {
+    total += (bytes[index] + bytes[index + 1] + bytes[index + 2]) / 3;
+  }
+  return total / (bytes.length / 3);
+}
+
 describe('video-studio edit commands', () => {
   test('packs timeline clips end-to-start', () => {
     const projectPath = tempProject();
@@ -141,5 +159,36 @@ describe('video-studio edit commands', () => {
     const audioProbe = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', outputPath], { encoding: 'utf-8' });
     expect(audioProbe.status).toBe(0);
     expect(audioProbe.stdout.trim()).not.toBe('');
+  });
+
+  test('simple MP4 export applies clip look adjustments', () => {
+    if (!hasFfmpeg()) return;
+    const projectPath = tempProject();
+    const projectDir = projectPath.replace('/video.runner-video.json', '');
+    const sourcePath = `${projectDir}/gray.mp4`;
+    const baselinePath = `${projectDir}/baseline.mp4`;
+    const adjustedPath = `${projectDir}/adjusted.mp4`;
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'color=c=gray:s=64x64:r=10:d=1',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      sourcePath,
+    ], { encoding: 'utf-8' });
+    expect(fixture.status, fixture.stderr || fixture.stdout).toBe(0);
+    const project = readProject(projectPath);
+    project.settings = { ...project.settings, aspectRatio: 'custom', width: 64, height: 64, fps: 10 };
+    project.media.push({ id: 'media-gray', type: 'video', label: 'Gray', path: sourcePath, source: { kind: 'user-import' } });
+    project.timeline.tracks[0].clips = [{ id: 'clip-gray', mediaId: 'media-gray', type: 'video', startMs: 0, durationMs: 1000, label: 'Gray' }];
+    project.timeline.durationMs = 1000;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    run(['export', projectPath, '--out', baselinePath, '--json']);
+    project.timeline.tracks[0].clips[0].adjustments = { exposure: 0.6, contrast: 1.2, saturation: 1, preset: 'manual' };
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+    run(['export', projectPath, '--out', adjustedPath, '--json']);
+
+    expect(averageFrameLuma(adjustedPath)).toBeGreaterThan(averageFrameLuma(baselinePath) + 25);
   });
 });

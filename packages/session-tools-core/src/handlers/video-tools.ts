@@ -352,6 +352,21 @@ function sanitizedAdjustments(input: Partial<VideoClipAdjustments>): VideoClipAd
   return Object.fromEntries(Object.entries(next).filter(([, value]) => Number.isFinite(value as number) || typeof value === 'string')) as VideoClipAdjustments;
 }
 
+function hasExplicitAdjustmentInput(args: VideoClipAdjustInput): boolean {
+  return [
+    args.exposure,
+    args.contrast,
+    args.saturation,
+    args.highlights,
+    args.shadows,
+    args.temperature,
+    args.tint,
+    args.sharpen,
+    args.vignette,
+    args.grain,
+  ].some((value) => value !== undefined);
+}
+
 function hasAdjustments(adjustments: VideoClipAdjustments | undefined): boolean {
   return Boolean(adjustments && Object.keys(adjustments).some((key) => key !== 'preset'));
 }
@@ -861,22 +876,27 @@ export async function handleVideoClipAdjust(ctx: SessionToolContext, args: Video
   if (args.reset) {
     delete clip.adjustments;
   } else {
+    const media = clip.mediaId ? project.media.find((asset) => asset.id === clip.mediaId) : undefined;
+    if (!media || !['video', 'image'].includes(media.type)) {
+      return errorResponse(`Clip "${clip.label ?? clip.id}" is not a video or image clip that can render look adjustments.`);
+    }
     const preset = args.preset ? ADJUSTMENT_PRESETS[args.preset] : undefined;
     if (args.preset && !preset) return errorResponse(`Unknown adjustment preset: ${args.preset}`);
+    const hasExplicit = hasExplicitAdjustmentInput(args);
+    const base = args.preset ? { ...(preset ?? {}) } : { ...(clip.adjustments ?? {}) };
     clip.adjustments = sanitizedAdjustments({
-      ...(clip.adjustments ?? {}),
-      ...(preset ?? {}),
-      exposure: args.exposure ?? preset?.exposure ?? clip.adjustments?.exposure,
-      contrast: args.contrast ?? preset?.contrast ?? clip.adjustments?.contrast,
-      saturation: args.saturation ?? preset?.saturation ?? clip.adjustments?.saturation,
-      highlights: args.highlights ?? preset?.highlights ?? clip.adjustments?.highlights,
-      shadows: args.shadows ?? preset?.shadows ?? clip.adjustments?.shadows,
-      temperature: args.temperature ?? preset?.temperature ?? clip.adjustments?.temperature,
-      tint: args.tint ?? preset?.tint ?? clip.adjustments?.tint,
-      sharpen: args.sharpen ?? preset?.sharpen ?? clip.adjustments?.sharpen,
-      vignette: args.vignette ?? preset?.vignette ?? clip.adjustments?.vignette,
-      grain: args.grain ?? preset?.grain ?? clip.adjustments?.grain,
-      preset: args.preset ?? preset?.preset ?? clip.adjustments?.preset,
+      ...base,
+      exposure: args.exposure ?? base.exposure,
+      contrast: args.contrast ?? base.contrast,
+      saturation: args.saturation ?? base.saturation,
+      highlights: args.highlights ?? base.highlights,
+      shadows: args.shadows ?? base.shadows,
+      temperature: args.temperature ?? base.temperature,
+      tint: args.tint ?? base.tint,
+      sharpen: args.sharpen ?? base.sharpen,
+      vignette: args.vignette ?? base.vignette,
+      grain: args.grain ?? base.grain,
+      preset: hasExplicit ? 'manual' : args.preset ?? clip.adjustments?.preset,
     });
   }
 

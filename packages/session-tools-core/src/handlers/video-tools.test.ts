@@ -391,32 +391,83 @@ describe('video studio session tools', () => {
     const ctx = makeCtx();
     const projectPath = join(root, 'project', 'video.runner-video.json');
     await handleVideoProjectCreate(ctx, { projectPath, title: 'Look Test' });
+    const mediaPath = join(root, 'still.png');
+    writeFileSync(mediaPath, 'fake image media', 'utf-8');
+    const imported = await handleVideoMediaImport(ctx, { projectPath, mediaPath });
+    const mediaId = (imported.structuredContent as { mediaId: string }).mediaId;
+    const clip = await handleVideoClipAdd(ctx, {
+      projectPath,
+      mediaId,
+      startMs: 0,
+      durationMs: 1000,
+    });
+    const clipId = (clip.structuredContent as { clipId: string }).clipId;
+
+    const cinematic = await handleVideoClipAdjust(ctx, {
+      projectPath,
+      clipId,
+      preset: 'cinematic',
+    });
+    const clean = await handleVideoClipAdjust(ctx, {
+      projectPath,
+      clipId,
+      preset: 'clean',
+    });
+    const cleanProject = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      timeline: { tracks: Array<{ clips: Array<{ id: string; adjustments?: { preset?: string; exposure?: number; contrast?: number; saturation?: number; highlights?: number; shadows?: number; grain?: number } }> }> };
+    };
+    const cleanStored = cleanProject.timeline.tracks[0]!.clips.find((item) => item.id === clipId)?.adjustments;
+    const neutral = await handleVideoClipAdjust(ctx, {
+      projectPath,
+      clipId,
+      preset: 'neutral',
+    });
+    const neutralProject = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      timeline: { tracks: Array<{ clips: Array<{ id: string; adjustments?: { preset?: string; exposure?: number; grain?: number } }> }> };
+    };
+    const neutralStored = neutralProject.timeline.tracks[0]!.clips.find((item) => item.id === clipId)?.adjustments;
+    const adjusted = await handleVideoClipAdjust(ctx, {
+      projectPath,
+      clipId,
+      exposure: 2,
+      grain: 2,
+    });
+
+    expect(cinematic.isError).toBe(false);
+    expect(clean.isError).toBe(false);
+    expect(neutral.isError).toBe(false);
+    expect(adjusted.isError).toBe(false);
+    expect(cleanStored).toEqual({ preset: 'clean', exposure: 0.03, contrast: 1.05, saturation: 1.04, grain: 0 });
+    expect(neutralStored).toEqual({ preset: 'neutral' });
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      timeline: { tracks: Array<{ clips: Array<{ id: string; adjustments?: { preset?: string; exposure?: number; contrast?: number; saturation?: number; highlights?: number; shadows?: number; grain?: number } }> }> };
+      agentEvents: Array<{ toolName?: string }>;
+    };
+    const stored = project.timeline.tracks[0]!.clips.find((item) => item.id === clipId)?.adjustments;
+    expect(stored).toEqual({ preset: 'manual', exposure: 1, grain: 1 });
+    expect(project.agentEvents.some((event) => event.toolName === 'video_clip_adjust')).toBe(true);
+  });
+
+  test('video_clip_adjust rejects clips that cannot render look adjustments', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Text Look Test' });
     const clip = await handleVideoClipAdd(ctx, {
       projectPath,
       type: 'text',
       text: 'A',
       startMs: 0,
       durationMs: 1000,
-      label: 'A',
     });
-    const clipId = (clip.structuredContent as { clipId: string }).clipId;
 
     const adjusted = await handleVideoClipAdjust(ctx, {
       projectPath,
-      clipId,
-      preset: 'cinematic',
-      exposure: 2,
-      grain: 2,
+      clipId: (clip.structuredContent as { clipId: string }).clipId,
+      exposure: 0.2,
     });
 
-    expect(adjusted.isError).toBe(false);
-    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
-      timeline: { tracks: Array<{ clips: Array<{ id: string; adjustments?: { preset?: string; exposure?: number; contrast?: number; saturation?: number; grain?: number } }> }> };
-      agentEvents: Array<{ toolName?: string }>;
-    };
-    const stored = project.timeline.tracks[0]!.clips.find((item) => item.id === clipId)?.adjustments;
-    expect(stored).toMatchObject({ preset: 'cinematic', exposure: 1, contrast: 1.18, saturation: 0.92, grain: 1 });
-    expect(project.agentEvents.some((event) => event.toolName === 'video_clip_adjust')).toBe(true);
+    expect(adjusted.isError).toBe(true);
+    expect(adjusted.content[0]?.type === 'text' ? adjusted.content[0].text : '').toContain('not a video or image clip');
   });
 
   test('video_clip_edit packs, splits, duplicates, and deletes clips', async () => {

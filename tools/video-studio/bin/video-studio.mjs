@@ -373,6 +373,47 @@ function ffmpegNumber(value) {
   return value.toFixed(3).replace(/\.?0+$/, '');
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function hasAdjustments(adjustments) {
+  return Boolean(adjustments && Object.keys(adjustments).some((key) => key !== 'preset'));
+}
+
+function adjustmentFilter(inputLabel, outputLabel, adjustments) {
+  if (!hasAdjustments(adjustments)) return `${inputLabel}null${outputLabel}`;
+  const brightness = clamp(
+    (adjustments?.exposure ?? 0)
+      + ((adjustments?.highlights ?? 0) * 0.08)
+      + ((adjustments?.shadows ?? 0) * 0.06),
+    -1,
+    1,
+  );
+  const contrast = clamp(adjustments?.contrast ?? 1, 0, 3);
+  const saturation = clamp(
+    (adjustments?.saturation ?? 1)
+      + ((adjustments?.temperature ?? 0) * 0.04)
+      - Math.abs(adjustments?.tint ?? 0) * 0.02,
+    0,
+    3,
+  );
+  const gamma = clamp(1 - ((adjustments?.shadows ?? 0) * 0.12) + ((adjustments?.highlights ?? 0) * 0.08), 0.1, 10);
+  const filters = [
+    `eq=brightness=${ffmpegNumber(brightness)}:contrast=${ffmpegNumber(contrast)}:saturation=${ffmpegNumber(saturation)}:gamma=${ffmpegNumber(gamma)}`,
+  ];
+  if ((adjustments?.grain ?? 0) > 0) {
+    filters.push(`noise=alls=${Math.round(clamp(adjustments.grain, 0, 1) * 18)}:allf=t`);
+  }
+  if ((adjustments?.sharpen ?? 0) > 0) {
+    filters.push(`unsharp=5:5:${ffmpegNumber(clamp(adjustments.sharpen, 0, 1) * 1.2)}:3:3:0`);
+  }
+  if ((adjustments?.vignette ?? 0) > 0) {
+    filters.push(`vignette=angle=${ffmpegNumber(Math.PI / 5 + clamp(adjustments.vignette, 0, 1) * 0.45)}`);
+  }
+  return `${inputLabel}${filters.join(',')}${outputLabel}`;
+}
+
 function textForClip(clip, fallback) {
   return typeof clip.text?.text === 'string' ? clip.text.text : (clip.label || fallback);
 }
@@ -429,10 +470,13 @@ function renderSimpleMp4(project, outputPath) {
     const end = ffmpegNumber(seconds((clip.startMs || 0) + (clip.durationMs || 1000)));
     const prepared = `v${overlayIndex}`;
     const next = `base${overlayIndex + 1}`;
+    const adjusted = `adj${overlayIndex}`;
     filters.push(
-      `[${inputIndex}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1,format=rgba,setpts=PTS-STARTPTS+${start}/TB[${prepared}]`,
+      `[${inputIndex}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1,format=rgba[${adjusted}]`,
     );
-    filters.push(`${currentVideo}[${prepared}]overlay=0:0:enable='between(t,${start},${end})'[${next}]`);
+    filters.push(adjustmentFilter(`[${adjusted}]`, `[${prepared}]`, clip.adjustments));
+    filters.push(`[${prepared}]setpts=PTS-STARTPTS+${start}/TB[${prepared}t]`);
+    filters.push(`${currentVideo}[${prepared}t]overlay=0:0:enable='between(t,${start},${end})'[${next}]`);
     currentVideo = `[${next}]`;
     overlayIndex += 1;
   }

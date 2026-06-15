@@ -32,10 +32,17 @@ const LOOK_PRESETS: Array<{ value: LookPreset; label: string; adjustments: NonNu
   { value: 'black-and-white', label: 'B&W', adjustments: { exposure: 0, contrast: 1.16, saturation: 0, grain: 0.1, preset: 'black-and-white' } },
 ]
 
+const MIN_CLIP_DURATION_MS = 100
+
+type TimelineDragMode = 'move' | 'trim-start' | 'trim-end'
+
 interface TimelineDragState {
   clipId: string
+  mode: TimelineDragMode
   startX: number
   initialStartMs: number
+  initialDurationMs: number
+  initialSourceInMs: number
   active: boolean
 }
 
@@ -56,6 +63,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [selectedClipId, setSelectedClipId] = React.useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null)
   const [playheadMs, setPlayheadMs] = React.useState(0)
+  const [timelineZoom, setTimelineZoom] = React.useState(1)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [importing, setImporting] = React.useState(false)
@@ -117,6 +125,15 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     }
     return null
   }, [project, selectedClipId])
+
+  const selectedClipMedia = React.useMemo(() => {
+    if (!project || !selectedClip?.mediaId) return null
+    return (project.media ?? []).find((item) => item.id === selectedClip.mediaId) ?? null
+  }, [project, selectedClip?.mediaId])
+
+  const selectedClipSupportsLook = selectedClipMedia?.type === 'video' || selectedClipMedia?.type === 'image'
+  const selectedLookValue = selectedClip?.adjustments ? selectedClip.adjustments.preset ?? 'manual' : 'neutral'
+  const previewLook = selectedClipSupportsLook ? previewLookStyle(selectedClip?.adjustments) : null
 
   const updateProject = React.useCallback((updater: (current: VideoProject) => VideoProject, options: { recordHistory?: boolean } = {}) => {
     setProject((current) => {
@@ -199,8 +216,19 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
         })
         setTimelineDrag((current) => current ? { ...current, active: true } : current)
       }
-      const deltaMs = Math.round(deltaX * 12)
-      moveClip(timelineDrag.clipId, timelineDrag.initialStartMs + deltaMs, true, false)
+      const deltaMs = Math.round(deltaX * (12 / timelineZoom))
+      if (timelineDrag.mode === 'move') {
+        moveClip(timelineDrag.clipId, timelineDrag.initialStartMs + deltaMs, true, false)
+      } else if (timelineDrag.mode === 'trim-start') {
+        updateProject((current) => trimClipStartInProject(current, timelineDrag.clipId, {
+          startMs: timelineDrag.initialStartMs + deltaMs,
+          initialStartMs: timelineDrag.initialStartMs,
+          initialDurationMs: timelineDrag.initialDurationMs,
+          initialSourceInMs: timelineDrag.initialSourceInMs,
+        }), { recordHistory: false })
+      } else {
+        updateProject((current) => trimClipEndInProject(current, timelineDrag.clipId, timelineDrag.initialDurationMs + deltaMs), { recordHistory: false })
+      }
     }
     const handlePointerUp = () => {
       setTimelineDrag(null)
@@ -212,17 +240,27 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
     }
-  }, [moveClip, timelineDrag])
+  }, [moveClip, timelineDrag, timelineZoom, updateProject])
 
   const nudgeSelectedClip = React.useCallback((deltaMs: number) => {
     if (!selectedClip) return
-    updateSelectedClip({ startMs: Math.max(0, (selectedClip.startMs ?? 0) + deltaMs) })
-  }, [selectedClip, updateSelectedClip])
+    moveClip(selectedClip.id, Math.max(0, (selectedClip.startMs ?? 0) + deltaMs), true)
+  }, [moveClip, selectedClip])
 
   const resizeSelectedClip = React.useCallback((deltaMs: number) => {
     if (!selectedClip) return
-    updateSelectedClip({ durationMs: Math.max(100, (selectedClip.durationMs ?? 1000) + deltaMs) })
-  }, [selectedClip, updateSelectedClip])
+    updateProject((current) => trimClipEndInProject(current, selectedClip.id, (selectedClip.durationMs ?? 1000) + deltaMs))
+  }, [selectedClip, updateProject])
+
+  const setSelectedClipStart = React.useCallback((startMs: number) => {
+    if (!selectedClip) return
+    moveClip(selectedClip.id, Math.max(0, startMs), false)
+  }, [moveClip, selectedClip])
+
+  const setSelectedClipDuration = React.useCallback((durationMs: number) => {
+    if (!selectedClip) return
+    updateProject((current) => trimClipEndInProject(current, selectedClip.id, durationMs))
+  }, [selectedClip, updateProject])
 
   const updateSelectedClipAdjustment = React.useCallback((patch: NonNullable<VideoClip['adjustments']>) => {
     updateSelectedClip({
@@ -595,7 +633,10 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
               <PanelTitle title="Preview" value={previewUrl ? 'latest export' : 'not rendered'} />
               <div className="mt-2 flex aspect-video max-h-[280px] items-center justify-center overflow-hidden rounded-md border border-white/[0.08] bg-black">
                 {previewUrl ? (
-                  <video src={previewUrl} controls className="h-full w-full object-contain" />
+                  <div className="relative h-full w-full">
+                    <video src={previewUrl} controls className="h-full w-full object-contain" style={previewLook?.videoStyle} />
+                    {previewLook?.grainOpacity ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 mix-blend-overlay" style={previewLook.grainStyle} /> : null}
+                  </div>
                 ) : (
                   <div className="text-sm text-white/38">Export once to preview rendered video</div>
                 )}
@@ -606,6 +647,18 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                 <PanelTitle title="Timeline" value={`${summary?.clipCount ?? 0} clips`} />
                 <div className="flex items-center gap-2">
                   <NumberField compact label="Playhead" value={playheadMs} onChange={(value) => setPlayheadMs(Math.max(0, value))} />
+                  <label className="flex h-8 items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.045] px-2 text-xs text-white/55">
+                    <span>Zoom</span>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="2.5"
+                      step="0.25"
+                      value={timelineZoom}
+                      onChange={(event) => setTimelineZoom(Number(event.target.value))}
+                      className="w-20 accent-[#f97316]"
+                    />
+                  </label>
                   <Button size="sm" variant="outline" className="h-8 border-white/[0.08] bg-white/[0.045] px-2 text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={packTimeline}>
                     <Magnet className="mr-1.5 h-3.5 w-3.5" />
                     Pack
@@ -620,12 +673,20 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                       <span>{track.type ?? 'track'}</span>
                     </div>
                     <div className="flex min-h-[58px] items-center gap-2 overflow-x-auto p-2">
-                      {(track.clips ?? []).length === 0 ? <span className="text-xs text-white/35">No clips</span> : renderTimelineClips(track.clips ?? [], selectedClipId, (clip) => {
+                      {(track.clips ?? []).length === 0 ? <span className="text-xs text-white/35">No clips</span> : renderTimelineClips(track.clips ?? [], selectedClipId, timelineZoom, (clip) => {
                         setSelectedClipId(clip.id)
-                      }, (event, clip) => {
+                      }, (event, clip, mode) => {
                         event.preventDefault()
                         setSelectedClipId(clip.id)
-                        setTimelineDrag({ clipId: clip.id, startX: event.clientX, initialStartMs: clip.startMs ?? 0, active: false })
+                        setTimelineDrag({
+                          clipId: clip.id,
+                          mode,
+                          startX: event.clientX,
+                          initialStartMs: clip.startMs ?? 0,
+                          initialDurationMs: clip.durationMs ?? 1000,
+                          initialSourceInMs: clip.sourceInMs ?? 0,
+                          active: false,
+                        })
                       })}
                     </div>
                   </div>
@@ -652,29 +713,32 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                     <IconButton label="Pack timeline" onClick={packTimeline}><Magnet className="h-3.5 w-3.5" /></IconButton>
                   </div>
                 </div>
-                <NumberField label="Start ms" value={selectedClip.startMs ?? 0} onChange={(value) => updateSelectedClip({ startMs: Math.max(0, value) })} />
-                <NumberField label="Duration ms" value={selectedClip.durationMs ?? 1000} onChange={(value) => updateSelectedClip({ durationMs: Math.max(1, value) })} />
-                <div className="grid gap-2 rounded-md border border-white/[0.08] bg-black/25 p-2">
-                  <PanelTitle title="Look" value={selectedClip.adjustments?.preset ? String(selectedClip.adjustments.preset) : 'manual'} />
-                  <select
-                    value={selectedClip.adjustments?.preset ?? 'neutral'}
-                    onChange={(event) => applyLookPreset(event.target.value as LookPreset)}
-                    className="h-8 rounded-md border border-white/[0.08] bg-black/35 px-2 text-sm text-white/72 outline-none focus:border-[#f97316]/50"
-                  >
-                    {LOOK_PRESETS.map((preset) => (
-                      <option key={preset.value} value={preset.value}>{preset.label}</option>
-                    ))}
-                  </select>
-                  <AdjustmentField label="Exposure" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.exposure ?? 0} onChange={(value) => updateSelectedClipAdjustment({ exposure: value, preset: 'manual' })} />
-                  <AdjustmentField label="Contrast" min={0} max={3} step={0.01} value={selectedClip.adjustments?.contrast ?? 1} onChange={(value) => updateSelectedClipAdjustment({ contrast: value, preset: 'manual' })} />
-                  <AdjustmentField label="Saturation" min={0} max={3} step={0.01} value={selectedClip.adjustments?.saturation ?? 1} onChange={(value) => updateSelectedClipAdjustment({ saturation: value, preset: 'manual' })} />
-                  <AdjustmentField label="Highlights" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.highlights ?? 0} onChange={(value) => updateSelectedClipAdjustment({ highlights: value, preset: 'manual' })} />
-                  <AdjustmentField label="Shadows" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.shadows ?? 0} onChange={(value) => updateSelectedClipAdjustment({ shadows: value, preset: 'manual' })} />
-                  <AdjustmentField label="Grain" min={0} max={1} step={0.01} value={selectedClip.adjustments?.grain ?? 0} onChange={(value) => updateSelectedClipAdjustment({ grain: value, preset: 'manual' })} />
-                  <Button size="sm" variant="outline" className="h-8 border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={resetLook}>
-                    Reset Look
-                  </Button>
-                </div>
+                <NumberField label="Start ms" value={selectedClip.startMs ?? 0} onChange={setSelectedClipStart} />
+                <NumberField label="Duration ms" value={selectedClip.durationMs ?? 1000} onChange={setSelectedClipDuration} />
+                {selectedClipSupportsLook && (
+                  <div className="grid gap-2 rounded-md border border-white/[0.08] bg-black/25 p-2">
+                    <PanelTitle title="Look" value={selectedLookValue} />
+                    <select
+                      value={selectedLookValue}
+                      onChange={(event) => applyLookPreset(event.target.value as LookPreset)}
+                      className="h-8 rounded-md border border-white/[0.08] bg-black/35 px-2 text-sm text-white/72 outline-none focus:border-[#f97316]/50"
+                    >
+                      <option value="manual" disabled>Manual</option>
+                      {LOOK_PRESETS.map((preset) => (
+                        <option key={preset.value} value={preset.value}>{preset.label}</option>
+                      ))}
+                    </select>
+                    <AdjustmentField label="Exposure" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.exposure ?? 0} onChange={(value) => updateSelectedClipAdjustment({ exposure: value, preset: 'manual' })} />
+                    <AdjustmentField label="Contrast" min={0} max={3} step={0.01} value={selectedClip.adjustments?.contrast ?? 1} onChange={(value) => updateSelectedClipAdjustment({ contrast: value, preset: 'manual' })} />
+                    <AdjustmentField label="Saturation" min={0} max={3} step={0.01} value={selectedClip.adjustments?.saturation ?? 1} onChange={(value) => updateSelectedClipAdjustment({ saturation: value, preset: 'manual' })} />
+                    <AdjustmentField label="Highlights" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.highlights ?? 0} onChange={(value) => updateSelectedClipAdjustment({ highlights: value, preset: 'manual' })} />
+                    <AdjustmentField label="Shadows" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.shadows ?? 0} onChange={(value) => updateSelectedClipAdjustment({ shadows: value, preset: 'manual' })} />
+                    <AdjustmentField label="Grain" min={0} max={1} step={0.01} value={selectedClip.adjustments?.grain ?? 0} onChange={(value) => updateSelectedClipAdjustment({ grain: value, preset: 'manual' })} />
+                    <Button size="sm" variant="outline" className="h-8 border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={resetLook}>
+                      Reset Look
+                    </Button>
+                  </div>
+                )}
                 {selectedClip.mediaId && <ReadOnlyValue label="Media ID" value={selectedClip.mediaId} />}
               </div>
             ) : <EmptyText>Select a clip to inspect</EmptyText>}
@@ -751,12 +815,14 @@ function snapClipStart(clips: VideoClip[], clipId: string, proposedStartMs: numb
 
 function moveClipInProject(project: VideoProject, clipId: string, startMs: number, snap: boolean): VideoProject {
   const tracks = (project.timeline?.tracks ?? []).map((track) => {
-    const hasClip = (track.clips ?? []).some((clip) => clip.id === clipId)
-    if (!hasClip) return track
-    const nextStartMs = snap ? snapClipStart(track.clips ?? [], clipId, startMs) : Math.max(0, Math.round(startMs))
+    const ordered = sortClipsByStart(track.clips ?? [])
+    const clip = ordered.find((item) => item.id === clipId)
+    if (!clip) return track
+    const proposedStartMs = snap ? snapClipStart(ordered, clipId, startMs) : Math.max(0, Math.round(startMs))
+    const nextStartMs = clampClipMoveStart(ordered, clipId, proposedStartMs, clip.durationMs ?? 1000)
     return {
       ...track,
-      clips: sortClipsByStart((track.clips ?? []).map((clip) => clip.id === clipId ? { ...clip, startMs: nextStartMs } : clip)),
+      clips: sortClipsByStart(ordered.map((item) => item.id === clipId ? { ...item, startMs: nextStartMs } : item)),
     }
   })
   return {
@@ -769,15 +835,138 @@ function moveClipInProject(project: VideoProject, clipId: string, startMs: numbe
   }
 }
 
-function timelinePixels(ms: number): number {
-  return Math.max(12, Math.min(320, ms / 12))
+function clampClipMoveStart(clips: VideoClip[], clipId: string, proposedStartMs: number, durationMs: number): number {
+  const ordered = sortClipsByStart(clips).filter((clip) => clip.id !== clipId)
+  const boundedStartMs = Math.max(0, Math.round(proposedStartMs))
+  const clipDurationMs = Math.max(MIN_CLIP_DURATION_MS, durationMs)
+  const candidates: number[] = []
+  const firstClip = ordered[0]
+  if (!firstClip || (firstClip.startMs ?? 0) >= clipDurationMs) candidates.push(0)
+  for (let index = 0; index < ordered.length; index += 1) {
+    const previousClip = ordered[index]
+    const nextClip = ordered[index + 1]
+    if (!previousClip) continue
+    const previousEndMs = (previousClip.startMs ?? 0) + Math.max(MIN_CLIP_DURATION_MS, previousClip.durationMs ?? MIN_CLIP_DURATION_MS)
+    if (!nextClip || (nextClip.startMs ?? 0) - previousEndMs >= clipDurationMs) {
+      candidates.push(previousEndMs)
+    }
+  }
+  return candidates.reduce((best, candidate) =>
+    Math.abs(candidate - boundedStartMs) < Math.abs(best - boundedStartMs) ? candidate : best,
+  candidates[0] ?? boundedStartMs)
+}
+
+function trimClipStartInProject(
+  project: VideoProject,
+  clipId: string,
+  options: { startMs: number; initialStartMs: number; initialDurationMs: number; initialSourceInMs: number },
+): VideoProject {
+  const tracks = (project.timeline?.tracks ?? []).map((track) => {
+    const ordered = sortClipsByStart(track.clips ?? [])
+    const clipIndex = ordered.findIndex((clip) => clip.id === clipId)
+    if (clipIndex === -1) return track
+    const clip = ordered[clipIndex]
+    if (!clip) return track
+    const previousClip = ordered[clipIndex - 1]
+    const clipEndMs = options.initialStartMs + options.initialDurationMs
+    const minStartMs = previousClip ? (previousClip.startMs ?? 0) + Math.max(MIN_CLIP_DURATION_MS, previousClip.durationMs ?? MIN_CLIP_DURATION_MS) : 0
+    const sourceOutMs = typeof clip.sourceOutMs === 'number' ? clip.sourceOutMs : undefined
+    const maxStartFromDuration = clipEndMs - MIN_CLIP_DURATION_MS
+    const maxStartFromSource = sourceOutMs === undefined
+      ? Number.POSITIVE_INFINITY
+      : options.initialStartMs + Math.max(0, sourceOutMs - options.initialSourceInMs - MIN_CLIP_DURATION_MS)
+    const maxStartMs = Math.max(minStartMs, Math.min(maxStartFromDuration, maxStartFromSource))
+    const nextStartMs = clampNumber(Math.round(options.startMs), minStartMs, maxStartMs)
+    const durationMs = Math.max(MIN_CLIP_DURATION_MS, clipEndMs - nextStartMs)
+    const sourceDeltaMs = nextStartMs - options.initialStartMs
+    return {
+      ...track,
+      clips: ordered.map((clip) => clip.id === clipId ? {
+        ...clip,
+        startMs: nextStartMs,
+        durationMs,
+        sourceInMs: clampSourceIn(options.initialSourceInMs + sourceDeltaMs, sourceOutMs),
+      } : clip),
+    }
+  })
+  return {
+    ...project,
+    timeline: {
+      ...project.timeline,
+      durationMs: computeTimelineDuration(tracks),
+      tracks,
+    },
+  }
+}
+
+function trimClipEndInProject(project: VideoProject, clipId: string, durationMs: number): VideoProject {
+  const tracks = (project.timeline?.tracks ?? []).map((track) => {
+    const ordered = sortClipsByStart(track.clips ?? [])
+    const clipIndex = ordered.findIndex((clip) => clip.id === clipId)
+    if (clipIndex === -1) return track
+    const clip = ordered[clipIndex]
+    if (!clip) return track
+    const nextClip = ordered[clipIndex + 1]
+    const maxDurationMs = nextClip ? Math.max(MIN_CLIP_DURATION_MS, (nextClip.startMs ?? 0) - (clip.startMs ?? 0)) : Number.POSITIVE_INFINITY
+    const nextDurationMs = clampNumber(Math.round(durationMs), MIN_CLIP_DURATION_MS, maxDurationMs)
+    return {
+      ...track,
+      clips: ordered.map((item) => item.id === clipId ? { ...item, durationMs: nextDurationMs } : item),
+    }
+  })
+  return {
+    ...project,
+    timeline: {
+      ...project.timeline,
+      durationMs: computeTimelineDuration(tracks),
+      tracks,
+    },
+  }
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (min > max) return min
+  return Math.min(max, Math.max(min, value))
+}
+
+function clampSourceIn(value: number, sourceOutMs: number | undefined): number {
+  const min = 0
+  const max = sourceOutMs === undefined ? Number.POSITIVE_INFINITY : Math.max(0, sourceOutMs - MIN_CLIP_DURATION_MS)
+  return clampNumber(Math.round(value), min, max)
+}
+
+function previewLookStyle(adjustments: VideoClip['adjustments']): { videoStyle: React.CSSProperties; grainStyle: React.CSSProperties; grainOpacity: number } | null {
+  if (!adjustments || !Object.keys(adjustments).some((key) => key !== 'preset')) return null
+  const exposure = clampNumber(adjustments.exposure ?? 0, -1, 1)
+  const highlights = clampNumber(adjustments.highlights ?? 0, -1, 1)
+  const shadows = clampNumber(adjustments.shadows ?? 0, -1, 1)
+  const contrast = clampNumber(adjustments.contrast ?? 1, 0, 3)
+  const saturation = clampNumber((adjustments.saturation ?? 1) + ((adjustments.temperature ?? 0) * 0.04) - Math.abs(adjustments.tint ?? 0) * 0.02, 0, 3)
+  const brightness = clampNumber(1 + exposure + (highlights * 0.08) + (shadows * 0.06), 0, 2)
+  const grainOpacity = clampNumber(adjustments.grain ?? 0, 0, 1) * 0.22
+  return {
+    videoStyle: {
+      filter: `brightness(${brightness.toFixed(3)}) contrast(${contrast.toFixed(3)}) saturate(${saturation.toFixed(3)})`,
+    },
+    grainStyle: {
+      opacity: grainOpacity,
+      backgroundImage: 'radial-gradient(circle at 20% 30%, rgba(255,255,255,0.55) 0 1px, transparent 1px), radial-gradient(circle at 70% 60%, rgba(0,0,0,0.45) 0 1px, transparent 1px)',
+      backgroundSize: '5px 5px, 7px 7px',
+    },
+    grainOpacity,
+  }
+}
+
+function timelinePixels(ms: number, zoom = 1): number {
+  return Math.max(12, Math.min(640, (ms / 12) * zoom))
 }
 
 function renderTimelineClips(
   clips: VideoClip[],
   selectedClipId: string | null,
+  zoom: number,
   onSelectClip: (clip: VideoClip) => void,
-  onStartDrag: (event: React.PointerEvent<HTMLButtonElement>, clip: VideoClip) => void,
+  onStartDrag: (event: React.PointerEvent<HTMLElement>, clip: VideoClip, mode: TimelineDragMode) => void,
 ): React.ReactNode[] {
   const nodes: React.ReactNode[] = []
   let cursor = 0
@@ -790,7 +979,7 @@ function renderTimelineClips(
         <div
           key={`gap-${clip.id}`}
           className="flex h-10 shrink-0 items-center justify-center rounded-md border border-dashed border-white/[0.06] bg-black/25 px-2 text-[10px] uppercase tracking-wide text-white/28"
-          style={{ width: `${timelinePixels(gapMs)}px` }}
+          style={{ width: `${timelinePixels(gapMs, zoom)}px` }}
         >
           Gap
         </div>,
@@ -801,12 +990,28 @@ function renderTimelineClips(
         key={clip.id}
         type="button"
         onClick={() => onSelectClip(clip)}
-        onPointerDown={(event) => onStartDrag(event, clip)}
-        className={`h-10 min-w-[112px] cursor-grab rounded-md border px-2 text-left text-xs active:cursor-grabbing ${selectedClipId === clip.id ? 'border-[#f97316]/70 bg-[#f97316]/18 text-white' : 'border-white/[0.08] bg-white/[0.045] text-white/68'}`}
-        style={{ width: `${Math.max(112, timelinePixels(durationMs))}px` }}
+        onPointerDown={(event) => onStartDrag(event, clip, 'move')}
+        className={`group relative h-10 min-w-[112px] cursor-grab rounded-md border px-3 text-left text-xs active:cursor-grabbing ${selectedClipId === clip.id ? 'border-[#f97316]/70 bg-[#f97316]/18 text-white' : 'border-white/[0.08] bg-white/[0.045] text-white/68'}`}
+        style={{ width: `${Math.max(112, timelinePixels(durationMs, zoom))}px` }}
       >
+        <span
+          aria-hidden="true"
+          onPointerDown={(event) => {
+            event.stopPropagation()
+            onStartDrag(event, clip, 'trim-start')
+          }}
+          className="absolute inset-y-1 left-1 w-1.5 cursor-ew-resize rounded-full bg-white/18 opacity-0 transition-opacity group-hover:opacity-100"
+        />
         <span className="block truncate font-medium">{clip.label ?? clip.type ?? 'clip'}</span>
         <span className="block truncate text-white/42">{formatDuration(startMs)} · {formatDuration(durationMs)}</span>
+        <span
+          aria-hidden="true"
+          onPointerDown={(event) => {
+            event.stopPropagation()
+            onStartDrag(event, clip, 'trim-end')
+          }}
+          className="absolute inset-y-1 right-1 w-1.5 cursor-ew-resize rounded-full bg-white/18 opacity-0 transition-opacity group-hover:opacity-100"
+        />
       </button>,
     )
     cursor = Math.max(cursor, startMs + durationMs)
