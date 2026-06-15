@@ -93,12 +93,16 @@ function objectSchema(properties: Record<string, unknown>, required: string[] = 
 const targetSchema = {
   type: 'object',
   properties: {
-    kind: { type: 'string', enum: ['display_index', 'role', 'label', 'identifier'] },
-    value: {},
+    kind: { type: 'string', enum: ['display_index', 'node_id', 'refetch_fingerprint'] },
+    value: {
+      description: 'Integer for display_index; string for node_id or refetch_fingerprint.',
+    },
   },
   required: ['kind', 'value'],
   additionalProperties: false,
 };
+
+const imageModeSchema = { type: 'string', enum: ['path', 'base64', 'omit'], default: 'path' };
 
 const cursorSchema = {
   type: 'object',
@@ -124,18 +128,21 @@ const tools: Tool[] = [
   },
   {
     name: 'computer_use_list_windows',
-    description: 'List windows. Pass an app name to narrow results, for example Chrome or Safari.',
+    description: 'List windows for an app name, bundle ID, or target query, for example Chrome, Safari, or com.apple.finder.',
     inputSchema: objectSchema({
-      app: { type: 'string', description: 'Optional app name filter.' },
-    }),
+      app: { type: 'string', description: 'App name, bundle ID, or target query.' },
+    }, ['app']),
   },
   {
     name: 'computer_use_observe_window',
     description: 'Read a window state and capture a screenshot path. Use before any click/type action.',
     inputSchema: objectSchema({
       window: { type: 'string' },
-      imageMode: { type: 'string', enum: ['path', 'base64', 'none'], default: 'path' },
+      imageMode: imageModeSchema,
       maxNodes: { type: 'number', default: 6500 },
+      includeMenuBar: { type: 'boolean' },
+      menuPath: { type: 'array', items: { type: 'string' } },
+      debug: { type: 'boolean', default: false },
     }, ['window']),
   },
   {
@@ -143,56 +150,141 @@ const tools: Tool[] = [
     description: 'Click in a window by target or coordinates. Only use after observe_window confirms the intended target; ask the user before risky actions like submit, purchase, delete, send, or irreversible navigation.',
     inputSchema: objectSchema({
       window: { type: 'string' },
+      stateToken: { type: 'string', description: 'State token from the observed window state.' },
       target: targetSchema,
       x: { type: 'number' },
       y: { type: 'number' },
+      mode: { type: 'string', enum: ['primary', 'secondary'] },
       clickCount: { type: 'number', default: 1 },
-      imageMode: { type: 'string', enum: ['path', 'base64', 'none'], default: 'path' },
+      mouseButton: { type: 'string', enum: ['left', 'right', 'middle'] },
+      imageMode: imageModeSchema,
       cursor: cursorSchema,
+      includeMenuBar: { type: 'boolean' },
+      maxNodes: { type: 'number' },
+      debug: { type: 'boolean', default: false },
       intent: { type: 'string', description: 'Plain-language reason for this UI action.' },
     }, ['window', 'intent']),
+  },
+  {
+    name: 'computer_use_perform_secondary_action',
+    description: 'Invoke an exposed secondary action label from an observed node, such as Close or Show Menu. Use only after observe_window shows that exact action on the target.',
+    inputSchema: objectSchema({
+      window: { type: 'string' },
+      stateToken: { type: 'string' },
+      target: targetSchema,
+      action: { type: 'string', description: 'Exact public label from the target node secondaryActions array.' },
+      actionID: { type: 'string' },
+      menuPath: { type: 'array', items: { type: 'string' } },
+      cursor: cursorSchema,
+      includeMenuBar: { type: 'boolean' },
+      maxNodes: { type: 'number' },
+      imageMode: imageModeSchema,
+      debug: { type: 'boolean', default: false },
+      intent: { type: 'string', description: 'Plain-language reason for this UI action.' },
+    }, ['window', 'target', 'action', 'intent']),
   },
   {
     name: 'computer_use_type_text',
     description: 'Type text into a focused or targeted control. Use after observe_window confirms the field; ask the user before sending credentials, payments, public posts, or destructive commands.',
     inputSchema: objectSchema({
       window: { type: 'string' },
+      stateToken: { type: 'string' },
       target: targetSchema,
       text: { type: 'string' },
-      focusAssistMode: { type: 'string', default: 'focus_and_caret_end' },
-      imageMode: { type: 'string', enum: ['path', 'base64', 'none'], default: 'path' },
+      focusAssistMode: { type: 'string', enum: ['none', 'focus', 'focus_and_caret_end'], default: 'focus_and_caret_end' },
+      imageMode: imageModeSchema,
       cursor: cursorSchema,
+      includeMenuBar: { type: 'boolean' },
+      maxNodes: { type: 'number' },
+      debug: { type: 'boolean', default: false },
       intent: { type: 'string', description: 'Plain-language reason for this UI action.' },
     }, ['window', 'text', 'intent']),
   },
   {
-    name: 'computer_use_press_key',
-    description: 'Press a keyboard key or shortcut in a window. Use after observe_window confirms focus; ask the user before Enter/Return on risky forms.',
+    name: 'computer_use_set_value',
+    description: 'Set a supported value directly on a semantic target. Prefer this for fields that expose value-set support; it does not submit or press Return.',
     inputSchema: objectSchema({
       window: { type: 'string' },
-      key: { type: 'string', description: 'Key name, for example Enter, Escape, Tab, a.' },
-      modifiers: {
-        type: 'array',
-        items: { type: 'string', enum: ['command', 'shift', 'option', 'control'] },
-      },
-      imageMode: { type: 'string', enum: ['path', 'base64', 'none'], default: 'path' },
+      stateToken: { type: 'string' },
+      target: targetSchema,
+      value: { type: 'string' },
+      imageMode: imageModeSchema,
       cursor: cursorSchema,
+      includeMenuBar: { type: 'boolean' },
+      maxNodes: { type: 'number' },
+      debug: { type: 'boolean', default: false },
+      intent: { type: 'string', description: 'Plain-language reason for this UI action.' },
+    }, ['window', 'target', 'value', 'intent']),
+  },
+  {
+    name: 'computer_use_press_key',
+    description: 'Press a key or shortcut in a window, for example Escape, Tab, Return, or command+f. Use after observe_window confirms focus; ask the user before Return on risky forms.',
+    inputSchema: objectSchema({
+      window: { type: 'string' },
+      stateToken: { type: 'string' },
+      key: { type: 'string', description: 'Key name or chord, for example Return, Escape, Tab, a, or command+f.' },
+      imageMode: imageModeSchema,
+      cursor: cursorSchema,
+      includeMenuBar: { type: 'boolean' },
+      maxNodes: { type: 'number' },
+      debug: { type: 'boolean', default: false },
       intent: { type: 'string', description: 'Plain-language reason for this UI action.' },
     }, ['window', 'key', 'intent']),
   },
   {
     name: 'computer_use_scroll',
-    description: 'Scroll a window. Prefer this over drag for normal page/document movement.',
+    description: 'Scroll a semantic target in a window. Prefer this over drag for normal page/document movement.',
     inputSchema: objectSchema({
       window: { type: 'string' },
-      deltaX: { type: 'number', default: 0 },
-      deltaY: { type: 'number' },
+      stateToken: { type: 'string' },
+      target: targetSchema,
+      direction: { type: 'string', enum: ['up', 'down', 'left', 'right'] },
+      pages: { type: 'number' },
+      verificationMode: { type: 'string', enum: ['strict', 'fast'] },
+      imageMode: imageModeSchema,
+      cursor: cursorSchema,
+      includeMenuBar: { type: 'boolean' },
+      maxNodes: { type: 'number' },
+      debug: { type: 'boolean', default: false },
+      intent: { type: 'string', description: 'Plain-language reason for this UI action.' },
+    }, ['window', 'target', 'direction', 'intent']),
+  },
+  {
+    name: 'computer_use_set_window_frame',
+    description: 'Set a window frame directly. Prefer this over drag/resize for deterministic window layout.',
+    inputSchema: objectSchema({
+      window: { type: 'string' },
       x: { type: 'number' },
       y: { type: 'number' },
-      imageMode: { type: 'string', enum: ['path', 'base64', 'none'], default: 'path' },
+      width: { type: 'number' },
+      height: { type: 'number' },
+      animate: { type: 'boolean', default: true },
       cursor: cursorSchema,
       intent: { type: 'string', description: 'Plain-language reason for this UI action.' },
-    }, ['window', 'deltaY', 'intent']),
+    }, ['window', 'x', 'y', 'width', 'height', 'intent']),
+  },
+  {
+    name: 'computer_use_drag',
+    description: 'Drag a window or drag-capable target to a screen coordinate. Prefer set_window_frame for deterministic window layout.',
+    inputSchema: objectSchema({
+      window: { type: 'string' },
+      toX: { type: 'number' },
+      toY: { type: 'number' },
+      cursor: cursorSchema,
+      intent: { type: 'string', description: 'Plain-language reason for this UI action.' },
+    }, ['window', 'toX', 'toY', 'intent']),
+  },
+  {
+    name: 'computer_use_resize',
+    description: 'Resize a window by dragging a named edge or corner handle. Prefer set_window_frame for deterministic window layout.',
+    inputSchema: objectSchema({
+      window: { type: 'string' },
+      handle: { type: 'string', enum: ['left', 'right', 'top', 'bottom', 'topLeft', 'topRight', 'bottomLeft', 'bottomRight'] },
+      toX: { type: 'number' },
+      toY: { type: 'number' },
+      cursor: cursorSchema,
+      intent: { type: 'string', description: 'Plain-language reason for this UI action.' },
+    }, ['window', 'handle', 'toX', 'toY', 'intent']),
   },
 ];
 
@@ -217,12 +309,22 @@ async function call(name: string, input: JsonObject): Promise<unknown> {
       return requestRuntime('/v1/get_window_state', { imageMode: 'path', maxNodes: 6500, ...input });
     case 'computer_use_click':
       return requestRuntime('/v1/click', { imageMode: 'path', ...input });
+    case 'computer_use_perform_secondary_action':
+      return requestRuntime('/v1/perform_secondary_action', { imageMode: 'path', ...input });
     case 'computer_use_type_text':
       return requestRuntime('/v1/type_text', { imageMode: 'path', focusAssistMode: 'focus_and_caret_end', ...input });
+    case 'computer_use_set_value':
+      return requestRuntime('/v1/set_value', { imageMode: 'path', ...input });
     case 'computer_use_press_key':
       return requestRuntime('/v1/press_key', { imageMode: 'path', ...input });
     case 'computer_use_scroll':
       return requestRuntime('/v1/scroll', { imageMode: 'path', ...input });
+    case 'computer_use_set_window_frame':
+      return requestRuntime('/v1/set_window_frame', input);
+    case 'computer_use_drag':
+      return requestRuntime('/v1/drag', input);
+    case 'computer_use_resize':
+      return requestRuntime('/v1/resize', input);
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
