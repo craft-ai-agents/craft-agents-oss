@@ -20,6 +20,7 @@ export interface ProviderConfig {
   baseUrl?: string;
   command?: string[]; // for type:"command" — argv; request JSON on stdin, OpenAI JSON on stdout
   models?: string[]; // static catalog for command lanes (e.g. web-only / sub-exclusive models)
+  defaultModel?: string; // model id to use when a lane is chosen by privacy/task fallback rather than an explicit pick (e.g. the local model for a forced local_only route)
   apiKeyEnv: string | null;
   apiKeyDefault?: string;
   enabledIfKey?: boolean;

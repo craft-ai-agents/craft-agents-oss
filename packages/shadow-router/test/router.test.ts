@@ -51,6 +51,26 @@ test("private virtual model forces local-only", () => {
   expect(d.provider).toBe("ollama");
 });
 
+test("private resolves to the local lane's defaultModel, not a cloud id", () => {
+  const provs = resolveAll(config, env);
+  const d = resolveModel(req("draft a private note", "private"), config, provs);
+  expect(d.provider).toBe("ollama");
+  // Regression: previously sent byTask.default.model (a cloud claude id) to the local lane → 404.
+  expect(d.model).toBe(config.providers.ollama.defaultModel);
+  expect(d.model).not.toMatch(/claude|gpt|gemini/);
+});
+
+test("code falling to the local lane uses the local coder via code_local", () => {
+  // Strip the cloud lane so the only privacy-safe lane left for a code task is local.
+  const cfg = JSON.parse(JSON.stringify(config)) as RouterConfig;
+  delete (cfg.providers as Record<string, unknown>).vibeproxy;
+  const provs = resolveAll(cfg, env);
+  const d = resolveAuto(req("refactor this python function and fix the bug"), cfg, provs);
+  expect(d.provider).toBe("ollama");
+  expect(d.model).toBe(cfg.routing.byTask.code_local.model);
+  expect(d.model).toBe("gemma4-coder-fusion:q4");
+});
+
 test("explicit pick that violates privacy falls back to auto, never leaks", () => {
   const provs = resolveAll(config, env);
   // force a CN/training provider into the config, then address it explicitly with sensitive content

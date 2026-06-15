@@ -20,6 +20,25 @@ function classifyTask(req: ChatRequest): keyof RouterConfig["routing"]["byTask"]
   return "default";
 }
 
+/**
+ * Model id for a lane chosen by fallback (privacy floor pushed us off the task-pref lane),
+ * not by an explicit pick. Resolution order, most-to-least specific:
+ *   1. a task-specific route for this lane — byTask[`${task}_local`] when it targets this provider
+ *      (e.g. code on the local lane → the local coder, not the general local model);
+ *   2. the lane's declared defaultModel (e.g. the general local model for private content);
+ *   3. the global task default (last resort — may be a cloud id, only correct if the lane shares it).
+ */
+function fallbackModel(
+  task: keyof RouterConfig["routing"]["byTask"],
+  provider: string,
+  config: RouterConfig,
+  providers: Map<string, ResolvedProvider>,
+): string {
+  const taskLocal = config.routing.byTask[`${task}_local`];
+  if (taskLocal && taskLocal.provider === provider) return taskLocal.model;
+  return providers.get(provider)?.defaultModel ?? config.routing.byTask.default.model;
+}
+
 /** Pick the cheapest privacy-safe lane for an `auto` request. */
 export function resolveAuto(
   req: ChatRequest,
@@ -43,7 +62,10 @@ export function resolveAuto(
       excluded: Object.keys(config.providers).filter((n) => !safe.includes(n)),
     };
   }
-  const model = provider === pref.provider ? pref.model : (config.routing.byTask.default.model);
+  // When we fall off the task-pref lane (e.g. pref is a cloud lane but the content is restricted,
+  // so only a different lane is privacy-safe), the cloud pref's model id would 404 on that lane.
+  // Resolve a model the fallback lane actually serves (task-specific local route → lane default).
+  const model = provider === pref.provider ? pref.model : fallbackModel(task, provider, config, providers);
   return {
     provider,
     model,
@@ -65,8 +87,10 @@ export function resolvePrivate(
     .filter(([, p]) => p.privacyTier === "local_only")
     .map(([n]) => n)
     .find((n) => providers.get(n)?.enabled);
+  // Use the local lane's own defaultModel — the task-default model is a cloud id the local
+  // backend doesn't serve. Falls back to the task default only if the lane declares no defaultModel.
   return local
-    ? { provider: local, model: config.routing.byTask.default.model, reason: "private:local-only", category }
+    ? { provider: local, model: providers.get(local)?.defaultModel ?? config.routing.byTask.default.model, reason: "private:local-only", category }
     : { provider: "", model: "", reason: "no-local-provider-available", category };
 }
 

@@ -35,11 +35,12 @@
       "type": "openai",
       "baseUrl": "http://127.0.0.1:11434/v1",
       "apiKeyEnv": null,
+      "defaultModel": "qwen3:8b",
       "privacyTier": "local_only",
       "jurisdiction": "local",
       "piiSafe": true,
       "costModel": "free",
-      "note": "Local inference — the only lane allowed for restricted / sensitive content."
+      "note": "Local inference — the only lane allowed for restricted / sensitive content. defaultModel = qwen3:8b (general local) for forced-local (private) content. Code tasks falling to local use the code_local route → gemma4-coder-fusion:q4 (gemma-4-12B-coder, Composer2.5+Fable5 distilled Python coder, Q4_K_M); address it directly as ollama/gemma4-coder-fusion:q4 for free local Python coding."
     },
     "chatgpt-web": {
       "type": "command",
@@ -86,6 +87,7 @@
   "routing": {
     "byTask": {
       "code": { "provider": "vibeproxy", "model": "gpt-5.5" },
+      "code_local": { "provider": "ollama", "model": "gemma4-coder-fusion:q4" },
       "reasoning": { "provider": "vibeproxy", "model": "claude-opus-4-8" },
       "reasoning_high": { "provider": "vibeproxy", "model": "gemini-3-pro-high" },
       "cheap": { "provider": "vibeproxy", "model": "gemini-2.5-flash-lite" },
