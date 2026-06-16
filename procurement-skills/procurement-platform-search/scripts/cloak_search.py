@@ -751,7 +751,7 @@ GENERIC = {
     "avnet":     ("https://www.avnet.com/shop/us/search/?term={q}", True),
     "arrow":     ("https://www.arrow.com/en/products/search?q={q}", True),
     "element14": ("https://sg.element14.com/search?st={q}", True),
-    "rs-us":     ("https://us.rs-online.com/web/p/products/?searchTerm={q}", True),  # US=原Allied，DataDome墙+Magento渲染，需代理
+    # rs-us 不在此表——它是 Magento+DataDome+GroupBy 搜索，走专用 scrape_rs_us（拦 XHR+重试）
     # ❌ 不接（已查实，非架构问题）：
     #  rs-cn   —— RS 无可搜中国 storefront（cn 域 Akamai Invalid URL，www?r=cn 甩首页）。
     #  chip1stop —— 整站 502（Azure 网关挂，被 Arrow 吞并后迁移中），可用后再评估；货源≈arrow。
@@ -789,6 +789,62 @@ def scrape_generic(part, wait, limit, *, site, url_tpl, needs_proxy, max_chars=4
             "hit": hit,
             "blocked": blocked,
         }
+    finally:
+        b.close()
+
+
+def _rsus_line(rec):
+    m = rec.get("allMeta") or {}
+    attrs = m.get("attributes") or {}
+
+    def at(k):
+        v = attrs.get(k) or {}
+        t = v.get("text") or v.get("numbers") or []
+        return t[0] if t else None
+
+    eid = at("entity_id")
+    stock = at("additional_inventory")
+    price = (m.get("priceInfo") or {}).get("price")
+    parts = [
+        at("manufacturer_part_number") or "",
+        (m.get("brands") or [""])[0],
+        (rec.get("_t") or "")[:60],
+        f"库存{stock}" if stock not in (None, "") else "",
+        f"${price}" if price else "",
+        f"https://us.rs-online.com/web/p/products/{eid}" if eid else "",
+    ]
+    return " | ".join(str(x) for x in parts if x)
+
+
+def scrape_rs_us(part, wait, limit):
+    """RS 美区（=原 Allied）：Magento + GroupBy 搜索 API + DataDome 反爬。
+    拦 groupby/search/endpoint 取 records；DataDome 间歇拦截，goto 重试至 3 次。
+    需住宅代理（境外+反爬）——仅生产带 mihomo 时可用。"""
+    base = f"https://us.rs-online.com/catalogsearch/result/?q={_q(part)}"
+    recs = []
+    b = launch(headless=True, humanize=True, proxy=MIHOMO)
+    try:
+        p = b.new_page()
+
+        def on_resp(r):
+            if "groupby/search/endpoint" in r.url and not recs:
+                try:
+                    recs.extend((r.json() or {}).get("records") or [])
+                except Exception:
+                    pass
+
+        p.on("response", on_resp)
+        for attempt in range(3):
+            if recs:
+                break
+            try:
+                p.goto(f"{base}&_a={attempt}", wait_until="domcontentloaded", timeout=wait * 1000)
+            except Exception:
+                pass
+            p.wait_for_timeout(9000)
+        lines = [l for l in (_rsus_line(r) for r in recs[:limit]) if l]
+        text = "\n".join(lines) or "（rs-us 无命中或 DataDome 持续拦截）"
+        return {"platform": "rs-us", "url": base, "text": text, "hit": bool(lines)}
     finally:
         b.close()
 
@@ -857,6 +913,7 @@ SCRAPERS = {
     "heilind": scrape_heilind,  # 连接器/机电专家，Coveo 搜索 API
     "ocpneumatics": scrape_ocpneumatics,  # OC Pneumatics，SMC 气动经销，Meilisearch multi-search
     "jbchip": scrape_jbchip,    # 京北通宇电子商城(中国)，Vue SPA 拦 /api/item/goods/v1
+    "rs-us": scrape_rs_us,      # RS美区(=Allied)，GroupBy搜索API+DataDome重试，需住宅代理
 }
 
 # 把通用原始站注册进同一张分发表，main() 无需加任何分支
