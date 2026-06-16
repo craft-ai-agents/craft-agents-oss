@@ -42,12 +42,12 @@ metadata:
 
   （想全查就把 `--source` 列全；每站串行十几秒，按需选。）
 - **`rs-us`（RS 美区=原 Allied，专用 scraper，仅生产带住宅代理可用）**：Magento + GroupBy 搜索 API + DataDome 反爬。`scrape_rs_us` 拦 `groupby/search/endpoint`、goto 重试至 3 次扛 DataDome 间歇拦截。输出：MPN｜品牌｜描述｜库存｜价｜链接。生产实测 5 条命中。`needs_proxy` 走 `MIHOMO`，本地代理未开时不可用。
+- **`tti`（被动/连接器/机电，sager 源头，专用 scraper，仅生产带住宅代理可用）**：PerimeterX Press&Hold 防护。`scrape_tti` **先访问 tti 首页让 PerimeterX 种 cookie（首页不弹验证），再同一上下文跳 part-search**（过验证后服务端渲染），渲染成文本。生产实测命中 Operational Amplifiers 结果。
 - **🔒 生产住宅代理实测仍被反爬挡，未接（2026-06-16 在带 mihomo 7899 的生产逐个验过）**：
-  - `arrow`：Akamai Access Denied，住宅 IP 也拒（比 master 的 Akamai 更严）。
-  - `tti`：PerimeterX **Press&Hold** 行为验证，鼠标按住 11s 未破（查鼠标轨迹熵）。
-  - `element14`：403，住宅 IP 也挡。
-  - `avnet`：非反爬问题——`/shop/us/search/?term=` 对真实料号也跳 "Part Not Found"，产品搜索入口在 WebSphere 门户里没摸到。
-  - 这四个 **Octopart 均覆盖**，ROI 低，先搁置；要硬啃需 captcha 求解服务/多地住宅 IP/浏览器农场，是另一个量级的工程。
+  - `arrow`：Akamai **首页都 Access Denied**，住宅 IP 也拒，连预热都做不了——最硬。
+  - `element14`：Akamai，首页能过但搜索端点 403；首页预热 + 搜索框交互都没绕过。
+  - `avnet`：JS "Challenge Validation"（flaky）+ 产品搜索藏在 WebSphere 门户里，`/shop/us/search/?term=` 对真实料号也 "Part Not Found"。
+  - 这三个 **Octopart 均覆盖**。**CapSolver 不适用**：它解 token 验证码(reCAPTCHA/hCaptcha/Turnstile)+DataDome 滑块，而这三个是 Akamai-web 硬拒/门户问题，没有可解的验证码弹窗。要硬啃需多地住宅 IP / 浏览器农场 / 更强指纹，是另一个量级的工程。
 - **专用 XHR scraper（已实现，拦接口取结构化数据，无需代理，可直接 `--source`）**：
   - `verical`（Arrow marketplace，拦 parametric POST）：型号｜品牌｜描述｜库存｜价格｜链接，货源广、数据干净。
   - `rochester`（停产/EOL 半导体授权源，Salesforce B2B 三段 POST）：型号｜厂商｜描述｜库存(In/Out)｜价｜datasheet——**找停产料专用**。

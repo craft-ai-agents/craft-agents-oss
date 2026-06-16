@@ -746,8 +746,7 @@ GENERIC = {
     "corestaff": ("https://www.zaikostore.com/zaikostore/stockList?productName_forFind={q}&pageNumber=1&viewCount=50&headerSearch=1", False),  # CoreStaff 日本(ZaikoStore)
     "darisus":  ("https://shop.darisusgmbh.de/advanced_search_result.php?keywords={q}", False),  # 德国连接器/电子
     "componentonline": ("https://www.componentonline.com/search?search_key={q}", False),  # Component Electronics(美)
-    # ⚠️ 反爬（Press&Hold/Akamai/403/DataDome）——需生产住宅代理重测；过墙后均服务端渲染可读
-    "tti":       ("https://www.tti.com/content/ttiinc/en/apps/part-search.html?q={q}", True),  # 被动/连接器/机电, sager源头；Press&Hold 无头不稳
+    # ⚠️ 反爬（Akamai/403）——需生产住宅代理重测；tti 走专用 scrape_tti（首页预热过 PerimeterX）
     "avnet":     ("https://www.avnet.com/shop/us/search/?term={q}", True),
     "arrow":     ("https://www.arrow.com/en/products/search?q={q}", True),
     "element14": ("https://sg.element14.com/search?st={q}", True),
@@ -788,6 +787,36 @@ def scrape_generic(part, wait, limit, *, site, url_tpl, needs_proxy, max_chars=4
             "text": text[:max_chars] or "（空白页/未渲染——可能 SPA 未加载或需代理）",
             "hit": hit,
             "blocked": blocked,
+        }
+    finally:
+        b.close()
+
+
+def scrape_tti(part, wait, limit):
+    """TTI（被动/连接器/机电，sager 源头）：PerimeterX Press&Hold 防护。先访问首页让 PX 种
+    cookie（首页不弹验证），再同一上下文跳 part-search（过验证后服务端渲染），渲染成文本交 Agent 读。
+    需住宅代理。"""
+    search = f"https://www.tti.com/content/ttiinc/en/apps/part-search.html?q={_q(part)}"
+    b = launch(headless=True, humanize=True, proxy=MIHOMO)
+    try:
+        p = b.new_page()
+        try:
+            p.goto("https://www.tti.com/", wait_until="domcontentloaded", timeout=wait * 1000)
+        except Exception:
+            pass
+        p.wait_for_timeout(7000)  # 等 PerimeterX sensor 种 cookie
+        try:
+            p.goto(search, wait_until="domcontentloaded", timeout=wait * 1000)
+        except Exception:
+            pass
+        p.wait_for_timeout(6000)
+        text = " ".join((p.inner_text("body") or "").split())
+        blocked = bool(BLOCK_PAT.search(text[:3000]))
+        hit = (not blocked) and (part.lower() in text.lower())
+        return {
+            "platform": "tti", "url": search,
+            "text": text[:4000] or "（空白页——PerimeterX 预热可能失败）",
+            "hit": hit, "blocked": blocked,
         }
     finally:
         b.close()
@@ -914,6 +943,7 @@ SCRAPERS = {
     "ocpneumatics": scrape_ocpneumatics,  # OC Pneumatics，SMC 气动经销，Meilisearch multi-search
     "jbchip": scrape_jbchip,    # 京北通宇电子商城(中国)，Vue SPA 拦 /api/item/goods/v1
     "rs-us": scrape_rs_us,      # RS美区(=Allied)，GroupBy搜索API+DataDome重试，需住宅代理
+    "tti": scrape_tti,          # 被动/连接器/机电(sager源头)，首页预热过 PerimeterX，需住宅代理
 }
 
 # 把通用原始站注册进同一张分发表，main() 无需加任何分支
