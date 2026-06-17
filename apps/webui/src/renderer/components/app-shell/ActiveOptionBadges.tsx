@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { useTranslation } from "react-i18next"
 import { cn } from '@/lib/utils'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Info } from 'lucide-react'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import type { BackgroundTask } from './ActiveTasksBar'
@@ -13,8 +12,6 @@ import { resolveEntityColor } from '@craft-agent/shared/colors'
 import { useTheme } from '@/context/ThemeContext'
 import { useDynamicStack } from '@/hooks/useDynamicStack'
 import type { SessionStatus } from '@/config/session-status-config'
-import { getState } from '@/config/session-status-config'
-import { SessionStatusMenu } from '@/components/ui/session-status-menu'
 import { MetadataBadge } from '@/components/ui/metadata-badge'
 import { SessionInfoPopover } from './SessionInfoPopover'
 
@@ -77,9 +74,6 @@ export function ActiveOptionBadges({
   onLabelsChange,
   autoOpenLabelId,
   onAutoOpenConsumed,
-  sessionStatuses = [],
-  currentSessionStatus,
-  onSessionStatusChange,
   className,
 }: ActiveOptionBadgesProps) {
   // Resolve session label entries to their config objects + parsed values.
@@ -101,14 +95,9 @@ export function ActiveOptionBadges({
 
   const hasLabels = resolvedLabels.length > 0
 
-  // Resolve the current state from sessionStatuses for the badge display.
-  // Every session always has a state — fall back to the default state (or 'todo')
-  // when currentSessionStatus isn't explicitly set, matching SessionList's behavior.
-  const effectiveStateId = currentSessionStatus || 'todo'
-  const resolvedState = sessionStatuses.length > 0 ? getState(effectiveStateId, sessionStatuses) : undefined
-  const hasState = !!resolvedState
-
-  // Show the stacking container when there are labels (state badge is now rendered standalone on the left)
+  // Session status is no longer shown in the input area — it now lives only in the
+  // session list (grouping / filter). The status IS the procurement task type, which
+  // would otherwise duplicate the TaskBar task buttons sitting right below.
   const hasStackContent = hasLabels
 
   // Dynamic stacking with equal visible strips: ResizeObserver computes per-badge
@@ -117,26 +106,14 @@ export function ActiveOptionBadges({
   const stackRef = useDynamicStack({ gap: 8, minVisible: 20, reservedStart: 0 })
 
   // Only render if badges or tasks are active
-  if (!permissionMode && tasks.length === 0 && !hasState && !hasStackContent) {
+  if (!permissionMode && tasks.length === 0 && !hasStackContent) {
     return null
   }
 
   return (
     <div className={cn("flex items-start gap-2 mb-2 px-px pt-px pb-0.5", className)}>
-      {/* Left side: mode → state → labels stack */}
+      {/* Left side: labels stack */}
       <div className="flex items-start gap-2 min-w-0 flex-1">
-
-        {/* State Badge — standalone on the left, after Mode */}
-        {hasState && resolvedState && (
-          <div className="shrink-0">
-            <StateBadge
-              state={resolvedState}
-              sessionStatuses={sessionStatuses}
-              onSessionStatusChange={onSessionStatusChange}
-              sessionId={sessionId}
-            />
-          </div>
-        )}
 
         {/* Stacking container for label badges (left side).
          * useDynamicStack sets per-child marginLeft directly via ResizeObserver.
@@ -278,83 +255,6 @@ function LabelBadge({
         className="relative"
       />
     </LabelValuePopover>
-  )
-}
-
-// ============================================================================
-// State Badge Component
-// ============================================================================
-
-/**
- * Renders the current workflow state as a badge in the dynamic stacking container.
- * Click opens a SessionStatusMenu popover for changing the state.
- * Styled consistently with label badges (h-[30px], rounded-[8px], color-mix tinting).
- */
-function StateBadge({
-  state,
-  sessionStatuses,
-  onSessionStatusChange,
-  sessionId,
-}: {
-  state: SessionStatus
-  sessionStatuses: SessionStatus[]
-  onSessionStatusChange?: (stateId: string) => void
-  sessionId?: string
-}) {
-  const { t } = useTranslation()
-  const [open, setOpen] = React.useState(false)
-
-  const handleSelect = React.useCallback((stateId: string) => {
-    setOpen(false)
-    onSessionStatusChange?.(stateId)
-  }, [onSessionStatusChange])
-
-  // Use the state's resolved color for tinting (same color-mix pattern as labels)
-  const badgeColor = state.resolvedColor || 'var(--foreground)'
-  const applyColor = state.iconColorable
-
-  const DEFAULT_STATUS_IDS = new Set(['backlog', 'todo', 'needs-review', 'done', 'cancelled'])
-  const stateLabel = DEFAULT_STATUS_IDS.has(state.id) ? t(`status.${state.id}`, state.label) : state.label
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <MetadataBadge
-          label={stateLabel}
-          badgeColor={badgeColor}
-          interactive
-          isActive={open}
-          showChevron
-          icon={(
-            <span
-              className="shrink-0 flex items-center w-3.5 h-3.5 [&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full [&>span]:text-xs"
-              style={applyColor ? { color: state.resolvedColor } : undefined}
-            >
-              {state.icon}
-            </span>
-          )}
-          className="pl-2.5"
-        />
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-auto p-0 border-0 shadow-none bg-transparent"
-        side="top"
-        align="end"
-        sideOffset={4}
-        onCloseAutoFocus={(e) => {
-          e.preventDefault()
-          window.dispatchEvent(new CustomEvent('craft:focus-input', {
-            detail: { sessionId }
-          }))
-        }}
-      >
-        <SessionStatusMenu
-          activeState={state.id}
-          onSelect={handleSelect}
-          states={sessionStatuses}
-        />
-      </PopoverContent>
-    </Popover>
   )
 }
 
