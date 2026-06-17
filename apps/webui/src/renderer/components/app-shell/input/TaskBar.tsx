@@ -63,26 +63,36 @@ export function TaskBar({ onSubmit }: TaskBarProps) {
 
   return (
     <div className="mb-1.5">
-      {/* 生成的表单卡片 —— 浮在按钮排上方 */}
+      {/* 生成的表单卡片 —— 浮在按钮排上方,样式对齐主输入框(中性、非 info 色) */}
       {activeForm && (
-        <div key={activeId} className="mb-1.5 border border-info/30 rounded-[8px] shadow-middle bg-info/5 p-3 space-y-2">
+        <div
+          key={activeId}
+          className="mb-1.5 rounded-[12px] border border-border/50 bg-background shadow-middle px-3 py-2.5 space-y-2.5"
+        >
+          {/* 标题行 */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-              <activeForm.icon className="h-3.5 w-3.5 text-info" />
+            <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+              <activeForm.icon className="h-4 w-4 text-foreground/60" />
               <span>{activeForm.label}</span>
             </div>
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={closeForm} aria-label="关闭">
+            <button
+              type="button"
+              onClick={closeForm}
+              aria-label="关闭"
+              className="flex h-6 w-6 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
               <X className="h-3.5 w-3.5" />
-            </Button>
+            </button>
           </div>
 
-          <div className="space-y-2">
+          {/* 字段 */}
+          <div className="space-y-1.5">
             {activeForm.fields.map((field, idx) => (
-              <label key={field.key} className="flex items-center gap-2 text-xs">
-                <span className="w-16 shrink-0 text-muted-foreground">{field.label}</span>
+              <label key={field.key} className="flex items-center gap-2.5 text-[13px]">
+                <span className="w-14 shrink-0 text-muted-foreground">{field.label}</span>
                 {field.type === 'select' ? (
                   <select
-                    className="flex-1 rounded-[6px] border border-border bg-background px-2 py-1 text-foreground"
+                    className="flex-1 h-8 rounded-[8px] border border-border bg-background px-2.5 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     value={values[field.key] ?? ''}
                     onChange={(e) => setField(field.key, e.target.value)}
                   >
@@ -92,7 +102,7 @@ export function TaskBar({ onSubmit }: TaskBarProps) {
                   </select>
                 ) : (
                   <Input
-                    className="flex-1 h-7 text-xs"
+                    className="flex-1 h-8 rounded-[8px] text-[13px]"
                     placeholder={field.placeholder}
                     value={values[field.key] ?? ''}
                     autoFocus={idx === 0}
@@ -109,8 +119,9 @@ export function TaskBar({ onSubmit }: TaskBarProps) {
             ))}
           </div>
 
+          {/* 提交 */}
           <div className="flex justify-end">
-            <Button size="sm" disabled={!complete} onClick={handleSubmit}>提交</Button>
+            <Button size="sm" className="h-7 px-4" disabled={!complete} onClick={handleSubmit}>提交</Button>
           </div>
         </div>
       )}
