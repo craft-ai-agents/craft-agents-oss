@@ -46,7 +46,6 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
         id: 'find',
         label: '找料',
         color: { light: '#3B82F6', dark: '#60A5FA' }, // blue
-        icon: '🔍',
         category: 'open',
         isFixed: false,
         isDefault: false,
@@ -56,7 +55,6 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
         id: 'alternative',
         label: '替代料',
         color: { light: '#8B5CF6', dark: '#A78BFA' }, // purple
-        icon: '🔁',
         category: 'open',
         isFixed: false,
         isDefault: false,
@@ -66,7 +64,6 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
         id: 'compare',
         label: '型号比对',
         color: { light: '#F59E0B', dark: '#FBBF24' }, // amber
-        icon: '⚖️',
         category: 'open',
         isFixed: false,
         isDefault: false,
@@ -76,7 +73,6 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
         id: 'supplier',
         label: '供应商',
         color: { light: '#14B8A6', dark: '#2DD4BF' }, // teal
-        icon: '🏢',
         category: 'open',
         isFixed: false,
         isDefault: false,
@@ -86,7 +82,6 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
         id: 'doc',
         label: '单据',
         color: { light: '#F43F5E', dark: '#FB7185' }, // rose
-        icon: '📄',
         category: 'open',
         isFixed: false,
         isDefault: false,
