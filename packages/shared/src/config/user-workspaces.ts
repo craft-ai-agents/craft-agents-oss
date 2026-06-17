@@ -17,6 +17,11 @@ type UserWorkspaceRegistry = Record<string, string>;
 const USER_WORKSPACES_REGISTRY_FILE = join(CONFIG_DIR, 'user-workspaces.json');
 const USER_WORKSPACES_DIR = join(CONFIG_DIR, 'user-workspaces');
 
+export interface RegisteredUserWorkspaceOwner {
+  openId: string;
+  workspaceId: string;
+}
+
 const userWorkspaceLocks = new Map<string, Promise<string>>();
 
 function loadUserWorkspaceRegistry(): UserWorkspaceRegistry {
@@ -132,4 +137,20 @@ export async function resolveUserWorkspaceId(openId: string): Promise<string> {
 export function getRegisteredUserWorkspaceId(openId: string): string | null {
   const workspaceId = loadUserWorkspaceRegistry()[openId.trim()];
   return workspaceId && getWorkspaceById(workspaceId) ? workspaceId : null;
+}
+
+export function getRegisteredUserWorkspaceOwnerByWorkspaceId(workspaceId: string): RegisteredUserWorkspaceOwner | null {
+  const normalizedWorkspaceId = workspaceId.trim();
+  if (!normalizedWorkspaceId) return null;
+
+  const registry = loadUserWorkspaceRegistry();
+  for (const [openId, registeredWorkspaceId] of Object.entries(registry)) {
+    if (registeredWorkspaceId !== normalizedWorkspaceId) continue;
+    if (!getWorkspaceById(registeredWorkspaceId)) return null;
+    return {
+      openId,
+      workspaceId: registeredWorkspaceId,
+    };
+  }
+  return null;
 }

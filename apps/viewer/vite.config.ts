@@ -27,7 +27,7 @@ export default defineConfig({
     include: ['react', 'react-dom'],
   },
   server: {
-    port: 5174, // Different from Electron dev server
+    port: 5174, // Distinct from playground (5173) and webui (5175) dev servers
     open: true,
     proxy: {
       // Proxy API requests to production R2 during local dev

@@ -367,7 +367,7 @@ const SETTINGS_ICONS: Record<SettingsSubpage, string> = {
  * Order is determined by SETTINGS_PAGES in settings-registry.ts
  */
 export const SETTINGS_ITEMS: SettingsMenuItem[] = SETTINGS_PAGES
-  .filter(page => page.id !== 'server' || FEATURE_FLAGS.embeddedServer)
+  .filter(page => !page.hidden)
   .map(page => ({
     id: page.id,
     labelKey: page.labelKey,

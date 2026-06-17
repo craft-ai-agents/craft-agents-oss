@@ -156,7 +156,14 @@ function loadSkillsFromDir(skillsDir: string, source: SkillSource): LoadedSkill[
   try {
     const entries = readdirSync(skillsDir, { withFileTypes: true });
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
+      if (!entry.isDirectory()) {
+        if (!entry.isSymbolicLink()) continue;
+        try {
+          if (!statSync(join(skillsDir, entry.name)).isDirectory()) continue;
+        } catch {
+          continue;
+        }
+      }
 
       const skill = loadSkillFromDir(skillsDir, entry.name, source);
       if (skill) {

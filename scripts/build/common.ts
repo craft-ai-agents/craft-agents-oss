@@ -357,9 +357,7 @@ export function copySDK(config: BuildConfig): void {
   if (!existsSync(binSource)) {
     throw new Error(
       `SDK native binary package not found at ${binSource}. ` +
-      `For cross-arch builds run \`npm pack @anthropic-ai/${pkg}@<sdk-version>\` ` +
-      `to fetch it, or use the platform build script (build-dmg.sh / build-linux.sh / build-win.ps1) ` +
-      `which handles the cross-fetch automatically.`,
+      `For cross-arch builds run \`npm pack @anthropic-ai/${pkg}@<sdk-version>\` to fetch it.`,
     );
   }
 
@@ -717,19 +715,5 @@ export async function loadEnvFile(config: BuildConfig): Promise<void> {
         }
       }
     }
-  }
-}
-
-/**
- * Get output artifact name for a platform/arch
- */
-export function getArtifactName(platform: Platform, arch: Arch): string {
-  switch (platform) {
-    case 'darwin':
-      return `Craft-Agents-${arch}.dmg`;
-    case 'win32':
-      return `Craft-Agents-${arch}.exe`;
-    case 'linux':
-      return `Craft-Agents-${arch}.AppImage`;
   }
 }

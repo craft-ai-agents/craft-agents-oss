@@ -839,7 +839,7 @@ function AppShellContent({
       if (settings) {
         setLocalMcpEnabled(settings.localMcpEnabled ?? true)
         // Load cyclablePermissionModes from workspace settings
-        if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
+        if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 1) {
           setEnabledModes(settings.cyclablePermissionModes)
         }
       }

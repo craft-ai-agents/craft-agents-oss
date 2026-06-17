@@ -161,7 +161,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
     this.proc = spawn(nodeBin, [cfg.workerEntry], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      env: { ...process.env },
     })
 
     this.proc.stdout?.setEncoding('utf8')

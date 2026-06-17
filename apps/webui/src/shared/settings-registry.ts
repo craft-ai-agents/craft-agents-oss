@@ -23,6 +23,8 @@ export interface SettingsPageDefinition {
   labelKey: string
   /** i18n key for short description shown in settings navigator */
   descriptionKey: string
+  /** Hide from settings navigator (page still exists, just not shown) */
+  hidden?: boolean
 }
 
 /**
@@ -36,15 +38,15 @@ export interface SettingsPageDefinition {
  */
 export const SETTINGS_PAGES = [
   { id: 'app' as const, labelKey: 'settings.app.title', descriptionKey: 'settings.app.description' },
-  { id: 'ai' as const, labelKey: 'settings.ai.title', descriptionKey: 'settings.ai.description' },
+  { id: 'ai' as const, labelKey: 'settings.ai.title', descriptionKey: 'settings.ai.description', hidden: true },
   { id: 'appearance' as const, labelKey: 'settings.appearance.title', descriptionKey: 'settings.appearance.description' },
   { id: 'input' as const, labelKey: 'settings.input.title', descriptionKey: 'settings.input.description' },
   { id: 'workspace' as const, labelKey: 'settings.workspace.title', descriptionKey: 'settings.workspace.description' },
-  { id: 'permissions' as const, labelKey: 'settings.permissions.title', descriptionKey: 'settings.permissions.description' },
+  { id: 'permissions' as const, labelKey: 'settings.permissions.title', descriptionKey: 'settings.permissions.description', hidden: true },
   { id: 'labels' as const, labelKey: 'settings.labels.title', descriptionKey: 'settings.labels.description' },
   { id: 'messaging' as const, labelKey: 'settings.messaging.title', descriptionKey: 'settings.messaging.description' },
-  { id: 'server' as const, labelKey: 'settings.server.title', descriptionKey: 'settings.server.description' },
-  { id: 'shortcuts' as const, labelKey: 'settings.shortcuts.title', descriptionKey: 'settings.shortcuts.description' },
+  { id: 'server' as const, labelKey: 'settings.server.title', descriptionKey: 'settings.server.description', hidden: true },
+  { id: 'shortcuts' as const, labelKey: 'settings.shortcuts.title', descriptionKey: 'settings.shortcuts.description', hidden: true },
   { id: 'preferences' as const, labelKey: 'settings.preferences.title', descriptionKey: 'settings.preferences.description' },
 ] satisfies readonly SettingsPageDefinition[]
 
@@ -53,6 +55,11 @@ export const SETTINGS_PAGES = [
  * This replaces the manual union type in types.ts
  */
 export type SettingsSubpage = (typeof SETTINGS_PAGES)[number]['id']
+
+/**
+ * Visible settings pages (hidden pages filtered out).
+ */
+export const VISIBLE_SETTINGS_PAGES = SETTINGS_PAGES.filter(p => !p.hidden)
 
 /**
  * Array of valid settings subpage IDs - for runtime validation
