@@ -12,9 +12,9 @@
 #     docs/superpowers/plans/2026-06-08-docker-to-systemd-migration.md
 #
 # 用法：
-#   ./scripts/quick-deploy.sh            # 构建 + rsync 源码/dist/skill + 重启
-#   ./scripts/quick-deploy.sh --deps     # 额外在服务器 bun install（依赖变了时用）
-#   ./scripts/quick-deploy.sh --no-build # 跳过构建，只 rsync + 重启（改了纯 TS 逻辑）
+#   ./scripts/quick-deploy.sh            # 构建 + rsync + 服务器 bun install + 重启
+#   ./scripts/quick-deploy.sh --no-deps  # 跳过服务器 bun install（确定依赖没变、想快一点）
+#   ./scripts/quick-deploy.sh --no-build # 跳过本机构建（改了纯 TS 逻辑）
 #   ./scripts/quick-deploy.sh --allow-dirty  # 明知工作树脏仍部署（带 WIP，慎用）
 #
 # 正规化（2026-06-17）：单一全量部署路径，skill 跟随整体一起上（不单独部署）。
@@ -33,10 +33,13 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SKILLS_SRC="${SKILLS_SRC:-$ROOT/procurement-skills}"
 cd "$ROOT"
 
-DO_BUILD=1; DO_DEPS=0; ALLOW_DIRTY=0
+# 依赖默认装：依赖变了却忘了装 = 服务器起不来（Cannot find module）。这类崩溃靠默认消除，
+# lockfile 没变时 --frozen-lockfile 是秒级空跑。确定没改依赖想快可 --no-deps。
+DO_BUILD=1; DO_DEPS=1; ALLOW_DIRTY=0
 for a in "$@"; do
   case "$a" in
     --no-build) DO_BUILD=0 ;;
+    --no-deps) DO_DEPS=0 ;;
     --deps) DO_DEPS=1 ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
   esac
