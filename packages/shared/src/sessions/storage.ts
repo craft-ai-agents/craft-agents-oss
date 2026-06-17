@@ -731,7 +731,7 @@ export function listFlaggedSessions(workspaceRootPath: string): SessionMetadata[
  */
 export function listCompletedSessions(workspaceRootPath: string): SessionMetadata[] {
   return listActiveSessions(workspaceRootPath).filter(s => {
-    const category = getStatusCategory(workspaceRootPath, s.sessionStatus || 'todo');
+    const category = getStatusCategory(workspaceRootPath, s.sessionStatus || 'find');
     return category === 'closed';
   });
 }
@@ -743,7 +743,7 @@ export function listCompletedSessions(workspaceRootPath: string): SessionMetadat
  */
 export function listInboxSessions(workspaceRootPath: string): SessionMetadata[] {
   return listActiveSessions(workspaceRootPath).filter(s => {
-    const category = getStatusCategory(workspaceRootPath, s.sessionStatus || 'todo');
+    const category = getStatusCategory(workspaceRootPath, s.sessionStatus || 'find');
     return category === 'open';
   });
 }

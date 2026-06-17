@@ -89,6 +89,7 @@ import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
+import { detectTaskStatus } from '@craft-agent/shared/statuses/auto-detect'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
 import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
@@ -5126,6 +5127,19 @@ export class SessionManager implements ISessionManager {
       }
     } catch (e) {
       sessionLog.warn(`Auto-label evaluation failed for session ${sessionId}:`, e)
+    }
+
+    // Auto-classify the session by procurement task type. The session status IS
+    // the task type (找料/替代料/型号比对/供应商/单据 — see statuses/auto-detect.ts);
+    // the session list groups by status, so this sorts the session into the right
+    // section. Latest matching message wins (guarded so it only writes on change).
+    try {
+      const taskStatus = detectTaskStatus(message)
+      if (taskStatus && managed.sessionStatus !== taskStatus) {
+        await this.setSessionStatus(sessionId, taskStatus)
+      }
+    } catch (e) {
+      sessionLog.warn(`Task-status detection failed for session ${sessionId}:`, e)
     }
 
     managed.lastMessageAt = Date.now()

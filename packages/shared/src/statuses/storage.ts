@@ -34,59 +34,66 @@ const STATUS_ICONS_DIR = 'statuses/icons';
  * Note: icon field is omitted - uses auto-discovered files in statuses/icons/{id}.svg
  */
 export function getDefaultStatusConfig(): WorkspaceStatusConfig {
-  // Note: color is omitted - defaults from colors/defaults.ts are applied:
-  // - backlog: foreground/50 (muted, not yet planned)
-  // - todo: foreground/50 (muted, ready to work on)
-  // - needs-review: info (amber, attention needed)
-  // - done: accent (purple, completed)
-  // - cancelled: foreground/50 (muted, inactive)
-  //
-  // Note: icon is omitted - auto-discovered from statuses/icons/{id}.svg
+  // Procurement fork: the session status IS the task type (no generic
+  // todo/in-progress/done lifecycle — "纯净"). The session list groups by status,
+  // so sessions sort into 找料/替代料/型号比对/供应商/单据 sections. The status is
+  // auto-set from the user message by statuses/auto-detect.ts `detectTaskStatus`.
+  // Labels (a separate axis) keep their generic defaults; task type lives here.
   return {
     version: 1,
     statuses: [
       {
-        id: 'backlog',
-        label: 'Backlog',
+        id: 'find',
+        label: '找料',
+        color: { light: '#3B82F6', dark: '#60A5FA' }, // blue
+        icon: '🔍',
         category: 'open',
         isFixed: false,
-        isDefault: true,
+        isDefault: false,
         order: 0,
       },
       {
-        id: 'todo',
-        label: 'Todo',
+        id: 'alternative',
+        label: '替代料',
+        color: { light: '#8B5CF6', dark: '#A78BFA' }, // purple
+        icon: '🔁',
         category: 'open',
-        isFixed: true,
+        isFixed: false,
         isDefault: false,
         order: 1,
       },
       {
-        id: 'needs-review',
-        label: 'Needs Review',
+        id: 'compare',
+        label: '型号比对',
+        color: { light: '#F59E0B', dark: '#FBBF24' }, // amber
+        icon: '⚖️',
         category: 'open',
         isFixed: false,
-        isDefault: true,
+        isDefault: false,
         order: 2,
       },
       {
-        id: 'done',
-        label: 'Done',
-        category: 'closed',
-        isFixed: true,
+        id: 'supplier',
+        label: '供应商',
+        color: { light: '#14B8A6', dark: '#2DD4BF' }, // teal
+        icon: '🏢',
+        category: 'open',
+        isFixed: false,
         isDefault: false,
         order: 3,
       },
       {
-        id: 'cancelled',
-        label: 'Cancelled',
-        category: 'closed',
-        isFixed: true,
+        id: 'doc',
+        label: '单据',
+        color: { light: '#F43F5E', dark: '#FB7185' }, // rose
+        icon: '📄',
+        category: 'open',
+        isFixed: false,
         isDefault: false,
         order: 4,
       },
     ],
-    defaultStatusId: 'todo',
+    defaultStatusId: 'find',
   };
 }
 
@@ -117,14 +124,15 @@ export function ensureDefaultIconFiles(workspaceRootPath: string): void {
 }
 
 /**
- * Validate status configuration has required fixed statuses
+ * Validate status configuration is usable.
+ * (Procurement fork: the generic fixed todo/done/cancelled requirement is dropped —
+ * statuses are the procurement task types. We only require a non-empty set whose
+ * declared default exists.)
  */
 function validateStatusConfig(config: WorkspaceStatusConfig): boolean {
-  const requiredFixedStatuses = ['todo', 'done', 'cancelled'];
-
-  return requiredFixedStatuses.every(id =>
-    config.statuses.some(s => s.id === id && s.isFixed)
-  );
+  return Array.isArray(config.statuses) &&
+    config.statuses.length > 0 &&
+    config.statuses.some(s => s.id === config.defaultStatusId);
 }
 
 /**

@@ -22,63 +22,72 @@ const LABEL_CONFIG_FILE = 'labels/config.json';
 
 /**
  * Get default label configuration.
+ * Provides a starter set of labels organized into two complementary color families:
+ * - Development (blue family): Code, Bug, Automation
+ * - Content (purple family): Writing, Research, Design
+ * Plus flat valued labels: Priority (number), Project (string)
  *
- * Procurement workflow task types. Each label carries an `autoRules` regex that
- * matches the distinctive phrase of the matching task-launcher message (see
- * apps/webui .../input/task-forms.ts `toMessage`), so a session is auto-classified
- * by task type the moment the user sends it — no manual tagging. The same rules
- * also catch hand-typed messages that use the same wording.
- *
- * Patterns are mutually exclusive across the five task messages:
- *   找料      "帮我找一下 X"                          → 帮我找一下 / 找料
- *   找替代料   "帮我找 X 的替代料"                      → 替代料
- *   型号比对   "需求型号 X，报价型号 Y，能不能替代…"     → 能不能替代
- *   补供应商   "帮我按 X 补几个供应商候选"              → 供应商候选
- *   生成单据   "把 X 这单按 Y 生成请款单（PI）"         → 生成请款单 / 生成单据
+ * Children use hue-shifted shades of their parent color to show visual hierarchy.
  */
 export function getDefaultLabelConfig(): WorkspaceLabelConfig {
   return {
     version: 1,
     labels: [
       {
-        id: 'find',
-        name: '找料',
-        color: { light: '#3B82F6', dark: '#60A5FA' }, // blue
-        autoRules: [
-          { pattern: '帮我找一下|找料', valueTemplate: '找料', description: '找料任务' },
+        id: 'development',
+        name: 'Development',
+        color: { light: '#3B82F6', dark: '#60A5FA' },
+        children: [
+          {
+            id: 'code',
+            name: 'Code',
+            color: { light: '#4F46E5', dark: '#818CF8' }, // indigo shift
+          },
+          {
+            id: 'bug',
+            name: 'Bug',
+            color: { light: '#0EA5E9', dark: '#38BDF8' }, // sky shift
+          },
+          {
+            id: 'automation',
+            name: 'Automation',
+            color: { light: '#06B6D4', dark: '#22D3EE' }, // cyan shift
+          },
         ],
       },
       {
-        id: 'alternative',
-        name: '替代料',
-        color: { light: '#8B5CF6', dark: '#A78BFA' }, // purple
-        autoRules: [
-          { pattern: '替代料', valueTemplate: '替代料', description: '找替代料任务' },
+        id: 'content',
+        name: 'Content',
+        color: { light: '#8B5CF6', dark: '#A78BFA' },
+        children: [
+          {
+            id: 'writing',
+            name: 'Writing',
+            color: { light: '#7C3AED', dark: '#C4B5FD' }, // deeper violet
+          },
+          {
+            id: 'research',
+            name: 'Research',
+            color: { light: '#A855F7', dark: '#C084FC' }, // lighter purple
+          },
+          {
+            id: 'design',
+            name: 'Design',
+            color: { light: '#D946EF', dark: '#E879F9' }, // fuchsia shift
+          },
         ],
       },
       {
-        id: 'compare',
-        name: '型号比对',
-        color: { light: '#F59E0B', dark: '#FBBF24' }, // amber
-        autoRules: [
-          { pattern: '能不能替代|能否替代', valueTemplate: '型号比对', description: '能不能替任务' },
-        ],
+        id: 'priority',
+        name: 'Priority',
+        color: { light: '#F59E0B', dark: '#FBBF24' },
+        valueType: 'number',
       },
       {
-        id: 'supplier',
-        name: '供应商',
-        color: { light: '#14B8A6', dark: '#2DD4BF' }, // teal
-        autoRules: [
-          { pattern: '供应商候选|补.{0,6}供应商', valueTemplate: '供应商', description: '补供应商任务' },
-        ],
-      },
-      {
-        id: 'doc',
-        name: '单据',
-        color: { light: '#F43F5E', dark: '#FB7185' }, // rose
-        autoRules: [
-          { pattern: '生成请款单|生成单据|生成.{0,6}发票|开请款', valueTemplate: '单据', description: '生成单据任务' },
-        ],
+        id: 'project',
+        name: 'Project',
+        color: 'foreground/50',
+        valueType: 'string',
       },
     ],
   };

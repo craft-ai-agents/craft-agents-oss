@@ -19,9 +19,9 @@ export function validateSessionStatus(
   workspaceRootPath: string,
   sessionStatus: string | undefined
 ): string {
-  // Default to 'todo' if undefined
+  // Default to 'find' if undefined (procurement default task type)
   if (!sessionStatus) {
-    return 'todo';
+    return 'find';
   }
 
   // Check if status exists in workspace config
@@ -29,11 +29,13 @@ export function validateSessionStatus(
     return sessionStatus;
   }
 
-  // Invalid status - log warning and fallback to 'todo'
+  // Invalid status - log warning and fallback to 'find'. This also auto-migrates
+  // legacy sessions (old todo/done/backlog/… statuses) into the 找料 bucket on load
+  // instead of dropping them out of the status-grouped list.
   console.warn(
     `[validateSessionStatus] Invalid status '${sessionStatus}' for workspace, ` +
-    `falling back to 'todo'. The status may have been deleted.`
+    `falling back to 'find'. The status may have been deleted.`
   );
 
-  return 'todo';
+  return 'find';
 }

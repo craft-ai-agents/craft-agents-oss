@@ -176,7 +176,8 @@ export function countUnreadMessages(session: Session): number {
 // ---------------------------------------------------------------------------
 
 export function getSessionStatus(session: SessionMeta): SessionStatusId {
-  return (session.sessionStatus as SessionStatusId) || 'todo'
+  // 'find' is the procurement default task-type status (replaces the old 'todo').
+  return (session.sessionStatus as SessionStatusId) || 'find'
 }
 
 export function hasUnreadMeta(session: SessionMeta): boolean {
