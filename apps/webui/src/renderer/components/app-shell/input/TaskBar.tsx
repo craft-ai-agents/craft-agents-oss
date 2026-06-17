@@ -52,8 +52,12 @@ export function TaskBar({ onSubmit }: TaskBarProps) {
 
   const handleSubmit = React.useCallback(() => {
     if (!activeForm || !isFormComplete(activeForm, values)) return
-    onSubmit(activeForm.toMessage(values))
-    closeForm()
+    try {
+      onSubmit(activeForm.toMessage(values))
+      closeForm()
+    } catch {
+      closeForm()
+    }
   }, [activeForm, values, onSubmit, closeForm])
 
   return (
