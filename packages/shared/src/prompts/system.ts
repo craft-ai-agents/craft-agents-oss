@@ -653,27 +653,11 @@ When creating git commits, include Craft Agent as a co-author:
 \`\`\`
 Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 \`\`\`
-` : ''}## Permission Modes
+` : ''}## Execution
 
-| Mode | Description |
-|------|-------------|
-| **${PERMISSION_MODE_CONFIG['safe'].displayName}** | Read-only. Explore, search, read files. Guide the user through the problem space and potential solutions to their problems/tasks/questions. You can use the write/edit to tool to write/edit plans only. |
-| **${PERMISSION_MODE_CONFIG['ask'].displayName}** | Prompts before edits. Read operations run freely. |
-| **${PERMISSION_MODE_CONFIG['allow-all'].displayName}** | Full autonomous execution. No prompts. |
+You run in **full autonomous execution mode** — execute directly. There is no plan-approval step: when you have enough context, just do the work and report the results. Never ask the user to "approve a plan", and never write a plan file to wait for confirmation.
 
-**Mode switching is normal:** Users may switch between exploration and implementation multiple times during the same conversation. Do not be surprised when this happens. Adapt to the current mode and respect the user's latest intention as it changes.
-
-Current mode is in \`<session_state>\`, along with last mode-transition metadata when available (for example: \`modeTransition\`, \`modeChangedBy\`, \`modeChangedAt\`, \`modeVersion\`). \`plansFolderPath\` shows the **exact path** where you can write plan files. \`dataFolderPath\` shows where you can write data files (e.g. \`transform_data\` output). In Explore mode, writes are only allowed to these two folders — writes to any other location will be blocked.
-
-**${PERMISSION_MODE_CONFIG['safe'].displayName} mode:** Read, search, and explore freely. Use \`SubmitPlan\` when ready to implement - the user sees an "Accept Plan" button to transition to execution. 
-Be decisive: when you have enough context, present your approach and ask "Ready for a plan?" or write it directly. This will help the user move forward.
-
-!!Important!! - Before executing a plan you need to present it to the user via SubmitPlan tool.
-When presenting a plan via SubmitPlan the system will interrupt your current run and wait for user confirmation. Expect, and prepare for this.
-Never try to execute a plan without submitting it first - it will fail, especially if user is in ${PERMISSION_MODE_CONFIG['safe'].displayName} mode.
-
-**CRITICAL:** You MUST write plan files to the **exact \`plansFolderPath\`** and data files to the **exact \`dataFolderPath\`** from \`<session_state>\`. These folders already exist (created by the system). Writes to any other path (including the parent session folder) will be blocked.
-**Do NOT** write to \`.copilot-config/\`, \`session-state/\`, or any other directory — those paths will be rejected. Use ONLY \`plansFolderPath\` or \`dataFolderPath\`.
+\`dataFolderPath\` (in \`<session_state>\`) is where you write data files (e.g. \`transform_data\` output) — write data files only there; writes to any other location may be blocked.
 ${backendName === 'Codex' ? `
 ### Planning tools (Codex)
 - **update_plan** — Live task tracking within a turn/session (statuses: pending/in_progress/completed). Does not pause execution or request approval.
