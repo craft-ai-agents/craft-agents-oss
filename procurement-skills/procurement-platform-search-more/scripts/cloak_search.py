@@ -637,10 +637,13 @@ GENERIC = {
 }
 
 
-# 强制直连的站：它们的 Akamai 拒住宅代理 IP（同 arrow/element14 那个被拉黑的 LA 出口），
-# 却放行机房直连。而生产 agent 环境设了 HTTP_PROXY，Chromium 默认全走住宅代理——故对这些站
-# 启动浏览器前临时摘掉代理环境变量，只让它们走机房直连，用完即恢复（不影响同批其它站）。
-_DIRECT_SITES = {"future"}
+# 强制直连的站（2026-06-17 生产逐站直连/代理对照实测归类）：
+# 这些站从机房直连可达，被绕去 LA 住宅代理反而（a）future 的 Akamai 拒住宅 IP→Access Denied，
+# （b）境内/日本站(lcsc/szlcsc/monotaro/corestaff)绕一圈 LA 又慢又可能挂。
+# 而生产 agent 环境设了 HTTP_PROXY，Chromium 默认全走住宅代理——故对这些站启动浏览器前临时
+# 摘掉代理环境变量走机房直连、用完即恢复（不影响同批其它站）。
+# 其余西方站(newark/rs-*/tme/xonelec/componentonline)机房 IP 被拒，仍走住宅代理(env)。
+_DIRECT_SITES = {"future", "monotaro", "lcsc", "szlcsc", "corestaff", "darisus"}
 
 
 def scrape_generic(part, wait, limit, *, site, url_tpl, needs_proxy, direct=False, max_chars=4000):
@@ -655,30 +658,39 @@ def scrape_generic(part, wait, limit, *, site, url_tpl, needs_proxy, direct=Fals
         for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
             if k in os.environ:
                 saved_proxy_env[k] = os.environ.pop(k)
-    b = launch(**kw)
+    # 连接稳定性：被反爬拦截(瞬时挑战如"just a moment")时自动重试一次——二次常放行；
+    # 命中、或空页/无命中(非拦截)则不重试。代理环境变量在所有重试外层统一恢复。
     try:
-        p = b.new_page()
-        try:
-            p.goto(url, wait_until="domcontentloaded", timeout=wait * 1000)
-        except Exception:
-            pass
-        p.wait_for_timeout(5000)
-        try:
-            text = " ".join((p.inner_text("body") or "").split())
-            final_url = p.url
-        except Exception:
-            text, final_url = "", url
-        blocked = bool(BLOCK_PAT.search(text[:3000]))
-        hit = (not blocked) and (part.lower() in text.lower())
-        return {
-            "platform": site,
-            "url": final_url,
-            "text": text[:max_chars] or "（空白页/未渲染——可能 SPA 未加载或需代理）",
-            "hit": hit,
-            "blocked": blocked,
-        }
+        result = {"platform": site, "url": url, "text": "（未取到）", "hit": False, "blocked": False}
+        for _attempt in range(2):
+            b = launch(**kw)
+            try:
+                p = b.new_page()
+                try:
+                    p.goto(url, wait_until="domcontentloaded", timeout=wait * 1000)
+                except Exception:
+                    pass
+                p.wait_for_timeout(5000)
+                try:
+                    text = " ".join((p.inner_text("body") or "").split())
+                    final_url = p.url
+                except Exception:
+                    text, final_url = "", url
+                blocked = bool(BLOCK_PAT.search(text[:3000]))
+                hit = (not blocked) and (part.lower() in text.lower())
+                result = {
+                    "platform": site,
+                    "url": final_url,
+                    "text": text[:max_chars] or "（空白页/未渲染——可能 SPA 未加载或需代理）",
+                    "hit": hit,
+                    "blocked": blocked,
+                }
+            finally:
+                b.close()
+            if result["hit"] or not result["blocked"]:
+                break
+        return result
     finally:
-        b.close()
         os.environ.update(saved_proxy_env)  # 恢复被临时摘掉的代理环境变量
 
 
