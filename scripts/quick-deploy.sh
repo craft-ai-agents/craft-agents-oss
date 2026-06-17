@@ -14,7 +14,14 @@
 # 用法：
 #   ./scripts/quick-deploy.sh            # 构建 + rsync 源码/dist/skill + 重启
 #   ./scripts/quick-deploy.sh --deps     # 额外在服务器 bun install（依赖变了时用）
-#   ./scripts/quick-deploy.sh --no-build # 跳过构建，只 rsync + 重启（改了 skill/纯 TS 逻辑）
+#   ./scripts/quick-deploy.sh --no-build # 跳过构建，只 rsync + 重启（改了纯 TS 逻辑）
+#   ./scripts/quick-deploy.sh --allow-dirty  # 明知工作树脏仍部署（带 WIP，慎用）
+#
+# 正规化（2026-06-17）：
+#   - 默认**拒绝脏工作树**：全量部署会把整个工作目录推上生产，未提交的 WIP 也会跟着上。
+#     所以先 commit 再部署；确实要带 WIP 才加 --allow-dirty。
+#   - 部署后在服务器写 /opt/craft-agents/DEPLOYED_SHA，记录现网是哪个 commit。
+#   - 只改某个 skill 用 scripts/deploy-skill.sh <名字>（从 HEAD 精确推单目录，不碰 WIP/不构建）。
 # =============================================================================
 set -euo pipefail
 
@@ -26,13 +33,29 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SKILLS_SRC="${SKILLS_SRC:-$ROOT/procurement-skills}"
 cd "$ROOT"
 
-DO_BUILD=1; DO_DEPS=0
+DO_BUILD=1; DO_DEPS=0; ALLOW_DIRTY=0
 for a in "$@"; do
   case "$a" in
     --no-build) DO_BUILD=0 ;;
     --deps) DO_DEPS=1 ;;
+    --allow-dirty) ALLOW_DIRTY=1 ;;
   esac
 done
+
+# 正规化守卫：全量部署 rsync 的是整个工作树，脏 = WIP 会上生产。默认拒绝。
+DIRTY="$(git status --porcelain)"
+if [[ -n "$DIRTY" && "$ALLOW_DIRTY" == 0 ]]; then
+  echo "✋ 工作树有未提交改动，全量部署会把它们一起推上生产。"
+  echo "   先 commit（或只改 skill 就用 scripts/deploy-skill.sh），确需带 WIP 才加 --allow-dirty。"
+  echo "   未提交/未跟踪文件："
+  git status --short | sed 's/^/     /'
+  exit 1
+fi
+GIT_SHA="$(git rev-parse --short HEAD)"
+GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+DEPLOY_STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+[[ "$ALLOW_DIRTY" == 1 && -n "$DIRTY" ]] && GIT_SHA="$GIT_SHA-dirty"
+echo "==> 部署 $GIT_BRANCH @ $GIT_SHA（$DEPLOY_STAMP）"
 
 if [[ "$DO_BUILD" == 1 ]]; then
   echo "==> [1/4] 本机构建 bundle + webui"
@@ -74,6 +97,10 @@ if [[ "$DO_DEPS" == 1 ]]; then
   ssh "$SERVER" "cd $REMOTE_APP && sudo -u craft BUN_CONFIG_REGISTRY=https://registry.npmmirror.com /usr/local/bin/bun install --frozen-lockfile"
 fi
 
-echo "==> [4/4] 重启 craft-agent"
+echo "==> [4/4] 记录现网版本 + 重启 craft-agent"
+# 写 DEPLOYED_SHA：现网到底跑哪个 commit，一眼可查
+ssh "$SERVER" "echo '$GIT_SHA $GIT_BRANCH $DEPLOY_STAMP' | sudo tee $REMOTE_APP/DEPLOYED_SHA >/dev/null && sudo chown craft:craft $REMOTE_APP/DEPLOYED_SHA"
 ssh "$SERVER" "sudo systemctl restart craft-agent && sleep 2 && sudo systemctl --no-pager -l status craft-agent | head -12"
-echo "==> 完成。验证：curl -s -o /dev/null -w '%{http_code}\\n' https://agent.inotoday.asia/"
+echo "==> 完成（现网 $GIT_BRANCH @ $GIT_SHA）。验证："
+HTTP="$(curl -s -o /dev/null -w '%{http_code}' https://agent.inotoday.asia/ || echo 000)"
+echo "    HTTP $HTTP  （200/302 为正常；现网版本：ssh $SERVER 'cat $REMOTE_APP/DEPLOYED_SHA'）"
