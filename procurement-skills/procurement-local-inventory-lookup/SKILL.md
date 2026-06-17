@@ -53,15 +53,18 @@ metadata:
 
     lark-cli base +record-search --as user --base-token Mjlkb49B9aoptssVw8Jc0wGwnhh --table-id <table-id> --json '{"keyword":"<搜索词>","search_fields":["型号"]}'
 
-### 并发限制：最多 2 个同时查
+### 串行查询：一次只查一张表，不要并发
 
-飞书 Base record-search 有频率限制（错误码 `800004135`）。**最多 2 张表同时查，不要超过 2 个并发**。
+飞书 Base record-search 有频率限制（错误码 `800004135`）。**一张表查完再查下一张，绝不并发**（不要同时起多个 lark-cli 请求）。
 
-按以下分组两两并行（一组完成再下一组）：
-1. 动态库存表 + 自家库存
-2. A级 + B1
-3. B2 + B3
-4. C级
+按以下顺序逐张查（一张完成再下一张）：
+1. 动态库存表
+2. 自家库存
+3. A级
+4. B1
+5. B2
+6. B3
+7. C级
 
 遇到 `800004135`（limited）：等几秒重试直到成功，静默处理，不用告诉用户。
 

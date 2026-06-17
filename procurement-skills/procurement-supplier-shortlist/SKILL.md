@@ -28,7 +28,7 @@ metadata:
 
       lark-cli base +record-search --as user --base-token Mjlkb49B9aoptssVw8Jc0wGwnhh --table-id tblbtuMHFIOr6Oss --json '{"keyword":"<品牌>","search_fields":["主营品牌","优势产品","询价品牌"]}'
 
-- **品牌中英文互查**：用户给中文品牌（如"欧姆龙"），同时用英文（"Omron"）再搜一次，反之亦然。对照表见 AGENTS.md「品牌中英文对照」。两次结果合并去重。
+- **品牌中英文互查**：用户给中文品牌（如"欧姆龙"），也用英文（"Omron"）再搜一次，反之亦然（两次查询串行、一次一个，别并发）。对照表见 AGENTS.md「品牌中英文对照」。两次结果合并去重。
 - 按品类搜：`search_fields` 用 `["优势产品"]`，keyword 填品类。
 
 读命中记录的 `供应商全称 / 供应商类型 / 供应商等级 / 主营品牌 / 优势产品 / 联系方式 / 联系媒介 / 官网|店铺 / 供应商状态 / 备注`，按下面原则整理。
