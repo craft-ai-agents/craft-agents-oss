@@ -1,6 +1,6 @@
 ---
 name: procurement-supplier-shortlist
-description: 查飞书 Base 里的供应商档案，按品牌、品类、供应商类型整理出候选名单。当用户问“哪些供应商能供这个/帮我列几家供应商/谁家做这个品类”，需要筛选或对比供应商时使用。产出供应商名单，不查具体报价（报价用 procurement-platform-search）。
+description: 查飞书 Base 里的供应商档案，按品牌、品类、供应商类型整理出候选名单。当用户问”哪些供应商能供这个/帮我列几家供应商/谁家做这个品类”时使用。只产出供应商名单，不查报价不查库存。
 metadata:
   short-description: 供应商候选名单筛选
   lang: zh
@@ -8,7 +8,7 @@ metadata:
 
 # 供应商候选名单筛选
 
-输入品牌/品类（可带型号特征），用 `lark-cli base` 查飞书 Base 的供应商档案，整理采购可联系的候选名单。**只读，不写表。**
+输入品牌/品类（可带型号特征），用 `lark-cli base --as user` 查飞书 Base 的供应商档案，整理采购可联系的候选名单。**只读，不写表。**
 
 不做供应商真假、付款风险、价格优劣、下单判断。
 
@@ -16,14 +16,19 @@ metadata:
 
 - 表 `供应商档案` table-id `tblbtuMHFIOr6Oss`（默认视图 `供应商总清单` view-id `vew2iLJ778`）。
 - 关键字段：`供应商全称 / 供应商类型 / 供应商等级 / 主营品牌 / 询价品牌 / 优势产品 / 联系人 / 联系方式 / 联系媒介 / 官网|店铺 / 供应商状态 / 付款风险 / 地区 / 备注 / 总分`。
-- 此表按品牌/品类/供应商类型筛名单，不查库存数量（库存走 procurement-local-inventory-lookup）。
+- 此表按品牌/品类/供应商类型筛名单，不查库存数量。
 
 ## 怎么查（record-search，默认 markdown 直接读）
 
+业务 Base《供应商管理（正式版）》当前用 `--as user` 查询。若默认身份或 `--as bot` 返回 `91403 you don't have permission`，切到 `--as user` 后重试一次并说明身份差异。
+
+注意子命令必须带 **`+`** 前缀，写 `record-search` 不带 `+` 会失败。
+
 - 按品牌搜（一次跨主营/优势/询价品牌）：
 
-      lark-cli base +record-search --base-token Mjlkb49B9aoptssVw8Jc0wGwnhh --table-id tblbtuMHFIOr6Oss --json '{"keyword":"<品牌>","search_fields":["主营品牌","优势产品","询价品牌"]}'
+      lark-cli base +record-search --as user --base-token Mjlkb49B9aoptssVw8Jc0wGwnhh --table-id tblbtuMHFIOr6Oss --json '{"keyword":"<品牌>","search_fields":["主营品牌","优势产品","询价品牌"]}'
 
+- **品牌中英文互查**：用户给中文品牌（如"欧姆龙"），同时用英文（"Omron"）再搜一次，反之亦然。对照表见 AGENTS.md「品牌中英文对照」。两次结果合并去重。
 - 按品类搜：`search_fields` 用 `["优势产品"]`，keyword 填品类。
 
 读命中记录的 `供应商全称 / 供应商类型 / 供应商等级 / 主营品牌 / 优势产品 / 联系方式 / 联系媒介 / 官网|店铺 / 供应商状态 / 备注`，按下面原则整理。
@@ -40,7 +45,7 @@ metadata:
 
 候选列表：供应商全称、类型/等级、匹配原因（强/弱，注明命中字段）、联系方式或联系媒介、官网|店铺、供应商状态、备注；未覆盖项；人工确认项（是否仍合作/可供该型号/有无现货报价/需否补授权）。
 
-> markdown 列很多，只挑上面这些给采购，别整表照搬。permission/登录失效错误如实告诉用户去开 base 读权限 / 重新登录，不要编造。
+> markdown 列很多，只挑上面这些给采购，别整表照搬。`--as user` 下的 permission/登录失效错误如实告诉用户去开 base 读权限 / 重新登录，不要编造；不要反复切换身份重试。
 
 ## 边界
 

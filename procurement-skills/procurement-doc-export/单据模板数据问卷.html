@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>单据模板 — 数据来源对照问卷</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --card: #fff;
+    --border: #e0e0e0;
+    --accent: #1a73e8;
+    --accent-light: #e8f0fe;
+    --tag-manual: #fef3e2;
+    --tag-manual-border: #f9a825;
+    --tag-auto: #e6f4ea;
+    --tag-auto-border: #34a853;
+    --tag-unknown: #fce8e6;
+    --tag-unknown-border: #ea4335;
+    --text: #202124;
+    --text-secondary: #5f6368;
+    --radius: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 24px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  .subtitle { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 32px; }
+  .legend {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    margin-bottom: 24px; font-size: 0.85rem;
+  }
+  .legend span {
+    padding: 3px 10px; border-radius: 4px; border: 1px solid;
+  }
+  .legend .auto { background: var(--tag-auto); border-color: var(--tag-auto-border); }
+  .legend .manual { background: var(--tag-manual); border-color: var(--tag-manual-border); }
+  .legend .unknown { background: var(--tag-unknown); border-color: var(--tag-unknown-border); }
+
+  /* flow diagram */
+  .flow {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 20px; margin-bottom: 28px; overflow-x: auto;
+  }
+  .flow pre {
+    font-family: "Menlo", "Consolas", monospace;
+    font-size: 0.82rem; line-height: 1.5; white-space: pre;
+  }
+
+  /* template cards */
+  .tpl-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .tpl-header {
+    padding: 14px 20px;
+    background: var(--accent-light);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+  }
+  .tpl-header:hover { background: #d2e3fc; }
+  .tpl-header h2 { font-size: 1rem; font-weight: 600; }
+  .tpl-header .sheets-count {
+    font-size: 0.8rem; color: var(--text-secondary);
+    background: #fff; padding: 2px 8px; border-radius: 10px;
+  }
+  .tpl-header .arrow {
+    transition: transform 0.2s; font-size: 0.8rem; color: var(--text-secondary);
+  }
+  .tpl-card.open .tpl-header .arrow { transform: rotate(90deg); }
+  .tpl-body { display: none; padding: 16px 20px; }
+  .tpl-card.open .tpl-body { display: block; }
+
+  .tpl-desc {
+    font-size: 0.85rem; color: var(--text-secondary);
+    margin-bottom: 16px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sheet-group { margin-bottom: 20px; }
+  .sheet-group h3 {
+    font-size: 0.9rem; font-weight: 600; margin-bottom: 8px;
+    padding: 4px 0; border-bottom: 2px solid var(--accent);
+    display: inline-block;
+  }
+
+  /* field table */
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: 0.85rem; margin-bottom: 12px;
+  }
+  th {
+    text-align: left; padding: 8px 10px;
+    background: #f8f9fa; border-bottom: 2px solid var(--border);
+    font-weight: 600; font-size: 0.8rem; color: var(--text-secondary);
+  }
+  td {
+    padding: 7px 10px; border-bottom: 1px solid #f0f0f0;
+    vertical-align: top;
+  }
+  tr:hover td { background: #f8f9fa; }
+  .tag {
+    display: inline-block; font-size: 0.75rem;
+    padding: 1px 7px; border-radius: 3px; border: 1px solid;
+    white-space: nowrap;
+  }
+  .tag-auto { background: var(--tag-auto); border-color: var(--tag-auto-border); color: #1e7e34; }
+  .tag-manual { background: var(--tag-manual); border-color: var(--tag-manual-border); color: #e65100; }
+  .tag-unknown { background: var(--tag-unknown); border-color: var(--tag-unknown-border); color: #c62828; }
+
+  td textarea {
+    width: 100%; min-height: 32px; border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 8px; font-size: 0.83rem;
+    font-family: inherit; resize: vertical; background: #fff;
+  }
+  td textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
+
+  /* question blocks */
+  .question-block {
+    background: var(--tag-unknown);
+    border: 1px solid var(--tag-unknown-border);
+    border-radius: var(--radius);
+    padding: 12px 16px; margin: 12px 0;
+  }
+  .question-block p { font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
+  .question-block textarea {
+    width: 100%; min-height: 48px; border: 1px solid #ddd;
+    border-radius: 4px; padding: 6px 10px; font-size: 0.83rem;
+    font-family: inherit; resize: vertical;
+  }
+
+  /* general questions */
+  .general { margin-top: 32px; }
+  .general h2 { font-size: 1.1rem; margin-bottom: 16px; }
+  .general .q-item {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 18px; margin-bottom: 12px;
+  }
+  .general .q-item p { font-size: 0.88rem; font-weight: 600; margin-bottom: 8px; }
+  .general .q-item textarea {
+    width: 100%; min-height: 56px; border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px 10px; font-size: 0.85rem;
+    font-family: inherit; resize: vertical;
+  }
+
+  .actions {
+    margin-top: 28px; display: flex; gap: 12px; justify-content: center;
+    padding-bottom: 40px;
+  }
+  .btn {
+    padding: 10px 28px; border-radius: 6px; border: none;
+    font-size: 0.9rem; cursor: pointer; font-weight: 500;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #1557b0; }
+  .btn-secondary { background: #fff; border: 1px solid var(--border); color: var(--text); }
+  .btn-secondary:hover { background: #f8f9fa; }
+
+  @media (max-width: 640px) {
+    body { padding: 12px; }
+    table { font-size: 0.8rem; }
+    .legend { font-size: 0.78rem; }
+  }
+</style>
+</head>
+<body>
+
+<h1>单据模板 — 数据来源对照</h1>
+<p class="subtitle">我在做单据自动生成，需要搞清楚每个模板里的数据从哪来。下面按模板列出了字段，我把目前的理解标了出来，不确定的标红，麻烦帮忙看看对不对、直接在输入框里改就行。</p>
+
+<div class="legend">
+  <span class="auto">自动 — 能从飞书表自动读</span>
+  <span class="manual">人工 — 每次需要人填</span>
+  <span class="unknown">待确认 — 我不确定</span>
+</div>
+
+<!-- ========== FLOW ========== -->
+<div class="flow"><pre>
+                      订单（飞书「客户订单审批」表）
+                                  │
+                        是否退税？（人工决定）
+                        ┌─────────┴─────────┐
+                       退税              不退税
+                        │                   │
+                  出口报关文件          不报关出口资料
+                  (全套报关单据)        (PI + 装箱单)
+                        │
+               ┌────────┼────────┐
+              JPY      USD      1039？
+             日元套    美元套    待确认
+</pre></div>
+
+<!-- ========== TEMPLATE 1 ========== -->
+<div class="tpl-card open" id="tpl1">
+  <div class="tpl-header" onclick="toggle('tpl1')">
+    <h2>模板 1：出口报关文件</h2>
+    <div><span class="sheets-count">21 个 sheet / 3 套模板</span> <span class="arrow">▶</span></div>
+  </div>
+  <div class="tpl-body">
+    <div class="tpl-desc">
+      文件：INO_LG_出口报关文件模板.xlsx<br>
+      包含日元套（6 sheet）、美元套（6 sheet）、1039 套（3 sheet）、进口端（4 sheet）、辅助（报关流程/清关HS/汇总）
+    </div>
+
+    <div class="question-block">
+      <p>❓ 日元套 / 美元套 / 1039 套分别什么时候用？</p>
+      <textarea placeholder="比如：币种 JPY 用日元套，USD 用美元套，1039 是..."></textarea>
+    </div>
+
+    <div class="question-block">
+      <p>❓ 一张报关单对应一个订单号，还是可能多个订单合一张？</p>
+      <textarea placeholder=""></textarea>
+    </div>
+
+    <div class="question-block">
+      <p>❓ 进口端资料（进口合同/发票/装箱单/货物说明表）是每次出口都要同时出，还是单独按需出？</p>
+      <textarea placeholder=""></textarea>
+    </div>
+
+    <!-- 汇总 sheet -->
+    <div class="sheet-group">
+      <h3>汇总 sheet</h3>
+      <table>
+        <tr><th>字段</th><th>我的理解</th><th>状态</th><th>你的意见（不对直接改）</th></tr>
+        <tr>
+          <td>运输方式</td><td>人工每次选（FedEx/DHL/...）</td>
+          <td><span class="tag tag-manual">人工</span></td>
+          <td><textarea placeholder="对 / 不对，应该是..."></textarea></td>
+        </tr>
+        <tr>
+          <td>运费</td><td>人工填？还是查「国际运费」表？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>日期</td><td>发货日期，人工填</td>
+          <td><span class="tag tag-manual">人工</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>贸易国 / 运抵国</td><td>从客户地址推？还是人工填？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>件数（中/英）</td><td>人工填</td>
+          <td><span class="tag tag-manual">人工</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>毛重 / 净重</td><td>人工填</td>
+          <td><span class="tag tag-manual">人工</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>体积</td><td>人工填</td>
+          <td><span class="tag tag-manual">人工</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>型号</td><td>订单表「下单型号」</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>HS 编码</td><td>先查模板「清关HS」sheet，没有再查商务部网站</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder="这个查法对吗？"></textarea></td>
+        </tr>
+        <tr>
+          <td>品牌 / 品牌类型</td><td>不确定，订单表里有吗？还是人工填？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>商品名称（中/英）</td><td>订单表「物料名称」，但经常是空的</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder="空的时候从哪补？"></textarea></td>
+        </tr>
+        <tr>
+          <td>数量 / 单位</td><td>订单表</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>单价</td><td>订单表「单价」</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>币种</td><td>订单表「币种」</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>原产国 / 货源地</td><td>固定填「中国 / 深圳」？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder="有例外吗？"></textarea></td>
+        </tr>
+        <tr>
+          <td>Sold to / Seller / Buyer</td><td>按币种切主体（JPY→日本印诺，USD→深圳印诺）</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder="这个规则固定吗？有例外吗？"></textarea></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- 出口报关单 sheet -->
+    <div class="sheet-group">
+      <h3>出口报关单 sheet</h3>
+      <table>
+        <tr><th>字段</th><th>我的理解</th><th>状态</th><th>你的意见</th></tr>
+        <tr>
+          <td>境内发货人</td><td>固定「深圳市印诺电子科技有限公司」</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>境外收货人</td><td>客户抬头信息</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>出境关别</td><td>不确定，是固定值还是人工填？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>运输方式</td><td>跟汇总一样，人工填</td>
+          <td><span class="tag tag-manual">人工</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>运输工具名称及航次号</td><td>人工填</td>
+          <td><span class="tag tag-manual">人工</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>提运单号</td><td>人工填</td>
+          <td><span class="tag tag-manual">人工</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>监管方式</td><td>固定「一般贸易」？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder="有其他情况吗？"></textarea></td>
+        </tr>
+        <tr>
+          <td>征免性质</td><td>固定「一般征税」？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>成交方式</td><td>订单「交易条件」（DDU/FOB/...）</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>包装种类</td><td>固定「纸箱」？还是人工填？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>件数 / 毛重 / 净重</td><td>人工填</td>
+          <td><span class="tag tag-manual">人工</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>货品明细（商品编号/名称/数量/单价）</td><td>订单表 + HS 编码</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>原产国 / 最终目的国 / 货源地</td><td>固定值？还是每单不同？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- 出口合同/发票/装箱单/申报要素 -->
+    <div class="sheet-group">
+      <h3>出口合同 / 出口发票 / 出口装箱单 / packinglist</h3>
+      <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:8px;">这几个 sheet 的字段大部分跟报关单、汇总重叠，我理解数据来源是一样的（订单表 + 客户信息 + 人工填的重量件数）。</p>
+      <div class="question-block">
+        <p>❓ 这几个 sheet 有没有额外的字段是上面没覆盖到的？</p>
+        <textarea placeholder="如果有，写一下字段名和来源"></textarea>
+      </div>
+    </div>
+
+    <!-- 出口申报要素 -->
+    <div class="sheet-group">
+      <h3>出口申报要素 sheet</h3>
+      <table>
+        <tr><th>字段</th><th>我的理解</th><th>状态</th><th>你的意见</th></tr>
+        <tr>
+          <td>品名</td><td>订单表？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>品牌（中文及外文名称）</td><td>不确定从哪来</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>品牌类型（境外品牌等）</td><td>不确定</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>型号</td><td>订单表「下单型号」</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>出口享惠情况</td><td>固定「其它」？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>GTIN / CAS</td><td>固定填「无」？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>其他申报要素（材质、功率等）</td><td>不确定，看商品类型？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder="不同商品的申报要素不一样吗？有规则吗？"></textarea></td>
+        </tr>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<!-- ========== TEMPLATE 2 ========== -->
+<div class="tpl-card" id="tpl2">
+  <div class="tpl-header" onclick="toggle('tpl2')">
+    <h2>模板 2：进口报关文件</h2>
+    <div><span class="sheets-count">6 个 sheet</span> <span class="arrow">▶</span></div>
+  </div>
+  <div class="tpl-body">
+    <div class="tpl-desc">文件：INO_LG_进口报关文件模板.xlsx<br>包含：汇总、进口合同、进口发票、进口装箱单、进口货物说明表、出口申报要素</div>
+
+    <div class="question-block">
+      <p>❓ 这个模板是印诺自己进口时用的，还是给客户做的进口报关资料？</p>
+      <textarea placeholder=""></textarea>
+    </div>
+    <div class="question-block">
+      <p>❓ 跟出口报关文件是一一对应的吗？每次出口都要同时出一份进口报关？</p>
+      <textarea placeholder=""></textarea>
+    </div>
+    <div class="question-block">
+      <p>❓ 数据来源跟出口报关基本一样？有没有额外要填的字段？</p>
+      <textarea placeholder=""></textarea>
+    </div>
+
+    <div class="sheet-group">
+      <h3>进口货物说明表（特有字段）</h3>
+      <table>
+        <tr><th>字段</th><th>我的理解</th><th>状态</th><th>你的意见</th></tr>
+        <tr>
+          <td>与合同卖方是否存在特殊关系</td><td>固定填「否」？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>保费</td><td>人工填？还是固定值？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>H.S 编码</td><td>同出口报关的 HS</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ========== TEMPLATE 3 ========== -->
+<div class="tpl-card" id="tpl3">
+  <div class="tpl-header" onclick="toggle('tpl3')">
+    <h2>模板 3：不报关出口资料</h2>
+    <div><span class="sheets-count">3 个 sheet</span> <span class="arrow">▶</span></div>
+  </div>
+  <div class="tpl-body">
+    <div class="tpl-desc">文件：INO_LG_不报关出口资料.xlsx<br>包含：汇总、PI、PACKING LIST</div>
+
+    <div class="question-block">
+      <p>❓ 这个模板是"不退税 → 不走正式报关"时用的对吧？</p>
+      <textarea placeholder=""></textarea>
+    </div>
+
+    <div class="sheet-group">
+      <h3>汇总 sheet</h3>
+      <table>
+        <tr><th>字段</th><th>我的理解</th><th>状态</th><th>你的意见</th></tr>
+        <tr>
+          <td>Sold to（客户）</td><td>客户抬头信息</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>The seller</td><td>固定「深圳印诺」？还是按币种切？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>SHIP TO（收件人/电话）</td><td>客户信息</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>BILL TO</td><td>按币种切（日元→日本印诺，美元→客户信息）</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder="这个规则对吗？"></textarea></td>
+        </tr>
+        <tr>
+          <td>日期</td><td>人工填</td>
+          <td><span class="tag tag-manual">人工</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>INVOICE NO</td><td>自动生成？还是人工编？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder="编号规则是什么？"></textarea></td>
+        </tr>
+        <tr>
+          <td>PO NO</td><td>客户订单编号</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>品牌 / 型号 / 描述</td><td>订单表</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>材质（英）</td><td>不确定从哪来</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>H.S CODE</td><td>清关HS 表</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>数量 / 单价</td><td>订单表</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>毛重 / 净重 / 体积</td><td>人工填</td>
+          <td><span class="tag tag-manual">人工</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="sheet-group">
+      <h3>PI sheet / PACKING LIST sheet</h3>
+      <div class="question-block">
+        <p>❓ 这两个 sheet 的字段跟汇总基本重叠，有没有额外的字段？</p>
+        <textarea placeholder=""></textarea>
+      </div>
+      <table>
+        <tr><th>字段</th><th>我的理解</th><th>状态</th><th>你的意见</th></tr>
+        <tr>
+          <td>DELIVERY TERM</td><td>订单「交易条件」，默认 DDU？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder="每次都 DDU 还是也可能是别的？"></textarea></td>
+        </tr>
+        <tr>
+          <td>AIR WAYBILL NUMBER</td><td>人工填（快递单号）</td>
+          <td><span class="tag tag-manual">人工</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>Freight Cost</td><td>人工填</td>
+          <td><span class="tag tag-manual">人工</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ========== TEMPLATE 4 ========== -->
+<div class="tpl-card" id="tpl4">
+  <div class="tpl-header" onclick="toggle('tpl4')">
+    <h2>模板 4：日本请款（請求書）</h2>
+    <div><span class="sheets-count">2 个 sheet</span> <span class="arrow">▶</span></div>
+  </div>
+  <div class="tpl-body">
+    <div class="tpl-desc">文件：INO_SA_日本印诺请款模板.xlsx<br>包含：日本采购、深圳采购</div>
+
+    <div class="question-block">
+      <p>❓「日本采购」和「深圳采购」分别是什么场景？是按采购来源分的吗？</p>
+      <textarea placeholder=""></textarea>
+    </div>
+
+    <div class="sheet-group">
+      <h3>字段对照</h3>
+      <table>
+        <tr><th>字段</th><th>我的理解</th><th>状态</th><th>你的意见</th></tr>
+        <tr>
+          <td>货品行（型号/数量/单价）</td><td>订单表「客户订单审批」</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder="还是另一张表？"></textarea></td>
+        </tr>
+        <tr>
+          <td>為替レート（汇率）</td><td>从「每日汇率」表查？还是人工填？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>イノ日本利益 / イノ深圳利益</td><td>不确定，有固定的计算规则吗？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>FAR 手数料</td><td>不确定</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>银行信息</td><td>固定值（HSBC HK）</td>
+          <td><span class="tag tag-auto">自动</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ========== TEMPLATE 5 ========== -->
+<div class="tpl-card" id="tpl5">
+  <div class="tpl-header" onclick="toggle('tpl5')">
+    <h2>模板 5：对冲结算书</h2>
+    <div><span class="sheets-count">3 个 sheet</span> <span class="arrow">▶</span></div>
+  </div>
+  <div class="tpl-body">
+    <div class="tpl-desc">文件：INO_SA_应收应付双凯杰对冲结算书模板.xlsx<br>包含：对冲协议书、采购、销售</div>
+
+    <div class="question-block">
+      <p>❓ 这个是跟「双凯杰」这一家专用的，还是通用模板（换个公司名就能用）？</p>
+      <textarea placeholder=""></textarea>
+    </div>
+    <div class="question-block">
+      <p>❓ 多久出一次？按月/按季度/按需？</p>
+      <textarea placeholder=""></textarea>
+    </div>
+
+    <div class="sheet-group">
+      <h3>字段对照</h3>
+      <table>
+        <tr><th>字段</th><th>我的理解</th><th>状态</th><th>你的意见</th></tr>
+        <tr>
+          <td>对冲协议书（甲方/乙方/地址）</td><td>固定值？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>采购 sheet（型号/采购价/市场报价/数量）</td><td>从「业务报价计算」表？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder="数据从哪来？"></textarea></td>
+        </tr>
+        <tr>
+          <td>采购 sheet（利润/双凯杰利润）</td><td>公式自动算？还是人工定？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>销售 sheet（单据编号/客户/含税单价/金额）</td><td>不确定从哪来</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+        <tr>
+          <td>销售 sheet（制单人/单据日期）</td><td>人工填？</td>
+          <td><span class="tag tag-unknown">待确认</span></td>
+          <td><textarea placeholder=""></textarea></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ========== TEMPLATE 6 ========== -->
+<div class="tpl-card" id="tpl6">
+  <div class="tpl-header" onclick="toggle('tpl6')">
+    <h2>模板 6：美金请款发票 PI（已实现）</h2>
+    <div><span class="sheets-count">已跑通</span> <span class="arrow">▶</span></div>
+  </div>
+  <div class="tpl-body">
+    <div class="tpl-desc">
+      文件：美金请款发票模板PI.xlsx<br>
+      这个已经能自动生成了。列出来是为了对齐：如果其他模板的字段来源跟这个不一样，请标出来。
+    </div>
+    <table>
+      <tr><th>字段</th><th>当前来源</th><th>状态</th><th>有问题的话写这里</th></tr>
+      <tr>
+        <td>客户 / Bill To / Ship To</td><td>客户抬头库（customers.json）</td>
+        <td><span class="tag tag-auto">自动</span></td>
+        <td><textarea placeholder=""></textarea></td>
+      </tr>
+      <tr>
+        <td>Invoice No / PO Number</td><td>订单表「客户订单编号」</td>
+        <td><span class="tag tag-auto">自动</span></td>
+        <td><textarea placeholder=""></textarea></td>
+      </tr>
+      <tr>
+        <td>货品行（料号/数量/单价/描述）</td><td>订单表「客户订单审批」</td>
+        <td><span class="tag tag-auto">自动</span></td>
+        <td><textarea placeholder=""></textarea></td>
+      </tr>
+      <tr>
+        <td>交易条件 Terms</td><td>订单表「交易条件」</td>
+        <td><span class="tag tag-auto">自动</span></td>
+        <td><textarea placeholder=""></textarea></td>
+      </tr>
+      <tr>
+        <td>日期</td><td>生成当天</td>
+        <td><span class="tag tag-auto">自动</span></td>
+        <td><textarea placeholder=""></textarea></td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<!-- ========== GENERAL ========== -->
+<div class="general">
+  <h2>通用问题</h2>
+
+  <div class="q-item">
+    <p>1. 客户抬头信息：目前只录了 TAKEBISHI（たけびし/竹菱），近期常出单的客户还有哪些？能把公司名、地址、电话发我吗？</p>
+    <textarea placeholder="客户名 / 地址 / 电话"></textarea>
+  </div>
+
+  <div class="q-item">
+    <p>2. 品牌和商品名称：订单表里「物料名称」经常是空的，平时从哪补这个信息？</p>
+    <textarea placeholder=""></textarea>
+  </div>
+
+  <div class="q-item">
+    <p>3. HS 编码：模板里「清关HS」表的编码够用吗？多久需要加新的？</p>
+    <textarea placeholder=""></textarea>
+  </div>
+
+  <div class="q-item">
+    <p>4. INVOICE NO 的编号规则是什么？不同模板的编号规则一样吗？</p>
+    <textarea placeholder="比如：YN + 年月日 + 序号？"></textarea>
+  </div>
+
+  <div class="q-item">
+    <p>5. 整个流程里，哪个环节最花时间 / 最容易出错？我好优先做那块。</p>
+    <textarea placeholder=""></textarea>
+  </div>
+</div>
+
+<!-- ========== ACTIONS ========== -->
+<div class="actions">
+  <button class="btn btn-primary" onclick="exportAnswers()">导出填写内容</button>
+  <button class="btn btn-secondary" onclick="window.print()">打印 / 存 PDF</button>
+</div>
+
+<script>
+function toggle(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+function exportAnswers() {
+  const areas = document.querySelectorAll('textarea');
+  const questions = document.querySelectorAll('.question-block p, .q-item p, th');
+  let text = '单据模板数据对照 — 填写结果\n' + '='.repeat(40) + '\n\n';
+  let currentSection = '';
+
+  document.querySelectorAll('.tpl-card, .general').forEach(section => {
+    const header = section.querySelector('h2');
+    if (header) {
+      text += '\n## ' + header.textContent + '\n\n';
+    }
+
+    section.querySelectorAll('.question-block, tr, .q-item').forEach(item => {
+      if (item.classList.contains('question-block') || item.classList.contains('q-item')) {
+        const q = item.querySelector('p');
+        const a = item.querySelector('textarea');
+        if (q && a && a.value.trim()) {
+          text += q.textContent + '\n→ ' + a.value.trim() + '\n\n';
+        }
+      } else if (item.tagName === 'TR') {
+        const cells = item.querySelectorAll('td');
+        const ta = item.querySelector('textarea');
+        if (cells.length && ta && ta.value.trim()) {
+          text += '「' + cells[0].textContent.trim() + '」→ ' + ta.value.trim() + '\n';
+        }
+      }
+    });
+  });
+
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '单据模板数据对照_填写结果.txt';
+  a.click();
+}
+</script>
+
+</body>
+</html>

@@ -43,4 +43,4 @@ metadata:
 - 只用业务语言输出，格式见 [references/output-format.md](references/output-format.md)。
 - 单型号对约 2 分钟：先看结构化对比，缺的关键项再开 datasheet 补；超时就用现有资料收口并说明缺口。
 - 页面打不开/资料缺，如实写成阻碍/需补料，不能当差异不存在。
-- 只处理两个型号能否互用；找替代候选用 `procurement-alternative-search`，查报价货源用 `procurement-platform-search`。
+- 只处理两个型号能否互用。

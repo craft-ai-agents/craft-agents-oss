@@ -1,6 +1,6 @@
 ---
 name: procurement-alternative-search
-description: 给一个电子元器件型号（停产/缺货/想找替代），查找候选替代料并判断能不能真替。当用户问“X 有没有替代料/找个能替 X 的/X 停产了用什么/pin to pin 替代/有没有兼容料”时使用。本 skill 负责“找候选 + 判断”；只判断已知一对型号用 procurement-part-mismatch-review。
+description: 给一个电子元器件型号（停产/缺货/想找替代），查找候选替代料并判断能不能真替。当用户问”X 有没有替代料/找个能替 X 的/X 停产了用什么/pin to pin 替代/有没有兼容料”时使用。
 metadata:
   short-description: 查找替代料
   lang: zh
@@ -49,8 +49,6 @@ metadata:
 - 收敛：**关键项全兼容 = 能替；任一关键项冲突 = 不能替；规格缺项 = 需补料**。别只凭型号相近或规格摘要像就说能替。
 
 ## 输出
-> 面向非技术采购人员：输出只说查到什么、来源哪个平台/原厂，**不出现 CloakBrowser、脚本、API、接口、cloak_search/api_search 等技术名词或工具名**；“没查到”分清两种：平台确实没这个型号→明说“XX 没有收录此型号”；有料但这次没取到→说清是“没取到不是没有”+业务化原因（需登录/访问受限/这次没连上），别用“暂时查不到”模糊带过。
-
 
 替代清单，按可用度排：
 
@@ -61,4 +59,4 @@ metadata:
 
 - 规格摘要相近 ≠ 能替；结论以差异判断为准。
 - 最终可用性要采购/工程确认（pin compatible、认证、客户是否接受）。
-- 找候选用本 skill；只判断已知一对用 `procurement-part-mismatch-review`；查报价货源用 `procurement-platform-search`。
+- 本 skill 负责找候选 + 判断能不能替。
