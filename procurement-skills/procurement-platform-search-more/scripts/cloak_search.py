@@ -17,6 +17,7 @@
 """
 import argparse
 import json
+import os
 import re
 import sys
 import urllib.parse
@@ -636,12 +637,24 @@ GENERIC = {
 }
 
 
-def scrape_generic(part, wait, limit, *, site, url_tpl, needs_proxy, max_chars=4000):
-    """通用原始站：渲染搜索页→取 body 文本→交给 Agent 读。不写选择器。"""
+# 强制直连的站：它们的 Akamai 拒住宅代理 IP（同 arrow/element14 那个被拉黑的 LA 出口），
+# 却放行机房直连。而生产 agent 环境设了 HTTP_PROXY，Chromium 默认全走住宅代理——故对这些站
+# 启动浏览器前临时摘掉代理环境变量，只让它们走机房直连，用完即恢复（不影响同批其它站）。
+_DIRECT_SITES = {"future"}
+
+
+def scrape_generic(part, wait, limit, *, site, url_tpl, needs_proxy, direct=False, max_chars=4000):
+    """通用原始站：渲染搜索页→取 body 文本→交给 Agent 读。不写选择器。
+    direct=True 的站强制直连（launch 前摘掉 HTTP(S)_PROXY 环境变量，用完恢复）。"""
     url = url_tpl.format(q=_q(part))
     kw = {"headless": True, "humanize": True}
     if needs_proxy:
         kw["proxy"] = MIHOMO
+    saved_proxy_env = {}
+    if direct:
+        for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+            if k in os.environ:
+                saved_proxy_env[k] = os.environ.pop(k)
     b = launch(**kw)
     try:
         p = b.new_page()
@@ -666,6 +679,7 @@ def scrape_generic(part, wait, limit, *, site, url_tpl, needs_proxy, max_chars=4
         }
     finally:
         b.close()
+        os.environ.update(saved_proxy_env)  # 恢复被临时摘掉的代理环境变量
 
 
 def scrape_tti(part, wait, limit):
@@ -823,7 +837,8 @@ SCRAPERS = {
 
 # 把通用原始站注册进同一张分发表，main() 无需加任何分支
 for _site, (_tpl, _proxy) in GENERIC.items():
-    SCRAPERS[_site] = partial(scrape_generic, site=_site, url_tpl=_tpl, needs_proxy=_proxy)
+    SCRAPERS[_site] = partial(scrape_generic, site=_site, url_tpl=_tpl, needs_proxy=_proxy,
+                              direct=(_site in _DIRECT_SITES))
 
 
 def main():
