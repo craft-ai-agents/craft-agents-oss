@@ -60,6 +60,16 @@ export const DEFAULT_ICON_SVGS: Record<string, string> = {
   <circle cx="12" cy="12" r="10" />
   <path d="M9 9l6 6M15 9l-6 6" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
 </svg>`,
+
+  // Procurement task-type statuses: a simple solid colored dot. Differentiation is
+  // by status color + label text, not by shape. A real SVG (vs the empty `icon`
+  // fallback) is required so EntityIcon renders the colorable currentColor path
+  // instead of the hardcoded `text-muted-foreground` fallback (which looks gray).
+  'find': `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="7" /></svg>`,
+  'alternative': `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="7" /></svg>`,
+  'compare': `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="7" /></svg>`,
+  'supplier': `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="7" /></svg>`,
+  'doc': `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="7" /></svg>`,
 };
 
 /**
