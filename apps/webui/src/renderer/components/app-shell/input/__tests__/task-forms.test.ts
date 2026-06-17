@@ -43,4 +43,10 @@ describe('task-forms registry', () => {
     expect(isFormComplete(find, { mpn: '  ' })).toBe(false)
     expect(isFormComplete(find, { mpn: 'X' })).toBe(true)
   })
+
+  it('isFormComplete 对 select 字段:空则不完整,选中则完整', () => {
+    const doc = getTaskForm('doc')!
+    expect(isFormComplete(doc, { source: 'X' })).toBe(false) // template 未选
+    expect(isFormComplete(doc, { source: 'X', template: '美金请款发票 PI' })).toBe(true)
+  })
 })

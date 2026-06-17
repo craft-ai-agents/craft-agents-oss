@@ -55,7 +55,8 @@ export function TaskBar({ onSubmit }: TaskBarProps) {
     try {
       onSubmit(activeForm.toMessage(values))
       closeForm()
-    } catch {
+    } catch (err) {
+      console.error('[TaskBar] submit failed', err)
       closeForm()
     }
   }, [activeForm, values, onSubmit, closeForm])
@@ -64,7 +65,7 @@ export function TaskBar({ onSubmit }: TaskBarProps) {
     <div className="mb-1.5">
       {/* 生成的表单卡片 —— 浮在按钮排上方 */}
       {activeForm && (
-        <div className="mb-1.5 border border-info/30 rounded-[8px] shadow-middle bg-info/5 p-3 space-y-2">
+        <div key={activeId} className="mb-1.5 border border-info/30 rounded-[8px] shadow-middle bg-info/5 p-3 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
               <activeForm.icon className="h-3.5 w-3.5 text-info" />
