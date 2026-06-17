@@ -1,6 +1,6 @@
 ---
 name: procurement-platform-search-more
-description: 核心四家（Digikey/Mouser/云汉/master，见 procurement-platform-search）之外的更多货源——一批原始分销站（按区域/品类）+ 聚合站。当核心四家查不够、需要更广货源或特定品类（连接器/电源/FA机械件/停产料/气动件等）线索时叠加使用。按型号品类选源，不默认全查。
+description: 核心四家（Digikey/Mouser/云汉/master）之外的更多货源——一批原始分销站（按区域/品类）+ 聚合站。当核心四家查不够、需要更广货源或特定品类（连接器/电源/FA机械件/停产料/气动件等）线索时叠加使用。按型号品类选源，不默认全查。
 metadata:
   short-description: 扩展货源（更多原始站+聚合站）
   lang: zh
@@ -8,7 +8,7 @@ metadata:
 
 # 扩展货源查找（核心四家之外，按需选源）
 
-先用 `procurement-platform-search` 查核心四家（Digikey/Mouser/云汉/master）。**不够、或要特定品类货源时**用本 skill 补。
+本 skill 查核心四家（Digikey/Mouser/云汉/master）之外的更多货源：一批原始分销站 + 聚合站。核心四家不够、或要特定品类货源时用它补。
 
 **按型号品类选 `--source`，不要一次全开**（几十个站串行会很慢）。下面按品类列了该选哪些。聚合站 octopart **默认不查**（聚合数据可能滞后，原始站优先），只在确实要扩货源时按需加。
 
