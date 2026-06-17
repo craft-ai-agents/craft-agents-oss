@@ -762,7 +762,7 @@ export function EditPopover({
   }
 
   // Use App context for session management (same code path as main chat)
-  const { onCreateSession, onSendMessage, onRespondToPermission, onRespondToCredential } = useAppShellContext()
+  const { onCreateSession, onSendMessage, onRespondToPermission, onRespondToCredential, onRespondToAsk } = useAppShellContext()
 
   // Session ID for inline execution (created on first message)
   const [inlineSessionId, setInlineSessionId] = useState<string | null>(null)
@@ -1064,6 +1064,7 @@ export function EditPopover({
                   onRespondToPermission={onRespondToPermission}
                   pendingCredential={pendingCredential}
                   onRespondToCredential={onRespondToCredential}
+                  onRespondToAsk={onRespondToAsk}
                   compactMode={true}
                   placeholder={placeholder}
                   emptyStateLabel={displayLabel || context.label}

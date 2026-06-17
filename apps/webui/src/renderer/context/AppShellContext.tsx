@@ -103,6 +103,13 @@ export interface AppShellContextType {
     response: CredentialResponse
   ) => void
 
+  // Ask (multiple-choice) handling
+  onRespondToAsk?: (
+    sessionId: string,
+    requestId: string,
+    choice: string | null
+  ) => void
+
   // File/URL handlers - these can open in tabs or external apps
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
