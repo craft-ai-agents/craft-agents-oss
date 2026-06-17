@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-平台 API 搜索（Digikey + Mouser）。纯标准库，无第三方依赖。
+核心平台 API 搜索（Digikey + Mouser）。纯标准库，无第三方依赖。
 
 凭证从环境变量读（部署在服务器 /etc/craft-agent.env，systemd 注入，agent 的
 Bash 子进程继承）：
@@ -131,81 +131,14 @@ def search_mouser(part, limit):
     return results
 
 
-def search_vanlinkon(part, limit):
-    """
-    连可连(vanlinkon.com) JSON API 搜索。
-    端点：https://api.vanlinkon.com/api/search?keyword=<part>
-    该子域名无境外 H2 WAF 限制，纯 HTTP 直接访问，不需要浏览器。
-    返回归一化结果列表（与 digikey/mouser 同格式）。
-    """
-    url = f"https://api.vanlinkon.com/api/search?keyword={urllib.parse.quote(part, safe='')}"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/136.0.0.0 Safari/537.36"
-            ),
-            "Accept": "application/json",
-            "Accept-Language": "zh-CN,zh;q=0.9",
-            "Referer": "https://www.vanlinkon.com/",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-        data = json.loads(resp.read().decode("utf-8", errors="replace"))
-
-    if data.get("status") != "success" or data.get("code") != 200:
-        return []
-
-    results = []
-    seen = set()
-    warehouses = data.get("data") or []
-    for wh in warehouses:
-        wh_name = wh.get("name", "")
-        for p in wh.get("products") or []:
-            model = p.get("model_number") or ""
-            key = f"{model}|{wh_name}"
-            if key in seen:
-                continue
-            seen.add(key)
-
-            brand = p.get("product_category") or ""
-            stock = p.get("stock") or 0
-            price = p.get("inventory_price")
-            product_id = p.get("product_id") or ""
-            delivery = p.get("delivery_date") or ""
-            spec = p.get("specification") or ""
-
-            results.append({
-                "platform": "vanlinkon",
-                "mpn": model,
-                "manufacturer": brand,
-                "description": spec or p.get("product_name") or "",
-                "stock": stock,
-                "price": price,
-                "currency": "CNY",
-                "url": (
-                    f"https://www.vanlinkon.com/product/{product_id}"
-                    if product_id else url
-                ),
-                "datasheet": None,
-                "warehouse": wh_name,
-                "delivery_date": delivery,
-            })
-            if len(results) >= limit:
-                return results
-    return results
-
-
-SOURCES = {"digikey": search_digikey, "mouser": search_mouser, "vanlinkon": search_vanlinkon}
+SOURCES = {"digikey": search_digikey, "mouser": search_mouser}
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--part", required=True)
     ap.add_argument("--source", default="digikey,mouser",
-                    help="逗号分隔，默认 digikey,mouser；国内平台加 vanlinkon")
+                    help="逗号分隔，默认 digikey,mouser")
     ap.add_argument("--limit", type=int, default=5)
     args = ap.parse_args()
 
@@ -215,7 +148,7 @@ def main():
     def run(name):
         fn = SOURCES.get(name)
         if not fn:
-            return name, None, "未知平台（仅 digikey/mouser/vanlinkon 有 API）"
+            return name, None, "未知平台（仅 digikey/mouser 有 API）"
         try:
             # 0 命中时自动回退到型号变体；命中后回填实际命中的查询串
             for q in gen_variants(args.part):

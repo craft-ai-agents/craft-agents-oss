@@ -27,7 +27,8 @@
 
 - 找料 / 帮我找这个型号 / 哪里能搞到 / 查库存 / 有没有货 → **见上面的流程，先查库存**
 - 不认识某个型号、要查它是什么（品牌/品类/规格/封装/生命周期）→ `procurement-model-info-search`
-- 查平台/分销商报价、现货、产品页、替代料 → `procurement-platform-search`
+- 查平台/分销商报价、现货、产品页、替代料 → `procurement-platform-search`（默认核心四家：Digikey/Mouser/云汉/master）
+- 核心四家不够、要更多原始分销站或特定品类货源（连接器/电源/FA机械件/停产料/气动件等）→ 叠加 `procurement-platform-search-more`
 - 按品牌/品类列供应商候选 → `procurement-supplier-shortlist`
 - 采购型号和报价型号不一致、判断能不能用 → `procurement-part-mismatch-review`
 - 找替代料 / 停产或缺货想换料 / pin 兼容料 → `procurement-alternative-search`
@@ -113,7 +114,8 @@
 | 平台 | 正确工具 | 说明 |
 |------|---------|------|
 | Digikey、Mouser | `procurement-platform-search` 的 `api_search.py` | 官方 API，最快最准 |
-| 云汉(ickey)、master、Octopart | `procurement-platform-search` 的 `cloak_search.py` | CloakBrowser 过反爬 |
+| 云汉(ickey)、master | `procurement-platform-search` 的 `cloak_search.py` | CloakBrowser 过反爬（核心四家） |
+| 更多原始站 / Octopart 等聚合站 | `procurement-platform-search-more` 的脚本 | 按需选源；Octopart 等聚合站默认不查 |
 | 1688、淘宝、Misumi、立创 | `cloakbrowser` skill | 通用 CloakBrowser 取页面 |
 | 其它反爬站（403/空页面） | `cloakbrowser` skill | 遇到 WebFetch 失败就换这个 |
 | 普通网页（原厂产品页、datasheet、资讯站） | WebFetch | 没有反爬的才用 |
