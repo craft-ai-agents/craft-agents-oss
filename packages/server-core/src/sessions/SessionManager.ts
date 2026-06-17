@@ -94,6 +94,7 @@ import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
 import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
+import { TurnTracer, buildTurnTraceContext } from '../telemetry'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, rollbackFailedBranchCreation } from '@craft-agent/server-core/domain'
@@ -5268,6 +5269,19 @@ export class SessionManager implements ISessionManager {
       sendSpan.mark('servers.applied')
     }
 
+    const turnTracer = TurnTracer.start({
+      traceContext: buildTurnTraceContext({
+        workspace: managed.workspace,
+        sessionId,
+        sessionName: managed.name,
+        userMessageId: userMessage.id,
+        model: agent.getModel(),
+        connectionSlug: managed.llmConnection ?? undefined,
+      }),
+      input: message,
+      attachmentCount: storedAttachments?.length ?? attachments?.length ?? 0,
+    })
+
     try {
       sessionLog.info('Starting chat for session:', sessionId)
       sessionLog.info('Workspace:', JSON.stringify(managed.workspace, null, 2))
@@ -5306,6 +5320,7 @@ export class SessionManager implements ISessionManager {
         workspaceDefaultConnectionSlug: loadWorkspaceConfig(workspaceRootPath)?.defaults?.defaultLlmConnection,
         managedModel: managed.model,
       })
+      turnTracer.setModel(messageBackendContext.resolvedModel)
       const modelInputAttachments = filterAttachmentsForModelInput(
         attachments,
         messageBackendContext.connection,
@@ -5338,7 +5353,9 @@ export class SessionManager implements ISessionManager {
           }
         }
 
-        // Process the event first
+        // Observe before business handling so failures in processEvent still leave
+        // a breadcrumb for the event that triggered them.
+        turnTracer.observe(event)
         await this.processEvent(managed, event)
 
         // Fallback: Capture SDK session ID if the onSdkSessionIdUpdate callback didn't fire.
@@ -5364,6 +5381,7 @@ export class SessionManager implements ISessionManager {
           if (managed.authRetryInProgress) {
             sessionLog.info('Chat completed but auth retry is in progress, skipping normal completion handling')
             sendSpan.mark('chat.complete.auth_retry_pending')
+            turnTracer.complete('auth_retry_pending')
             sendSpan.end()
             return  // Exit function - retry will handle completion
           }
@@ -5374,6 +5392,7 @@ export class SessionManager implements ISessionManager {
           if (!managed.isProcessing) {
             sessionLog.info('Chat completed after explicit handoff/stop; skipping normal completion handling')
             sendSpan.mark('chat.complete.already_stopped')
+            turnTracer.complete('already_stopped')
             sendSpan.end()
             return
           }
@@ -5434,6 +5453,7 @@ export class SessionManager implements ISessionManager {
           }
 
           sendSpan.mark('chat.complete')
+          turnTracer.complete('complete')
           sendSpan.end()
           this.onProcessingStopped(sessionId, 'complete')
           return  // Exit function, skip finally block (onProcessingStopped handles cleanup)
@@ -5449,9 +5469,11 @@ export class SessionManager implements ISessionManager {
       if (!managed.isProcessing) {
         sessionLog.info('Chat loop exited after explicit handoff/stop')
         sendSpan.mark('chat.exit.already_stopped')
+        turnTracer.complete('already_stopped')
         sendSpan.end()
       } else if (managed.stopRequested) {
         sessionLog.info('Chat loop completed after stop request - events drained successfully')
+        turnTracer.abort('stop_requested')
         this.onProcessingStopped(sessionId, 'interrupted')
       } else {
         sessionLog.info('Chat loop exited unexpectedly')
@@ -5471,6 +5493,7 @@ export class SessionManager implements ISessionManager {
         sessionLog.info(`Chat aborted (reason: ${reason || 'unknown'})`)
         sendSpan.mark('chat.aborted')
         sendSpan.setMetadata('abort_reason', reason || 'unknown')
+        turnTracer.abort(reason || 'unknown')
         sendSpan.end()
 
         // UI handoff paths (plan submission, auth request) handle their own cleanup
@@ -5489,6 +5512,7 @@ export class SessionManager implements ISessionManager {
 
         sendSpan.mark('chat.error')
         sendSpan.setMetadata('error', error instanceof Error ? error.message : String(error))
+        turnTracer.fail(error)
         sendSpan.end()
         this.sendEvent({
           type: 'error',
@@ -5505,9 +5529,11 @@ export class SessionManager implements ISessionManager {
       if (managed.isProcessing && managed.processingGeneration === myGeneration) {
         sessionLog.info('Finally block cleanup - unexpected exit')
         sendSpan.mark('chat.unexpected_exit')
+        turnTracer.abort('unexpected_exit')
         sendSpan.end()
         this.onProcessingStopped(sessionId, 'interrupted')
       }
+      await turnTracer.end()
     }
   }
 

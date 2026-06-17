@@ -1,0 +1,6708 @@
+- id: procurement_inventory_first-001-mt53e512m32d1zw-046-aat-b
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHDZBTOOnP
+      kind: dynamic_inventory
+    seed:
+      model: MT53E512M32D1ZW-046 AAT:B
+      brand: Micron
+      quantity: '8000'
+      price: 135U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - category_chip
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_space
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - MT53E512M32D1ZW-046 AAT:B
+  input: 帮我找一下 MT53E512M32D1ZW-046 AAT:B
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - MT53E512M32D1ZW-046 AAT:B
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - MT53E512M32D1ZW-046 AAT:B
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-002-tlp184-v4gbtl-e-t
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHxh3vLpW
+      kind: dynamic_inventory
+    seed:
+      model: TLP184(V4GBTL,E(T
+      brand: 东芝
+      quantity: null
+      price: 0.42含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - TLP184(V4GBTL,E(T
+  input: 帮我找一下 TLP184(V4GBTL,E(T
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP184(V4GBTL,E(T
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP184(V4GBTL,E(T
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-003-tlp293-gb-tpl-e
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsCaXk
+      kind: dynamic_inventory
+    seed:
+      model: TLP293(GB-TPL,E
+      brand: 东芝
+      quantity: null
+      price: 0.44含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - TLP293(GB-TPL,E
+  input: 帮我找一下 TLP293(GB-TPL,E
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP293(GB-TPL,E
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP293(GB-TPL,E
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-004-tlp291-gb-tp-se-t
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCs245O
+      kind: dynamic_inventory
+    seed:
+      model: TLP291(GB-TP,SE(T
+      brand: 东芝
+      quantity: null
+      price: 0.353含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - TLP291(GB-TP,SE(T
+  input: 帮我找一下 TLP291(GB-TP,SE(T
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP291(GB-TP,SE(T
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP291(GB-TP,SE(T
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-005-tlp184-gb-tpl-se-t
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsQh2I
+      kind: dynamic_inventory
+    seed:
+      model: TLP184(GB-TPL,SE(T
+      brand: 东芝
+      quantity: null
+      price: 0.45含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - TLP184(GB-TPL,SE(T
+  input: 帮我找一下 TLP184(GB-TPL,SE(T
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP184(GB-TPL,SE(T
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP184(GB-TPL,SE(T
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-006-tlp350-f
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsJXCv
+      kind: dynamic_inventory
+    seed:
+      model: TLP350(F)
+      brand: 东芝
+      quantity: null
+      price: 2.88含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - TLP350(F)
+  input: 帮我找一下 TLP350(F)
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP350(F)
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP350(F)
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-007-tlp118-tpl-e
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsSfDz
+      kind: dynamic_inventory
+    seed:
+      model: TLP118(TPL,E
+      brand: 东芝
+      quantity: null
+      price: 1.63含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - TLP118(TPL,E
+  input: 帮我找一下 TLP118(TPL,E
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP118(TPL,E
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP118(TPL,E
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-008-tlp185-gb-tpl-se
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCs9fFS
+      kind: dynamic_inventory
+    seed:
+      model: TLP185(GB-TPL,SE
+      brand: 东芝
+      quantity: null
+      price: 0.339含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - TLP185(GB-TPL,SE
+  input: 帮我找一下 TLP185(GB-TPL,SE
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP185(GB-TPL,SE
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP185(GB-TPL,SE
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-009-cxdq3a8am-cj-a
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCs3bkB
+      kind: dynamic_inventory
+    seed:
+      model: CXDQ3A8AM-CJ-A
+      brand: null
+      quantity: '1600'
+      price: 150含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - CXDQ3A8AM-CJ-A
+  input: 帮我找一下 CXDQ3A8AM-CJ-A
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - CXDQ3A8AM-CJ-A
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - CXDQ3A8AM-CJ-A
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-010-k4b4g1646e-bcnb000
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsiALu
+      kind: dynamic_inventory
+    seed:
+      model: K4B4G1646E-BCNB000
+      brand: null
+      quantity: '13440'
+      price: 71含税/63未
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - K4B4G1646E-BCNB000
+  input: 帮我找一下 K4B4G1646E-BCNB000
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - K4B4G1646E-BCNB000
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - K4B4G1646E-BCNB000
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-011-pse2a0sl-08gx
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsLmvT
+      kind: dynamic_inventory
+    seed:
+      model: PSE2A0SL-08GX
+      brand: null
+      quantity: '3920'
+      price: 35U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - PSE2A0SL-08GX
+  input: 帮我找一下 PSE2A0SL-08GX
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - PSE2A0SL-08GX
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - PSE2A0SL-08GX
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-012-mt53e512m32d1zw-046-wt-b
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsNPpB
+      kind: dynamic_inventory
+    seed:
+      model: MT53E512M32D1ZW-046 WT:B
+      brand: null
+      quantity: '8000'
+      price: 93U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - model_has_space
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - MT53E512M32D1ZW-046 WT:B
+  input: 帮我找一下 MT53E512M32D1ZW-046 WT:B
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - MT53E512M32D1ZW-046 WT:B
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - MT53E512M32D1ZW-046 WT:B
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-013-mtfc4gacajcn-4m-it
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsRbOm
+      kind: dynamic_inventory
+    seed:
+      model: MTFC4GACAJCN-4M IT
+      brand: null
+      quantity: '2000'
+      price: 30U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - model_has_space
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - MTFC4GACAJCN-4M IT
+  input: 帮我找一下 MTFC4GACAJCN-4M IT
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - MTFC4GACAJCN-4M IT
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - MTFC4GACAJCN-4M IT
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-014-psmn2r3-100ssej
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsvdlS
+      kind: dynamic_inventory
+    seed:
+      model: PSMN2R3-100SSEJ
+      brand: NXP
+      quantity: '4000'
+      price: 18.5U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - PSMN2R3-100SSEJ
+  input: 帮我找一下 PSMN2R3-100SSEJ
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - PSMN2R3-100SSEJ
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - PSMN2R3-100SSEJ
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-015-icm-42688-p
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsge4W
+      kind: dynamic_inventory
+    seed:
+      model: ICM-42688-P
+      brand: null
+      quantity: '10000'
+      price: 8.2U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - ICM-42688-P
+  input: 帮我找一下 ICM-42688-P
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - ICM-42688-P
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - ICM-42688-P
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-016-h5ag36exndx017n
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsEFHe
+      kind: dynamic_inventory
+    seed:
+      model: H5AG36EXNDX017N
+      brand: null
+      quantity: null
+      price: 45u
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - H5AG36EXNDX017N
+  input: 帮我找一下 H5AG36EXNDX017N
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - H5AG36EXNDX017N
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - H5AG36EXNDX017N
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-017-h5ag46dxndx117n
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsVv11
+      kind: dynamic_inventory
+    seed:
+      model: H5AG46DXNDX117N
+      brand: null
+      quantity: 12800pcs
+      price: 55u
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - H5AG46DXNDX117N
+  input: 帮我找一下 H5AG46DXNDX117N
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - H5AG46DXNDX117N
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - H5AG46DXNDX117N
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-018-lt5557euf-pbf
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsTlAE
+      kind: dynamic_inventory
+    seed:
+      model: LT5557EUF#PBF
+      brand: null
+      quantity: 1365片
+      price: 8.8U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - LT5557EUF#PBF
+  input: 帮我找一下 LT5557EUF#PBF
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - LT5557EUF#PBF
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - LT5557EUF#PBF
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-019-mx52lm08a11xvw
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsBDaT
+      kind: dynamic_inventory
+    seed:
+      model: MX52LM08A11XVW
+      brand: null
+      quantity: 8包
+      price: usd 29.5
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - MX52LM08A11XVW
+  input: 帮我找一下 MX52LM08A11XVW
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - MX52LM08A11XVW
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - MX52LM08A11XVW
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-020-lt3045edd-trpbf
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsKm1z
+      kind: dynamic_inventory
+    seed:
+      model: LT3045EDD#TRPBF
+      brand: null
+      quantity: 2500片
+      price: 3.2U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 真实库存找料优先 - LT3045EDD#TRPBF
+  input: 帮我找一下 LT3045EDD#TRPBF
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - LT3045EDD#TRPBF
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - LT3045EDD#TRPBF
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-021-mt4424te-cp1h-3m
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0sId6jB
+      kind: supplier_stock
+    seed:
+      model: MT4424TE-CP1H-3M
+      brand: GUOCHAN
+      quantity: '1'
+      price: '19.2'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - model_has_dash
+        - supplier_stock
+  name: 真实库存找料优先 - MT4424TE-CP1H-3M
+  input: 帮我找一下 MT4424TE-CP1H-3M
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tblzQbSnVNhGszYA
+      requiredTableNames:
+        - A级供应商库存
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - MT4424TE-CP1H-3M
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - MT4424TE-CP1H-3M
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-022-tk-fpo-3m
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0Tp33rk
+      kind: supplier_stock
+    seed:
+      model: TK-FPO(3M）
+      brand: GUOCHAN
+      quantity: '2'
+      price: '15.8'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - model_has_dash
+        - model_has_parenthesis
+        - supplier_stock
+  name: 真实库存找料优先 - TK-FPO(3M）
+  input: 帮我找一下 TK-FPO(3M）
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tblzQbSnVNhGszYA
+      requiredTableNames:
+        - A级供应商库存
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TK-FPO(3M）
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TK-FPO(3M）
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-023-db9
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0TpI8q4
+      kind: supplier_stock
+    seed:
+      model: DB9
+      brand: HD-LINK
+      quantity: '48'
+      price: '0.9'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - supplier_stock
+  name: 真实库存找料优先 - DB9
+  input: 帮我找一下 DB9
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tblzQbSnVNhGszYA
+      requiredTableNames:
+        - A级供应商库存
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - DB9
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - DB9
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-024-cm-c032b
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0TpiXTk
+      kind: supplier_stock
+    seed:
+      model: CM-C032B
+      brand: SMC
+      quantity: '1'
+      price: '17.7'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - category_industrial
+        - model_has_dash
+        - supplier_stock
+  name: 真实库存找料优先 - CM-C032B
+  input: 帮我找一下 CM-C032B
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tblzQbSnVNhGszYA
+      requiredTableNames:
+        - A级供应商库存
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - CM-C032B
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - CM-C032B
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_inventory_first-025-d-a72
+  category: procurement_inventory_first
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0Tp68eA
+      kind: supplier_stock
+    seed:
+      model: D-A72
+      brand: SMC
+      quantity: '1'
+      price: '31.5'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - category_industrial
+        - model_has_dash
+        - supplier_stock
+  name: 真实库存找料优先 - D-A72
+  input: 帮我找一下 D-A72
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 12
+      maxBashCalls: 10
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tblzQbSnVNhGszYA
+      requiredTableNames:
+        - A级供应商库存
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - D-A72
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - D-A72
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+  assertions:
+    - type: code
+      criterion: 先查内部库存，不先查外部平台或型号资料网页
+    - type: manual
+      criterion: 保留用户原始型号，并说明内部库存查询结果来自本地/供应商库存
+- id: procurement_model_normalization-026-mt53e512m32d1zw-046-aat-b
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHDZBTOOnP
+      kind: dynamic_inventory
+    seed:
+      model: MT53E512M32D1ZW-046 AAT:B
+      brand: Micron
+      quantity: '8000'
+      price: 135U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - category_chip
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_space
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - MT53E512M32D1ZW-046 AAT:B
+  input: 找料 MT53E512M32D1ZW-046 AAT:B
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - MT53E512M32D1ZW-046 AAT:B
+        - MT53E512M32D1ZW046AAT:B
+        - 'MT53E512M32D1ZW-046 AAT:'
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - MT53E512M32D1ZW-046 AAT:B
+        - MT53E512M32D1ZW046AAT:B
+        - 'MT53E512M32D1ZW-046 AAT:'
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-027-tlp184-v4gbtl-e-t
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHxh3vLpW
+      kind: dynamic_inventory
+    seed:
+      model: TLP184(V4GBTL,E(T
+      brand: 东芝
+      quantity: null
+      price: 0.42含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - TLP184(V4GBTL,E(T
+  input: 找料 TLP184(V4GBTL,E(T
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP184(V4GBTL,E(T
+        - TLP184(V4GBTL,E(
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP184(V4GBTL,E(T
+        - TLP184(V4GBTL,E(
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-028-tlp293-gb-tpl-e
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsCaXk
+      kind: dynamic_inventory
+    seed:
+      model: TLP293(GB-TPL,E
+      brand: 东芝
+      quantity: null
+      price: 0.44含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - TLP293(GB-TPL,E
+  input: 找料 TLP293(GB-TPL,E
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP293(GB-TPL,E
+        - TLP293(GBTPL,E
+        - TLP293(GB-TPL,
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP293(GB-TPL,E
+        - TLP293(GBTPL,E
+        - TLP293(GB-TPL,
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-029-tlp291-gb-tp-se-t
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCs245O
+      kind: dynamic_inventory
+    seed:
+      model: TLP291(GB-TP,SE(T
+      brand: 东芝
+      quantity: null
+      price: 0.353含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - TLP291(GB-TP,SE(T
+  input: 找料 TLP291(GB-TP,SE(T
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP291(GB-TP,SE(T
+        - TLP291(GBTP,SE(T
+        - TLP291(GB-TP,SE(
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP291(GB-TP,SE(T
+        - TLP291(GBTP,SE(T
+        - TLP291(GB-TP,SE(
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-030-tlp184-gb-tpl-se-t
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsQh2I
+      kind: dynamic_inventory
+    seed:
+      model: TLP184(GB-TPL,SE(T
+      brand: 东芝
+      quantity: null
+      price: 0.45含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - TLP184(GB-TPL,SE(T
+  input: 找料 TLP184(GB-TPL,SE(T
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP184(GB-TPL,SE(T
+        - TLP184(GBTPL,SE(T
+        - TLP184(GB-TPL,SE(
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP184(GB-TPL,SE(T
+        - TLP184(GBTPL,SE(T
+        - TLP184(GB-TPL,SE(
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-031-tlp350-f
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsJXCv
+      kind: dynamic_inventory
+    seed:
+      model: TLP350(F)
+      brand: 东芝
+      quantity: null
+      price: 2.88含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - TLP350(F)
+  input: 找料 TLP350(F)
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP350(F)
+        - TLP350(
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP350(F)
+        - TLP350(
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-032-tlp118-tpl-e
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsSfDz
+      kind: dynamic_inventory
+    seed:
+      model: TLP118(TPL,E
+      brand: 东芝
+      quantity: null
+      price: 1.63含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - TLP118(TPL,E
+  input: 找料 TLP118(TPL,E
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP118(TPL,E
+        - TLP118(TPL,
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP118(TPL,E
+        - TLP118(TPL,
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-033-tlp185-gb-tpl-se
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCs9fFS
+      kind: dynamic_inventory
+    seed:
+      model: TLP185(GB-TPL,SE
+      brand: 东芝
+      quantity: null
+      price: 0.339含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - TLP185(GB-TPL,SE
+  input: 找料 TLP185(GB-TPL,SE
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - TLP185(GB-TPL,SE
+        - TLP185(GBTPL,SE
+        - TLP185(GB-TPL,S
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - TLP185(GB-TPL,SE
+        - TLP185(GBTPL,SE
+        - TLP185(GB-TPL,S
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - quantity
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-034-cxdq3a8am-cj-a
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCs3bkB
+      kind: dynamic_inventory
+    seed:
+      model: CXDQ3A8AM-CJ-A
+      brand: null
+      quantity: '1600'
+      price: 150含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - CXDQ3A8AM-CJ-A
+  input: 找料 CXDQ3A8AM-CJ-A
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - CXDQ3A8AM-CJ-A
+        - CXDQ3A8AMCJA
+        - CXDQ3A8AM-CJ-
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - CXDQ3A8AM-CJ-A
+        - CXDQ3A8AMCJA
+        - CXDQ3A8AM-CJ-
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-035-k4b4g1646e-bcnb000
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsiALu
+      kind: dynamic_inventory
+    seed:
+      model: K4B4G1646E-BCNB000
+      brand: null
+      quantity: '13440'
+      price: 71含税/63未
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - K4B4G1646E-BCNB000
+  input: 找料 K4B4G1646E-BCNB000
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - K4B4G1646E-BCNB000
+        - K4B4G1646EBCNB000
+        - K4B4G1646E-BCNB00
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - K4B4G1646E-BCNB000
+        - K4B4G1646EBCNB000
+        - K4B4G1646E-BCNB00
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-036-pse2a0sl-08gx
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsLmvT
+      kind: dynamic_inventory
+    seed:
+      model: PSE2A0SL-08GX
+      brand: null
+      quantity: '3920'
+      price: 35U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - PSE2A0SL-08GX
+  input: 找料 PSE2A0SL-08GX
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - PSE2A0SL-08GX
+        - PSE2A0SL08GX
+        - PSE2A0SL-08G
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - PSE2A0SL-08GX
+        - PSE2A0SL08GX
+        - PSE2A0SL-08G
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-037-mt53e512m32d1zw-046-wt-b
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsNPpB
+      kind: dynamic_inventory
+    seed:
+      model: MT53E512M32D1ZW-046 WT:B
+      brand: null
+      quantity: '8000'
+      price: 93U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - model_has_space
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - MT53E512M32D1ZW-046 WT:B
+  input: 找料 MT53E512M32D1ZW-046 WT:B
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - MT53E512M32D1ZW-046 WT:B
+        - MT53E512M32D1ZW046WT:B
+        - 'MT53E512M32D1ZW-046 WT:'
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - MT53E512M32D1ZW-046 WT:B
+        - MT53E512M32D1ZW046WT:B
+        - 'MT53E512M32D1ZW-046 WT:'
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-038-mtfc4gacajcn-4m-it
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsRbOm
+      kind: dynamic_inventory
+    seed:
+      model: MTFC4GACAJCN-4M IT
+      brand: null
+      quantity: '2000'
+      price: 30U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - model_has_space
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - MTFC4GACAJCN-4M IT
+  input: 找料 MTFC4GACAJCN-4M IT
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - MTFC4GACAJCN-4M IT
+        - MTFC4GACAJCN4MIT
+        - MTFC4GACAJCN-4M I
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - MTFC4GACAJCN-4M IT
+        - MTFC4GACAJCN4MIT
+        - MTFC4GACAJCN-4M I
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-039-psmn2r3-100ssej
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsvdlS
+      kind: dynamic_inventory
+    seed:
+      model: PSMN2R3-100SSEJ
+      brand: NXP
+      quantity: '4000'
+      price: 18.5U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - PSMN2R3-100SSEJ
+  input: 找料 PSMN2R3-100SSEJ
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - PSMN2R3-100SSEJ
+        - PSMN2R3100SSEJ
+        - PSMN2R3-100SSE
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - PSMN2R3-100SSEJ
+        - PSMN2R3100SSEJ
+        - PSMN2R3-100SSE
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_normalization-040-icm-42688-p
+  category: procurement_model_normalization
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsge4W
+      kind: dynamic_inventory
+    seed:
+      model: ICM-42688-P
+      brand: null
+      quantity: '10000'
+      price: 8.2U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 型号预处理真实噪声 - ICM-42688-P
+  input: 找料 ICM-42688-P
+  skillSlugs:
+    - procurement-local-inventory-lookup
+  expected:
+    trace:
+      inventoryFirst: true
+      forbidPlatformBeforeInventory: true
+      maxToolCalls: 14
+      maxBashCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-local-inventory-lookup
+      requiredTableIds:
+        - tbli1WYTb1Xn2MSa
+      requiredTableNames:
+        - 动态库存表
+      requiredSearchFields:
+        - 型号
+      requiredSearchTerms:
+        - ICM-42688-P
+        - ICM42688P
+        - ICM-42688-
+      forbiddenTools:
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - ICM-42688-P
+        - ICM42688P
+        - ICM-42688-
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 生成原始词、去符号词、核心词，并去重后再查库存
+    - type: manual
+      criterion: 没有把去符号词当成用户唯一想要的型号
+- id: procurement_model_mismatch_detail-041-mt53e512m32d1zw-046-aat-b
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHDZBTOOnP
+      kind: dynamic_inventory
+    seed:
+      model: MT53E512M32D1ZW-046 AAT:B
+      brand: Micron
+      quantity: '8000'
+      price: 135U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - category_chip
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_space
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: '近似命中差异说明 - MT53E512M32D1ZW-046 AAT: vs MT53E512M32D1ZW-046 AAT:B'
+  context: |-
+    用户原始要找的型号是 MT53E512M32D1ZW-046 AAT:。
+    内部库存查询命中了一条近似记录，库存表里的型号是 MT53E512M32D1ZW-046 AAT:B。
+    库存记录品牌是 Micron。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - 'MT53E512M32D1ZW-046 AAT:'
+        - MT53E512M32D1ZW-046 AAT:B
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-042-tlp184-v4gbtl-e-t
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHxh3vLpW
+      kind: dynamic_inventory
+    seed:
+      model: TLP184(V4GBTL,E(T
+      brand: 东芝
+      quantity: null
+      price: 0.42含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 近似命中差异说明 - TLP184(V4GBTL,E( vs TLP184(V4GBTL,E(T
+  context: |-
+    用户原始要找的型号是 TLP184(V4GBTL,E(。
+    内部库存查询命中了一条近似记录，库存表里的型号是 TLP184(V4GBTL,E(T。
+    库存记录品牌是 东芝。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP184(V4GBTL,E(
+        - TLP184(V4GBTL,E(T
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-043-tlp293-gb-tpl-e
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsCaXk
+      kind: dynamic_inventory
+    seed:
+      model: TLP293(GB-TPL,E
+      brand: 东芝
+      quantity: null
+      price: 0.44含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 近似命中差异说明 - TLP293(GB-TPL, vs TLP293(GB-TPL,E
+  context: |-
+    用户原始要找的型号是 TLP293(GB-TPL,。
+    内部库存查询命中了一条近似记录，库存表里的型号是 TLP293(GB-TPL,E。
+    库存记录品牌是 东芝。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP293(GB-TPL,
+        - TLP293(GB-TPL,E
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-044-tlp291-gb-tp-se-t
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCs245O
+      kind: dynamic_inventory
+    seed:
+      model: TLP291(GB-TP,SE(T
+      brand: 东芝
+      quantity: null
+      price: 0.353含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 近似命中差异说明 - TLP291(GB-TP,SE( vs TLP291(GB-TP,SE(T
+  context: |-
+    用户原始要找的型号是 TLP291(GB-TP,SE(。
+    内部库存查询命中了一条近似记录，库存表里的型号是 TLP291(GB-TP,SE(T。
+    库存记录品牌是 东芝。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP291(GB-TP,SE(
+        - TLP291(GB-TP,SE(T
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-045-tlp184-gb-tpl-se-t
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsQh2I
+      kind: dynamic_inventory
+    seed:
+      model: TLP184(GB-TPL,SE(T
+      brand: 东芝
+      quantity: null
+      price: 0.45含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 近似命中差异说明 - TLP184(GB-TPL,SE( vs TLP184(GB-TPL,SE(T
+  context: |-
+    用户原始要找的型号是 TLP184(GB-TPL,SE(。
+    内部库存查询命中了一条近似记录，库存表里的型号是 TLP184(GB-TPL,SE(T。
+    库存记录品牌是 东芝。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP184(GB-TPL,SE(
+        - TLP184(GB-TPL,SE(T
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-046-tlp350-f
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsJXCv
+      kind: dynamic_inventory
+    seed:
+      model: TLP350(F)
+      brand: 东芝
+      quantity: null
+      price: 2.88含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 近似命中差异说明 - TLP350( vs TLP350(F)
+  context: |-
+    用户原始要找的型号是 TLP350(。
+    内部库存查询命中了一条近似记录，库存表里的型号是 TLP350(F)。
+    库存记录品牌是 东芝。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP350(
+        - TLP350(F)
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-047-tlp118-tpl-e
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsSfDz
+      kind: dynamic_inventory
+    seed:
+      model: TLP118(TPL,E
+      brand: 东芝
+      quantity: null
+      price: 1.63含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 近似命中差异说明 - TLP118(TPL, vs TLP118(TPL,E
+  context: |-
+    用户原始要找的型号是 TLP118(TPL,。
+    内部库存查询命中了一条近似记录，库存表里的型号是 TLP118(TPL,E。
+    库存记录品牌是 东芝。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP118(TPL,
+        - TLP118(TPL,E
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-048-tlp185-gb-tpl-se
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCs9fFS
+      kind: dynamic_inventory
+    seed:
+      model: TLP185(GB-TPL,SE
+      brand: 东芝
+      quantity: null
+      price: 0.339含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 近似命中差异说明 - TLP185(GB-TPL,S vs TLP185(GB-TPL,SE
+  context: |-
+    用户原始要找的型号是 TLP185(GB-TPL,S。
+    内部库存查询命中了一条近似记录，库存表里的型号是 TLP185(GB-TPL,SE。
+    库存记录品牌是 东芝。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP185(GB-TPL,S
+        - TLP185(GB-TPL,SE
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-049-cxdq3a8am-cj-a
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCs3bkB
+      kind: dynamic_inventory
+    seed:
+      model: CXDQ3A8AM-CJ-A
+      brand: null
+      quantity: '1600'
+      price: 150含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 近似命中差异说明 - CXDQ3A8AM-CJ- vs CXDQ3A8AM-CJ-A
+  context: |-
+    用户原始要找的型号是 CXDQ3A8AM-CJ-。
+    内部库存查询命中了一条近似记录，库存表里的型号是 CXDQ3A8AM-CJ-A。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - CXDQ3A8AM-CJ-
+        - CXDQ3A8AM-CJ-A
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-050-k4b4g1646e-bcnb000
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsiALu
+      kind: dynamic_inventory
+    seed:
+      model: K4B4G1646E-BCNB000
+      brand: null
+      quantity: '13440'
+      price: 71含税/63未
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 近似命中差异说明 - K4B4G1646E-BCNB00 vs K4B4G1646E-BCNB000
+  context: |-
+    用户原始要找的型号是 K4B4G1646E-BCNB00。
+    内部库存查询命中了一条近似记录，库存表里的型号是 K4B4G1646E-BCNB000。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - K4B4G1646E-BCNB00
+        - K4B4G1646E-BCNB000
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-051-pse2a0sl-08gx
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsLmvT
+      kind: dynamic_inventory
+    seed:
+      model: PSE2A0SL-08GX
+      brand: null
+      quantity: '3920'
+      price: 35U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 近似命中差异说明 - PSE2A0SL-08G vs PSE2A0SL-08GX
+  context: |-
+    用户原始要找的型号是 PSE2A0SL-08G。
+    内部库存查询命中了一条近似记录，库存表里的型号是 PSE2A0SL-08GX。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - PSE2A0SL-08G
+        - PSE2A0SL-08GX
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-052-mt53e512m32d1zw-046-wt-b
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsNPpB
+      kind: dynamic_inventory
+    seed:
+      model: MT53E512M32D1ZW-046 WT:B
+      brand: null
+      quantity: '8000'
+      price: 93U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - model_has_space
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: '近似命中差异说明 - MT53E512M32D1ZW-046 WT: vs MT53E512M32D1ZW-046 WT:B'
+  context: |-
+    用户原始要找的型号是 MT53E512M32D1ZW-046 WT:。
+    内部库存查询命中了一条近似记录，库存表里的型号是 MT53E512M32D1ZW-046 WT:B。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - 'MT53E512M32D1ZW-046 WT:'
+        - MT53E512M32D1ZW-046 WT:B
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-053-mtfc4gacajcn-4m-it
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsRbOm
+      kind: dynamic_inventory
+    seed:
+      model: MTFC4GACAJCN-4M IT
+      brand: null
+      quantity: '2000'
+      price: 30U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - model_has_space
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 近似命中差异说明 - MTFC4GACAJCN-4M I vs MTFC4GACAJCN-4M IT
+  context: |-
+    用户原始要找的型号是 MTFC4GACAJCN-4M I。
+    内部库存查询命中了一条近似记录，库存表里的型号是 MTFC4GACAJCN-4M IT。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - MTFC4GACAJCN-4M I
+        - MTFC4GACAJCN-4M IT
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-054-psmn2r3-100ssej
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsvdlS
+      kind: dynamic_inventory
+    seed:
+      model: PSMN2R3-100SSEJ
+      brand: NXP
+      quantity: '4000'
+      price: 18.5U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 近似命中差异说明 - PSMN2R3-100SSE vs PSMN2R3-100SSEJ
+  context: |-
+    用户原始要找的型号是 PSMN2R3-100SSE。
+    内部库存查询命中了一条近似记录，库存表里的型号是 PSMN2R3-100SSEJ。
+    库存记录品牌是 NXP。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - PSMN2R3-100SSE
+        - PSMN2R3-100SSEJ
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_model_mismatch_detail-055-icm-42688-p
+  category: procurement_model_mismatch_detail
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsge4W
+      kind: dynamic_inventory
+    seed:
+      model: ICM-42688-P
+      brand: null
+      quantity: '10000'
+      price: 8.2U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 近似命中差异说明 - ICM-42688- vs ICM-42688-P
+  context: |-
+    用户原始要找的型号是 ICM-42688-。
+    内部库存查询命中了一条近似记录，库存表里的型号是 ICM-42688-P。
+    库存记录供应商是 Jada芯片分销群。
+  input: 把这个库存命中整理给采购看。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - ICM-42688-
+        - ICM-42688-P
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - brand
+        - supplierName
+      missingFields:
+        - brand
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 明确写出用户型号和命中型号的具体差异，不能只写“相近命中需复核”
+    - type: manual
+      criterion: 不把近似命中当成精确现货结论
+- id: procurement_self_inventory_cost-056-max3098eaeee
+  category: procurement_self_inventory_cost
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 自家库存
+      tableId: tblSUjXdehzkxIbK
+      recordId: recv5wzmIM3q8w
+      kind: self_inventory
+    seed:
+      model: MAX3098EAEEE+
+      brand: Maxim
+      quantity: '105'
+      price: $14.70
+      supplierName: null
+      supplierGrade: null
+      tags:
+        - category_chip
+        - model_has_plus
+        - self_inventory
+        - self_inventory_cost
+        - 自家库存
+  name: 自家库存成本价 - MAX3098EAEEE+
+  context: |-
+    查库存结果：自家库存表命中。
+    型号 MAX3098EAEEE+，品牌 Maxim，库存数量 105，单价 $14.70。
+    货架位置号 C4。
+  input: 有自家库存，你整理结果给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - MAX3098EAEEE+
+        - $14.70
+        - 囤货成本
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - shelf
+  assertions:
+    - type: code
+      criterion: 展示自家库存的单价/成本价，而不是只说有货
+    - type: manual
+      criterion: 说明自家库存价格是囤货成本，可用于和市场行情对比
+- id: procurement_self_inventory_cost-057-rk73h2attd1002f
+  category: procurement_self_inventory_cost
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 自家库存
+      tableId: tblSUjXdehzkxIbK
+      recordId: recv5wzmIM2TnA
+      kind: self_inventory
+    seed:
+      model: RK73H2ATTD1002F
+      brand: KOA
+      quantity: '195000'
+      price: $0.002
+      supplierName: null
+      supplierGrade: null
+      tags:
+        - self_inventory
+        - self_inventory_cost
+        - 自家库存
+  name: 自家库存成本价 - RK73H2ATTD1002F
+  context: |-
+    查库存结果：自家库存表命中。
+    型号 RK73H2ATTD1002F，品牌 KOA，库存数量 195000，单价 $0.002。
+    货架位置号 小房间。
+  input: 有自家库存，你整理结果给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - RK73H2ATTD1002F
+        - $0.002
+        - 囤货成本
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - shelf
+  assertions:
+    - type: code
+      criterion: 展示自家库存的单价/成本价，而不是只说有货
+    - type: manual
+      criterion: 说明自家库存价格是囤货成本，可用于和市场行情对比
+- id: procurement_self_inventory_cost-058-003900-0059
+  category: procurement_self_inventory_cost
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 自家库存
+      tableId: tblSUjXdehzkxIbK
+      recordId: recv5wzmIMhA5U
+      kind: self_inventory
+    seed:
+      model: 003900-0059
+      brand: MOLEX
+      quantity: '2000'
+      price: $0.008
+      supplierName: null
+      supplierGrade: null
+      tags:
+        - category_connector
+        - model_has_dash
+        - model_numeric_punctuation
+        - self_inventory
+        - self_inventory_cost
+        - 自家库存
+  name: 自家库存成本价 - 003900-0059
+  context: |-
+    查库存结果：自家库存表命中。
+    型号 003900-0059，品牌 MOLEX，库存数量 2000，单价 $0.008。
+    货架位置号 小房间。
+  input: 有自家库存，你整理结果给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - 003900-0059
+        - $0.008
+        - 囤货成本
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - shelf
+  assertions:
+    - type: code
+      criterion: 展示自家库存的单价/成本价，而不是只说有货
+    - type: manual
+      criterion: 说明自家库存价格是囤货成本，可用于和市场行情对比
+- id: procurement_self_inventory_cost-059-tm11r-5m2-88
+  category: procurement_self_inventory_cost
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 自家库存
+      tableId: tblSUjXdehzkxIbK
+      recordId: recv5wzmIMQkkQ
+      kind: self_inventory
+    seed:
+      model: TM11R-5M2-88
+      brand: HRS
+      quantity: '500'
+      price: $8.465
+      supplierName: null
+      supplierGrade: null
+      tags:
+        - category_connector
+        - model_has_dash
+        - self_inventory
+        - self_inventory_cost
+        - 自家库存
+  name: 自家库存成本价 - TM11R-5M2-88
+  context: |-
+    查库存结果：自家库存表命中。
+    型号 TM11R-5M2-88，品牌 HRS，库存数量 500，单价 $8.465。
+    货架位置号 小房间。
+  input: 有自家库存，你整理结果给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TM11R-5M2-88
+        - $8.465
+        - 囤货成本
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - shelf
+  assertions:
+    - type: code
+      criterion: 展示自家库存的单价/成本价，而不是只说有货
+    - type: manual
+      criterion: 说明自家库存价格是囤货成本，可用于和市场行情对比
+- id: procurement_self_inventory_cost-060-tk8p60w5-rvq
+  category: procurement_self_inventory_cost
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 自家库存
+      tableId: tblSUjXdehzkxIbK
+      recordId: recv5wzmIMHp6x
+      kind: self_inventory
+    seed:
+      model: TK8P60W5,RVQ
+      brand: TOSHIBA
+      quantity: '4000'
+      price: $0.759
+      supplierName: null
+      supplierGrade: null
+      tags:
+        - category_chip
+        - self_inventory
+        - self_inventory_cost
+        - 自家库存
+  name: 自家库存成本价 - TK8P60W5,RVQ
+  context: |-
+    查库存结果：自家库存表命中。
+    型号 TK8P60W5,RVQ，品牌 TOSHIBA，库存数量 4000，单价 $0.759。
+    货架位置号 E4。
+  input: 有自家库存，你整理结果给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TK8P60W5,RVQ
+        - $0.759
+        - 囤货成本
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - shelf
+  assertions:
+    - type: code
+      criterion: 展示自家库存的单价/成本价，而不是只说有货
+    - type: manual
+      criterion: 说明自家库存价格是囤货成本，可用于和市场行情对比
+- id: procurement_self_inventory_cost-061-174779-1
+  category: procurement_self_inventory_cost
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 自家库存
+      tableId: tblSUjXdehzkxIbK
+      recordId: recv5wzmIMaqCd
+      kind: self_inventory
+    seed:
+      model: 174779-1
+      brand: TE
+      quantity: '61000'
+      price: $0.043
+      supplierName: null
+      supplierGrade: null
+      tags:
+        - category_connector
+        - model_has_dash
+        - model_numeric_punctuation
+        - self_inventory
+        - self_inventory_cost
+        - 自家库存
+  name: 自家库存成本价 - 174779-1
+  context: |-
+    查库存结果：自家库存表命中。
+    型号 174779-1，品牌 TE，库存数量 61000，单价 $0.043。
+    货架位置号 小房间。
+  input: 有自家库存，你整理结果给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - 174779-1
+        - $0.043
+        - 囤货成本
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - shelf
+  assertions:
+    - type: code
+      criterion: 展示自家库存的单价/成本价，而不是只说有货
+    - type: manual
+      criterion: 说明自家库存价格是囤货成本，可用于和市场行情对比
+- id: procurement_self_inventory_cost-062-53358-0640
+  category: procurement_self_inventory_cost
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 自家库存
+      tableId: tblSUjXdehzkxIbK
+      recordId: recv5wzmIMuWnw
+      kind: self_inventory
+    seed:
+      model: 53358-0640
+      brand: Molex
+      quantity: '2751'
+      price: $0.115
+      supplierName: null
+      supplierGrade: null
+      tags:
+        - category_connector
+        - model_has_dash
+        - model_numeric_punctuation
+        - self_inventory
+        - self_inventory_cost
+        - 自家库存
+  name: 自家库存成本价 - 53358-0640
+  context: |-
+    查库存结果：自家库存表命中。
+    型号 53358-0640，品牌 Molex，库存数量 2751，单价 $0.115。
+    货架位置号 F2。
+  input: 有自家库存，你整理结果给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - 53358-0640
+        - $0.115
+        - 囤货成本
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - shelf
+  assertions:
+    - type: code
+      criterion: 展示自家库存的单价/成本价，而不是只说有货
+    - type: manual
+      criterion: 说明自家库存价格是囤货成本，可用于和市场行情对比
+- id: procurement_self_inventory_cost-063-6-292246-2
+  category: procurement_self_inventory_cost
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 自家库存
+      tableId: tblSUjXdehzkxIbK
+      recordId: recv5wzmIMO228
+      kind: self_inventory
+    seed:
+      model: 6-292246-2
+      brand: TE
+      quantity: '1480'
+      price: $0.248
+      supplierName: null
+      supplierGrade: null
+      tags:
+        - category_connector
+        - model_has_dash
+        - model_numeric_punctuation
+        - self_inventory
+        - self_inventory_cost
+        - 自家库存
+  name: 自家库存成本价 - 6-292246-2
+  context: |-
+    查库存结果：自家库存表命中。
+    型号 6-292246-2，品牌 TE，库存数量 1480，单价 $0.248。
+    货架位置号 F7 F8 F9 F10。
+  input: 有自家库存，你整理结果给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - 6-292246-2
+        - $0.248
+        - 囤货成本
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - shelf
+  assertions:
+    - type: code
+      criterion: 展示自家库存的单价/成本价，而不是只说有货
+    - type: manual
+      criterion: 说明自家库存价格是囤货成本，可用于和市场行情对比
+- id: procurement_self_inventory_cost-064-53358-1240
+  category: procurement_self_inventory_cost
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 自家库存
+      tableId: tblSUjXdehzkxIbK
+      recordId: recv5wzmIMYbss
+      kind: self_inventory
+    seed:
+      model: 53358-1240
+      brand: Molex
+      quantity: '1243'
+      price: $0.320
+      supplierName: null
+      supplierGrade: null
+      tags:
+        - category_connector
+        - model_has_dash
+        - model_numeric_punctuation
+        - self_inventory
+        - self_inventory_cost
+        - 自家库存
+  name: 自家库存成本价 - 53358-1240
+  context: |-
+    查库存结果：自家库存表命中。
+    型号 53358-1240，品牌 Molex，库存数量 1243，单价 $0.320。
+    货架位置号 F5。
+  input: 有自家库存，你整理结果给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - 53358-1240
+        - $0.320
+        - 囤货成本
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - shelf
+  assertions:
+    - type: code
+      criterion: 展示自家库存的单价/成本价，而不是只说有货
+    - type: manual
+      criterion: 说明自家库存价格是囤货成本，可用于和市场行情对比
+- id: procurement_self_inventory_cost-065-53358-0350
+  category: procurement_self_inventory_cost
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 自家库存
+      tableId: tblSUjXdehzkxIbK
+      recordId: recv5wzmIMZgr5
+      kind: self_inventory
+    seed:
+      model: 53358-0350
+      brand: Molex
+      quantity: '2493'
+      price: $0.090
+      supplierName: null
+      supplierGrade: null
+      tags:
+        - category_connector
+        - model_has_dash
+        - model_numeric_punctuation
+        - self_inventory
+        - self_inventory_cost
+        - 自家库存
+  name: 自家库存成本价 - 53358-0350
+  context: |-
+    查库存结果：自家库存表命中。
+    型号 53358-0350，品牌 Molex，库存数量 2493，单价 $0.090。
+    货架位置号 F11。
+  input: 有自家库存，你整理结果给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - 53358-0350
+        - $0.090
+        - 囤货成本
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - shelf
+  assertions:
+    - type: code
+      criterion: 展示自家库存的单价/成本价，而不是只说有货
+    - type: manual
+      criterion: 说明自家库存价格是囤货成本，可用于和市场行情对比
+- id: procurement_single_supplier_risk-066-cxdq3a8am-cj-a
+  category: procurement_single_supplier_risk
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCs3bkB
+      kind: dynamic_inventory
+    seed:
+      model: CXDQ3A8AM-CJ-A
+      brand: null
+      quantity: '1600'
+      price: 150含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 单源库存风险 - CXDQ3A8AM-CJ-A
+  context: |-
+    用户之前问了“帮我找 CXDQ3A8AM-CJ-A”，内部库存查完。
+    结果：只有动态库存表里有一条记录，供应商 Jada芯片分销群，等级 待判断，数量 1600，单价 150含税。
+    其他库存表没有更多记录。
+  input: 查完了，结果如上。请整理给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - CXDQ3A8AM-CJ-A
+        - 仅此一家
+        - 待判断
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+        - supplierGrade
+      missingFields:
+        - brand
+        - supplierGrade
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 标注仅此一家报有货，无其他源印证
+    - type: manual
+      criterion: 价格、品牌或供应商等级缺失时明确写“未填写/待确认”，不能编造
+- id: procurement_single_supplier_risk-067-k4b4g1646e-bcnb000
+  category: procurement_single_supplier_risk
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsiALu
+      kind: dynamic_inventory
+    seed:
+      model: K4B4G1646E-BCNB000
+      brand: null
+      quantity: '13440'
+      price: 71含税/63未
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 单源库存风险 - K4B4G1646E-BCNB000
+  context: |-
+    用户之前问了“帮我找 K4B4G1646E-BCNB000”，内部库存查完。
+    结果：只有动态库存表里有一条记录，供应商 Jada芯片分销群，等级 待判断，数量 13440，单价 71含税/63未。
+    其他库存表没有更多记录。
+  input: 查完了，结果如上。请整理给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - K4B4G1646E-BCNB000
+        - 仅此一家
+        - 待判断
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+        - supplierGrade
+      missingFields:
+        - brand
+        - supplierGrade
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 标注仅此一家报有货，无其他源印证
+    - type: manual
+      criterion: 价格、品牌或供应商等级缺失时明确写“未填写/待确认”，不能编造
+- id: procurement_single_supplier_risk-068-pse2a0sl-08gx
+  category: procurement_single_supplier_risk
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsLmvT
+      kind: dynamic_inventory
+    seed:
+      model: PSE2A0SL-08GX
+      brand: null
+      quantity: '3920'
+      price: 35U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 单源库存风险 - PSE2A0SL-08GX
+  context: |-
+    用户之前问了“帮我找 PSE2A0SL-08GX”，内部库存查完。
+    结果：只有动态库存表里有一条记录，供应商 Jada芯片分销群，等级 待判断，数量 3920，单价 35U。
+    其他库存表没有更多记录。
+  input: 查完了，结果如上。请整理给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - PSE2A0SL-08GX
+        - 仅此一家
+        - 待判断
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+        - supplierGrade
+      missingFields:
+        - brand
+        - supplierGrade
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 标注仅此一家报有货，无其他源印证
+    - type: manual
+      criterion: 价格、品牌或供应商等级缺失时明确写“未填写/待确认”，不能编造
+- id: procurement_single_supplier_risk-069-mt53e512m32d1zw-046-wt-b
+  category: procurement_single_supplier_risk
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsNPpB
+      kind: dynamic_inventory
+    seed:
+      model: MT53E512M32D1ZW-046 WT:B
+      brand: null
+      quantity: '8000'
+      price: 93U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - model_has_space
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 单源库存风险 - MT53E512M32D1ZW-046 WT:B
+  context: |-
+    用户之前问了“帮我找 MT53E512M32D1ZW-046 WT:B”，内部库存查完。
+    结果：只有动态库存表里有一条记录，供应商 Jada芯片分销群，等级 待判断，数量 8000，单价 93U。
+    其他库存表没有更多记录。
+  input: 查完了，结果如上。请整理给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - MT53E512M32D1ZW-046 WT:B
+        - 仅此一家
+        - 待判断
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+        - supplierGrade
+      missingFields:
+        - brand
+        - supplierGrade
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 标注仅此一家报有货，无其他源印证
+    - type: manual
+      criterion: 价格、品牌或供应商等级缺失时明确写“未填写/待确认”，不能编造
+- id: procurement_single_supplier_risk-070-mtfc4gacajcn-4m-it
+  category: procurement_single_supplier_risk
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsRbOm
+      kind: dynamic_inventory
+    seed:
+      model: MTFC4GACAJCN-4M IT
+      brand: null
+      quantity: '2000'
+      price: 30U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - model_has_space
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 单源库存风险 - MTFC4GACAJCN-4M IT
+  context: |-
+    用户之前问了“帮我找 MTFC4GACAJCN-4M IT”，内部库存查完。
+    结果：只有动态库存表里有一条记录，供应商 Jada芯片分销群，等级 待判断，数量 2000，单价 30U。
+    其他库存表没有更多记录。
+  input: 查完了，结果如上。请整理给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - MTFC4GACAJCN-4M IT
+        - 仅此一家
+        - 待判断
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+        - supplierGrade
+      missingFields:
+        - brand
+        - supplierGrade
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 标注仅此一家报有货，无其他源印证
+    - type: manual
+      criterion: 价格、品牌或供应商等级缺失时明确写“未填写/待确认”，不能编造
+- id: procurement_single_supplier_risk-071-icm-42688-p
+  category: procurement_single_supplier_risk
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsge4W
+      kind: dynamic_inventory
+    seed:
+      model: ICM-42688-P
+      brand: null
+      quantity: '10000'
+      price: 8.2U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 单源库存风险 - ICM-42688-P
+  context: |-
+    用户之前问了“帮我找 ICM-42688-P”，内部库存查完。
+    结果：只有动态库存表里有一条记录，供应商 Jada芯片分销群，等级 待判断，数量 10000，单价 8.2U。
+    其他库存表没有更多记录。
+  input: 查完了，结果如上。请整理给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - ICM-42688-P
+        - 仅此一家
+        - 待判断
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+        - supplierGrade
+      missingFields:
+        - brand
+        - supplierGrade
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 标注仅此一家报有货，无其他源印证
+    - type: manual
+      criterion: 价格、品牌或供应商等级缺失时明确写“未填写/待确认”，不能编造
+- id: procurement_single_supplier_risk-072-h5ag36exndx017n
+  category: procurement_single_supplier_risk
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsEFHe
+      kind: dynamic_inventory
+    seed:
+      model: H5AG36EXNDX017N
+      brand: null
+      quantity: null
+      price: 45u
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 单源库存风险 - H5AG36EXNDX017N
+  context: |-
+    用户之前问了“帮我找 H5AG36EXNDX017N”，内部库存查完。
+    结果：只有动态库存表里有一条记录，供应商 Jada芯片分销群，等级 待判断，数量 未填写，单价 45u。
+    其他库存表没有更多记录。
+  input: 查完了，结果如上。请整理给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - H5AG36EXNDX017N
+        - 仅此一家
+        - 待判断
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+        - supplierGrade
+      missingFields:
+        - brand
+        - quantity
+        - supplierGrade
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 标注仅此一家报有货，无其他源印证
+    - type: manual
+      criterion: 价格、品牌或供应商等级缺失时明确写“未填写/待确认”，不能编造
+- id: procurement_single_supplier_risk-073-h5ag46dxndx117n
+  category: procurement_single_supplier_risk
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsVv11
+      kind: dynamic_inventory
+    seed:
+      model: H5AG46DXNDX117N
+      brand: null
+      quantity: 12800pcs
+      price: 55u
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 单源库存风险 - H5AG46DXNDX117N
+  context: |-
+    用户之前问了“帮我找 H5AG46DXNDX117N”，内部库存查完。
+    结果：只有动态库存表里有一条记录，供应商 Jada芯片分销群，等级 待判断，数量 12800pcs，单价 55u。
+    其他库存表没有更多记录。
+  input: 查完了，结果如上。请整理给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - H5AG46DXNDX117N
+        - 仅此一家
+        - 待判断
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+        - supplierGrade
+      missingFields:
+        - brand
+        - supplierGrade
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 标注仅此一家报有货，无其他源印证
+    - type: manual
+      criterion: 价格、品牌或供应商等级缺失时明确写“未填写/待确认”，不能编造
+- id: procurement_single_supplier_risk-074-lt5557euf-pbf
+  category: procurement_single_supplier_risk
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsTlAE
+      kind: dynamic_inventory
+    seed:
+      model: LT5557EUF#PBF
+      brand: null
+      quantity: 1365片
+      price: 8.8U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 单源库存风险 - LT5557EUF#PBF
+  context: |-
+    用户之前问了“帮我找 LT5557EUF#PBF”，内部库存查完。
+    结果：只有动态库存表里有一条记录，供应商 Jada芯片分销群，等级 待判断，数量 1365片，单价 8.8U。
+    其他库存表没有更多记录。
+  input: 查完了，结果如上。请整理给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - LT5557EUF#PBF
+        - 仅此一家
+        - 待判断
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+        - supplierGrade
+      missingFields:
+        - brand
+        - supplierGrade
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 标注仅此一家报有货，无其他源印证
+    - type: manual
+      criterion: 价格、品牌或供应商等级缺失时明确写“未填写/待确认”，不能编造
+- id: procurement_single_supplier_risk-075-mx52lm08a11xvw
+  category: procurement_single_supplier_risk
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsBDaT
+      kind: dynamic_inventory
+    seed:
+      model: MX52LM08A11XVW
+      brand: null
+      quantity: 8包
+      price: usd 29.5
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 单源库存风险 - MX52LM08A11XVW
+  context: |-
+    用户之前问了“帮我找 MX52LM08A11XVW”，内部库存查完。
+    结果：只有动态库存表里有一条记录，供应商 Jada芯片分销群，等级 待判断，数量 8包，单价 usd 29.5。
+    其他库存表没有更多记录。
+  input: 查完了，结果如上。请整理给我。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - MX52LM08A11XVW
+        - 仅此一家
+        - 待判断
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - supplierName
+        - supplierGrade
+      missingFields:
+        - brand
+        - supplierGrade
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 标注仅此一家报有货，无其他源印证
+    - type: manual
+      criterion: 价格、品牌或供应商等级缺失时明确写“未填写/待确认”，不能编造
+- id: procurement_dynamic_inventory-076-mt53e512m32d1zw-046-aat-b
+  category: procurement_dynamic_inventory
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHDZBTOOnP
+      kind: dynamic_inventory
+    seed:
+      model: MT53E512M32D1ZW-046 AAT:B
+      brand: Micron
+      quantity: '8000'
+      price: 135U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - category_chip
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_space
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 动态库存时效性 - MT53E512M32D1ZW-046 AAT:B
+  context: |-
+    动态库存表命中：型号 MT53E512M32D1ZW-046 AAT:B，品牌 Micron，数量 8000。
+    目标价/价格 135U，类型 未填写，发布时间 2026-05-25 00:00:00。
+  input: 把动态库存结果整理给采购。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - MT53E512M32D1ZW-046 AAT:B
+        - 动态库存
+        - '2026-05-25 00:00:00'
+        - 135U
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - updatedAt
+        - stockType
+      missingFields:
+        - stockType
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 说明动态库存时效性强，并展示发布时间
+    - type: manual
+      criterion: 目标价/价格里有含税或文本噪声时原样呈现，不擅自换算
+- id: procurement_dynamic_inventory-077-tlp184-v4gbtl-e-t
+  category: procurement_dynamic_inventory
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHxh3vLpW
+      kind: dynamic_inventory
+    seed:
+      model: TLP184(V4GBTL,E(T
+      brand: 东芝
+      quantity: null
+      price: 0.42含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 动态库存时效性 - TLP184(V4GBTL,E(T
+  context: |-
+    动态库存表命中：型号 TLP184(V4GBTL,E(T，品牌 东芝，数量 未填写。
+    目标价/价格 0.42含税，类型 未填写，发布时间 2026-05-25 00:00:00。
+  input: 把动态库存结果整理给采购。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP184(V4GBTL,E(T
+        - 动态库存
+        - '2026-05-25 00:00:00'
+        - 0.42含税
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - updatedAt
+        - stockType
+      missingFields:
+        - quantity
+        - stockType
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 说明动态库存时效性强，并展示发布时间
+    - type: manual
+      criterion: 目标价/价格里有含税或文本噪声时原样呈现，不擅自换算
+- id: procurement_dynamic_inventory-078-tlp293-gb-tpl-e
+  category: procurement_dynamic_inventory
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsCaXk
+      kind: dynamic_inventory
+    seed:
+      model: TLP293(GB-TPL,E
+      brand: 东芝
+      quantity: null
+      price: 0.44含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 动态库存时效性 - TLP293(GB-TPL,E
+  context: |-
+    动态库存表命中：型号 TLP293(GB-TPL,E，品牌 东芝，数量 未填写。
+    目标价/价格 0.44含税，类型 未填写，发布时间 2026-05-25 00:00:00。
+  input: 把动态库存结果整理给采购。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP293(GB-TPL,E
+        - 动态库存
+        - '2026-05-25 00:00:00'
+        - 0.44含税
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - updatedAt
+        - stockType
+      missingFields:
+        - quantity
+        - stockType
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 说明动态库存时效性强，并展示发布时间
+    - type: manual
+      criterion: 目标价/价格里有含税或文本噪声时原样呈现，不擅自换算
+- id: procurement_dynamic_inventory-079-tlp291-gb-tp-se-t
+  category: procurement_dynamic_inventory
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCs245O
+      kind: dynamic_inventory
+    seed:
+      model: TLP291(GB-TP,SE(T
+      brand: 东芝
+      quantity: null
+      price: 0.353含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 动态库存时效性 - TLP291(GB-TP,SE(T
+  context: |-
+    动态库存表命中：型号 TLP291(GB-TP,SE(T，品牌 东芝，数量 未填写。
+    目标价/价格 0.353含税，类型 未填写，发布时间 2026-05-25 00:00:00。
+  input: 把动态库存结果整理给采购。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP291(GB-TP,SE(T
+        - 动态库存
+        - '2026-05-25 00:00:00'
+        - 0.353含税
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - updatedAt
+        - stockType
+      missingFields:
+        - quantity
+        - stockType
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 说明动态库存时效性强，并展示发布时间
+    - type: manual
+      criterion: 目标价/价格里有含税或文本噪声时原样呈现，不擅自换算
+- id: procurement_dynamic_inventory-080-tlp184-gb-tpl-se-t
+  category: procurement_dynamic_inventory
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsQh2I
+      kind: dynamic_inventory
+    seed:
+      model: TLP184(GB-TPL,SE(T
+      brand: 东芝
+      quantity: null
+      price: 0.45含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 动态库存时效性 - TLP184(GB-TPL,SE(T
+  context: |-
+    动态库存表命中：型号 TLP184(GB-TPL,SE(T，品牌 东芝，数量 未填写。
+    目标价/价格 0.45含税，类型 未填写，发布时间 2026-05-25 00:00:00。
+  input: 把动态库存结果整理给采购。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP184(GB-TPL,SE(T
+        - 动态库存
+        - '2026-05-25 00:00:00'
+        - 0.45含税
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - updatedAt
+        - stockType
+      missingFields:
+        - quantity
+        - stockType
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 说明动态库存时效性强，并展示发布时间
+    - type: manual
+      criterion: 目标价/价格里有含税或文本噪声时原样呈现，不擅自换算
+- id: procurement_dynamic_inventory-081-tlp350-f
+  category: procurement_dynamic_inventory
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsJXCv
+      kind: dynamic_inventory
+    seed:
+      model: TLP350(F)
+      brand: 东芝
+      quantity: null
+      price: 2.88含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 动态库存时效性 - TLP350(F)
+  context: |-
+    动态库存表命中：型号 TLP350(F)，品牌 东芝，数量 未填写。
+    目标价/价格 2.88含税，类型 未填写，发布时间 2026-05-25 00:00:00。
+  input: 把动态库存结果整理给采购。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP350(F)
+        - 动态库存
+        - '2026-05-25 00:00:00'
+        - 2.88含税
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - updatedAt
+        - stockType
+      missingFields:
+        - quantity
+        - stockType
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 说明动态库存时效性强，并展示发布时间
+    - type: manual
+      criterion: 目标价/价格里有含税或文本噪声时原样呈现，不擅自换算
+- id: procurement_dynamic_inventory-082-tlp118-tpl-e
+  category: procurement_dynamic_inventory
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsSfDz
+      kind: dynamic_inventory
+    seed:
+      model: TLP118(TPL,E
+      brand: 东芝
+      quantity: null
+      price: 1.63含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 动态库存时效性 - TLP118(TPL,E
+  context: |-
+    动态库存表命中：型号 TLP118(TPL,E，品牌 东芝，数量 未填写。
+    目标价/价格 1.63含税，类型 未填写，发布时间 2026-05-25 00:00:00。
+  input: 把动态库存结果整理给采购。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP118(TPL,E
+        - 动态库存
+        - '2026-05-25 00:00:00'
+        - 1.63含税
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - updatedAt
+        - stockType
+      missingFields:
+        - quantity
+        - stockType
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 说明动态库存时效性强，并展示发布时间
+    - type: manual
+      criterion: 目标价/价格里有含税或文本噪声时原样呈现，不擅自换算
+- id: procurement_dynamic_inventory-083-tlp185-gb-tpl-se
+  category: procurement_dynamic_inventory
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCs9fFS
+      kind: dynamic_inventory
+    seed:
+      model: TLP185(GB-TPL,SE
+      brand: 东芝
+      quantity: null
+      price: 0.339含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_parenthesis
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 动态库存时效性 - TLP185(GB-TPL,SE
+  context: |-
+    动态库存表命中：型号 TLP185(GB-TPL,SE，品牌 东芝，数量 未填写。
+    目标价/价格 0.339含税，类型 未填写，发布时间 2026-05-25 00:00:00。
+  input: 把动态库存结果整理给采购。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - TLP185(GB-TPL,SE
+        - 动态库存
+        - '2026-05-25 00:00:00'
+        - 0.339含税
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - updatedAt
+        - stockType
+      missingFields:
+        - quantity
+        - stockType
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 说明动态库存时效性强，并展示发布时间
+    - type: manual
+      criterion: 目标价/价格里有含税或文本噪声时原样呈现，不擅自换算
+- id: procurement_dynamic_inventory-084-cxdq3a8am-cj-a
+  category: procurement_dynamic_inventory
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCs3bkB
+      kind: dynamic_inventory
+    seed:
+      model: CXDQ3A8AM-CJ-A
+      brand: null
+      quantity: '1600'
+      price: 150含税
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 动态库存时效性 - CXDQ3A8AM-CJ-A
+  context: |-
+    动态库存表命中：型号 CXDQ3A8AM-CJ-A，品牌 未填写，数量 1600。
+    目标价/价格 150含税，类型 未填写，发布时间 2026-05-25 00:00:00。
+  input: 把动态库存结果整理给采购。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - CXDQ3A8AM-CJ-A
+        - 动态库存
+        - '2026-05-25 00:00:00'
+        - 150含税
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - updatedAt
+        - stockType
+      missingFields:
+        - brand
+        - stockType
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 说明动态库存时效性强，并展示发布时间
+    - type: manual
+      criterion: 目标价/价格里有含税或文本噪声时原样呈现，不擅自换算
+- id: procurement_dynamic_inventory-085-k4b4g1646e-bcnb000
+  category: procurement_dynamic_inventory
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHHKCsiALu
+      kind: dynamic_inventory
+    seed:
+      model: K4B4G1646E-BCNB000
+      brand: null
+      quantity: '13440'
+      price: 71含税/63未
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - dynamic_inventory
+        - missing_brand
+        - model_has_dash
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 动态库存时效性 - K4B4G1646E-BCNB000
+  context: |-
+    动态库存表命中：型号 K4B4G1646E-BCNB000，品牌 未填写，数量 13440。
+    目标价/价格 71含税/63未，类型 未填写，发布时间 2026-05-25 00:00:00。
+  input: 把动态库存结果整理给采购。
+  expected:
+    trace:
+      maxToolCalls: 0
+    answer:
+      requiredTerms:
+        - K4B4G1646E-BCNB000
+        - 动态库存
+        - '2026-05-25 00:00:00'
+        - 71含税/63未
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+      mustMentionInternalSource: true
+    evidence:
+      preserveFields:
+        - brand
+        - quantity
+        - price
+        - updatedAt
+        - stockType
+      missingFields:
+        - brand
+        - stockType
+      missingFieldPolicy: explicit_unknown
+      missingFieldTerms:
+        - 未填写
+        - 待确认
+        - 缺失
+        - 为空
+        - 未提供
+  assertions:
+    - type: manual
+      criterion: 说明动态库存时效性强，并展示发布时间
+    - type: manual
+      criterion: 目标价/价格里有含税或文本噪声时原样呈现，不擅自换算
+- id: procurement_platform_continuation-086-mt53e512m32d1zw-046-aat-b
+  category: procurement_platform_continuation
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 动态库存表
+      tableId: tbli1WYTb1Xn2MSa
+      recordId: recvkHDZBTOOnP
+      kind: dynamic_inventory
+    seed:
+      model: MT53E512M32D1ZW-046 AAT:B
+      brand: Micron
+      quantity: '8000'
+      price: 135U
+      supplierName: Jada芯片分销群
+      supplierGrade: null
+      tags:
+        - category_chip
+        - dynamic_inventory
+        - model_has_dash
+        - model_has_space
+        - price_text_noise
+        - time_sensitive_dynamic
+        - 动态库存表
+  name: 用户明确继续查平台 - MT53E512M32D1ZW-046 AAT:B
+  input: 内部库存没有。继续帮我查平台，型号 MT53E512M32D1ZW-046 AAT:B
+  skillSlugs:
+    - procurement-platform-search
+  expected:
+    trace:
+      requiresPlatformSearch: true
+      maxToolCalls: 16
+    toolCalls:
+      requiredSkills:
+        - procurement-platform-search
+      requiredSearchTerms:
+        - MT53E512M32D1ZW-046 AAT:B
+    answer:
+      requiredTerms:
+        - MT53E512M32D1ZW-046 AAT:B
+        - 交期
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+  assertions:
+    - type: code
+      criterion: 用户明确要求继续查平台时，应触发平台搜索
+    - type: manual
+      criterion: 平台结果要区分现货和交期，缺失时写交期待确认
+- id: procurement_platform_continuation-087-cm-c032b
+  category: procurement_platform_continuation
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0TpiXTk
+      kind: supplier_stock
+    seed:
+      model: CM-C032B
+      brand: SMC
+      quantity: '1'
+      price: '17.7'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - category_industrial
+        - model_has_dash
+        - supplier_stock
+  name: 用户明确继续查平台 - CM-C032B
+  input: 内部库存没有。继续帮我查平台，型号 CM-C032B
+  skillSlugs:
+    - procurement-platform-search
+  expected:
+    trace:
+      requiresPlatformSearch: true
+      maxToolCalls: 16
+    toolCalls:
+      requiredSkills:
+        - procurement-platform-search
+      requiredSearchTerms:
+        - CM-C032B
+    answer:
+      requiredTerms:
+        - CM-C032B
+        - 交期
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+  assertions:
+    - type: code
+      criterion: 用户明确要求继续查平台时，应触发平台搜索
+    - type: manual
+      criterion: 平台结果要区分现货和交期，缺失时写交期待确认
+- id: procurement_platform_continuation-088-d-a72
+  category: procurement_platform_continuation
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0Tp68eA
+      kind: supplier_stock
+    seed:
+      model: D-A72
+      brand: SMC
+      quantity: '1'
+      price: '31.5'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - category_industrial
+        - model_has_dash
+        - supplier_stock
+  name: 用户明确继续查平台 - D-A72
+  input: 内部库存没有。继续帮我查平台，型号 D-A72
+  skillSlugs:
+    - procurement-platform-search
+  expected:
+    trace:
+      requiresPlatformSearch: true
+      maxToolCalls: 16
+    toolCalls:
+      requiredSkills:
+        - procurement-platform-search
+      requiredSearchTerms:
+        - D-A72
+    answer:
+      requiredTerms:
+        - D-A72
+        - 交期
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+  assertions:
+    - type: code
+      criterion: 用户明确要求继续查平台时，应触发平台搜索
+    - type: manual
+      criterion: 平台结果要区分现货和交期，缺失时写交期待确认
+- id: procurement_platform_continuation-089-mb-b05
+  category: procurement_platform_continuation
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0TpTngS
+      kind: supplier_stock
+    seed:
+      model: MB-B05
+      brand: SMC
+      quantity: '2'
+      price: '54.6'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - category_industrial
+        - model_has_dash
+        - supplier_stock
+  name: 用户明确继续查平台 - MB-B05
+  input: 内部库存没有。继续帮我查平台，型号 MB-B05
+  skillSlugs:
+    - procurement-platform-search
+  expected:
+    trace:
+      requiresPlatformSearch: true
+      maxToolCalls: 16
+    toolCalls:
+      requiredSkills:
+        - procurement-platform-search
+      requiredSearchTerms:
+        - MB-B05
+    answer:
+      requiredTerms:
+        - MB-B05
+        - 交期
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+  assertions:
+    - type: code
+      criterion: 用户明确要求继续查平台时，应触发平台搜索
+    - type: manual
+      criterion: 平台结果要区分现货和交期，缺失时写交期待确认
+- id: procurement_platform_continuation-090-mb-b08
+  category: procurement_platform_continuation
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0Tpk9KX
+      kind: supplier_stock
+    seed:
+      model: MB-B08
+      brand: SMC
+      quantity: '2'
+      price: '96.6'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - category_industrial
+        - model_has_dash
+        - supplier_stock
+  name: 用户明确继续查平台 - MB-B08
+  input: 内部库存没有。继续帮我查平台，型号 MB-B08
+  skillSlugs:
+    - procurement-platform-search
+  expected:
+    trace:
+      requiresPlatformSearch: true
+      maxToolCalls: 16
+    toolCalls:
+      requiredSkills:
+        - procurement-platform-search
+      requiredSearchTerms:
+        - MB-B08
+    answer:
+      requiredTerms:
+        - MB-B08
+        - 交期
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+  assertions:
+    - type: code
+      criterion: 用户明确要求继续查平台时，应触发平台搜索
+    - type: manual
+      criterion: 平台结果要区分现货和交期，缺失时写交期待确认
+- id: procurement_platform_continuation-091-zs-38-3l
+  category: procurement_platform_continuation
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0Tpobbz
+      kind: supplier_stock
+    seed:
+      model: ZS-38-3L
+      brand: SMC
+      quantity: '1'
+      price: '23.1'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - category_industrial
+        - model_has_dash
+        - supplier_stock
+  name: 用户明确继续查平台 - ZS-38-3L
+  input: 内部库存没有。继续帮我查平台，型号 ZS-38-3L
+  skillSlugs:
+    - procurement-platform-search
+  expected:
+    trace:
+      requiresPlatformSearch: true
+      maxToolCalls: 16
+    toolCalls:
+      requiredSkills:
+        - procurement-platform-search
+      requiredSearchTerms:
+        - ZS-38-3L
+    answer:
+      requiredTerms:
+        - ZS-38-3L
+        - 交期
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+  assertions:
+    - type: code
+      criterion: 用户明确要求继续查平台时，应触发平台搜索
+    - type: manual
+      criterion: 平台结果要区分现货和交期，缺失时写交期待确认
+- id: procurement_platform_continuation-092-e3z-t61-2m-by-omc
+  category: procurement_platform_continuation
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0Tp8UwJ
+      kind: supplier_stock
+    seed:
+      model: E3Z-T61 2M BY OMC
+      brand: OMRON
+      quantity: '211'
+      price: '107.6'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - category_industrial
+        - model_has_dash
+        - model_has_space
+        - supplier_stock
+  name: 用户明确继续查平台 - E3Z-T61 2M BY OMC
+  input: 内部库存没有。继续帮我查平台，型号 E3Z-T61 2M BY OMC
+  skillSlugs:
+    - procurement-platform-search
+  expected:
+    trace:
+      requiresPlatformSearch: true
+      maxToolCalls: 16
+    toolCalls:
+      requiredSkills:
+        - procurement-platform-search
+      requiredSearchTerms:
+        - E3Z-T61 2M BY OMC
+    answer:
+      requiredTerms:
+        - E3Z-T61 2M BY OMC
+        - 交期
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+  assertions:
+    - type: code
+      criterion: 用户明确要求继续查平台时，应触发平台搜索
+    - type: manual
+      criterion: 平台结果要区分现货和交期，缺失时写交期待确认
+- id: procurement_platform_continuation-093-e2e-x3d1-n-2m
+  category: procurement_platform_continuation
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0TpnylT
+      kind: supplier_stock
+    seed:
+      model: E2E-X3D1-N 2M
+      brand: OMRON
+      quantity: '154'
+      price: '94.2'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - category_industrial
+        - model_has_dash
+        - model_has_space
+        - supplier_stock
+  name: 用户明确继续查平台 - E2E-X3D1-N 2M
+  input: 内部库存没有。继续帮我查平台，型号 E2E-X3D1-N 2M
+  skillSlugs:
+    - procurement-platform-search
+  expected:
+    trace:
+      requiresPlatformSearch: true
+      maxToolCalls: 16
+    toolCalls:
+      requiredSkills:
+        - procurement-platform-search
+      requiredSearchTerms:
+        - E2E-X3D1-N 2M
+    answer:
+      requiredTerms:
+        - E2E-X3D1-N 2M
+        - 交期
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+  assertions:
+    - type: code
+      criterion: 用户明确要求继续查平台时，应触发平台搜索
+    - type: manual
+      criterion: 平台结果要区分现货和交期，缺失时写交期待确认
+- id: procurement_platform_continuation-094-e2e-x4md1-2m
+  category: procurement_platform_continuation
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0TpaBJL
+      kind: supplier_stock
+    seed:
+      model: E2E-X4MD1 2M
+      brand: OMRON
+      quantity: '42'
+      price: '106.6'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - category_industrial
+        - model_has_dash
+        - model_has_space
+        - supplier_stock
+  name: 用户明确继续查平台 - E2E-X4MD1 2M
+  input: 内部库存没有。继续帮我查平台，型号 E2E-X4MD1 2M
+  skillSlugs:
+    - procurement-platform-search
+  expected:
+    trace:
+      requiresPlatformSearch: true
+      maxToolCalls: 16
+    toolCalls:
+      requiredSkills:
+        - procurement-platform-search
+      requiredSearchTerms:
+        - E2E-X4MD1 2M
+    answer:
+      requiredTerms:
+        - E2E-X4MD1 2M
+        - 交期
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+  assertions:
+    - type: code
+      criterion: 用户明确要求继续查平台时，应触发平台搜索
+    - type: manual
+      criterion: 平台结果要区分现货和交期，缺失时写交期待确认
+- id: procurement_platform_continuation-095-e2e-x4md1-2m
+  category: procurement_platform_continuation
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: A级供应商库存
+      tableId: tblzQbSnVNhGszYA
+      recordId: recv53H0TprxKw
+      kind: supplier_stock
+    seed:
+      model: E2E-X4MD1 2M
+      brand: OMRON
+      quantity: '50'
+      price: '105.6'
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - A级供应商库存
+        - category_industrial
+        - model_has_dash
+        - model_has_space
+        - supplier_stock
+  name: 用户明确继续查平台 - E2E-X4MD1 2M
+  input: 内部库存没有。继续帮我查平台，型号 E2E-X4MD1 2M
+  skillSlugs:
+    - procurement-platform-search
+  expected:
+    trace:
+      requiresPlatformSearch: true
+      maxToolCalls: 16
+    toolCalls:
+      requiredSkills:
+        - procurement-platform-search
+      requiredSearchTerms:
+        - E2E-X4MD1 2M
+    answer:
+      requiredTerms:
+        - E2E-X4MD1 2M
+        - 交期
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+  assertions:
+    - type: code
+      criterion: 用户明确要求继续查平台时，应触发平台搜索
+    - type: manual
+      criterion: 平台结果要区分现货和交期，缺失时写交期待确认
+- id: procurement_supplier_shortlist-096-item
+  category: procurement_supplier_shortlist
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 供应商档案
+      tableId: tblbtuMHFIOr6Oss
+      recordId: rec2697Q7E5Pq6
+      kind: supplier_profile
+    seed:
+      model: null
+      brand: Omron
+      quantity: null
+      price: null
+      supplierName: 江西乐商控制系统有限公司
+      supplierGrade: A
+      tags:
+        - category_industrial
+        - supplier_profile
+        - 供应商档案
+  name: 供应商档案候选 - Omron
+  input: 库存只有一家，帮我按 Omron 补几个供应商候选
+  skillSlugs:
+    - procurement-supplier-shortlist
+  expected:
+    trace:
+      requiresSupplierShortlist: true
+      maxToolCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-supplier-shortlist
+      requiredTableIds:
+        - tblbtuMHFIOr6Oss
+      requiredTableNames:
+        - 供应商档案
+      requiredSearchTerms:
+        - Omron
+    answer:
+      requiredTerms:
+        - Omron
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - supplierName
+        - brand
+        - productCategory
+        - supplierGrade
+        - supplierType
+  assertions:
+    - type: code
+      criterion: 触发供应商档案候选查询，而不是继续只查库存表
+    - type: manual
+      criterion: 候选供应商要展示等级、类型、优势产品或主营品牌等可核对信息
+- id: procurement_supplier_shortlist-097-item
+  category: procurement_supplier_shortlist
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 供应商档案
+      tableId: tblbtuMHFIOr6Oss
+      recordId: recv3rQPiUuXrW
+      kind: supplier_profile
+    seed:
+      model: null
+      brand: Omron
+      quantity: null
+      price: null
+      supplierName: 福建欧继电气有限公司
+      supplierGrade: C
+      tags:
+        - category_industrial
+        - supplier_profile
+        - weak_supplier_signal
+        - 供应商档案
+  name: 供应商档案候选 - Omron
+  input: 库存只有一家，帮我按 Omron 补几个供应商候选
+  skillSlugs:
+    - procurement-supplier-shortlist
+  expected:
+    trace:
+      requiresSupplierShortlist: true
+      maxToolCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-supplier-shortlist
+      requiredTableIds:
+        - tblbtuMHFIOr6Oss
+      requiredTableNames:
+        - 供应商档案
+      requiredSearchTerms:
+        - Omron
+    answer:
+      requiredTerms:
+        - Omron
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - supplierName
+        - brand
+        - productCategory
+        - supplierGrade
+        - supplierType
+  assertions:
+    - type: code
+      criterion: 触发供应商档案候选查询，而不是继续只查库存表
+    - type: manual
+      criterion: 候选供应商要展示等级、类型、优势产品或主营品牌等可核对信息
+- id: procurement_supplier_shortlist-098-item
+  category: procurement_supplier_shortlist
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 供应商档案
+      tableId: tblbtuMHFIOr6Oss
+      recordId: recv3rQPiUWAK6
+      kind: supplier_profile
+    seed:
+      model: null
+      brand: Mitsubishi
+      quantity: null
+      price: null
+      supplierName: 上海肯科电气有限公司
+      supplierGrade: B
+      tags:
+        - category_industrial
+        - supplier_profile
+        - 供应商档案
+  name: 供应商档案候选 - Mitsubishi
+  input: 库存只有一家，帮我按 Mitsubishi 补几个供应商候选
+  skillSlugs:
+    - procurement-supplier-shortlist
+  expected:
+    trace:
+      requiresSupplierShortlist: true
+      maxToolCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-supplier-shortlist
+      requiredTableIds:
+        - tblbtuMHFIOr6Oss
+      requiredTableNames:
+        - 供应商档案
+      requiredSearchTerms:
+        - Mitsubishi
+    answer:
+      requiredTerms:
+        - Mitsubishi
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - supplierName
+        - brand
+        - productCategory
+        - supplierGrade
+        - supplierType
+  assertions:
+    - type: code
+      criterion: 触发供应商档案候选查询，而不是继续只查库存表
+    - type: manual
+      criterion: 候选供应商要展示等级、类型、优势产品或主营品牌等可核对信息
+- id: procurement_supplier_shortlist-099-item
+  category: procurement_supplier_shortlist
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 供应商档案
+      tableId: tblbtuMHFIOr6Oss
+      recordId: recv3rQPiUPVXs
+      kind: supplier_profile
+    seed:
+      model: null
+      brand: COSEL、VICOR
+      quantity: null
+      price: null
+      supplierName: 上海齐众电子科技有限公司
+      supplierGrade: C
+      tags:
+        - supplier_profile
+        - weak_supplier_signal
+        - 供应商档案
+  name: 供应商档案候选 - COSEL、VICOR
+  input: 库存只有一家，帮我按 COSEL、VICOR 补几个供应商候选
+  skillSlugs:
+    - procurement-supplier-shortlist
+  expected:
+    trace:
+      requiresSupplierShortlist: true
+      maxToolCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-supplier-shortlist
+      requiredTableIds:
+        - tblbtuMHFIOr6Oss
+      requiredTableNames:
+        - 供应商档案
+      requiredSearchTerms:
+        - COSEL、VICOR
+    answer:
+      requiredTerms:
+        - COSEL、VICOR
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - supplierName
+        - brand
+        - productCategory
+        - supplierGrade
+        - supplierType
+  assertions:
+    - type: code
+      criterion: 触发供应商档案候选查询，而不是继续只查库存表
+    - type: manual
+      criterion: 候选供应商要展示等级、类型、优势产品或主营品牌等可核对信息
+- id: procurement_supplier_shortlist-100-item
+  category: procurement_supplier_shortlist
+  metadata:
+    source:
+      baseName: 供应商管理（正式版）
+      baseToken: Mjlkb49B9aoptssVw8Jc0wGwnhh
+      tableName: 供应商档案
+      tableId: tblbtuMHFIOr6Oss
+      recordId: recv3rQPiUDfjd
+      kind: supplier_profile
+    seed:
+      model: null
+      brand: IDEC
+      quantity: null
+      price: null
+      supplierName: 深圳市乐成科技有限公司
+      supplierGrade: B
+      tags:
+        - category_industrial
+        - supplier_profile
+        - 供应商档案
+  name: 供应商档案候选 - IDEC
+  input: 库存只有一家，帮我按 IDEC 补几个供应商候选
+  skillSlugs:
+    - procurement-supplier-shortlist
+  expected:
+    trace:
+      requiresSupplierShortlist: true
+      maxToolCalls: 12
+    toolCalls:
+      requiredSkills:
+        - procurement-supplier-shortlist
+      requiredTableIds:
+        - tblbtuMHFIOr6Oss
+      requiredTableNames:
+        - 供应商档案
+      requiredSearchTerms:
+        - IDEC
+    answer:
+      requiredTerms:
+        - IDEC
+      forbiddenTerms:
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+    evidence:
+      preserveFields:
+        - supplierName
+        - brand
+        - productCategory
+        - supplierGrade
+        - supplierType
+  assertions:
+    - type: code
+      criterion: 触发供应商档案候选查询，而不是继续只查库存表
+    - type: manual
+      criterion: 候选供应商要展示等级、类型、优势产品或主营品牌等可核对信息

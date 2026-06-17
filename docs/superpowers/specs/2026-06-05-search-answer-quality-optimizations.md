@@ -2,7 +2,7 @@
 
 - 日期: 2026-06-05
 - 状态: 草案,待 product owner 勾选纳入项 + 补充
-- 关系: 这是 [eval 体系设计](./2026-06-05-agent-quality-eval-system-design.md) 里"轨二·业务调优杠杆"的具体化。**每一项都是一个假设,由轨一的 pass^k 验证——先有 case 和数字,再正式上线。**
+- 关系: 这是 [Phoenix TS eval](../../evals/phoenix-ts-eval.md) 里"业务调优杠杆"的具体化。**每一项都是一个假设,由 Phoenix experiment 的 pass^k 验证——先有 case 和数字,再正式上线。**
 
 > 标注:✅=你已确认要做  · ☐=我补的候选,待你勾选  · 证据来自代码现状 + 2026 公司实践
 

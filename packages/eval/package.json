@@ -1,0 +1,28 @@
+{
+  "name": "@craft-agent/eval",
+  "version": "0.10.0",
+  "license": "Apache-2.0",
+  "description": "Phoenix-backed eval runner for Craft Agent real agent workflows",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "eval": "bun run src/cli.ts",
+    "sample:procurement-base": "bun run src/scripts/sample-procurement-base.ts",
+    "generate:procurement-cases": "bun run src/scripts/generate-procurement-cases.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@arizeai/phoenix-client": "6.10.0",
+    "@craft-agent/server-core": "workspace:*",
+    "@craft-agent/shared": "workspace:*",
+    "js-yaml": "^4.1.1"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "typescript": "^5.8.2"
+  }
+}

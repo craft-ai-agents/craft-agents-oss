@@ -1,0 +1,5667 @@
+{
+  "generatedAt": "2026-06-11T12:45:25.023Z",
+  "baseName": "供应商管理（正式版）",
+  "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+  "sampleLimitPerTable": 20,
+  "seeds": [
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHDZBTOOnP",
+        "kind": "dynamic_inventory"
+      },
+      "model": "MT53E512M32D1ZW-046 AAT:B",
+      "brand": "Micron",
+      "quantity": "8000",
+      "price": "135U",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "MT53E512M32D1ZW-046 AAT:B",
+        "品牌": "Micron",
+        "数量": "8000",
+        "目标价/价格": "135U",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "category_chip",
+        "dynamic_inventory",
+        "model_has_dash",
+        "model_has_space",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHxh3vLpW",
+        "kind": "dynamic_inventory"
+      },
+      "model": "TLP184(V4GBTL,E(T",
+      "brand": "东芝",
+      "price": "0.42含税",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "TLP184(V4GBTL,E(T",
+        "品牌": "东芝",
+        "数量": null,
+        "目标价/价格": "0.42含税",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "model_has_parenthesis",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsCaXk",
+        "kind": "dynamic_inventory"
+      },
+      "model": "TLP293(GB-TPL,E",
+      "brand": "东芝",
+      "price": "0.44含税",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "TLP293(GB-TPL,E",
+        "品牌": "东芝",
+        "数量": null,
+        "目标价/价格": "0.44含税",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "model_has_dash",
+        "model_has_parenthesis",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCs245O",
+        "kind": "dynamic_inventory"
+      },
+      "model": "TLP291(GB-TP,SE(T",
+      "brand": "东芝",
+      "price": "0.353含税",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "TLP291(GB-TP,SE(T",
+        "品牌": "东芝",
+        "数量": null,
+        "目标价/价格": "0.353含税",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "model_has_dash",
+        "model_has_parenthesis",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsQh2I",
+        "kind": "dynamic_inventory"
+      },
+      "model": "TLP184(GB-TPL,SE(T",
+      "brand": "东芝",
+      "price": "0.45含税",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "TLP184(GB-TPL,SE(T",
+        "品牌": "东芝",
+        "数量": null,
+        "目标价/价格": "0.45含税",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "model_has_dash",
+        "model_has_parenthesis",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsJXCv",
+        "kind": "dynamic_inventory"
+      },
+      "model": "TLP350(F)",
+      "brand": "东芝",
+      "price": "2.88含税",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "TLP350(F)",
+        "品牌": "东芝",
+        "数量": null,
+        "目标价/价格": "2.88含税",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "model_has_parenthesis",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsSfDz",
+        "kind": "dynamic_inventory"
+      },
+      "model": "TLP118(TPL,E",
+      "brand": "东芝",
+      "price": "1.63含税",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "TLP118(TPL,E",
+        "品牌": "东芝",
+        "数量": null,
+        "目标价/价格": "1.63含税",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "model_has_parenthesis",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCs9fFS",
+        "kind": "dynamic_inventory"
+      },
+      "model": "TLP185(GB-TPL,SE",
+      "brand": "东芝",
+      "price": "0.339含税",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "TLP185(GB-TPL,SE",
+        "品牌": "东芝",
+        "数量": null,
+        "目标价/价格": "0.339含税",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "model_has_dash",
+        "model_has_parenthesis",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCs3bkB",
+        "kind": "dynamic_inventory"
+      },
+      "model": "CXDQ3A8AM-CJ-A",
+      "quantity": "1600",
+      "price": "150含税",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "CXDQ3A8AM-CJ-A",
+        "品牌": null,
+        "数量": "1600",
+        "目标价/价格": "150含税",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "missing_brand",
+        "model_has_dash",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsiALu",
+        "kind": "dynamic_inventory"
+      },
+      "model": "K4B4G1646E-BCNB000",
+      "quantity": "13440",
+      "price": "71含税/63未",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "K4B4G1646E-BCNB000",
+        "品牌": null,
+        "数量": "13440",
+        "目标价/价格": "71含税/63未",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "missing_brand",
+        "model_has_dash",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsLmvT",
+        "kind": "dynamic_inventory"
+      },
+      "model": "PSE2A0SL-08GX",
+      "quantity": "3920",
+      "price": "35U",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "PSE2A0SL-08GX",
+        "品牌": null,
+        "数量": "3920",
+        "目标价/价格": "35U",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "missing_brand",
+        "model_has_dash",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsNPpB",
+        "kind": "dynamic_inventory"
+      },
+      "model": "MT53E512M32D1ZW-046 WT:B",
+      "quantity": "8000",
+      "price": "93U",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "MT53E512M32D1ZW-046 WT:B",
+        "品牌": null,
+        "数量": "8000",
+        "目标价/价格": "93U",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "missing_brand",
+        "model_has_dash",
+        "model_has_space",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsRbOm",
+        "kind": "dynamic_inventory"
+      },
+      "model": "MTFC4GACAJCN-4M IT",
+      "quantity": "2000",
+      "price": "30U",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "MTFC4GACAJCN-4M IT",
+        "品牌": null,
+        "数量": "2000",
+        "目标价/价格": "30U",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "missing_brand",
+        "model_has_dash",
+        "model_has_space",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsvdlS",
+        "kind": "dynamic_inventory"
+      },
+      "model": "PSMN2R3-100SSEJ",
+      "brand": "NXP",
+      "quantity": "4000",
+      "price": "18.5U",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "PSMN2R3-100SSEJ",
+        "品牌": "NXP",
+        "数量": "4000",
+        "目标价/价格": "18.5U",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "model_has_dash",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsge4W",
+        "kind": "dynamic_inventory"
+      },
+      "model": "ICM-42688-P",
+      "quantity": "10000",
+      "price": "8.2U",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "ICM-42688-P",
+        "品牌": null,
+        "数量": "10000",
+        "目标价/价格": "8.2U",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "missing_brand",
+        "model_has_dash",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsEFHe",
+        "kind": "dynamic_inventory"
+      },
+      "model": "H5AG36EXNDX017N",
+      "price": "45u",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "H5AG36EXNDX017N",
+        "品牌": null,
+        "数量": null,
+        "目标价/价格": "45u",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "missing_brand",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsVv11",
+        "kind": "dynamic_inventory"
+      },
+      "model": "H5AG46DXNDX117N",
+      "quantity": "12800pcs",
+      "price": "55u",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "H5AG46DXNDX117N",
+        "品牌": null,
+        "数量": "12800pcs",
+        "目标价/价格": "55u",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "missing_brand",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsTlAE",
+        "kind": "dynamic_inventory"
+      },
+      "model": "LT5557EUF#PBF",
+      "quantity": "1365片",
+      "price": "8.8U",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "LT5557EUF#PBF",
+        "品牌": null,
+        "数量": "1365片",
+        "目标价/价格": "8.8U",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "missing_brand",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsBDaT",
+        "kind": "dynamic_inventory"
+      },
+      "model": "MX52LM08A11XVW",
+      "quantity": "8包",
+      "price": "usd 29.5",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "MX52LM08A11XVW",
+        "品牌": null,
+        "数量": "8包",
+        "目标价/价格": "usd 29.5",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "missing_brand",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "动态库存表",
+        "tableId": "tbli1WYTb1Xn2MSa",
+        "recordId": "recvkHHKCsKm1z",
+        "kind": "dynamic_inventory"
+      },
+      "model": "LT3045EDD#TRPBF",
+      "quantity": "2500片",
+      "price": "3.2U",
+      "supplierName": "Jada芯片分销群",
+      "updatedAt": "2026-05-25 00:00:00",
+      "rawFields": {
+        "型号": "LT3045EDD#TRPBF",
+        "品牌": null,
+        "数量": "2500片",
+        "目标价/价格": "3.2U",
+        "供应商名称": [
+          "Jada芯片分销群"
+        ],
+        "类型": null,
+        "发布时间": "2026-05-25 00:00:00"
+      },
+      "tags": [
+        "dynamic_inventory",
+        "missing_brand",
+        "price_text_noise",
+        "time_sensitive_dynamic",
+        "动态库存表"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0sId6jB",
+        "kind": "supplier_stock"
+      },
+      "model": "MT4424TE-CP1H-3M",
+      "brand": "GUOCHAN",
+      "quantity": "1",
+      "price": "19.2",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "updatedAt": "2025-11-14 00:00:00",
+      "rawFields": {
+        "型号": "MT4424TE-CP1H-3M",
+        "品牌": "GUOCHAN",
+        "库存数量": "1",
+        "单价": "19.2",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": "2025-11-14 00:00:00"
+      },
+      "tags": [
+        "A级供应商库存",
+        "model_has_dash",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0Tp33rk",
+        "kind": "supplier_stock"
+      },
+      "model": "TK-FPO(3M）",
+      "brand": "GUOCHAN",
+      "quantity": "2",
+      "price": "15.8",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "TK-FPO(3M）",
+        "品牌": "GUOCHAN",
+        "库存数量": "2",
+        "单价": "15.8",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "model_has_dash",
+        "model_has_parenthesis",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0TpI8q4",
+        "kind": "supplier_stock"
+      },
+      "model": "DB9",
+      "brand": "HD-LINK",
+      "quantity": "48",
+      "price": "0.9",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "DB9",
+        "品牌": "HD-LINK",
+        "库存数量": "48",
+        "单价": "0.9",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0TpiXTk",
+        "kind": "supplier_stock"
+      },
+      "model": "CM-C032B",
+      "brand": "SMC",
+      "quantity": "1",
+      "price": "17.7",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "CM-C032B",
+        "品牌": "SMC",
+        "库存数量": "1",
+        "单价": "17.7",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0Tp68eA",
+        "kind": "supplier_stock"
+      },
+      "model": "D-A72",
+      "brand": "SMC",
+      "quantity": "1",
+      "price": "31.5",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "D-A72",
+        "品牌": "SMC",
+        "库存数量": "1",
+        "单价": "31.5",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0TpTngS",
+        "kind": "supplier_stock"
+      },
+      "model": "MB-B05",
+      "brand": "SMC",
+      "quantity": "2",
+      "price": "54.6",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "MB-B05",
+        "品牌": "SMC",
+        "库存数量": "2",
+        "单价": "54.6",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0Tpk9KX",
+        "kind": "supplier_stock"
+      },
+      "model": "MB-B08",
+      "brand": "SMC",
+      "quantity": "2",
+      "price": "96.6",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "MB-B08",
+        "品牌": "SMC",
+        "库存数量": "2",
+        "单价": "96.6",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0Tpobbz",
+        "kind": "supplier_stock"
+      },
+      "model": "ZS-38-3L",
+      "brand": "SMC",
+      "quantity": "1",
+      "price": "23.1",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "ZS-38-3L",
+        "品牌": "SMC",
+        "库存数量": "1",
+        "单价": "23.1",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0Tp8UwJ",
+        "kind": "supplier_stock"
+      },
+      "model": "E3Z-T61 2M BY OMC",
+      "brand": "OMRON",
+      "quantity": "211",
+      "price": "107.6",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "E3Z-T61 2M BY OMC",
+        "品牌": "OMRON",
+        "库存数量": "211",
+        "单价": "107.6",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "model_has_space",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0TpnylT",
+        "kind": "supplier_stock"
+      },
+      "model": "E2E-X3D1-N 2M",
+      "brand": "OMRON",
+      "quantity": "154",
+      "price": "94.2",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "E2E-X3D1-N 2M",
+        "品牌": "OMRON",
+        "库存数量": "154",
+        "单价": "94.2",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "model_has_space",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0TpaBJL",
+        "kind": "supplier_stock"
+      },
+      "model": "E2E-X4MD1 2M",
+      "brand": "OMRON",
+      "quantity": "42",
+      "price": "106.6",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "E2E-X4MD1 2M",
+        "品牌": "OMRON",
+        "库存数量": "42",
+        "单价": "106.6",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "model_has_space",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0TprxKw",
+        "kind": "supplier_stock"
+      },
+      "model": "E2E-X4MD1 2M",
+      "brand": "OMRON",
+      "quantity": "50",
+      "price": "105.6",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "E2E-X4MD1 2M",
+        "品牌": "OMRON",
+        "库存数量": "50",
+        "单价": "105.6",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "model_has_space",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0TpBCst",
+        "kind": "supplier_stock"
+      },
+      "model": "E2K-C25ME1 2M",
+      "brand": "OMRON",
+      "quantity": "26",
+      "price": "274.3",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "E2K-C25ME1 2M",
+        "品牌": "OMRON",
+        "库存数量": "26",
+        "单价": "274.3",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "model_has_space",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0TpzQRE",
+        "kind": "supplier_stock"
+      },
+      "model": "E2K-X8ME1 2M",
+      "brand": "OMRON",
+      "quantity": "8",
+      "price": "263.9",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "E2K-X8ME1 2M",
+        "品牌": "OMRON",
+        "库存数量": "8",
+        "单价": "263.9",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "model_has_space",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0TpZ3Dr",
+        "kind": "supplier_stock"
+      },
+      "model": "E3T-FD11 2M",
+      "brand": "OMRON",
+      "quantity": "14",
+      "price": "186.3",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "E3T-FD11 2M",
+        "品牌": "OMRON",
+        "库存数量": "14",
+        "单价": "186.3",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "model_has_space",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0TpYttE",
+        "kind": "supplier_stock"
+      },
+      "model": "E3T-FD11 2M",
+      "brand": "OMRON",
+      "quantity": "20",
+      "price": "186.3",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "E3T-FD11 2M",
+        "品牌": "OMRON",
+        "库存数量": "20",
+        "单价": "186.3",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "model_has_space",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0Tpid2t",
+        "kind": "supplier_stock"
+      },
+      "model": "E3X-HD11 2M",
+      "brand": "OMRON",
+      "quantity": "96",
+      "price": "310.5",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "E3X-HD11 2M",
+        "品牌": "OMRON",
+        "库存数量": "96",
+        "单价": "310.5",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "model_has_space",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0TpS4P5",
+        "kind": "supplier_stock"
+      },
+      "model": "E3Z-D61 2M BY OMC",
+      "brand": "OMRON",
+      "quantity": "197",
+      "price": "101.4",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "E3Z-D61 2M BY OMC",
+        "品牌": "OMRON",
+        "库存数量": "197",
+        "单价": "101.4",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "model_has_space",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0Tpd71I",
+        "kind": "supplier_stock"
+      },
+      "model": "E3Z-D82 2M BY OMC",
+      "brand": "OMRON",
+      "quantity": "55",
+      "price": "156.6",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "E3Z-D82 2M BY OMC",
+        "品牌": "OMRON",
+        "库存数量": "55",
+        "单价": "156.6",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "model_has_space",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "A级供应商库存",
+        "tableId": "tblzQbSnVNhGszYA",
+        "recordId": "recv53H0TpS5t0",
+        "kind": "supplier_stock"
+      },
+      "model": "EE-1006 2M",
+      "brand": "OMRON",
+      "quantity": "11",
+      "price": "15.2",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "rawFields": {
+        "型号": "EE-1006 2M",
+        "品牌": "OMRON",
+        "库存数量": "11",
+        "单价": "15.2",
+        "供应商名称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "供应商等级": "A",
+        "更新时间": null
+      },
+      "tags": [
+        "A级供应商库存",
+        "category_industrial",
+        "model_has_dash",
+        "model_has_space",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXEL9yAV",
+        "kind": "supplier_stock"
+      },
+      "model": "RTL8762CK-CG",
+      "brand": "Realtek",
+      "quantity": "4,900",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "updatedAt": "2025-05-25 00:00:00",
+      "rawFields": {
+        "型号": "RTL8762CK-CG",
+        "品牌": "Realtek",
+        "库存数量": "4,900",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": "2025-05-25 00:00:00"
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELXTTA",
+        "kind": "supplier_stock"
+      },
+      "model": "RTL8762CK-CG",
+      "brand": "Realtek",
+      "quantity": "4,900",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "RTL8762CK-CG",
+        "品牌": "Realtek",
+        "库存数量": "4,900",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELnHaX",
+        "kind": "supplier_stock"
+      },
+      "model": "iW1602-10B",
+      "brand": "Dialog/瑞萨",
+      "quantity": "3,000",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "iW1602-10B",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "3,000",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "model_mixed_case",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELvQ66",
+        "kind": "supplier_stock"
+      },
+      "model": "iW1700-00",
+      "brand": "Dialog/瑞萨",
+      "quantity": "2,900",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "iW1700-00",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "2,900",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "model_mixed_case",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELrPhM",
+        "kind": "supplier_stock"
+      },
+      "model": "iW1702-31B",
+      "brand": "Dialog/瑞萨",
+      "quantity": "6,000",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "iW1702-31B",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "6,000",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "model_mixed_case",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELPVwy",
+        "kind": "supplier_stock"
+      },
+      "model": "IW676-30C",
+      "brand": "Dialog/瑞萨",
+      "quantity": "3,000",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "IW676-30C",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "3,000",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELtVhB",
+        "kind": "supplier_stock"
+      },
+      "model": "iW1706-00",
+      "brand": "Dialog/瑞萨",
+      "quantity": "6,000",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "iW1706-00",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "6,000",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "model_mixed_case",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELV7Fe",
+        "kind": "supplier_stock"
+      },
+      "model": "iW1709-00",
+      "brand": "Dialog/瑞萨",
+      "quantity": "2,500",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "iW1709-00",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "2,500",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "model_mixed_case",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELxmmh",
+        "kind": "supplier_stock"
+      },
+      "model": "iW1709-00",
+      "brand": "Dialog/瑞萨",
+      "quantity": "2,500",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "iW1709-00",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "2,500",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "model_mixed_case",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELhlpx",
+        "kind": "supplier_stock"
+      },
+      "model": "iW1709-00",
+      "brand": "Dialog/瑞萨",
+      "quantity": "5,000",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "iW1709-00",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "5,000",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "model_mixed_case",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELtE7R",
+        "kind": "supplier_stock"
+      },
+      "model": "iW1780-01",
+      "brand": "Dialog/瑞萨",
+      "quantity": "2,500",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "iW1780-01",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "2,500",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "model_mixed_case",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELvqmM",
+        "kind": "supplier_stock"
+      },
+      "model": "iW2206-00",
+      "brand": "Dialog/瑞萨",
+      "quantity": "15,000",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "iW2206-00",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "15,000",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "model_mixed_case",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELkInd",
+        "kind": "supplier_stock"
+      },
+      "model": "iW2206-00",
+      "brand": "Dialog/瑞萨",
+      "quantity": "1,000",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "iW2206-00",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "1,000",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "model_mixed_case",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELHfdl",
+        "kind": "supplier_stock"
+      },
+      "model": "IW336-00",
+      "brand": "Dialog/瑞萨",
+      "quantity": "10,000",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "IW336-00",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "10,000",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELAPBY",
+        "kind": "supplier_stock"
+      },
+      "model": "IW336-00",
+      "brand": "Dialog/瑞萨",
+      "quantity": "10,000",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "IW336-00",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "10,000",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELsjwK",
+        "kind": "supplier_stock"
+      },
+      "model": "iW3629-00",
+      "brand": "Dialog/瑞萨",
+      "quantity": "12,500",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "iW3629-00",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "12,500",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "model_mixed_case",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELk8tE",
+        "kind": "supplier_stock"
+      },
+      "model": "iW3629-00",
+      "brand": "Dialog/瑞萨",
+      "quantity": "22,500",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "iW3629-00",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "22,500",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "model_mixed_case",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXEL2XMY",
+        "kind": "supplier_stock"
+      },
+      "model": "IW3677-00",
+      "brand": "Dialog/瑞萨",
+      "quantity": "2,500",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "IW3677-00",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "2,500",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELlJHE",
+        "kind": "supplier_stock"
+      },
+      "model": "IW3677-00",
+      "brand": "Dialog/瑞萨",
+      "quantity": "15,000",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "IW3677-00",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "15,000",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存1",
+        "tableId": "tbldOthm6zmFonDM",
+        "recordId": "recv4WuXELZIZw",
+        "kind": "supplier_stock"
+      },
+      "model": "IW3677-00C",
+      "brand": "Dialog/瑞萨",
+      "quantity": "2,500",
+      "supplierName": "百能云芯",
+      "supplierGrade": "待判断",
+      "rawFields": {
+        "型号": "IW3677-00C",
+        "品牌": "Dialog/瑞萨",
+        "库存数量": "2,500",
+        "单价": null,
+        "供应商名称": [
+          "百能云芯"
+        ],
+        "供应商等级": "待判断",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存1",
+        "category_chip",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzs7Wzt",
+        "kind": "supplier_stock"
+      },
+      "model": "34484",
+      "brand": "TE Connectivity",
+      "quantity": "25000",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "updatedAt": "2025-11-01 00:00:00",
+      "rawFields": {
+        "型号": "34484",
+        "品牌": "TE Connectivity",
+        "库存数量": "25000",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": "2025-11-01 00:00:00"
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_connector",
+        "missing_price",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsDR6B",
+        "kind": "supplier_stock"
+      },
+      "model": "61-1100.0",
+      "brand": "eao",
+      "quantity": "20",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "61-1100.0",
+        "品牌": "eao",
+        "库存数量": "20",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsXFEI",
+        "kind": "supplier_stock"
+      },
+      "model": "61-0000.02",
+      "brand": "eao",
+      "quantity": "20",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "61-0000.02",
+        "品牌": "eao",
+        "库存数量": "20",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsWZs3",
+        "kind": "supplier_stock"
+      },
+      "model": "730.530.06",
+      "brand": "eao",
+      "quantity": "5",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "730.530.06",
+        "品牌": "eao",
+        "库存数量": "5",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzs3oV4",
+        "kind": "supplier_stock"
+      },
+      "model": "01-961.9",
+      "brand": "eao",
+      "quantity": "20",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "01-961.9",
+        "品牌": "eao",
+        "库存数量": "20",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsyzh9",
+        "kind": "supplier_stock"
+      },
+      "model": "01-983.5",
+      "brand": "eao",
+      "quantity": "20",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "01-983.5",
+        "品牌": "eao",
+        "库存数量": "20",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzssiwd",
+        "kind": "supplier_stock"
+      },
+      "model": "31.953.2",
+      "brand": "eao",
+      "quantity": "20",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "31.953.2",
+        "品牌": "eao",
+        "库存数量": "20",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzs1ohw",
+        "kind": "supplier_stock"
+      },
+      "model": "19-903.4",
+      "brand": "eao",
+      "quantity": "100",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "19-903.4",
+        "品牌": "eao",
+        "库存数量": "100",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsfbd7",
+        "kind": "supplier_stock"
+      },
+      "model": "31-933.5",
+      "brand": "eao",
+      "quantity": "50",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "31-933.5",
+        "品牌": "eao",
+        "库存数量": "50",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsDpc2",
+        "kind": "supplier_stock"
+      },
+      "model": "51-272.0252",
+      "brand": "eao",
+      "quantity": "20",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "51-272.0252",
+        "品牌": "eao",
+        "库存数量": "20",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzswvAh",
+        "kind": "supplier_stock"
+      },
+      "model": "52-928.0",
+      "brand": "eao",
+      "quantity": "20",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "52-928.0",
+        "品牌": "eao",
+        "库存数量": "20",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsY5rl",
+        "kind": "supplier_stock"
+      },
+      "model": "704.965.1",
+      "brand": "eao",
+      "quantity": "200",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "704.965.1",
+        "品牌": "eao",
+        "库存数量": "200",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsHGi1",
+        "kind": "supplier_stock"
+      },
+      "model": "704.965.2",
+      "brand": "eao",
+      "quantity": "200",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "704.965.2",
+        "品牌": "eao",
+        "库存数量": "200",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsTxKh",
+        "kind": "supplier_stock"
+      },
+      "model": "61-9351.2",
+      "brand": "eao",
+      "quantity": "20",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "61-9351.2",
+        "品牌": "eao",
+        "库存数量": "20",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsazce",
+        "kind": "supplier_stock"
+      },
+      "model": "51-953.4",
+      "brand": "eao",
+      "quantity": "100",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "51-953.4",
+        "品牌": "eao",
+        "库存数量": "100",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsA5hW",
+        "kind": "supplier_stock"
+      },
+      "model": "51-953.5",
+      "brand": "eao",
+      "quantity": "25",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "51-953.5",
+        "品牌": "eao",
+        "库存数量": "25",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsgf2p",
+        "kind": "supplier_stock"
+      },
+      "model": "31.968.04",
+      "brand": "eao",
+      "quantity": "10",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "31.968.04",
+        "品牌": "eao",
+        "库存数量": "10",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzssur1",
+        "kind": "supplier_stock"
+      },
+      "model": "51-282.0252",
+      "brand": "eao",
+      "quantity": "10",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "51-282.0252",
+        "品牌": "eao",
+        "库存数量": "10",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsGnZZ",
+        "kind": "supplier_stock"
+      },
+      "model": "61-1150.0",
+      "brand": "eao",
+      "quantity": "10",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "61-1150.0",
+        "品牌": "eao",
+        "库存数量": "10",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存2",
+        "tableId": "tblqaoi5UuUGybxF",
+        "recordId": "recv5qznzsY9mY",
+        "kind": "supplier_stock"
+      },
+      "model": "31-123.0252",
+      "brand": "eao",
+      "quantity": "20",
+      "supplierName": "上海睿河电子科技有限公司",
+      "supplierGrade": "待判断,B",
+      "rawFields": {
+        "型号": "31-123.0252",
+        "品牌": "eao",
+        "库存数量": "20",
+        "单价": null,
+        "供应商名称": [
+          "上海睿河电子科技有限公司"
+        ],
+        "供应商等级": "待判断,B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存2",
+        "category_industrial",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpDgHH",
+        "kind": "supplier_stock"
+      },
+      "model": "0034.3127.G",
+      "brand": "SCHURTER",
+      "quantity": "16",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "updatedAt": "2025-11-01 00:00:00",
+      "rawFields": {
+        "型号": "0034.3127.G",
+        "品牌": "SCHURTER",
+        "库存数量": "16",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": "2025-11-01 00:00:00"
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dot",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpITnL",
+        "kind": "supplier_stock"
+      },
+      "model": "34.6925",
+      "brand": "SCHURTER",
+      "quantity": "135",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "34.6925",
+        "品牌": "SCHURTER",
+        "库存数量": "135",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpfHms",
+        "kind": "supplier_stock"
+      },
+      "model": "40.1151",
+      "brand": "SCHURTER",
+      "quantity": "116",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "40.1151",
+        "品牌": "SCHURTER",
+        "库存数量": "116",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpWaC8",
+        "kind": "supplier_stock"
+      },
+      "model": "0208-1001",
+      "brand": "Molex",
+      "quantity": "34",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "0208-1001",
+        "品牌": "Molex",
+        "库存数量": "34",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrp05R7",
+        "kind": "supplier_stock"
+      },
+      "model": "0001.2516.B",
+      "brand": "SCHURTER",
+      "quantity": "3",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "0001.2516.B",
+        "品牌": "SCHURTER",
+        "库存数量": "3",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dot",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpE6TW",
+        "kind": "supplier_stock"
+      },
+      "model": "31.1653",
+      "brand": "SCHURTER",
+      "quantity": "262",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "31.1653",
+        "品牌": "SCHURTER",
+        "库存数量": "262",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrp4xbn",
+        "kind": "supplier_stock"
+      },
+      "model": "31.1661",
+      "brand": "SCHURTER",
+      "quantity": "5",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "31.1661",
+        "品牌": "SCHURTER",
+        "库存数量": "5",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpeQdA",
+        "kind": "supplier_stock"
+      },
+      "model": "31.2308",
+      "brand": "SCHURTER",
+      "quantity": "3650",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "31.2308",
+        "品牌": "SCHURTER",
+        "库存数量": "3650",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpo9x6",
+        "kind": "supplier_stock"
+      },
+      "model": "31.3558",
+      "brand": "SCHURTER",
+      "quantity": "62",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "31.3558",
+        "品牌": "SCHURTER",
+        "库存数量": "62",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrp9gSJ",
+        "kind": "supplier_stock"
+      },
+      "model": "34.3101",
+      "brand": "SCHURTER",
+      "quantity": "3",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "34.3101",
+        "品牌": "SCHURTER",
+        "库存数量": "3",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dot",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpaaYz",
+        "kind": "supplier_stock"
+      },
+      "model": "0209-2101",
+      "brand": "Molex",
+      "quantity": "514",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "0209-2101",
+        "品牌": "Molex",
+        "库存数量": "514",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpwazY",
+        "kind": "supplier_stock"
+      },
+      "model": "0306-1023",
+      "brand": "Molex",
+      "quantity": "1542",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "0306-1023",
+        "品牌": "Molex",
+        "库存数量": "1542",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpdW2q",
+        "kind": "supplier_stock"
+      },
+      "model": "0306-1032",
+      "brand": "Molex",
+      "quantity": "9",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "0306-1032",
+        "品牌": "Molex",
+        "库存数量": "9",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpVlEG",
+        "kind": "supplier_stock"
+      },
+      "model": "0306-1121",
+      "brand": "Molex",
+      "quantity": "2",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "0306-1121",
+        "品牌": "Molex",
+        "库存数量": "2",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpOIF8",
+        "kind": "supplier_stock"
+      },
+      "model": "0306-2042",
+      "brand": "Molex",
+      "quantity": "1",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "0306-2042",
+        "品牌": "Molex",
+        "库存数量": "1",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpopCI",
+        "kind": "supplier_stock"
+      },
+      "model": "0870-0001",
+      "brand": "Molex",
+      "quantity": "2",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "0870-0001",
+        "品牌": "Molex",
+        "库存数量": "2",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpvtEP",
+        "kind": "supplier_stock"
+      },
+      "model": "0870-0048",
+      "brand": "Molex",
+      "quantity": "193528",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "0870-0048",
+        "品牌": "Molex",
+        "库存数量": "193528",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpGdYR",
+        "kind": "supplier_stock"
+      },
+      "model": "0870-0058",
+      "brand": "Molex",
+      "quantity": "144",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "0870-0058",
+        "品牌": "Molex",
+        "库存数量": "144",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpfa9t",
+        "kind": "supplier_stock"
+      },
+      "model": "0870-0102",
+      "brand": "Molex",
+      "quantity": "10064",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "0870-0102",
+        "品牌": "Molex",
+        "库存数量": "10064",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "B级供应商库存3",
+        "tableId": "tbld53dBj2dvI1R6",
+        "recordId": "recv5wmDrpnvpV",
+        "kind": "supplier_stock"
+      },
+      "model": "0950-3041",
+      "brand": "Molex",
+      "quantity": "4503",
+      "supplierName": "连可连国际贸易（上海）有限公司",
+      "supplierGrade": "B",
+      "rawFields": {
+        "型号": "0950-3041",
+        "品牌": "Molex",
+        "库存数量": "4503",
+        "单价": null,
+        "供应商名称": [
+          "连可连国际贸易（上海）有限公司"
+        ],
+        "供应商等级": "B",
+        "更新时间": null
+      },
+      "tags": [
+        "B级供应商库存3",
+        "category_connector",
+        "missing_price",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "supplier_stock"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJ3xrT",
+        "kind": "supplier_stock"
+      },
+      "model": "R80-12",
+      "quantity": "800",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "updatedAt": "2025-12-05 00:00:00",
+      "rawFields": {
+        "型号": "R80-12",
+        "品牌": null,
+        "库存数量": "800",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": "2025-12-05 00:00:00"
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJq5dd",
+        "kind": "supplier_stock"
+      },
+      "model": "R60-12",
+      "quantity": "800",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "R60-12",
+        "品牌": null,
+        "库存数量": "800",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJF54H",
+        "kind": "supplier_stock"
+      },
+      "model": "R38-14",
+      "quantity": "1200",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "R38-14",
+        "品牌": null,
+        "库存数量": "1200",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJSRwj",
+        "kind": "supplier_stock"
+      },
+      "model": "FN1.25-M4",
+      "quantity": "2000",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "FN1.25-M4",
+        "品牌": null,
+        "库存数量": "2000",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJ9VKu",
+        "kind": "supplier_stock"
+      },
+      "model": "150-12",
+      "quantity": "200",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "150-12",
+        "品牌": null,
+        "库存数量": "200",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJAGct",
+        "kind": "supplier_stock"
+      },
+      "model": "150-10",
+      "quantity": "200",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "150-10",
+        "品牌": null,
+        "库存数量": "200",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJ06mT",
+        "kind": "supplier_stock"
+      },
+      "model": "R80-10",
+      "quantity": "725",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "R80-10",
+        "品牌": null,
+        "库存数量": "725",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJPcyT",
+        "kind": "supplier_stock"
+      },
+      "model": "R80-8",
+      "quantity": "1600",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "R80-8",
+        "品牌": null,
+        "库存数量": "1600",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJXMRD",
+        "kind": "supplier_stock"
+      },
+      "model": "R60-8",
+      "quantity": "2500",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "R60-8",
+        "品牌": null,
+        "库存数量": "2500",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJU2rp",
+        "kind": "supplier_stock"
+      },
+      "model": "B6P-VH-FB-B(LF)(SN)",
+      "quantity": "800",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "B6P-VH-FB-B(LF)(SN)",
+        "品牌": null,
+        "库存数量": "800",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "model_has_parenthesis",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJPWn1",
+        "kind": "supplier_stock"
+      },
+      "model": "22-S5",
+      "quantity": "2800",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "22-S5",
+        "品牌": null,
+        "库存数量": "2800",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJaSfn",
+        "kind": "supplier_stock"
+      },
+      "model": "R100-10",
+      "quantity": "800",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "R100-10",
+        "品牌": null,
+        "库存数量": "800",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJKwsb",
+        "kind": "supplier_stock"
+      },
+      "model": "R60-10",
+      "quantity": "600",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "R60-10",
+        "品牌": null,
+        "库存数量": "600",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJ63Z0",
+        "kind": "supplier_stock"
+      },
+      "model": "R200-10",
+      "quantity": "150",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "R200-10",
+        "品牌": null,
+        "库存数量": "150",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJwpxS",
+        "kind": "supplier_stock"
+      },
+      "model": "R200-12",
+      "quantity": "150",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "R200-12",
+        "品牌": null,
+        "库存数量": "150",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJEQx3",
+        "kind": "supplier_stock"
+      },
+      "model": "RAA1.25-3.5 V1.25-M3(LF)K",
+      "quantity": "20000",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "RAA1.25-3.5 V1.25-M3(LF)K",
+        "品牌": null,
+        "库存数量": "20000",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "model_has_dot",
+        "model_has_parenthesis",
+        "model_has_space",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJIkJs",
+        "kind": "supplier_stock"
+      },
+      "model": "B06B-XARS-1-T",
+      "quantity": "10000",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "B06B-XARS-1-T",
+        "品牌": null,
+        "库存数量": "10000",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJ7vp9",
+        "kind": "supplier_stock"
+      },
+      "model": "B2P-VH-B(LF)(SN)",
+      "quantity": "12000",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "B2P-VH-B(LF)(SN)",
+        "品牌": null,
+        "库存数量": "12000",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "model_has_parenthesis",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJ5PNZ",
+        "kind": "supplier_stock"
+      },
+      "model": "B3P5-VH-B",
+      "quantity": "1000",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "B3P5-VH-B",
+        "品牌": null,
+        "库存数量": "1000",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "C级供应商库存",
+        "tableId": "tblBbvvRKB0Ziioz",
+        "recordId": "recv4RpoTJ46W8",
+        "kind": "supplier_stock"
+      },
+      "model": "R38-12",
+      "quantity": "1200",
+      "supplierName": "苏州汇鼎进机电有限公司",
+      "supplierGrade": "C",
+      "rawFields": {
+        "型号": "R38-12",
+        "品牌": null,
+        "库存数量": "1200",
+        "单价": null,
+        "供应商名称": [
+          "苏州汇鼎进机电有限公司"
+        ],
+        "供应商等级": [
+          "C"
+        ],
+        "更新时间": null
+      },
+      "tags": [
+        "C级供应商库存",
+        "missing_brand",
+        "missing_price",
+        "model_has_dash",
+        "supplier_stock",
+        "weak_supplier_signal"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIM3q8w",
+        "kind": "self_inventory"
+      },
+      "model": "MAX3098EAEEE+",
+      "brand": "Maxim",
+      "quantity": "105",
+      "price": "$14.70",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "C4",
+      "rawFields": {
+        "型号": "MAX3098EAEEE+",
+        "品牌": "Maxim",
+        "库存数量": "105",
+        "单价": " $14.70 ",
+        "货架位置号": "C4",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_chip",
+        "model_has_plus",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIM2TnA",
+        "kind": "self_inventory"
+      },
+      "model": "RK73H2ATTD1002F",
+      "brand": "KOA",
+      "quantity": "195000",
+      "price": "$0.002",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "小房间",
+      "rawFields": {
+        "型号": "RK73H2ATTD1002F",
+        "品牌": "KOA",
+        "库存数量": "195000",
+        "单价": " $0.002 ",
+        "货架位置号": "小房间",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMhA5U",
+        "kind": "self_inventory"
+      },
+      "model": "003900-0059",
+      "brand": "MOLEX",
+      "quantity": "2000",
+      "price": "$0.008",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "小房间",
+      "rawFields": {
+        "型号": "003900-0059",
+        "品牌": "MOLEX",
+        "库存数量": "2000",
+        "单价": " $0.008 ",
+        "货架位置号": "小房间",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMQkkQ",
+        "kind": "self_inventory"
+      },
+      "model": "TM11R-5M2-88",
+      "brand": "HRS",
+      "quantity": "500",
+      "price": "$8.465",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "小房间",
+      "rawFields": {
+        "型号": "TM11R-5M2-88",
+        "品牌": "HRS",
+        "库存数量": "500",
+        "单价": " $8.465 ",
+        "货架位置号": "小房间",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMHp6x",
+        "kind": "self_inventory"
+      },
+      "model": "TK8P60W5,RVQ",
+      "brand": "TOSHIBA",
+      "quantity": "4000",
+      "price": "$0.759",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "E4",
+      "rawFields": {
+        "型号": "TK8P60W5,RVQ",
+        "品牌": "TOSHIBA",
+        "库存数量": "4000",
+        "单价": " $0.759 ",
+        "货架位置号": "E4",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_chip",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMaqCd",
+        "kind": "self_inventory"
+      },
+      "model": "174779-1",
+      "brand": "TE",
+      "quantity": "61000",
+      "price": "$0.043",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "小房间",
+      "rawFields": {
+        "型号": "174779-1",
+        "品牌": "TE",
+        "库存数量": "61000",
+        "单价": " $0.043 ",
+        "货架位置号": "小房间",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMuWnw",
+        "kind": "self_inventory"
+      },
+      "model": "53358-0640",
+      "brand": "Molex",
+      "quantity": "2751",
+      "price": "$0.115",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "F2",
+      "rawFields": {
+        "型号": "53358-0640",
+        "品牌": "Molex",
+        "库存数量": "2751",
+        "单价": " $0.115 ",
+        "货架位置号": "F2",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMO228",
+        "kind": "self_inventory"
+      },
+      "model": "6-292246-2",
+      "brand": "TE",
+      "quantity": "1480",
+      "price": "$0.248",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "F7 F8 F9 F10",
+      "rawFields": {
+        "型号": "6-292246-2",
+        "品牌": "TE",
+        "库存数量": "1480",
+        "单价": " $0.248 ",
+        "货架位置号": "F7 F8 F9 F10",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMYbss",
+        "kind": "self_inventory"
+      },
+      "model": "53358-1240",
+      "brand": "Molex",
+      "quantity": "1243",
+      "price": "$0.320",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "F5",
+      "rawFields": {
+        "型号": "53358-1240",
+        "品牌": "Molex",
+        "库存数量": "1243",
+        "单价": " $0.320 ",
+        "货架位置号": "F5",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMZgr5",
+        "kind": "self_inventory"
+      },
+      "model": "53358-0350",
+      "brand": "Molex",
+      "quantity": "2493",
+      "price": "$0.090",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "F11",
+      "rawFields": {
+        "型号": "53358-0350",
+        "品牌": "Molex",
+        "库存数量": "2493",
+        "单价": " $0.090 ",
+        "货架位置号": "F11",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMi8Ny",
+        "kind": "self_inventory"
+      },
+      "model": "QR/P14-RC-25S-C",
+      "brand": "HRS",
+      "quantity": "60",
+      "price": "$0.058",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "F4",
+      "rawFields": {
+        "型号": "QR/P14-RC-25S-C",
+        "品牌": "HRS",
+        "库存数量": "60",
+        "单价": " $0.058 ",
+        "货架位置号": "F4",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_has_slash",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMVqMa",
+        "kind": "self_inventory"
+      },
+      "model": "917708-1",
+      "brand": "TE",
+      "quantity": "321",
+      "price": "$0.025",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "B3",
+      "rawFields": {
+        "型号": "917708-1",
+        "品牌": "TE",
+        "库存数量": "321",
+        "单价": " $0.025 ",
+        "货架位置号": "B3",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMXXpJ",
+        "kind": "self_inventory"
+      },
+      "model": "175778-3",
+      "brand": "TE",
+      "quantity": "3102",
+      "price": "$0.055",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "F1",
+      "rawFields": {
+        "型号": "175778-3",
+        "品牌": "TE",
+        "库存数量": "3102",
+        "单价": " $0.055 ",
+        "货架位置号": "F1",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMYztm",
+        "kind": "self_inventory"
+      },
+      "model": "ZER-06V-E",
+      "brand": "JST",
+      "quantity": "2909",
+      "price": "$0.120",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "F1",
+      "rawFields": {
+        "型号": "ZER-06V-E",
+        "品牌": "JST",
+        "库存数量": "2909",
+        "单价": " $0.120 ",
+        "货架位置号": "F1",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMJ4rp",
+        "kind": "self_inventory"
+      },
+      "model": "54597-3000",
+      "brand": "Molex",
+      "quantity": "2532",
+      "price": "$0.174",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "F1",
+      "rawFields": {
+        "型号": "54597-3000",
+        "品牌": "Molex",
+        "库存数量": "2532",
+        "单价": " $0.174 ",
+        "货架位置号": "F1",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIM7tvE",
+        "kind": "self_inventory"
+      },
+      "model": "53358-0450",
+      "brand": "Molex",
+      "quantity": "1825",
+      "price": "$0.100",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "F1",
+      "rawFields": {
+        "型号": "53358-0450",
+        "品牌": "Molex",
+        "库存数量": "1825",
+        "单价": " $0.100 ",
+        "货架位置号": "F1",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMYgGk",
+        "kind": "self_inventory"
+      },
+      "model": "51140-0305",
+      "brand": "Molex",
+      "quantity": "3000",
+      "price": "$0.032",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "F1",
+      "rawFields": {
+        "型号": "51140-0305",
+        "品牌": "Molex",
+        "库存数量": "3000",
+        "单价": " $0.032 ",
+        "货架位置号": "F1",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMC1II",
+        "kind": "self_inventory"
+      },
+      "model": "QR/P4-24P-C(01)",
+      "brand": "HRS",
+      "quantity": "438",
+      "price": "$0.061",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "C2 A3",
+      "rawFields": {
+        "型号": "QR/P4-24P-C(01)",
+        "品牌": "HRS",
+        "库存数量": "438",
+        "单价": " $0.061 ",
+        "货架位置号": "C2 A3",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_has_parenthesis",
+        "model_has_slash",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMbHg4",
+        "kind": "self_inventory"
+      },
+      "model": "54111-1619",
+      "brand": "Molex",
+      "quantity": "135",
+      "price": "$0.200",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "F3",
+      "rawFields": {
+        "型号": "54111-1619",
+        "品牌": "Molex",
+        "库存数量": "135",
+        "单价": " $0.200 ",
+        "货架位置号": "F3",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "category_connector",
+        "model_has_dash",
+        "model_numeric_punctuation",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "自家库存",
+        "tableId": "tblSUjXdehzkxIbK",
+        "recordId": "recv5wzmIMS6xI",
+        "kind": "self_inventory"
+      },
+      "model": "SFC-3",
+      "brand": "KGS",
+      "quantity": "4300",
+      "price": "$3.571",
+      "updatedAt": "2025-12-31 00:00:00",
+      "shelf": "C3 E3",
+      "rawFields": {
+        "型号": "SFC-3",
+        "品牌": "KGS",
+        "库存数量": "4300",
+        "单价": " $3.571 ",
+        "货架位置号": "C3 E3",
+        "更新时间": "2025-12-31 00:00:00"
+      },
+      "tags": [
+        "model_has_dash",
+        "self_inventory",
+        "self_inventory_cost",
+        "自家库存"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "rec2697Q7E5Pq6",
+        "kind": "supplier_profile"
+      },
+      "brand": "Omron",
+      "supplierName": "江西乐商控制系统有限公司",
+      "supplierGrade": "A",
+      "productCategory": "继电器、开关等工控类",
+      "supplierType": "授权代理/授权分销商",
+      "region": "中国大陆",
+      "providesStockSheet": "是",
+      "rawFields": {
+        "供应商全称": [
+          "江西乐商控制系统有限公司"
+        ],
+        "主营品牌": [
+          "Omron"
+        ],
+        "优势产品": "继电器、开关等工控类",
+        "询价品牌": "OMRON オムロン",
+        "供应商等级": [
+          "A"
+        ],
+        "等级": "A",
+        "供应商类型": [
+          "授权代理/授权分销商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "是"
+        ]
+      },
+      "tags": [
+        "category_industrial",
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUuXrW",
+        "kind": "supplier_profile"
+      },
+      "brand": "Omron",
+      "supplierName": "福建欧继电气有限公司",
+      "supplierGrade": "C",
+      "productCategory": "传感器、行程开关、继电器、变频器",
+      "supplierType": "贸易商",
+      "region": "中国大陆",
+      "providesStockSheet": "是",
+      "rawFields": {
+        "供应商全称": [
+          "福建欧继电气有限公司"
+        ],
+        "主营品牌": [
+          "Omron"
+        ],
+        "优势产品": "传感器、行程开关、继电器、变频器",
+        "询价品牌": null,
+        "供应商等级": [
+          "C"
+        ],
+        "等级": "B",
+        "供应商类型": [
+          "贸易商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "是"
+        ]
+      },
+      "tags": [
+        "category_industrial",
+        "supplier_profile",
+        "weak_supplier_signal",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUWAK6",
+        "kind": "supplier_profile"
+      },
+      "brand": "Mitsubishi",
+      "supplierName": "上海肯科电气有限公司",
+      "supplierGrade": "B",
+      "productCategory": "主做PLC、三菱变频器、三菱触摸屏、三菱低压电器",
+      "supplierType": "贸易商",
+      "region": "中国大陆",
+      "providesStockSheet": "否",
+      "rawFields": {
+        "供应商全称": [
+          "上海肯科电气有限公司"
+        ],
+        "主营品牌": [
+          "Mitsubishi"
+        ],
+        "优势产品": "主做PLC、三菱变频器、三菱触摸屏、三菱低压电器",
+        "询价品牌": "三菱",
+        "供应商等级": [
+          "B"
+        ],
+        "等级": "C",
+        "供应商类型": [
+          "贸易商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "否"
+        ]
+      },
+      "tags": [
+        "category_industrial",
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUPVXs",
+        "kind": "supplier_profile"
+      },
+      "brand": "COSEL、VICOR",
+      "supplierName": "上海齐众电子科技有限公司",
+      "supplierGrade": "C",
+      "productCategory": "电源供应商",
+      "supplierType": "贸易商",
+      "region": "中国大陆",
+      "providesStockSheet": "否",
+      "rawFields": {
+        "供应商全称": [
+          "上海齐众电子科技有限公司"
+        ],
+        "主营品牌": [
+          "COSEL",
+          "VICOR"
+        ],
+        "优势产品": "电源供应商",
+        "询价品牌": "科索",
+        "供应商等级": [
+          "C"
+        ],
+        "等级": "C",
+        "供应商类型": [
+          "贸易商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "否"
+        ]
+      },
+      "tags": [
+        "supplier_profile",
+        "weak_supplier_signal",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUDfjd",
+        "kind": "supplier_profile"
+      },
+      "brand": "IDEC",
+      "supplierName": "深圳市乐成科技有限公司",
+      "supplierGrade": "B",
+      "productCategory": "开关",
+      "supplierType": "贸易商",
+      "region": "中国大陆",
+      "providesStockSheet": "是",
+      "rawFields": {
+        "供应商全称": [
+          "深圳市乐成科技有限公司"
+        ],
+        "主营品牌": [
+          "IDEC"
+        ],
+        "优势产品": "开关",
+        "询价品牌": null,
+        "供应商等级": [
+          "B"
+        ],
+        "等级": "B",
+        "供应商类型": [
+          "贸易商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "是"
+        ]
+      },
+      "tags": [
+        "category_industrial",
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiU1s6N",
+        "kind": "supplier_profile"
+      },
+      "brand": "Mean Well",
+      "supplierName": "深圳新力泰科技有限公司",
+      "productCategory": "开关电源；",
+      "supplierType": "授权代理/授权分销商",
+      "region": "中国大陆",
+      "providesStockSheet": "否",
+      "rawFields": {
+        "供应商全称": [
+          "深圳新力泰科技有限公司"
+        ],
+        "主营品牌": [
+          "Mean Well"
+        ],
+        "优势产品": "开关电源；",
+        "询价品牌": "Meanwell",
+        "供应商等级": null,
+        "等级": "B",
+        "供应商类型": [
+          "授权代理/授权分销商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "否"
+        ]
+      },
+      "tags": [
+        "category_industrial",
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUYRLU",
+        "kind": "supplier_profile"
+      },
+      "brand": "Mean Well",
+      "supplierName": "深圳市晟明威科技有限公司",
+      "productCategory": "电源产品；风扇；导轨端子；机器人",
+      "supplierType": "授权代理/授权分销商",
+      "region": "中国大陆",
+      "providesStockSheet": "否",
+      "rawFields": {
+        "供应商全称": [
+          "深圳市晟明威科技有限公司"
+        ],
+        "主营品牌": [
+          "Mean Well"
+        ],
+        "优势产品": "电源产品；风扇；导轨端子；机器人",
+        "询价品牌": "Meanwell",
+        "供应商等级": null,
+        "等级": "B",
+        "供应商类型": [
+          "授权代理/授权分销商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "否"
+        ]
+      },
+      "tags": [
+        "category_industrial",
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUmW1G",
+        "kind": "supplier_profile"
+      },
+      "brand": "JST、Molex",
+      "supplierName": "深圳市创凯荣科技有限公司",
+      "supplierGrade": "B",
+      "productCategory": "JST/MOLEX/HRS/TE",
+      "supplierType": "贸易商",
+      "region": "中国大陆",
+      "providesStockSheet": "是",
+      "rawFields": {
+        "供应商全称": [
+          "深圳市创凯荣科技有限公司"
+        ],
+        "主营品牌": [
+          "JST",
+          "Molex"
+        ],
+        "优势产品": "JST/MOLEX/HRS/TE",
+        "询价品牌": null,
+        "供应商等级": [
+          "B"
+        ],
+        "等级": "B",
+        "供应商类型": [
+          "贸易商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "是"
+        ]
+      },
+      "tags": [
+        "category_connector",
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiU4hWo",
+        "kind": "supplier_profile"
+      },
+      "brand": "TE",
+      "supplierName": "深圳市和润丰电子有限公司",
+      "supplierGrade": "B",
+      "productCategory": "TE/TI/AD/RENESAA/trio/航顺/菲尼克斯",
+      "supplierType": "贸易商",
+      "region": "中国大陆",
+      "providesStockSheet": "是",
+      "rawFields": {
+        "供应商全称": [
+          "深圳市和润丰电子有限公司"
+        ],
+        "主营品牌": [
+          "TE"
+        ],
+        "优势产品": "TE/TI/AD/RENESAA/trio/航顺/菲尼克斯",
+        "询价品牌": "TE",
+        "供应商等级": [
+          "B"
+        ],
+        "等级": "B",
+        "供应商类型": [
+          "贸易商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "是"
+        ]
+      },
+      "tags": [
+        "category_connector",
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUMeGl",
+        "kind": "supplier_profile"
+      },
+      "brand": "SanDisk",
+      "supplierName": "广州幻想世纪贸易有限公司",
+      "supplierGrade": "A",
+      "productCategory": "内存卡\nU盘\n移动固态硬盘\n内置硬盘",
+      "supplierType": "授权代理/授权分销商",
+      "region": "中国大陆",
+      "providesStockSheet": "否",
+      "rawFields": {
+        "供应商全称": [
+          "广州幻想世纪贸易有限公司"
+        ],
+        "主营品牌": [
+          "SanDisk"
+        ],
+        "优势产品": "内存卡\nU盘\n移动固态硬盘\n内置硬盘",
+        "询价品牌": "SD",
+        "供应商等级": [
+          "A"
+        ],
+        "等级": "B",
+        "供应商类型": [
+          "授权代理/授权分销商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "否"
+        ]
+      },
+      "tags": [
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUg24f",
+        "kind": "supplier_profile"
+      },
+      "brand": "SanDisk",
+      "supplierName": "上海伯众数码科技有限公司",
+      "supplierGrade": "A",
+      "productCategory": "内存卡，移动硬盘，U盘，读卡器",
+      "supplierType": "授权代理/授权分销商",
+      "region": "中国大陆",
+      "providesStockSheet": "否",
+      "rawFields": {
+        "供应商全称": [
+          "上海伯众数码科技有限公司"
+        ],
+        "主营品牌": [
+          "SanDisk"
+        ],
+        "优势产品": "内存卡，移动硬盘，U盘，读卡器",
+        "询价品牌": "SD SanDisk",
+        "供应商等级": [
+          "A"
+        ],
+        "等级": "B",
+        "供应商类型": [
+          "授权代理/授权分销商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "否"
+        ]
+      },
+      "tags": [
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUySBM",
+        "kind": "supplier_profile"
+      },
+      "brand": "SanDisk",
+      "supplierName": "宏衢(上海)贸易有限公司",
+      "supplierGrade": "A",
+      "productCategory": "内存卡，移动硬盘，USB，读卡器",
+      "supplierType": "授权代理/授权分销商",
+      "region": "中国大陆",
+      "providesStockSheet": "否",
+      "rawFields": {
+        "供应商全称": [
+          "宏衢(上海)贸易有限公司"
+        ],
+        "主营品牌": [
+          "SanDisk"
+        ],
+        "优势产品": "内存卡，移动硬盘，USB，读卡器",
+        "询价品牌": "SD",
+        "供应商等级": [
+          "A"
+        ],
+        "等级": "B",
+        "供应商类型": [
+          "授权代理/授权分销商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "否"
+        ]
+      },
+      "tags": [
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUNtJE",
+        "kind": "supplier_profile"
+      },
+      "brand": "Molex",
+      "supplierName": "深圳市奥连电子有限公司",
+      "supplierGrade": "B",
+      "productCategory": "MOLEX",
+      "supplierType": "贸易商",
+      "region": "中国大陆",
+      "providesStockSheet": "否",
+      "rawFields": {
+        "供应商全称": [
+          "深圳市奥连电子有限公司"
+        ],
+        "主营品牌": [
+          "Molex"
+        ],
+        "优势产品": "MOLEX",
+        "询价品牌": "Molex",
+        "供应商等级": [
+          "B"
+        ],
+        "等级": "B",
+        "供应商类型": [
+          "贸易商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "否"
+        ]
+      },
+      "tags": [
+        "category_connector",
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUHuLy",
+        "kind": "supplier_profile"
+      },
+      "brand": "Amphenol",
+      "supplierName": "常州飞力奥电器有限公司",
+      "supplierGrade": "A",
+      "productCategory": "安费诺，JST、KET、MOLEX、德尔福",
+      "supplierType": "授权代理/授权分销商",
+      "region": "中国大陆",
+      "providesStockSheet": "否",
+      "rawFields": {
+        "供应商全称": [
+          "常州飞力奥电器有限公司"
+        ],
+        "主营品牌": [
+          "Amphenol"
+        ],
+        "优势产品": "安费诺，JST、KET、MOLEX、德尔福",
+        "询价品牌": null,
+        "供应商等级": [
+          "A"
+        ],
+        "等级": "B",
+        "供应商类型": [
+          "授权代理/授权分销商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "否"
+        ]
+      },
+      "tags": [
+        "category_connector",
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUxNfg",
+        "kind": "supplier_profile"
+      },
+      "brand": "电子元器件授权分销商",
+      "supplierName": "易络盟电子",
+      "supplierGrade": "A",
+      "productCategory": "全球知名品牌电子元器件授权分销商,授权经销2000余家半导体、连接器、光电和显示产品、无源、电源和机电等多达95万件的现货产品",
+      "supplierType": "授权代理/授权分销商",
+      "region": "中国大陆",
+      "providesStockSheet": "否",
+      "rawFields": {
+        "供应商全称": [
+          "易络盟电子"
+        ],
+        "主营品牌": [
+          "电子元器件授权分销商"
+        ],
+        "优势产品": "全球知名品牌电子元器件授权分销商,授权经销2000余家半导体、连接器、光电和显示产品、无源、电源和机电等多达95万件的现货产品",
+        "询价品牌": "Micron ISSI SWISSBIT ALLIANCE　MEMORY TE RAYCHEN",
+        "供应商等级": [
+          "A"
+        ],
+        "等级": "B",
+        "供应商类型": [
+          "授权代理/授权分销商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "否"
+        ]
+      },
+      "tags": [
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUrQVg",
+        "kind": "supplier_profile"
+      },
+      "brand": "Molex",
+      "supplierName": "广州南星电子有限公司",
+      "supplierGrade": "B",
+      "productCategory": "连接器",
+      "supplierType": "贸易商",
+      "region": "中国大陆",
+      "providesStockSheet": "是",
+      "rawFields": {
+        "供应商全称": [
+          "广州南星电子有限公司"
+        ],
+        "主营品牌": [
+          "Molex"
+        ],
+        "优势产品": "连接器",
+        "询价品牌": "Molex MOLEX",
+        "供应商等级": [
+          "B"
+        ],
+        "等级": "B",
+        "供应商类型": [
+          "贸易商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "是"
+        ]
+      },
+      "tags": [
+        "category_connector",
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiU0kTm",
+        "kind": "supplier_profile"
+      },
+      "brand": "Omron",
+      "supplierName": "珠海市汉泓自动化科技有限公司",
+      "supplierGrade": "A",
+      "productCategory": "温控器、传感器、编码器、继电器、欧姆龙光栅光电开关、限位开关等工控类",
+      "supplierType": "授权代理/授权分销商",
+      "region": "中国大陆",
+      "providesStockSheet": "是",
+      "rawFields": {
+        "供应商全称": [
+          "珠海市汉泓自动化科技有限公司"
+        ],
+        "主营品牌": [
+          "Omron"
+        ],
+        "优势产品": "温控器、传感器、编码器、继电器、欧姆龙光栅光电开关、限位开关等工控类",
+        "询价品牌": "OMRON",
+        "供应商等级": [
+          "A"
+        ],
+        "等级": "A",
+        "供应商类型": [
+          "授权代理/授权分销商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "是"
+        ]
+      },
+      "tags": [
+        "category_industrial",
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiU4OS8",
+        "kind": "supplier_profile"
+      },
+      "brand": "DMC、Souriau、Harting",
+      "supplierName": "北京博远通达科技连接有限公司",
+      "productCategory": "专业化的连接器、工具、线缆供应商及代理商",
+      "supplierType": "贸易商",
+      "region": "中国大陆",
+      "providesStockSheet": "否",
+      "rawFields": {
+        "供应商全称": [
+          "北京博远通达科技连接有限公司"
+        ],
+        "主营品牌": [
+          "DMC",
+          "Souriau",
+          "Harting"
+        ],
+        "优势产品": "专业化的连接器、工具、线缆供应商及代理商",
+        "询价品牌": null,
+        "供应商等级": null,
+        "等级": "C",
+        "供应商类型": [
+          "贸易商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "否"
+        ]
+      },
+      "tags": [
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUQzKt",
+        "kind": "supplier_profile"
+      },
+      "brand": "Schneider",
+      "supplierName": "北京恒瑞达锐科技有限公司",
+      "supplierGrade": "A",
+      "productCategory": "UPS电源",
+      "supplierType": "授权代理/授权分销商",
+      "region": "中国大陆",
+      "providesStockSheet": "是",
+      "rawFields": {
+        "供应商全称": [
+          "北京恒瑞达锐科技有限公司"
+        ],
+        "主营品牌": [
+          "Schneider"
+        ],
+        "优势产品": "UPS电源",
+        "询价品牌": "SCHNEIDER ELECTRIC",
+        "供应商等级": [
+          "A"
+        ],
+        "等级": "A",
+        "供应商类型": [
+          "授权代理/授权分销商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "是"
+        ]
+      },
+      "tags": [
+        "supplier_profile",
+        "供应商档案"
+      ]
+    },
+    {
+      "source": {
+        "baseName": "供应商管理（正式版）",
+        "baseToken": "Mjlkb49B9aoptssVw8Jc0wGwnhh",
+        "tableName": "供应商档案",
+        "tableId": "tblbtuMHFIOr6Oss",
+        "recordId": "recv3rQPiUtckv",
+        "kind": "supplier_profile"
+      },
+      "brand": "Amphenol",
+      "supplierName": "陕西卓一新能源科技有限责任公司",
+      "supplierGrade": "A",
+      "supplierType": "授权代理/授权分销商",
+      "region": "中国大陆",
+      "providesStockSheet": "是",
+      "rawFields": {
+        "供应商全称": [
+          "陕西卓一新能源科技有限责任公司"
+        ],
+        "主营品牌": [
+          "Amphenol"
+        ],
+        "优势产品": null,
+        "询价品牌": null,
+        "供应商等级": [
+          "A"
+        ],
+        "等级": "A",
+        "供应商类型": [
+          "授权代理/授权分销商"
+        ],
+        "地区": [
+          "中国大陆"
+        ],
+        "是否提供库存表": [
+          "是"
+        ]
+      },
+      "tags": [
+        "supplier_profile",
+        "供应商档案"
+      ]
+    }
+  ]
+}
