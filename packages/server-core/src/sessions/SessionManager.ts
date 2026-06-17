@@ -1978,23 +1978,25 @@ export class SessionManager implements ISessionManager {
    */
   async handleAskResponse(sessionId: string, requestId: string, choice: string | null): Promise<void> {
     const managed = this.sessions.get(sessionId)
-    if (!managed?.pendingAuthRequest) {
-      sessionLog.warn(`Cannot handle ask response - no pending request for session ${sessionId}`)
+    if (!managed) {
+      sessionLog.warn(`Cannot handle ask response - session ${sessionId} not found`)
       return
     }
-    const request = managed.pendingAuthRequest
-    if (request.type !== 'ask' || request.requestId !== requestId) {
-      sessionLog.warn(`Ask response mismatch for session ${sessionId} (req ${requestId})`)
+    // Source of truth is the persisted auth-request message, NOT the in-memory
+    // pendingAuthRequest (which is lost across server restarts / cold reloads).
+    const authMessage = managed.messages.find(m =>
+      m.role === 'auth-request' &&
+      m.authRequestType === 'ask' &&
+      m.authRequestId === requestId &&
+      m.authStatus === 'pending'
+    )
+    if (!authMessage) {
+      sessionLog.warn(`Cannot handle ask response - no pending ask message ${requestId} for session ${sessionId}`)
       return
     }
 
     const cancelled = choice == null
-    const authMessage = managed.messages.find(m =>
-      m.role === 'auth-request' && m.authRequestId === requestId && m.authStatus === 'pending'
-    )
-    if (authMessage) {
-      authMessage.authStatus = cancelled ? 'cancelled' : 'completed'
-    }
+    authMessage.authStatus = cancelled ? 'cancelled' : 'completed'
 
     this.sendEvent({
       type: 'auth_completed',
@@ -2004,8 +2006,10 @@ export class SessionManager implements ISessionManager {
       cancelled,
     }, managed.workspace.id)
 
-    managed.pendingAuthRequestId = undefined
-    managed.pendingAuthRequest = undefined
+    if (managed.pendingAuthRequestId === requestId) {
+      managed.pendingAuthRequestId = undefined
+      managed.pendingAuthRequest = undefined
+    }
     this.persistSession(managed)
 
     // Resume the conversation: the user's pick becomes their next message.
