@@ -139,10 +139,10 @@ export function TaskBar({ onSubmit, sessionId, sessionFolderPath }: TaskBarProps
               type="button"
               variant={activeId === form.id ? 'secondary' : 'outline'}
               size="sm"
-              className="h-7 gap-1 text-xs"
+              className="h-[30px] gap-1.5 px-3.5 text-[13px] font-medium"
               onClick={() => openForm(form)}
             >
-              <form.icon className="h-3.5 w-3.5" />
+              <form.icon className="h-4 w-4" />
               {form.label}
             </Button>
           ))}
