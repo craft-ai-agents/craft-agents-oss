@@ -8,6 +8,7 @@ import type { BackgroundTask } from '../ActiveTasksBar'
 import { ActiveOptionBadges } from '../ActiveOptionBadges'
 import { InputContainer } from './InputContainer'
 import { InputErrorBoundary } from './InputErrorBoundary'
+import { TaskBar } from './TaskBar'
 
 interface ChatInputZoneProps {
   compactMode?: boolean
@@ -99,6 +100,8 @@ export function ChatInputZone({
           onSessionStatusChange={onSessionStatusChange}
         />
       )}
+
+      <TaskBar onSubmit={inputProps.onSubmit} />
 
       <InputErrorBoundary
         sessionId={sessionId}
