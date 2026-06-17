@@ -114,6 +114,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.tasks.GET_OUTPUT,
   RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION,
   RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL,
+  RPC_CHANNELS.sessions.RESPOND_TO_ASK,
   RPC_CHANNELS.sessions.COMMAND,
   RPC_CHANNELS.sessions.GET_PENDING_PLAN_EXECUTION,
   RPC_CHANNELS.sessions.GET_PERMISSION_MODE_STATE,
@@ -298,6 +299,11 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   // Returns true if the response was delivered, false if agent/session is gone
   server.handle(RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL, async (_ctx, sessionId: string, requestId: string, response: import('@craft-agent/shared/protocol').CredentialResponse) => {
     return sessionManager.respondToCredential(sessionId, requestId, response)
+  })
+
+  // Respond to an 'ask' request (multiple-choice question). choice=null = dismissed.
+  server.handle(RPC_CHANNELS.sessions.RESPOND_TO_ASK, async (_ctx, sessionId: string, requestId: string, choice: string | null) => {
+    return sessionManager.handleAskResponse(sessionId, requestId, choice)
   })
 
   // ==========================================================================

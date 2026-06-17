@@ -63,6 +63,7 @@ import {
   type AuthRequestTurn,
 } from "@craft-agent/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
+import { MemoizedAskRequestCard } from "@/components/chat/AskRequestCard"
 import { ChatInputZone, type StructuredInputState, type StructuredResponse, type PermissionResponse, type AdminApprovalResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
@@ -157,6 +158,7 @@ interface ChatDisplayProps {
   pendingCredential?: CredentialRequest
   /** Callback to respond to credential request */
   onRespondToCredential?: (sessionId: string, requestId: string, response: CredentialResponse) => void
+  onRespondToAsk?: (sessionId: string, requestId: string, choice: string | null) => void
   // Thinking level (session-level setting)
   /** Current thinking level ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel
@@ -448,6 +450,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   onRespondToPermission,
   pendingCredential,
   onRespondToCredential,
+  onRespondToAsk,
   // Thinking level
   thinkingLevel = 'medium',
   onThinkingLevelChange,
@@ -1667,12 +1670,21 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
                           )}
                         >
-                          <MemoizedAuthRequestCard
-                            message={turn.message}
-                            sessionId={session.id}
-                            onRespondToCredential={onRespondToCredential}
-                            isInteractive={isAuthInteractive}
-                          />
+                          {turn.message.authRequestType === 'ask' ? (
+                            <MemoizedAskRequestCard
+                              message={turn.message}
+                              sessionId={session.id}
+                              onRespondToAsk={onRespondToAsk}
+                              isInteractive={isAuthInteractive}
+                            />
+                          ) : (
+                            <MemoizedAuthRequestCard
+                              message={turn.message}
+                              sessionId={session.id}
+                              onRespondToCredential={onRespondToCredential}
+                              isInteractive={isAuthInteractive}
+                            />
+                          )}
                         </div>
                       )
                     }

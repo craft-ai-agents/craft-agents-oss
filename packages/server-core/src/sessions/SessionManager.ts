@@ -1858,6 +1858,8 @@ export class SessionManager implements ISessionManager {
     switch (request.type) {
       case 'credential':
         return `Authentication required for ${request.sourceName}`
+      case 'ask':
+        return request.question
       case 'oauth':
         return `OAuth authentication for ${request.sourceName}`
       case 'oauth-google':
@@ -1966,6 +1968,49 @@ export class SessionManager implements ISessionManager {
     await this.sendMessage(sessionId, resultContent, [], [], {})
 
     sessionLog.info(`Auth request completed for ${result.sourceSlug}: ${result.success ? 'success' : 'failed'}`)
+  }
+
+  /**
+   * Handle the user's pick for an 'ask' (multiple-choice) request from the UI.
+   * Lighter than completeAuthRequest (no source/credential/bridge logic): mark the
+   * pending auth-request message done, clear pending state, then resume the turn by
+   * sending the chosen option back as the next user message. choice=null = dismissed.
+   */
+  async handleAskResponse(sessionId: string, requestId: string, choice: string | null): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed?.pendingAuthRequest) {
+      sessionLog.warn(`Cannot handle ask response - no pending request for session ${sessionId}`)
+      return
+    }
+    const request = managed.pendingAuthRequest
+    if (request.type !== 'ask' || request.requestId !== requestId) {
+      sessionLog.warn(`Ask response mismatch for session ${sessionId} (req ${requestId})`)
+      return
+    }
+
+    const cancelled = choice == null
+    const authMessage = managed.messages.find(m =>
+      m.role === 'auth-request' && m.authRequestId === requestId && m.authStatus === 'pending'
+    )
+    if (authMessage) {
+      authMessage.authStatus = cancelled ? 'cancelled' : 'completed'
+    }
+
+    this.sendEvent({
+      type: 'auth_completed',
+      sessionId,
+      requestId,
+      success: !cancelled,
+      cancelled,
+    }, managed.workspace.id)
+
+    managed.pendingAuthRequestId = undefined
+    managed.pendingAuthRequest = undefined
+    this.persistSession(managed)
+
+    // Resume the conversation: the user's pick becomes their next message.
+    const resume = cancelled ? '（用户没有选择，跳过这个问题。）' : choice!
+    await this.sendMessage(sessionId, resume, [], [], {})
   }
 
   /**
@@ -3477,6 +3522,11 @@ export class SessionManager implements ISessionManager {
             authHeaderNames: request.headerNames,
             authSourceUrl: request.sourceUrl,
             authPasswordRequired: request.passwordRequired,
+          }),
+          // Copy type-specific fields for ask (multiple-choice question)
+          ...(request.type === 'ask' && {
+            authQuestion: request.question,
+            authOptions: request.options,
           }),
         }
 

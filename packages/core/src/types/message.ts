@@ -31,6 +31,7 @@ export type CredentialInputMode =
  */
 export type AuthRequestType =
   | 'credential'
+  | 'ask'
   | 'oauth'
   | 'oauth-google'
   | 'oauth-slack'
@@ -326,6 +327,8 @@ export interface Message {
   authHint?: string;              // Hint about where to find credentials
   authSourceUrl?: string;         // Source URL for password manager domain matching (1Password)
   authPasswordRequired?: boolean; // For basic auth: whether password is required (default true)
+  authQuestion?: string;          // For 'ask' requests: the question text
+  authOptions?: string[];         // For 'ask' requests: the selectable options
   authError?: string;             // Error message if auth failed
   authEmail?: string;             // Authenticated email (for OAuth)
   authWorkspace?: string;         // Authenticated workspace (for Slack)
@@ -405,6 +408,8 @@ export interface StoredMessage {
   authHint?: string;
   authSourceUrl?: string;
   authPasswordRequired?: boolean;
+  authQuestion?: string;
+  authOptions?: string[];
   authError?: string;
   authEmail?: string;
   authWorkspace?: string;

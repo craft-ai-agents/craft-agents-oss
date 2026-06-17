@@ -28,6 +28,7 @@ import {
   handleMicrosoftOAuthTrigger,
 } from './handlers/source-oauth.ts';
 import { handleCredentialPrompt } from './handlers/credential-prompt.ts';
+import { handleAskUser } from './handlers/ask-user.ts';
 import { handleUpdatePreferences } from './handlers/update-preferences.ts';
 import { handleTransformData } from './handlers/transform-data.ts';
 import { handleScriptSandbox } from './handlers/script-sandbox.ts';
@@ -89,6 +90,11 @@ export const CredentialPromptSchema = z.object({
   hint: z.string().optional().describe('Hint about where to find credentials'),
   headerNames: z.array(z.string()).optional().describe('Header names for multi-header auth (e.g., ["DD-API-KEY", "DD-APPLICATION-KEY"])'),
   passwordRequired: z.boolean().optional().describe('For basic auth: whether password is required'),
+});
+
+export const AskUserSchema = z.object({
+  question: z.string().describe('The question to show the user (short, plain).'),
+  options: z.array(z.string()).min(2).max(6).describe('2–6 short option labels the user picks from.'),
 });
 
 export const CallLlmSchema = z.object({
@@ -320,6 +326,18 @@ The user will see a secure input UI with appropriate fields based on the auth mo
 
 **IMPORTANT:** After calling this tool, execution will be paused for user input.`,
 
+  ask_user: `Ask the user a multiple-choice question and let them pick by tapping an option (no typing).
+
+Use this whenever you need the user to decide between concrete choices instead of guessing — e.g. "which of these substitutes do you want?", "继续查平台还是先看库存?", picking among matched parts/suppliers/templates. The options render as buttons; the user's pick comes back as their next message.
+
+**Args:**
+- \`question\`: the question text (short, plain).
+- \`options\`: 2–6 short option labels.
+
+**When NOT to use:** if the answer is free-form (a part number, a quantity) — just ask in plain text. Use this only for picking among a small fixed set.
+
+**IMPORTANT:** After calling this tool, execution pauses until the user picks. Do not call it again or continue until they respond.`,
+
   update_user_preferences: `Update stored user preferences. Use this when you learn information about the user that would be helpful to remember for future conversations. This includes their name, timezone, location, preferred language, or any other relevant notes. Only update fields you have confirmed information about - don't guess.`,
 
   transform_data: `Transform data files using a script and write structured output for datatable/spreadsheet blocks, or extract HTML content for html-preview blocks.
@@ -485,6 +503,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'source_slack_oauth_trigger', description: TOOL_DESCRIPTIONS.source_slack_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, executionMode: 'registry', safeMode: 'block', handler: handleSlackOAuthTrigger },
   { name: 'source_microsoft_oauth_trigger', description: TOOL_DESCRIPTIONS.source_microsoft_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, executionMode: 'registry', safeMode: 'block', handler: handleMicrosoftOAuthTrigger },
   { name: 'source_credential_prompt', description: TOOL_DESCRIPTIONS.source_credential_prompt, inputSchema: CredentialPromptSchema, executionMode: 'registry', safeMode: 'block', handler: handleCredentialPrompt },
+  { name: 'ask_user', description: TOOL_DESCRIPTIONS.ask_user, inputSchema: AskUserSchema, executionMode: 'registry', safeMode: 'allow', handler: handleAskUser },
   { name: 'update_user_preferences', description: TOOL_DESCRIPTIONS.update_user_preferences, inputSchema: UpdatePreferencesSchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdatePreferences },
   { name: 'transform_data', description: TOOL_DESCRIPTIONS.transform_data, inputSchema: TransformDataSchema, executionMode: 'registry', safeMode: 'allow', handler: handleTransformData },
   { name: 'script_sandbox', description: TOOL_DESCRIPTIONS.script_sandbox, inputSchema: ScriptSandboxSchema, executionMode: 'registry', safeMode: 'allow', handler: handleScriptSandbox },

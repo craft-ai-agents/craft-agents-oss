@@ -1556,6 +1556,12 @@ export default function App() {
     }
   }, [])
 
+  const handleRespondToAsk = useCallback(async (sessionId: string, requestId: string, choice: string | null) => {
+    // Server marks the auth-request message done (auth_completed) and resumes the turn
+    // with the chosen option as a new user message — no client-side queue to manage.
+    await window.webAgentAPI.respondToAsk(sessionId, requestId, choice)
+  }, [])
+
   const handleRespondToCredential = useCallback(async (sessionId: string, requestId: string, response: CredentialResponse) => {
     const success = await window.webAgentAPI.respondToCredential(sessionId, requestId, response)
 
@@ -1798,6 +1804,7 @@ export default function App() {
     onDeleteSession: handleDeleteSession,
     onRespondToPermission: handleRespondToPermission,
     onRespondToCredential: handleRespondToCredential,
+    onRespondToAsk: handleRespondToAsk,
     // File/URL handlers
     onOpenFile: handleOpenFile,
     onOpenUrl: handleOpenUrl,

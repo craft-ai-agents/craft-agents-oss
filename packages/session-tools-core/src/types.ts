@@ -81,6 +81,21 @@ export interface CredentialAuthRequest extends BaseAuthRequest {
 }
 
 /**
+ * Ask request - presents the user a multiple-choice question and waits for a pick.
+ * Reuses the auth-request handoff/interrupt/resume machinery (like credential prompts)
+ * but is purely a UI choice, not authentication. Backend-agnostic: any tool-calling
+ * model (DeepSeek via Pi, Claude, …) can call the `ask_user` tool that triggers it.
+ * sourceSlug/sourceName from BaseAuthRequest are unused (set to sentinel/empty).
+ */
+export interface AskAuthRequest extends BaseAuthRequest {
+  type: 'ask';
+  /** The question to show the user */
+  question: string;
+  /** The selectable options (rendered as buttons) */
+  options: string[];
+}
+
+/**
  * MCP OAuth auth request - standard OAuth 2.0 + PKCE
  */
 export interface McpOAuthAuthRequest extends BaseAuthRequest {
@@ -116,6 +131,7 @@ export interface MicrosoftOAuthAuthRequest extends BaseAuthRequest {
  */
 export type AuthRequest =
   | CredentialAuthRequest
+  | AskAuthRequest
   | McpOAuthAuthRequest
   | GoogleOAuthAuthRequest
   | SlackOAuthAuthRequest
@@ -133,6 +149,8 @@ export interface AuthResult {
   // Additional info for successful auth
   email?: string;      // For Google/Microsoft OAuth
   workspace?: string;  // For Slack OAuth
+  /** For 'ask' requests: the option the user picked (formatted into the resume message). */
+  answer?: string;
 }
 
 // ============================================================
