@@ -62,10 +62,12 @@ echo "==> 部署 $GIT_BRANCH @ $GIT_SHA（$DEPLOY_STAMP）"
 
 if [[ "$DO_BUILD" == 1 ]]; then
   echo "==> [1/4] 本机构建 bundle + webui"
-  bun build packages/session-mcp-server/src/index.ts \
-    --outfile packages/session-mcp-server/dist/index.js --target node --format cjs
-  bun build packages/pi-agent-server/src/index.ts \
-    --outfile packages/pi-agent-server/dist/index.js --target node --format cjs
+  # 用各包自己的 build script(唯一真源,自带正确 --external)。
+  # 教训(2026-06-17)：曾在此内联 bun build 命令，漏了 pi-agent-server 的
+  # --external @mariozechner/pi-*，把 Pi 库连同构建机绝对路径打进 bundle，
+  # 上线后 Pi 子进程 ENOENT 崩溃、chat 卡死。内联命令会和包脚本漂移，禁用。
+  (cd packages/session-mcp-server && bun run build)
+  (cd packages/pi-agent-server && bun run build)
   bun run scripts/build-wa-worker.ts
   NODE_OPTIONS="--max-old-space-size=4096" bunx vite build --config apps/webui/vite.config.ts
 else
