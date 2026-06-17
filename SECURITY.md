@@ -25,7 +25,7 @@ Include the following information:
 ### Scope
 
 This policy applies to:
-- The Craft Agents desktop application
+- The Craft Agents web service (`apps/webui` + server)
 - The `@craft-agent/*` npm packages
 - Official Craft Agents repositories
 

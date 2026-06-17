@@ -57,6 +57,7 @@ pnpm-lock.yaml
 
 # Craft Agent local data (sessions, credentials, config)
 .craft-agent/
+.phoenix/
 
 # SSH keys and secrets
 *.pem
@@ -76,9 +77,16 @@ deploy/mihomo.yaml
 build-skills/
 build-bin/
 
+# 大二进制工具：本地 vendor 的 bun(98M)/uv(54M)，可下载、平台相关，绝不进 git
+vendor/
+resources/bin/
+
 # procurement skills: 忽略 python 缓存
 procurement-skills/**/__pycache__/
 procurement-skills/**/*.pyc
+
+# Eval runtime symlinks that expose local procurement skills as project skills
+.agents/skills/procurement-*
 
 # procurement-doc-export: 真实业务模板含客户/财务/合同数据，只留本地，绝不进（公开 fork）仓库
 procurement-skills/procurement-doc-export/templates/*.xlsx

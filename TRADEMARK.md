@@ -68,9 +68,9 @@ For those creating forks, the following files contain branding that should be up
 
 | File | Contains |
 |------|----------|
-| `apps/electron/electron-builder.yml` | Product name, bundle ID, copyright |
-| `apps/electron/resources/` | Application icons |
 | `packages/shared/src/branding.ts` | Service URLs |
+| `apps/webui/src/index.html` | Page title / product name |
+| `apps/webui/src/public/manifest.json` | App name and icons |
 
 ## Examples
 

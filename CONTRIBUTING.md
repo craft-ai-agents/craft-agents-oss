@@ -31,7 +31,7 @@ Thank you for your interest in contributing to Craft Agents! This document provi
 
 4. Run in development mode:
    ```bash
-   bun run electron:dev
+   bun run server:dev:webui
    ```
 
 ## Development Workflow
@@ -95,11 +95,14 @@ How you tested these changes
 ```
 craft-agents/
 ├── apps/
-│   ├── electron/    # Desktop GUI (primary interface)
-│   └── tui/         # Terminal CLI (deprecated)
+│   ├── webui/       # Web UI — primary interface (React, served by the server)
+│   ├── viewer/      # Shared-session viewer
+│   └── cli/         # Command-line interface
 └── packages/
-    ├── core/        # @craft-agent/core - Shared types
+    ├── server/      # Headless server entry point
+    ├── server-core/ # Server runtime (sessions, telemetry, handlers)
     ├── shared/      # @craft-agent/shared - Business logic
+    ├── core/        # @craft-agent/core - Shared types
     └── ui/          # @craft-agent/ui - React components
 ```
 
@@ -109,7 +112,7 @@ craft-agents/
 - **Authentication**: `packages/shared/src/auth/`
 - **MCP Integration**: `packages/shared/src/mcp/`
 - **UI Components**: `packages/ui/src/`
-- **Electron App**: `apps/electron/`
+- **Web UI**: `apps/webui/`
 
 ## Questions?
 

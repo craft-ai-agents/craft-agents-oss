@@ -17,11 +17,11 @@
 #   ./scripts/quick-deploy.sh --no-build # 跳过构建，只 rsync + 重启（改了纯 TS 逻辑）
 #   ./scripts/quick-deploy.sh --allow-dirty  # 明知工作树脏仍部署（带 WIP，慎用）
 #
-# 正规化（2026-06-17）：
+# 正规化（2026-06-17）：单一全量部署路径，skill 跟随整体一起上（不单独部署）。
 #   - 默认**拒绝脏工作树**：全量部署会把整个工作目录推上生产，未提交的 WIP 也会跟着上。
 #     所以先 commit 再部署；确实要带 WIP 才加 --allow-dirty。
 #   - 部署后在服务器写 /opt/craft-agents/DEPLOYED_SHA，记录现网是哪个 commit。
-#   - 只改某个 skill 用 scripts/deploy-skill.sh <名字>（从 HEAD 精确推单目录，不碰 WIP/不构建）。
+#   - 大二进制（vendor/bun、resources/bin 下的 uv 等）走 rsync 排除，不上服务器。
 # =============================================================================
 set -euo pipefail
 
@@ -46,7 +46,7 @@ done
 DIRTY="$(git status --porcelain)"
 if [[ -n "$DIRTY" && "$ALLOW_DIRTY" == 0 ]]; then
   echo "✋ 工作树有未提交改动，全量部署会把它们一起推上生产。"
-  echo "   先 commit（或只改 skill 就用 scripts/deploy-skill.sh），确需带 WIP 才加 --allow-dirty。"
+  echo "   先 commit 再部署；确需带 WIP 才加 --allow-dirty。"
   echo "   未提交/未跟踪文件："
   git status --short | sed 's/^/     /'
   exit 1
@@ -74,6 +74,7 @@ echo "==> [2/4] rsync 源码 + dist 到 $SERVER:$REMOTE_APP（排除 .git/node_m
 rsync -az --delete \
   --exclude='.git/' --exclude='node_modules/' --exclude='build-skills/' \
   --exclude='.env' --exclude='*.tar.gz' \
+  --exclude='vendor/' --exclude='resources/bin/' \
   -e ssh ./ "$SERVER:/tmp/craft-app-sync/"
 ssh "$SERVER" "sudo rsync -a --delete \
   --exclude='node_modules/' \
