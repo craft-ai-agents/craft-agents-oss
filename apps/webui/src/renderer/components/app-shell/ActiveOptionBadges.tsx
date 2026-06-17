@@ -105,8 +105,10 @@ export function ActiveOptionBadges({
   // shows the same visible strip when stacked. No React re-renders needed.
   const stackRef = useDynamicStack({ gap: 8, minVisible: 20, reservedStart: 0 })
 
-  // Only render if badges or tasks are active
-  if (!permissionMode && tasks.length === 0 && !hasStackContent) {
+  // Only render when there are labels to show. The session-info ("信息") button
+  // now lives on the TaskBar button row (right end) so it aligns with the task
+  // buttons instead of floating on its own row.
+  if (!hasStackContent) {
     return null
   }
 
@@ -161,11 +163,6 @@ export function ActiveOptionBadges({
           </div>
         )}
 
-      </div>
-
-      {/* Right side: Files popover button */}
-      <div className="shrink-0">
-        <FilesPopoverButton sessionId={sessionId} sessionFolderPath={sessionFolderPath} />
       </div>
     </div>
   )
@@ -258,7 +255,7 @@ function LabelBadge({
   )
 }
 
-function FilesPopoverButton({ sessionId, sessionFolderPath }: { sessionId?: string; sessionFolderPath?: string }) {
+export function FilesPopoverButton({ sessionId, sessionFolderPath }: { sessionId?: string; sessionFolderPath?: string }) {
   const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
 

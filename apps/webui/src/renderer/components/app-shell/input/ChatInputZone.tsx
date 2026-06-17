@@ -101,7 +101,13 @@ export function ChatInputZone({
         />
       )}
 
-      {!compactMode && <TaskBar onSubmit={inputProps.onSubmit} />}
+      {!compactMode && (
+        <TaskBar
+          onSubmit={inputProps.onSubmit}
+          sessionId={sessionId}
+          sessionFolderPath={sessionFolderPath}
+        />
+      )}
 
       <InputErrorBoundary
         sessionId={sessionId}

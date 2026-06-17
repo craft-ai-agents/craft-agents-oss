@@ -2,12 +2,16 @@ import * as React from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { FilesPopoverButton } from '../ActiveOptionBadges'
 import type { FileAttachment } from '../../../../shared/types'
 import { TASK_FORMS, isFormComplete, type TaskForm } from './task-forms'
 
 interface TaskBarProps {
   /** 复用现有发送入口:提交即当成普通用户消息发出 */
   onSubmit: (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => void
+  /** 会话信息("信息"按钮)——渲染在按钮排右端,与任务按钮同排对齐 */
+  sessionId?: string
+  sessionFolderPath?: string
 }
 
 /**
@@ -17,7 +21,7 @@ interface TaskBarProps {
  * 填好提交 → toMessage() 拼成中文触发消息 → onSubmit() 发出 → 卡片消失。
  * 卡片是输入区控件,不进对话历史。下方自由文本框完全不受影响。
  */
-export function TaskBar({ onSubmit }: TaskBarProps) {
+export function TaskBar({ onSubmit, sessionId, sessionFolderPath }: TaskBarProps) {
   const [activeId, setActiveId] = React.useState<string | null>(null)
   const [values, setValues] = React.useState<Record<string, string>>({})
 
@@ -126,21 +130,28 @@ export function TaskBar({ onSubmit }: TaskBarProps) {
         </div>
       )}
 
-      {/* 任务按钮排 —— 常驻 */}
-      <div className="flex flex-wrap gap-1.5">
-        {TASK_FORMS.map((form) => (
-          <Button
-            key={form.id}
-            type="button"
-            variant={activeId === form.id ? 'secondary' : 'outline'}
-            size="sm"
-            className="h-7 gap-1 text-xs"
-            onClick={() => openForm(form)}
-          >
-            <form.icon className="h-3.5 w-3.5" />
-            {form.label}
-          </Button>
-        ))}
+      {/* 任务按钮排(左)+ 信息按钮(右)—— 同一行对齐 */}
+      <div className="flex items-center gap-2">
+        <div className="flex flex-1 min-w-0 flex-wrap gap-1.5">
+          {TASK_FORMS.map((form) => (
+            <Button
+              key={form.id}
+              type="button"
+              variant={activeId === form.id ? 'secondary' : 'outline'}
+              size="sm"
+              className="h-7 gap-1 text-xs"
+              onClick={() => openForm(form)}
+            >
+              <form.icon className="h-3.5 w-3.5" />
+              {form.label}
+            </Button>
+          ))}
+        </div>
+        {sessionId && (
+          <div className="shrink-0">
+            <FilesPopoverButton sessionId={sessionId} sessionFolderPath={sessionFolderPath} />
+          </div>
+        )}
       </div>
     </div>
   )
