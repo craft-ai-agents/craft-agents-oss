@@ -17,10 +17,9 @@ metadata:
 **API 源（无需浏览器，快）—— `api_search.py`：**
 
     python3 .agents/skills/procurement-platform-search-more/scripts/api_search.py --part "<型号>" --source vanlinkon
-    # element14 需先配 ELEMENT14_API_KEY（partner.element14.com 免费注册），否则报缺 key
 
 - `vanlinkon`（连可连，中国连接器商城）：多仓报盘（自营/代销/RS），库存/¥价/交期。
-- `element14`（element14/Farnell/Newark 官方 API）：需 API key；拿到 key 即返干净 JSON，绕开网页反爬。
+- ~~`element14` 官方 API~~：注册门户 partner.element14.com 长期 HTTP 500、拿不到 key，**废**。element14 货源改走渲染源 `--source element14-cn`（e络盟中国店，见下，无需 key）。
 
 **渲染/专用源（CloakBrowser，有反爬）—— `cloak_search.py`，必须 `--source`：**
 
@@ -34,6 +33,7 @@ metadata:
 - `future`（Future）`newark`（Newark）`tme`（波兰/欧）`xonelec`（X-ON）`componentonline`（Component Electronics）
 - RS 分区：`rs-uk` `rs-jp` `rs-hk`；`rs-us`（=Allied 美区，**需住宅代理**，仅生产可用）
 - `verical`（**Verical = Arrow 自营商城，机房直连可达、实时报盘**）：型号|品牌|描述|库存|价格|链接 一应俱全。**arrow 本站被反爬封死，要 arrow 货源就用它**（比聚合站 octopart 数据更实时）。
+- `element14-cn`（**e络盟中国店 cn.element14.com，机房直连可达、RMB 阶梯价**）：型号|品牌|规格|库存|阶梯价|交期|datasheet 全有，中文页。**element14/Farnell/Newark 国际站被反爬封、官方 API 门户长期 500——要 element14 货源就用这个中国店**。
 
 **连接器 / 机电互连：**
 - `peigenesis`（PEI-Genesis 连接器专家）`darisus`（德，连接器）`heilind`（赫联，连接器/机电）`sager`（电源/连接器/机电）
@@ -61,7 +61,7 @@ metadata:
 
 - `arrow`、`element14`（网页）、`avnet`：Akamai/门户反爬把 IP 信誉拉黑（中国机房 + 住宅代理两个 IP 都被封，2026-06-18 实测仍 403 Access Denied），网页路径攻不下。**别再硬撞本站，按出路走**：
   - **arrow 货源 → `--source verical`**（Arrow 自营商城，机房直连可达、实时报盘，**优先**）+ `octopart` 兜底。
-  - **element14 → 官方 API `--source element14`**（端点可达，只缺 key；配好 `ELEMENT14_API_KEY` 即通，partner.element14.com 注册）。
+  - **element14 货源 → `--source element14-cn`**（e络盟中国店，机房直连可达、RMB 阶梯价+库存+交期，2026-06-18 实测出料，**无需 key**）。Newark/国际站被封、官方 API 注册门户长期 HTTP 500——都别用。
   - **avnet → `octopart`**（无干净 API/直连路，靠聚合站覆盖）。
 - 不接：`rs-cn`（无可搜中国 storefront）、`chip1stop`（整站 502，被 Arrow 吞并迁移中，货源≈arrow）、`kirikaeki`（已关站）、`distrelec`（=RS 集团跳转）、`TI`（无通用关键词搜索，按 `ti.com/product/<MPN>` 作原厂产品页）。
 

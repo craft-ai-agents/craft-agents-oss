@@ -623,8 +623,11 @@ GENERIC = {
     "corestaff": ("https://www.zaikostore.com/zaikostore/stockList?productName_forFind={q}&pageNumber=1&viewCount=50&headerSearch=1", False),  # CoreStaff 日本(ZaikoStore)
     "darisus":  ("https://shop.darisusgmbh.de/advanced_search_result.php?keywords={q}", False),  # 德国连接器/电子
     "componentonline": ("https://www.componentonline.com/search?search_key={q}", False),  # Component Electronics(美)
+    # element14 家族（e络盟/Farnell/Newark 同一公司同一目录）：国际站/Newark 被反爬挡（403）、
+    # 官方 API 注册门户长期 500 拿不到 key。但 **e络盟中国店 cn.element14.com 从中国机房直连可达**
+    # （2026-06-18 实测未被挡、RMB 报价、中文页），这才是 element14 货源的出路。
+    "element14-cn": ("https://cn.element14.com/search?st={q}", False),
     # ⚠️ 反爬（Akamai/403）——住宅 IP 信誉被拉黑，网页路径攻不下，需更干净住宅代理重测。
-    # element14 不在此（网页被挡）——改走官方 API：api_search.py --source element14（配 ELEMENT14_API_KEY）。
     "avnet":     ("https://www.avnet.com/shop/us/search/?term={q}", True),
     "arrow":     ("https://www.arrow.com/en/search-result.html?keyword={q}", True),
     # rs-us 不在此表——它是 Magento+DataDome+GroupBy 搜索，走专用 scrape_rs_us（拦 XHR+重试）
@@ -643,7 +646,7 @@ GENERIC = {
 # 而生产 agent 环境设了 HTTP_PROXY，Chromium 默认全走住宅代理——故对这些站启动浏览器前临时
 # 摘掉代理环境变量走机房直连、用完即恢复（不影响同批其它站）。
 # 其余西方站(newark/rs-*/tme/xonelec/componentonline)机房 IP 被拒，仍走住宅代理(env)。
-_DIRECT_SITES = {"future", "monotaro", "lcsc", "szlcsc", "corestaff", "darisus"}
+_DIRECT_SITES = {"future", "monotaro", "lcsc", "szlcsc", "corestaff", "darisus", "element14-cn"}
 
 
 def scrape_generic(part, wait, limit, *, site, url_tpl, needs_proxy, direct=False, max_chars=4000):
