@@ -558,12 +558,7 @@ export function useInlineSlashCommand({
   const sections = React.useMemo((): SlashSection[] => {
     const result: SlashSection[] = []
 
-    // Modes section
-    result.push({
-      id: 'modes',
-      label: 'Modes',
-      items: permissionModeCommands,
-    })
+    // Modes section removed — execute-only deployment, no permission-mode switching.
 
     // Commands section
     result.push({
