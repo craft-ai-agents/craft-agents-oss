@@ -1074,17 +1074,27 @@ function AppShellContent({
   }, [])
 
   useAction('chat.cyclePermissionMode', () => {
-    if (effectiveSessionId) {
-      const currentOptions = contextValue.sessionOptions.get(effectiveSessionId)
-      const currentMode = currentOptions?.permissionMode ?? 'ask'
-      // Cycle through enabled permission modes
-      const modes = enabledModes.length >= 2 ? enabledModes : ['safe', 'ask', 'allow-all'] as PermissionMode[]
-      const currentIndex = modes.indexOf(currentMode)
-      // If current mode not in enabled list, jump to first enabled mode
-      const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % modes.length
-      const nextMode = modes[nextIndex]
-      contextValue.onSessionOptionsChange(effectiveSessionId, { permissionMode: nextMode })
+    if (!effectiveSessionId) return
+    // Locked single-mode deployments (cyclablePermissionModes has <2 modes, e.g.
+    // execute-only ["allow-all"]): Shift+Tab does NOT cycle. Snap to that single mode
+    // and stop — never fall back to the full [safe, ask, allow-all] set (that fallback
+    // is what let an accidental Shift+Tab drop the session into explore/safe mode).
+    if (enabledModes.length < 2) {
+      const locked = enabledModes[0]
+      if (locked) {
+        const cur = contextValue.sessionOptions.get(effectiveSessionId)
+        if (cur?.permissionMode !== locked) {
+          contextValue.onSessionOptionsChange(effectiveSessionId, { permissionMode: locked })
+        }
+      }
+      return
     }
+    const currentOptions = contextValue.sessionOptions.get(effectiveSessionId)
+    const currentMode = currentOptions?.permissionMode ?? 'ask'
+    const currentIndex = enabledModes.indexOf(currentMode)
+    // If current mode not in enabled list, jump to first enabled mode
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % enabledModes.length
+    contextValue.onSessionOptionsChange(effectiveSessionId, { permissionMode: enabledModes[nextIndex] })
   })
 
   const handleToggleSidebar = useCallback(() => {
