@@ -1073,29 +1073,10 @@ function AppShellContent({
     dispatchFocusInputEvent({ sessionId: targetSessionId })
   }, [])
 
-  useAction('chat.cyclePermissionMode', () => {
-    if (!effectiveSessionId) return
-    // Locked single-mode deployments (cyclablePermissionModes has <2 modes, e.g.
-    // execute-only ["allow-all"]): Shift+Tab does NOT cycle. Snap to that single mode
-    // and stop — never fall back to the full [safe, ask, allow-all] set (that fallback
-    // is what let an accidental Shift+Tab drop the session into explore/safe mode).
-    if (enabledModes.length < 2) {
-      const locked = enabledModes[0]
-      if (locked) {
-        const cur = contextValue.sessionOptions.get(effectiveSessionId)
-        if (cur?.permissionMode !== locked) {
-          contextValue.onSessionOptionsChange(effectiveSessionId, { permissionMode: locked })
-        }
-      }
-      return
-    }
-    const currentOptions = contextValue.sessionOptions.get(effectiveSessionId)
-    const currentMode = currentOptions?.permissionMode ?? 'ask'
-    const currentIndex = enabledModes.indexOf(currentMode)
-    // If current mode not in enabled list, jump to first enabled mode
-    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % enabledModes.length
-    contextValue.onSessionOptionsChange(effectiveSessionId, { permissionMode: enabledModes[nextIndex] })
-  })
+  // Permission-mode switching removed (execute-only deployment). Shift+Tab is a no-op —
+  // sessions always run allow-all (execute). Kept registered so the keybinding system
+  // stays intact; there is no UI anywhere to change the mode.
+  useAction('chat.cyclePermissionMode', () => { /* no-op: mode switching disabled */ })
 
   const handleToggleSidebar = useCallback(() => {
     if (isSidebarAndNavigatorHidden) {

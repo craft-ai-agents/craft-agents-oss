@@ -88,7 +88,7 @@ import {
   addRecentWorkingDir,
 } from './working-directory-history'
 import { useWorkingDirectoryState } from './use-working-directory-state'
-import { CompactPermissionModeSelector } from './CompactPermissionModeSelector'
+// CompactPermissionModeSelector removed — execute-only deployment (no permission-mode UI).
 import { CompactModelSelector } from './CompactModelSelector'
 import {
   formatTokenCount,
@@ -922,23 +922,13 @@ export function FreeFormInput({
     return () => window.removeEventListener('craft:paste-files', handlePasteFiles as unknown as EventListener)
   }, [disabled, sessionId, isFocusedPanel, richInputRef])
 
-  // Build active commands list for slash command menu
-  const activeCommands = React.useMemo(() => {
-    const active: SlashCommandId[] = []
-    // Add the currently active permission mode
-    if (permissionMode === 'safe') active.push('safe')
-    else if (permissionMode === 'ask') active.push('ask')
-    else if (permissionMode === 'allow-all') active.push('allow-all')
-    return active
-  }, [permissionMode])
+  // Permission-mode slash commands removed — execute-only deployment. No active modes.
+  const activeCommands = React.useMemo<SlashCommandId[]>(() => [], [])
 
-  // Handle slash command selection (mode/feature commands)
+  // Handle slash command selection (only /compact remains; mode commands removed)
   const handleSlashCommand = React.useCallback((commandId: SlashCommandId) => {
-    if (commandId === 'safe') onPermissionModeChange?.('safe')
-    else if (commandId === 'ask') onPermissionModeChange?.('ask')
-    else if (commandId === 'allow-all') onPermissionModeChange?.('allow-all')
-    else if (commandId === 'compact' && !isProcessing) onSubmit('/compact', undefined)
-  }, [onPermissionModeChange, isProcessing, onSubmit])
+    if (commandId === 'compact' && !isProcessing) onSubmit('/compact', undefined)
+  }, [isProcessing, onSubmit])
 
   // Handle folder selection from slash command menu
   const handleSlashFolderSelect = React.useCallback((path: string) => {
@@ -1785,12 +1775,7 @@ export function FreeFormInput({
               dropdowns inside render via portals, so they aren't clipped. */}
           {compactMode && (
           <div className="flex items-center gap-1 min-w-0 shrink overflow-hidden">
-          {onPermissionModeChange && (
-            <CompactPermissionModeSelector
-              permissionMode={permissionMode}
-              onPermissionModeChange={onPermissionModeChange}
-            />
-          )}
+          {/* Permission-mode selector removed — execute-only deployment, no mode switching. */}
           {enableCompactModelPicker && (
             <CompactModelSelector
               currentModel={currentModel}

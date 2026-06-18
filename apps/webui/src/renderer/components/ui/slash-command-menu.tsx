@@ -79,17 +79,9 @@ function PermissionModeIcon({ mode, className }: PermissionModeIconProps) {
 // Icon size constant
 const MENU_ICON_SIZE = 'h-3.5 w-3.5'
 
-// Generate permission mode commands from centralized config
-const permissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(mode => {
-  const config = PERMISSION_MODE_CONFIG[mode]
-  return {
-    id: mode,
-    label: config.displayName,
-    description: config.description,
-    icon: <PermissionModeIcon mode={mode} className={MENU_ICON_SIZE} />,
-  }
-})
-
+// Permission-mode slash commands removed — this deployment is execute-only (no mode
+// switching). Only /compact remains. PermissionModeIcon / permissionModeCommands kept
+// out of the menu intentionally.
 const compactCommand: SlashCommand = {
   id: 'compact',
   label: 'Compact Context',
@@ -98,12 +90,11 @@ const compactCommand: SlashCommand = {
 }
 
 export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
-  ...permissionModeCommands,
   compactCommand,
 ]
 
 export const DEFAULT_SLASH_COMMAND_GROUPS: CommandGroup[] = [
-  { id: 'modes', commands: permissionModeCommands },
+  { id: 'actions', commands: [compactCommand] },
 ]
 
 // ============================================================================
