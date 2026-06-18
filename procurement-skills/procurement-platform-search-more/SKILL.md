@@ -62,8 +62,12 @@ metadata:
 - `arrow`、`element14`（网页）、`avnet`：Akamai/门户反爬把 IP 信誉拉黑（中国机房 + 住宅代理两个 IP 都被封，2026-06-18 实测仍 403 Access Denied），网页路径攻不下。**别再硬撞本站，按出路走**：
   - **arrow 货源 → `--source verical`**（Arrow 自营商城，机房直连可达、实时报盘，**优先**）+ `octopart` 兜底。
   - **element14 货源 → `--source element14-cn`**（e络盟中国店，机房直连可达、RMB 阶梯价+库存+交期，2026-06-18 实测出料，**无需 key**）。Newark/国际站被封、官方 API 注册门户长期 HTTP 500——都别用。
-  - **avnet → `octopart`**（无干净 API/直连路，靠聚合站覆盖）。
-- 不接：`rs-cn`（无可搜中国 storefront）、`chip1stop`（整站 502，被 Arrow 吞并迁移中，货源≈arrow）、`kirikaeki`（已关站）、`distrelec`（=RS 集团跳转）、`TI`（无通用关键词搜索，按 `ti.com/product/<MPN>` 作原厂产品页）。
+  - **avnet 货源 → `--source element14-cn` + `octopart`**（**Avnet 拥有 element14/e络盟**，目录高度重叠，e络盟中国店已间接覆盖 avnet 货；avnet 本站无 .cn 域、shop 被反爬挡，无独立直连路，不强求）。
+- 不接 / 受限：
+  - `TI`（德州仪器）：**`ti.com.cn/product/cn/<MPN>` 中国产品页机房直连可达**（2026-06-18 实测未被挡），给 datasheet + 该 GPN 的全部可订变体 OPN（封装/卷带后缀），作**原厂参考/变体枚举**用；但**库存/价格在 store 接口 `productmodel/gpn/<GPN>/tistoresegmented`、401 受 PerimeterX 会话门控**——拿不到价/库存。TI 料 Digikey/Mouser/element14-cn 已覆盖，不强求其报价。
+  - `chip1stop`：整站 502（被 Arrow 吞并、迁移中），货源≈arrow，已被 `verical` 覆盖，等站恢复再评估。
+  - `rs-cn`：RS 无可搜中国 storefront（cn 域 Akamai Invalid URL）。
+  - ~~`distrelec`（=RS 集团跳转，与 rs-* 重复）、`kirikaeki`（已关站）~~：死站/重复，已从关注清单删除。
 
 ## 取数与重试（已固化在脚本里）
 
