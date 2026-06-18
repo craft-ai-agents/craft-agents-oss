@@ -1,4 +1,5 @@
 import LinkifyIt from 'linkify-it'
+import { FILE_EXTENSIONS_PATTERN } from '../../lib/file-classification'
 
 /**
  * Linkify - URL and file path detection for markdown preprocessing
@@ -10,9 +11,19 @@ import LinkifyIt from 'linkify-it'
 // Initialize linkify-it with default settings (fuzzy URLs, emails enabled)
 const linkify = new LinkifyIt()
 
-// File path regex - detects /path, ~/path, ./path with common extensions
-// Matches paths that start with /, ~/, or ./ followed by path chars and a file extension
-const FILE_PATH_REGEX = /(?:^|[\s([\{<])((\/|~\/|\.\/)[\w\-./@]+\.(?:ts|tsx|js|jsx|mjs|cjs|md|json|yaml|yml|py|go|rs|css|scss|less|html|htm|txt|log|sh|bash|zsh|swift|kt|java|c|cpp|h|hpp|rb|php|xml|toml|ini|cfg|conf|env|sql|graphql|vue|svelte|astro|prisma|dockerfile|makefile|gitignore))(?=[\s)\]}\.,;:!?>]|$)/gi
+// File path regex - detects absolute/home/explicit-relative/bare-relative paths with common extensions
+// Examples: /Users/foo.ts, ~/src/app.tsx, ./README.md, ../guide.md, apps/electron/src/main.ts
+// Extensions derived from file-classification.ts to stay in sync with preview support
+const FILE_PATH_REGEX_SOURCE = `(?:^|[\\s([\\{<])((?:/|~/|\\./|\\.\\./|[A-Za-z0-9_][\\w\\-./@]*)[\\w\\-./@]*\\.(?:${FILE_EXTENSIONS_PATTERN}))(?=[\\s)\\]}\\.,:;!?>]|$)`
+const FILE_PATH_REGEX = new RegExp(FILE_PATH_REGEX_SOURCE, 'gi')
+const FILE_PATH_PRETEST_REGEX = new RegExp(FILE_PATH_REGEX_SOURCE, 'i')
+
+// File-path regex for markdown anchor targets (entire href/text value)
+// Used by Markdown.tsx click handler to route file links to onFileClick.
+const FILE_PATH_TARGET_REGEX = new RegExp(
+  `^(?!https?://|mailto:|ftp://|data:)(?:/|~/|\./|\.\./|[A-Za-z0-9_][\\w\\-./@]*)[\\w\\-./@]*\\.(?:${FILE_EXTENSIONS_PATTERN})$`,
+  'i'
+)
 
 interface DetectedLink {
   type: 'url' | 'email' | 'file'
@@ -114,13 +125,29 @@ export function detectLinks(text: string): DetectedLink[] {
 
   // 1. Detect URLs and emails with linkify-it
   const urlMatches = linkify.match(text) || []
+  // linkify-it doesn't strip trailing asterisks from bold/italic markdown,
+  // which causes broken links when URLs are wrapped like **url** or *url*
+  // Note: _ and ~ are valid URL chars so we only strip *
+  const trailingMarkdownRe = /\*+$/
   for (const match of urlMatches) {
+    let matchText = match.text
+    let matchUrl = match.url
+    let matchEnd = match.lastIndex
+
+    const stripped = matchText.replace(trailingMarkdownRe, '')
+    if (stripped !== matchText) {
+      const diff = matchText.length - stripped.length
+      matchText = stripped
+      matchUrl = matchUrl.replace(trailingMarkdownRe, '')
+      matchEnd -= diff
+    }
+
     links.push({
       type: match.schema === 'mailto:' ? 'email' : 'url',
-      text: match.text,
-      url: match.url,
+      text: matchText,
+      url: matchUrl,
       start: match.index,
-      end: match.lastIndex
+      end: matchEnd
     })
   }
 
@@ -156,12 +183,55 @@ export function detectLinks(text: string): DetectedLink[] {
 }
 
 /**
+ * Detect placeholder/fabricated URLs that the AI generated without knowing the real URL.
+ * These are URLs like `https://github.com/...` or `https://example.com/...`
+ * that should be stripped back to inline code instead of rendered as links.
+ */
+const PLACEHOLDER_URL_PATTERN = /\/\.\.\.(?:[)/\s#?]|$)/
+
+/**
+ * Check if a URL looks like a placeholder/fabricated URL.
+ * Returns true for URLs containing path segments like `/...`
+ */
+export function isPlaceholderUrl(url: string): boolean {
+  return PLACEHOLDER_URL_PATTERN.test(url)
+}
+
+/**
+ * Strip markdown links with placeholder URLs back to plain text.
+ * Converts `[text](https://github.com/...)` → `text`
+ * Respects code blocks — links inside fenced or inline code are not touched.
+ */
+function stripPlaceholderLinks(text: string): string {
+  const codeRanges = findCodeRanges(text)
+  // Match markdown links [text](url) where url contains placeholder patterns
+  return text.replace(
+    /\[([^\[\]]*)\]\(([^)]*)\)/g,
+    (fullMatch, linkText: string, url: string, offset: number) => {
+      // Don't modify links inside code blocks
+      if (isInsideCode(offset, codeRanges)) return fullMatch
+
+      if (isPlaceholderUrl(url)) {
+        // Strip the link, keep just the display text as plain text
+        if (!linkText.trim()) return fullMatch
+        return linkText
+      }
+      return fullMatch
+    }
+  )
+}
+
+/**
  * Preprocess text to convert raw URLs and file paths into markdown links
  * Skips code blocks and already-linked content
  */
 export function preprocessLinks(text: string): string {
+  // First pass: strip markdown links with placeholder/fabricated URLs
+  // (e.g., AI-generated `[commit](https://github.com/...)` → `\`commit\``)
+  text = stripPlaceholderLinks(text)
+
   // Quick check - if no potential links, return early
-  if (!linkify.pretest(text) && !/[~/.]\//.test(text)) {
+  if (!linkify.pretest(text) && !FILE_PATH_PRETEST_REGEX.test(text)) {
     return text
   }
 
@@ -202,5 +272,13 @@ export function preprocessLinks(text: string): string {
  * Useful for optimization - skip preprocessing if no links present
  */
 export function hasLinks(text: string): boolean {
-  return linkify.pretest(text) || /[~/.]\/[\w]/.test(text)
+  return linkify.pretest(text) || FILE_PATH_PRETEST_REGEX.test(text)
+}
+
+/**
+ * Check whether a markdown anchor target should be treated as a local file path.
+ * Used by click handlers to route local paths to onFileClick instead of onUrlClick.
+ */
+export function isFilePathTarget(target: string): boolean {
+  return FILE_PATH_TARGET_REGEX.test(target.trim())
 }

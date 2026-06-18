@@ -1,5 +1,6 @@
 // Main components
 export { InputContainer } from './InputContainer'
+export { ChatInputZone } from './ChatInputZone'
 export { FreeFormInput } from './FreeFormInput'
 export { StructuredInput } from './StructuredInput'
 
@@ -17,4 +18,5 @@ export type {
   StructuredInputData,
   StructuredResponse,
   PermissionResponse,
+  AdminApprovalResponse,
 } from './structured/types'

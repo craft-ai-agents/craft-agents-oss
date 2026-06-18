@@ -13,6 +13,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type { WorkspaceStatusConfig, StatusConfig, StatusCategory } from './types.ts';
+import { readJsonFileSync } from '../utils/files.ts';
 import { DEFAULT_ICON_SVGS } from './default-icons.ts';
 import {
   validateIconValue,
@@ -144,7 +145,7 @@ export function loadStatusConfig(workspaceRootPath: string): WorkspaceStatusConf
   }
 
   try {
-    const config = JSON.parse(readFileSync(configPath, 'utf-8')) as WorkspaceStatusConfig;
+    const config = readJsonFileSync<WorkspaceStatusConfig>(configPath);
 
     // Validate required fixed statuses exist
     if (!validateStatusConfig(config)) {

@@ -2,10 +2,11 @@
  * CodePreviewOverlay - Overlay for code file preview (Read/Write tools)
  *
  * Uses PreviewOverlay for presentation and ShikiCodeViewer for syntax highlighting.
- * File path badge provides "Open" / "Reveal in Finder" via PlatformContext.
+ * File path badge provides "Open" / "Reveal in {file manager}" via PlatformContext.
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { BookOpen, PenLine } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
 import { ContentFrame } from './ContentFrame'
@@ -36,6 +37,8 @@ export interface CodePreviewOverlayProps {
   error?: string
   /** Render inline without dialog (for playground) */
   embedded?: boolean
+  /** Original shell command (for Codex reads) - shown above code */
+  command?: string
 }
 
 export function CodePreviewOverlay({
@@ -51,7 +54,10 @@ export function CodePreviewOverlay({
   theme = 'light',
   error,
   embedded,
+  command,
 }: CodePreviewOverlayProps) {
+  const { t } = useTranslation()
+
   // Build subtitle with line info
   const subtitle =
     startLine !== undefined && totalLines !== undefined && numLines !== undefined
@@ -74,7 +80,22 @@ export function CodePreviewOverlay({
       embedded={embedded}
       className="bg-foreground-3"
     >
-      <ContentFrame title="Code" fitContent minWidth={850}>
+      {/* Show command if present (Codex reads via shell commands) */}
+      {command && (
+        <div className="px-6 mb-4">
+          <div className="w-full max-w-[850px] mx-auto">
+            <div className="bg-background shadow-minimal rounded-[8px] px-4 py-3 font-mono">
+              <div className="text-xs font-semibold text-muted-foreground/70 mb-1">Command</div>
+              <div className="text-sm text-foreground overflow-x-auto">
+                <span className="text-muted-foreground select-none">$ </span>
+                <span>{command}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ContentFrame title={t('overlay.code')} fitContent minWidth={850}>
         <div>
           <ShikiCodeViewer
             code={content}

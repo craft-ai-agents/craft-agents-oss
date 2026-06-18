@@ -100,7 +100,7 @@ export function evaluateViews(
 export function buildViewContext(meta: {
   name?: string;
   preview?: string;
-  todoState?: string;
+  sessionStatus?: string;
   permissionMode?: string;
   model?: string;
   lastMessageRole?: string;
@@ -123,7 +123,8 @@ export function buildViewContext(meta: {
     // Strings (default to empty string for safe expression evaluation)
     name: meta.name ?? '',
     preview: meta.preview ?? '',
-    todoState: meta.todoState ?? '',
+    sessionStatus: meta.sessionStatus ?? '',
+    todoState: meta.sessionStatus ?? '',  // Deprecated alias — existing expressions using todoState still work
     permissionMode: meta.permissionMode ?? '',
     model: meta.model ?? '',
     lastMessageRole: meta.lastMessageRole ?? '',

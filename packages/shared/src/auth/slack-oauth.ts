@@ -16,6 +16,8 @@ import { randomBytes } from 'crypto';
 import { openUrl } from '../utils/open-url.ts';
 import { createCallbackServer, type AppType } from './callback-server.ts';
 import type { SlackService } from '../sources/types.ts';
+import { type OAuthSessionContext, buildOAuthDeeplinkUrl } from './types.ts';
+import type { PreparedOAuthFlow, OAuthExchangeParams, OAuthExchangeResult } from './oauth-flow-types.ts';
 
 // Re-export for convenience
 export type { SlackService } from '../sources/types.ts';
@@ -70,6 +72,8 @@ export interface SlackOAuthOptions {
   userScopes?: string[];
   /** App type for callback server styling */
   appType?: AppType;
+  /** Session context for building deeplink back to chat after OAuth */
+  sessionContext?: OAuthSessionContext;
 }
 
 /**
@@ -233,6 +237,79 @@ export function getSlackScopes(options: SlackOAuthOptions): string[] {
 }
 
 /**
+ * Options for preparing a Slack OAuth flow (server-side, no browser interaction)
+ */
+export interface PrepareSlackOAuthOptions {
+  service?: SlackService;
+  userScopes?: string[];
+  /** Port for the local callback server (Electron). One of callbackPort or callbackUrl required. */
+  callbackPort?: number;
+  /** Full callback URL (WebUI). Takes precedence over callbackPort. */
+  callbackUrl?: string;
+}
+
+/**
+ * Prepare a Slack OAuth flow without starting a callback server or opening a browser.
+ * Returns everything needed to construct the auth URL and later exchange the code.
+ *
+ * Slack uses a Cloudflare relay for HTTPS redirects since Slack requires HTTPS redirect URIs.
+ */
+export function prepareSlackOAuth(options: PrepareSlackOAuthOptions): PreparedOAuthFlow {
+  if (!isSlackOAuthConfigured()) {
+    throw new Error(
+      'Slack OAuth not configured. Set SLACK_OAUTH_CLIENT_ID and SLACK_OAUTH_CLIENT_SECRET environment variables.'
+    );
+  }
+
+  const userScopes = getSlackScopes(options);
+  const state = generateState();
+
+  // Slack requires HTTPS → use Cloudflare relay when using callbackPort
+  const redirectUri = options.callbackUrl
+    ?? `https://agents.craft.do/auth/slack/callback?port=${options.callbackPort}`;
+
+  const authUrl = new URL(SLACK_AUTH_URL);
+  authUrl.searchParams.set('client_id', SLACK_CLIENT_ID);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('state', state);
+  authUrl.searchParams.set('user_scope', userScopes.join(','));
+
+  return {
+    authUrl: authUrl.toString(),
+    state,
+    codeVerifier: '',  // Slack doesn't use PKCE
+    tokenEndpoint: SLACK_TOKEN_URL,
+    clientId: SLACK_CLIENT_ID,
+    clientSecret: SLACK_CLIENT_SECRET,
+    redirectUri,
+    provider: 'slack',
+  };
+}
+
+/**
+ * Exchange a Slack authorization code for tokens (server-side).
+ * Slack uses HTTP Basic auth (client_id:client_secret) for token exchange.
+ */
+export async function exchangeSlackOAuth(params: OAuthExchangeParams): Promise<OAuthExchangeResult> {
+  try {
+    const tokens = await exchangeCodeForTokens(params.code, params.redirectUri);
+
+    return {
+      success: true,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: tokens.expiresIn ? Date.now() + tokens.expiresIn * 1000 : undefined,
+      email: tokens.teamName,  // Use teamName as the identifier
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Slack OAuth exchange failed',
+    };
+  }
+}
+
+/**
  * Start Slack OAuth flow for USER authentication
  *
  * Opens browser for Slack consent, handles callback, and returns user token + workspace info.
@@ -269,9 +346,10 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
     // Generate state for CSRF protection
     const state = generateState();
 
-    // Start local HTTP callback server
+    // Start local HTTP callback server with deeplink for returning to chat session
     const appType = options.appType || 'electron';
-    const callbackServer = await createCallbackServer({ appType });
+    const deeplinkUrl = buildOAuthDeeplinkUrl(options.sessionContext);
+    const callbackServer = await createCallbackServer({ appType, deeplinkUrl });
 
     // Extract port from local callback URL
     const localUrl = new URL(callbackServer.url);

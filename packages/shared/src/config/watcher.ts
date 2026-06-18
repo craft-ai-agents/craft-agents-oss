@@ -18,9 +18,12 @@
 
 import { watch, existsSync, readdirSync, statSync, readFileSync, mkdirSync } from 'fs';
 import { join, dirname, basename, relative } from 'path';
+import { platform } from 'os';
 import type { FSWatcher } from 'fs';
 import { CONFIG_DIR } from './paths.ts';
 import { debug } from '../utils/debug.ts';
+import { expandPath } from '../utils/paths.ts';
+import { readJsonFileSync } from '../utils/files.ts';
 import { perf } from '../utils/perf.ts';
 import { loadStoredConfig, type StoredConfig } from './storage.ts';
 import {
@@ -40,7 +43,7 @@ import {
 import { permissionsConfigCache, getAppPermissionsDir } from '../agent/permissions-config.ts';
 import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath } from '../workspaces/storage.ts';
 import type { LoadedSkill } from '../skills/types.ts';
-import { loadSkill, loadWorkspaceSkills, skillNeedsIconDownload, downloadSkillIcon } from '../skills/storage.ts';
+import { loadSkill, loadAllSkills, invalidateSkillsCache, skillNeedsIconDownload, downloadSkillIcon } from '../skills/storage.ts';
 import {
   loadStatusConfig,
   statusNeedsIconDownload,
@@ -48,8 +51,25 @@ import {
 } from '../statuses/storage.ts';
 import { readSessionHeader } from '../sessions/jsonl.ts';
 import type { SessionHeader } from '../sessions/types.ts';
+import { AUTOMATIONS_CONFIG_FILE } from '../automations/constants.ts';
 import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from './storage.ts';
 import type { ThemeOverrides, PresetTheme } from './theme.ts';
+
+// ============================================================
+// Active Watcher Registry (duplicate detection)
+// ============================================================
+
+/**
+ * Tracks active ConfigWatcher instances by workspace directory.
+ * Used to detect duplicate recursive watchers on the same directory tree,
+ * which can wedge Bun's event loop on Linux.
+ */
+const activeWatchers = new Map<string, string>(); // workspaceDir → creator workspaceId
+
+/** Exported for testing only */
+export function _getActiveWatchers(): ReadonlyMap<string, string> {
+  return activeWatchers;
+}
 
 // ============================================================
 // Constants
@@ -60,6 +80,10 @@ const PREFERENCES_FILE = join(CONFIG_DIR, 'preferences.json');
 
 // Debounce delay in milliseconds
 const DEBOUNCE_MS = 100;
+
+// Longer debounce for session metadata on Windows where fs.watch() fires
+// aggressively for atomic writes (unlink + rename = 2+ events)
+const SESSION_META_DEBOUNCE_MS = platform() === 'win32' ? 300 : DEBOUNCE_MS;
 
 // ============================================================
 // Types
@@ -76,8 +100,9 @@ export interface UserPreferences {
     region?: string;
     country?: string;
   };
-  language?: string;
   notes?: string;
+  /** Internal: mirrors Appearance → Language. Maintained by the main-process i18n IPC handler. */
+  uiLanguage?: string;
   updatedAt?: number;
 }
 
@@ -89,6 +114,8 @@ export interface ConfigWatcherCallbacks {
   onConfigChange?: (config: StoredConfig) => void;
   /** Called when preferences.json changes */
   onPreferencesChange?: (prefs: UserPreferences) => void;
+  /** Called when LLM connections array changes (add/remove/update connections) */
+  onLlmConnectionsChange?: (connections: import('./storage.ts').LlmConnection[]) => void;
 
   // Source callbacks
   /** Called when a specific source config changes (null if deleted) */
@@ -122,6 +149,10 @@ export interface ConfigWatcherCallbacks {
   /** Called when labels config.json changes */
   onLabelConfigChange?: (workspaceId: string) => void;
 
+  // Automations callbacks
+  /** Called when automations.json changes */
+  onAutomationsConfigChange?: (workspaceId: string) => void;
+
   // Session callbacks
   /** Called when a session's JSONL header is modified externally (labels, name, flags, etc.) */
   onSessionMetadataChange?: (sessionId: string, header: SessionHeader) => void;
@@ -154,8 +185,7 @@ export function loadPreferences(): UserPreferences | null {
   }
 
   try {
-    const content = readFileSync(PREFERENCES_FILE, 'utf-8');
-    return JSON.parse(content) as UserPreferences;
+    return readJsonFileSync<UserPreferences>(PREFERENCES_FILE);
   } catch (error) {
     debug('[ConfigWatcher] Error loading preferences', error);
     return null;
@@ -182,6 +212,9 @@ export class ConfigWatcher {
   private knownSkills: Set<string> = new Set();
   private knownThemes: Set<string> = new Set();
 
+  // Track LLM connections for change detection (JSON string for deep comparison)
+  private lastLlmConnectionsHash: string = '';
+
   // Computed paths
   private workspaceDir: string;
   private sourcesDir: string;
@@ -193,7 +226,7 @@ export class ConfigWatcher {
     // Paths contain '/' or '\\' (Windows) while IDs don't
     const isPath = workspaceIdOrPath.includes('/') || workspaceIdOrPath.includes('\\');
     if (isPath) {
-      this.workspaceDir = workspaceIdOrPath;
+      this.workspaceDir = expandPath(workspaceIdOrPath);
       // Extract workspace ID from path (last segment) - handle both separators
       this.workspaceId = workspaceIdOrPath.split(/[/\\]/).pop() || workspaceIdOrPath;
     } else {
@@ -222,6 +255,14 @@ export class ConfigWatcher {
     const span = perf.span('configWatcher.start', { workspaceId: this.workspaceId });
 
     this.isRunning = true;
+
+    // Detect duplicate recursive watchers on the same directory tree
+    const existingOwner = activeWatchers.get(this.workspaceDir);
+    if (existingOwner) {
+      debug(`[ConfigWatcher] WARNING: duplicate watcher for ${this.workspaceDir} (already owned by: ${existingOwner}, new: ${this.workspaceId})`);
+    }
+    activeWatchers.set(this.workspaceDir, this.workspaceId);
+
     debug('[ConfigWatcher] Starting for workspace:', this.workspaceId);
 
     // Ensure workspace directory exists
@@ -256,8 +297,36 @@ export class ConfigWatcher {
     this.scanAppThemes();
     span.mark('scanAppThemes');
 
+    // Initialize LLM connections hash for change detection
+    this.initLlmConnectionsHash();
+    span.mark('initLlmConnectionsHash');
+
     debug('[ConfigWatcher] Started watching files');
     span.end();
+  }
+
+  /**
+   * Initialize LLM connections hash for change detection
+   */
+  private initLlmConnectionsHash(): void {
+    const config = loadStoredConfig();
+    if (config) {
+      const connections = config.llmConnections || [];
+      this.lastLlmConnectionsHash = JSON.stringify(connections);
+    }
+  }
+
+  /**
+   * Manually notify the watcher of a file change.
+   * Workaround: Bun's fs.watch({ recursive: true }) on Linux doesn't track
+   * files in directories created after the watcher started.
+   * See: https://github.com/oven-sh/bun/issues/15939
+   * See: https://github.com/oven-sh/bun/issues/15085
+   * When these are fixed, this method and its call sites can be removed.
+   */
+  notifyFileChange(relativePath: string): void {
+    if (!this.isRunning) return;
+    this.handleWorkspaceFileChange(relativePath, 'change');
   }
 
   /**
@@ -269,6 +338,7 @@ export class ConfigWatcher {
     }
 
     this.isRunning = false;
+    activeWatchers.delete(this.workspaceDir);
 
     // Clear all debounce timers
     for (const timer of this.debounceTimers.values()) {
@@ -323,6 +393,7 @@ export class ConfigWatcher {
    * Watch workspace directory recursively
    */
   private watchWorkspaceDir(): void {
+    debug('[ConfigWatcher] Setting up workspace watcher for:', this.workspaceDir);
     try {
       const watcher = watch(this.workspaceDir, { recursive: true }, (eventType, filename) => {
         if (!filename) return;
@@ -348,6 +419,13 @@ export class ConfigWatcher {
     // Workspace-level permissions.json
     if (relativePath === 'permissions.json') {
       this.debounce('workspace-permissions', () => this.handleWorkspacePermissionsChange());
+      return;
+    }
+
+    // Workspace-level automations config file
+    if (relativePath === AUTOMATIONS_CONFIG_FILE) {
+      debug('[ConfigWatcher] automations config change detected:', relativePath);
+      this.debounce('automations-config', () => this.handleAutomationsConfigChange());
       return;
     }
 
@@ -403,7 +481,7 @@ export class ConfigWatcher {
 
       // Only watch actual session files, ignore .tmp (atomic write intermediates)
       if (file === 'session.jsonl') {
-        this.debounce(`session-meta:${sessionId}`, () => this.handleSessionMetadataChange(sessionId));
+        this.debounce(`session-meta:${sessionId}`, () => this.handleSessionMetadataChange(sessionId), SESSION_META_DEBOUNCE_MS);
       }
       return;
     }
@@ -446,7 +524,7 @@ export class ConfigWatcher {
   /**
    * Debounce a handler by key
    */
-  private debounce(key: string, handler: () => void): void {
+  private debounce(key: string, handler: () => void, delayMs: number = DEBOUNCE_MS): void {
     const existing = this.debounceTimers.get(key);
     if (existing) {
       clearTimeout(existing);
@@ -455,7 +533,7 @@ export class ConfigWatcher {
     const timer = setTimeout(() => {
       this.debounceTimers.delete(key);
       handler();
-    }, DEBOUNCE_MS);
+    }, delayMs);
 
     this.debounceTimers.set(key, timer);
   }
@@ -698,8 +776,9 @@ export class ConfigWatcher {
         }
       }
 
-      // Notify list change
-      const allSkills = loadWorkspaceSkills(this.workspaceDir);
+      // Invalidate cache before reloading so we get fresh results
+      invalidateSkillsCache();
+      const allSkills = loadAllSkills(this.workspaceDir);
       this.callbacks.onSkillsListChange?.(allSkills);
     } catch (error) {
       debug('[ConfigWatcher] Error handling skills dir change:', error);
@@ -772,6 +851,16 @@ export class ConfigWatcher {
     const config = loadStoredConfig();
     if (config) {
       this.callbacks.onConfigChange?.(config);
+
+      // Check for LLM connections changes
+      // Use JSON hash comparison for deep equality check
+      const connections = config.llmConnections || [];
+      const currentHash = JSON.stringify(connections);
+      if (currentHash !== this.lastLlmConnectionsHash) {
+        debug('[ConfigWatcher] LLM connections changed');
+        this.lastLlmConnectionsHash = currentHash;
+        this.callbacks.onLlmConnectionsChange?.(connections);
+      }
     } else {
       this.callbacks.onError?.('config.json', new Error('Failed to load config'));
     }
@@ -847,6 +936,14 @@ export class ConfigWatcher {
   private handleLabelConfigChange(): void {
     debug('[ConfigWatcher] Labels config.json changed:', this.workspaceId);
     this.callbacks.onLabelConfigChange?.(this.workspaceId);
+  }
+
+  /**
+   * Handle automations config change.
+   */
+  private handleAutomationsConfigChange(): void {
+    debug('[ConfigWatcher] automations config changed:', this.workspaceId);
+    this.callbacks.onAutomationsConfigChange?.(this.workspaceId);
   }
 
   // ============================================================

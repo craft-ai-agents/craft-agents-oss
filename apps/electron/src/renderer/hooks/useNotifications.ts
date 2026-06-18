@@ -1,16 +1,15 @@
 /**
  * Notifications Hook
  *
- * Handles native OS notifications and app badge count.
+ * Handles native OS notifications and badge Canvas rendering.
  * - Tracks window focus state
  * - Shows notifications for new messages when window is unfocused
- * - Updates dock badge with total unread count
+ * - Renders badge icons via Canvas API (main process drives badge count directly)
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useAtomValue } from 'jotai'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import type { Session } from '../../shared/types'
-import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
+import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 
 /**
  * Draw a badge onto an icon image using Canvas
@@ -75,14 +74,47 @@ function drawBadgeOnIcon(iconDataUrl: string, count: number): Promise<string> {
 }
 
 /**
- * Check if a session has unread messages using metadata
- * Uses the explicit hasUnread flag (state machine approach)
+ * Draw Windows taskbar overlay badge icon (transparent background + red circle)
  */
-function hasUnreadMessagesFromMeta(meta: SessionMeta): boolean {
-  // Use the explicit hasUnread flag - single source of truth
-  // This flag is set to true when processing completes while user is NOT viewing,
-  // and cleared when user views the session
-  return meta.hasUnread === true
+function drawWindowsBadgeOverlay(count: number): string {
+  const canvas = document.createElement('canvas')
+  const size = 32
+  canvas.width = size
+  canvas.height = size
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    throw new Error('Could not get canvas context')
+  }
+
+  const text = count > 99 ? '99+' : count.toString()
+  const badgeRadius = size * 0.46
+  const badgeX = size / 2
+  const badgeY = size / 2
+
+  // Subtle shadow so overlay reads better on varied taskbar colors
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)'
+  ctx.shadowBlur = 3
+  ctx.shadowOffsetY = 1
+
+  ctx.beginPath()
+  ctx.arc(badgeX, badgeY, badgeRadius, 0, Math.PI * 2)
+  ctx.fillStyle = '#FF3B30'
+  ctx.fill()
+
+  // Reset shadow for text
+  ctx.shadowColor = 'transparent'
+  ctx.shadowBlur = 0
+  ctx.shadowOffsetY = 0
+
+  const fontSize = count > 99 ? size * 0.34 : size * 0.48
+  ctx.font = `700 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`
+  ctx.fillStyle = '#FFFFFF'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, badgeX, badgeY)
+
+  return canvas.toDataURL('image/png')
 }
 
 interface UseNotificationsOptions {
@@ -99,8 +131,6 @@ interface UseNotificationsResult {
   isWindowFocused: boolean
   /** Show a notification for a session */
   showSessionNotification: (session: Session, messagePreview?: string) => void
-  /** Update the app badge count based on sessions */
-  updateBadgeCount: () => void
 }
 
 export function useNotifications({
@@ -110,11 +140,12 @@ export function useNotifications({
 }: UseNotificationsOptions): UseNotificationsResult {
   const [isWindowFocused, setIsWindowFocused] = useState(true)
   const onNavigateToSessionRef = useRef(onNavigateToSession)
-  const lastBadgeCountRef = useRef<number | null>(null)
 
-  // Use session metadata from Jotai atom (lightweight, no messages)
-  // This prevents closures from retaining the full messages array
-  const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
+  // Check once whether this server has GUI notification channels (headless servers don't)
+  const hasGuiChannels = useMemo(
+    () => window.electronAPI.isChannelAvailable(RPC_CHANNELS.notification.SHOW),
+    [],
+  )
 
   // Keep ref updated
   useEffect(() => {
@@ -123,85 +154,65 @@ export function useNotifications({
 
   // Subscribe to window focus changes
   useEffect(() => {
+    if (!hasGuiChannels) return
+
     // Get initial focus state
     window.electronAPI.getWindowFocusState().then(setIsWindowFocused)
 
     // Subscribe to focus changes
     const cleanup = window.electronAPI.onWindowFocusChange((isFocused) => {
       setIsWindowFocused(isFocused)
-      // Badge count is always shown based on unread count, not cleared on focus
     })
 
     return cleanup
-  }, [])
+  }, [hasGuiChannels])
 
   // Subscribe to notification navigation (when user clicks a notification)
   useEffect(() => {
+    if (!hasGuiChannels) return
+
     const cleanup = window.electronAPI.onNotificationNavigate((data) => {
-      console.log('[Notifications] Navigate to session:', data.sessionId)
       onNavigateToSessionRef.current?.(data.sessionId)
     })
 
     return cleanup
-  }, [])
+  }, [hasGuiChannels])
 
   // Subscribe to badge draw requests from main process
   // This uses Canvas API (only available in renderer) to draw badge on icon
   useEffect(() => {
+    if (!hasGuiChannels) return
+
     const cleanup = window.electronAPI.onBadgeDraw(async (data) => {
-      console.log('[Notifications] Badge draw request:', data.count)
       try {
         const badgedIconDataUrl = await drawBadgeOnIcon(data.iconDataUrl, data.count)
         await window.electronAPI.setDockIconWithBadge(badgedIconDataUrl)
-        console.log('[Notifications] Badge icon set successfully')
       } catch (error) {
         console.error('[Notifications] Failed to draw badge:', error)
       }
     })
 
+    // Now that the Canvas listener is subscribed, request initial badge from main
+    void window.electronAPI.refreshBadge()
+
     return cleanup
-  }, [])
+  }, [hasGuiChannels])
 
-  // Update badge count when session metadata changes
-  const updateBadgeCount = useCallback(() => {
-    // Only show badge if notifications are enabled
-    if (!enabled) {
-      console.log('[Notifications] Badge disabled, clearing')
-      window.electronAPI.updateBadgeCount(0)
-      return
-    }
+  // Subscribe to Windows taskbar overlay draw requests from main process
+  useEffect(() => {
+    if (!hasGuiChannels) return
 
-    // Count sessions that have unread messages using metadata
-    // Exclude hidden sessions (mini-agent sessions) from badge count
-    const metas = Array.from(sessionMetaMap.values())
-    const unreadSessions = metas.filter(m => hasUnreadMessagesFromMeta(m) && !m.hidden)
-    const totalUnread = unreadSessions.length
-
-    // Skip badge update if any session is processing AND the count hasn't changed
-    // This prevents excessive updates during streaming while still allowing
-    // updates when user switches sessions (which marks as read and decreases count)
-    const hasProcessing = metas.some(m => m.isProcessing)
-    if (hasProcessing && totalUnread === lastBadgeCountRef.current) {
-      return
-    }
-
-    // Debug: log sessions with messages vs unread
-    const sessionsWithMessages = metas.filter(m => m.lastFinalMessageId !== undefined)
-    console.log('[Notifications] Badge update:', {
-      totalSessions: metas.length,
-      sessionsWithMessages: sessionsWithMessages.length,
-      unreadCount: totalUnread,
+    const cleanup = window.electronAPI.onBadgeDrawWindows(async (data) => {
+      try {
+        const overlayDataUrl = drawWindowsBadgeOverlay(data.count)
+        await window.electronAPI.setDockIconWithBadge(overlayDataUrl)
+      } catch (error) {
+        console.error('[Notifications] Failed to draw Windows badge overlay:', error)
+      }
     })
 
-    // Badge always shows unread count (regardless of focus)
-    lastBadgeCountRef.current = totalUnread
-    window.electronAPI.updateBadgeCount(totalUnread)
-  }, [sessionMetaMap, enabled])
-
-  // Auto-update badge when session metadata or focus changes
-  useEffect(() => {
-    updateBadgeCount()
-  }, [updateBadgeCount])
+    return cleanup
+  }, [hasGuiChannels])
 
   // Show notification for a session
   const showSessionNotification = useCallback((session: Session, messagePreview?: string) => {
@@ -211,6 +222,8 @@ export function useNotifications({
     if (isWindowFocused) return
     // Don't show if no workspace
     if (!workspaceId) return
+    // Don't show if server doesn't have GUI notification handlers
+    if (!hasGuiChannels) return
 
     // Get session title for notification
     const title = session.name || 'New message'
@@ -222,11 +235,10 @@ export function useNotifications({
     }
 
     window.electronAPI.showNotification(title, body, workspaceId, session.id)
-  }, [enabled, isWindowFocused, workspaceId])
+  }, [enabled, isWindowFocused, workspaceId, hasGuiChannels])
 
   return {
     isWindowFocused,
     showSessionNotification,
-    updateBadgeCount,
   }
 }

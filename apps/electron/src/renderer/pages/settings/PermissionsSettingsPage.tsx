@@ -11,6 +11,7 @@
 
 import * as React from 'react'
 import { useState, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
@@ -29,7 +30,6 @@ import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopo
 import { getDocUrl } from '@craft-agent/shared/docs/doc-links'
 import { routes } from '@/lib/navigate'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
-import { useI18n } from '@/i18n'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -89,40 +89,40 @@ function buildDefaultPermissionsData(config: PermissionsConfigFile | null): Perm
  * Build custom permissions data from workspace permissions.json.
  * These are user-added patterns that extend the defaults.
  */
-function buildCustomPermissionsData(config: PermissionsConfigFile): PermissionRow[] {
+function buildCustomPermissionsData(config: PermissionsConfigFile, fallbackLabels: { blockedTool: string; bashPattern: string; mcpPattern: string; apiEndpoint: string; writePath: string }): PermissionRow[] {
   const rows: PermissionRow[] = []
 
   // Additional blocked tools
   config.blockedTools?.forEach((item) => {
     const pattern = typeof item === 'string' ? item : item.pattern
-    const comment = typeof item === 'string' ? 'Custom blocked tool' : (item.comment || 'Custom blocked tool')
+    const comment = typeof item === 'string' ? fallbackLabels.blockedTool : (item.comment || fallbackLabels.blockedTool)
     rows.push({ access: 'blocked', type: 'tool', pattern, comment })
   })
 
   // Additional bash patterns
   config.allowedBashPatterns?.forEach((item) => {
     const pattern = typeof item === 'string' ? item : item.pattern
-    const comment = typeof item === 'string' ? 'Custom bash pattern' : (item.comment || 'Custom bash pattern')
+    const comment = typeof item === 'string' ? fallbackLabels.bashPattern : (item.comment || fallbackLabels.bashPattern)
     rows.push({ access: 'allowed', type: 'bash', pattern, comment })
   })
 
   // Additional MCP patterns
   config.allowedMcpPatterns?.forEach((item) => {
     const pattern = typeof item === 'string' ? item : item.pattern
-    const comment = typeof item === 'string' ? 'Custom MCP pattern' : (item.comment || 'Custom MCP pattern')
+    const comment = typeof item === 'string' ? fallbackLabels.mcpPattern : (item.comment || fallbackLabels.mcpPattern)
     rows.push({ access: 'allowed', type: 'mcp', pattern, comment })
   })
 
   // API endpoints
   config.allowedApiEndpoints?.forEach((item) => {
     const pattern = `${item.method} ${item.path}`
-    rows.push({ access: 'allowed', type: 'api', pattern, comment: item.comment || 'Custom API endpoint' })
+    rows.push({ access: 'allowed', type: 'api', pattern, comment: item.comment || fallbackLabels.apiEndpoint })
   })
 
   // Write paths are shown as allowed paths
   config.allowedWritePaths?.forEach((item) => {
     const pattern = typeof item === 'string' ? item : item.pattern
-    const comment = typeof item === 'string' ? 'Allowed write path' : (item.comment || 'Allowed write path')
+    const comment = typeof item === 'string' ? fallbackLabels.writePath : (item.comment || fallbackLabels.writePath)
     // Show as a special "tool" type since it's about Write/Edit operations
     rows.push({ access: 'allowed', type: 'tool', pattern: `Write to: ${pattern}`, comment })
   })
@@ -131,7 +131,7 @@ function buildCustomPermissionsData(config: PermissionsConfigFile): PermissionRo
 }
 
 export default function PermissionsSettingsPage() {
-  const { t } = useI18n('settings')
+  const { t } = useTranslation()
   const { activeWorkspaceId } = useAppShellContext()
   const activeWorkspace = useActiveWorkspace()
 
@@ -144,11 +144,20 @@ export default function PermissionsSettingsPage() {
   // Build default permissions data from ~/.craft-agent/permissions/default.json
   const defaultPermissionsData = useMemo(() => buildDefaultPermissionsData(defaultConfig), [defaultConfig])
 
+  // Fallback labels for custom permissions (translated)
+  const permissionFallbackLabels = useMemo(() => ({
+    blockedTool: t("settings.permissions.customBlockedTool"),
+    bashPattern: t("settings.permissions.customBashPattern"),
+    mcpPattern: t("settings.permissions.customMcpPattern"),
+    apiEndpoint: t("settings.permissions.customApiEndpoint"),
+    writePath: t("settings.permissions.allowedWritePath"),
+  }), [t])
+
   // Build custom permissions data from workspace permissions.json
   const customPermissionsData = useMemo(() => {
     if (!customConfig) return []
-    return buildCustomPermissionsData(customConfig)
-  }, [customConfig])
+    return buildCustomPermissionsData(customConfig, permissionFallbackLabels)
+  }, [customConfig, permissionFallbackLabels])
 
   // Load both default and workspace permissions configs
   useEffect(() => {
@@ -195,7 +204,7 @@ export default function PermissionsSettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title={t('permissions.title')} actions={<HeaderMenu route={routes.view.settings('permissions')} helpFeature="permissions" />} />
+      <PanelHeader title={t("settings.permissions.title")} actions={<HeaderMenu route={routes.view.settings('permissions')} helpFeature="permissions" />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
@@ -207,14 +216,14 @@ export default function PermissionsSettingsPage() {
               ) : (
                 <>
                   {/* About Section */}
-                  <SettingsSection title={t('permissions.aboutPermissions.title')}>
+                  <SettingsSection title={t("settings.permissions.aboutPermissions")}>
                     <SettingsCard className="px-4 py-3.5">
                       <div className="text-sm text-muted-foreground leading-relaxed space-y-1.5">
                         <p>
-                          {t('permissions.aboutPermissions.paragraph1')}
+                          {t("settings.permissions.aboutText1")}
                         </p>
                         <p>
-                          {t('permissions.aboutPermissions.paragraph2')}
+                          {t("settings.permissions.aboutText2")}
                         </p>
                         <p>
                           <button
@@ -222,7 +231,7 @@ export default function PermissionsSettingsPage() {
                             onClick={() => window.electronAPI?.openUrl(getDocUrl('permissions'))}
                             className="text-foreground/70 hover:text-foreground underline underline-offset-2"
                           >
-                            {t('permissions.aboutPermissions.learnMore')}
+                            {t("common.learnMore")}
                           </button>
                         </p>
                       </div>
@@ -231,8 +240,8 @@ export default function PermissionsSettingsPage() {
 
                   {/* Default Permissions Section */}
                   <SettingsSection
-                    title={t('permissions.defaultPermissions.title')}
-                    description={t('permissions.defaultPermissions.description')}
+                    title={t("settings.permissions.defaultPermissions")}
+                    description={t("settings.permissions.defaultPermissionsDesc")}
                     action={
                       // EditPopover for AI-assisted default permissions editing
                       defaultPermissionsPath ? (
@@ -240,7 +249,7 @@ export default function PermissionsSettingsPage() {
                           trigger={<EditButton />}
                           {...getEditConfig('default-permissions', defaultPermissionsPath)}
                           secondaryAction={{
-                            label: t('permissions.defaultPermissions.editFile'),
+                            label: t("common.editFile"),
                             filePath: defaultPermissionsPath,
                           }}
                         />
@@ -254,13 +263,13 @@ export default function PermissionsSettingsPage() {
                           searchable
                           maxHeight={350}
                           fullscreen
-                          fullscreenTitle={t('permissions.defaultPermissions.fullscreenTitle')}
+                          fullscreenTitle={t("settings.permissions.defaultPermissions")}
                         />
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">
-                          <p className="text-sm">{t('permissions.defaultPermissions.empty')}</p>
+                          <p className="text-sm">{t("settings.permissions.noDefaultPermissions")}</p>
                           <p className="text-xs mt-1 text-foreground/40">
-                            {t('permissions.defaultPermissions.emptyHint')}
+                            {t("settings.permissions.noDefaultPermissionsDesc")}
                           </p>
                         </div>
                       )}
@@ -269,19 +278,20 @@ export default function PermissionsSettingsPage() {
 
                   {/* Custom Permissions Section */}
                   <SettingsSection
-                    title={t('permissions.workspaceCustomizations.title')}
-                    description={t('permissions.workspaceCustomizations.description')}
+                    title={t("settings.permissions.workspaceCustomizations")}
+                    description={t("settings.permissions.workspaceCustomizationsDesc")}
                     action={
                       (() => {
                         // Get centralized edit config - all strings defined in EditPopover.tsx
-                        const { context, example } = getEditConfig('workspace-permissions', activeWorkspace?.rootPath || '')
+                        const { context, example, displayLabel } = getEditConfig('workspace-permissions', activeWorkspace?.rootPath || '')
                         return (
                           <EditPopover
                             trigger={<EditButton />}
                             example={example}
                             context={context}
+                            displayLabel={displayLabel}
                             secondaryAction={activeWorkspace ? {
-                              label: t('permissions.workspaceCustomizations.editFile'),
+                              label: t("common.editFile"),
                               filePath: `${activeWorkspace.rootPath}/permissions.json`,
                             } : undefined}
                           />
@@ -296,13 +306,13 @@ export default function PermissionsSettingsPage() {
                           searchable
                           maxHeight={350}
                           fullscreen
-                          fullscreenTitle={t('permissions.workspaceCustomizations.fullscreenTitle')}
+                          fullscreenTitle={t("settings.permissions.workspaceCustomizations")}
                         />
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">
-                          <p className="text-sm">{t('permissions.workspaceCustomizations.empty')}</p>
+                          <p className="text-sm">{t("settings.permissions.noCustomPermissions")}</p>
                           <p className="text-xs mt-1 text-foreground/40">
-                            {t('permissions.workspaceCustomizations.emptyHint')}
+                            {t("settings.permissions.noCustomPermissionsDesc")}
                           </p>
                         </div>
                       )}

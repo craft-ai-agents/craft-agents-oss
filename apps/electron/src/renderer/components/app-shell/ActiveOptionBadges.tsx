@@ -1,20 +1,24 @@
 import * as React from 'react'
+import { useTranslation } from "react-i18next"
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SlashCommandMenu, DEFAULT_SLASH_COMMAND_GROUPS, type SlashCommandId } from '@/components/ui/slash-command-menu'
-import { ChevronDown, X } from 'lucide-react'
+import { ChevronDown, Info } from 'lucide-react'
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from '@craft-agent/shared/agent/modes'
-import { ActiveTasksBar, type BackgroundTask } from './ActiveTasksBar'
+import type { BackgroundTask } from './ActiveTasksBar'
 import { LabelIcon, LabelValueTypeIcon } from '@/components/ui/label-icon'
 import { LabelValuePopover } from '@/components/ui/label-value-popover'
 import type { LabelConfig } from '@craft-agent/shared/labels'
-import { flattenLabels, parseLabelEntry, formatLabelEntry } from '@craft-agent/shared/labels'
+import { flattenLabels, parseLabelEntry, formatLabelEntry, formatDisplayValue } from '@craft-agent/shared/labels'
 import { resolveEntityColor } from '@craft-agent/shared/colors'
 import { useTheme } from '@/context/ThemeContext'
 import { useDynamicStack } from '@/hooks/useDynamicStack'
-import type { TodoState } from '@/config/todo-states'
-import { getState } from '@/config/todo-states'
-import { TodoStateMenu } from '@/components/ui/todo-filter-menu'
+import type { SessionStatus } from '@/config/session-status-config'
+import { getState } from '@/config/session-status-config'
+import { SessionStatusMenu } from '@/components/ui/session-status-menu'
+import { MetadataBadge } from '@/components/ui/metadata-badge'
+import { openLabelLink } from '@/lib/open-label-link'
+import { SessionInfoPopover } from './SessionInfoPopover'
 
 // ============================================================================
 // Permission Mode Icon Component
@@ -38,10 +42,6 @@ function PermissionModeIcon({ mode, className }: { mode: PermissionMode; classNa
 }
 
 export interface ActiveOptionBadgesProps {
-  /** Show ultrathink badge */
-  ultrathinkEnabled?: boolean
-  /** Callback when ultrathink is toggled off */
-  onUltrathinkChange?: (enabled: boolean) => void
   /** Current permission mode */
   permissionMode?: PermissionMode
   /** Callback when permission mode changes */
@@ -50,6 +50,8 @@ export interface ActiveOptionBadgesProps {
   tasks?: BackgroundTask[]
   /** Session ID for opening preview windows */
   sessionId?: string
+  /** Absolute path to the session folder (for Files header actions) */
+  sessionFolderPath?: string
   /** Callback when kill button is clicked on a task */
   onKillTask?: (taskId: string) => void
   /** Callback to insert message into input field */
@@ -68,11 +70,11 @@ export interface ActiveOptionBadgesProps {
   onAutoOpenConsumed?: () => void
   // ── State/status badge (in dynamic stack) ──
   /** Available workflow states */
-  todoStates?: TodoState[]
+  sessionStatuses?: SessionStatus[]
   /** Current session state ID */
-  currentTodoState?: string
+  currentSessionStatus?: string
   /** Callback when state changes */
-  onTodoStateChange?: (stateId: string) => void
+  onSessionStatusChange?: (stateId: string) => void
   /** Additional CSS classes */
   className?: string
 }
@@ -85,12 +87,11 @@ interface ResolvedLabelEntry {
 }
 
 export function ActiveOptionBadges({
-  ultrathinkEnabled = false,
-  onUltrathinkChange,
   permissionMode = 'ask',
   onPermissionModeChange,
   tasks = [],
   sessionId,
+  sessionFolderPath,
   onKillTask,
   onInsertMessage,
   sessionLabels = [],
@@ -99,9 +100,9 @@ export function ActiveOptionBadges({
   onLabelsChange,
   autoOpenLabelId,
   onAutoOpenConsumed,
-  todoStates = [],
-  currentTodoState,
-  onTodoStateChange,
+  sessionStatuses = [],
+  currentSessionStatus,
+  onSessionStatusChange,
   className,
 }: ActiveOptionBadgesProps) {
   // Resolve session label entries to their config objects + parsed values.
@@ -123,109 +124,105 @@ export function ActiveOptionBadges({
 
   const hasLabels = resolvedLabels.length > 0
 
-  // Resolve the current state from todoStates for the badge display.
+  // Resolve the current state from sessionStatuses for the badge display.
   // Every session always has a state — fall back to the default state (or 'todo')
-  // when currentTodoState isn't explicitly set, matching SessionList's behavior.
-  const effectiveStateId = currentTodoState || 'todo'
-  const resolvedState = todoStates.length > 0 ? getState(effectiveStateId, todoStates) : undefined
+  // when currentSessionStatus isn't explicitly set, matching SessionList's behavior.
+  const effectiveStateId = currentSessionStatus || 'todo'
+  const resolvedState = sessionStatuses.length > 0 ? getState(effectiveStateId, sessionStatuses) : undefined
   const hasState = !!resolvedState
 
-  // Show the stacking container when there are labels or a state badge
-  const hasStackContent = hasLabels || hasState
+  // Show the stacking container when there are labels (state badge is now rendered standalone on the left)
+  const hasStackContent = hasLabels
 
   // Dynamic stacking with equal visible strips: ResizeObserver computes per-badge
   // margins directly on children. Wider badges get more negative margins so each
   // shows the same visible strip when stacked. No React re-renders needed.
-  // reservedStart: 24 matches the mask gradient width so stacking begins
-  // before badges reach the faded zone on the left edge.
-  const stackRef = useDynamicStack({ gap: 8, minVisible: 20, reservedStart: 24 })
+  const stackRef = useDynamicStack({ gap: 8, minVisible: 20, reservedStart: 0 })
 
   // Only render if badges or tasks are active
-  if (!ultrathinkEnabled && !permissionMode && tasks.length === 0 && !hasStackContent) {
+  if (!permissionMode && tasks.length === 0 && !hasState && !hasStackContent) {
     return null
   }
 
   return (
     <div className={cn("flex items-start gap-2 mb-2 px-px pt-px pb-0.5", className)}>
-      {/* Permission Mode Badge */}
-      {permissionMode && (
-        <div className="shrink-0">
-          <PermissionModeDropdown
-            permissionMode={permissionMode}
-            ultrathinkEnabled={ultrathinkEnabled}
-            onPermissionModeChange={onPermissionModeChange}
-            onUltrathinkChange={onUltrathinkChange}
-          />
-        </div>
-      )}
-
-      {/* Ultrathink Badge */}
-      {ultrathinkEnabled && (
-        <button
-          type="button"
-          onClick={() => onUltrathinkChange?.(false)}
-          className="h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px] flex items-center gap-1.5 shrink-0 transition-all bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-pink-600/10 hover:from-blue-600/15 hover:via-purple-600/15 hover:to-pink-600/15 shadow-tinted outline-none select-none"
-          style={{ '--shadow-color': '147, 51, 234' } as React.CSSProperties}
-        >
-          <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-            Ultrathink
-          </span>
-          <X className="h-3 w-3 text-purple-500 opacity-60 hover:opacity-100 translate-y-px" />
-        </button>
-      )}
-
-      {/* Stacking container for state badge + label badges.
-       * useDynamicStack sets per-child marginLeft directly via ResizeObserver.
-       * overflow: clip prevents scroll container while py/-my gives shadow room. */}
-      {hasStackContent && (
-        <div
-          className="min-w-0 flex-1 py-0.5 -my-0.5"
-          style={{
-            // shadow-minimal replicated as drop-shadow (traces masked alpha, no clipping).
-            // Ring uses higher blur+opacity for visible border feel (hard 1px ring can't be replicated exactly).
-            // Blur shadows use reduced blur+opacity to stay tight (accounting for no negative spread in drop-shadow).
-            filter: 'drop-shadow(0px 0px 0.5px rgba(var(--foreground-rgb), 0.3)) drop-shadow(0px 1px 0.1px rgba(0,0,0,0.04)) drop-shadow(0px 3px 0.2px rgba(0,0,0,0.03))',
-          }}
-        >
-          <div
-            ref={stackRef}
-            className="flex items-center min-w-0 justify-end py-1 -my-1 pr-2 -mr-2"
-            style={{ overflow: 'clip' }}
-          >
-            {/* State badge — first child in the stack (leftmost in the right-aligned row) */}
-            {hasState && resolvedState && (
-              <StateBadge
-                state={resolvedState}
-                todoStates={todoStates}
-                onTodoStateChange={onTodoStateChange}
-              />
-            )}
-            {/* Label badges */}
-            {resolvedLabels.map(({ config, rawValue, index }) => (
-              <LabelBadge
-                key={config.id}
-                label={config}
-                value={rawValue}
-                autoOpen={config.id === autoOpenLabelId}
-                onAutoOpenConsumed={onAutoOpenConsumed}
-                onValueChange={(newValue) => {
-                  // Rebuild the sessionLabels array with the updated entry
-                  const updated = [...sessionLabels]
-                  updated[index] = formatLabelEntry(config.id, newValue)
-                  onLabelsChange?.(updated)
-                }}
-                onRemove={() => {
-                  if (onLabelsChange) {
-                    onLabelsChange(sessionLabels.filter((_, i) => i !== index))
-                  } else {
-                    onRemoveLabel?.(config.id)
-                  }
-                }}
-              />
-            ))}
+      {/* Left side: mode → state → labels stack */}
+      <div className="flex items-start gap-2 min-w-0 flex-1">
+        {/* Permission Mode Badge */}
+        {permissionMode && (
+          <div className="shrink-0">
+            <PermissionModeDropdown
+              permissionMode={permissionMode}
+              onPermissionModeChange={onPermissionModeChange}
+              sessionId={sessionId}
+            />
           </div>
-        </div>
-      )}
+        )}
+
+        {/* State Badge — standalone on the left, after Mode */}
+        {hasState && resolvedState && (
+          <div className="shrink-0">
+            <StateBadge
+              state={resolvedState}
+              sessionStatuses={sessionStatuses}
+              onSessionStatusChange={onSessionStatusChange}
+              sessionId={sessionId}
+            />
+          </div>
+        )}
+
+        {/* Stacking container for label badges (left side).
+         * useDynamicStack sets per-child marginLeft directly via ResizeObserver.
+         * overflow: clip prevents scroll container while py/-my gives shadow room. */}
+        {hasStackContent && (
+          <div
+            className="flex-1 min-w-0 max-w-full py-0.5 -my-0.5"
+            style={{
+              // shadow-minimal replicated as drop-shadow (traces masked alpha, no clipping).
+              // Ring uses higher blur+opacity for visible border feel (hard 1px ring can't be replicated exactly).
+              // Blur shadows use reduced blur+opacity to stay tight (accounting for no negative spread in drop-shadow).
+              filter: 'drop-shadow(0px 0px 0.5px rgba(var(--foreground-rgb), 0.3)) drop-shadow(0px 1px 0.1px rgba(0,0,0,0.04)) drop-shadow(0px 3px 0.2px rgba(0,0,0,0.03))',
+            }}
+          >
+            <div
+              ref={stackRef}
+              className="flex items-center min-w-0 py-1 -my-1"
+              style={{ overflow: 'clip' }}
+            >
+              {/* Label badges */}
+              {resolvedLabels.map(({ config, rawValue, index }) => (
+                <LabelBadge
+                  key={`${config.id}-${index}`}
+                  label={config}
+                  value={rawValue}
+                  autoOpen={config.id === autoOpenLabelId}
+                  onAutoOpenConsumed={onAutoOpenConsumed}
+                  sessionId={sessionId}
+                  onValueChange={(newValue) => {
+                    // Rebuild the sessionLabels array with the updated entry
+                    const updated = [...sessionLabels]
+                    updated[index] = formatLabelEntry(config.id, newValue)
+                    onLabelsChange?.(updated)
+                  }}
+                  onRemove={() => {
+                    if (onLabelsChange) {
+                      onLabelsChange(sessionLabels.filter((_, i) => i !== index))
+                    } else {
+                      onRemoveLabel?.(config.id)
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* Right side: Files popover button */}
+      <div className="shrink-0">
+        <FilesPopoverButton sessionId={sessionId} sessionFolderPath={sessionFolderPath} />
+      </div>
     </div>
   )
 }
@@ -233,20 +230,6 @@ export function ActiveOptionBadges({
 // ============================================================================
 // Label Badge Component
 // ============================================================================
-
-/**
- * Format a raw value for display based on the label's valueType.
- * Dates render as locale short format; numbers and strings pass through.
- */
-function formatDisplayValue(rawValue: string, valueType?: 'string' | 'number' | 'date'): string {
-  if (valueType === 'date') {
-    const date = new Date(rawValue.includes('T') ? rawValue + ':00Z' : rawValue + 'T00:00:00Z')
-    if (!isNaN(date.getTime())) {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    }
-  }
-  return rawValue
-}
 
 /**
  * Renders a single label badge with LabelValuePopover for editing/removal.
@@ -261,6 +244,7 @@ function LabelBadge({
   onAutoOpenConsumed,
   onValueChange,
   onRemove,
+  sessionId,
 }: {
   label: LabelConfig
   value?: string
@@ -269,6 +253,7 @@ function LabelBadge({
   onAutoOpenConsumed?: () => void
   onValueChange?: (newValue: string | undefined) => void
   onRemove: () => void
+  sessionId?: string
 }) {
   const { isDark } = useTheme()
   const [open, setOpen] = React.useState(false)
@@ -297,42 +282,21 @@ function LabelBadge({
       onOpenChange={setOpen}
       onValueChange={onValueChange}
       onRemove={onRemove}
+      sessionId={sessionId}
     >
-      <button
-        type="button"
-        className={cn(
-          "h-[30px] pl-3 pr-2 text-xs font-medium rounded-[8px] flex items-center shrink-0",
-          "outline-none select-none transition-colors",
-          // Background: 97% background + 3% label color. Hover: 92% + 8%.
-          // Text: 80% foreground + 20% label color.
-          // All opaque — drop-shadow traces alpha, badge must stay solid.
-          "bg-[color-mix(in_srgb,var(--background)_97%,var(--badge-color))]",
-          "hover:bg-[color-mix(in_srgb,var(--background)_92%,var(--badge-color))]",
-          "text-[color-mix(in_srgb,var(--foreground)_80%,var(--badge-color))]",
-          "relative", // for z-index stacking when overlapped
-        )}
-        style={{ '--badge-color': resolvedColor } as React.CSSProperties}
-      >
-        <LabelIcon label={label} size="lg" />
-        <span className="whitespace-nowrap ml-2">{label.name}</span>
-        {/* Optional typed value: interpunkt separator + value, or placeholder icon if typed but no value set */}
-        {displayValue ? (
-          <>
-            <span className="opacity-30 mx-1">·</span>
-            <span className="opacity-60 whitespace-nowrap max-w-[100px] truncate">
-              {displayValue}
-            </span>
-          </>
-        ) : (
-          label.valueType && (
-            <>
-              <span className="opacity-30 mx-1">·</span>
-              <LabelValueTypeIcon valueType={label.valueType} />
-            </>
-          )
-        )}
-        <ChevronDown className="h-3 w-3 opacity-40 ml-1 shrink-0" />
-      </button>
+      <MetadataBadge
+        label={label.name}
+        value={displayValue}
+        onValueClick={label.valueType === 'link' && value ? () => openLabelLink(value) : undefined}
+        icon={<LabelIcon label={label} size="lg" />}
+        valueHintIcon={label.valueType ? <LabelValueTypeIcon valueType={label.valueType} /> : undefined}
+        badgeColor={resolvedColor}
+        interactive
+        isActive={open}
+        showChevron
+        shadow="none"
+        className="relative"
+      />
     </LabelValuePopover>
   )
 }
@@ -343,55 +307,54 @@ function LabelBadge({
 
 /**
  * Renders the current workflow state as a badge in the dynamic stacking container.
- * Click opens a TodoStateMenu popover for changing the state.
+ * Click opens a SessionStatusMenu popover for changing the state.
  * Styled consistently with label badges (h-[30px], rounded-[8px], color-mix tinting).
  */
 function StateBadge({
   state,
-  todoStates,
-  onTodoStateChange,
+  sessionStatuses,
+  onSessionStatusChange,
+  sessionId,
 }: {
-  state: TodoState
-  todoStates: TodoState[]
-  onTodoStateChange?: (stateId: string) => void
+  state: SessionStatus
+  sessionStatuses: SessionStatus[]
+  onSessionStatusChange?: (stateId: string) => void
+  sessionId?: string
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
 
   const handleSelect = React.useCallback((stateId: string) => {
     setOpen(false)
-    onTodoStateChange?.(stateId)
-  }, [onTodoStateChange])
+    onSessionStatusChange?.(stateId)
+  }, [onSessionStatusChange])
 
   // Use the state's resolved color for tinting (same color-mix pattern as labels)
   const badgeColor = state.resolvedColor || 'var(--foreground)'
   const applyColor = state.iconColorable
 
+  const DEFAULT_STATUS_IDS = new Set(['backlog', 'todo', 'needs-review', 'done', 'cancelled'])
+  const stateLabel = DEFAULT_STATUS_IDS.has(state.id) ? t(`status.${state.id}`, state.label) : state.label
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px] flex items-center gap-1.5 shrink-0",
-            "outline-none select-none transition-colors",
-            // Same color-mix tinting as label badges for visual consistency
-            "bg-[color-mix(in_srgb,var(--background)_97%,var(--badge-color))]",
-            "hover:bg-[color-mix(in_srgb,var(--background)_92%,var(--badge-color))]",
-            "text-[color-mix(in_srgb,var(--foreground)_80%,var(--badge-color))]",
-            "relative",
+        <MetadataBadge
+          label={stateLabel}
+          badgeColor={badgeColor}
+          interactive
+          isActive={open}
+          showChevron
+          icon={(
+            <span
+              className="shrink-0 flex items-center w-3.5 h-3.5 [&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full [&>span]:text-xs"
+              style={applyColor ? { color: state.resolvedColor } : undefined}
+            >
+              {state.icon}
+            </span>
           )}
-          style={{ '--badge-color': badgeColor } as React.CSSProperties}
-        >
-          {/* State icon with resolved color */}
-          <span
-            className="shrink-0 flex items-center w-3.5 h-3.5 [&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full [&>span]:text-xs"
-            style={applyColor ? { color: state.resolvedColor } : undefined}
-          >
-            {state.icon}
-          </span>
-          <span className="whitespace-nowrap">{state.label}</span>
-          <ChevronDown className="h-3 w-3 opacity-40 shrink-0" />
-        </button>
+          className="pl-2.5"
+        />
       </PopoverTrigger>
       <PopoverContent
         className="w-auto p-0 border-0 shadow-none bg-transparent"
@@ -400,27 +363,58 @@ function StateBadge({
         sideOffset={4}
         onCloseAutoFocus={(e) => {
           e.preventDefault()
-          window.dispatchEvent(new CustomEvent('craft:focus-input'))
+          window.dispatchEvent(new CustomEvent('craft:focus-input', {
+            detail: { sessionId }
+          }))
         }}
       >
-        <TodoStateMenu
+        <SessionStatusMenu
           activeState={state.id}
           onSelect={handleSelect}
-          states={todoStates}
+          states={sessionStatuses}
         />
       </PopoverContent>
     </Popover>
   )
 }
 
-interface PermissionModeDropdownProps {
-  permissionMode: PermissionMode
-  ultrathinkEnabled?: boolean
-  onPermissionModeChange?: (mode: PermissionMode) => void
-  onUltrathinkChange?: (enabled: boolean) => void
+function FilesPopoverButton({ sessionId, sessionFolderPath }: { sessionId?: string; sessionFolderPath?: string }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = React.useState(false)
+
+  if (!sessionId) return null
+
+  return (
+    <SessionInfoPopover
+      sessionId={sessionId}
+      sessionFolderPath={sessionFolderPath}
+      trigger={(
+        <button
+          type="button"
+          className={cn(
+            "h-[30px] pl-[12px] pr-[14px] text-xs font-medium rounded-[8px] flex items-center gap-1.5 shrink-0",
+            "outline-none select-none transition-colors shadow-minimal",
+            "hover:bg-foreground/5 data-[state=open]:bg-foreground/5",
+            "bg-[color-mix(in_srgb,var(--background)_97%,var(--foreground)_3%)]",
+            "text-foreground/80",
+          )}
+        >
+          <Info className="h-3.5 w-3.5 shrink-0" />
+          <span className="whitespace-nowrap">{t("common.info")}</span>
+        </button>
+      )}
+    />
+  )
 }
 
-function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onPermissionModeChange, onUltrathinkChange }: PermissionModeDropdownProps) {
+interface PermissionModeDropdownProps {
+  permissionMode: PermissionMode
+  onPermissionModeChange?: (mode: PermissionMode) => void
+  sessionId?: string
+}
+
+function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessionId }: PermissionModeDropdownProps) {
+  const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
   // Optimistic local state - updates immediately, syncs with prop
   const [optimisticMode, setOptimisticMode] = React.useState(permissionMode)
@@ -430,23 +424,18 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
     setOptimisticMode(permissionMode)
   }, [permissionMode])
 
-  // Build active commands including ultrathink state
   const activeCommands = React.useMemo((): SlashCommandId[] => {
-    const active: SlashCommandId[] = [optimisticMode as SlashCommandId]
-    if (ultrathinkEnabled) active.push('ultrathink')
-    return active
-  }, [optimisticMode, ultrathinkEnabled])
+    return [optimisticMode as SlashCommandId]
+  }, [optimisticMode])
 
   // Handle command selection from dropdown
   const handleSelect = React.useCallback((commandId: SlashCommandId) => {
     if (commandId === 'safe' || commandId === 'ask' || commandId === 'allow-all') {
       setOptimisticMode(commandId)
       onPermissionModeChange?.(commandId)
-    } else if (commandId === 'ultrathink') {
-      onUltrathinkChange?.(!ultrathinkEnabled)
     }
     setOpen(false)
-  }, [onPermissionModeChange, onUltrathinkChange, ultrathinkEnabled])
+  }, [onPermissionModeChange])
 
   // Get config for current mode (use optimistic state for instant UI update)
   const config = PERMISSION_MODE_CONFIG[optimisticMode]
@@ -484,19 +473,24 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
           style={{ '--shadow-color': currentStyle.shadowVar } as React.CSSProperties}
         >
           <PermissionModeIcon mode={optimisticMode} className="h-3.5 w-3.5" />
-          <span>{config.displayName}</span>
+          <span>{t(`mode.${optimisticMode}`)}</span>
           <ChevronDown className="h-3.5 w-3.5 opacity-60" />
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-auto p-0 bg-background/80 backdrop-blur-xl backdrop-saturate-150 border-border/50"
+        className="w-auto p-0 rounded-[8px] bg-background text-foreground shadow-modal-small"
         side="top"
         align="start"
         sideOffset={4}
-        style={{ borderRadius: '8px', boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)' }}
         onCloseAutoFocus={(e) => {
           e.preventDefault()
-          window.dispatchEvent(new CustomEvent('craft:focus-input'))
+          // Don't auto-focus the text input on touch devices — it pulls up the virtual keyboard
+          const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+          if (!isTouchDevice) {
+            window.dispatchEvent(new CustomEvent('craft:focus-input', {
+              detail: { sessionId }
+            }))
+          }
         }}
       >
         <SlashCommandMenu

@@ -10,7 +10,7 @@ import type { EntityColor } from '@craft-agent/shared/colors'
 import { resolveEntityColor } from '@craft-agent/shared/colors'
 import { useTheme } from '@/context/ThemeContext'
 import { cn } from '@/lib/utils'
-import { Hash, CalendarDays, Type } from 'lucide-react'
+import { Hash, CalendarDays, Type, Link } from 'lucide-react'
 import type { LabelConfig } from '@craft-agent/shared/labels'
 
 interface LabelIconProps {
@@ -86,14 +86,16 @@ export function LabelIcon({ label, size = 'sm', hasChildren, className }: LabelI
  *   - number → Hash
  *   - date   → CalendarDays
  *   - string → Type
+ *   - link   → Link
  *
  * Returns null if the label has no valueType (boolean/presence-only labels).
- * Used in both SessionList and LabelBadge to indicate a typed label awaiting a value.
+ * Used in label badge rows and ActiveOptionBadges to indicate a typed label awaiting a value.
  */
 const VALUE_TYPE_ICONS = {
   number: Hash,
   date: CalendarDays,
   string: Type,
+  link: Link,
 } as const
 
 interface LabelValueTypeIconProps {

@@ -9,10 +9,10 @@ interface UseRovingTabIndexOptions<T> {
   orientation?: 'vertical' | 'horizontal' | 'both'
   /** Wrap around at ends */
   wrap?: boolean
-  /** Called when active item changes (immediate selection) */
-  onActiveChange?: (item: T, index: number) => void
-  /** Called when Enter is pressed on active item */
-  onEnter?: (item: T, index: number) => void
+  /** Called when user navigates with arrow keys - use for scrolling into view */
+  onNavigate?: (item: T, index: number) => void
+  /** Called when Enter/Space is pressed on focused item - use for selection */
+  onActivate?: (item: T, index: number) => void
   /** Called when Delete/Backspace is pressed */
   onDelete?: (item: T, index: number) => void
   /** Initial active index */
@@ -23,6 +23,8 @@ interface UseRovingTabIndexOptions<T> {
   onContextMenu?: (item: T, index: number, element: HTMLElement) => void
   /** Whether to move focus to items on navigation (default: true). Set false to keep focus elsewhere (e.g., search input) */
   moveFocus?: boolean
+  /** Called when Shift+Arrow extends selection (for multi-select support) */
+  onExtendSelection?: (toIndex: number) => void
 }
 
 interface UseRovingTabIndexReturn<T> {
@@ -37,7 +39,6 @@ interface UseRovingTabIndexReturn<T> {
     ref: (el: HTMLElement | null) => void
     onKeyDown: (e: React.KeyboardEvent) => void
     onFocus: () => void
-    onClick: () => void
     'aria-selected': boolean
     role: string
   }
@@ -54,12 +55,18 @@ interface UseRovingTabIndexReturn<T> {
 /**
  * Implements roving tabindex pattern for list navigation.
  *
+ * Key design: Navigation (focus) is separate from Selection
+ * - Arrow keys move focus via onNavigate (use for scrolling into view)
+ * - Enter/Space triggers onActivate (use for selection)
+ * - Clicks are handled externally by the component
+ *
  * Features:
  * - Only active item has tabIndex=0, others have tabIndex=-1
- * - Arrow keys navigate and immediately select (onActiveChange)
+ * - Arrow keys navigate and call onNavigate
+ * - Enter/Space triggers onActivate callback
  * - Tab exits the list to next zone
- * - Enter triggers onEnter callback
  * - Home/End jump to first/last item
+ * - Shift+Arrow calls onExtendSelection for multi-select
  * - Context menu key (or Shift+F10) opens context menu
  */
 export function useRovingTabIndex<T>({
@@ -67,13 +74,14 @@ export function useRovingTabIndex<T>({
   getId,
   orientation = 'vertical',
   wrap = true,
-  onActiveChange,
-  onEnter,
+  onNavigate,
+  onActivate,
   onDelete,
   initialIndex = 0,
   enabled = true,
   onContextMenu,
   moveFocus = true,
+  onExtendSelection,
 }: UseRovingTabIndexOptions<T>): UseRovingTabIndexReturn<T> {
   const [activeIndex, setActiveIndexState] = useState(() =>
     Math.min(initialIndex, Math.max(0, items.length - 1))
@@ -81,22 +89,23 @@ export function useRovingTabIndex<T>({
   const itemRefs = useRef<Map<string, HTMLElement>>(new Map())
 
   // Reset active index if items change and current index is out of bounds
+  // Note: We only sync state here, no callbacks - this is not user-initiated navigation
   useEffect(() => {
     if (items.length === 0) {
       setActiveIndexState(0)
     } else if (activeIndex >= items.length) {
       const newIndex = Math.max(0, items.length - 1)
       setActiveIndexState(newIndex)
-      onActiveChange?.(items[newIndex], newIndex)
     }
   }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Programmatic index setter - only syncs state, no callbacks
+  // Callbacks are only for user-initiated keyboard navigation
   const setActiveIndex = useCallback((index: number) => {
     if (index >= 0 && index < items.length) {
       setActiveIndexState(index)
-      onActiveChange?.(items[index], index)
     }
-  }, [items, onActiveChange])
+  }, [items.length])
 
   const focusActiveItem = useCallback(() => {
     const item = items[activeIndex]
@@ -110,7 +119,7 @@ export function useRovingTabIndex<T>({
   const navigateToIndex = useCallback((nextIndex: number) => {
     if (nextIndex >= 0 && nextIndex < items.length && nextIndex !== activeIndex) {
       setActiveIndexState(nextIndex)
-      onActiveChange?.(items[nextIndex], nextIndex)
+      onNavigate?.(items[nextIndex], nextIndex)
       // Focus new item after state update (unless moveFocus is false)
       if (moveFocus) {
         requestAnimationFrame(() => {
@@ -119,16 +128,18 @@ export function useRovingTabIndex<T>({
         })
       }
     }
-  }, [items, activeIndex, getId, onActiveChange, moveFocus])
+  }, [items, activeIndex, getId, onNavigate, moveFocus])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!enabled || items.length === 0) return
 
     const isVertical = orientation === 'vertical' || orientation === 'both'
     const isHorizontal = orientation === 'horizontal' || orientation === 'both'
+    const isShiftKey = e.shiftKey
 
     let nextIndex = activeIndex
     let handled = false
+    let isExtendSelection = false
 
     switch (e.key) {
       case 'ArrowDown':
@@ -137,6 +148,7 @@ export function useRovingTabIndex<T>({
             ? (activeIndex + 1) % items.length
             : Math.min(activeIndex + 1, items.length - 1)
           handled = true
+          isExtendSelection = isShiftKey && !!onExtendSelection
         }
         break
 
@@ -146,6 +158,7 @@ export function useRovingTabIndex<T>({
             ? (activeIndex - 1 + items.length) % items.length
             : Math.max(activeIndex - 1, 0)
           handled = true
+          isExtendSelection = isShiftKey && !!onExtendSelection
         }
         break
 
@@ -155,6 +168,7 @@ export function useRovingTabIndex<T>({
             ? (activeIndex + 1) % items.length
             : Math.min(activeIndex + 1, items.length - 1)
           handled = true
+          isExtendSelection = isShiftKey && !!onExtendSelection
         }
         break
 
@@ -164,22 +178,26 @@ export function useRovingTabIndex<T>({
             ? (activeIndex - 1 + items.length) % items.length
             : Math.max(activeIndex - 1, 0)
           handled = true
+          isExtendSelection = isShiftKey && !!onExtendSelection
         }
         break
 
       case 'Home':
         nextIndex = 0
         handled = true
+        isExtendSelection = isShiftKey && !!onExtendSelection
         break
 
       case 'End':
         nextIndex = items.length - 1
         handled = true
+        isExtendSelection = isShiftKey && !!onExtendSelection
         break
 
       case 'Enter':
+      case ' ':
         e.preventDefault()
-        onEnter?.(items[activeIndex], activeIndex)
+        onActivate?.(items[activeIndex], activeIndex)
         handled = true
         break
 
@@ -213,10 +231,25 @@ export function useRovingTabIndex<T>({
       e.preventDefault()
       e.stopPropagation()
       if (nextIndex !== activeIndex) {
-        navigateToIndex(nextIndex)
+        if (isExtendSelection) {
+          // Shift+Arrow: extend selection without calling onNavigate
+          onExtendSelection?.(nextIndex)
+          // Update active index for visual feedback
+          setActiveIndexState(nextIndex)
+          // Focus new item if moveFocus is enabled
+          if (moveFocus) {
+            requestAnimationFrame(() => {
+              const id = getId(items[nextIndex], nextIndex)
+              itemRefs.current.get(id)?.focus()
+            })
+          }
+        } else {
+          // Normal navigation
+          navigateToIndex(nextIndex)
+        }
       }
     }
-  }, [enabled, items, activeIndex, orientation, wrap, onEnter, onDelete, onContextMenu, getId, navigateToIndex])
+  }, [enabled, items, activeIndex, orientation, wrap, onActivate, onDelete, onContextMenu, getId, navigateToIndex, onExtendSelection, moveFocus])
 
   const getItemProps = useCallback((item: T, index: number) => {
     const id = getId(item, index)
@@ -233,22 +266,18 @@ export function useRovingTabIndex<T>({
         }
       },
       onKeyDown: handleKeyDown,
+      // onFocus only syncs activeIndex - does NOT trigger selection
+      // This allows components to handle click selection externally
       onFocus: () => {
-        // Sync active index when item is focused (e.g., via tab navigation)
         if (index !== activeIndex) {
           setActiveIndexState(index)
-          onActiveChange?.(item, index)
         }
       },
-      onClick: () => {
-        // Always trigger selection on click, even if already active
-        setActiveIndexState(index)
-        onActiveChange?.(item, index)
-      },
+      // onClick removed - handle selection externally in the component
       'aria-selected': isActive,
       role: 'option' as const,
     }
-  }, [activeIndex, getId, handleKeyDown, onActiveChange])
+  }, [activeIndex, getId, handleKeyDown])
 
   const getContainerProps = useCallback(() => ({
     role: 'listbox' as const,

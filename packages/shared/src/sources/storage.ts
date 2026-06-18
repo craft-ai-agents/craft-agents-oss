@@ -19,9 +19,14 @@ import type {
 } from './types.ts';
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
+import { readJsonFileSync } from '../utils/files.ts';
 import { getBuiltinSources, isBuiltinSource, getDocsSource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
+// Circular import (credential-manager imports from this file) is safe here:
+// getSourceCredentialManager is only referenced lazily inside saveSourceConfig,
+// not at module-eval time.
+import { getSourceCredentialManager } from './credential-manager.ts';
 import {
   validateIconValue,
   findIconFile,
@@ -66,7 +71,7 @@ export function loadSourceConfig(
   if (!existsSync(configPath)) return null;
 
   try {
-    const config = JSON.parse(readFileSync(configPath, 'utf-8')) as FolderSourceConfig;
+    const config = readJsonFileSync<FolderSourceConfig>(configPath);
 
     // Expand path variables in local source paths for portability
     if (config.type === 'local' && config.local?.path) {
@@ -135,6 +140,39 @@ export function saveSourceConfig(
   }
 
   writeFileSync(join(dir, 'config.json'), JSON.stringify(storageConfig, null, 2));
+
+  // Orphan-credential cleanup: when an API source is set to authType:'none',
+  // any credential previously stored for this slug (e.g. from authType:'header')
+  // becomes addressable garbage. getCredentialId() maps 'none', 'header', and
+  // 'query' to the same source_apikey slot, so a stored value can silently
+  // override defaultHeaders on a future config change. Delete it here.
+  if (storageConfig.type === 'api' && storageConfig.api?.authType === 'none') {
+    deleteApiKeyCredentialBestEffort(workspaceRootPath, storageConfig);
+  }
+}
+
+/**
+ * Best-effort delete of the source_apikey credential slot for an API source.
+ * Never throws — credential cleanup must not block config saves.
+ */
+function deleteApiKeyCredentialBestEffort(
+  workspaceRootPath: string,
+  config: FolderSourceConfig
+): void {
+  try {
+    const cm = getSourceCredentialManager();
+    // Minimal LoadedSource shape: getCredentialId() only reads config + workspaceId.
+    const source: LoadedSource = {
+      config,
+      guide: null,
+      folderPath: getSourcePath(workspaceRootPath, config.slug),
+      workspaceRootPath,
+      workspaceId: basename(workspaceRootPath),
+    };
+    cm.deleteSync(source);
+  } catch (err) {
+    debug('[saveSourceConfig] orphan credential cleanup threw:', err);
+  }
 }
 
 // ============================================================
@@ -350,6 +388,26 @@ export function loadWorkspaceSources(workspaceRootPath: string): LoadedSource[] 
  */
 export function getEnabledSources(workspaceRootPath: string): LoadedSource[] {
   return loadWorkspaceSources(workspaceRootPath).filter((s) => s.config.enabled);
+}
+
+/**
+ * Check if a source is ready for use (enabled and authenticated).
+ * Sources with authType: 'none' or undefined are considered authenticated.
+ *
+ * Use this instead of inline `s.config.enabled && s.config.isAuthenticated` checks
+ * to ensure consistent handling of no-auth sources.
+ */
+export function isSourceUsable(source: LoadedSource): boolean {
+  if (!source.config.enabled) return false;
+
+  // Get auth type from MCP or API config
+  const authType = source.config.mcp?.authType || source.config.api?.authType;
+
+  // Sources with no auth requirement are always usable when enabled
+  if (authType === 'none' || authType === undefined) return true;
+
+  // Sources requiring auth must be authenticated
+  return source.config.isAuthenticated === true;
 }
 
 /**

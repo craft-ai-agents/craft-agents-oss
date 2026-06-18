@@ -1,64 +1,47 @@
-/**
- * SourcesListPanel
- *
- * Panel component for displaying workspace sources in the 2nd sidebar.
- * Styled to match SessionList with avatar, title, and subtitle layout.
- */
-
 import * as React from 'react'
-import { useState } from 'react'
-import { MoreHorizontal, DatabaseZap } from 'lucide-react'
-import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
+import { useTranslation } from 'react-i18next'
+import { DatabaseZap } from 'lucide-react'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { deriveConnectionStatus } from '@/components/ui/source-status-indicator'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from '@/components/ui/empty'
-import { getDocUrl } from '@craft-agent/shared/docs/doc-links'
-import { Separator } from '@/components/ui/separator'
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  StyledDropdownMenuContent,
-} from '@/components/ui/styled-dropdown'
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-  StyledContextMenuContent,
-} from '@/components/ui/styled-context-menu'
-import { DropdownMenuProvider, ContextMenuProvider } from '@/components/ui/menu-context'
+import { EntityPanel } from '@/components/ui/entity-panel'
+import { EntityListBadge } from '@/components/ui/entity-list-badge'
+import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
+import { sourceSelection } from '@/hooks/useEntitySelection'
 import { SourceMenu } from './SourceMenu'
+import { SendResourceToWorkspaceDialog } from './SendResourceToWorkspaceDialog'
+import { useAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
-import { cn } from '@/lib/utils'
 import type { LoadedSource, SourceConnectionStatus, SourceFilter } from '../../../shared/types'
+
+const SOURCE_TYPE_CONFIG: Record<string, { labelKey: string; colorClass: string }> = {
+  mcp: { labelKey: 'sourcesList.typeMcp', colorClass: 'bg-accent/10 text-accent' },
+  api: { labelKey: 'sourcesList.typeApi', colorClass: 'bg-success/10 text-success' },
+  local: { labelKey: 'sourcesList.typeLocal', colorClass: 'bg-info/10 text-info' },
+}
+
+const SOURCE_STATUS_CONFIG: Record<string, { labelKey: string; colorClass: string } | null> = {
+  connected: null,
+  needs_auth: { labelKey: 'sourcesList.statusAuthRequired', colorClass: 'bg-warning/10 text-warning' },
+  failed: { labelKey: 'sourcesList.statusDisconnected', colorClass: 'bg-destructive/10 text-destructive' },
+  untested: { labelKey: 'sourcesList.statusNotTested', colorClass: 'bg-foreground/10 text-foreground/50' },
+  local_disabled: { labelKey: 'sourcesList.statusDisabled', colorClass: 'bg-foreground/10 text-foreground/50' },
+}
+
+const SOURCE_TYPE_FILTER_LABEL_KEYS: Record<string, string> = {
+  api: 'sourcesList.filterApi',
+  mcp: 'sourcesList.filterMcp',
+  local: 'sourcesList.filterLocalFolder',
+}
 
 export interface SourcesListPanelProps {
   sources: LoadedSource[]
-  /** Filter to show only sources of a specific type (api, mcp, local) */
   sourceFilter?: SourceFilter | null
-  /** Workspace root path for EditPopover context */
   workspaceRootPath?: string
   onDeleteSource: (sourceSlug: string) => void
   onSourceClick: (source: LoadedSource) => void
   selectedSourceSlug?: string | null
-  /** Whether local MCP servers are enabled (affects stdio source status) */
   localMcpEnabled?: boolean
   className?: string
-}
-
-/**
- * Get user-friendly label for source type filter (for empty state messages)
- */
-function getSourceTypeFilterLabel(sourceType: 'api' | 'mcp' | 'local'): string {
-  switch (sourceType) {
-    case 'api':
-      return 'API'
-    case 'mcp':
-      return 'MCP'
-    case 'local':
-      return 'local folder'
-    default:
-      return sourceType
-  }
 }
 
 export function SourcesListPanel({
@@ -71,49 +54,52 @@ export function SourcesListPanel({
   localMcpEnabled = true,
   className,
 }: SourcesListPanelProps) {
-  // Filter sources based on type filter if active
+  const { t } = useTranslation()
+  const { workspaces, activeWorkspaceId } = useAppShellContext()
+  const hasOtherWorkspaces = workspaces.length > 1
+
+  // Send to Workspace dialog state
+  const [sendDialogOpen, setSendDialogOpen] = React.useState(false)
+  const [sendResourceSlug, setSendResourceSlug] = React.useState<string | null>(null)
+  const [sendResourceLabel, setSendResourceLabel] = React.useState('')
+
   const filteredSources = React.useMemo(() => {
-    if (!sourceFilter) {
-      return sources
-    }
-    // Filter by source type
+    if (!sourceFilter) return sources
     return sources.filter(s => s.config.type === sourceFilter.sourceType)
   }, [sources, sourceFilter])
 
-  // Build empty state message based on filter
   const emptyMessage = React.useMemo(() => {
     if (sourceFilter?.kind === 'type') {
-      return `No ${getSourceTypeFilterLabel(sourceFilter.sourceType)} sources configured.`
+      const filterLabelKey = SOURCE_TYPE_FILTER_LABEL_KEYS[sourceFilter.sourceType]
+      const filterLabel = filterLabelKey ? t(filterLabelKey) : sourceFilter.sourceType
+      return t('sourcesList.noSourcesOfType', { type: filterLabel })
     }
-    return 'No sources configured.'
-  }, [sourceFilter])
+    return t('sourcesList.noSourcesConfigured')
+  }, [sourceFilter, t])
 
-  // Empty state - rendered outside ScrollArea for proper vertical centering
-  if (filteredSources.length === 0) {
-    return (
-      <Empty className={cn('flex-1', className)}>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <DatabaseZap />
-          </EmptyMedia>
-          <EmptyTitle>{emptyMessage}</EmptyTitle>
-          <EmptyDescription>
-            Sources connect your agent to external data — MCP servers, REST APIs, and local folders.
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <button
-            onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}
-            className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-foreground/[0.02] shadow-minimal hover:bg-foreground/[0.05] transition-colors"
-          >
-            Learn more
-          </button>
+  return (
+    <>
+    <EntityPanel<LoadedSource>
+      items={filteredSources}
+      getId={(s) => s.config.slug}
+      selection={sourceSelection}
+      selectedId={selectedSourceSlug}
+      onItemClick={onSourceClick}
+      className={className}
+      containerProps={{ 'data-list-role': 'sources' }}
+      emptyState={
+        <EntityListEmptyScreen
+          icon={<DatabaseZap />}
+          title={emptyMessage}
+          description={t('sourcesList.emptyDescription')}
+          docKey="sources"
+        >
           {workspaceRootPath && (
             <EditPopover
               align="center"
               trigger={
                 <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  Add Source
+                  {t('sourcesList.addSource')}
                 </button>
               }
               {...getEditConfig(
@@ -122,230 +108,57 @@ export function SourcesListPanel({
               )}
             />
           )}
-        </EmptyContent>
-      </Empty>
-    )
-  }
-
-  return (
-    <ScrollArea className={cn('flex-1', className)}>
-      <div className="pb-2">
-        <div className="pt-2">
-          {filteredSources.map((source, index) => (
-            <SourceItem
-              key={`${source.config.slug}-${source.config.connectionStatus}-${source.config.isAuthenticated}-${localMcpEnabled}`}
-              source={source}
-              isSelected={selectedSourceSlug === source.config.slug}
-              isFirst={index === 0}
-              localMcpEnabled={localMcpEnabled}
-              onClick={() => onSourceClick(source)}
-              onDelete={() => onDeleteSource(source.config.slug)}
-            />
-          ))}
-        </div>
-      </div>
-    </ScrollArea>
-  )
-}
-
-interface SourceItemProps {
-  source: LoadedSource
-  isSelected: boolean
-  isFirst: boolean
-  localMcpEnabled: boolean
-  onClick: () => void
-  onDelete: () => void
-}
-
-/**
- * Get display label for source type
- */
-function getSourceTypeLabel(type: string): string {
-  switch (type) {
-    case 'mcp':
-      return 'MCP'
-    case 'api':
-      return 'API'
-    case 'local':
-      return 'Local'
-    default:
-      return type
-  }
-}
-
-/**
- * Get color classes for source type badge
- */
-function getSourceTypeBadgeClasses(type: string): string {
-  switch (type) {
-    case 'mcp':
-      return 'bg-accent/10 text-accent'
-    case 'api':
-      return 'bg-success/10 text-success'
-    case 'local':
-      return 'bg-info/10 text-info'
-    default:
-      return 'bg-foreground/10 text-foreground/70'
-  }
-}
-
-/**
- * Get status badge info for non-connected sources
- * Returns null if source is connected (no badge needed)
- */
-function getStatusBadge(status: SourceConnectionStatus): { label: string; classes: string } | null {
-  switch (status) {
-    case 'connected':
-      return null // No badge for connected sources
-    case 'needs_auth':
-      return { label: 'Auth Required', classes: 'bg-warning/10 text-warning' }
-    case 'failed':
-      return { label: 'Disconnected', classes: 'bg-destructive/10 text-destructive' }
-    case 'untested':
-      return { label: 'Not Tested', classes: 'bg-foreground/10 text-foreground/50' }
-    case 'local_disabled':
-      return { label: 'Disabled', classes: 'bg-foreground/10 text-foreground/50' }
-    default:
-      return null
-  }
-}
-
-function SourceItem({ source, isSelected, isFirst, localMcpEnabled, onClick, onDelete }: SourceItemProps) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [contextMenuOpen, setContextMenuOpen] = useState(false)
-  const { config } = source
-
-  // Build subtitle text: provider or tagline
-  const subtitle = config.tagline || config.provider || ''
-
-  // Get connection status and badge info (pass localMcpEnabled for stdio sources)
-  const connectionStatus = deriveConnectionStatus(source, localMcpEnabled)
-  const statusBadge = getStatusBadge(connectionStatus)
-
-  return (
-    <div className="source-item" data-selected={isSelected || undefined} data-tutorial={isFirst ? "source-item-first" : undefined}>
-      {/* Separator - only show if not first */}
-      {!isFirst && (
-        <div className="source-separator pl-12 pr-4">
-          <Separator />
-        </div>
-      )}
-      {/* Wrapper for button + dropdown + context menu, group for hover state */}
-      <ContextMenu modal={true} onOpenChange={setContextMenuOpen}>
-        <ContextMenuTrigger asChild>
-          <div className="source-content relative group select-none pl-2 mr-2">
-        {/* Source Avatar - positioned absolutely, like todo icon */}
-        <div className="absolute left-[18px] top-3.5 z-10 flex items-center justify-center">
-          <SourceAvatar source={source} size="sm" />
-        </div>
-        {/* Main content button */}
-        <button
-          className={cn(
-            "flex w-full items-start gap-2 pl-2 pr-4 py-3 text-left text-sm transition-all outline-none rounded-[8px]",
-            isSelected
-              ? "bg-foreground/5 hover:bg-foreground/7"
-              : "hover:bg-foreground/2"
-          )}
-          onClick={onClick}
-        >
-          {/* Spacer for avatar */}
-          <div className="w-5 h-5 shrink-0" />
-          {/* Content column */}
-          <div className="flex flex-col gap-1.5 min-w-0 flex-1">
-            {/* Title - source name */}
-            <div className="flex items-start gap-2 w-full pr-6 min-w-0">
-              <div className="font-medium font-sans line-clamp-2 min-w-0 -mb-[2px]">
-                {config.name}
-              </div>
-            </div>
-            {/* Subtitle - type badge + status badge + tagline/description */}
-            <div className="flex items-center gap-1.5 text-xs text-foreground/70 w-full -mb-[2px] pr-6 min-w-0">
-              {/* Type badge */}
-              <span className={cn(
-                "shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded",
-                getSourceTypeBadgeClasses(config.type)
-              )}>
-                {getSourceTypeLabel(config.type)}
-              </span>
-              {/* Status badge with tooltip showing connection error details on hover */}
-              {statusBadge && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className={cn(
-                      "shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded cursor-default",
-                      statusBadge.classes
-                    )}>
-                      {statusBadge.label}
-                    </span>
-                  </TooltipTrigger>
-                  {config.connectionError && (
-                    <TooltipContent side="top" className="max-w-xs">
-                      <span className="text-xs">{config.connectionError}</span>
-                    </TooltipContent>
-                  )}
-                </Tooltip>
+        </EntityListEmptyScreen>
+      }
+      mapItem={(source) => {
+        const connectionStatus = deriveConnectionStatus(source, localMcpEnabled)
+        const typeConfig = SOURCE_TYPE_CONFIG[source.config.type]
+        const statusConfig = SOURCE_STATUS_CONFIG[connectionStatus]
+        const subtitle = source.config.tagline || source.config.provider || ''
+        return {
+          icon: <SourceAvatar source={source} size="sm" />,
+          title: source.config.name,
+          badges: (
+            <>
+              {typeConfig && <EntityListBadge colorClass={typeConfig.colorClass}>{t(typeConfig.labelKey)}</EntityListBadge>}
+              {statusConfig && (
+                <EntityListBadge colorClass={statusConfig.colorClass} tooltip={source.config.connectionError || undefined} className="cursor-default">
+                  {t(statusConfig.labelKey)}
+                </EntityListBadge>
               )}
-              {/* Tagline/description */}
-              {subtitle && (
-                <span className="truncate">
-                  {subtitle}
-                </span>
-              )}
-            </div>
-          </div>
-        </button>
-        {/* Action buttons - visible on hover or when menu is open */}
-        <div
-          className={cn(
-            "absolute right-2 top-2 transition-opacity z-10",
-            menuOpen || contextMenuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-          )}
-        >
-          {/* More menu */}
-          <div className="flex items-center rounded-[8px] overflow-hidden border border-transparent hover:border-border/50">
-            <DropdownMenu modal={true} onOpenChange={setMenuOpen}>
-              <DropdownMenuTrigger asChild>
-                <div className="p-1.5 hover:bg-foreground/10 data-[state=open]:bg-foreground/10 cursor-pointer">
-                  <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </DropdownMenuTrigger>
-              <StyledDropdownMenuContent align="end">
-                <DropdownMenuProvider>
-                  <SourceMenu
-                    sourceSlug={config.slug}
-                    sourceName={config.name}
-                    onOpenInNewWindow={() => {
-                      window.electronAPI.openUrl(`craftagents://sources/source/${config.slug}?window=focused`)
-                    }}
-                    onShowInFinder={() => {
-                      window.electronAPI.showInFolder(source.folderPath)
-                    }}
-                    onDelete={onDelete}
-                  />
-                </DropdownMenuProvider>
-              </StyledDropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-          </div>
-        </ContextMenuTrigger>
-        {/* Context menu - same content as dropdown */}
-        <StyledContextMenuContent>
-          <ContextMenuProvider>
+              {subtitle && <span className="truncate">{subtitle}</span>}
+            </>
+          ),
+          menu: (
             <SourceMenu
-              sourceSlug={config.slug}
-              sourceName={config.name}
-              onOpenInNewWindow={() => {
-                window.electronAPI.openUrl(`craftagents://sources/source/${config.slug}?window=focused`)
-              }}
-              onShowInFinder={() => {
-                window.electronAPI.showInFolder(source.folderPath)
-              }}
-              onDelete={onDelete}
+              sourceSlug={source.config.slug}
+              sourceName={source.config.name}
+              onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://sources/source/${source.config.slug}?window=focused`)}
+              onShowInFinder={() => window.electronAPI.showInFolder(source.folderPath)}
+              onDelete={() => onDeleteSource(source.config.slug)}
+              onSendToWorkspace={hasOtherWorkspaces ? () => {
+                setSendResourceSlug(source.config.slug)
+                setSendResourceLabel(source.config.name)
+                setSendDialogOpen(true)
+              } : undefined}
             />
-          </ContextMenuProvider>
-        </StyledContextMenuContent>
-      </ContextMenu>
-    </div>
+          ),
+        }
+      }}
+    />
+
+    {/* Send to Workspace dialog */}
+    {sendResourceSlug && (
+      <SendResourceToWorkspaceDialog
+        open={sendDialogOpen}
+        onOpenChange={setSendDialogOpen}
+        resourceType="source"
+        resourceIds={[sendResourceSlug]}
+        resourceLabel={sendResourceLabel}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+      />
+    )}
+    </>
   )
 }

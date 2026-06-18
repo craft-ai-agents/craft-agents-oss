@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type { WorkspaceLabelConfig, LabelConfig } from './types.ts';
 import { flattenLabels, findLabelById } from './tree.ts';
+import { readJsonFileSync } from '../utils/files.ts';
 import { migrateLabelColors } from '../colors/migrate.ts';
 import { debug } from '../utils/debug.ts';
 
@@ -110,7 +111,7 @@ export function loadLabelConfig(workspaceRootPath: string): WorkspaceLabelConfig
   }
 
   try {
-    const config = JSON.parse(readFileSync(configPath, 'utf-8')) as WorkspaceLabelConfig;
+    const config = readJsonFileSync<WorkspaceLabelConfig>(configPath);
 
     // Auto-migrate old Tailwind class colors (e.g., "text-accent") to new EntityColor format.
     // If migration occurs, write the updated config back to disk.

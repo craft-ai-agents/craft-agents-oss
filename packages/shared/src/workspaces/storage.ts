@@ -19,10 +19,12 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { randomUUID } from 'crypto';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
+import { atomicWriteFileSync, readJsonFileSync } from '../utils/files.ts';
 import { getDefaultStatusConfig, saveStatusConfig, ensureDefaultIconFiles } from '../statuses/storage.ts';
 import { getDefaultLabelConfig, saveLabelConfig } from '../labels/storage.ts';
 import { loadConfigDefaults } from '../config/storage.ts';
-import { DEFAULT_MODEL } from '../config/models.ts';
+import { parsePermissionMode, PERMISSION_MODE_ORDER } from '../agent/mode-types.ts';
+import { normalizeThinkingLevel } from '../agent/thinking-levels.ts';
 import type {
   WorkspaceConfig,
   CreateWorkspaceInput,
@@ -99,11 +101,34 @@ export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
   if (!existsSync(configPath)) return null;
 
   try {
-    const config = JSON.parse(readFileSync(configPath, 'utf-8')) as WorkspaceConfig;
+    const config = readJsonFileSync<WorkspaceConfig>(configPath);
 
     // Expand path variables in defaults for portability
     if (config.defaults?.workingDirectory) {
       config.defaults.workingDirectory = expandPath(config.defaults.workingDirectory);
+    }
+
+    // Compatibility: accept canonical or legacy permission mode names on read
+    if (config.defaults?.permissionMode && typeof config.defaults.permissionMode === 'string') {
+      const parsed = parsePermissionMode(config.defaults.permissionMode);
+      config.defaults.permissionMode = parsed ?? undefined;
+    }
+
+    if (Array.isArray(config.defaults?.cyclablePermissionModes)) {
+      const normalized = config.defaults.cyclablePermissionModes
+        .map(mode => (typeof mode === 'string' ? parsePermissionMode(mode) : null))
+        .filter((mode): mode is NonNullable<typeof mode> => !!mode)
+        .filter((mode, index, arr) => arr.indexOf(mode) === index);
+
+      config.defaults.cyclablePermissionModes = normalized.length >= 2
+        ? normalized
+        : [...PERMISSION_MODE_ORDER];
+    }
+
+    if (config.defaults && 'thinkingLevel' in config.defaults) {
+      // TODO: Remove legacy 'think' normalization after old persisted workspace configs
+      // have realistically aged out across upgrades.
+      config.defaults.thinkingLevel = normalizeThinkingLevel(config.defaults.thinkingLevel);
     }
 
     return config;
@@ -134,7 +159,8 @@ export function saveWorkspaceConfig(rootPath: string, config: WorkspaceConfig): 
     };
   }
 
-  writeFileSync(join(rootPath, 'config.json'), JSON.stringify(storageConfig, null, 2));
+  // Use atomic write to prevent corruption on crash/interrupt
+  atomicWriteFileSync(join(rootPath, 'config.json'), JSON.stringify(storageConfig, null, 2));
 }
 
 // ============================================================
@@ -275,11 +301,14 @@ export function createWorkspaceAtPath(
   const globalDefaults = loadConfigDefaults();
 
   // Merge global defaults with provided defaults
+  // AI settings (model, thinkingLevel, defaultLlmConnection) are left undefined
+  // so they fall back to app-level defaults
   const workspaceDefaults: WorkspaceConfig['defaults'] = {
-    model: DEFAULT_MODEL,
+    model: undefined,
+    thinkingLevel: undefined,
+    // defaultLlmConnection: undefined - falls back to app default
     permissionMode: globalDefaults.workspaceDefaults.permissionMode,
     cyclablePermissionModes: globalDefaults.workspaceDefaults.cyclablePermissionModes,
-    thinkingLevel: globalDefaults.workspaceDefaults.thinkingLevel,
     enabledSourceSlugs: [],
     workingDirectory: undefined,
     ...defaults, // User-provided defaults override global defaults
@@ -384,6 +413,56 @@ export function discoverWorkspacesInDefaultLocation(): string[] {
   }
 
   return discovered;
+}
+
+// ============================================================
+// Workspace Color Theme
+// ============================================================
+
+/**
+ * Get the color theme setting for a workspace.
+ * Returns undefined if workspace uses the app default.
+ *
+ * @param rootPath - Absolute path to workspace root folder
+ * @returns Theme ID or undefined (inherit from app default)
+ */
+export function getWorkspaceColorTheme(rootPath: string): string | undefined {
+  const config = loadWorkspaceConfig(rootPath);
+  return config?.defaults?.colorTheme;
+}
+
+/**
+ * Set the color theme for a workspace.
+ * Pass undefined to clear and use app default.
+ *
+ * @param rootPath - Absolute path to workspace root folder
+ * @param themeId - Preset theme ID or undefined to inherit
+ */
+export function setWorkspaceColorTheme(rootPath: string, themeId: string | undefined): void {
+  const config = loadWorkspaceConfig(rootPath);
+  if (!config) return;
+
+  // Validate theme ID if provided (skip for undefined = inherit default)
+  // Only allow alphanumeric characters, hyphens, and underscores (max 64 chars)
+  if (themeId && themeId !== 'default') {
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(themeId)) {
+      console.warn(`[workspace-storage] Invalid theme ID rejected: ${themeId}`);
+      return;
+    }
+  }
+
+  // Initialize defaults if not present
+  if (!config.defaults) {
+    config.defaults = {};
+  }
+
+  if (themeId) {
+    config.defaults.colorTheme = themeId;
+  } else {
+    delete config.defaults.colorTheme;
+  }
+
+  saveWorkspaceConfig(rootPath, config);
 }
 
 // ============================================================

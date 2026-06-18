@@ -20,7 +20,7 @@ export interface ComponentVariant {
   props: Record<string, unknown>
 }
 
-export type Category = 'Sources' | 'Onboarding' | 'Agent Setup' | 'Chat' | 'Session List' | 'Edit Popover' | 'Turn Cards' | 'TurnCard Modes' | 'Fullscreen' | 'Chat Messages' | 'Chat Inputs' | 'Toast Messages' | 'Markdown' | 'Icons' | 'Settings' | 'Feedback' | 'OAuth'
+export type Category = 'Sources' | 'Automations' | 'Mobile WebUI' | 'Onboarding' | 'Agent Setup' | 'Chat' | 'Island' | 'Browser' | 'Planner' | 'Custom Shadows' | 'Session List' | 'Entity Lists' | 'Edit Popover' | 'Turn Cards' | 'TurnCard Modes' | 'Fullscreen' | 'Chat Messages' | 'Chat Inputs' | 'Toast Messages' | 'Markdown' | 'Icons' | 'Settings' | 'Messaging' | 'Feedback' | 'OAuth'
 
 export interface ComponentEntry {
   id: string
@@ -37,6 +37,8 @@ export interface ComponentEntry {
   wrapper?: ComponentType<{ children: ReactNode }>
   /** Layout mode: 'centered' (default), 'top' for scrollable content, 'full' for full-height flex layout */
   layout?: 'centered' | 'top' | 'full'
+  /** Optional preview overflow override for the component preview box */
+  previewOverflow?: 'auto' | 'hidden' | 'visible'
 }
 
 export interface CategoryGroup {

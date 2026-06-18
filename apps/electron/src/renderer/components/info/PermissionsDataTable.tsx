@@ -6,7 +6,9 @@
  */
 
 import * as React from 'react'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Maximize2 } from 'lucide-react'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
@@ -51,12 +53,13 @@ interface PermissionsDataTableProps {
  * - Click to copy pattern to clipboard with toast notification
  */
 function PatternBadge({ pattern }: { pattern: string }) {
+  const { t } = useTranslation()
   const handleClick = async () => {
     try {
       await navigator.clipboard.writeText(pattern)
-      toast.success('Pattern copied to clipboard')
+      toast.success(t('toast.patternCopied'))
     } catch {
-      toast.error('Failed to copy pattern')
+      toast.error(t('toast.failedToCopyPattern'))
     }
   }
 
@@ -84,89 +87,93 @@ function PatternBadge({ pattern }: { pattern: string }) {
 }
 
 // Column definitions with sorting
-const columnsWithType: ColumnDef<PermissionRow>[] = [
-  {
-    accessorKey: 'access',
-    header: ({ column }) => <SortableHeader column={column} title="Access" />,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <Info_StatusBadge status={row.original.access} className="whitespace-nowrap" />
-      </div>
-    ),
-    minSize: 80,
-  },
-  {
-    accessorKey: 'type',
-    header: ({ column }) => <SortableHeader column={column} title="Type" />,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <Info_Badge color="muted" className="capitalize whitespace-nowrap">
-          {row.original.type}
-        </Info_Badge>
-      </div>
-    ),
-    minSize: 80,
-  },
-  {
-    accessorKey: 'pattern',
-    header: ({ column }) => <SortableHeader column={column} title="Pattern" />,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <PatternBadge pattern={row.original.pattern} />
-      </div>
-    ),
-    minSize: 100,
-  },
-  {
-    id: 'comment',
-    accessorKey: 'comment',
-    header: () => <span className="p-1.5 pl-2.5">Comment</span>,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5 min-w-0">
-        <span className="truncate block">
-          {row.original.comment || '—'}
-        </span>
-      </div>
-    ),
-    meta: { fillWidth: true, truncate: true },
-  },
-]
+function getColumnsWithType(t: TFunction): ColumnDef<PermissionRow>[] {
+  return [
+    {
+      accessorKey: 'access',
+      header: ({ column }) => <SortableHeader column={column} title={t("table.access")} />,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          <Info_StatusBadge status={row.original.access} className="whitespace-nowrap" />
+        </div>
+      ),
+      minSize: 80,
+    },
+    {
+      accessorKey: 'type',
+      header: ({ column }) => <SortableHeader column={column} title={t("common.type")} />,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          <Info_Badge color="muted" className="capitalize whitespace-nowrap">
+            {row.original.type}
+          </Info_Badge>
+        </div>
+      ),
+      minSize: 80,
+    },
+    {
+      accessorKey: 'pattern',
+      header: ({ column }) => <SortableHeader column={column} title={t("table.pattern")} />,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          <PatternBadge pattern={row.original.pattern} />
+        </div>
+      ),
+      minSize: 100,
+    },
+    {
+      id: 'comment',
+      accessorKey: 'comment',
+      header: () => <span className="p-1.5 pl-2.5">{t("table.comment")}</span>,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5 min-w-0">
+          <span className="truncate block">
+            {row.original.comment || '—'}
+          </span>
+        </div>
+      ),
+      meta: { fillWidth: true, truncate: true },
+    },
+  ]
+}
 
-const columnsWithoutType: ColumnDef<PermissionRow>[] = [
-  {
-    accessorKey: 'access',
-    header: ({ column }) => <SortableHeader column={column} title="Access" />,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <Info_StatusBadge status={row.original.access} className="whitespace-nowrap" />
-      </div>
-    ),
-    minSize: 80,
-  },
-  {
-    accessorKey: 'pattern',
-    header: ({ column }) => <SortableHeader column={column} title="Pattern" />,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <PatternBadge pattern={row.original.pattern} />
-      </div>
-    ),
-    minSize: 100,
-  },
-  {
-    id: 'comment',
-    accessorKey: 'comment',
-    header: () => <span className="p-1.5 pl-2.5">Comment</span>,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5 min-w-0">
-        <span className="truncate block">
-          {row.original.comment || '—'}
-        </span>
-      </div>
-    ),
-    meta: { fillWidth: true, truncate: true },
-  },
-]
+function getColumnsWithoutType(t: TFunction): ColumnDef<PermissionRow>[] {
+  return [
+    {
+      accessorKey: 'access',
+      header: ({ column }) => <SortableHeader column={column} title={t("table.access")} />,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          <Info_StatusBadge status={row.original.access} className="whitespace-nowrap" />
+        </div>
+      ),
+      minSize: 80,
+    },
+    {
+      accessorKey: 'pattern',
+      header: ({ column }) => <SortableHeader column={column} title={t("table.pattern")} />,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          <PatternBadge pattern={row.original.pattern} />
+        </div>
+      ),
+      minSize: 100,
+    },
+    {
+      id: 'comment',
+      accessorKey: 'comment',
+      header: () => <span className="p-1.5 pl-2.5">{t("table.comment")}</span>,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5 min-w-0">
+          <span className="truncate block">
+            {row.original.comment || '—'}
+          </span>
+        </div>
+      ),
+      meta: { fillWidth: true, truncate: true },
+    },
+  ]
+}
 
 export function PermissionsDataTable({
   data,
@@ -177,8 +184,11 @@ export function PermissionsDataTable({
   fullscreenTitle = 'Permissions',
   className,
 }: PermissionsDataTableProps) {
+  const { t } = useTranslation()
   const [isFullscreen, setIsFullscreen] = useState(false)
   const { isDark } = useTheme()
+  const columnsWithType = useMemo(() => getColumnsWithType(t), [t])
+  const columnsWithoutType = useMemo(() => getColumnsWithoutType(t), [t])
   const columns = hideTypeColumn ? columnsWithoutType : columnsWithType
 
   // Fullscreen button for toolbar - shown on hover
@@ -192,7 +202,7 @@ export function PermissionsDataTable({
         'text-muted-foreground/50 hover:text-foreground',
         'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100'
       )}
-      title="View Fullscreen"
+      title={t("table.viewFullscreen")}
     >
       <Maximize2 className="w-3.5 h-3.5" />
     </button>
@@ -203,9 +213,9 @@ export function PermissionsDataTable({
       <Info_DataTable
         columns={columns}
         data={data}
-        searchable={searchable ? { placeholder: 'Search patterns...' } : false}
+        searchable={searchable ? { placeholder: t("table.searchPatterns") } : false}
         maxHeight={maxHeight}
-        emptyContent="No permissions configured"
+        emptyContent={t("table.noPermissionsConfigured")}
         floatingAction={fullscreenButton}
         className={cn(fullscreen && 'group', className)}
       />
@@ -216,14 +226,14 @@ export function PermissionsDataTable({
           isOpen={isFullscreen}
           onClose={() => setIsFullscreen(false)}
           title={fullscreenTitle}
-          subtitle={`${data.length} ${data.length === 1 ? 'rule' : 'rules'}`}
+          subtitle={t("table.ruleCount", { count: data.length })}
           theme={isDark ? 'dark' : 'light'}
         >
           <Info_DataTable
             columns={columns}
             data={data}
-            searchable={searchable ? { placeholder: 'Search patterns...' } : false}
-            emptyContent="No permissions configured"
+            searchable={searchable ? { placeholder: t("table.searchPatterns") } : false}
+            emptyContent={t("table.noPermissionsConfigured")}
           />
         </DataTableOverlay>
       )}

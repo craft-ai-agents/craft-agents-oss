@@ -5,7 +5,7 @@
  * - Centered content card with max-width
  * - Copy button via FullscreenOverlayBase's built-in copyContent prop
  * - Optional "Plan" header variant
- * - Optional filePath badge with dual-trigger menu (Open / Reveal in Finder)
+ * - Optional filePath badge with dual-trigger menu (Open / Reveal in {file manager})
  *
  * Background and scenic blur are provided by FullscreenOverlayBase.
  * Uses FullscreenOverlayBase for portal, traffic lights, ESC handling, and header.
@@ -13,8 +13,11 @@
 
 import { ListTodo } from 'lucide-react'
 import { Markdown } from '../markdown'
+import type { AnnotationV1 } from '@craft-agent/core'
+import type { ExternalOpenAnnotationRequest } from '../annotations/use-annotation-interaction-controller'
 import { FullscreenOverlayBase } from './FullscreenOverlayBase'
 import type { OverlayTypeBadge } from './FullscreenOverlayBaseHeader'
+import { AnnotatableMarkdownDocument } from './AnnotatableMarkdownDocument'
 
 export interface DocumentFormattedMarkdownOverlayProps {
   /** The content to display (markdown) */
@@ -29,12 +32,30 @@ export interface DocumentFormattedMarkdownOverlayProps {
   onOpenUrl?: (url: string) => void
   /** Callback for file path clicks */
   onOpenFile?: (path: string) => void
-  /** Optional file path — shows badge with "Open" / "Reveal in Finder" menu */
+  /** Optional file path — shows badge with "Open" / "Reveal in {file manager}" menu */
   filePath?: string
   /** Optional type badge — tool/format indicator (e.g. "Write") shown in header */
   typeBadge?: OverlayTypeBadge
   /** Optional error message — renders a tinted error banner above the content card */
   error?: string
+  /** Optional session id used for annotation payload source metadata */
+  sessionId?: string
+  /** Optional message id; when present with callbacks, overlay becomes annotatable */
+  messageId?: string
+  /** Persisted annotations for the message */
+  annotations?: AnnotationV1[]
+  /** Callback to add annotation */
+  onAddAnnotation?: (messageId: string, annotation: AnnotationV1) => void
+  /** Callback to remove annotation */
+  onRemoveAnnotation?: (messageId: string, annotationId: string) => void
+  /** Callback to update annotation */
+  onUpdateAnnotation?: (messageId: string, annotationId: string, patch: Partial<AnnotationV1>) => void
+  /** Input send key behavior used by follow-up editor */
+  sendMessageKey?: 'enter' | 'cmd-enter'
+  /** Whether source content is currently streaming (affects annotation eligibility parity) */
+  isStreaming?: boolean
+  /** Optional external request to open a specific annotation */
+  openAnnotationRequest?: ExternalOpenAnnotationRequest | null
 }
 
 export function DocumentFormattedMarkdownOverlay({
@@ -47,6 +68,15 @@ export function DocumentFormattedMarkdownOverlay({
   filePath,
   typeBadge,
   error,
+  sessionId,
+  messageId,
+  annotations,
+  onAddAnnotation,
+  onRemoveAnnotation,
+  onUpdateAnnotation,
+  sendMessageKey = 'enter',
+  isStreaming = false,
+  openAnnotationRequest,
 }: DocumentFormattedMarkdownOverlayProps) {
   return (
     <FullscreenOverlayBase
@@ -73,14 +103,32 @@ export function DocumentFormattedMarkdownOverlay({
           {/* Content area */}
           <div className="px-10 pt-8 pb-8">
             <div className="text-sm">
-              <Markdown
-                mode="minimal"
-                onUrlClick={onOpenUrl}
-                onFileClick={onOpenFile}
-                hideFirstMermaidExpand={false}
-              >
-                {content}
-              </Markdown>
+              {messageId && onAddAnnotation ? (
+                <AnnotatableMarkdownDocument
+                  content={content}
+                  sessionId={sessionId}
+                  messageId={messageId}
+                  annotations={annotations}
+                  onAddAnnotation={onAddAnnotation}
+                  onRemoveAnnotation={onRemoveAnnotation}
+                  onUpdateAnnotation={onUpdateAnnotation}
+                  onOpenUrl={onOpenUrl}
+                  onOpenFile={onOpenFile}
+                  sendMessageKey={sendMessageKey}
+                  islandZIndex={420}
+                  openAnnotationRequest={openAnnotationRequest}
+                  isStreaming={isStreaming}
+                />
+              ) : (
+                <Markdown
+                  mode="minimal"
+                  onUrlClick={onOpenUrl}
+                  onFileClick={onOpenFile}
+                  hideFirstMermaidExpand={false}
+                >
+                  {content}
+                </Markdown>
+              )}
             </div>
           </div>
         </div>

@@ -3,6 +3,7 @@
  */
 
 import { Sun, Moon, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 /**
  * CraftAgentLogo - The Craft Agent "C" logo
@@ -34,6 +35,7 @@ interface HeaderProps {
 }
 
 export function Header({ hasSession, sessionTitle, isDark, onToggleTheme, onClear }: HeaderProps) {
+  const { t } = useTranslation()
   return (
     <header className="shrink-0 grid grid-cols-[auto_1fr_auto] items-center px-4 py-3">
       {/* Logo - links to main site */}
@@ -60,7 +62,7 @@ export function Header({ hasSession, sessionTitle, isDark, onToggleTheme, onClea
           <button
             onClick={onClear}
             className="p-1.5 rounded-md bg-background shadow-minimal text-foreground/40 hover:text-foreground/70 transition-colors"
-            title="Clear session"
+            title={t('viewer.clearSession')}
           >
             <X className="w-4 h-4" />
           </button>

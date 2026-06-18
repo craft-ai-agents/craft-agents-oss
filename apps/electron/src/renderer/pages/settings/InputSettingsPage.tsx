@@ -10,12 +10,13 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
+import { isMac } from '@/lib/platform'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
-import { useI18n } from '@/i18n'
 
 import {
   SettingsSection,
@@ -34,7 +35,7 @@ export const meta: DetailsPageMeta = {
 // ============================================
 
 export default function InputSettingsPage() {
-  const { t } = useI18n('settings')
+  const { t } = useTranslation()
 
   // Auto-capitalisation state
   const [autoCapitalisation, setAutoCapitalisation] = useState(true)
@@ -75,30 +76,31 @@ export default function InputSettingsPage() {
     await window.electronAPI.setSpellCheck(enabled)
   }, [])
 
-  const handleSendMessageKeyChange = useCallback(async (key: 'enter' | 'cmd-enter') => {
+  const handleSendMessageKeyChange = useCallback((value: string) => {
+    const key = value as 'enter' | 'cmd-enter'
     setSendMessageKey(key)
-    await window.electronAPI.setSendMessageKey(key)
+    window.electronAPI.setSendMessageKey(key)
   }, [])
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title={t('input.title')} actions={<HeaderMenu route={routes.view.settings('input')} />} />
+      <PanelHeader title={t("settings.input.title")} actions={<HeaderMenu route={routes.view.settings('input')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
             <div className="space-y-8">
               {/* Typing Behavior */}
-              <SettingsSection title={t('input.typing.title')} description={t('input.typing.description')}>
+              <SettingsSection title={t("settings.input.typing")} description={t("settings.input.typingDesc")}>
                 <SettingsCard>
                   <SettingsToggle
-                    label={t('input.typing.autoCapitalisation')}
-                    description={t('input.typing.autoCapitalisationDescription')}
+                    label={t("settings.input.autoCapitalisation")}
+                    description={t("settings.input.autoCapitalisationDesc")}
                     checked={autoCapitalisation}
                     onCheckedChange={handleAutoCapitalisationChange}
                   />
                   <SettingsToggle
-                    label={t('input.typing.spellCheck')}
-                    description={t('input.typing.spellCheckDescription')}
+                    label={t("settings.input.spellCheck")}
+                    description={t("settings.input.spellCheckDesc")}
                     checked={spellCheck}
                     onCheckedChange={handleSpellCheckChange}
                   />
@@ -106,16 +108,16 @@ export default function InputSettingsPage() {
               </SettingsSection>
 
               {/* Send Behavior */}
-              <SettingsSection title={t('input.sending.title')} description={t('input.sending.description')}>
+              <SettingsSection title={t("settings.input.sending")} description={t("settings.input.sendingDesc")}>
                 <SettingsCard>
                   <SettingsMenuSelectRow
-                    label={t('input.sending.sendMessageWith')}
-                    description={t('input.sending.sendMessageWithDescription')}
+                    label={t("settings.input.sendMessageWith")}
+                    description={t("settings.input.sendMessageWithDesc")}
                     value={sendMessageKey}
                     onValueChange={handleSendMessageKeyChange}
                     options={[
-                      { value: 'enter', label: t('input.sending.enterOption'), description: t('input.sending.enterOptionDescription') },
-                      { value: 'cmd-enter', label: t('input.sending.cmdEnterOption'), description: t('input.sending.cmdEnterOptionDescription') },
+                      { value: 'enter', label: t("settings.input.enterKey"), description: t("settings.input.enterKeyDesc") },
+                      { value: 'cmd-enter', label: isMac ? t("settings.input.cmdEnterKey") : t("settings.input.ctrlEnterKey"), description: t("settings.input.cmdEnterKeyDesc") },
                     ]}
                   />
                 </SettingsCard>

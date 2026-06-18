@@ -20,6 +20,7 @@ const proc = spawn({
   cwd: ROOT_DIR,
   stdout: "inherit",
   stderr: "inherit",
+  env: { ...process.env, NODE_OPTIONS: "--max-old-space-size=4096" },
 });
 
 const exitCode = await proc.exited;

@@ -8,7 +8,7 @@ $ElectronDir = Split-Path -Parent $ScriptDir
 $RootDir = Split-Path -Parent (Split-Path -Parent $ElectronDir)
 
 # Configuration
-$BunVersion = "bun-v1.3.5"  # Pinned version for reproducible builds
+$BunVersion = "bun-v1.3.9"  # Pinned version for reproducible builds
 
 Write-Host "=== Building Craft Agents Windows Installer using electron-builder ===" -ForegroundColor Cyan
 
@@ -154,26 +154,92 @@ try {
     Remove-Item -Recurse -Force $TempDir -ErrorAction SilentlyContinue
 }
 
-# 4. Copy SDK from root node_modules (monorepo hoisting)
+# 4. Copy SDK from root node_modules (monorepo hoisting).
+# Since SDK 0.2.113: thin core + per-platform binary package.
+# See apps/electron/scripts/build-dmg.sh for the full rationale.
 $SdkSource = "$RootDir\node_modules\@anthropic-ai\claude-agent-sdk"
 if (-not (Test-Path $SdkSource)) {
-    Write-Host "ERROR: SDK not found at $SdkSource" -ForegroundColor Red
+    Write-Host "ERROR: SDK core not found at $SdkSource" -ForegroundColor Red
     Write-Host "Run 'bun install' from the repository root first."
     exit 1
 }
-Write-Host "Copying SDK..."
+Write-Host "Copying SDK core..."
 New-Item -ItemType Directory -Force -Path "$ElectronDir\node_modules\@anthropic-ai" | Out-Null
+Remove-Item -Recurse -Force "$ElectronDir\node_modules\@anthropic-ai\claude-agent-sdk" -ErrorAction SilentlyContinue
 Copy-Item -Recurse -Force $SdkSource "$ElectronDir\node_modules\@anthropic-ai\"
 
-# 5. Copy interceptor
-$InterceptorSource = "$RootDir\packages\shared\src\network-interceptor.ts"
+# 4a. Resolve the target arch's binary package (cross-fetch from npm if absent).
+# Target arch is hard-coded x64 — Windows arm64 is not currently shipped.
+$SdkBinPkg = "claude-agent-sdk-win32-x64"
+$SdkBinSource = "$RootDir\node_modules\@anthropic-ai\$SdkBinPkg"
+if (-not (Test-Path $SdkBinSource)) {
+    Write-Host "Cross-arch build: $SdkBinPkg not in node_modules — fetching from npm..."
+    $SdkVersion = (node -p "require('$RootDir/package.json'.replace(/\\/g, '/')).dependencies['@anthropic-ai/claude-agent-sdk']").Trim('"')
+    $PkgTmp = New-Item -ItemType Directory -Path ([System.IO.Path]::Combine($env:TEMP, [System.Guid]::NewGuid().ToString()))
+    try {
+        Push-Location $PkgTmp
+        npm pack "@anthropic-ai/$SdkBinPkg@$SdkVersion" | Out-Null
+        $Tarball = Get-ChildItem -Filter "anthropic-ai-*.tgz" | Select-Object -First 1
+        tar -xzf $Tarball.Name
+        Pop-Location
+        New-Item -ItemType Directory -Force -Path $SdkBinSource | Out-Null
+        Copy-Item -Recurse -Force "$PkgTmp\package\*" $SdkBinSource
+    } finally {
+        Remove-Item -Recurse -Force $PkgTmp -ErrorAction SilentlyContinue
+    }
+}
+
+if (-not (Test-Path $SdkBinSource)) {
+    Write-Host "ERROR: SDK native binary package ($SdkBinPkg) not found at $SdkBinSource" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "Staging SDK native binary as claude-agent-sdk-binary alias..."
+$AliasDest = "$ElectronDir\node_modules\@anthropic-ai\claude-agent-sdk-binary"
+Remove-Item -Recurse -Force $AliasDest -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $AliasDest | Out-Null
+Copy-Item -Recurse -Force "$SdkBinSource\*" $AliasDest
+
+$BinPath = "$AliasDest\claude.exe"
+if (-not (Test-Path $BinPath)) {
+    Write-Host "ERROR: Native binary not found at $BinPath" -ForegroundColor Red
+    exit 1
+}
+$BinSize = (Get-Item $BinPath).Length
+if ($BinSize -lt 50000000) {
+    Write-Host "ERROR: claude.exe is only $BinSize bytes (expected ~210 MB)" -ForegroundColor Red
+    exit 1
+}
+Write-Host "  Native binary: $([math]::Round($BinSize / 1MB)) MB"
+
+# 5. Copy ripgrep (sourced from @vscode/ripgrep since 0.2.113).
+$RgSource = "$RootDir\node_modules\@vscode\ripgrep"
+if (-not (Test-Path $RgSource) -or -not (Test-Path "$RgSource\bin\rg.exe")) {
+    Write-Host "ERROR: @vscode/ripgrep not installed or postinstall did not run" -ForegroundColor Red
+    Write-Host "Run 'bun install' and 'bun pm trust @vscode/ripgrep'."
+    exit 1
+}
+Write-Host "Copying @vscode/ripgrep..."
+New-Item -ItemType Directory -Force -Path "$ElectronDir\node_modules\@vscode" | Out-Null
+Remove-Item -Recurse -Force "$ElectronDir\node_modules\@vscode\ripgrep" -ErrorAction SilentlyContinue
+Copy-Item -Recurse -Force $RgSource "$ElectronDir\node_modules\@vscode\"
+
+# 6. Copy network interceptor sources (for Pi subprocess; Claude no longer
+#    uses --preload — see Phase 2 in plans/sdk-uplift-plan.md).
+$InterceptorSource = "$RootDir\packages\shared\src\unified-network-interceptor.ts"
 if (-not (Test-Path $InterceptorSource)) {
     Write-Host "ERROR: Interceptor not found at $InterceptorSource" -ForegroundColor Red
     exit 1
 }
-Write-Host "Copying interceptor..."
+Write-Host "Copying interceptor (for Pi subprocess)..."
 New-Item -ItemType Directory -Force -Path "$ElectronDir\packages\shared\src" | Out-Null
 Copy-Item $InterceptorSource "$ElectronDir\packages\shared\src\"
+foreach ($dep in @("interceptor-common.ts", "feature-flags.ts", "interceptor-request-utils.ts")) {
+    $depPath = "$RootDir\packages\shared\src\$dep"
+    if (Test-Path $depPath) {
+        Copy-Item $depPath "$ElectronDir\packages\shared\src\"
+    }
+}
 
 # 6. Build Electron app
 Write-Host "Building Electron app..."
@@ -186,7 +252,13 @@ $MainArgs = @(
     "--platform=node",
     "--format=cjs",
     "--outfile=apps/electron/dist/main.cjs",
-    "--external:electron"
+    "--external:electron",
+    # SDK 0.3.x is pure ESM and calls createRequire(import.meta.url) at module init.
+    # esbuild's CJS bundling leaves import.meta.url undefined for inlined ESM, crashing
+    # the app on load (ERR_INVALID_ARG_VALUE). Externalize it so Node loads it natively
+    # as ESM — the SDK core is staged into the app's node_modules above (step 4).
+    # Must stay in sync with package.json build:main and scripts/electron-dev.ts.
+    "--external:@anthropic-ai/claude-agent-sdk"
 )
 # Add OAuth defines if env vars are set
 if ($env:GOOGLE_OAUTH_CLIENT_ID) {
@@ -243,14 +315,15 @@ try {
     Pop-Location
 }
 
-# Copy resources
-Write-Host "  Copying resources..."
-Push-Location $RootDir
+# Copy all resources and bundled assets using the shared script.
+# Single source of truth — matches Mac/Linux build (bun run build:copy).
+# Copies: resources (icons, DMG bg), docs, tool-icons, themes, permissions, config-defaults.
+Write-Host "  Copying resources and bundled assets..."
+Push-Location $ElectronDir
 try {
-    $ResourcesSrc = "$ElectronDir\resources"
-    $ResourcesDst = "$ElectronDir\dist\resources"
-    if (Test-Path $ResourcesDst) { Remove-Item -Recurse -Force $ResourcesDst }
-    Copy-Item -Recurse $ResourcesSrc $ResourcesDst
+    bun scripts/copy-assets.ts
+    if ($LASTEXITCODE -ne 0) { throw "Asset copy failed" }
+    Write-Host "  Assets copied" -ForegroundColor Green
 } finally {
     Pop-Location
 }

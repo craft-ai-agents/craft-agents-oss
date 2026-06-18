@@ -115,6 +115,8 @@ interface SortableListProps<T extends SortableItemData> {
   renderItem: (item: T, isDragging: boolean) => React.ReactNode
   /** Render the drag overlay content (floating clone). Falls back to renderItem. */
   renderOverlay?: (item: T) => React.ReactNode
+  /** Show DragOverlay clone while dragging (default: true) */
+  showOverlay?: boolean
   /** Additional className for the list container */
   className?: string
 }
@@ -128,6 +130,7 @@ export function SortableList<T extends SortableItemData>({
   onReorder,
   renderItem,
   renderOverlay,
+  showOverlay = true,
   className,
 }: SortableListProps<T>) {
   const [activeId, setActiveId] = React.useState<string | null>(null)
@@ -183,6 +186,7 @@ export function SortableList<T extends SortableItemData>({
               key={item.id}
               id={item.id}
               isDragActive={activeId === item.id}
+              hideWhileDragging={showOverlay}
             >
               {renderItem(item, activeId === item.id)}
             </SortableItemWrapper>
@@ -192,21 +196,23 @@ export function SortableList<T extends SortableItemData>({
 
       {/* DragOverlay uses position:fixed — escapes all stacking contexts and overflow.
          Inline boxShadow avoids Tailwind CSS variable scoping issues in portals. */}
-      <DragOverlay
-        dropAnimation={dropAnimationConfig}
-        style={{ zIndex: 9999 }}
-      >
-        {activeItem ? (
-          <div
-            className="sortable-overlay rounded-[6px] bg-background"
-            style={{
-              boxShadow: '0 0 0 1px rgba(63, 63, 68, 0.05), 0px 15px 15px 0 rgba(34, 33, 81, 0.25)',
-            }}
-          >
-            {(renderOverlay ?? renderItem)(activeItem, false)}
-          </div>
-        ) : null}
-      </DragOverlay>
+      {showOverlay && (
+        <DragOverlay
+          dropAnimation={dropAnimationConfig}
+          style={{ zIndex: 'var(--z-floating-menu, 400)' }}
+        >
+          {activeItem ? (
+            <div
+              className="sortable-overlay rounded-[6px] bg-background"
+              style={{
+                boxShadow: '0 0 0 1px rgba(63, 63, 68, 0.05), 0px 15px 15px 0 rgba(34, 33, 81, 0.25)',
+              }}
+            >
+              {(renderOverlay ?? renderItem)(activeItem, false)}
+            </div>
+          ) : null}
+        </DragOverlay>
+      )}
     </DndContext>
   )
 }
@@ -218,10 +224,11 @@ export function SortableList<T extends SortableItemData>({
 interface SortableItemWrapperProps {
   id: string
   isDragActive: boolean
+  hideWhileDragging: boolean
   children: React.ReactNode
 }
 
-function SortableItemWrapper({ id, isDragActive, children }: SortableItemWrapperProps) {
+function SortableItemWrapper({ id, isDragActive, hideWhileDragging, children }: SortableItemWrapperProps) {
   const {
     attributes,
     listeners,
@@ -234,8 +241,8 @@ function SortableItemWrapper({ id, isDragActive, children }: SortableItemWrapper
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    // Ghost: hidden while dragging (DragOverlay shows the floating clone)
-    opacity: isDragging ? 0 : 1,
+    // Hide ghost only when DragOverlay is enabled
+    opacity: isDragging && hideWhileDragging ? 0 : 1,
     cursor: isDragActive ? 'grabbing' : 'grab',
   }
 

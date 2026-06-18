@@ -9,7 +9,6 @@
 import * as React from 'react'
 import { createContext, useContext, useCallback } from 'react'
 import { useAtomValue } from 'jotai'
-import type { RichTextInputHandle } from '@/components/ui/rich-text-input'
 import type { ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
 import type {
   Session,
@@ -19,12 +18,14 @@ import type {
   CredentialRequest,
   CredentialResponse,
   PermissionMode,
-  TodoState,
+  SessionStatus,
   LoadedSource,
   LoadedSkill,
   NewChatActionParams,
+  LlmConnectionWithStatus,
+  TestAutomationResult,
 } from '../../shared/types'
-import type { TodoState as TodoStateConfig } from '@/config/todo-states'
+import type { SessionStatus as SessionStatusConfig } from '@/config/session-status-config'
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
 import { defaultSessionOptions } from '../hooks/useSessionOptions'
 import { sessionAtomFamily } from '../atoms/sessions'
@@ -36,17 +37,28 @@ export interface AppShellContextType {
   // from retaining the full messages array and causing memory leaks.
   workspaces: Workspace[]
   activeWorkspaceId: string | null
-  currentModel: string
-  /** When set, a custom model overrides the Anthropic model selector (e.g. OpenRouter) */
-  customModel: string | null
+  /** Workspace slug for SDK skill qualification (derived from workspace path) */
+  activeWorkspaceSlug: string | null
+  /** All LLM connections with authentication status */
+  llmConnections: LlmConnectionWithStatus[]
+  /** Default LLM connection slug for the current workspace */
+  workspaceDefaultLlmConnection?: string
+  /** Refresh LLM connections from config */
+  refreshLlmConnections: () => Promise<void>
   pendingPermissions: Map<string, PermissionRequest[]>
   pendingCredentials: Map<string, CredentialRequest[]>
   /** Get draft input text for a session - reads from ref without triggering re-renders */
   getDraft: (sessionId: string) => string
+  /** Get persisted attachment refs (path + name) for a session's draft - no file IO */
+  getDraftAttachmentRefs: (sessionId: string) => import('@craft-agent/shared/config').DraftAttachmentRef[]
+  /** Hydrate persisted attachment refs into full FileAttachment objects (async, reads files) */
+  hydrateDraftAttachments: (sessionId: string) => Promise<FileAttachment[]>
   /** All enabled sources for this workspace - provided by AppShell component */
   enabledSources?: LoadedSource[]
   /** All skills for this workspace - provided by AppShell component (for @mentions) */
   skills?: LoadedSkill[]
+  /** Working directory of the active session — needed for project-level skill resolution */
+  activeSessionWorkingDirectory?: string
   /** All label configs (tree) for label menu and badge display */
   labels?: import('@craft-agent/shared/labels').LabelConfig[]
   /** Callback when session labels change */
@@ -54,9 +66,9 @@ export interface AppShellContextType {
   /** Enabled permission modes for Shift+Tab cycling */
   enabledModes?: PermissionMode[]
   /** Dynamic todo states from workspace config (provided by AppShell, defaults to empty) */
-  todoStates?: TodoStateConfig[]
+  sessionStatuses?: SessionStatusConfig[]
 
-  // Unified session options (replaces ultrathinkSessions and sessionModes)
+  // Unified session options map
   /** All session-scoped options in one map. Use useSessionOptionsFor() hook for easy access. */
   sessionOptions: Map<string, SessionOptions>
 
@@ -66,11 +78,13 @@ export interface AppShellContextType {
   onRenameSession: (sessionId: string, name: string) => void
   onFlagSession: (sessionId: string) => void
   onUnflagSession: (sessionId: string) => void
+  onArchiveSession: (sessionId: string) => void
+  onUnarchiveSession: (sessionId: string) => void
   onMarkSessionRead: (sessionId: string) => void
   onMarkSessionUnread: (sessionId: string) => void
   /** Track which session user is viewing (for unread state machine) */
   onSetActiveViewingSession: (sessionId: string) => void
-  onTodoStateChange: (sessionId: string, state: TodoState) => void
+  onSessionStatusChange: (sessionId: string, state: SessionStatus) => void
   onDeleteSession: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
 
   // Permission handling
@@ -78,7 +92,8 @@ export interface AppShellContextType {
     sessionId: string,
     requestId: string,
     allowed: boolean,
-    alwaysAllow: boolean
+    alwaysAllow: boolean,
+    options?: import('../../shared/types').PermissionResponseOptions
   ) => void
 
   // Credential handling
@@ -92,13 +107,8 @@ export interface AppShellContextType {
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
 
-  // Model
-  onModelChange: (model: string) => void
-  /** Re-fetch custom model from billing config (call after API connection changes) */
-  refreshCustomModel: () => Promise<void>
-
   // Workspace
-  onSelectWorkspace: (id: string, openInNewWindow?: boolean) => void
+  onSelectWorkspace: (id: string, openInNewWindow?: boolean) => void | Promise<void>
   onRefreshWorkspaces?: () => void
 
   // App actions
@@ -107,23 +117,32 @@ export interface AppShellContextType {
   onOpenStoredUserPreferences: () => void
   onReset: () => void
 
-  // Unified session options callback (replaces onUltrathinkChange, onSkipPermissionsChange, onModeChange)
+  // Unified session options callback
   onSessionOptionsChange: (sessionId: string, updates: SessionOptionUpdates) => void
 
   // Input draft callback
   onInputChange: (sessionId: string, value: string) => void
 
+  // Attachment draft callback — persists attachment refs per session
+  onAttachmentsChange: (sessionId: string, attachments: FileAttachment[]) => void
+
   // Source selection callback (per-session) - provided by AppShell component
   onSessionSourcesChange?: (sessionId: string, sourceSlugs: string[]) => void
-
-  // Chat input ref (for focusing)
-  textareaRef?: React.RefObject<RichTextInputHandle>
 
   // Open a new chat with optional agent, name, and pre-filled input
   openNewChat?: (params?: NewChatActionParams) => Promise<void>
 
   // Right sidebar button (for page headers)
   rightSidebarButton?: React.ReactNode
+
+  // Leading action button for panel header (e.g., back button in compact mode)
+  leadingAction?: React.ReactNode
+
+  /** Whether this panel is the focused panel (for multi-panel visual differentiation) */
+  isFocusedPanel?: boolean
+
+  /** Whether the shell is currently in compact/narrow mode */
+  isCompactMode?: boolean
 
   // Session list search state (for ChatDisplay highlighting)
   /** Current search query from session list - used to highlight matches in ChatDisplay */
@@ -135,7 +154,23 @@ export interface AppShellContextType {
   /** Ref to ChatDisplay for navigation between matches */
   chatDisplayRef?: React.RefObject<ChatDisplayHandle>
   /** Callback when ChatDisplay match info changes (for immediate UI updates) */
-  onChatMatchInfoChange?: (info: { count: number; index: number }) => void
+  onChatMatchInfoChange?: (info: { sessionId: string | null; count: number; index: number; isHighlighting: boolean }) => void
+
+  // Automation management
+  /** Test an automation by ID — executes its actions and returns results */
+  onTestAutomation?: (automationId: string) => void
+  /** Toggle an automation's enabled state by ID */
+  onToggleAutomation?: (automationId: string) => void
+  /** Duplicate an automation by ID — clones config with " Copy" suffix */
+  onDuplicateAutomation?: (automationId: string) => void
+  /** Delete an automation by ID — removes from automations config */
+  onDeleteAutomation?: (automationId: string) => void
+  /** Map of automationId → last test result */
+  automationTestResults?: Record<string, import('../components/automations/types').TestResult>
+  /** Fetch execution history for an automation by ID */
+  getAutomationHistory?: (automationId: string) => Promise<import('../components/automations/types').ExecutionEntry[]>
+  /** Replay (re-execute) webhook actions for a failed automation */
+  onReplayAutomation?: (automationId: string, event: string) => void
 }
 
 const AppShellContext = createContext<AppShellContextType | null>(null)
@@ -203,15 +238,13 @@ export function usePendingCredential(sessionId: string): CredentialRequest | und
  * This is the primary way components should access session options.
  *
  * Usage:
- *   const { options, setPermissionMode, toggleUltrathink } = useSessionOptionsFor(sessionId)
- *   if (options.ultrathinkEnabled) { ... }
+ *   const { options, setPermissionMode } = useSessionOptionsFor(sessionId)
  *   setPermissionMode('safe')
  */
 export function useSessionOptionsFor(sessionId: string): {
   options: SessionOptions
   setOption: <K extends keyof SessionOptions>(key: K, value: SessionOptions[K]) => void
   setOptions: (updates: SessionOptionUpdates) => void
-  toggleUltrathink: () => void
   setPermissionMode: (mode: PermissionMode) => void
   isSafeModeActive: () => boolean
 } {
@@ -230,10 +263,6 @@ export function useSessionOptionsFor(sessionId: string): {
     onSessionOptionsChange(sessionId, updates)
   }, [sessionId, onSessionOptionsChange])
 
-  const toggleUltrathink = useCallback(() => {
-    setOption('ultrathinkEnabled', !options.ultrathinkEnabled)
-  }, [options.ultrathinkEnabled, setOption])
-
   const setPermissionMode = useCallback((mode: PermissionMode) => {
     setOption('permissionMode', mode)
   }, [setOption])
@@ -246,7 +275,6 @@ export function useSessionOptionsFor(sessionId: string): {
     options,
     setOption,
     setOptions,
-    toggleUltrathink,
     setPermissionMode,
     isSafeModeActive,
   }

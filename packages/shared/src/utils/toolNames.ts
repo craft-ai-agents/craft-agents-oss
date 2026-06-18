@@ -9,9 +9,33 @@
  * Display names for specific tools that need custom names
  */
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  // Built-in tools
+  'Glob': 'Finding Files',
+  'Grep': 'Searching Files',
+  'Read': 'Reading File',
+  'Write': 'Writing File',
+  'Edit': 'Editing File',
+  'Bash': 'Running Command',
+  'Task': 'Running Agent',
+  'Agent': 'Running Agent',
+  'WebFetch': 'Fetching URL',
+  'WebSearch': 'Searching Web',
+  'TodoWrite': 'Updating Tasks',
+  'NotebookEdit': 'Editing Notebook',
+
   // Documentation tools
   'SearchCraftAgents': 'Search Documentation',
 };
+
+/**
+ * Set of tool names that represent parent task tools (subagent launchers).
+ * The SDK renamed 'Task' to 'Agent' in v0.2.72 — both must be recognised.
+ * Add future renames here instead of scattering checks across the codebase.
+ */
+export const PARENT_TASK_TOOLS: ReadonlySet<string> = new Set(['Task', 'Agent']);
+
+/** Check whether a tool name is a parent task tool (Task or Agent). */
+export const isParentTaskTool = (name: string): boolean => PARENT_TASK_TOOLS.has(name);
 
 /**
  * Tools that should be hidden from the UI (purely internal state changes)

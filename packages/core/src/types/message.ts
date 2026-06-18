@@ -20,10 +20,11 @@ export type MessageRole =
  * Credential input modes for different auth types
  */
 export type CredentialInputMode =
-  | 'bearer'      // Single token field (Bearer Token, API Key)
-  | 'basic'       // Username + Password fields
-  | 'header'      // API Key with custom header name
-  | 'query';      // API Key for query parameter
+  | 'bearer'       // Single token field (Bearer Token, API Key)
+  | 'basic'        // Username + Password fields
+  | 'header'       // API Key with custom header name
+  | 'query'        // API Key for query parameter
+  | 'multi-header'; // Multiple header fields
 
 /**
  * Auth request types
@@ -63,7 +64,7 @@ export interface ToolDisplayMeta {
 /**
  * Attachment type categories
  */
-export type AttachmentType = 'image' | 'text' | 'pdf' | 'office' | 'unknown';
+export type AttachmentType = 'image' | 'text' | 'pdf' | 'office' | 'audio' | 'unknown';
 
 /**
  * Attachment preview for display in user messages (runtime, before storage)
@@ -104,6 +105,125 @@ export interface ContentBadge {
    * Used when the badge represents a clickable file reference
    */
   filePath?: string;
+}
+
+/**
+ * Author metadata for annotations
+ */
+export interface AnnotationAuthor {
+  id: string;
+  name?: string;
+  type?: 'user' | 'agent' | 'system';
+}
+
+/**
+ * Annotation body payloads (extensible)
+ */
+export type AnnotationBody =
+  | { type: 'highlight' }
+  | { type: 'note'; text: string; format?: 'plain' | 'markdown' }
+  | { type: 'tag'; value: string };
+
+/**
+ * Annotation intent (tight v1 semantics).
+ */
+export type AnnotationIntent = 'highlight' | 'comment' | 'question';
+
+/**
+ * Optional lifecycle status for annotation workflows.
+ */
+export type AnnotationStatus = 'pending' | 'acknowledged' | 'resolved' | 'dismissed';
+
+/**
+ * Block types for block selectors.
+ */
+export type AnnotationBlockType =
+  | 'paragraph'
+  | 'code'
+  | 'latex'
+  | 'mermaid'
+  | 'datatable'
+  | 'spreadsheet'
+  | 'image-preview'
+  | 'pdf-preview'
+  | 'html-preview';
+
+/**
+ * Selector union used to anchor an annotation target.
+ * Multiple selectors can be stored for robust fallback resolution.
+ */
+export type AnnotationSelector =
+  | {
+      type: 'text-quote';
+      exact: string;
+      prefix?: string;
+      suffix?: string;
+    }
+  | {
+      type: 'text-position';
+      start: number;
+      end: number;
+      textVersion?: string;
+    }
+  | {
+      type: 'block';
+      blockType: AnnotationBlockType;
+      path: string;
+      blockId?: string;
+    }
+  | {
+      type: 'xywh';
+      unit: 'pixel' | 'percent';
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      page?: number;
+      rotation?: number;
+    }
+  | {
+      type: 'table-cell';
+      rowKey: string | number;
+      columnKey: string;
+    };
+
+/**
+ * Annotation target definition.
+ */
+export interface AnnotationTarget {
+  source: {
+    sessionId: string;
+    messageId: string;
+  };
+  selectors: AnnotationSelector[];
+}
+
+/**
+ * Persisted annotation payload (schema-versioned for migration safety).
+ */
+export interface AnnotationV1 {
+  id: string;
+  schemaVersion: 1;
+  createdAt: number;
+  updatedAt?: number;
+  createdBy?: AnnotationAuthor;
+  deletedAt?: number;
+  body: AnnotationBody[];
+  target: AnnotationTarget;
+  /** Optional workflow intent (tight v1 semantics). */
+  intent?: AnnotationIntent;
+  /** Optional lifecycle status. */
+  status?: AnnotationStatus;
+  /** Optional reference to the conversation/thread around this annotation. */
+  threadRef?: {
+    threadId?: string;
+    sessionId?: string;
+  };
+  style?: {
+    color?: 'yellow' | 'green' | 'blue' | 'pink' | string;
+    opacity?: number;
+  };
+  meta?: Record<string, unknown>;
 }
 
 /**
@@ -155,6 +275,8 @@ export interface Message {
   attachments?: StoredAttachment[];
   // Content badges for inline display (sources, skills)
   badges?: ContentBadge[];
+  /** Annotation payloads for this message */
+  annotations?: AnnotationV1[];
   isError?: boolean;
   isStreaming?: boolean;
   // Pending: streaming text where we don't yet know if it's intermediate
@@ -177,8 +299,13 @@ export interface Message {
   errorDetails?: string[];
   errorOriginal?: string;
   errorCanRetry?: boolean;
-  // Ultrathink mode - indicates this user message was sent with extended thinking
-  ultrathink?: boolean;
+  errorActions?: Array<{
+    key: string;
+    label: string;
+    action?: 'retry' | 'settings' | 'reauth' | 'open_url' | 'reconnect_source';
+    url?: string;
+    sourceSlug?: string;
+  }>;
   // Plan-specific fields (for role='plan')
   planPath?: string;  // Path to the plan markdown file
   // Auth-request-specific fields (for role='auth-request')
@@ -189,6 +316,7 @@ export interface Message {
   authStatus?: AuthStatus;
   authCredentialMode?: CredentialInputMode;  // For credential requests
   authHeaderName?: string;        // For header auth - the header name
+  authHeaderNames?: string[];     // For multi-header auth (e.g., ["DD-API-KEY", "DD-APPLICATION-KEY"])
   authLabels?: {                  // Custom field labels
     credential?: string;
     username?: string;
@@ -197,6 +325,7 @@ export interface Message {
   authDescription?: string;       // Description/instructions
   authHint?: string;              // Hint about where to find credentials
   authSourceUrl?: string;         // Source URL for password manager domain matching (1Password)
+  authPasswordRequired?: boolean; // For basic auth: whether password is required (default true)
   authError?: string;             // Error message if auth failed
   authEmail?: string;             // Authenticated email (for OAuth)
   authWorkspace?: string;         // Authenticated workspace (for Slack)
@@ -204,7 +333,7 @@ export interface Message {
 
 /**
  * Stored message format (persistence)
- * Excludes only transient fields (isStreaming)
+ * Excludes transient runtime-only fields (isStreaming, isPending)
  */
 export interface StoredMessage {
   id: string;
@@ -234,19 +363,28 @@ export interface StoredMessage {
   attachments?: StoredAttachment[];
   /** Content badges for inline display (sources, skills) */
   badges?: ContentBadge[];
+  /** Annotations persisted at message level */
+  annotations?: AnnotationV1[];
   // Turn grouping - critical for TurnCard rendering after reload
   isIntermediate?: boolean;
   turnId?: string;
   // Status type for compaction messages (persisted for reload)
   statusType?: 'compacting' | 'compaction_complete';
+  // Info level for info messages (persisted for reload)
+  infoLevel?: 'info' | 'warning' | 'error' | 'success';
   // Error display fields
   errorCode?: string;
   errorTitle?: string;
   errorDetails?: string[];
   errorOriginal?: string;
   errorCanRetry?: boolean;
-  // Ultrathink mode - indicates this user message was sent with extended thinking
-  ultrathink?: boolean;
+  errorActions?: Array<{
+    key: string;
+    label: string;
+    action?: 'retry' | 'settings' | 'reauth' | 'open_url' | 'reconnect_source';
+    url?: string;
+    sourceSlug?: string;
+  }>;
   // Plan-specific fields (for role='plan')
   planPath?: string;
   // Auth-request-specific fields (for role='auth-request')
@@ -257,6 +395,7 @@ export interface StoredMessage {
   authStatus?: AuthStatus;
   authCredentialMode?: CredentialInputMode;
   authHeaderName?: string;
+  authHeaderNames?: string[];
   authLabels?: {
     credential?: string;
     username?: string;
@@ -265,9 +404,12 @@ export interface StoredMessage {
   authDescription?: string;
   authHint?: string;
   authSourceUrl?: string;
+  authPasswordRequired?: boolean;
   authError?: string;
   authEmail?: string;
   authWorkspace?: string;
+  // Queued: user message that is waiting to be processed (persisted for recovery)
+  isQueued?: boolean;
 }
 
 /**
@@ -294,7 +436,11 @@ export interface RecoveryAction {
   /** Slash command to execute (e.g., '/settings') */
   command?: string;
   /** Custom action type for special handling */
-  action?: 'retry' | 'settings' | 'reauth';
+  action?: 'retry' | 'settings' | 'reauth' | 'open_url' | 'reconnect_source';
+  /** URL to open (for open_url action) */
+  url?: string;
+  /** Source slug (for reconnect_source action) */
+  sourceSlug?: string;
 }
 
 /**
@@ -303,12 +449,14 @@ export interface RecoveryAction {
 export type ErrorCode =
   | 'invalid_api_key'
   | 'invalid_credentials'
+  | 'response_too_large'
   | 'expired_oauth_token'
   | 'token_expired'
   | 'rate_limited'
   | 'service_error'
   | 'service_unavailable'
   | 'network_error'
+  | 'proxy_error'           // Proxy/firewall/captive portal intercepted the request
   | 'mcp_auth_required'
   | 'mcp_unreachable'
   | 'billing_error'
@@ -316,6 +464,11 @@ export type ErrorCode =
   | 'invalid_model'          // Model ID not found
   | 'data_policy_error'      // OpenRouter data policy restriction
   | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
+  | 'image_too_large'        // Image exceeds API dimension/size limits
+  | 'provider_error'         // AI provider experiencing issues (overloaded, unavailable)
+  | 'queued_message_replay_failed'  // A message queued during an active turn could not be auto-replayed (#616)
+  | 'sdk_binary_missing'     // SDK subprocess binary not present on disk (incomplete bundle)
+  | 'sdk_cwd_missing'        // SDK subprocess cwd not present on disk (stale cross-machine import)
   | 'unknown_error';
 
 /**
@@ -341,14 +494,33 @@ export interface TypedError {
 }
 
 /**
+ * Permission request type categories
+ */
+export type PermissionRequestType = 'bash' | 'file_write' | 'mcp_mutation' | 'api_mutation' | 'admin_approval';
+
+/**
  * Permission request from agent (e.g., bash command approval)
  */
 export interface PermissionRequest {
   requestId: string;
   toolName: string;
-  command: string;
+  command?: string;  // Optional: bash commands have it, MCP tools may not
   description: string;
-  type?: 'bash';  // Type of permission request
+  type?: PermissionRequestType;  // Type of permission request
+  /** Friendly app/package label for admin approval prompts */
+  appName?: string;
+  /** Plain-language reason shown in admin approval prompt */
+  reason?: string;
+  /** Plain-language impact shown in admin approval prompt */
+  impact?: string;
+  /** Whether native OS auth prompt is expected */
+  requiresSystemPrompt?: boolean;
+  /** Optional remember window for this exact command */
+  rememberForMinutes?: number;
+  /** Hash binding for approval integrity checks */
+  commandHash?: string;
+  /** Approval validity window */
+  approvalTtlSeconds?: number;
 }
 
 /**
@@ -373,10 +545,25 @@ export type AgentEvent =
   | { type: 'status'; message: string }
   | { type: 'info'; message: string }
   | { type: 'text_delta'; text: string; turnId?: string; parentToolUseId?: string }
-  | { type: 'text_complete'; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string }
+  | { type: 'text_complete'; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string; sdkMessageId?: string }
+  | { type: 'pi_turn_anchor'; sdkMessageId: string; sdkTurnAnchor: string }
   | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string; displayName?: string; turnId?: string; parentToolUseId?: string; toolDisplayMeta?: ToolDisplayMeta }
   | { type: 'tool_result'; toolUseId: string; toolName?: string; result: string; isError: boolean; input?: Record<string, unknown>; turnId?: string; parentToolUseId?: string }
-  | { type: 'permission_request'; requestId: string; toolName: string; command: string; description: string }
+  | {
+      type: 'permission_request';
+      requestId: string;
+      toolName: string;
+      command?: string;
+      description: string;
+      permissionType?: PermissionRequestType;
+      appName?: string;
+      reason?: string;
+      impact?: string;
+      requiresSystemPrompt?: boolean;
+      rememberForMinutes?: number;
+      commandHash?: string;
+      approvalTtlSeconds?: number;
+    }
   | { type: 'error'; message: string }
   | { type: 'typed_error'; error: TypedError }
   | { type: 'complete'; usage?: AgentEventUsage }
@@ -384,9 +571,11 @@ export type AgentEvent =
   | { type: 'task_backgrounded'; toolUseId: string; taskId: string; intent?: string; turnId?: string }
   | { type: 'shell_backgrounded'; toolUseId: string; shellId: string; intent?: string; command?: string; turnId?: string }
   | { type: 'task_progress'; toolUseId: string; elapsedSeconds: number; turnId?: string }
+  | { type: 'task_completed'; taskId: string; status: 'completed' | 'failed' | 'stopped'; outputFile?: string; summary?: string; turnId?: string }
   | { type: 'shell_killed'; shellId: string; turnId?: string }
   | { type: 'source_activated'; sourceSlug: string; originalMessage: string }
-  | { type: 'usage_update'; usage: Pick<AgentEventUsage, 'inputTokens' | 'contextWindow'> };
+  | { type: 'usage_update'; usage: Pick<AgentEventUsage, 'inputTokens' | 'contextWindow'> }
+  | { type: 'steer_undelivered'; message: string };
 
 /**
  * Generate a unique message ID

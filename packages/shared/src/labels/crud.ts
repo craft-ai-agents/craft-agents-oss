@@ -6,9 +6,9 @@
  * Delete cascade strips the label (and descendants) from all sessions.
  */
 
-import { loadLabelConfig, saveLabelConfig } from './storage.ts';
-import { findLabelById, collectAllIds, getDescendantIds } from './tree.ts';
-import { extractLabelId } from './values.ts';
+import { loadLabelConfig, saveLabelConfig, isValidLabelId, isValidLabelIdFormat } from './storage.ts';
+import { findLabelById, collectAllIds, getDescendantIds, getLabelDisplayName } from './tree.ts';
+import { extractLabelId, parseLabelEntry, formatLabelEntry } from './values.ts';
 import type { LabelConfig, CreateLabelInput, UpdateLabelInput } from './types.ts';
 
 /**
@@ -64,6 +64,37 @@ export function createLabel(
 
   saveLabelConfig(workspaceRootPath, config);
   return label;
+}
+
+/**
+ * Ensure all label entries reference labels that exist in the workspace config.
+ * For each entry, if the label ID doesn't exist, auto-creates it with a
+ * titlecased name derived from the slug. Returns resolved entries with the
+ * actual created IDs (handles any slug mismatch from createLabel).
+ *
+ * Entries with invalid ID format are passed through unchanged.
+ */
+export function ensureLabelsExist(
+  workspaceRootPath: string,
+  labels: string[]
+): string[] {
+  return labels.map(label => {
+    const { id: labelId, rawValue } = parseLabelEntry(label)
+
+    if (isValidLabelId(workspaceRootPath, labelId)) return label
+    if (!isValidLabelIdFormat(labelId)) return label
+
+    // getLabelDisplayName with empty tree falls back to titlecased slug
+    const name = getLabelDisplayName([], labelId)
+
+    const created = createLabel(workspaceRootPath, {
+      name,
+      color: 'foreground/50',
+    })
+
+    // Return entry with the actual created ID (handles slug mismatch)
+    return formatLabelEntry(created.id, rawValue)
+  })
 }
 
 /**

@@ -26,7 +26,7 @@ export function OverlayErrorBanner({ label, message }: OverlayErrorBannerProps) 
         style={{ '--shadow-color': 'var(--destructive-rgb)' } as React.CSSProperties}
       >
         <div className="text-xs font-semibold text-destructive/70 mb-0.5">{label}</div>
-        <p className="text-sm text-destructive whitespace-pre-wrap break-words">{message}</p>
+        <p className="text-sm text-destructive whitespace-pre-wrap break-words font-mono">{message}</p>
       </div>
     </div>
   )

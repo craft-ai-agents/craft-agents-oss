@@ -8,7 +8,8 @@
 import { debug } from './debug.ts';
 import { homedir } from 'os';
 import { join } from 'path';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
+import { readJsonFileSync } from './files.ts';
 
 // Cache path for persisted provider domains
 const CRAFT_AGENT_DIR = join(homedir(), '.craft-agent');
@@ -82,8 +83,7 @@ interface ProviderDomainsCache {
 function loadProviderDomainsCache(): Record<string, string> {
   try {
     if (!existsSync(PROVIDER_DOMAINS_CACHE_PATH)) return {};
-    const content = readFileSync(PROVIDER_DOMAINS_CACHE_PATH, 'utf-8');
-    const cache = JSON.parse(content) as ProviderDomainsCache;
+    const cache = readJsonFileSync<ProviderDomainsCache>(PROVIDER_DOMAINS_CACHE_PATH);
     return cache.domains || {};
   } catch {
     return {};

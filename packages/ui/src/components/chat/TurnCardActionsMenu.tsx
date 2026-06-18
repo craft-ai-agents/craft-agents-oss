@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { MoreHorizontal, FileDiff, ArrowUpRight } from 'lucide-react'
 import { SimpleDropdown, SimpleDropdownItem } from '../ui/SimpleDropdown'
 import { cn } from '../../lib/utils'
@@ -27,6 +28,7 @@ export function TurnCardActionsMenu({
   hasEditOrWriteActivities,
   className,
 }: TurnCardActionsMenuProps) {
+  const { t } = useTranslation()
   const [isOpen, setIsOpen] = React.useState(false)
 
   // Don't render if no actions available
@@ -66,7 +68,7 @@ export function TurnCardActionsMenu({
           onClick={onOpenMultiFileDiff}
           icon={<FileDiff />}
         >
-          View file changes
+          {t('chat.viewFileChanges')}
         </SimpleDropdownItem>
       )}
       {onOpenDetails && (
@@ -74,7 +76,7 @@ export function TurnCardActionsMenu({
           onClick={onOpenDetails}
           icon={<ArrowUpRight />}
         >
-          View turn details
+          {t('chat.viewTurnDetails')}
         </SimpleDropdownItem>
       )}
     </SimpleDropdown>

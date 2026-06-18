@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Download, FolderOpen, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -37,6 +38,7 @@ export function GitBashWarning({
   errorMessage,
   onClearError,
 }: GitBashWarningProps) {
+  const { t } = useTranslation()
   const [customPath, setCustomPath] = useState(status.path || '')
   const [showCustomPath, setShowCustomPath] = useState(false)
 
@@ -60,17 +62,17 @@ export function GitBashWarning({
 
   return (
     <StepFormLayout
-      title="Git Bash Required"
-      description="Craft Agent needs Git Bash to run shell commands on Windows. It was not found on your system."
+      title={t("onboarding.gitBash.title")}
+      description={t("onboarding.gitBash.description")}
     >
       <div className="space-y-4">
         {/* Primary action: Download Git */}
         <div className="rounded-lg border border-border bg-foreground-2 p-4">
           <h3 className="text-sm font-medium text-foreground">
-            Install Git for Windows
+            {t("onboarding.gitBash.installTitle")}
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            The easiest way to get Git Bash. It's free and includes everything you need.
+            {t("onboarding.gitBash.installDesc")}
           </p>
           <Button
             onClick={handleDownload}
@@ -78,17 +80,17 @@ export function GitBashWarning({
             size="sm"
           >
             <Download className="mr-2 size-4" />
-            Download Git for Windows
+            {t("onboarding.gitBash.download")}
           </Button>
         </div>
 
         {/* Secondary: Already have Git? */}
         <div className="rounded-lg border border-border bg-foreground-2 p-4">
           <h3 className="text-sm font-medium text-foreground">
-            Already have Git installed?
+            {t("onboarding.gitBash.alreadyInstalled")}
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            If Git is installed in a non-standard location, you can specify the path to bash.exe.
+            {t("onboarding.gitBash.customPath")}
           </p>
 
           {showCustomPath ? (
@@ -99,7 +101,7 @@ export function GitBashWarning({
                   setCustomPath(e.target.value)
                   onClearError?.()
                 }}
-                placeholder="C:\Program Files\Git\bin\bash.exe"
+                placeholder={t("onboarding.gitBash.pathPlaceholder")}
                 className="text-xs"
               />
               <Button
@@ -108,7 +110,7 @@ export function GitBashWarning({
                 className="w-full bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
                 size="sm"
               >
-                Use this path
+                {t("onboarding.gitBash.useThisPath")}
               </Button>
               {errorMessage && (
                 <p className="text-xs text-red-500">{errorMessage}</p>
@@ -123,7 +125,7 @@ export function GitBashWarning({
                 className="flex-1 bg-background text-foreground hover:bg-foreground/5 rounded-lg shadow-minimal"
               >
                 <RefreshCw className={`mr-2 size-4 ${isRechecking ? 'animate-spin' : ''}`} />
-                {isRechecking ? 'Checking...' : 'Re-check'}
+                {isRechecking ? t("common.checking") : t("onboarding.gitBash.recheck")}
               </Button>
               <Button
                 onClick={handleBrowse}
@@ -131,7 +133,7 @@ export function GitBashWarning({
                 className="flex-1 bg-background text-foreground hover:bg-foreground/5 rounded-lg shadow-minimal"
               >
                 <FolderOpen className="mr-2 size-4" />
-                Browse...
+                {t("onboarding.gitBash.browse")}
               </Button>
             </div>
           )}

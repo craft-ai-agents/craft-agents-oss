@@ -1,16 +1,42 @@
 import * as React from 'react'
-import ReactMarkdown, { type Components } from 'react-markdown'
+import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import 'katex/dist/katex.min.css'
 import { cn } from '../../lib/utils'
 import { CodeBlock, InlineCode } from './CodeBlock'
 import { MarkdownDiffBlock } from './MarkdownDiffBlock'
 import { MarkdownJsonBlock } from './MarkdownJsonBlock'
 import { MarkdownMermaidBlock } from './MarkdownMermaidBlock'
+import { MarkdownDatatableBlock } from './MarkdownDatatableBlock'
+import { MarkdownSpreadsheetBlock } from './MarkdownSpreadsheetBlock'
+import { MarkdownHtmlBlock } from './MarkdownHtmlBlock'
+import { MarkdownImageBlock } from './MarkdownImageBlock'
+import { MarkdownLatexBlock } from './MarkdownLatexBlock'
+import { MarkdownPdfBlock } from './MarkdownPdfBlock'
+import { MarkdownDocBlock } from './MarkdownDocBlock'
 import { preprocessLinks } from './linkify'
+import { resolveMarkdownLinkTarget } from './link-target'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
 import { CollapsibleSection } from './CollapsibleSection'
 import { useCollapsibleMarkdown } from './CollapsibleMarkdownContext'
+import { wrapWithSafeProxy } from './safe-components'
+import { MARKDOWN_MATH_OPTIONS } from './math-options'
+import { markdownUrlTransform } from './url-transform'
+
+/**
+ * Names of preview-block code-fence types that recursive `Markdown` callers
+ * may want to suppress. Used by `MarkdownDocBlock` to prevent
+ * `markdown-preview` self-recursion while leaving other preview blocks
+ * (mermaid, datatable, …) intact.
+ */
+export type DisablablePreviewBlock =
+  | 'markdown-preview'
+  | 'html-preview'
+  | 'pdf-preview'
+  | 'image-preview'
 
 /**
  * Render modes for markdown content:
@@ -59,6 +85,17 @@ export interface MarkdownProps {
    * @default true
    */
   hideFirstMermaidExpand?: boolean
+  /**
+   * Disable specific preview-block handlers for nested rendering.
+   *
+   * When a preview-block component renders user-supplied markdown through
+   * `Markdown` again (e.g. `MarkdownDocBlock`), it can pass the names of the
+   * preview-block types it wants to suppress to prevent infinite recursion.
+   * Suppressed blocks fall through to the default `CodeBlock` renderer.
+   *
+   * Default behavior (prop omitted): all preview blocks are registered.
+   */
+  disablePreviewBlocks?: ReadonlySet<DisablablePreviewBlock>
 }
 
 /** Context for collapsible sections */
@@ -66,9 +103,6 @@ interface CollapsibleContext {
   collapsedSections: Set<string>
   toggleSection: (id: string) => void
 }
-
-// File path detection regex - matches paths starting with /, ~/, or ./
-const FILE_PATH_REGEX = /^(?:\/|~\/|\.\/)[\w\-./@]+\.(?:ts|tsx|js|jsx|mjs|cjs|md|json|yaml|yml|py|go|rs|css|scss|less|html|htm|txt|log|sh|bash|zsh|swift|kt|java|c|cpp|h|hpp|rb|php|xml|toml|ini|cfg|conf|env|sql|graphql|vue|svelte|astro|prisma)$/i
 
 /**
  * Create custom components based on render mode.
@@ -82,14 +116,51 @@ const FILE_PATH_REGEX = /^(?:\/|~\/|\.\/)[\w\-./@]+\.(?:ts|tsx|js|jsx|mjs|cjs|md
  * @param hideFirstMermaidExpand - Whether to hide the expand button on the first
  *   mermaid block when the message starts with a mermaid fence. Defaults to true.
  */
+function stableHash(input: string): string {
+  let hash = 2166136261
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
 function createComponents(
   mode: RenderMode,
   onUrlClick?: (url: string) => void,
   onFileClick?: (path: string) => void,
   collapsibleContext?: CollapsibleContext | null,
   firstMermaidCodeRef?: React.RefObject<string | null>,
-  hideFirstMermaidExpand: boolean = true
+  hideFirstMermaidExpand: boolean = true,
+  disablePreviewBlocks?: ReadonlySet<DisablablePreviewBlock>,
 ): Partial<Components> {
+  const isPreviewEnabled = (name: DisablablePreviewBlock) => !disablePreviewBlocks?.has(name)
+  let blockIndex = 0
+  const wrapBlock = (
+    blockType: string,
+    content: string,
+    child: React.ReactNode,
+    nodePosition?: { start?: { line?: number }; end?: { line?: number } },
+  ) => {
+    blockIndex += 1
+    const startLine = nodePosition?.start?.line
+    const endLine = nodePosition?.end?.line
+    const path = startLine && endLine
+      ? `line:${startLine}-${endLine}`
+      : `idx:${blockIndex}`
+    const blockId = `blk-${stableHash(`${blockType}|${path}|${content.slice(0, 240)}`)}`
+
+    return (
+      <div
+        data-ca-block-type={blockType}
+        data-ca-block-path={path}
+        data-ca-block-id={blockId}
+      >
+        {child}
+      </div>
+    )
+  }
+
   const baseComponents: Partial<Components> = {
     // Section wrapper for collapsible headings
     div: ({ node, children, ...props }) => {
@@ -113,25 +184,51 @@ function createComponents(
       // Regular div
       return <div {...props}>{children}</div>
     },
-    // Links: Make clickable with callbacks
+    // Links: Make clickable with callbacks.
+    //
+    // We sanitize the DOM `href` separately from the click-dispatch target:
+    // - `safeHref` is what React puts on the `<a>` element. We pass `href`
+    //   through `defaultUrlTransform`; any dangerous scheme
+    //   (javascript:/data:/vbscript:/file:) is stripped to empty, in which case
+    //   we omit the attribute entirely. That blocks middle-click and
+    //   cmd-click escape routes (Electron's `setWindowOpenHandler` /
+    //   `will-navigate` would otherwise bypass our React `onClick` and call
+    //   `shell.openExternal` directly).
+    // - The click handler still receives the ORIGINAL `href` and routes it
+    //   through `resolveMarkdownLinkTarget` so file URLs land in `onFileClick`
+    //   and blocked URLs surface a meaningful error via `onUrlClick` →
+    //   `classifyExternalUrl`.
     a: ({ href, children }) => {
+      const trimmedHref = href?.trim() ?? ''
+      const sanitized = trimmedHref ? defaultUrlTransform(trimmedHref) : ''
+      const safeHref = sanitized ? sanitized : undefined
+
       const handleClick = (e: React.MouseEvent) => {
         e.preventDefault()
-        if (href) {
-          // Check if it's a file path
-          if (FILE_PATH_REGEX.test(href) && onFileClick) {
-            onFileClick(href)
-          } else if (onUrlClick) {
-            onUrlClick(href)
-          }
+
+        // Some AI outputs include raw HTML anchors with empty href but path text content.
+        // Fallback to the anchor text when href is missing/empty.
+        const fallbackText = React.Children.toArray(children)
+          .map((child) => (typeof child === 'string' ? child : ''))
+          .join('')
+          .trim()
+
+        const target = trimmedHref || fallbackText
+        if (!target) return
+
+        const resolvedTarget = resolveMarkdownLinkTarget(target)
+        if (resolvedTarget.kind === 'file' && onFileClick) {
+          onFileClick(resolvedTarget.path)
+        } else if (resolvedTarget.kind === 'url' && onUrlClick) {
+          onUrlClick(resolvedTarget.url)
         }
       }
 
       return (
         <a
-          href={href}
+          href={safeHref}
           onClick={handleClick}
-          className="text-foreground hover:underline cursor-pointer"
+          className="text-accent hover:underline cursor-pointer"
         >
           {children}
         </a>
@@ -171,7 +268,7 @@ function createComponents(
       ...baseComponents,
       // Inline code
       code: ({ className, children, ...props }) => {
-        const match = /language-(\w+)/.exec(className || '')
+        const match = /language-([\w-]+)/.exec(className || '')
         const isBlock = 'node' in props && props.node?.position?.start.line !== props.node?.position?.end.line
 
         // Block code
@@ -179,11 +276,44 @@ function createComponents(
           const code = String(children).replace(/\n$/, '')
           // Diff code blocks → pierre/diffs for a proper diff viewer
           if (match?.[1] === 'diff') {
-            return <MarkdownDiffBlock code={code} className="my-1" />
+            return wrapBlock('code', code, <MarkdownDiffBlock code={code} className="my-2" />, props.node?.position)
           }
           // JSON code blocks → interactive tree viewer
           if (match?.[1] === 'json') {
-            return <MarkdownJsonBlock code={code} className="my-1" />
+            return wrapBlock('code', code, <MarkdownJsonBlock code={code} className="my-2" />, props.node?.position)
+          }
+          // Datatable code blocks → sortable/filterable data table
+          if (match?.[1] === 'datatable') {
+            return wrapBlock('datatable', code, <MarkdownDatatableBlock code={code} className="my-2" />, props.node?.position)
+          }
+          // Spreadsheet code blocks → Excel-style grid
+          if (match?.[1] === 'spreadsheet') {
+            return wrapBlock('spreadsheet', code, <MarkdownSpreadsheetBlock code={code} className="my-2" />, props.node?.position)
+          }
+          // HTML preview blocks → sandboxed iframe
+          if (match?.[1] === 'html-preview' && isPreviewEnabled('html-preview')) {
+            return wrapBlock('html-preview', code, <MarkdownHtmlBlock code={code} className="my-2" />, props.node?.position)
+          }
+          // PDF preview blocks → inline first page with expand to full viewer
+          if (match?.[1] === 'pdf-preview' && isPreviewEnabled('pdf-preview')) {
+            return wrapBlock('pdf-preview', code, <MarkdownPdfBlock code={code} className="my-2" />, props.node?.position)
+          }
+          // Image preview blocks → inline image with expand to full viewer
+          if (match?.[1] === 'image-preview' && isPreviewEnabled('image-preview')) {
+            return wrapBlock('image-preview', code, <MarkdownImageBlock code={code} className="my-2" />, props.node?.position)
+          }
+          // Markdown preview blocks → inline rendered .md file
+          if (match?.[1] === 'markdown-preview' && isPreviewEnabled('markdown-preview')) {
+            return wrapBlock(
+              'markdown-preview',
+              code,
+              <MarkdownDocBlock code={code} className="my-2" onUrlClick={onUrlClick} onFileClick={onFileClick} />,
+              props.node?.position,
+            )
+          }
+          // LaTeX/math code blocks → KaTeX rendered display math
+          if (match?.[1] === 'latex' || match?.[1] === 'math') {
+            return wrapBlock('latex', code, <MarkdownLatexBlock code={code} className="my-2" />, props.node?.position)
           }
           // Mermaid code blocks → zinc-styled SVG diagram.
           // Hide the inline expand button when the mermaid block is the first
@@ -195,9 +325,14 @@ function createComponents(
             const isFirstBlock = hideFirstMermaidExpand &&
                                 firstMermaidCodeRef?.current != null &&
                                 code === firstMermaidCodeRef.current
-            return <MarkdownMermaidBlock code={code} className="my-1" showExpandButton={!isFirstBlock} />
+            return wrapBlock(
+              'mermaid',
+              code,
+              <MarkdownMermaidBlock code={code} className="my-2" showExpandButton={!isFirstBlock} />,
+              props.node?.position,
+            )
           }
-          return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
+          return wrapBlock('code', code, <CodeBlock code={code} language={match?.[1]} mode="full" className="my-2" />, props.node?.position)
         }
 
         // Inline code
@@ -207,15 +342,35 @@ function createComponents(
       // Comfortable paragraph spacing
       p: ({ children }) => <p className="my-2 leading-relaxed">{children}</p>,
       // Styled lists - ul uses tighter spacing, ol uses standard for number alignment
-      ul: ({ children }) => (
-        <ul className="my-2 space-y-1 ps-[16px] pe-2 list-disc marker:text-[var(--md-bullets)]">
+      ul: ({ children, className }) => (
+        <ul
+          className={cn(
+            'my-2 space-y-1 ps-[16px] pe-2 list-disc marker:text-[var(--md-bullets)]',
+            className?.includes('contains-task-list') && 'list-none ps-0 marker:content-none',
+          )}
+        >
           {children}
         </ul>
       ),
-      ol: ({ children }) => (
-        <ol className="my-2 space-y-1 pl-6 list-decimal">{children}</ol>
+      ol: ({ children, className }) => (
+        <ol className={cn('my-2 space-y-1 pl-6 list-decimal', className)}>{children}</ol>
       ),
-      li: ({ children }) => <li>{children}</li>,
+      li: ({ children, className }) => (
+        <li className={cn(className?.includes('task-list-item') && 'list-none')}>{children}</li>
+      ),
+      input: ({ type, checked }) => {
+        if (type === 'checkbox') {
+          return (
+            <input
+              type="checkbox"
+              checked={checked}
+              readOnly
+              className="mr-2 rounded border-muted-foreground align-middle"
+            />
+          )
+        }
+        return <input type={type} />
+      },
       // Clean tables
       table: ({ children }) => (
         <div className="my-3 overflow-x-auto">
@@ -252,18 +407,51 @@ function createComponents(
     ...baseComponents,
     // Full code blocks with copy button
     code: ({ className, children, ...props }) => {
-      const match = /language-(\w+)/.exec(className || '')
+      const match = /language-([\w-]+)/.exec(className || '')
       const isBlock = 'node' in props && props.node?.position?.start.line !== props.node?.position?.end.line
 
       if (match || isBlock) {
         const code = String(children).replace(/\n$/, '')
         // Diff code blocks → pierre/diffs for a proper diff viewer
         if (match?.[1] === 'diff') {
-          return <MarkdownDiffBlock code={code} className="my-1" />
+          return wrapBlock('code', code, <MarkdownDiffBlock code={code} className="my-2" />, props.node?.position)
         }
         // JSON code blocks → interactive tree viewer
         if (match?.[1] === 'json') {
-          return <MarkdownJsonBlock code={code} className="my-1" />
+          return wrapBlock('code', code, <MarkdownJsonBlock code={code} className="my-2" />, props.node?.position)
+        }
+        // Datatable code blocks → sortable/filterable data table
+        if (match?.[1] === 'datatable') {
+          return wrapBlock('datatable', code, <MarkdownDatatableBlock code={code} className="my-2" />, props.node?.position)
+        }
+        // Spreadsheet code blocks → Excel-style grid
+        if (match?.[1] === 'spreadsheet') {
+          return wrapBlock('spreadsheet', code, <MarkdownSpreadsheetBlock code={code} className="my-2" />, props.node?.position)
+        }
+        // HTML preview blocks → sandboxed iframe
+        if (match?.[1] === 'html-preview' && isPreviewEnabled('html-preview')) {
+          return wrapBlock('html-preview', code, <MarkdownHtmlBlock code={code} className="my-2" />, props.node?.position)
+        }
+        // PDF preview blocks → inline first page with expand to full viewer
+        if (match?.[1] === 'pdf-preview' && isPreviewEnabled('pdf-preview')) {
+          return wrapBlock('pdf-preview', code, <MarkdownPdfBlock code={code} className="my-2" />, props.node?.position)
+        }
+        // Image preview blocks → inline image with expand to full viewer
+        if (match?.[1] === 'image-preview' && isPreviewEnabled('image-preview')) {
+          return wrapBlock('image-preview', code, <MarkdownImageBlock code={code} className="my-2" />, props.node?.position)
+        }
+        // Markdown preview blocks → inline rendered .md file
+        if (match?.[1] === 'markdown-preview' && isPreviewEnabled('markdown-preview')) {
+          return wrapBlock(
+            'markdown-preview',
+            code,
+            <MarkdownDocBlock code={code} className="my-2" onUrlClick={onUrlClick} onFileClick={onFileClick} />,
+            props.node?.position,
+          )
+        }
+        // LaTeX/math code blocks → KaTeX rendered display math
+        if (match?.[1] === 'latex' || match?.[1] === 'math') {
+          return wrapBlock('latex', code, <MarkdownLatexBlock code={code} className="my-2" />, props.node?.position)
         }
         // Mermaid code blocks → zinc-styled SVG diagram.
         // (Same first-block detection as minimal mode — see comment above.)
@@ -271,9 +459,14 @@ function createComponents(
           const isFirstBlock = hideFirstMermaidExpand &&
                               firstMermaidCodeRef?.current != null &&
                               code === firstMermaidCodeRef.current
-          return <MarkdownMermaidBlock code={code} className="my-1" showExpandButton={!isFirstBlock} />
+          return wrapBlock(
+            'mermaid',
+            code,
+            <MarkdownMermaidBlock code={code} className="my-2" showExpandButton={!isFirstBlock} />,
+            props.node?.position,
+          )
         }
-        return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
+        return wrapBlock('code', code, <CodeBlock code={code} language={match?.[1]} mode="full" className="my-2" />, props.node?.position)
       }
 
       return <InlineCode>{children}</InlineCode>
@@ -282,15 +475,22 @@ function createComponents(
     // Rich paragraph spacing
     p: ({ children }) => <p className="my-3 leading-relaxed">{children}</p>,
     // Styled lists - ul uses tighter spacing, ol uses standard for number alignment
-    ul: ({ children }) => (
-      <ul className="my-3 space-y-1.5 ps-[16px] pe-2 list-disc marker:text-[var(--md-bullets)]">
+    ul: ({ children, className }) => (
+      <ul
+        className={cn(
+          'my-3 space-y-1.5 ps-[16px] pe-2 list-disc marker:text-[var(--md-bullets)]',
+          className?.includes('contains-task-list') && 'list-none ps-0 marker:content-none',
+        )}
+      >
         {children}
       </ul>
     ),
-    ol: ({ children }) => (
-      <ol className="my-3 space-y-1.5 pl-6 list-decimal">{children}</ol>
+    ol: ({ children, className }) => (
+      <ol className={cn('my-3 space-y-1.5 pl-6 list-decimal', className)}>{children}</ol>
     ),
-    li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+    li: ({ children, className }) => (
+      <li className={cn('leading-relaxed', className?.includes('task-list-item') && 'list-none')}>{children}</li>
+    ),
     // Beautiful tables
     table: ({ children }) => (
       <div className="my-4 overflow-x-auto rounded-md border">
@@ -348,8 +548,9 @@ function createComponents(
     em: ({ children }) => <em className="italic">{children}</em>,
     del: ({ children }) => <del className="line-through text-muted-foreground">{children}</del>,
     // Handle unknown <markdown> tags that may come through rehype-raw
-    markdown: ({ children }) => <>{children}</>,
-  }
+    // Type assertion needed because 'markdown' is not a standard HTML element
+    markdown: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  } as Partial<Components>
 }
 
 /**
@@ -371,6 +572,7 @@ export function Markdown({
   onFileClick,
   collapsible = false,
   hideFirstMermaidExpand = true,
+  disablePreviewBlocks,
 }: MarkdownProps) {
   // Get collapsible context if enabled
   const collapsibleContext = useCollapsibleMarkdown()
@@ -389,8 +591,8 @@ export function Markdown({
   }
 
   const components = React.useMemo(
-    () => createComponents(mode, onUrlClick, onFileClick, collapsible ? collapsibleContext : null, firstMermaidCodeRef, hideFirstMermaidExpand),
-    [mode, onUrlClick, onFileClick, collapsible, collapsibleContext, hideFirstMermaidExpand]
+    () => wrapWithSafeProxy(createComponents(mode, onUrlClick, onFileClick, collapsible ? collapsibleContext : null, firstMermaidCodeRef, hideFirstMermaidExpand, disablePreviewBlocks)),
+    [mode, onUrlClick, onFileClick, collapsible, collapsibleContext, hideFirstMermaidExpand, disablePreviewBlocks]
   )
 
   // Preprocess to convert raw URLs and file paths to markdown links
@@ -399,9 +601,19 @@ export function Markdown({
     [children]
   )
 
-  // Conditionally include the collapsible sections plugin
+  // Conditionally include the collapsible sections plugin.
+  // IMPORTANT: Disable single-dollar inline math so currency like $2M–$4M
+  // stays plain text. Math should use $$...$$ delimiters.
   const remarkPlugins = React.useMemo(
-    () => collapsible ? [remarkGfm, remarkCollapsibleSections] : [remarkGfm],
+    () => {
+      const mathPlugin: [typeof remarkMath, typeof MARKDOWN_MATH_OPTIONS] = [
+        remarkMath,
+        MARKDOWN_MATH_OPTIONS
+      ]
+      return collapsible
+        ? [remarkGfm, mathPlugin, remarkCollapsibleSections]
+        : [remarkGfm, mathPlugin]
+    },
     [collapsible]
   )
 
@@ -409,8 +621,9 @@ export function Markdown({
     <div className={cn('markdown-content', className)}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
-        rehypePlugins={[rehypeRaw]}
+        rehypePlugins={[rehypeKatex, rehypeRaw]}
         components={components}
+        urlTransform={markdownUrlTransform}
       >
         {processedContent}
       </ReactMarkdown>
@@ -432,13 +645,15 @@ export const MemoizedMarkdown = React.memo(
       return (
         prevProps.id === nextProps.id &&
         prevProps.children === nextProps.children &&
-        prevProps.mode === nextProps.mode
+        prevProps.mode === nextProps.mode &&
+        prevProps.disablePreviewBlocks === nextProps.disablePreviewBlocks
       )
     }
     // Otherwise compare content and mode
     return (
       prevProps.children === nextProps.children &&
-      prevProps.mode === nextProps.mode
+      prevProps.mode === nextProps.mode &&
+      prevProps.disablePreviewBlocks === nextProps.disablePreviewBlocks
     )
   }
 )

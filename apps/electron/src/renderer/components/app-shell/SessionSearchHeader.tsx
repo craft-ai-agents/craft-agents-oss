@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { Search, X } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
 
@@ -27,6 +28,8 @@ export interface SessionSearchHeaderProps {
   onBlur?: () => void
   /** Whether content search is in progress */
   isSearching?: boolean
+  /** Whether the search service is unavailable (e.g. ripgrep not found) */
+  isUnavailable?: boolean
   /** Number of results to display (when not searching) */
   resultCount?: number
   /** Whether the result count exceeded the display limit (shows "100+" instead of exact count) */
@@ -47,12 +50,14 @@ export function SessionSearchHeader({
   onFocus,
   onBlur,
   isSearching = false,
+  isUnavailable = false,
   resultCount,
   exceededLimit = false,
   inputRef,
   placeholder = 'Search titles and content...',
   readOnly = false,
 }: SessionSearchHeaderProps) {
+  const { t } = useTranslation()
   return (
     <div className="shrink-0 px-2 pt-2 pb-1.5 border-b border-border/50">
       {/* Search input */}
@@ -75,23 +80,25 @@ export function SessionSearchHeader({
           <button
             onClick={onSearchClose}
             className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-foreground/10 rounded"
-            title="Close search"
+            title={t("session.closeSearch")}
           >
             <X className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
         )}
       </div>
 
-      {/* Search status row - shown when there's a query (1+ characters) */}
-      {searchQuery.length > 0 && (
+      {/* Search status row - shown when search mode is active (2+ characters) */}
+      {searchQuery.length >= 2 && (
         <div className="px-2 pt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground">
           {isSearching ? (
             <>
               <Spinner className="text-[9px] text-foreground/50" />
-              <span>Loading…</span>
+              <span>{t('common.loading')}</span>
             </>
+          ) : isUnavailable ? (
+            <span className="text-destructive/70">{t('session.searchUnavailable')}</span>
           ) : (
-            <span>{exceededLimit ? '100+' : (resultCount ?? 0)} results</span>
+            <span>{t('session.results', { count: exceededLimit ? '100+' : (resultCount ?? 0) })}</span>
           )}
         </div>
       )}

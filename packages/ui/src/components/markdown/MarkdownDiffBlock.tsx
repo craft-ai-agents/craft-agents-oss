@@ -6,18 +6,21 @@
  * in the full-screen diff overlay (ShikiDiffViewer), instead of plain
  * Shiki syntax highlighting.
  *
- * Handles two common diff code block formats:
+ * Handles common diff code block formats:
  * 1. Proper unified diffs (with --- / +++ / @@ headers) — passed directly
- * 2. Bare diff content (just +/- lines) — synthetic headers are prepended
+ * 2. Numbered hunks without file headers — synthetic file headers are prepended
+ * 3. Bare diff content or bare @@ markers — synthetic headers are prepended
  *
  * Falls back to the regular CodeBlock if PatchDiff rendering fails.
  */
 
 import * as React from 'react'
 import { PatchDiff, type PatchDiffProps } from '@pierre/diffs/react'
-import { DIFFS_TAG_NAME, registerCustomTheme, resolveTheme } from '@pierre/diffs'
+import { DIFFS_TAG_NAME } from '@pierre/diffs'
 import { cn } from '../../lib/utils'
 import { CodeBlock } from './CodeBlock'
+import { ensureUnifiedDiffFormat } from './diff-normalize'
+import { registerCraftShikiThemes } from '../code-viewer/registerShikiThemes'
 
 // ── Custom element + theme registration (same as ShikiDiffViewer) ──────────
 // Idempotent: safe to run even if ShikiDiffViewer already registered these.
@@ -33,16 +36,8 @@ if (typeof HTMLElement !== 'undefined' && !customElements.get(DIFFS_TAG_NAME)) {
   customElements.define(DIFFS_TAG_NAME, FileDiffContainer)
 }
 
-// Transparent-bg variants of pierre's built-in themes so the app's
-// CSS variable (--background) shows through for custom theme support.
-registerCustomTheme('craft-dark', async () => {
-  const theme = await resolveTheme('pierre-dark')
-  return { ...theme, name: 'craft-dark', bg: 'transparent', colors: { ...theme.colors, 'editor.background': 'transparent' } }
-})
-registerCustomTheme('craft-light', async () => {
-  const theme = await resolveTheme('pierre-light')
-  return { ...theme, name: 'craft-light', bg: 'transparent', colors: { ...theme.colors, 'editor.background': 'transparent' } }
-})
+// Register custom themes once per runtime.
+registerCraftShikiThemes()
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -53,43 +48,6 @@ registerCustomTheme('craft-light', async () => {
 function isDarkMode(): boolean {
   if (typeof document === 'undefined') return false
   return document.documentElement.classList.contains('dark')
-}
-
-/**
- * Ensure the raw diff text is a valid unified diff that PatchDiff can parse.
- *
- * Markdown diff blocks often omit the --- / +++ / @@ headers. If those are
- * missing we synthesise minimal headers so the parser can handle the content.
- */
-function ensureUnifiedDiffFormat(raw: string): string {
-  // If the content already contains a hunk header, assume it's valid
-  if (/^@@\s/m.test(raw)) return raw
-
-  const lines = raw.split('\n')
-
-  // Count original (context + deletions) and modified (context + additions)
-  // line totals so we can build a correct hunk header.
-  let origCount = 0
-  let modCount = 0
-
-  for (const line of lines) {
-    if (line.startsWith('-')) {
-      origCount++
-    } else if (line.startsWith('+')) {
-      modCount++
-    } else {
-      // Context line (including empty lines)
-      origCount++
-      modCount++
-    }
-  }
-
-  return [
-    '--- a/file',
-    '+++ b/file',
-    `@@ -1,${origCount} +1,${modCount} @@`,
-    raw,
-  ].join('\n')
 }
 
 // ── Error boundary ────────────────────────────────────────────────────────

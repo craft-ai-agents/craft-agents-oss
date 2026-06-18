@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
@@ -54,6 +55,7 @@ export function TableOfContents({
   onHeadingClick,
   className,
 }: TableOfContentsProps) {
+  const { t } = useTranslation()
   // Extract headings with line numbers from markdown content
   const headings = useMemo(() => {
     const lines = content.split('\n')
@@ -94,7 +96,7 @@ export function TableOfContents({
   if (headings.length === 0) {
     return (
       <div className={cn('h-full flex items-center justify-center p-4', className)}>
-        <span className="text-xs text-muted-foreground">No headings</span>
+        <span className="text-xs text-muted-foreground">{t("tableOfContents.noHeadings")}</span>
       </div>
     )
   }

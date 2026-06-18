@@ -4,7 +4,9 @@
 
 // Workspace and config types
 export type {
+  WorkspaceInfo,
   Workspace,
+  RemoteServerConfig,
   McpAuthType,
   AuthType,
   OAuthCredentials,
@@ -28,11 +30,20 @@ export type {
   MessageAttachment,
   StoredAttachment,
   ContentBadge,
+  AnnotationAuthor,
+  AnnotationBody,
+  AnnotationIntent,
+  AnnotationStatus,
+  AnnotationBlockType,
+  AnnotationSelector,
+  AnnotationTarget,
+  AnnotationV1,
   Message,
   StoredMessage,
   TokenUsage,
   AgentEventUsage,
   RecoveryAction,
+  ErrorCode,
   TypedError,
   PermissionRequest,
   AgentEvent,
@@ -42,4 +53,15 @@ export type {
   AuthStatus,
 } from './message.ts';
 export { generateMessageId } from './message.ts';
+
+// Message persistence mappers
+export { messageToStored, storedToMessage } from './message-mapper.ts';
+
+// Server types (headless operations)
+export type {
+  ServerStatus,
+  ServerHealth,
+  SessionProcessingStatus,
+  ActiveSessionInfo,
+} from './server.ts';
 

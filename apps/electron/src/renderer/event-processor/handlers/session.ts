@@ -13,9 +13,11 @@ import type {
   TypedErrorEvent,
   SourcesChangedEvent,
   LabelsChangedEvent,
-  TodoStateChangedEvent,
+  SessionStatusChangedEvent,
   SessionFlaggedEvent,
   SessionUnflaggedEvent,
+  SessionArchivedEvent,
+  SessionUnarchivedEvent,
   NameChangedEvent,
   PermissionRequestEvent,
   CredentialRequestEvent,
@@ -29,12 +31,15 @@ import type {
   WorkingDirectoryChangedEvent,
   PermissionModeChangedEvent,
   SessionModelChangedEvent,
+  LLMConnectionChangedEvent,
   UserMessageEvent,
+  MessageAnnotationsUpdatedEvent,
   SessionSharedEvent,
   SessionUnsharedEvent,
   AuthRequestEvent,
   AuthCompletedEvent,
   UsageUpdateEvent,
+  Effect,
 } from '../types'
 import type { Message } from '../../../shared/types'
 import { generateMessageId, appendMessage } from '../helpers'
@@ -51,19 +56,42 @@ export function handleComplete(
 ): ProcessResult {
   const { session } = state
 
-  // Fail-safe: mark any running tools as complete
+  // Fail-safe: mark any non-terminal tools as complete.
+  // Catches 'executing' (normal) and 'backgrounded' (spurious — e.g. foreground Agent
+  // whose result contained agentId:). Genuinely backgrounded tasks have isBackground=true
+  // AND a taskId, so they're excluded — task_completed will finalize them.
+  const TERMINAL_TOOL_STATUSES = new Set(['completed', 'error'])
   let updatedMessages = session.messages
   const hasRunningTools = session.messages.some(
-    m => m.role === 'tool' && m.toolStatus === 'executing'
+    m => m.role === 'tool'
+      && !TERMINAL_TOOL_STATUSES.has(m.toolStatus ?? '')
+      && !(m.isBackground && m.taskId)  // Don't force-complete genuine background tasks
   )
 
   if (hasRunningTools) {
     updatedMessages = session.messages.map(m => {
-      if (m.role === 'tool' && m.toolStatus === 'executing') {
-        return { ...m, toolStatus: 'completed' as const }
+      if (
+        m.role === 'tool'
+        && !TERMINAL_TOOL_STATUSES.has(m.toolStatus ?? '')
+        && !(m.isBackground && m.taskId)
+      ) {
+        return { ...m, toolStatus: 'completed' as const, toolResult: m.toolResult ?? '' }
       }
       return m
     })
+  }
+
+  // Clear isQueued from any user messages once the turn completes. Pi's steer
+  // path never emits a 'processing' status update to clear it (the message is
+  // injected mid-stream and absorbed into the current response), so this is
+  // the natural place to drop the indicator. Claude's queued path has already
+  // cleared via the 'processing' status update before this fires; this is
+  // a safe no-op for that case.
+  const hasQueuedUserBubbles = updatedMessages.some(m => m.role === 'user' && m.isQueued)
+  if (hasQueuedUserBubbles) {
+    updatedMessages = updatedMessages.map(m =>
+      m.role === 'user' && m.isQueued ? { ...m, isQueued: false } : m
+    )
   }
 
   return {
@@ -105,7 +133,7 @@ export function handleError(
     id: generateMessageId(),
     role: 'error',
     content: event.error,
-    timestamp: Date.now(),
+    timestamp: event.timestamp ?? Date.now(),
   }
 
   return {
@@ -144,12 +172,19 @@ export function handleTypedError(
     content: event.error.title
       ? `${event.error.title}: ${event.error.message}`
       : event.error.message,
-    timestamp: Date.now(),
+    timestamp: event.timestamp ?? Date.now(),
     errorCode: event.error.code,
     errorTitle: event.error.title,
     errorDetails: event.error.details,
     errorOriginal: event.error.originalError,
     errorCanRetry: event.error.canRetry,
+    errorActions: event.error.actions?.map(a => ({
+      key: a.key,
+      label: a.label,
+      action: a.action,
+      url: a.url,
+      sourceSlug: a.sourceSlug,
+    })),
   }
 
   return {
@@ -180,7 +215,7 @@ export function handleStatus(
     id: generateMessageId(),
     role: 'status',
     content: event.message,
-    timestamp: Date.now(),
+    timestamp: event.timestamp ?? Date.now(),
     statusType: event.statusType,
   }
 
@@ -236,7 +271,7 @@ export function handleInfo(
     id: generateMessageId(),
     role: 'info',
     content: event.message,
-    timestamp: Date.now(),
+    timestamp: event.timestamp ?? Date.now(),
     infoLevel: event.level,
   }
 
@@ -250,22 +285,35 @@ export function handleInfo(
 }
 
 /**
- * Handle interrupted - agent was interrupted
- * When message is provided, it's a user-initiated stop (shows "Response interrupted")
- * When message is omitted, it's a silent redirect (user sent new message while processing)
+ * Handle interrupted - agent was interrupted.
+ *
+ * Two distinct shapes:
+ * - **User-initiated stop** (`event.message` present): user clicked the Stop
+ *   button. We render the "Response interrupted" notice, drop queued user
+ *   bubbles, and restore their text to the input field so the user can edit
+ *   and re-send.
+ * - **Silent redirect** (`event.message` absent): the agent aborted internally
+ *   so a new message could be processed. The backend's `processNextQueuedMessage`
+ *   will auto-replay queued messages — we must NOT remove the queued bubbles
+ *   nor restore them to the input, otherwise the user perceives a silent drop
+ *   (#616).
  */
 export function handleInterrupted(
   state: SessionState,
   event: InterruptedEvent
 ): ProcessResult {
   const { session } = state
+  const effects: Effect[] = []
+  const isUserInitiated = !!event.message
 
   // Clear transient streaming state (isPending, isStreaming) and mark running tools as interrupted
   // These fields are not persisted, so this matches the state after a reload
   // Also filter out status messages - they are transient UI state that shouldn't persist after interruption
-  // (similar to isPending/isStreaming, and they're not persisted to disk anyway)
   const updatedMessages = session.messages
     .filter(m => m.role !== 'status')  // Remove transient status messages
+    // Only drop queued bubbles when the user explicitly stopped — silent
+    // redirects auto-replay them so they must remain visible (#616).
+    .filter(m => !(isUserInitiated && m.isQueued))
     .map(m => {
       // Mark running tools as interrupted
       if (m.role === 'tool' && m.toolResult === undefined && m.toolStatus !== 'completed' && m.toolStatus !== 'error') {
@@ -283,6 +331,16 @@ export function handleInterrupted(
     ? [...updatedMessages, event.message]
     : updatedMessages
 
+  // Restore queued message text to the input field — only on user-initiated
+  // stops. Silent redirects keep the bubble in chat and rely on the backend's
+  // auto-replay (#616).
+  if (isUserInitiated && event.queuedMessages && event.queuedMessages.length > 0) {
+    effects.push({
+      type: 'restore_input',
+      text: event.queuedMessages.join('\n\n'),
+    })
+  }
+
   return {
     state: {
       session: {
@@ -293,7 +351,7 @@ export function handleInterrupted(
       },
       streaming: null,
     },
-    effects: [],
+    effects,
   }
 }
 
@@ -395,6 +453,11 @@ export function handlePermissionModeChanged(
       type: 'permission_mode_changed',
       sessionId: event.sessionId,
       permissionMode: event.permissionMode,
+      previousPermissionMode: event.previousPermissionMode,
+      transitionDisplay: event.transitionDisplay,
+      modeVersion: event.modeVersion,
+      changedAt: event.changedAt,
+      changedBy: event.changedBy,
     }],
   }
 }
@@ -418,6 +481,28 @@ export function handleSessionModelChanged(
 }
 
 /**
+ * Handle connection_changed - sync session.llmConnection to renderer state
+ */
+export function handleConnectionChanged(
+  state: SessionState,
+  event: LLMConnectionChangedEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  return {
+    state: {
+      session: {
+        ...session,
+        llmConnection: event.connectionSlug,
+        ...(event.supportsBranching !== undefined && { supportsBranching: event.supportsBranching }),
+      },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
  * Handle user_message - confirms optimistic user message from backend
  *
  * Three statuses:
@@ -432,11 +517,11 @@ export function handleUserMessage(
   const { session, streaming } = state
   const { message, status } = event
 
-  // Find existing message by content + timestamp match (for optimistic updates)
-  // or by ID (for queued messages where backend created the ID)
+  // Find existing message by ID match (backend ID, optimistic ID, or content+timestamp fallback)
   const existingIndex = session.messages.findIndex(m =>
     m.role === 'user' && (
       m.id === message.id ||
+      (event.optimisticMessageId && m.id === event.optimisticMessageId) ||
       (m.content === message.content && Math.abs(m.timestamp - message.timestamp) < 5000)
     )
   )
@@ -444,12 +529,31 @@ export function handleUserMessage(
   let updatedMessages: Message[]
 
   if (existingIndex >= 0) {
-    // Update existing message - remove isPending, add isQueued if status is 'queued'
+    const existingMessage = session.messages[existingIndex]
+
+    // Event sequence protection: don't regress from 'processing' back to 'queued'
+    // This handles out-of-order events (e.g., 'processing' arrives before 'queued')
+    if (status === 'queued' && existingMessage.isQueued === false) {
+      // Already progressed past queued state, ignore this late 'queued' event
+      return { state, effects: [] }
+    }
+
+    // Update existing message — clear isPending, set isQueued based on status.
+    //
+    // - 'queued'     → isQueued = true  (Claude path: backend queued for re-send)
+    // - 'processing' → isQueued = false (queued message is now actually running)
+    // - 'accepted'   → isQueued = false (Pi steer path: agent has the message)
+    //
+    // We deliberately do NOT swap `m.id` to the backend's canonical id here.
+    // ChatDisplay's `getTurnKey` keys user-message bubbles by id, and a swap
+    // would unmount/remount the UserMessageBubble — wiping its local timer
+    // state and dropping the queued chip mid-flight. The canonical backend
+    // id is irrelevant to subsequent events: they all use
+    // `event.optimisticMessageId` for routing (see the findIndex above).
     updatedMessages = session.messages.map((m, i) => {
       if (i === existingIndex) {
         return {
           ...m,
-          id: message.id,  // Use backend's ID as canonical
           isPending: false,
           isQueued: status === 'queued',
         }
@@ -475,6 +579,31 @@ export function handleUserMessage(
         lastMessageRole: 'user',  // Clear plan badge when user responds
         // Set isProcessing when message is accepted/processing (enables multi-window sync)
         isProcessing: status === 'accepted' || status === 'processing',
+      },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle message_annotations_updated - update annotations on a specific message.
+ */
+export function handleMessageAnnotationsUpdated(
+  state: SessionState,
+  event: MessageAnnotationsUpdatedEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  return {
+    state: {
+      session: {
+        ...session,
+        messages: session.messages.map(m =>
+          m.id === event.messageId
+            ? { ...m, annotations: event.annotations }
+            : m
+        ),
       },
       streaming,
     },
@@ -525,16 +654,16 @@ export function handleLabelsChanged(
 }
 
 /**
- * Handle todo_state_changed - update session's todoState (external metadata change or agent tool)
+ * Handle session_status_changed - update session's sessionStatus (external metadata change or agent tool)
  */
-export function handleTodoStateChanged(
+export function handleSessionStatusChanged(
   state: SessionState,
-  event: TodoStateChangedEvent
+  event: SessionStatusChangedEvent
 ): ProcessResult {
   const { session, streaming } = state
   return {
     state: {
-      session: { ...session, todoState: event.todoState },
+      session: { ...session, sessionStatus: event.sessionStatus },
       streaming,
     },
     effects: [],
@@ -569,6 +698,40 @@ export function handleSessionUnflagged(
   return {
     state: {
       session: { ...session, isFlagged: false },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle session_archived - mark session as archived
+ */
+export function handleSessionArchived(
+  state: SessionState,
+  _event: SessionArchivedEvent
+): ProcessResult {
+  const { session, streaming } = state
+  return {
+    state: {
+      session: { ...session, isArchived: true, archivedAt: Date.now() },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle session_unarchived - mark session as unarchived
+ */
+export function handleSessionUnarchived(
+  state: SessionState,
+  _event: SessionUnarchivedEvent
+): ProcessResult {
+  const { session, streaming } = state
+  return {
+    state: {
+      session: { ...session, isArchived: false, archivedAt: undefined },
       streaming,
     },
     effects: [],
@@ -783,3 +946,4 @@ export function handleUsageUpdate(
     effects: [],
   }
 }
+

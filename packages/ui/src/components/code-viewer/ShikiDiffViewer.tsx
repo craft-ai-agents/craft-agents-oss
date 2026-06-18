@@ -11,9 +11,10 @@
 import * as React from 'react'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { FileDiff, type FileDiffMetadata, type FileDiffProps } from '@pierre/diffs/react'
-import { parseDiffFromFile, DIFFS_TAG_NAME, registerCustomTheme, resolveTheme, type FileContents } from '@pierre/diffs'
+import { parseDiffFromFile, DIFFS_TAG_NAME, type FileContents } from '@pierre/diffs'
 import { cn } from '../../lib/utils'
 import { LANGUAGE_MAP } from './language-map'
+import { registerCraftShikiThemes } from './registerShikiThemes'
 
 // Register the diffs-container custom element if not already registered
 // This is necessary because the React component renders a custom element
@@ -28,17 +29,8 @@ if (typeof HTMLElement !== 'undefined' && !customElements.get(DIFFS_TAG_NAME)) {
   customElements.define(DIFFS_TAG_NAME, FileDiffContainer)
 }
 
-// Register custom themes based on pierre-dark/light but with transparent background.
-// This lets the container's var(--background) CSS variable show through,
-// so the diff viewer respects custom app themes (e.g. Dracula).
-registerCustomTheme('craft-dark', async () => {
-  const theme = await resolveTheme('pierre-dark')
-  return { ...theme, name: 'craft-dark', bg: 'transparent', colors: { ...theme.colors, 'editor.background': 'transparent' } }
-})
-registerCustomTheme('craft-light', async () => {
-  const theme = await resolveTheme('pierre-light')
-  return { ...theme, name: 'craft-light', bg: 'transparent', colors: { ...theme.colors, 'editor.background': 'transparent' } }
-})
+// Register custom themes once per runtime.
+registerCraftShikiThemes()
 
 export interface ShikiDiffViewerProps {
   /** Original (before) content */

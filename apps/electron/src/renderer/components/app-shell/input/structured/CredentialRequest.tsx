@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import type { CredentialRequest as CredentialRequestType, CredentialResponse } from '../../../../../shared/types'
+import { validateBasicAuthCredentials, getPasswordValue, getPasswordLabel, getPasswordPlaceholder } from '@/utils/auth-validation'
 
 interface CredentialRequestProps {
   request: CredentialRequestType
@@ -27,11 +28,27 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  // Multi-header state: { "DD-API-KEY": "", "DD-APPLICATION-KEY": "" }
+  const [headerValues, setHeaderValues] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {}
+    if (request.headerNames) {
+      for (const name of request.headerNames) {
+        initial[name] = ''
+      }
+    }
+    return initial
+  })
 
   const isBasicAuth = request.mode === 'basic'
+  const isMultiHeader = request.mode === 'multi-header'
+  const passwordRequired = request.passwordRequired ?? true  // default true for backward compatibility
+
+  // Validation logic
   const isValid = isBasicAuth
-    ? username.trim() && password.trim()
-    : value.trim()
+    ? validateBasicAuthCredentials(username, password, passwordRequired)
+    : isMultiHeader
+    ? request.headerNames?.every(name => headerValues[name]?.trim().length > 0) ?? false
+    : value.trim().length > 0
 
   const handleSubmit = useCallback(() => {
     if (!isValid) return
@@ -40,7 +57,18 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
       onResponse({
         type: 'credential',
         username: username.trim(),
-        password: password.trim(),
+        password: getPasswordValue(password, passwordRequired),
+        cancelled: false
+      })
+    } else if (isMultiHeader) {
+      // Trim all header values
+      const trimmedHeaders: Record<string, string> = {}
+      for (const [key, val] of Object.entries(headerValues)) {
+        trimmedHeaders[key] = val.trim()
+      }
+      onResponse({
+        type: 'credential',
+        headers: trimmedHeaders,
         cancelled: false
       })
     } else {
@@ -50,7 +78,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
         cancelled: false
       })
     }
-  }, [isBasicAuth, username, password, value, isValid, onResponse])
+  }, [isBasicAuth, isMultiHeader, username, password, value, headerValues, isValid, onResponse, passwordRequired])
 
   const handleCancel = useCallback(() => {
     onResponse({ type: 'credential', cancelled: true })
@@ -73,7 +101,9 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
   const credentialLabel = request.labels?.credential ||
     (request.mode === 'bearer' ? 'Bearer Token' : 'API Key')
   const usernameLabel = request.labels?.username || 'Username'
-  const passwordLabel = request.labels?.password || 'Password'
+  const basePasswordLabel = request.labels?.password || 'Password'
+  const passwordLabel = getPasswordLabel(basePasswordLabel, passwordRequired)
+  const passwordPlaceholder = getPasswordPlaceholder(basePasswordLabel, passwordRequired)
 
   return (
     <div className={cn(
@@ -89,7 +119,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
         className="flex flex-col flex-1 min-h-0"
       >
         {/* Content */}
-        <div className="p-4 space-y-4 flex-1 min-h-0 flex flex-col">
+        <div className="p-4 space-y-4 flex-1 min-h-0 flex flex-col overflow-y-auto">
           {/* Header */}
           <div className="flex items-start gap-3">
             <div className="shrink-0 mt-0.5">
@@ -151,7 +181,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
                       onChange={(e) => setPassword(e.target.value)}
                       onKeyDown={handleKeyDown}
                       className="pl-9 pr-9"
-                      placeholder={`Enter ${passwordLabel.toLowerCase()}`}
+                      placeholder={passwordPlaceholder}
                     />
                     <button
                       type="button"
@@ -163,6 +193,43 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
                     </button>
                   </div>
                 </div>
+              </>
+            ) : isMultiHeader && request.headerNames ? (
+              /* Multi-header fields (e.g., Datadog DD-API-KEY + DD-APPLICATION-KEY) */
+              <>
+                {request.headerNames.map((headerName, index) => (
+                  <div key={headerName} className="space-y-1.5">
+                    <Label htmlFor={`credential-header-${index}`} className="text-xs">
+                      {headerName}
+                    </Label>
+                    <div className="relative">
+                      <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id={`credential-header-${index}`}
+                        name={headerName}
+                        autoComplete="off"
+                        type={showPassword ? 'text' : 'password'}
+                        value={headerValues[headerName] || ''}
+                        onChange={(e) => setHeaderValues(prev => ({
+                          ...prev,
+                          [headerName]: e.target.value
+                        }))}
+                        onKeyDown={handleKeyDown}
+                        className="pl-9 pr-9"
+                        placeholder={`Enter ${headerName}`}
+                        autoFocus={index === 0}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </>
             ) : (
               /* Single credential field (API key, bearer token) */
@@ -211,7 +278,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2 px-3 py-2 border-t border-border/50">
+        <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 border-t border-border/50">
           <Button
             type="submit"
             size="sm"
@@ -233,9 +300,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
             Cancel
           </Button>
 
-          <div className="flex-1" />
-
-          <span className="text-[10px] text-muted-foreground">
+          <span className="min-w-0 flex-1 basis-full text-[10px] text-muted-foreground sm:basis-auto sm:text-right">
             Credentials are encrypted at rest
           </span>
         </div>

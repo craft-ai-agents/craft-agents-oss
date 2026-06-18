@@ -9,7 +9,8 @@
  * - URL: "https://..." - auto-downloaded to icon.{ext} file
  * - File: icon.svg, icon.png, etc. - auto-discovered in directory
  *
- * Priority: Local file > URL (downloaded) > Emoji
+ * Priority: Config value (emoji/URL) > Local file (auto-discovered)
+ * Config is the source of truth. Local files are only used when config.icon is undefined.
  *
  * NOT supported (rejected):
  * - Inline SVG: "<svg>...</svg>"
@@ -200,27 +201,38 @@ export function needsIconDownload(iconValue: string | undefined, localIconPath: 
  * Result of resolving an icon for rendering.
  */
 export interface ResolvedIcon {
-  type: 'file' | 'emoji' | 'none';
-  /** For file: absolute path. For emoji: the emoji string. */
+  type: 'file' | 'emoji' | 'url' | 'none';
+  /** For file: absolute path. For emoji: the emoji string. For url: the URL. */
   value?: string;
 }
 
 /**
  * Resolve an icon for rendering.
- * Applies priority: local file > emoji > none
+ * Config value is the source of truth. Local files are fallback for auto-discovery.
+ *
+ * Priority:
+ * 1. Emoji in config → emoji
+ * 2. URL in config → url (caller handles download/display)
+ * 3. Local file (auto-discovered) → file
+ * 4. None
  *
  * @param iconValue - The icon value from config (emoji or URL)
- * @param localIconPath - Path to local icon file if it exists
+ * @param localIconPath - Path to local icon file if it exists (auto-discovered)
  */
 export function resolveIcon(iconValue: string | undefined, localIconPath: string | undefined): ResolvedIcon {
-  // Priority 1: Local file
-  if (localIconPath) {
-    return { type: 'file', value: localIconPath };
-  }
-
-  // Priority 2: Emoji (URLs should have been downloaded to local file)
+  // Priority 1: Emoji from config
   if (iconValue && isEmoji(iconValue)) {
     return { type: 'emoji', value: iconValue };
+  }
+
+  // Priority 2: URL from config (caller handles download/display)
+  if (iconValue && isIconUrl(iconValue)) {
+    return { type: 'url', value: iconValue };
+  }
+
+  // Priority 3: Auto-discovered local file (only when config.icon is undefined)
+  if (localIconPath) {
+    return { type: 'file', value: localIconPath };
   }
 
   // No icon

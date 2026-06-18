@@ -1,6 +1,6 @@
 appId: com.lukilabs.craft-agent
 productName: Craft Agents
-copyright: Copyright © 2025 Craft Docs Ltd.
+copyright: Copyright © 2026 Craft Docs Ltd.
 
 electronVersion: "39.2.7"
 
@@ -16,21 +16,59 @@ files:
   - "!dist/renderer/src/**"
   - "!**/*.map"
   - package.json
-  # Bundled assets loaded at runtime via getBundledAssetsDir()
-  - dist/assets/docs/**/*
-  - dist/assets/tool-icons/**/*
-  - dist/assets/themes/**/*
-  - dist/assets/permissions/**/*
-  - dist/assets/config-defaults.json
-  # Include SDK for subprocess execution
-  - node_modules/@anthropic-ai/claude-agent-sdk/**/*
+  # Include bundled MCP servers (bridge + session) for Codex sessions
+  - resources/bridge-mcp-server/**/*
+  - resources/session-mcp-server/**/*
+  # Include Pi agent server subprocess for Pi SDK sessions
+  - resources/pi-agent-server/**/*
+  # Note: Bundled assets (docs, themes, permissions, tool-icons) are in resources/
+  # and copied to dist/resources/ by build:copy. They're included via dist/**/* above.
   # Include network interceptor for API error capture and MCP schema injection
-  - packages/shared/src/network-interceptor.ts
+  - packages/shared/src/unified-network-interceptor.ts
+  - packages/shared/src/interceptor-common.ts
+  - packages/shared/src/feature-flags.ts
+  - packages/shared/src/interceptor-request-utils.ts
+  # Include CLI tool Python scripts (platform-independent)
+  - resources/scripts/**/*
+  # Include CLI tool shell wrappers (platform-independent, both Unix and Windows)
+  - resources/bin/markitdown
+  - resources/bin/markitdown.cmd
+  - resources/bin/pdf-tool
+  - resources/bin/pdf-tool.cmd
+  - resources/bin/xlsx-tool
+  - resources/bin/xlsx-tool.cmd
+  - resources/bin/doc-diff
+  - resources/bin/doc-diff.cmd
+  - resources/bin/img-tool
+  - resources/bin/img-tool.cmd
+  - resources/bin/docx-tool
+  - resources/bin/docx-tool.cmd
+  - resources/bin/pptx-tool
+  - resources/bin/pptx-tool.cmd
+  - resources/bin/ical-tool
+  - resources/bin/ical-tool.cmd
+  # Include bundled uv binary (platform-specific, only the relevant one ships per build)
+  - resources/bin/darwin-arm64/**/*
+  - resources/bin/darwin-x64/**/*
+  - resources/bin/win32-x64/**/*
+  - resources/bin/linux-x64/**/*
   # Include bundled Bun runtime (platform-specific, set by build script)
   - vendor/bun/**/*
-  # Exclude everything else from node_modules
+  # Exclude everything from node_modules (will use extraResources for SDK)
   - "!node_modules/**/*"
-  - node_modules/@anthropic-ai/**/*
+
+# Since SDK 0.2.113 the SDK ships a thin core (`@anthropic-ai/claude-agent-sdk`)
+# and a per-platform optional dependency (`-darwin-arm64`, `-darwin-x64`, etc.)
+# containing the ~210 MB native `claude` binary. We bundle both as extraResources
+# below — only the binary matching the build target is shipped per artifact, so
+# the platform `files` rules below also exclude the wrong-platform binaries.
+#
+# Why extraResources instead of `files`: since electron-builder v20.15.2,
+# `node_modules` directories are auto-excluded from `files`. extraResources
+# bypasses that. See: https://github.com/electron-userland/electron-builder/issues/3104
+#
+# Ripgrep is sourced from `@vscode/ripgrep` (was previously bundled inside the
+# SDK as `vendor/ripgrep/<platform>/rg`; removed in 0.2.113).
 
 extraMetadata:
   main: dist/main.cjs
@@ -63,21 +101,36 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
-  # Exclude ripgrep binaries for other platforms
+  extraResources:
+    # Thin core SDK (sdk.mjs + types). ~4 MB — present on every platform.
+    - from: node_modules/@anthropic-ai/claude-agent-sdk
+      to: app/node_modules/@anthropic-ai/claude-agent-sdk
+    # Stable alias pointing at the target-arch native binary package.
+    # Populated by build-dmg.sh / build-linux.sh / build-win.ps1 before
+    # electron-builder runs (`apps/electron/node_modules/@anthropic-ai/claude-agent-sdk-binary/`).
+    # The runtime resolver (runtime-resolver.ts) looks here first.
+    - from: node_modules/@anthropic-ai/claude-agent-sdk-binary
+      to: app/node_modules/@anthropic-ai/claude-agent-sdk-binary
+    # ripgrep (used by packages/server-core/src/services/search.ts).
+    - from: node_modules/@vscode/ripgrep
+      to: app/node_modules/@vscode/ripgrep
+    # WhatsApp worker subprocess (self-contained; Baileys bundled in).
+    - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
+      to: messaging-whatsapp-worker/worker.cjs
+  # Exclude binaries for other platforms
   files:
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-linux"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-linux"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-win32"
+    - "!**/resources/bin/win32-*/**"
+    - "!**/resources/bin/linux-*/**"
   # Use predictable naming for macOS packages (applies to zip; dmg uses its own config below)
-  artifactName: "Craft-Agent-${arch}.${ext}"
+  artifactName: "Craft-Agents-${arch}.${ext}"
   # Code signing & notarization (disabled by default for local builds)
   # To enable: set CSC_LINK, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
   # notarize:
   #   teamId: ${APPLE_TEAM_ID}
 
 dmg:
-  # Use predictable naming: Craft-Agent-arm64.dmg, Craft-Agent-x64.dmg
-  artifactName: "Craft-Agent-${arch}.dmg"
+  # Use predictable naming: Craft-Agents-arm64.dmg, Craft-Agents-x64.dmg
+  artifactName: "Craft-Agents-${arch}.dmg"
   # Custom background (multi-resolution TIFF with 1x+2x for retina support)
   background: resources/dmg-background.tiff
   # Use app icon as the mounted volume icon in Finder
@@ -101,24 +154,34 @@ win:
     - target: nsis
       arch:
         - x64
-  # Use predictable naming: Craft-Agent-x64.exe
-  artifactName: "Craft-Agent-${arch}.${ext}"
+  # Use predictable naming: Craft-Agents-x64.exe
+  artifactName: "Craft-Agents-${arch}.${ext}"
   files:
-    # Exclude ripgrep binaries for other platforms
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-linux"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-linux"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-darwin"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-darwin"
-    # WORKAROUND: Exclude bun from regular files on Windows.
+    # Exclude binaries for other platforms
+    - "!**/resources/bin/darwin-*/**"
+    - "!**/resources/bin/linux-*/**"
+    # WORKAROUND: Exclude bun and uv from regular files on Windows.
     # electron-builder's npm node module collector causes EBUSY errors when copying
-    # bun.exe because it scans/locks files while simultaneously trying to copy them.
-    # Moving bun to extraResources avoids this by copying it before the collector runs.
+    # .exe files because it scans/locks files while simultaneously trying to copy them.
+    # Moving them to extraResources avoids this by copying before the collector runs.
     # See: https://github.com/electron-userland/electron-builder/issues/8250
     - "!vendor/bun/**/*"
-  # Copy bun.exe as extraResource to avoid EBUSY file locking (see comment above)
+    - "!**/resources/bin/win32-x64/**"
+  # Copy executables as extraResources to avoid EBUSY file locking (see comment above)
   extraResources:
+    - from: node_modules/@anthropic-ai/claude-agent-sdk
+      to: app/node_modules/@anthropic-ai/claude-agent-sdk
+    - from: node_modules/@anthropic-ai/claude-agent-sdk-binary
+      to: app/node_modules/@anthropic-ai/claude-agent-sdk-binary
+    - from: node_modules/@vscode/ripgrep
+      to: app/node_modules/@vscode/ripgrep
     - from: vendor/bun/bun.exe
       to: vendor/bun/bun.exe
+    - from: resources/bin/win32-x64
+      to: app/resources/bin/win32-x64
+    # WhatsApp worker subprocess (self-contained; Baileys bundled in).
+    - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
+      to: messaging-whatsapp-worker/worker.cjs
 
 nsis:
   oneClick: true
@@ -135,10 +198,18 @@ linux:
     - target: AppImage
       arch:
         - x64
-  artifactName: "Craft-Agent-${arch}.${ext}"
-  # Exclude ripgrep binaries for other platforms
+  artifactName: "Craft-Agents-${arch}.${ext}"
+  extraResources:
+    - from: node_modules/@anthropic-ai/claude-agent-sdk
+      to: app/node_modules/@anthropic-ai/claude-agent-sdk
+    - from: node_modules/@anthropic-ai/claude-agent-sdk-binary
+      to: app/node_modules/@anthropic-ai/claude-agent-sdk-binary
+    - from: node_modules/@vscode/ripgrep
+      to: app/node_modules/@vscode/ripgrep
+    # WhatsApp worker subprocess (self-contained; Baileys bundled in).
+    - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
+      to: messaging-whatsapp-worker/worker.cjs
+  # Exclude binaries for other platforms
   files:
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-darwin"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-darwin"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-win32"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-linux"
+    - "!**/resources/bin/darwin-*/**"
+    - "!**/resources/bin/win32-*/**"

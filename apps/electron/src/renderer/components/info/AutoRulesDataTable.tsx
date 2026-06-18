@@ -11,6 +11,8 @@
 
 import * as React from 'react'
 import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Maximize2 } from 'lucide-react'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
@@ -52,12 +54,13 @@ interface AutoRulesDataTableProps {
  * Mirrors the PatternBadge from PermissionsDataTable for consistency.
  */
 function PatternBadge({ pattern }: { pattern: string }) {
+  const { t } = useTranslation()
   const handleClick = async () => {
     try {
       await navigator.clipboard.writeText(pattern)
-      toast.success('Pattern copied to clipboard')
+      toast.success(t('toast.patternCopied'))
     } catch {
-      toast.error('Failed to copy pattern')
+      toast.error(t('toast.failedToCopyPattern'))
     }
   }
 
@@ -84,74 +87,76 @@ function PatternBadge({ pattern }: { pattern: string }) {
 }
 
 // Column definitions for the auto-rules flat table
-const columns: ColumnDef<AutoRuleRow>[] = [
-  {
-    id: 'label',
-    header: ({ column }) => <SortableHeader column={column} title="Label" />,
-    accessorFn: (row) => row.label.name,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5 flex items-center gap-1.5">
-        <LabelIcon label={row.original.label} size="xs" />
-        <span className="text-sm truncate">{row.original.label.name}</span>
-      </div>
-    ),
-    minSize: 100,
-  },
-  {
-    id: 'pattern',
-    header: ({ column }) => <SortableHeader column={column} title="Pattern" />,
-    accessorFn: (row) => row.rule.pattern,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <PatternBadge pattern={row.original.rule.pattern} />
-      </div>
-    ),
-    minSize: 120,
-  },
-  {
-    id: 'flags',
-    header: () => <span className="p-1.5 pl-2.5">Flags</span>,
-    accessorFn: (row) => row.rule.flags ?? 'gi',
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <span className="text-xs text-muted-foreground font-mono">
-          {row.original.rule.flags ?? 'gi'}
-        </span>
-      </div>
-    ),
-    minSize: 50,
-  },
-  {
-    id: 'template',
-    header: () => <span className="p-1.5 pl-2.5">Template</span>,
-    accessorFn: (row) => row.rule.valueTemplate ?? '',
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        {row.original.rule.valueTemplate ? (
-          <Info_Badge color="muted" className="font-mono whitespace-nowrap">
-            {row.original.rule.valueTemplate}
-          </Info_Badge>
-        ) : (
-          <span className="text-muted-foreground/50 text-sm">—</span>
-        )}
-      </div>
-    ),
-    minSize: 80,
-  },
-  {
-    id: 'description',
-    header: () => <span className="p-1.5 pl-2.5">Description</span>,
-    accessorFn: (row) => row.rule.description ?? '',
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5 min-w-0">
-        <span className="truncate block text-sm">
-          {row.original.rule.description || '—'}
-        </span>
-      </div>
-    ),
-    meta: { fillWidth: true, truncate: true },
-  },
-]
+function getColumns(t: TFunction): ColumnDef<AutoRuleRow>[] {
+  return [
+    {
+      id: 'label',
+      header: ({ column }) => <SortableHeader column={column} title={t("table.label")} />,
+      accessorFn: (row) => row.label.name,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5 flex items-center gap-1.5">
+          <LabelIcon label={row.original.label} size="xs" />
+          <span className="text-sm truncate">{row.original.label.name}</span>
+        </div>
+      ),
+      minSize: 100,
+    },
+    {
+      id: 'pattern',
+      header: ({ column }) => <SortableHeader column={column} title={t("table.pattern")} />,
+      accessorFn: (row) => row.rule.pattern,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          <PatternBadge pattern={row.original.rule.pattern} />
+        </div>
+      ),
+      minSize: 120,
+    },
+    {
+      id: 'flags',
+      header: () => <span className="p-1.5 pl-2.5">{t("table.flags")}</span>,
+      accessorFn: (row) => row.rule.flags ?? 'gi',
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          <span className="text-xs text-muted-foreground font-mono">
+            {row.original.rule.flags ?? 'gi'}
+          </span>
+        </div>
+      ),
+      minSize: 50,
+    },
+    {
+      id: 'template',
+      header: () => <span className="p-1.5 pl-2.5">{t("table.template")}</span>,
+      accessorFn: (row) => row.rule.valueTemplate ?? '',
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          {row.original.rule.valueTemplate ? (
+            <Info_Badge color="muted" className="font-mono whitespace-nowrap">
+              {row.original.rule.valueTemplate}
+            </Info_Badge>
+          ) : (
+            <span className="text-muted-foreground/50 text-sm">—</span>
+          )}
+        </div>
+      ),
+      minSize: 80,
+    },
+    {
+      id: 'description',
+      header: () => <span className="p-1.5 pl-2.5">{t("common.description")}</span>,
+      accessorFn: (row) => row.rule.description ?? '',
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5 min-w-0">
+          <span className="truncate block text-sm">
+            {row.original.rule.description || '—'}
+          </span>
+        </div>
+      ),
+      meta: { fillWidth: true, truncate: true },
+    },
+  ]
+}
 
 /**
  * Recursively collect all auto-rules from the label tree,
@@ -185,8 +190,10 @@ export function AutoRulesDataTable({
   fullscreenTitle = 'Auto-Apply Rules',
   className,
 }: AutoRulesDataTableProps) {
+  const { t } = useTranslation()
   const [isFullscreen, setIsFullscreen] = useState(false)
   const { isDark } = useTheme()
+  const columns = useMemo(() => getColumns(t), [t])
 
   // Flatten label tree into auto-rule rows
   const rows = useMemo(() => collectAutoRules(data), [data])
@@ -202,7 +209,7 @@ export function AutoRulesDataTable({
         'text-muted-foreground/50 hover:text-foreground',
         'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100'
       )}
-      title="View Fullscreen"
+      title={t("table.viewFullscreen")}
     >
       <Maximize2 className="w-3.5 h-3.5" />
     </button>
@@ -213,9 +220,9 @@ export function AutoRulesDataTable({
       <Info_DataTable
         columns={columns}
         data={rows}
-        searchable={searchable ? { placeholder: 'Search rules...' } : false}
+        searchable={searchable ? { placeholder: t("table.searchRules") } : false}
         maxHeight={maxHeight}
-        emptyContent="No auto-apply rules configured"
+        emptyContent={t("settings.labels.noAutoApplyRules")}
         floatingAction={fullscreenButton}
         className={cn(fullscreen && 'group', className)}
       />
@@ -226,14 +233,14 @@ export function AutoRulesDataTable({
           isOpen={isFullscreen}
           onClose={() => setIsFullscreen(false)}
           title={fullscreenTitle}
-          subtitle={`${rows.length} ${rows.length === 1 ? 'rule' : 'rules'}`}
+          subtitle={t("table.ruleCount", { count: rows.length })}
           theme={isDark ? 'dark' : 'light'}
         >
           <Info_DataTable
             columns={columns}
             data={rows}
-            searchable={searchable ? { placeholder: 'Search rules...' } : false}
-            emptyContent="No auto-apply rules configured"
+            searchable={searchable ? { placeholder: t("table.searchRules") } : false}
+            emptyContent={t("settings.labels.noAutoApplyRules")}
           />
         </DataTableOverlay>
       )}

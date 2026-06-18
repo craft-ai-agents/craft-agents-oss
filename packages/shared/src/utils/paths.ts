@@ -127,6 +127,17 @@ export function normalizePath(path: string): string {
 }
 
 /**
+ * Normalize a path for cross-platform comparison.
+ * - Resolve to absolute
+ * - Convert backslashes to forward slashes
+ * - Lowercase on Windows
+ */
+export function normalizePathForComparison(path: string): string {
+  const normalized = normalizePath(resolve(path));
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+/**
  * Check if a file path starts with a directory path (cross-platform).
  * Handles both Windows backslashes and Unix forward slashes.
  *
@@ -136,8 +147,8 @@ export function normalizePath(path: string): string {
  * pathStartsWith('/home/user2/file.txt', '/home/user')         // false
  */
 export function pathStartsWith(filePath: string, dirPath: string): boolean {
-  const normalizedFile = normalizePath(filePath);
-  const normalizedDir = normalizePath(dirPath);
+  const normalizedFile = normalizePathForComparison(filePath);
+  const normalizedDir = normalizePathForComparison(dirPath);
   return normalizedFile.startsWith(normalizedDir + '/') || normalizedFile === normalizedDir;
 }
 
@@ -150,8 +161,8 @@ export function pathStartsWith(filePath: string, dirPath: string): boolean {
  * stripPathPrefix('C:\\foo\\bar\\baz.txt', 'C:\\foo')       // 'bar/baz.txt'
  */
 export function stripPathPrefix(filePath: string, prefix: string): string {
-  const normalizedFile = normalizePath(filePath);
-  const normalizedPrefix = normalizePath(prefix);
+  const normalizedFile = normalizePathForComparison(filePath);
+  const normalizedPrefix = normalizePathForComparison(prefix);
   if (normalizedFile.startsWith(normalizedPrefix + '/')) {
     return normalizedFile.slice(normalizedPrefix.length + 1);
   }
@@ -173,7 +184,7 @@ let _assetsRoot: string | undefined;
  * Register the Electron main process directory as the root for bundled assets.
  * Call this once at app startup: setBundledAssetsRoot(__dirname)
  *
- * After this, getBundledAssetsDir('docs') will resolve to `<__dirname>/assets/docs/`
+ * After this, getBundledAssetsDir('docs') will resolve to `<__dirname>/resources/docs/`
  * in the packaged app, or fall back to dev paths if that doesn't exist.
  */
 export function setBundledAssetsRoot(dir: string): void {
@@ -183,10 +194,11 @@ export function setBundledAssetsRoot(dir: string): void {
 /**
  * Resolve the path to a bundled assets subdirectory.
  *
+ * All bundled assets now live in resources/ which electron-builder handles natively.
  * Tries candidates in order:
- * 1. Electron main process: <assetsRoot>/assets/<subfolder> (set via setBundledAssetsRoot)
- * 2. Dev monorepo source:   <cwd>/packages/shared/assets/<subfolder>
- * 3. Dev dist output:       <cwd>/dist/assets/<subfolder>
+ * 1. Electron packaged app: <assetsRoot>/resources/<subfolder>
+ * 2. Dev: electron app resources folder (when running from apps/electron)
+ * 3. Dev: dist output (after build:copy)
  *
  * Returns the first candidate that exists on disk, or undefined if none found.
  *
@@ -194,12 +206,12 @@ export function setBundledAssetsRoot(dir: string): void {
  */
 export function getBundledAssetsDir(subfolder: string): string | undefined {
   const candidates = [
-    // Electron main process (set via setBundledAssetsRoot at startup)
-    ...(_assetsRoot ? [join(_assetsRoot, 'assets', subfolder)] : []),
-    // Dev: monorepo source
-    join(process.cwd(), 'packages', 'shared', 'assets', subfolder),
+    // Electron packaged app (set via setBundledAssetsRoot at startup)
+    ...(_assetsRoot ? [join(_assetsRoot, 'resources', subfolder)] : []),
+    // Dev: electron app resources folder (when cwd is apps/electron)
+    join(process.cwd(), 'resources', subfolder),
     // Dev: dist output (after build:copy)
-    join(process.cwd(), 'dist', 'assets', subfolder),
+    join(process.cwd(), 'dist', 'resources', subfolder),
   ];
   return candidates.find(p => existsSync(p));
 }

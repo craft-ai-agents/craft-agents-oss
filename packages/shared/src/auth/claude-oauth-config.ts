@@ -21,7 +21,7 @@ export const CLAUDE_OAUTH_CONFIG = {
    * Token URL - for exchanging codes and refreshing tokens
    * Same endpoint handles both exchange and refresh
    */
-  TOKEN_URL: 'https://console.anthropic.com/v1/oauth/token',
+  TOKEN_URL: 'https://platform.claude.com/v1/oauth/token',
 
   /**
    * Redirect URI - where OAuth flow redirects after authentication

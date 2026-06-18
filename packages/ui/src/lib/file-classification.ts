@@ -35,13 +35,14 @@ const CODE_EXTENSIONS = new Set([
   'py', 'rb', 'rs', 'go', 'java', 'kt', 'swift',
   'c', 'cpp', 'h', 'hpp', 'cs',
   'css', 'scss', 'less',
-  'html', 'xml', 'svg',  // SVG is also code-viewable, but image takes priority
+  'html', 'htm', 'xml', 'svg',  // SVG is also code-viewable, but image takes priority
   'yaml', 'yml', 'toml',
   'sh', 'bash', 'zsh', 'fish',
   'sql', 'graphql',
   'dockerfile',
   'makefile',
   'r', 'lua', 'perl', 'php',
+  'vue', 'svelte', 'astro', 'prisma',
 ])
 
 /** Markdown files — rendered with the Markdown component */
@@ -62,6 +63,22 @@ const TEXT_EXTENSIONS = new Set([
 
 /** PDF files — rendered in PDFPreviewOverlay via embedded viewer */
 const PDF_EXTENSIONS = new Set(['pdf'])
+
+/**
+ * External-only file extensions — recognized as file links but opened externally.
+ * These are included in FILE_EXTENSIONS_PATTERN so linkify.ts detects them as file paths,
+ * but classifyFile() returns canPreview: false so they route to the system opener.
+ */
+const EXTERNAL_EXTENSIONS = new Set([
+  'xlsx', 'xls', 'xlsm',   // Spreadsheets
+  'docx', 'doc',             // Word documents
+  'pptx', 'ppt',             // Presentations
+  'zip', 'tar', 'gz', 'rar', '7z',  // Archives
+  'dmg', 'pkg', 'exe', 'msi',       // Installers
+  'mp3', 'wav', 'flac', 'aac',      // Audio
+  'mp4', 'mov', 'avi', 'mkv',       // Video
+  'heic', 'heif', 'tiff', 'tif',    // Images Chromium can't decode
+])
 
 /**
  * Extract the file extension from a path, lowercased.
@@ -93,3 +110,18 @@ export function classifyFile(filePath: string): FileClassification {
 
   return { type: null, canPreview: false }
 }
+
+/**
+ * Regex alternation of all known file extensions (e.g. "ts|tsx|js|...").
+ * Derived from the classification sets above so link detection stays in sync
+ * with preview support automatically.
+ */
+export const FILE_EXTENSIONS_PATTERN = [
+  ...IMAGE_EXTENSIONS,
+  ...CODE_EXTENSIONS,
+  ...MARKDOWN_EXTENSIONS,
+  ...JSON_EXTENSIONS,
+  ...TEXT_EXTENSIONS,
+  ...PDF_EXTENSIONS,
+  ...EXTERNAL_EXTENSIONS,
+].join('|')

@@ -19,6 +19,7 @@ import {
   type ToolResultBlock,
   type ContentBlock,
 } from '../tool-matching'
+import { toolMetadataStore } from '../../interceptor-common'
 
 // ============================================================================
 // Test Helpers
@@ -222,6 +223,45 @@ describe('extractToolStarts', () => {
     const events2 = extractToolStarts(assistantBlocks, null, toolIndex, emittedIds)
     expect(events2).toHaveLength(1)
     expect(events2[0]).toMatchObject({ input: { file_path: '/foo.ts' } })
+  })
+
+  it('re-emits duplicate empty-input tool_start when metadata arrives late', () => {
+    const toolUseId = 'toolu_browser_1'
+    const streamBlocks: ContentBlock[] = [
+      makeToolUseBlock('mcp__session__browser_open', {}, toolUseId),
+    ]
+
+    try {
+      // First stream event with empty input and no stored metadata
+      const events1 = extractToolStarts(streamBlocks, null, toolIndex, emittedIds)
+      expect(events1).toHaveLength(1)
+      expect(events1[0]).toMatchObject({
+        toolUseId,
+        input: {},
+        intent: undefined,
+        displayName: undefined,
+      })
+
+      // Metadata is captured later by interceptor/store
+      toolMetadataStore.set(toolUseId, {
+        intent: 'Open the in-app browser window',
+        displayName: 'Open Browser',
+        timestamp: Date.now(),
+      })
+
+      // Duplicate assistant event still has empty input for browser_open,
+      // but should re-emit now that metadata is available.
+      const events2 = extractToolStarts(streamBlocks, null, toolIndex, emittedIds)
+      expect(events2).toHaveLength(1)
+      expect(events2[0]).toMatchObject({
+        toolUseId,
+        input: {},
+        intent: 'Open the in-app browser window',
+        displayName: 'Open Browser',
+      })
+    } finally {
+      toolMetadataStore.delete(toolUseId)
+    }
   })
 
   it('registers tools in the index', () => {
@@ -600,8 +640,8 @@ describe('extractToolResults', () => {
 
   // --- Background event detection ---
 
-  it('detects background Task from agentId in result', () => {
-    toolIndex.register('toolu_task', 'Task', { _intent: 'Search codebase' })
+  it('detects background Task from agentId in result when run_in_background is true', () => {
+    toolIndex.register('toolu_task', 'Task', { _intent: 'Search codebase', run_in_background: true })
 
     const blocks: ContentBlock[] = [
       makeToolResultBlock('toolu_task', 'Done.\nagentId: abc123'),
@@ -618,6 +658,21 @@ describe('extractToolResults', () => {
       taskId: 'abc123',
       intent: 'Search codebase',
     })
+  })
+
+  it('does NOT emit task_backgrounded for foreground Agent with agentId in result', () => {
+    // Foreground Agent tool (no run_in_background) — agentId in result should be ignored
+    toolIndex.register('toolu_agent', 'Agent', { _intent: 'Explore codebase', prompt: 'Find auth code' })
+
+    const blocks: ContentBlock[] = [
+      makeToolResultBlock('toolu_agent', 'Found auth in /src/auth.ts\nagentId: fg_agent_xyz'),
+    ]
+
+    const events = extractToolResults(blocks, null, undefined, toolIndex)
+
+    // Should ONLY have tool_result — no task_backgrounded
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ type: 'tool_result', toolUseId: 'toolu_agent' })
   })
 
   it('detects background Shell from shell_id in result', () => {
@@ -809,6 +864,10 @@ describe('isToolResultError', () => {
 
   it('detects error: prefix', () => {
     expect(isToolResultError('error: command failed')).toBe(true)
+  })
+
+  it('detects [ERROR] prefix', () => {
+    expect(isToolResultError('[ERROR] command failed')).toBe(true)
   })
 
   it('detects is_error flag in object', () => {

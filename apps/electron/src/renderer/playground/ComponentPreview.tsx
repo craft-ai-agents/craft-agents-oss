@@ -3,8 +3,6 @@ import { cn } from '@/lib/utils'
 import type { ComponentEntry } from './registry'
 import { TooltipProvider } from '@craft-agent/ui'
 
-type BackgroundStyle = 'default' | 'light' | 'dark' | 'checkered'
-
 interface ComponentPreviewProps {
   component: ComponentEntry
   props: Record<string, unknown>
@@ -35,7 +33,6 @@ function loadSavedSize(): { width: number; height: number } {
 }
 
 export function ComponentPreview({ component, props }: ComponentPreviewProps) {
-  const [bgStyle, setBgStyle] = React.useState<BackgroundStyle>('default')
   const [size, setSize] = React.useState(loadSavedSize)
   const containerRef = React.useRef<HTMLDivElement>(null)
   const isDraggingRef = React.useRef<'right' | 'bottom' | 'corner' | null>(null)
@@ -55,13 +52,6 @@ export function ComponentPreview({ component, props }: ComponentPreviewProps) {
   // Render with optional wrapper
   const Component = component.component
   const Wrapper = component.wrapper ?? React.Fragment
-
-  const bgClasses: Record<BackgroundStyle, string> = {
-    default: 'bg-background',
-    light: 'bg-white',
-    dark: 'bg-zinc-900',
-    checkered: 'bg-[length:20px_20px] bg-[linear-gradient(45deg,#f0f0f0_25%,transparent_25%),linear-gradient(-45deg,#f0f0f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f0f0f0_75%),linear-gradient(-45deg,transparent_75%,#f0f0f0_75%)] dark:bg-[linear-gradient(45deg,#2a2a2a_25%,transparent_25%),linear-gradient(-45deg,#2a2a2a_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#2a2a2a_75%),linear-gradient(-45deg,transparent_75%,#2a2a2a_75%)]',
-  }
 
   const handleMouseDown = React.useCallback((e: React.MouseEvent, direction: 'right' | 'bottom' | 'corner') => {
     e.preventDefault()
@@ -112,63 +102,43 @@ export function ComponentPreview({ component, props }: ComponentPreviewProps) {
     }
   }, [])
 
+  const previewOverflowClass = component.previewOverflow
+    ? (component.previewOverflow === 'visible' ? 'overflow-visible' : component.previewOverflow === 'hidden' ? 'overflow-hidden' : 'overflow-auto')
+    : (component.layout === 'full' ? 'overflow-hidden' : 'overflow-auto')
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="border-b border-border">
-        {/* Title and description row */}
-        <div className="px-4 pt-3 pb-2">
-          <h2 className="text-lg font-semibold text-foreground font-sans">
-            {component.name}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {component.description}
-          </p>
-        </div>
-
-        {/* Controls row */}
-        <div className="flex items-center justify-between px-4 pb-3">
-          <div className="flex items-center gap-4">
-            {/* Size display */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground font-mono">
-                {Math.round(size.width)} × {Math.round(size.height)}
-              </span>
-              <button
-                onClick={() => {
-                  setSize({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })
-                  localStorage.removeItem(STORAGE_KEY)
-                }}
-                className="px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors"
-              >
-                Reset
-              </button>
-            </div>
-
-            {/* Background style selector */}
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground mr-2">Background:</span>
-              {(['default', 'light', 'dark', 'checkered'] as BackgroundStyle[]).map(style => (
-                <button
-                  key={style}
-                  onClick={() => setBgStyle(style)}
-                  className={cn(
-                    'px-2 py-1 rounded text-xs transition-colors',
-                    bgStyle === style
-                      ? 'bg-foreground/10 text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {style.charAt(0).toUpperCase() + style.slice(1)}
-                </button>
-              ))}
-            </div>
+      <div className="border-b border-border px-4 pt-3 pb-3">
+        <h2 className="text-lg font-semibold text-foreground font-sans">
+          {component.name}
+        </h2>
+        <div className="mt-1 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+          <p>{component.description}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono">
+              {Math.round(size.width)} × {Math.round(size.height)}
+            </span>
+            <button
+              onClick={() => {
+                setSize({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })
+                localStorage.removeItem(STORAGE_KEY)
+              }}
+              className="px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors"
+            >
+              Reset
+            </button>
           </div>
         </div>
       </div>
 
       {/* Preview area */}
-      <div className="flex-1 overflow-auto p-4 flex items-center justify-center">
+      <div
+        className={cn(
+          'flex-1 overflow-auto p-4 flex',
+          component.layout === 'top' ? 'items-start justify-center' : 'items-center justify-center'
+        )}
+      >
         {/* Resizable container */}
         <div
           ref={containerRef}
@@ -179,9 +149,9 @@ export function ComponentPreview({ component, props }: ComponentPreviewProps) {
           <div
             className={cn(
               'w-full h-full rounded-lg border border-border',
-              component.layout === 'full' ? 'overflow-hidden' : 'overflow-auto',
+              previewOverflowClass,
               component.layout === 'centered' || !component.layout ? 'flex items-center justify-center' : '',
-              bgClasses[bgStyle]
+              'bg-background'
             )}
           >
             <TooltipProvider>

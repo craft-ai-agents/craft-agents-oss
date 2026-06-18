@@ -14,13 +14,57 @@ import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 import type { StoredAttachment, MessageRole, ToolStatus, AuthRequestType, AuthStatus, CredentialInputMode, StoredMessage } from '@craft-agent/core/types';
 
 /**
- * Todo state for sessions (user-controlled, never automatic)
+ * Session fields that persist to disk.
+ * Add new fields here - they automatically propagate to JSONL read/write
+ * via pickSessionFields() utility.
+ *
+ * IMPORTANT: When adding a new field:
+ * 1. Add it to this array
+ * 2. Add it to SessionConfig interface below
+ * 3. Done - serialization is automatic
+ */
+export const SESSION_PERSISTENT_FIELDS = [
+  // Identity
+  'id', 'workspaceRootPath', 'sdkSessionId', 'sdkCwd',
+  // Timestamps
+  'createdAt', 'lastUsedAt', 'lastMessageAt',
+  // Display
+  'name', 'isFlagged', 'sessionStatus', 'labels', 'hidden',
+  // Read tracking
+  'lastReadMessageId', 'hasUnread',
+  // Config
+  'enabledSourceSlugs', 'permissionMode', 'previousPermissionMode', 'workingDirectory',
+  // Model/Connection
+  'model', 'llmConnection', 'connectionLocked', 'thinkingLevel',
+  // Sharing
+  'sharedUrl', 'sharedId',
+  // Plan execution
+  'pendingPlanExecution',
+  // Archive
+  'isArchived', 'archivedAt',
+  // Branching
+  'branchFromMessageId',
+  'branchFromSdkSessionId',
+  'branchFromSessionPath',
+  'branchFromSdkCwd',
+  'branchFromSdkTurnId',
+  // Remote transfer handoff
+  'transferredSessionSummary',
+  'transferredSessionSummaryApplied',
+  // Automation origin
+  'triggeredBy',
+] as const;
+
+export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
+
+/**
+ * Session status (user-controlled, never automatic)
  *
  * Dynamic status ID referencing workspace status config.
  * Validated at runtime via validateSessionStatus().
  * Falls back to 'todo' if status doesn't exist.
  */
-export type TodoState = string;
+export type SessionStatus = string;
 
 /**
  * Built-in status IDs (for TypeScript consumers)
@@ -69,8 +113,10 @@ export interface SessionConfig {
   isFlagged?: boolean;
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode;
-  /** User-controlled todo state - determines inbox vs completed */
-  todoState?: TodoState;
+  /** Previous permission mode (used to preserve modeTransition context across restarts) */
+  previousPermissionMode?: PermissionMode;
+  /** User-controlled session status - determines inbox vs completed */
+  sessionStatus?: SessionStatus;
   /** Labels applied to this session (bare IDs or "id::value" entries) */
   labels?: string[];
   /** ID of last message user has read */
@@ -93,6 +139,10 @@ export interface SessionConfig {
   sharedId?: string;
   /** Model to use for this session (overrides global config if set) */
   model?: string;
+  /** LLM connection slug for this session (locked after first message) */
+  llmConnection?: string;
+  /** Whether the connection is locked (cannot be changed after first agent creation) */
+  connectionLocked?: boolean;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
   /**
@@ -103,11 +153,50 @@ export interface SessionConfig {
   pendingPlanExecution?: {
     /** Path to the plan file to execute */
     planPath: string;
+    /** Optional snapshot of draft input captured at accept time */
+    draftInputSnapshot?: string;
     /** Whether we're still waiting for compaction to complete */
     awaitingCompaction: boolean;
+    /** Whether execution has already been dispatched from the UI. */
+    executionDispatched?: boolean;
   };
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
+  /** Whether this session is archived */
+  isArchived?: boolean;
+  /** Timestamp when session was archived (for retention policy) */
+  archivedAt?: number;
+  /**
+   * Message ID this session was branched from.
+   * Branching semantics are a hard cutoff: model context must not include parent messages after this message.
+   */
+  branchFromMessageId?: string;
+  /**
+   * Parent session's SDK session ID (optional, only for provider strategies that support strict SDK-level forking).
+   */
+  branchFromSdkSessionId?: string;
+  /**
+   * Parent session's storage path (optional, only when provider-level forking needs parent session files).
+   */
+  branchFromSessionPath?: string;
+  /**
+   * Parent session's sdkCwd (optional). SDK session files are stored per-CWD
+   * (`~/.claude/projects/{cwd-hash}/`), so forking requires the child subprocess
+   * to use the parent's CWD to locate the parent's session file.
+   */
+  branchFromSdkCwd?: string;
+  /**
+   * Provider-native branch anchor at the branch point.
+   * - Claude: assistant message UUID (used as `resumeSessionAt`)
+   * - Pi: session entry ID (used with SessionManager.branch(anchor))
+   */
+  branchFromSdkTurnId?: string;
+  /** One-shot hidden summary injected on the first turn after a remote transfer. */
+  transferredSessionSummary?: string;
+  /** Whether the transferred-session summary has already been injected. */
+  transferredSessionSummaryApplied?: boolean;
+  /** Metadata for sessions created by automations */
+  triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
 }
 
 /**
@@ -140,8 +229,10 @@ export interface SessionHeader {
   isFlagged?: boolean;
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode;
-  /** User-controlled todo state - determines inbox vs completed */
-  todoState?: TodoState;
+  /** Previous permission mode (used to preserve modeTransition context across restarts) */
+  previousPermissionMode?: PermissionMode;
+  /** User-controlled session status - determines inbox vs completed */
+  sessionStatus?: SessionStatus;
   /** Labels applied to this session (bare IDs or "id::value" entries) */
   labels?: string[];
   /** ID of last message user has read */
@@ -164,6 +255,10 @@ export interface SessionHeader {
   sharedId?: string;
   /** Model to use for this session (overrides global config if set) */
   model?: string;
+  /** LLM connection slug for this session (locked after first message) */
+  llmConnection?: string;
+  /** Whether the connection is locked (cannot be changed after first agent creation) */
+  connectionLocked?: boolean;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
   /**
@@ -174,11 +269,25 @@ export interface SessionHeader {
   pendingPlanExecution?: {
     /** Path to the plan file to execute */
     planPath: string;
+    /** Optional snapshot of draft input captured at accept time */
+    draftInputSnapshot?: string;
     /** Whether we're still waiting for compaction to complete */
     awaitingCompaction: boolean;
+    /** Whether execution has already been dispatched from the UI. */
+    executionDispatched?: boolean;
   };
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
+  /** Whether this session is archived */
+  isArchived?: boolean;
+  /** Timestamp when session was archived (for retention policy) */
+  archivedAt?: number;
+  /** One-shot hidden summary injected on the first turn after a remote transfer. */
+  transferredSessionSummary?: string;
+  /** Whether the transferred-session summary has already been injected. */
+  transferredSessionSummaryApplied?: boolean;
+  /** Metadata for sessions created by automations */
+  triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;
@@ -209,12 +318,14 @@ export interface SessionMetadata {
   sdkSessionId?: string;
   /** Whether this session is flagged */
   isFlagged?: boolean;
-  /** User-controlled todo state */
-  todoState?: TodoState;
+  /** User-controlled session status */
+  sessionStatus?: SessionStatus;
   /** Labels applied to this session (bare IDs or "id::value" entries) */
   labels?: string[];
   /** Permission mode for this session */
   permissionMode?: PermissionMode;
+  /** Previous permission mode (used to preserve modeTransition context across restarts) */
+  previousPermissionMode?: PermissionMode;
   /** Number of plan files for this session */
   planCount?: number;
   /** Shared viewer URL (if shared via viewer) */
@@ -229,6 +340,10 @@ export interface SessionMetadata {
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error';
   /** Model to use for this session (overrides global config if set) */
   model?: string;
+  /** LLM connection slug for this session (locked after first message) */
+  llmConnection?: string;
+  /** Whether the connection is locked (cannot be changed after first agent creation) */
+  connectionLocked?: boolean;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
   /** ID of last message user has read - for unread detection */
@@ -245,4 +360,10 @@ export interface SessionMetadata {
   tokenUsage?: SessionTokenUsage;
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
+  /** Whether this session is archived */
+  isArchived?: boolean;
+  /** Timestamp when session was archived (for retention policy) */
+  archivedAt?: number;
+  /** Message ID that this session was branched from (hard context cutoff marker). */
+  branchFromMessageId?: string;
 }

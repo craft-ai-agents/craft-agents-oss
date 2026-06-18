@@ -8,6 +8,7 @@
  * - string: pass-through (no transformation)
  * - number: strip commas, expand suffixes (k/K → ×1000, M → ×1000000)
  * - date: pass-through (regex captures already produce ISO format)
+ * - link: trim surrounding whitespace (URL stored verbatim)
  */
 
 /**
@@ -17,13 +18,16 @@
  * @param raw - Raw value string from regex valueTemplate substitution
  * @param valueType - The label's declared valueType (determines normalization strategy)
  */
-export function normalizeValue(raw: string, valueType?: 'string' | 'number' | 'date'): string {
+export function normalizeValue(raw: string, valueType?: 'string' | 'number' | 'date' | 'link'): string {
   switch (valueType) {
     case 'number':
       return normalizeNumber(raw)
     case 'date':
       // Date values from regex capture are expected to already be in ISO format
       return raw
+    case 'link':
+      // URL stored verbatim; just trim surrounding whitespace.
+      return raw.trim()
     case 'string':
     default:
       return raw

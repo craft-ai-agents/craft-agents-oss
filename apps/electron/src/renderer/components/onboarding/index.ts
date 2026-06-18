@@ -10,10 +10,12 @@ export {
 } from './primitives'
 
 // Individual steps
+export { ProviderSelectStep, type ProviderChoice } from './ProviderSelectStep'
 export { WelcomeStep } from './WelcomeStep'
 export { APISetupStep, type ApiSetupMethod } from './APISetupStep'
 export { CredentialsStep, type CredentialStatus } from './CredentialsStep'
 export { CompletionStep } from './CompletionStep'
+export { LocalModelStep, type LocalModelSubmitData } from './LocalModelStep'
 export { ReauthScreen } from './ReauthScreen'
 export { GitBashWarning, type GitBashStatus } from './GitBashWarning'
 

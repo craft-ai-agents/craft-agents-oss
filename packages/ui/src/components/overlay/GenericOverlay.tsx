@@ -8,6 +8,7 @@
 
 import * as React from 'react'
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FileCode } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
 import { ContentFrame } from './ContentFrame'
@@ -116,7 +117,7 @@ export function GenericOverlay({
   language,
   isOpen,
   onClose,
-  title = 'Preview',
+  title,
   theme,
   diffMode = false,
   originalContent = '',
@@ -124,16 +125,19 @@ export function GenericOverlay({
   embedded,
   error,
 }: GenericOverlayProps) {
+  const { t } = useTranslation()
+  const resolvedTitle = title ?? t('overlay.preview')
+
   // Auto-detect language if not provided
   const detectedLanguage = useMemo(() => {
     if (language) return language
     // Try to detect from title (file path)
-    if (title.includes('/') || title.includes('.')) {
-      const pathLang = detectLanguageFromPath(title)
+    if (resolvedTitle.includes('/') || resolvedTitle.includes('.')) {
+      const pathLang = detectLanguageFromPath(resolvedTitle)
       if (pathLang !== 'text') return pathLang
     }
     return detectLanguage(diffMode ? modifiedContent : content)
-  }, [language, title, diffMode, modifiedContent, content])
+  }, [language, resolvedTitle, diffMode, modifiedContent, content])
 
   return (
     <PreviewOverlay
@@ -145,12 +149,12 @@ export function GenericOverlay({
         label: detectedLanguage,
         variant: 'gray',
       }}
-      title={title}
+      title={resolvedTitle}
       embedded={embedded}
       error={error ? { label: 'Tool Failed', message: error } : undefined}
       className="bg-foreground-3"
     >
-      <ContentFrame title="Preview">
+      <ContentFrame title={t('overlay.preview')}>
         <div className="flex-1 overflow-y-auto min-h-0">
           {diffMode ? (
             // Side-by-side diff view

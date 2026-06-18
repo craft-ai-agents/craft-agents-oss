@@ -29,6 +29,28 @@ export const isLinux =
   typeof navigator !== 'undefined' &&
   navigator.platform.toLowerCase().includes('linux')
 
+/**
+ * True when this bundle is running inside the browser-served Web UI
+ * (apps/webui), as opposed to the Electron renderer.
+ *
+ * The webui's Vite config injects `import.meta.env.IS_WEBUI = 'true'` via
+ * `define` so we can branch on context (e.g. skip macOS stoplight padding,
+ * which is irrelevant inside a regular browser tab).
+ */
+export const isWebUI: boolean = Boolean(
+  (import.meta as { env?: { IS_WEBUI?: unknown } }).env?.IS_WEBUI,
+)
+
+/**
+ * Get the platform-specific file manager name.
+ * macOS → "Finder", Windows → "Explorer", Linux → "File Manager"
+ */
+export function getFileManagerName(): string {
+  if (isMac) return 'Finder'
+  if (isWindows) return 'Explorer'
+  return 'File Manager'
+}
+
 /** Native path separator for current OS */
 export const PATH_SEP = isWindows ? '\\' : '/'
 

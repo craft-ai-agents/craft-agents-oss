@@ -2,10 +2,11 @@ import * as React from 'react'
 import type { ComponentEntry } from './types'
 import { SquareSlash } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { FreeFormInput } from '@/components/app-shell/input/FreeFormInput'
+import type { PermissionMode } from '@craft-agent/shared/agent/modes'
+import { ensureMockElectronAPI } from '../mock-utils'
 import {
   SlashCommandMenu,
-  InlineSlashCommand,
-  useInlineSlashCommand,
   DEFAULT_SLASH_COMMANDS,
   type SlashCommandId,
 } from '@/components/ui/slash-command-menu'
@@ -15,21 +16,15 @@ import {
 // ============================================================================
 
 function SlashCommandDemo() {
-  const inputRef = React.useRef<{ getBoundingClientRect: () => DOMRect; value: string; selectionStart: number }>(null)
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null)
-  const [inputValue, setInputValue] = React.useState('')
   const [activeCommands, setActiveCommands] = React.useState<SlashCommandId[]>([])
   const [buttonMenuOpen, setButtonMenuOpen] = React.useState(false)
+  const [inputValue, setInputValue] = React.useState('')
+  const [permissionMode, setPermissionMode] = React.useState<PermissionMode>('ask')
+  const [model, setModel] = React.useState('claude-sonnet-4-20250514')
 
-  // Sync inputRef with textarea values for the hook
+  // FreeFormInput depends on Electron bridge APIs (attachments, clipboard, etc.)
   React.useEffect(() => {
-    if (textareaRef.current) {
-      (inputRef as React.MutableRefObject<{ getBoundingClientRect: () => DOMRect; value: string; selectionStart: number }>).current = {
-        getBoundingClientRect: () => textareaRef.current!.getBoundingClientRect(),
-        get value() { return textareaRef.current?.value ?? '' },
-        get selectionStart() { return textareaRef.current?.selectionStart ?? 0 },
-      }
-    }
+    ensureMockElectronAPI()
   }, [])
 
   // Handle command selection (toggle active state)
@@ -41,49 +36,9 @@ function SlashCommandDemo() {
     )
   }, [])
 
-  // Handle folder selection (no-op in demo)
-  const handleFolderSelect = React.useCallback((_path: string) => {
-    // No-op in demo - just for testing the UI
-  }, [])
-
-  // Inline slash command hook
-  const inlineSlash = useInlineSlashCommand({
-    inputRef,
-    activeCommands,
-    onSelectCommand: handleCommandSelect,
-    onSelectFolder: handleFolderSelect,
-    recentFolders: [], // No folders in demo
-  })
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value
-    const cursorPosition = e.target.selectionStart
-    setInputValue(value)
-    inlineSlash.handleInputChange(value, cursorPosition)
-  }
-
-  const handleInlineCommandSelect = (commandId: SlashCommandId) => {
-    const newValue = inlineSlash.handleSelectCommand(commandId)
-    setInputValue(newValue)
-    // Focus back to textarea
-    setTimeout(() => textareaRef.current?.focus(), 0)
-  }
-
-  const handleInlineFolderSelect = (path: string) => {
-    const newValue = inlineSlash.handleSelectFolder(path)
-    setInputValue(newValue)
-    // Focus back to textarea
-    setTimeout(() => textareaRef.current?.focus(), 0)
-  }
-
   const handleButtonSelect = (commandId: SlashCommandId) => {
-    setActiveCommands(prev =>
-      prev.includes(commandId)
-        ? prev.filter(id => id !== commandId)
-        : [...prev, commandId]
-    )
+    handleCommandSelect(commandId)
     setButtonMenuOpen(false)
-    textareaRef.current?.focus()
   }
 
   return (
@@ -94,15 +49,15 @@ function SlashCommandDemo() {
           Slash Command Menu Demo
         </h2>
         <p className="text-xs text-muted-foreground">
-          Type <code className="px-1 py-0.5 bg-muted rounded">/</code> to trigger inline autocomplete, or click the button to open the menu.
-          Active commands show a checkmark.
+          Type <code className="px-1 py-0.5 bg-muted rounded">/</code> to trigger inline autocomplete in the real input component, or click the button to open the standalone menu.
+          Active commands in the standalone menu show a checkmark.
         </p>
       </div>
 
       {/* Active Commands Display */}
       {activeCommands.length > 0 && (
         <div className="shrink-0 px-4 py-2 border-b border-border/50 flex flex-wrap gap-2">
-          <span className="text-xs text-muted-foreground">Active:</span>
+          <span className="text-xs text-muted-foreground">Standalone menu active:</span>
           {activeCommands.map(id => {
             const cmd = DEFAULT_SLASH_COMMANDS.find(c => c.id === id)
             const color = cmd?.color || '#888'
@@ -171,85 +126,25 @@ function SlashCommandDemo() {
         </div>
       </div>
 
-      {/* Input Area with Inline Autocomplete */}
+      {/* Input Area using the real app input component */}
       <div className="shrink-0 p-4 border-t border-border/50">
         <div className="text-xs font-medium text-muted-foreground mb-2">
-          Inline Autocomplete (type / in the textarea)
+          Real FreeFormInput (type / in the input)
         </div>
-        <div className="relative rounded-lg border bg-background shadow-sm">
-          <textarea
-            ref={textareaRef}
-            value={inputValue}
-            onChange={handleInputChange}
-            placeholder="Type / to see commands..."
-            className="w-full min-h-[80px] px-4 py-3 text-sm bg-transparent outline-none resize-none"
-            rows={3}
-          />
-          <div className="flex items-center gap-2 px-3 py-2 border-t border-border/50">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => setButtonMenuOpen(!buttonMenuOpen)}
-            >
-              <SquareSlash className="h-4 w-4" />
-            </Button>
-            <span className="text-xs text-muted-foreground flex-1">
-              {inlineSlash.isOpen ? `Filtering: "${inlineSlash.filter}"` : 'Type / to trigger'}
-            </span>
-          </div>
-        </div>
-
-        {/* Inline Slash Command Menu */}
-        <InlineSlashCommand
-          open={inlineSlash.isOpen}
-          onOpenChange={(open) => {
-            if (!open) inlineSlash.close()
-          }}
-          sections={inlineSlash.sections}
-          activeCommands={activeCommands}
-          onSelectCommand={handleInlineCommandSelect}
-          onSelectFolder={handleInlineFolderSelect}
-          filter={inlineSlash.filter}
-          position={inlineSlash.position}
+        <FreeFormInput
+          placeholder="Type / to see commands..."
+          currentModel={model}
+          onModelChange={setModel}
+          permissionMode={permissionMode}
+          onPermissionModeChange={setPermissionMode}
+          inputValue={inputValue}
+          onInputChange={setInputValue}
+          sessionId="playground-session"
+          onSubmit={() => {}}
+          onStop={() => {}}
         />
       </div>
     </div>
-  )
-}
-
-// ============================================================================
-// Basic Menu Preview (for props-based customization)
-// ============================================================================
-
-interface SlashCommandMenuPlaygroundProps {
-  showFilter?: boolean
-  filterPlaceholder?: string
-}
-
-function SlashCommandMenuPlayground({
-  showFilter = true,
-  filterPlaceholder = 'Search commands...',
-}: SlashCommandMenuPlaygroundProps) {
-  const [activeCommands, setActiveCommands] = React.useState<SlashCommandId[]>([])
-
-  const handleSelect = (commandId: SlashCommandId) => {
-    setActiveCommands(prev =>
-      prev.includes(commandId)
-        ? prev.filter(id => id !== commandId)
-        : [...prev, commandId]
-    )
-  }
-
-  return (
-    <SlashCommandMenu
-      commands={DEFAULT_SLASH_COMMANDS}
-      activeCommands={activeCommands}
-      onSelect={handleSelect}
-      showFilter={showFilter}
-      filterPlaceholder={filterPlaceholder}
-      className="w-[280px]"
-    />
   )
 }
 
@@ -267,32 +162,6 @@ export const slashCommandComponents: ComponentEntry[] = [
     layout: 'full',
     props: [],
     variants: [],
-    mockData: () => ({}),
-  },
-  {
-    id: 'slash-command-menu',
-    name: 'SlashCommandMenu',
-    category: 'Chat Inputs',
-    description: 'Command palette for slash commands using cmdk',
-    component: SlashCommandMenuPlayground,
-    props: [
-      {
-        name: 'showFilter',
-        description: 'Show filter input above the menu',
-        control: { type: 'boolean' },
-        defaultValue: true,
-      },
-      {
-        name: 'filterPlaceholder',
-        description: 'Placeholder text for filter input',
-        control: { type: 'string', placeholder: 'Search...' },
-        defaultValue: 'Search commands...',
-      },
-    ],
-    variants: [
-      { name: 'With Filter', props: { showFilter: true } },
-      { name: 'Without Filter', props: { showFilter: false } },
-    ],
     mockData: () => ({}),
   },
 ]

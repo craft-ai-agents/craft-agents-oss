@@ -11,6 +11,7 @@ export type {
   ApiAuthType,
   KnownProvider,
   ApiOAuthProvider,
+  ApiOAuthConfig,
   McpSourceConfig,
   ApiSourceConfig,
   LocalSourceConfig,
@@ -19,12 +20,16 @@ export type {
   SourceGuide,
   LoadedSource,
   CreateSourceInput,
+  ApiRenewEndpoint,
 } from './types.ts';
 
 // Constants and helpers
 export {
   API_OAUTH_PROVIDERS,
   isApiOAuthProvider,
+  isGenericOAuthSource,
+  hasRenewEndpoint,
+  isRefreshableSource,
 } from './types.ts';
 
 // Storage functions
@@ -49,6 +54,7 @@ export {
   loadWorkspaceSources,
   loadAllSources,
   getEnabledSources,
+  isSourceUsable,
   getSourcesBySlugs,
   // Create/Delete operations
   generateSourceSlug,
@@ -90,3 +96,16 @@ export {
   getBuiltinSources,
   isBuiltinSource,
 } from './builtin-sources.ts';
+
+// API Tools (types)
+export type { SummarizeCallback } from './api-tools.ts';
+
+// Token Refresh Manager (handles OAuth token refresh with rate limiting)
+export {
+  TokenRefreshManager,
+  createTokenGetter,
+} from './token-refresh-manager.ts';
+export type {
+  TokenRefreshResult,
+  RefreshManagerOptions,
+} from './token-refresh-manager.ts';

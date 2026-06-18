@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as ReactDOM from 'react-dom'
 import { cn } from '../../lib/utils'
 
@@ -9,9 +9,18 @@ import { cn } from '../../lib/utils'
  * Features:
  * - Click-outside detection
  * - Portal rendering for proper stacking
- * - Keyboard navigation (Escape to close)
+ * - Keyboard navigation (Escape/ArrowUp/ArrowDown/Enter)
  * - Position-aware (flips if near edge)
  */
+
+interface SimpleDropdownContextValue {
+  close: () => void
+  highlightedId: string | null
+  setHighlightedId: (id: string) => void
+  setItemRef: (id: string, el: HTMLButtonElement | null) => void
+}
+
+const SimpleDropdownContext = React.createContext<SimpleDropdownContextValue | null>(null)
 
 export interface SimpleDropdownItemProps {
   /** Click handler */
@@ -24,6 +33,10 @@ export interface SimpleDropdownItemProps {
   variant?: 'default' | 'destructive'
   /** Additional className */
   className?: string
+  /** Optional ref callback to access the underlying button */
+  buttonRef?: (el: HTMLButtonElement | null) => void
+  /** Optional hover callback */
+  onMouseEnter?: (e: React.MouseEvent<HTMLButtonElement>) => void
 }
 
 export function SimpleDropdownItem({
@@ -32,16 +45,44 @@ export function SimpleDropdownItem({
   icon,
   variant = 'default',
   className,
+  buttonRef,
+  onMouseEnter,
 }: SimpleDropdownItemProps) {
+  const dropdownCtx = React.useContext(SimpleDropdownContext)
+  const itemId = React.useId()
+
+  const setCombinedRef = React.useCallback((el: HTMLButtonElement | null) => {
+    buttonRef?.(el)
+    dropdownCtx?.setItemRef(itemId, el)
+  }, [buttonRef, dropdownCtx, itemId])
+
+  const handleClick = React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation()
+    onClick(e)
+    dropdownCtx?.close()
+  }, [onClick, dropdownCtx])
+
+  const handleMouseEnter = React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    dropdownCtx?.setHighlightedId(itemId)
+    onMouseEnter?.(e)
+  }, [dropdownCtx, itemId, onMouseEnter])
+
+  const isHighlighted = dropdownCtx?.highlightedId === itemId
+
   return (
     <button
+      ref={setCombinedRef}
       type="button"
-      onClick={onClick}
+      data-simple-dropdown-item="true"
+      onClick={handleClick}
+      onMouseEnter={handleMouseEnter}
+      onFocus={() => dropdownCtx?.setHighlightedId(itemId)}
       className={cn(
-        "flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-[13px] rounded-[4px]",
-        "hover:bg-foreground/[0.05] focus:bg-foreground/[0.05] focus:outline-none",
-        "transition-colors",
-        variant === 'destructive' && "text-destructive hover:text-destructive",
+        'flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-[13px] rounded-[4px]',
+        'hover:bg-foreground/[0.05] focus:bg-foreground/[0.05] focus:outline-none',
+        'transition-colors',
+        isHighlighted && 'bg-foreground/[0.05]',
+        variant === 'destructive' && 'text-destructive hover:text-destructive',
         className
       )}
     >
@@ -68,6 +109,8 @@ export interface SimpleDropdownProps {
   disabled?: boolean
   /** Callback when open state changes */
   onOpenChange?: (open: boolean) => void
+  /** Enable built-in ArrowUp/ArrowDown/Enter keyboard navigation (default: true) */
+  keyboardNavigation?: boolean
 }
 
 export function SimpleDropdown({
@@ -77,8 +120,10 @@ export function SimpleDropdown({
   className,
   disabled = false,
   onOpenChange,
+  keyboardNavigation = true,
 }: SimpleDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [highlightedId, setHighlightedId] = useState<string | null>(null)
 
   // Notify parent of open state changes
   const setIsOpenWithCallback = useCallback((open: boolean | ((prev: boolean) => boolean)) => {
@@ -90,9 +135,36 @@ export function SimpleDropdown({
       return newValue
     })
   }, [onOpenChange])
+
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
   const triggerRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+
+  // Item registry (supports nested SimpleDropdownItem usage)
+  const itemRefs = useRef(new Map<string, HTMLButtonElement>())
+  const itemOrder = useRef<string[]>([])
+
+  const getNavigableIds = useCallback(() => {
+    return itemOrder.current.filter((id) => itemRefs.current.has(id))
+  }, [])
+
+  const setItemRef = useCallback((id: string, el: HTMLButtonElement | null) => {
+    if (el) {
+      itemRefs.current.set(id, el)
+      if (!itemOrder.current.includes(id)) itemOrder.current.push(id)
+      if (!highlightedId) setHighlightedId(id)
+      return
+    }
+
+    itemRefs.current.delete(id)
+    itemOrder.current = itemOrder.current.filter(existingId => existingId !== id)
+
+    setHighlightedId((prev) => {
+      if (prev !== id) return prev
+      const nextIds = getNavigableIds()
+      return nextIds[0] ?? null
+    })
+  }, [getNavigableIds, highlightedId])
 
   const updatePosition = useCallback(() => {
     if (!triggerRef.current) return
@@ -131,7 +203,7 @@ export function SimpleDropdown({
       }
     }
     setIsOpenWithCallback(prev => !prev)
-  }, [disabled, isOpen, align])
+  }, [disabled, isOpen, align, setIsOpenWithCallback])
 
   const handleClose = useCallback(() => {
     setIsOpenWithCallback(false)
@@ -144,7 +216,29 @@ export function SimpleDropdown({
     }
   }, [isOpen, updatePosition])
 
-  // Click outside detection
+  // Reset keyboard highlight when menu opens
+  useEffect(() => {
+    if (!isOpen) {
+      setHighlightedId(null)
+      itemRefs.current.clear()
+      itemOrder.current = []
+      return
+    }
+
+    setHighlightedId((prev) => {
+      if (prev) return prev
+      const ids = getNavigableIds()
+      return ids[0] ?? null
+    })
+  }, [isOpen, getNavigableIds])
+
+  // Keep highlighted item visible when navigating by keyboard.
+  useEffect(() => {
+    if (!isOpen || !highlightedId) return
+    itemRefs.current.get(highlightedId)?.scrollIntoView({ block: 'nearest' })
+  }, [isOpen, highlightedId])
+
+  // Click outside detection + keyboard nav
   useEffect(() => {
     if (!isOpen) return
 
@@ -159,60 +253,80 @@ export function SimpleDropdown({
       }
     }
 
-    const handleEscape = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         handleClose()
+        return
+      }
+
+      if (!menuRef.current) return
+      const target = e.target as Node | null
+      if (!target || !menuRef.current.contains(target)) return
+
+      if (!keyboardNavigation) return
+
+      const navigableIds = getNavigableIds()
+      if (navigableIds.length === 0) return
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const currentIndex = highlightedId ? navigableIds.indexOf(highlightedId) : -1
+        const delta = e.key === 'ArrowDown' ? 1 : -1
+        const nextIndex = currentIndex < 0
+          ? 0
+          : (currentIndex + delta + navigableIds.length) % navigableIds.length
+        setHighlightedId(navigableIds[nextIndex] ?? null)
+        return
+      }
+
+      if (e.key === 'Enter') {
+        if (!highlightedId) return
+        e.preventDefault()
+        itemRefs.current.get(highlightedId)?.click()
       }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleEscape)
+    document.addEventListener('keydown', handleKeyDown, true)
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleEscape)
+      document.removeEventListener('keydown', handleKeyDown, true)
     }
-  }, [isOpen, handleClose])
+  }, [isOpen, handleClose, getNavigableIds, highlightedId, keyboardNavigation])
 
-  // Wrap item clicks to close menu and prevent event bubbling
-  // This ensures dropdown item clicks don't propagate to parent elements
-  // (e.g., clicking "View Turn Details" shouldn't expand the turn card)
-  const wrappedChildren = React.Children.map(children, child => {
-    if (React.isValidElement<SimpleDropdownItemProps>(child) && child.type === SimpleDropdownItem) {
-      return React.cloneElement(child, {
-        onClick: (e?: React.MouseEvent) => {
-          e?.stopPropagation()
-          child.props.onClick()
-          handleClose()
-        },
-      } as Partial<SimpleDropdownItemProps>)
-    }
-    return child
-  })
+  const contextValue = useMemo<SimpleDropdownContextValue>(() => ({
+    close: handleClose,
+    highlightedId,
+    setHighlightedId,
+    setItemRef,
+  }), [handleClose, highlightedId, setItemRef])
 
   return (
     <>
       <div
         ref={triggerRef}
         onClick={handleToggle}
-        className={cn("inline-flex", disabled && "opacity-50 pointer-events-none")}
+        className={cn('inline-flex', disabled && 'opacity-50 pointer-events-none')}
       >
         {trigger}
       </div>
 
       {isOpen && position && ReactDOM.createPortal(
-        <div
-          ref={menuRef}
-          className={cn(
-            "fixed z-50 min-w-[140px] p-1",
-            "bg-background rounded-[8px] shadow-strong border border-border/50",
-            "animate-in fade-in-0 zoom-in-95 duration-100",
-            className
-          )}
-          style={{ top: position.top, left: position.left }}
-        >
-          {wrappedChildren}
-        </div>,
+        <SimpleDropdownContext.Provider value={contextValue}>
+          <div
+            ref={menuRef}
+            className={cn(
+              'fixed z-50 min-w-[140px] p-1',
+              'bg-background rounded-[8px] shadow-strong border border-border/50',
+              'animate-in fade-in-0 zoom-in-95 duration-100',
+              className
+            )}
+            style={{ top: position.top, left: position.left }}
+          >
+            {children}
+          </div>
+        </SimpleDropdownContext.Provider>,
         document.body
       )}
     </>

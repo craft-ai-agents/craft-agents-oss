@@ -24,7 +24,21 @@ export interface SkillMetadata {
    * Note: Relative paths and inline SVG are NOT supported.
    */
   icon?: string;
+  /** Optional source slugs to auto-enable when this skill is invoked */
+  requiredSources?: string[];
 }
+
+/** Source of a loaded skill */
+export type SkillSource = 'global' | 'workspace' | 'project';
+
+/**
+ * Plugin name for project-level and global skills.
+ *
+ * The SDK derives plugin names from `path.basename()` of the registered plugin
+ * directory. Both `{project}/.agents/` and `~/.agents/` share the basename
+ * `.agents`, so skills from either tier resolve to `.agents:skillSlug`.
+ */
+export const AGENTS_PLUGIN_NAME = '.agents';
 
 /**
  * A loaded skill with parsed content
@@ -40,4 +54,6 @@ export interface LoadedSkill {
   iconPath?: string;
   /** Absolute path to skill directory */
   path: string;
+  /** Where this skill was loaded from */
+  source: SkillSource;
 }

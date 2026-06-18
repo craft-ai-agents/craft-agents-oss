@@ -1,8 +1,11 @@
 import { useState, useCallback } from "react"
+import { useTranslation } from "react-i18next"
 import { ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "../ui/input"
 import { AddWorkspaceContainer, AddWorkspaceStepHeader, AddWorkspaceSecondaryButton, AddWorkspacePrimaryButton } from "./primitives"
+import { useDirectoryPicker } from "@/hooks/useDirectoryPicker"
+import { ServerDirectoryBrowser } from "@/components/ServerDirectoryBrowser"
 
 interface AddWorkspaceStep_OpenFolderProps {
   onBack: () => void
@@ -18,18 +21,24 @@ export function AddWorkspaceStep_OpenFolder({
   onCreate,
   isCreating
 }: AddWorkspaceStep_OpenFolderProps) {
+  const { t } = useTranslation()
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [workspaceName, setWorkspaceName] = useState('')
 
-  const handleBrowse = useCallback(async () => {
-    const path = await window.electronAPI.openFolderDialog()
-    if (path) {
-      setSelectedPath(path)
-      // Extract folder name for workspace name
-      const folderName = path.split(/[\\/]/).pop() || path
-      setWorkspaceName(folderName)
-    }
+  const handleFolderSelected = useCallback((path: string) => {
+    setSelectedPath(path)
+    // Extract folder name for workspace name
+    const folderName = path.split(/[\\/]/).pop() || path
+    setWorkspaceName(folderName)
   }, [])
+
+  const {
+    pickDirectory,
+    showServerBrowser,
+    serverBrowserMode,
+    cancelServerBrowser,
+    confirmServerBrowser,
+  } = useDirectoryPicker(handleFolderSelected)
 
   const handleOpen = useCallback(async () => {
     if (!selectedPath || !workspaceName.trim()) return
@@ -51,12 +60,12 @@ export function AddWorkspaceStep_OpenFolder({
         )}
       >
         <ArrowLeft className="h-4 w-4" />
-        Back
+        {t("common.back")}
       </button>
 
       <AddWorkspaceStepHeader
-        title="Choose existing folder"
-        description="Choose any folder to use as workspace."
+        title={t("workspace.chooseExistingFolder")}
+        description={t("workspace.chooseExistingFolderDesc")}
       />
 
       <div className="mt-6 w-full space-y-6">
@@ -71,14 +80,14 @@ export function AddWorkspaceStep_OpenFolder({
             {selectedPath ? (
               <p className="text-sm text-foreground truncate">{selectedPath}</p>
             ) : (
-              <p className="text-sm text-muted-foreground">No folder selected</p>
+              <p className="text-sm text-muted-foreground">{t("workspace.noFolderSelected")}</p>
             )}
           </div>
           <AddWorkspaceSecondaryButton
-            onClick={handleBrowse}
+            onClick={pickDirectory}
             disabled={isCreating}
           >
-            Browse
+            {t("common.browse")}
           </AddWorkspaceSecondaryButton>
         </div>
 
@@ -86,12 +95,12 @@ export function AddWorkspaceStep_OpenFolder({
         {selectedPath && (
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">
-              Workspace name
+              {t("workspace.nameLabel")}
             </label>
             <Input
               value={workspaceName}
               onChange={(e) => setWorkspaceName(e.target.value)}
-              placeholder="My Workspace"
+              placeholder={t("workspace.myWorkspace")}
               disabled={isCreating}
             />
           </div>
@@ -102,11 +111,18 @@ export function AddWorkspaceStep_OpenFolder({
           onClick={handleOpen}
           disabled={!canOpen || isCreating}
           loading={isCreating}
-          loadingText="Opening..."
+          loadingText={t("workspace.opening")}
         >
-          Open
+          {t("common.open")}
         </AddWorkspacePrimaryButton>
       </div>
+
+      <ServerDirectoryBrowser
+        open={showServerBrowser}
+        mode={serverBrowserMode}
+        onSelect={confirmServerBrowser}
+        onCancel={cancelServerBrowser}
+      />
     </AddWorkspaceContainer>
   )
 }

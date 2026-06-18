@@ -1,5 +1,5 @@
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
-import { useI18n } from '@/i18n'
 
 export type BannerState =
   | 'hidden'
@@ -30,18 +30,18 @@ export function SetupAuthBanner({
   onAction,
   variant = 'banner'
 }: SetupAuthBannerProps) {
-  const { t } = useI18n('auth')
+  const { t } = useTranslation()
   if (state === 'hidden') return null
 
   // Get title based on state
   const getTitle = () => {
     switch (state) {
       case 'mcp_auth':
-        return t('setupBanner.mcpTitle')
+        return t('auth.connectionRequired')
       case 'api_auth':
-        return t('setupBanner.apiTitle')
+        return t('auth.apiCredentialsRequired')
       case 'error':
-        return t('setupBanner.errorTitle')
+        return t('auth.somethingWentWrong')
       default:
         return ''
     }
@@ -52,11 +52,11 @@ export function SetupAuthBanner({
     if (reason) return reason
     switch (state) {
       case 'mcp_auth':
-        return t('setupBanner.mcpDescription')
+        return t('auth.connectToServices')
       case 'api_auth':
-        return t('setupBanner.apiDescription')
+        return t('auth.enterApiCredentials')
       case 'error':
-        return t('setupBanner.errorDescription')
+        return t('auth.somethingWentWrongRetry')
       default:
         return ''
     }
@@ -66,13 +66,13 @@ export function SetupAuthBanner({
   const getButtonText = () => {
     switch (state) {
       case 'mcp_auth':
-        return t('setupBanner.mcpButton')
+        return t('auth.connect')
       case 'api_auth':
-        return t('setupBanner.apiButton')
+        return t('auth.addCredentials')
       case 'error':
-        return t('setupBanner.errorButton')
+        return t('common.retry')
       default:
-        return t('setupBanner.continueButton')
+        return t('auth.continue')
     }
   }
 

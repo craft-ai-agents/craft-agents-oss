@@ -1,5 +1,5 @@
 /**
- * LabelBadgeRow - Renders a flex-wrap row of LabelBadge chips for applied session labels.
+ * LabelBadgeRow - Renders a flex-wrap row of metadata-style label chips.
  *
  * Positioned above the RichTextInput in FreeFormInput. Each badge shows
  * the label's color, name, and optional typed value. Clicking a badge
@@ -13,10 +13,14 @@
  */
 
 import * as React from 'react'
-import { LabelBadge } from './label-badge'
 import { LabelValuePopover } from './label-value-popover'
-import { parseLabelEntry, formatLabelEntry, extractLabelId } from '@craft-agent/shared/labels'
+import { LabelIcon, LabelValueTypeIcon } from './label-icon'
+import { MetadataBadge } from './metadata-badge'
+import { parseLabelEntry, formatLabelEntry, formatDisplayValue } from '@craft-agent/shared/labels'
+import { openLabelLink } from '@/lib/open-label-link'
 import type { LabelConfig } from '@craft-agent/shared/labels'
+import { resolveEntityColor } from '@craft-agent/shared/colors'
+import { useTheme } from '@/context/ThemeContext'
 import { cn } from '@/lib/utils'
 
 export interface LabelBadgeRowProps {
@@ -54,6 +58,8 @@ export function LabelBadgeRow({
   onLabelsChange,
   className,
 }: LabelBadgeRowProps) {
+  const { isDark } = useTheme()
+
   // Track which badge's popover is open (by index)
   const [openIndex, setOpenIndex] = React.useState<number | null>(null)
 
@@ -84,6 +90,10 @@ export function LabelBadgeRow({
 
         // If no config found, create a minimal fallback so the badge still renders
         const resolvedConfig: LabelConfig = config ?? { id: parsed.id, name: parsed.id }
+        const displayValue = parsed.rawValue ? formatDisplayValue(parsed.rawValue, resolvedConfig.valueType) : undefined
+        const resolvedColor = resolvedConfig.color
+          ? resolveEntityColor(resolvedConfig.color, isDark)
+          : 'var(--foreground)'
 
         return (
           <LabelValuePopover
@@ -95,10 +105,16 @@ export function LabelBadgeRow({
             onValueChange={(newValue) => handleValueChange(index, parsed.id, newValue)}
             onRemove={() => handleRemove(index)}
           >
-            <LabelBadge
-              label={resolvedConfig}
-              value={parsed.rawValue}
+            <MetadataBadge
+              label={resolvedConfig.name}
+              value={displayValue}
+              onValueClick={resolvedConfig.valueType === 'link' && parsed.rawValue ? () => openLabelLink(parsed.rawValue!) : undefined}
+              icon={<LabelIcon label={resolvedConfig} size="lg" />}
+              valueHintIcon={resolvedConfig.valueType ? <LabelValueTypeIcon valueType={resolvedConfig.valueType} /> : undefined}
+              badgeColor={resolvedColor}
+              interactive
               isActive={openIndex === index}
+              showChevron
             />
           </LabelValuePopover>
         )

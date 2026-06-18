@@ -164,7 +164,7 @@ export function registerThumbnailHandler(): void {
       // Check cache — hit if path matches AND mtime hasn't changed
       const cached = cache.get(filePath)
       if (cached && cached.mtime === mtime) {
-        return new Response(cached.data, {
+        return new Response(new Uint8Array(cached.data), {
           headers: {
             'Content-Type': 'image/png',
             'Cache-Control': 'max-age=3600',
@@ -183,7 +183,7 @@ export function registerThumbnailHandler(): void {
       cache.set(filePath, { mtime, data })
       evictIfNeeded()
 
-      return new Response(data, {
+      return new Response(new Uint8Array(data), {
         headers: {
           'Content-Type': 'image/png',
           'Cache-Control': 'max-age=3600',

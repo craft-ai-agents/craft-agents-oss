@@ -5,18 +5,94 @@
 
 import { spawn, type Subprocess } from "bun";
 import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "fs";
-import { join } from "path";
+import { join, basename } from "path";
 import * as esbuild from "esbuild";
+import { downloadUv, type Platform, type Arch } from "./build/common";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
 const DIST_DIR = join(ELECTRON_DIR, "dist");
+
+// Replace grammY's bundled polyfills (node-fetch@2 + abort-controller@3) with
+// native Node globals. esbuild otherwise renames the polyfill's `class
+// AbortSignal` to `_AbortSignal` to dodge collision with the global, which
+// breaks node-fetch@2's `constructor.name === 'AbortSignal'` check and fails
+// every Telegram API call with a TypeError. Kept in sync with
+// `apps/electron/package.json` build:main and `scripts/electron-build-main.ts`.
+const MAIN_PROCESS_ALIAS: Record<string, string> = {
+  "node-fetch": join(ROOT_DIR, "apps/electron/src/main/shims/node-fetch.cjs"),
+  "abort-controller": join(ROOT_DIR, "apps/electron/src/main/shims/abort-controller.cjs"),
+};
+
+// MCP server paths
+const SESSION_SERVER_DIR = join(ROOT_DIR, "packages/session-mcp-server");
+const SESSION_SERVER_OUTPUT = join(SESSION_SERVER_DIR, "dist/index.js");
+// Pi agent server path (subprocess for Pi SDK sessions)
+const PI_AGENT_SERVER_DIR = join(ROOT_DIR, "packages/pi-agent-server");
+const PI_AGENT_SERVER_OUTPUT = join(PI_AGENT_SERVER_DIR, "dist/index.js");
 
 // Platform-specific binary paths (bun creates .exe on Windows, no extension on Unix)
 const IS_WINDOWS = process.platform === "win32";
 const BIN_EXT = IS_WINDOWS ? ".exe" : "";
 const VITE_BIN = join(ROOT_DIR, `node_modules/.bin/vite${BIN_EXT}`);
 const ELECTRON_BIN = join(ROOT_DIR, `node_modules/.bin/electron${BIN_EXT}`);
+
+function resolveBuildPlatform(): Platform {
+  if (process.platform === "darwin") return "darwin";
+  if (process.platform === "win32") return "win32";
+  if (process.platform === "linux") return "linux";
+  throw new Error(`Unsupported platform for uv bootstrap: ${process.platform}`);
+}
+
+function resolveBuildArch(): Arch {
+  if (process.arch === "arm64") return "arm64";
+  if (process.arch === "x64") return "x64";
+  throw new Error(`Unsupported architecture for uv bootstrap: ${process.arch}`);
+}
+
+async function ensureBundledUvForCurrentPlatform(): Promise<void> {
+  const platform = resolveBuildPlatform();
+  const arch = resolveBuildArch();
+  const platformKey = `${platform}-${arch}`;
+  const uvBinary = platform === "win32" ? "uv.exe" : "uv";
+  const uvPath = join(ELECTRON_DIR, "resources", "bin", platformKey, uvBinary);
+
+  if (existsSync(uvPath)) {
+    console.log(`✅ Bundled uv present: ${uvPath}`);
+    return;
+  }
+
+  console.log(`⬇️  Bundled uv missing, bootstrapping ${platformKey}...`);
+  await downloadUv({
+    platform,
+    arch,
+    upload: false,
+    uploadLatest: false,
+    uploadScript: false,
+    rootDir: ROOT_DIR,
+    electronDir: ELECTRON_DIR,
+  });
+}
+
+// Multi-instance detection (matches detect-instance.sh logic)
+// Detects instance number from folder name suffix (e.g., craft-agents-1 → instance 1)
+function detectInstance(): void {
+  // Don't override if already set (e.g., by sourcing detect-instance.sh first)
+  if (process.env.CRAFT_VITE_PORT) return;
+
+  const folderName = basename(ROOT_DIR);
+  const match = folderName.match(/-(\d+)$/);
+
+  if (match) {
+    const instanceNum = match[1];
+    process.env.CRAFT_INSTANCE_NUMBER = instanceNum;
+    process.env.CRAFT_VITE_PORT = `${instanceNum}173`;
+    process.env.CRAFT_APP_NAME = `Craft Agents [${instanceNum}]`;
+    process.env.CRAFT_CONFIG_DIR = join(process.env.HOME || "", `.craft-agent-${instanceNum}`);
+    process.env.CRAFT_DEEPLINK_SCHEME = `craftagents${instanceNum}`;
+    console.log(`🔢 Instance ${instanceNum} detected: port=${process.env.CRAFT_VITE_PORT}, config=${process.env.CRAFT_CONFIG_DIR}`);
+  }
+}
 
 // Load .env file if it exists
 function loadEnvFile(): void {
@@ -121,6 +197,63 @@ function copyResources(): void {
   }
 }
 
+// Build the WhatsApp worker bundle (dist/worker.cjs). Runs the canonical
+// `scripts/build-wa-worker.ts` as a subprocess so the dev path stays in
+// sync with the packaged/CI build. Cheap (~70ms) so we always rebuild.
+async function buildWaWorker(): Promise<void> {
+  console.log("📨 Building WhatsApp worker...");
+  const proc = spawn({
+    cmd: ["bun", "run", "scripts/build-wa-worker.ts"],
+    cwd: ROOT_DIR,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    console.error("❌ WhatsApp worker build failed");
+    process.exit(1);
+  }
+}
+
+// Build MCP servers for Codex sessions and Pi agent server (one-time, no watch needed)
+async function buildMcpServers(): Promise<void> {
+  console.log("🌉 Building MCP servers and Pi agent server...");
+
+  // Ensure dist directories exist
+  const sessionDistDir = join(SESSION_SERVER_DIR, "dist");
+  const piDistDir = join(PI_AGENT_SERVER_DIR, "dist");
+  if (!existsSync(sessionDistDir)) mkdirSync(sessionDistDir, { recursive: true });
+  if (!existsSync(piDistDir)) mkdirSync(piDistDir, { recursive: true });
+
+  // Build session MCP server (esbuild, packages external — deps resolve from root node_modules)
+  const sessionResult = await runEsbuild(
+    "packages/session-mcp-server/src/index.ts",
+    "packages/session-mcp-server/dist/index.js",
+    {},
+    { packagesExternal: true }
+  );
+
+  if (!sessionResult.success) {
+    console.error("❌ Session MCP server build failed:", sessionResult.error);
+    process.exit(1);
+  }
+  console.log("✅ Session MCP server built");
+
+  // Build Pi agent server with bun (not esbuild) because its Pi SDK deps are ESM-only.
+  // esbuild with packages:external leaves them as require() calls which fail at runtime.
+  // Optional: skip if package directory is missing (e.g., not synced to OSS).
+  if (existsSync(join(PI_AGENT_SERVER_DIR, "src"))) {
+    const piResult = await buildPiAgentServer();
+    if (!piResult.success) {
+      console.error("❌ Pi agent server build failed:", piResult.error);
+      process.exit(1);
+    }
+    console.log("✅ Pi agent server built");
+  } else {
+    console.log("⏭️  Pi agent server skipped (package not found)");
+  }
+}
+
 // Get OAuth defines for esbuild API
 function getOAuthDefines(): Record<string, string> {
   const oauthVars = [
@@ -144,6 +277,10 @@ function getOAuthDefines(): Record<string, string> {
 function getElectronEnv(): Record<string, string> {
   const vitePort = process.env.CRAFT_VITE_PORT || "5173";
 
+  // Codex binary path is resolved at runtime by the binary-resolver module.
+  // It checks: CODEX_PATH env var > bundled binary > local dev fork > system PATH.
+  // You can override with CODEX_PATH env var if needed for debugging.
+
   return {
     ...process.env as Record<string, string>,
     VITE_DEV_SERVER_URL: `http://localhost:${vitePort}`,
@@ -154,11 +291,24 @@ function getElectronEnv(): Record<string, string> {
   };
 }
 
+// Externals for the main-process bundle.
+// - `electron`: the runtime, not bundleable.
+// - `@anthropic-ai/claude-agent-sdk`: SDK 0.3.x is pure ESM and calls
+//   `createRequire(import.meta.url)` at module-init; esbuild's CJS bundling
+//   leaves the synthesized `import_meta.url` undefined and the bundled
+//   main.cjs throws ERR_INVALID_ARG_VALUE on load. Externalize so Node loads
+//   the SDK natively as ESM. Electron 39 = Node 22.x supports `require()` of
+//   TLA-free ESM, so the runtime `require('@anthropic-ai/claude-agent-sdk')`
+//   resolves correctly. Mirror of the same flag in `scripts/electron-build-main.ts`
+//   and `apps/electron/package.json` build:main.
+const MAIN_BUNDLE_EXTERNALS = ["electron", "@anthropic-ai/claude-agent-sdk"];
+
 // Run a one-shot esbuild using the JavaScript API
 async function runEsbuild(
   entryPoint: string,
   outfile: string,
-  defines: Record<string, string> = {}
+  defines: Record<string, string> = {},
+  options: { packagesExternal?: boolean; alias?: Record<string, string> } = {}
 ): Promise<{ success: boolean; error?: string }> {
   try {
     await esbuild.build({
@@ -167,8 +317,9 @@ async function runEsbuild(
       platform: "node",
       format: "cjs",
       outfile: join(ROOT_DIR, outfile),
-      external: ["electron"],
-      packages: "external", // Mark all node_modules as external
+      external: MAIN_BUNDLE_EXTERNALS,
+      ...(options.packagesExternal ? { packages: "external" as const } : {}),
+      ...(options.alias ? { alias: options.alias } : {}),
       define: defines,
       logLevel: "warning",
     });
@@ -178,33 +329,59 @@ async function runEsbuild(
   }
 }
 
-// Verify a JavaScript file is syntactically valid
+// Build Pi agent server using bun instead of esbuild.
+// The Pi SDK (@mariozechner/pi-coding-agent) is ESM-only, and esbuild with
+// packages:external leaves ESM imports as require() calls that fail at runtime.
+// Bun's bundler handles ESM→ESM bundling correctly.
+async function buildPiAgentServer(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const proc = spawn({
+      cmd: ["bun", "build", "src/index.ts", "--outdir=dist", "--target=bun", "--format=esm"],
+      cwd: PI_AGENT_SERVER_DIR,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) {
+      return { success: false, error: stderr };
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: String(err) };
+  }
+}
+
+// Verify a built JavaScript bundle is parseable. `node --check` performs
+// syntax-only validation — it does NOT execute module-level code or resolve
+// `require()`, so Electron-specific top-level requires (e.g. @sentry/electron)
+// are safe. This catches truncated writes, FS corruption, and edge cases that
+// esbuild's build-success signal doesn't cover.
 async function verifyJsFile(filePath: string): Promise<{ valid: boolean; error?: string }> {
   if (!existsSync(filePath)) {
     return { valid: false, error: "File does not exist" };
   }
 
-  // Check file has content
   const stats = statSync(filePath);
   if (stats.size === 0) {
     return { valid: false, error: "File is empty" };
   }
 
-  // Use Node to syntax-check the file
-  const proc = spawn({
-    cmd: ["node", "--check", filePath],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  const stderr = await new Response(proc.stderr).text();
-  const exitCode = await proc.exited;
-
-  if (exitCode !== 0) {
-    return { valid: false, error: stderr || "Syntax error" };
+  try {
+    const proc = spawn({
+      cmd: ["node", "--check", filePath],
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) {
+      return { valid: false, error: stderr.trim() || `node --check exited ${exitCode}` };
+    }
+    return { valid: true };
+  } catch (err) {
+    return { valid: false, error: String(err) };
   }
-
-  return { valid: true };
 }
 
 // Wait for file to stabilize (no size changes)
@@ -241,6 +418,7 @@ async function main(): Promise<void> {
   console.log("🚀 Starting Electron dev environment...\n");
 
   // Setup
+  detectInstance();
   loadEnvFile();
   cleanViteCache();
 
@@ -249,7 +427,15 @@ async function main(): Promise<void> {
     mkdirSync(DIST_DIR, { recursive: true });
   }
 
+  await ensureBundledUvForCurrentPlatform();
+
   copyResources();
+
+  // Build MCP servers for Codex sessions
+  await buildMcpServers();
+
+  // Build WhatsApp worker bundle so the adapter can spawn it on demand
+  await buildWaWorker();
 
   const vitePort = process.env.CRAFT_VITE_PORT || "5173";
   const oauthDefines = getOAuthDefines();
@@ -263,22 +449,29 @@ async function main(): Promise<void> {
   console.log("🔨 Building main process...");
 
   const mainCjsPath = join(DIST_DIR, "main.cjs");
-  const preloadCjsPath = join(DIST_DIR, "preload.cjs");
+  const preloadCjsPath = join(DIST_DIR, "bootstrap-preload.cjs");
+  const toolbarPreloadCjsPath = join(DIST_DIR, "browser-toolbar-preload.cjs");
 
   // Remove old build files to ensure fresh build
   if (existsSync(mainCjsPath)) rmSync(mainCjsPath);
   if (existsSync(preloadCjsPath)) rmSync(preloadCjsPath);
+  if (existsSync(toolbarPreloadCjsPath)) rmSync(toolbarPreloadCjsPath);
 
-  // Build main and preload in parallel
-  const [mainResult, preloadResult] = await Promise.all([
+  // Build main and preload entries in parallel
+  const [mainResult, preloadResult, toolbarPreloadResult] = await Promise.all([
     runEsbuild(
       "apps/electron/src/main/index.ts",
       "apps/electron/dist/main.cjs",
-      oauthDefines
+      oauthDefines,
+      { alias: MAIN_PROCESS_ALIAS }
     ),
     runEsbuild(
-      "apps/electron/src/preload/index.ts",
-      "apps/electron/dist/preload.cjs"
+      "apps/electron/src/preload/bootstrap.ts",
+      "apps/electron/dist/bootstrap-preload.cjs"
+    ),
+    runEsbuild(
+      "apps/electron/src/preload/browser-toolbar.ts",
+      "apps/electron/dist/browser-toolbar-preload.cjs"
     ),
   ]);
 
@@ -292,23 +485,30 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  if (!toolbarPreloadResult.success) {
+    console.error("❌ Browser toolbar preload build failed:", toolbarPreloadResult.error);
+    process.exit(1);
+  }
+
   // Wait for files to stabilize (filesystem flush)
   console.log("⏳ Waiting for build files to stabilize...");
-  const [mainStable, preloadStable] = await Promise.all([
+  const [mainStable, preloadStable, toolbarPreloadStable] = await Promise.all([
     waitForFileStable(mainCjsPath),
     waitForFileStable(preloadCjsPath),
+    waitForFileStable(toolbarPreloadCjsPath),
   ]);
 
-  if (!mainStable || !preloadStable) {
+  if (!mainStable || !preloadStable || !toolbarPreloadStable) {
     console.error("❌ Build files did not stabilize");
     process.exit(1);
   }
 
   // Verify the built files are valid JavaScript
   console.log("🔍 Verifying build output...");
-  const [mainValid, preloadValid] = await Promise.all([
+  const [mainValid, preloadValid, toolbarPreloadValid] = await Promise.all([
     verifyJsFile(mainCjsPath),
     verifyJsFile(preloadCjsPath),
+    verifyJsFile(toolbarPreloadCjsPath),
   ]);
 
   if (!mainValid.valid) {
@@ -317,7 +517,12 @@ async function main(): Promise<void> {
   }
 
   if (!preloadValid.valid) {
-    console.error("❌ preload.cjs is invalid:", preloadValid.error);
+    console.error("❌ bootstrap-preload.cjs is invalid:", preloadValid.error);
+    process.exit(1);
+  }
+
+  if (!toolbarPreloadValid.valid) {
+    console.error("❌ browser-toolbar-preload.cjs is invalid:", toolbarPreloadValid.error);
     process.exit(1);
   }
 
@@ -349,8 +554,8 @@ async function main(): Promise<void> {
     platform: "node",
     format: "cjs",
     outfile: join(ROOT_DIR, "apps/electron/dist/main.cjs"),
-    external: ["electron"],
-    packages: "external",
+    external: MAIN_BUNDLE_EXTERNALS,
+    alias: MAIN_PROCESS_ALIAS,
     define: oauthDefines,
     logLevel: "info",
   });
@@ -360,20 +565,33 @@ async function main(): Promise<void> {
 
   // 3. Preload watcher (using esbuild watch API)
   const preloadContext = await esbuild.context({
-    entryPoints: [join(ROOT_DIR, "apps/electron/src/preload/index.ts")],
+    entryPoints: [join(ROOT_DIR, "apps/electron/src/preload/bootstrap.ts")],
     bundle: true,
     platform: "node",
     format: "cjs",
-    outfile: join(ROOT_DIR, "apps/electron/dist/preload.cjs"),
+    outfile: join(ROOT_DIR, "apps/electron/dist/bootstrap-preload.cjs"),
     external: ["electron"],
-    packages: "external",
     logLevel: "info",
   });
   await preloadContext.watch();
   esbuildContexts.push(preloadContext);
   console.log("👀 Watching preload...");
 
-  // 4. Start Electron (build already verified)
+  // 4. Browser toolbar preload watcher (dedicated browser window bridge)
+  const toolbarPreloadContext = await esbuild.context({
+    entryPoints: [join(ROOT_DIR, "apps/electron/src/preload/browser-toolbar.ts")],
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    outfile: join(ROOT_DIR, "apps/electron/dist/browser-toolbar-preload.cjs"),
+    external: ["electron"],
+    logLevel: "info",
+  });
+  await toolbarPreloadContext.watch();
+  esbuildContexts.push(toolbarPreloadContext);
+  console.log("👀 Watching browser toolbar preload...");
+
+  // 5. Start Electron (build already verified)
   console.log("🚀 Starting Electron...\n");
 
   const electronProc = spawn({

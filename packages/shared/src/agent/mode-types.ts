@@ -14,17 +14,69 @@ import { z } from 'zod';
 // ============================================================
 
 /**
- * Available permission modes
- * - 'safe': Read-only, blocks writes, never prompts (green)
- * - 'ask': Prompts for dangerous operations (amber)
- * - 'allow-all': Everything allowed, no prompts (violet)
+ * Available permission modes (internal storage keys).
+ *
+ * UI-facing canonical names are:
+ * - explore  -> safe
+ * - ask      -> ask
+ * - execute  -> allow-all
  */
 export type PermissionMode = 'safe' | 'ask' | 'allow-all';
+
+/**
+ * Canonical mode names used in user-facing/session-state surfaces.
+ */
+export type PermissionModeCanonical = 'explore' | 'ask' | 'execute';
 
 /**
  * Order of modes for cycling with SHIFT+TAB
  */
 export const PERMISSION_MODE_ORDER: PermissionMode[] = ['safe', 'ask', 'allow-all'];
+
+/**
+ * Internal -> canonical mapping.
+ */
+export const PERMISSION_MODE_TO_CANONICAL: Record<PermissionMode, PermissionModeCanonical> = {
+  safe: 'explore',
+  ask: 'ask',
+  'allow-all': 'execute',
+};
+
+/**
+ * Canonical -> internal mapping.
+ */
+export const CANONICAL_TO_PERMISSION_MODE: Record<PermissionModeCanonical, PermissionMode> = {
+  explore: 'safe',
+  ask: 'ask',
+  execute: 'allow-all',
+};
+
+/**
+ * Convert internal mode key to canonical user-facing mode name.
+ */
+export function toCanonicalPermissionMode(mode: PermissionMode): PermissionModeCanonical {
+  return PERMISSION_MODE_TO_CANONICAL[mode];
+}
+
+/**
+ * Parse user-facing mode names into internal mode keys.
+ *
+ * Accepts canonical values (explore/ask/execute) and legacy aliases
+ * (safe/allow-all, ask-to-edit) for backward compatibility.
+ */
+export function parsePermissionMode(mode: string): PermissionMode | null {
+  const normalized = mode.trim().toLowerCase();
+
+  if (normalized === 'safe') return 'safe';
+  if (normalized === 'ask') return 'ask';
+  if (normalized === 'allow-all') return 'allow-all';
+
+  if (normalized === 'explore') return 'safe';
+  if (normalized === 'execute') return 'allow-all';
+  if (normalized === 'ask-to-edit' || normalized === 'ask_to_edit' || normalized === 'ask to edit') return 'ask';
+
+  return null;
+}
 
 // ============================================================
 // Permissions Config Types (Browser-safe Zod schemas)
@@ -53,6 +105,26 @@ const PatternSchema = z.union([
 ]);
 
 /**
+ * Command-specific block hint for clearer Explore-mode rejection messages.
+ */
+const BlockedCommandHintSchema = z.object({
+  /** Command name (normalized lowercase base command, e.g. "printf") */
+  command: z.string(),
+  /** Primary reason shown when command is blocked */
+  reason: z.string(),
+  /** Additional policy/risk context */
+  context: z.string().optional(),
+  /** Suggested alternatives or next actions */
+  tryInstead: z.array(z.string()).optional(),
+  /** Concrete example command */
+  example: z.string().optional(),
+  /** Apply this hint only when the command does NOT match this regex */
+  whenNotMatching: z.string().optional(),
+});
+
+export type BlockedCommandHintRule = z.infer<typeof BlockedCommandHintSchema>;
+
+/**
  * Permissions JSON configuration schema
  *
  * Note: Core write tools (Write, Edit, MultiEdit, NotebookEdit) are hardcoded in
@@ -60,6 +132,8 @@ const PatternSchema = z.union([
  * allows users to block additional tools beyond these defaults.
  */
 export const PermissionsConfigSchema = z.object({
+  /** Version date for migration (ISO format: "2026-02-07") */
+  version: z.string().optional(),
   /** Bash command patterns to allow (regex strings) */
   allowedBashPatterns: z.array(PatternSchema).optional(),
   /** MCP tool patterns to allow (regex strings) */
@@ -70,6 +144,8 @@ export const PermissionsConfigSchema = z.object({
   allowedWritePaths: z.array(PatternSchema).optional(),
   /** Additional tools to block (extends the hardcoded defaults) */
   blockedTools: z.array(PatternSchema).optional(),
+  /** Command-specific hint messages for blocked Bash commands */
+  blockedCommandHints: z.array(BlockedCommandHintSchema).optional(),
 });
 
 export type PermissionsConfigFile = z.infer<typeof PermissionsConfigSchema>;
@@ -98,6 +174,21 @@ export interface CompiledBashPattern {
   source: string;
   /** Human-readable comment explaining what this pattern allows */
   comment?: string;
+}
+
+/**
+ * Runtime command-specific hint for blocked Bash commands.
+ */
+export interface CompiledBlockedCommandHint {
+  /** Base command token (lowercase), e.g. "printf" */
+  command: string;
+  reason: string;
+  context?: string;
+  tryInstead?: string[];
+  example?: string;
+  /** Optional condition: hint applies only when command does NOT match this regex */
+  whenNotMatching?: string;
+  whenNotMatchingRegex?: RegExp;
 }
 
 /**
@@ -142,6 +233,8 @@ export interface ModeConfig {
   blockedTools: Set<string>;
   /** Read-only Bash command patterns with metadata for helpful error messages */
   readOnlyBashPatterns: CompiledBashPattern[];
+  /** Command-specific hints shown when blocked Bash commands are rejected */
+  blockedCommandHints?: CompiledBlockedCommandHint[];
   /** Read-only MCP patterns (tools matching these are allowed) */
   readOnlyMcpPatterns: RegExp[];
   /** Fine-grained API endpoint rules (method + path pattern) */
@@ -182,9 +275,10 @@ export const SAFE_MODE_CONFIG: ModeConfig = {
   // Empty fallbacks - actual patterns loaded from default.json
   // If default.json is missing, no bash commands will be auto-allowed in Explore mode
   readOnlyBashPatterns: [],
+  blockedCommandHints: [],
   readOnlyMcpPatterns: [],
   allowedApiEndpoints: [],
-  displayName: 'Safe Mode',
+  displayName: 'Explore',
   shortcutHint: 'SHIFT+TAB',
 };
 

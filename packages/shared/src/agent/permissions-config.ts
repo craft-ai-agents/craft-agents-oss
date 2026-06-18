@@ -12,11 +12,15 @@
  */
 
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
+import { homedir } from 'os';
 import { join } from 'path';
 import { debug } from '../utils/debug.ts';
+import { readJsonFileSync, safeJsonParse } from '../utils/files.ts';
 import { CONFIG_DIR } from '../config/paths.ts';
 import { getBundledAssetsDir } from '../utils/paths.ts';
 import { getSourcePath } from '../sources/storage.ts';
+import { isValidPermissionsFile } from '../config/validators.ts';
+import { FEATURE_FLAGS } from '../feature-flags.ts';
 import {
   SAFE_MODE_CONFIG,
   PermissionsConfigSchema,
@@ -24,6 +28,8 @@ import {
   type PermissionsConfigFile,
   type CompiledApiEndpointRule,
   type CompiledBashPattern,
+  type CompiledBlockedCommandHint,
+  type BlockedCommandHintRule,
   type PermissionPaths,
 } from './mode-types.ts';
 
@@ -31,25 +37,29 @@ import {
 // App-level Permissions Directory
 // ============================================================
 
-const APP_PERMISSIONS_DIR = join(CONFIG_DIR, 'permissions');
-
 // Track if permissions have been initialized this session (prevents re-init on hot reload)
 let permissionsInitialized = false;
 
 /**
  * Get the app-level permissions directory.
  * Default permissions are stored at ~/.craft-agent/permissions/
+ * Reads env var dynamically so tests can override via CRAFT_CONFIG_DIR.
  */
 export function getAppPermissionsDir(): string {
-  return APP_PERMISSIONS_DIR;
+  const configDir = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.craft-agent');
+  return join(configDir, 'permissions');
 }
 
 /**
  * Sync bundled default permissions to disk on launch.
- * Always overwrites to ensure defaults stay current with the running app version
- * (e.g., new bash/MCP patterns added in a new release).
- * User customizations live in separate files (workspace/source permissions.json)
- * and are never touched by this function.
+ * Handles migrations when bundled version is newer:
+ * - If file doesn't exist → copy from bundle
+ * - If file exists but is invalid/corrupt → copy from bundle (auto-heal)
+ * - If file exists and bundled is newer → merge new patterns, update version
+ * - If file exists and same/older version → no-op (preserve user changes)
+ *
+ * User customizations in workspace/source permissions.json files
+ * are never touched by this function.
  */
 export function ensureDefaultPermissions(): void {
   // Skip if already initialized this session (prevents re-init on hot reload)
@@ -71,20 +81,104 @@ export function ensureDefaultPermissions(): void {
     return;
   }
 
-  // Always write bundled default.json to disk on launch.
-  // This ensures new permission rules from app updates are available immediately.
-  // User customizations go in workspace/source permissions.json files (separate layer).
   const destPath = join(permissionsDir, 'default.json');
   const srcPath = join(bundledPermissionsDir, 'default.json');
-  if (existsSync(srcPath)) {
+
+  if (!existsSync(srcPath)) {
+    return;
+  }
+
+  // New install or corrupt file - copy fresh from bundle
+  if (!existsSync(destPath) || !isValidPermissionsFile(destPath)) {
     try {
       const content = readFileSync(srcPath, 'utf-8');
       writeFileSync(destPath, content, 'utf-8');
-      debug('[Permissions] Synced bundled default.json to', destPath);
+      debug('[Permissions] Installed default.json');
     } catch (error) {
-      debug('[Permissions] Error syncing bundled default.json:', error);
+      debug('[Permissions] Error installing default.json:', error);
     }
+    return;
   }
+
+  // Check if migration needed (bundled version > installed version)
+  try {
+    const installedContent = readFileSync(destPath, 'utf-8');
+    const bundledContent = readFileSync(srcPath, 'utf-8');
+
+    const installed = safeJsonParse(installedContent) as PermissionsConfigFile;
+    const bundled = safeJsonParse(bundledContent) as PermissionsConfigFile;
+
+    const installedVersion = installed.version || '2000-01-01';
+    const bundledVersion = bundled.version || '2000-01-01';
+
+    if (bundledVersion > installedVersion) {
+      const merged = migratePermissions(installed, bundled);
+      writeFileSync(destPath, JSON.stringify(merged, null, 2), 'utf-8');
+      debug('[Permissions] Migrated from', installedVersion, 'to', bundledVersion);
+    } else {
+      debug('[Permissions] Already up to date:', installedVersion);
+    }
+  } catch (error) {
+    debug('[Permissions] Migration error:', error);
+  }
+}
+
+/**
+ * Merge new patterns from bundled config into existing installed config.
+ * Preserves user customizations, adds new patterns, updates version.
+ */
+function migratePermissions(
+  installed: PermissionsConfigFile,
+  bundled: PermissionsConfigFile
+): PermissionsConfigFile {
+  // Get existing pattern strings for deduplication
+  const getPatternString = (p: string | { pattern: string }): string =>
+    typeof p === 'string' ? p : p.pattern;
+
+  const existingBashPatterns = new Set(
+    (installed.allowedBashPatterns || []).map(getPatternString)
+  );
+  const existingMcpPatterns = new Set(
+    (installed.allowedMcpPatterns || []).map(getPatternString)
+  );
+
+  // Find new patterns not already in installed
+  const newBashPatterns = (bundled.allowedBashPatterns || []).filter(
+    p => !existingBashPatterns.has(getPatternString(p))
+  );
+  const newMcpPatterns = (bundled.allowedMcpPatterns || []).filter(
+    p => !existingMcpPatterns.has(getPatternString(p))
+  );
+
+  // Merge blocked command hints (dedupe by command + whenNotMatching + reason)
+  const installedHints = installed.blockedCommandHints || [];
+  const installedHintKeys = new Set(
+    installedHints.map(h => `${h.command}::${h.whenNotMatching || ''}::${h.reason}`)
+  );
+  const newBlockedCommandHints = (bundled.blockedCommandHints || []).filter(
+    h => !installedHintKeys.has(`${h.command}::${h.whenNotMatching || ''}::${h.reason}`)
+  );
+
+  debug('[Permissions] Adding', newBashPatterns.length, 'new bash patterns');
+  debug('[Permissions] Adding', newMcpPatterns.length, 'new MCP patterns');
+  debug('[Permissions] Adding', newBlockedCommandHints.length, 'new blocked command hints');
+
+  return {
+    ...installed,
+    version: bundled.version,
+    allowedBashPatterns: [
+      ...(installed.allowedBashPatterns || []),
+      ...newBashPatterns,
+    ],
+    allowedMcpPatterns: [
+      ...(installed.allowedMcpPatterns || []),
+      ...newMcpPatterns,
+    ],
+    blockedCommandHints: [
+      ...installedHints,
+      ...newBlockedCommandHints,
+    ],
+  };
 }
 
 /**
@@ -148,6 +242,8 @@ export interface PermissionsCustomConfig {
   allowedApiEndpoints: ApiEndpointRule[];
   /** File paths to allow writes in Explore mode (glob pattern strings) */
   allowedWritePaths: string[];
+  /** Command-specific hints for blocked Bash commands */
+  blockedCommandHints: BlockedCommandHintRule[];
 }
 
 /**
@@ -158,6 +254,8 @@ export interface MergedPermissionsConfig {
   blockedTools: Set<string>;
   /** Read-only bash patterns with metadata for helpful error messages */
   readOnlyBashPatterns: CompiledBashPattern[];
+  /** Command-specific hints for blocked Bash command explanations */
+  blockedCommandHints: CompiledBlockedCommandHint[];
   readOnlyMcpPatterns: RegExp[];
   /** Fine-grained API endpoint rules */
   allowedApiEndpoints: CompiledApiEndpointRule[];
@@ -193,10 +291,11 @@ export function parsePermissionsJson(content: string): PermissionsCustomConfig {
     allowedMcpPatterns: [],
     allowedApiEndpoints: [],
     allowedWritePaths: [],
+    blockedCommandHints: [],
   };
 
   try {
-    const json = JSON.parse(content);
+    const json = safeJsonParse(content);
     const result = PermissionsConfigSchema.safeParse(json);
 
     if (!result.success) {
@@ -232,6 +331,7 @@ export function parsePermissionsJson(content: string): PermissionsCustomConfig {
       allowedMcpPatterns: normalizePatterns(data.allowedMcpPatterns),
       allowedApiEndpoints: data.allowedApiEndpoints ?? [],
       allowedWritePaths: normalizePatterns(data.allowedWritePaths),
+      blockedCommandHints: data.blockedCommandHints ?? [],
     };
   } catch (error) {
     debug('[SafeMode] JSON parse error:', error);
@@ -248,6 +348,38 @@ function validateRegex(pattern: string): RegExp | null {
   } catch {
     return null;
   }
+}
+
+function compileBlockedCommandHint(hint: BlockedCommandHintRule): CompiledBlockedCommandHint | null {
+  const command = hint.command.trim().toLowerCase();
+  if (!command) return null;
+
+  let whenNotMatchingRegex: RegExp | undefined;
+  if (hint.whenNotMatching) {
+    const compiled = validateRegex(hint.whenNotMatching);
+    if (!compiled) {
+      debug(`[Permissions] Invalid blockedCommandHints.whenNotMatching regex, skipping: ${hint.whenNotMatching}`);
+      return null;
+    }
+    whenNotMatchingRegex = compiled;
+  }
+
+  return {
+    command,
+    reason: hint.reason,
+    context: hint.context,
+    tryInstead: hint.tryInstead,
+    example: hint.example,
+    whenNotMatching: hint.whenNotMatching,
+    whenNotMatchingRegex,
+  };
+}
+
+function shouldCompileBashPattern(pattern: string): boolean {
+  if (!FEATURE_FLAGS.craftAgentsCli && pattern.startsWith('^craft-agent\\s')) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -278,6 +410,16 @@ export function validatePermissionsConfig(config: PermissionsConfigFile): string
       const rule = config.allowedApiEndpoints[i];
       if (rule && !validateRegex(rule.path)) {
         errors.push(`allowedApiEndpoints[${i}].path: Invalid regex pattern: ${rule.path}`);
+      }
+    }
+  }
+
+  // Validate blocked command hint conditional regex patterns
+  if (config.blockedCommandHints) {
+    for (let i = 0; i < config.blockedCommandHints.length; i++) {
+      const hint = config.blockedCommandHints[i];
+      if (hint?.whenNotMatching && !validateRegex(hint.whenNotMatching)) {
+        errors.push(`blockedCommandHints[${i}].whenNotMatching: Invalid regex pattern: ${hint.whenNotMatching}`);
       }
     }
   }
@@ -340,6 +482,58 @@ export function loadSourcePermissionsConfig(
     debug(`[Permissions] Error loading source config:`, error);
     return null;
   }
+}
+
+// ============================================================
+// Raw Load / Save (for CLI CRUD — preserves schema-level structure)
+// ============================================================
+
+/**
+ * Load raw PermissionsConfigFile from a workspace permissions.json.
+ * Returns the Zod-parsed schema object (not the normalized runtime config).
+ * Returns null if the file doesn't exist.
+ */
+export function loadRawWorkspacePermissions(workspaceRootPath: string): PermissionsConfigFile | null {
+  const filePath = getWorkspacePermissionsPath(workspaceRootPath);
+  if (!existsSync(filePath)) return null;
+  const content = readFileSync(filePath, 'utf-8');
+  const json = safeJsonParse(content);
+  const result = PermissionsConfigSchema.safeParse(json);
+  return result.success ? result.data : null;
+}
+
+/**
+ * Load raw PermissionsConfigFile from a source permissions.json.
+ * Returns null if the file doesn't exist.
+ */
+export function loadRawSourcePermissions(workspaceRootPath: string, sourceSlug: string): PermissionsConfigFile | null {
+  const filePath = getSourcePermissionsPath(workspaceRootPath, sourceSlug);
+  if (!existsSync(filePath)) return null;
+  const content = readFileSync(filePath, 'utf-8');
+  const json = safeJsonParse(content);
+  const result = PermissionsConfigSchema.safeParse(json);
+  return result.success ? result.data : null;
+}
+
+/**
+ * Save a PermissionsConfigFile to the workspace permissions.json.
+ */
+export function saveWorkspacePermissions(workspaceRootPath: string, config: PermissionsConfigFile): void {
+  const filePath = getWorkspacePermissionsPath(workspaceRootPath);
+  mkdirSync(workspaceRootPath, { recursive: true });
+  writeFileSync(filePath, `${JSON.stringify(config, null, 2)}\n`, 'utf-8');
+  permissionsConfigCache.invalidateWorkspace(workspaceRootPath);
+}
+
+/**
+ * Save a PermissionsConfigFile to a source permissions.json.
+ */
+export function saveSourcePermissions(workspaceRootPath: string, sourceSlug: string, config: PermissionsConfigFile): void {
+  const filePath = getSourcePermissionsPath(workspaceRootPath, sourceSlug);
+  const sourceDir = getSourcePath(workspaceRootPath, sourceSlug);
+  mkdirSync(sourceDir, { recursive: true });
+  writeFileSync(filePath, `${JSON.stringify(config, null, 2)}\n`, 'utf-8');
+  permissionsConfigCache.invalidateSource(workspaceRootPath, sourceSlug);
 }
 
 // ============================================================
@@ -491,6 +685,7 @@ class PermissionsConfigCache {
     const merged: MergedPermissionsConfig = {
       blockedTools: new Set(defaults.blockedTools),
       readOnlyBashPatterns: [...defaults.readOnlyBashPatterns],
+      blockedCommandHints: [...(defaults.blockedCommandHints ?? [])],
       readOnlyMcpPatterns: [...defaults.readOnlyMcpPatterns],
       allowedApiEndpoints: [],
       allowedWritePaths: [],
@@ -539,6 +734,11 @@ class PermissionsConfigCache {
   private applyDefaultConfig(merged: MergedPermissionsConfig, config: PermissionsCustomConfig): void {
     // Add allowed bash patterns (as CompiledBashPattern with metadata for error messages)
     for (const patternEntry of config.allowedBashPatterns) {
+      if (!shouldCompileBashPattern(patternEntry.pattern)) {
+        debug(`[Permissions] Skipping craft-agent bash pattern (feature disabled): ${patternEntry.pattern}`);
+        continue;
+      }
+
       const regex = validateRegex(patternEntry.pattern);
       if (regex) {
         merged.readOnlyBashPatterns.push({
@@ -576,11 +776,24 @@ class PermissionsConfigCache {
     for (const pattern of config.allowedWritePaths) {
       merged.allowedWritePaths.push(pattern);
     }
+
+    // Add blocked command hints (contextual guidance for blocked bash commands)
+    for (const hint of config.blockedCommandHints) {
+      const compiled = compileBlockedCommandHint(hint);
+      if (compiled) {
+        merged.blockedCommandHints.push(compiled);
+      }
+    }
   }
 
   private applyCustomConfig(merged: MergedPermissionsConfig, custom: PermissionsCustomConfig): void {
     // Add allowed bash patterns (making config more permissive)
     for (const patternEntry of custom.allowedBashPatterns) {
+      if (!shouldCompileBashPattern(patternEntry.pattern)) {
+        debug(`[Permissions] Skipping craft-agent bash pattern (feature disabled): ${patternEntry.pattern}`);
+        continue;
+      }
+
       const regex = validateRegex(patternEntry.pattern);
       if (regex) {
         merged.readOnlyBashPatterns.push({
@@ -620,6 +833,14 @@ class PermissionsConfigCache {
     for (const pattern of custom.allowedWritePaths) {
       merged.allowedWritePaths.push(pattern);
     }
+
+    // Add blocked command hints
+    for (const hint of custom.blockedCommandHints) {
+      const compiled = compileBlockedCommandHint(hint);
+      if (compiled) {
+        merged.blockedCommandHints.push(compiled);
+      }
+    }
   }
 
   /**
@@ -654,6 +875,11 @@ class PermissionsConfigCache {
 
     // Bash patterns - apply normally (not source-specific)
     for (const patternEntry of custom.allowedBashPatterns) {
+      if (!shouldCompileBashPattern(patternEntry.pattern)) {
+        debug(`[Permissions] Skipping craft-agent bash pattern (feature disabled): ${patternEntry.pattern}`);
+        continue;
+      }
+
       const regex = validateRegex(patternEntry.pattern);
       if (regex) {
         merged.readOnlyBashPatterns.push({
@@ -676,6 +902,14 @@ class PermissionsConfigCache {
         });
       } else {
         debug(`[Permissions] Invalid API endpoint path pattern, skipping: ${rule.path}`);
+      }
+    }
+
+    // Blocked command hints - apply normally (bash is session-level)
+    for (const hint of custom.blockedCommandHints) {
+      const compiled = compileBlockedCommandHint(hint);
+      if (compiled) {
+        merged.blockedCommandHints.push(compiled);
       }
     }
   }

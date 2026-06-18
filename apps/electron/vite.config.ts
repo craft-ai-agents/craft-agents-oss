@@ -43,6 +43,8 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'src/renderer/index.html'),
         playground: resolve(__dirname, 'src/renderer/playground.html'),
+        'browser-toolbar': resolve(__dirname, 'src/renderer/browser-toolbar.html'),
+        'browser-empty-state': resolve(__dirname, 'src/renderer/browser-empty-state.html'),
       }
     }
   },
@@ -58,7 +60,7 @@ export default defineConfig({
     dedupe: ['react', 'react-dom']
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'jotai', 'filtrex', 'pdfjs-dist'],
+    include: ['react', 'react-dom', 'jotai', 'pdfjs-dist'],
     exclude: ['@craft-agent/ui'],
     esbuildOptions: {
       supported: { 'top-level-await': true },

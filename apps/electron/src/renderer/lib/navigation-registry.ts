@@ -15,7 +15,7 @@
  */
 
 import type { ComponentType } from 'react'
-import type { ChatFilter } from '../../shared/types'
+import type { SessionFilter } from '../../shared/types'
 
 // =============================================================================
 // Types
@@ -49,8 +49,8 @@ export interface NavigationData {
   sessions: Array<{ id: string; isFlagged?: boolean; stateId?: string }>
   /** All sources */
   sources: Array<{ slug: string }>
-  /** Current chat filter (if in chats mode) */
-  chatFilter?: ChatFilter
+  /** Current session filter (if in sessions mode) */
+  sessionFilter?: SessionFilter
 }
 
 /**
@@ -74,12 +74,12 @@ export interface NavigatorConfig<TDetailsPages extends Record<string, ComponentT
 /**
  * All navigator types in the app
  */
-export type NavigatorType = 'chats' | 'sources' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'settings'
 
 /**
- * Chat filter kinds that map to sidebar routes
+ * Session filter kinds that map to sidebar routes
  */
-export type ChatFilterKind = 'allChats' | 'flagged' | 'state'
+export type SessionFilterKind = 'allSessions' | 'flagged' | 'state'
 
 // =============================================================================
 // Details Page Metadata
@@ -116,16 +116,16 @@ const PlaceholderComponent: ComponentType<DetailsProps> = () => null
  * 3. Exporting meta from the component
  */
 export const NavigationRegistry = {
-  chats: {
-    displayName: 'Chats',
+  sessions: {
+    displayName: 'Sessions',
     detailsPages: {
-      chat: PlaceholderComponent, // Will be: ChatPage
+      session: PlaceholderComponent, // Will be: ChatPage
     },
     defaultDetails: null, // Empty state when no sessions
     getFirstItem: (ctx: NavigationData) => {
       if (!ctx.sessions.length) return null
-      // Filter based on current chat filter
-      const filter = ctx.chatFilter
+      // Filter based on current session filter
+      const filter = ctx.sessionFilter
       if (!filter) return ctx.sessions[0]?.id ?? null
 
       let filtered = ctx.sessions
@@ -136,9 +136,9 @@ export const NavigationRegistry = {
         case 'state':
           filtered = ctx.sessions.filter(s => s.stateId === filter.stateId)
           break
-        case 'allChats':
+        case 'allSessions':
         default:
-          // allChats shows all sessions
+          // allSessions shows all sessions
           break
       }
       return filtered[0]?.id ?? null
@@ -158,6 +158,7 @@ export const NavigationRegistry = {
     displayName: 'Settings',
     detailsPages: {
       app: PlaceholderComponent, // AppSettingsPage
+      ai: PlaceholderComponent, // AiSettingsPage
       appearance: PlaceholderComponent, // AppearanceSettingsPage
       input: PlaceholderComponent, // InputSettingsPage
       workspace: PlaceholderComponent, // WorkspaceSettingsPage
@@ -183,7 +184,7 @@ export type DetailsType<N extends NavigatorType> = keyof (typeof NavigationRegis
 /**
  * All possible details types across all navigators
  */
-export type AnyDetailsType = DetailsType<'chats'> | DetailsType<'sources'> | DetailsType<'settings'>
+export type AnyDetailsType = DetailsType<'sessions'> | DetailsType<'sources'> | DetailsType<'settings'>
 
 // =============================================================================
 // Navigation State Types
@@ -193,7 +194,7 @@ export type AnyDetailsType = DetailsType<'chats'> | DetailsType<'sources'> | Det
  * Represents the full navigation state
  */
 export type NavigationState =
-  | { navigator: 'chats'; chatFilter: ChatFilter; details: { type: 'chat'; id: string } | null }
+  | { navigator: 'sessions'; sessionFilter: SessionFilter; details: { type: 'session'; id: string } | null }
   | { navigator: 'sources'; details: { type: 'source'; id: string } | null }
   | { navigator: 'settings'; details: { type: DetailsType<'settings'>; id: string } }
 

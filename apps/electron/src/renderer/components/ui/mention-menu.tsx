@@ -1,9 +1,11 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { FadingText } from '@/components/ui/fading-text'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import type { LoadedSkill, LoadedSource, FileSearchResult } from '../../../shared/types'
+import { AGENTS_PLUGIN_NAME } from '@craft-agent/shared/skills/types'
 
 // ============================================================================
 // Types
@@ -51,7 +53,7 @@ const MENU_LIST_STYLE = 'max-h-[240px] overflow-y-auto py-1'
 const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-3 rounded-[6px] mx-1 px-2 py-1.5 text-[13px]'
 const MENU_ITEM_SELECTED = 'bg-foreground/5'
 // Type badge shown to the right of each item label (e.g. "Skill", "Source")
-const MENU_TYPE_BADGE = 'rounded-[4px] shadow-[0_0_0_1px_var(--shadow-tinted)] shadow-minimal bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground shrink-0'
+const MENU_TYPE_BADGE = 'rounded-[4px] shadow-minimal bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground shrink-0'
 
 // ============================================================================
 // Path utilities
@@ -64,20 +66,47 @@ function getParentDir(relativePath: string): string {
   return relativePath.slice(0, lastSlash + 1)
 }
 
+/** Check if query characters appear in order within target.
+ *  Returns true if all characters of query are found sequentially in target.
+ *  Note: comparison is literal — pass lowercased inputs for case-insensitive matching. */
+function subsequenceMatch(target: string, query: string): boolean {
+  let qi = 0
+  for (let ti = 0; ti < target.length && qi < query.length; ti++) {
+    if (target[ti] === query[qi]) qi++
+  }
+  return qi === query.length
+}
+
 /** Filter cached FileSearchResults by query and convert to MentionItems.
- *  Used for instant client-side filtering without waiting for IPC. */
+ *  Uses substring matching first (score 2), then subsequence matching as
+ *  fallback (score 1) so queries like "appav" find "app availability.md". */
 function filterCacheResults(cache: FileSearchResult[], query: string): MentionItem[] {
-  const lowerQuery = query.toLowerCase()
-  return cache
-    .filter(f => f.name.toLowerCase().includes(lowerQuery) || f.relativePath.toLowerCase().includes(lowerQuery))
+  const lowerQuery = query.trimEnd().toLowerCase()
+  if (!lowerQuery) return []
+
+  const scored = cache
+    .map(f => {
+      const name = f.name.toLowerCase()
+      const path = f.relativePath.toLowerCase()
+      let score = 0
+      if (name.includes(lowerQuery) || path.includes(lowerQuery)) {
+        score = 2
+      } else if (subsequenceMatch(name, lowerQuery) || subsequenceMatch(path, lowerQuery)) {
+        score = 1
+      }
+      return { f, score }
+    })
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score)
     .slice(0, 20)
-    .map(f => ({
-      id: f.path,
-      type: f.type === 'directory' ? 'folder' as const : 'file' as const,
-      label: f.name,
-      description: f.relativePath,
-      file: { path: f.path, type: f.type, relativePath: f.relativePath },
-    }))
+
+  return scored.map(({ f }) => ({
+    id: f.path,
+    type: f.type === 'directory' ? 'folder' as const : 'file' as const,
+    label: f.name,
+    description: f.relativePath,
+    file: { path: f.path, type: f.type, relativePath: f.relativePath },
+  }))
 }
 
 // ============================================================================
@@ -106,7 +135,8 @@ function getMatchScore(text: string, filter: string): number {
 
 function filterSections(sections: MentionSection[], filter: string): MentionSection[] {
   if (!filter) return sections
-  const lowerFilter = filter.toLowerCase()
+  const lowerFilter = filter.trimEnd().toLowerCase()
+  if (!lowerFilter) return sections
 
   // Collect all matching items across sections
   const allItems = sections.flatMap(section => section.items)
@@ -180,6 +210,7 @@ export function InlineMentionMenu({
   maxWidth = 280,
   className,
 }: InlineMentionMenuProps) {
+  const { t } = useTranslation()
   const menuRef = React.useRef<HTMLDivElement>(null)
   const listRef = React.useRef<HTMLDivElement>(null)
   const [selectedIndex, setSelectedIndex] = React.useState(0)
@@ -258,6 +289,7 @@ export function InlineMentionMenu({
   return (
     <div
       ref={menuRef}
+      data-inline-menu
       className={cn('fixed z-dropdown', MENU_CONTAINER_STYLE, className)}
       style={{
         left: Math.round(position.x) - 10,
@@ -268,12 +300,12 @@ export function InlineMentionMenu({
     >
       {/* Menu header — sticky above scroll area */}
       <div className="px-3 py-1.5 text-[12px] font-medium text-muted-foreground border-b border-foreground/5">
-        Mention files, skills, sources
+        {t('chat.mentionFilesSkillsSources')}
       </div>
 
       <div ref={listRef} className={MENU_LIST_STYLE}>
         {flatItems.length === 0 && filter && (
-          <div className="px-3 py-2 text-[12px] text-muted-foreground/60">No results</div>
+          <div className="px-3 py-2 text-[12px] text-muted-foreground/60">{t('chat.noResults')}</div>
         )}
         {flatItems.map((item, itemIndex) => {
           const isSelected = itemIndex === selectedIndex
@@ -328,7 +360,7 @@ export function InlineMentionMenu({
                     <span className="truncate block">{item.label}</span>
                   </div>
                   <span className={MENU_TYPE_BADGE}>
-                    {item.type === 'skill' ? 'Skill' : 'Source'}
+                    {item.type === 'skill' ? t('common.skill') : t('common.source')}
                   </span>
                 </>
               )}
@@ -524,9 +556,10 @@ export function useInlineMention({
     currentInputRef.current = { value, cursorPosition }
 
     const textBeforeCursor = value.slice(0, cursorPosition)
-    // Match @ anywhere, followed by optional word chars, hyphens, slashes, and dots
-    // (dots needed for file extensions like @main.ts)
-    const atMatch = textBeforeCursor.match(/@([\w\-\/.]+)?$/)
+    // Match @ followed by up to 100 chars (word chars, hyphens, slashes, dots, and spaces).
+    // Spaces are allowed so users can type filenames with spaces (e.g. @app availability.md).
+    // The menu auto-closes when a space produces no matches (Slack-style behavior).
+    const atMatch = textBeforeCursor.match(/@([\w\-\/.\s]{0,100})?$/)
 
     // Check if this is a valid @ mention trigger
     const matchStart = atMatch ? textBeforeCursor.lastIndexOf('@') : -1
@@ -534,6 +567,29 @@ export function useInlineMention({
 
     if (isValidTrigger) {
       const filterText = atMatch[1] || ''
+
+      // Slack-style auto-close: if the query contains a space and the file cache is
+      // populated but produces zero matches, close the menu. This prevents the
+      // "infinite spaces" problem while still allowing multi-word queries like
+      // "app availability.md". Skills/sources rarely have spaces in names, so
+      // file cache is the authoritative signal here.
+      if (filterText.includes(' ') && fileCache.current.length > 0) {
+        const fileMatches = filterCacheResults(fileCache.current, filterText)
+        if (fileMatches.length === 0) {
+          setIsOpen(false)
+          setFilter('')
+          setCommittedFilter('')
+          setAtStart(-1)
+          if (fileSearchTimeout.current) {
+            clearTimeout(fileSearchTimeout.current)
+            fileSearchTimeout.current = null
+          }
+          setFileResults([])
+          fileCache.current = []
+          return
+        }
+      }
+
       setAtStart(matchStart)
       setFilter(filterText)
 
@@ -628,23 +684,28 @@ export function useInlineMention({
       const before = currentValue.slice(0, atStart)
       const after = currentValue.slice(cursorPosition)
 
+      const buildMentionText = (kind: 'skill' | 'source' | 'file' | 'folder', value: string): string =>
+        '[' + kind + ':' + value + '] '
+
       // Build the mention text based on type using bracket syntax.
       // Skills use fully-qualified names (workspaceId:slug) because the SDK's
       // Skill tool requires this format to resolve workspace-scoped skills.
       let mentionText: string
       if (item.type === 'skill') {
-        // Use fully-qualified name for skills: [skill:workspaceId:slug]
-        const qualifiedName = workspaceId ? `${workspaceId}:${item.id}` : item.id
-        mentionText = `[skill:${qualifiedName}] `
+        // Plugin name depends on which tier the skill came from:
+        //   workspace → workspaceId, project/global → ".agents"
+        const pluginName = item.skill?.source === 'workspace' ? workspaceId : AGENTS_PLUGIN_NAME
+        const qualifiedName = pluginName ? `${pluginName}:${item.id}` : item.id
+        mentionText = buildMentionText('skill', qualifiedName)
       } else if (item.type === 'source') {
-        mentionText = `[source:${item.id}] `
+        mentionText = buildMentionText('source', item.id)
       } else if (item.type === 'file') {
         // Use relative path for file mentions
-        mentionText = `[file:${item.file?.relativePath || item.id}] `
+        mentionText = buildMentionText('file', item.file?.relativePath || item.id)
       } else if (item.type === 'folder') {
-        mentionText = `[folder:${item.file?.relativePath || item.id}] `
+        mentionText = buildMentionText('folder', item.file?.relativePath || item.id)
       } else {
-        mentionText = `[skill:${item.id}] `
+        mentionText = buildMentionText('skill', item.id)
       }
 
       result = before + mentionText + after

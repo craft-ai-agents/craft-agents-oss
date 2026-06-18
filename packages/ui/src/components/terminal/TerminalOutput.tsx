@@ -10,6 +10,7 @@
 
 import * as React from 'react'
 import { useState, useMemo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Terminal, Copy, Check } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { parseAnsi, stripAnsi, isGrepContentOutput, parseGrepOutput } from './ansi-parser'
@@ -45,6 +46,7 @@ export function TerminalOutput({
   theme = 'light',
   className,
 }: TerminalOutputProps) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState<'command' | 'output' | null>(null)
 
   const isDark = theme === 'dark'
@@ -104,7 +106,7 @@ export function TerminalOutput({
               'p-1 rounded transition-colors',
               isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'
             )}
-            title={copied === 'command' ? 'Copied!' : 'Copy command'}
+            title={copied === 'command' ? t('common.copied') : t('terminal.copyCommand')}
           >
             {copied === 'command' ? (
               <Check className="h-3.5 w-3.5 text-green-500" />
@@ -123,7 +125,7 @@ export function TerminalOutput({
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2 text-xs" style={{ color: mutedColor }}>
             <Terminal className="w-3 h-3" />
-            <span>Output</span>
+            <span>{t('terminal.output')}</span>
             {exitCode !== undefined && (
               <span
                 className="px-1.5 py-0.5 rounded text-[10px]"
@@ -142,7 +144,7 @@ export function TerminalOutput({
               'p-1 rounded transition-colors',
               isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'
             )}
-            title={copied === 'output' ? 'Copied!' : 'Copy output'}
+            title={copied === 'output' ? t('common.copied') : t('terminal.copyOutput')}
           >
             {copied === 'output' ? (
               <Check className="h-3.5 w-3.5 text-green-500" />

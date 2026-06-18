@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
+import { coerceInputText } from '@/lib/input-text'
 import { cn } from '@/lib/utils'
 import { findMentionMatches, parseMentions, type MentionMatch } from '@/lib/mentions'
 import {
@@ -17,6 +19,28 @@ import type { MentionItemType } from './mention-menu'
 
 /** Line count threshold for auto-converting pasted text to file attachment */
 const LONG_TEXT_LINE_THRESHOLD = 100
+
+export interface EscapeCompositionEventLike {
+  key?: string
+  isComposing?: boolean
+  nativeEvent?: {
+    isComposing?: boolean
+  }
+}
+
+/**
+ * Returns true when Escape is pressed while IME composition is active.
+ *
+ * Uses both local composition state and event-level composing flags for
+ * browser/runtime compatibility.
+ */
+export function isEscapeDuringComposition(
+  event: EscapeCompositionEventLike,
+  isComposingRefActive: boolean
+): boolean {
+  if (event.key !== 'Escape') return false
+  return Boolean(isComposingRefActive || event.isComposing || event.nativeEvent?.isComposing)
+}
 
 export interface RichTextInputProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onChange' | 'onInput' | 'onPaste'> {
   /** Current text value */
@@ -478,7 +502,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
     {
       value,
       onChange,
-      placeholder = 'Type a message...',
+      placeholder,
       skills = [],
       sources = [],
       workspaceId,
@@ -494,10 +518,12 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
     },
     forwardedRef
   ) {
+    const { t } = useTranslation()
+    const safeValue = React.useMemo(() => coerceInputText(value), [value])
     const divRef = React.useRef<HTMLDivElement>(null)
     const [isFocused, setIsFocused] = React.useState(false)
     const isComposing = React.useRef(false)
-    const lastValueRef = React.useRef(value)
+    const lastValueRef = React.useRef(safeValue)
     const cursorPositionRef = React.useRef(0)
     const lastMentionSignatureRef = React.useRef('')
     const isInternalUpdate = React.useRef(false)
@@ -516,11 +542,9 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
         loadSourceIcon({ config: source.config, workspaceId })
       }
 
-      // Preload skill icons
+      // Preload skill icons (handles emoji, URL, file, and auto-discovery)
       for (const skill of skills) {
-        if (skill.iconPath) {
-          loadSkillIcon({ slug: skill.slug, iconPath: skill.iconPath }, workspaceId)
-        }
+        loadSkillIcon(skill, workspaceId)
       }
     }, [sources, skills, workspaceId])
 
@@ -603,6 +627,15 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
       handleInput()
     }, [handleInput])
 
+    const handleKeyDownInternal = React.useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (isEscapeDuringComposition(e, isComposing.current)) {
+        e.stopPropagation()
+        return
+      }
+
+      onKeyDown?.(e)
+    }, [onKeyDown])
+
     // Handle paste - delegate files to parent, manually insert plain text
     const handlePasteInternal = React.useCallback((e: React.ClipboardEvent) => {
       // Check if we have files - let parent handle that
@@ -651,13 +684,13 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
     React.useEffect(() => {
       if (!divRef.current) return
       if (isInternalUpdate.current) return
-      if (lastValueRef.current === value) return
+      if (lastValueRef.current === safeValue) return
 
       // External value change - update content
-      lastValueRef.current = value
-      lastMentionSignatureRef.current = getMentionSignature(value, skillSlugs, sourceSlugs)
+      lastValueRef.current = safeValue
+      lastMentionSignatureRef.current = getMentionSignature(safeValue, skillSlugs, sourceSlugs)
 
-      const html = textToHTML(value, skills, sources, workspaceId)
+      const html = textToHTML(safeValue, skills, sources, workspaceId)
       divRef.current.innerHTML = html || '<br>'
 
       // Restore cursor position after innerHTML update.
@@ -666,19 +699,19 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
       // 2. The element is actually focused (user is actively editing)
       // This prevents stealing focus during session changes when search is active.
       if (pendingCursorRef.current !== null || document.activeElement === divRef.current) {
-        const cursorPos = pendingCursorRef.current ?? cursorPositionRef.current ?? value.length
+        const cursorPos = pendingCursorRef.current ?? cursorPositionRef.current ?? safeValue.length
         setCursorPosition(divRef.current, cursorPos)
         pendingCursorRef.current = null // Clear after use
       }
-    }, [value, skills, sources, skillSlugs, sourceSlugs, workspaceId])
+    }, [safeValue, skills, sources, skillSlugs, sourceSlugs, workspaceId])
 
     // Initialize content on mount
     React.useEffect(() => {
       if (!divRef.current) return
-      lastMentionSignatureRef.current = getMentionSignature(value, skillSlugs, sourceSlugs)
-      const html = textToHTML(value, skills, sources, workspaceId)
+      lastMentionSignatureRef.current = getMentionSignature(safeValue, skillSlugs, sourceSlugs)
+      const html = textToHTML(safeValue, skills, sources, workspaceId)
       divRef.current.innerHTML = html || '<br>'
-      lastValueRef.current = value
+      lastValueRef.current = safeValue
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Handle selection changes to highlight badges when selected
@@ -725,19 +758,19 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
     }, [])
 
     // Show placeholder when input is empty (regardless of focus state)
-    const showPlaceholder = !value
+    const showPlaceholder = !safeValue
 
     // Normalize placeholder to array for RotatingPlaceholder
     const placeholderArray = React.useMemo(() => {
-      if (!placeholder) return ['Type a message...']
+      if (!placeholder) return [t("chatInput.placeholder.typeMessage")]
       return Array.isArray(placeholder) ? placeholder : [placeholder]
     }, [placeholder])
 
     // Check if value contains any mentions (badges) to adjust line height
     const hasMentions = React.useMemo(() => {
-      const mentions = parseMentions(value, skillSlugs, sourceSlugs)
+      const mentions = parseMentions(safeValue, skillSlugs, sourceSlugs)
       return mentions.skills.length > 0 || mentions.sources.length > 0 || mentions.files.length > 0 || mentions.folders.length > 0
-    }, [value, skillSlugs, sourceSlugs])
+    }, [safeValue, skillSlugs, sourceSlugs])
 
     return (
       <div className="relative">
@@ -757,7 +790,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
           // Use inline style for line-height to override text-sm's built-in line-height
           style={{ lineHeight: 1.25 }}
           onInput={handleInput}
-          onKeyDown={onKeyDown}
+          onKeyDown={handleKeyDownInternal}
           onFocus={handleFocus}
           onBlur={handleBlur}
           onPaste={handlePasteInternal}

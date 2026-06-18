@@ -21,8 +21,10 @@ export interface SidebarContextMenuConfig {
   statusId?: string
   /** Label ID — when set, this is an individual label (enables Delete Label) */
   labelId?: string
-  /** Handler for "Configure Statuses" action - for allChats/status/flagged types */
+  /** Handler for "Configure Statuses" action - for allSessions/status/flagged types */
   onConfigureStatuses?: () => void
+  /** Handler for "Mark All Read" action - for allSessions type */
+  onMarkAllRead?: () => void
   /** Handler for "Configure Labels" action - receives labelId when triggered from a specific label */
   onConfigureLabels?: (labelId?: string) => void
   /** Handler for "Add New Label" action - creates a label (parentId passed from labelId) */
@@ -33,6 +35,8 @@ export interface SidebarContextMenuConfig {
   onAddSource?: () => void
   /** Handler for "Add Skill" action - for skills type */
   onAddSkill?: () => void
+  /** Handler for "Add Automation" action - for automations type */
+  onAddAutomation?: () => void
   /** Source type filter for "Learn More" link - determines which docs page to open */
   sourceType?: 'api' | 'mcp' | 'local'
   /** Handler for "Edit Views" action - for views type */
@@ -53,7 +57,7 @@ export interface SortableConfig {
 }
 
 export interface LinkItem {
-  id: string            // Unique ID for navigation (e.g., 'nav:allChats')
+  id: string            // Unique ID for navigation (e.g., 'nav:allSessions')
   title: string
   label?: string        // Optional badge (e.g., count)
   icon: LucideIcon | React.ReactNode  // LucideIcon or custom React element
@@ -233,11 +237,13 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
                         statusId={link.contextMenu.statusId}
                         labelId={link.contextMenu.labelId}
                         onConfigureStatuses={link.contextMenu.onConfigureStatuses}
+                        onMarkAllRead={link.contextMenu.onMarkAllRead}
                         onConfigureLabels={link.contextMenu.onConfigureLabels}
                         onAddLabel={link.contextMenu.onAddLabel}
                         onDeleteLabel={link.contextMenu.onDeleteLabel}
                         onAddSource={link.contextMenu.onAddSource}
                         onAddSkill={link.contextMenu.onAddSkill}
+                        onAddAutomation={link.contextMenu.onAddAutomation}
                         sourceType={link.contextMenu.sourceType}
                         onConfigureViews={link.contextMenu.onConfigureViews}
                         viewId={link.contextMenu.viewId}
@@ -298,12 +304,20 @@ function renderExpandedContent(
 ): React.ReactNode {
   // Flat sortable (e.g., statuses): wrap items in SortableList
   if (link.sortable && link.items) {
+    // Split at first separator: items before are sortable, items after are trailing (non-sortable)
+    const separatorIndex = link.items.findIndex(isSeparatorItem)
+    const sortableItems = separatorIndex >= 0 ? link.items.slice(0, separatorIndex) : link.items
+    const trailingItems = separatorIndex >= 0
+      ? link.items.slice(separatorIndex + 1).filter((item): item is LinkItem => !isSeparatorItem(item))
+      : []
+
     return (
       <SortableStatusList
-        items={link.items}
+        items={sortableItems}
         onReorder={link.sortable.onReorder}
         getItemProps={getItemProps}
         focusedItemId={focusedItemId}
+        trailingItems={trailingItems.length > 0 ? trailingItems : undefined}
       />
     )
   }
@@ -329,9 +343,11 @@ interface SortableStatusListProps {
   onReorder: (orderedIds: string[]) => void
   getItemProps: LeftSidebarProps['getItemProps']
   focusedItemId: string | null | undefined
+  /** Non-sortable items rendered after the sortable list (e.g., Flagged, Archived) */
+  trailingItems?: LinkItem[]
 }
 
-function SortableStatusList({ items, onReorder, getItemProps, focusedItemId }: SortableStatusListProps) {
+function SortableStatusList({ items, onReorder, getItemProps, focusedItemId, trailingItems }: SortableStatusListProps) {
   // Filter to LinkItems only (separators don't participate in DnD)
   const linkItems = items.filter((item): item is LinkItem => !isSeparatorItem(item))
 
@@ -380,11 +396,13 @@ function SortableStatusList({ items, onReorder, getItemProps, focusedItemId }: S
                         statusId={item.contextMenu.statusId}
                         labelId={item.contextMenu.labelId}
                         onConfigureStatuses={item.contextMenu.onConfigureStatuses}
+                        onMarkAllRead={item.contextMenu.onMarkAllRead}
                         onConfigureLabels={item.contextMenu.onConfigureLabels}
                         onAddLabel={item.contextMenu.onAddLabel}
                         onDeleteLabel={item.contextMenu.onDeleteLabel}
                         onAddSource={item.contextMenu.onAddSource}
                         onAddSkill={item.contextMenu.onAddSkill}
+                        onAddAutomation={item.contextMenu.onAddAutomation}
                         sourceType={item.contextMenu.sourceType}
                         onConfigureViews={item.contextMenu.onConfigureViews}
                         viewId={item.contextMenu.viewId}
@@ -408,6 +426,24 @@ function SortableStatusList({ items, onReorder, getItemProps, focusedItemId }: S
             />
           )}
         />
+        {/* Non-sortable trailing items (e.g., Flagged, Archived) */}
+        {trailingItems && trailingItems.length > 0 && (
+          <>
+            <div className="my-1 ml-2" aria-hidden="true">
+              <div className="h-px bg-foreground/5" />
+            </div>
+            <div className="grid gap-0.5">
+              {trailingItems.map(item => (
+                <div key={item.id} className="group/section">
+                  <SidebarButton
+                    link={item}
+                    itemProps={getItemProps?.(item.id)}
+                  />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -474,6 +510,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
               <span
                 className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 cursor-pointer"
                 data-no-dnd="true"
+                data-touch-reveal="true"
                 onClick={(e) => {
                   e.stopPropagation()
                   link.onToggle?.()
@@ -494,13 +531,13 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
         {link.title}
         {/* After-title element: type indicator icon, right-aligned before count badge, revealed on hover */}
         {link.afterTitle && (
-          <span className="ml-auto opacity-0 group-hover/section:opacity-100 group-data-[state=open]:opacity-100 group-data-[edit-active=true]:opacity-100 transition-opacity">
+          <span data-touch-reveal="true" className="ml-auto opacity-0 group-hover/section:opacity-100 group-data-[state=open]:opacity-100 group-data-[edit-active=true]:opacity-100 transition-opacity">
             {link.afterTitle}
           </span>
         )}
-        {/* Label Badge: Shows count or status on the right */}
+        {/* Label Badge: Shows count or status on the right, revealed on section hover */}
         {link.label && (
-          <span className={cn(link.afterTitle ? 'ml-0' : 'ml-auto', 'text-xs text-foreground/30 opacity-0 group-hover/section:opacity-100 group-data-[state=open]:opacity-100 group-data-[edit-active=true]:opacity-100 transition-opacity')}>
+          <span data-touch-reveal="true" className={cn(link.afterTitle ? 'ml-0' : 'ml-auto', 'text-xs text-foreground/30 opacity-0 group-hover/section:opacity-100 group-data-[state=open]:opacity-100 group-data-[edit-active=true]:opacity-100 transition-opacity')}>
             {link.label}
           </span>
         )}

@@ -1,0 +1,57 @@
+# Dependencies (rebuilt inside container).
+# Both patterns are required: `node_modules/` matches the top-level only,
+# `**/node_modules` catches the per-package + per-app nested copies that
+# Bun materialises in a monorepo. Without the second pattern the host's
+# `apps/cli/node_modules/@types/bun` (a real directory on macOS) overwrites
+# the symlink that `bun install --frozen-lockfile` creates inside the
+# container, triggering "cannot copy to non-directory" during `COPY . .`.
+node_modules/
+**/node_modules
+
+# Build artifacts
+dist/
+*.tgz
+
+# Electron app output (not needed for server)
+apps/electron/release/
+apps/electron/vendor/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.github/
+
+# Tests
+**/*.test.ts
+**/*.spec.ts
+**/tests/
+**/test/
+**/__tests__/
+
+# Top-level docs (not resource docs used by server)
+/docs/
+apps/online-docs/
+README*.md
+CONTRIBUTING*.md
+CHANGELOG*.md
+LICENSE*
+
+# Docker files (avoid recursive context)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Smoke test script (not needed inside image)
+scripts/docker-smoke-test.sh

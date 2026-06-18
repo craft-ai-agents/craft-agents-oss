@@ -9,15 +9,17 @@
  * primitives, allowing the same component to work in both scenarios.
  *
  * Provides actions based on the sidebar item type:
- * - "Configure Statuses" (for allChats/status/flagged items) - triggers EditPopover callback
+ * - "Configure Statuses" (for allSessions/status/flagged items) - triggers EditPopover callback
  * - "Add Source" (for sources) - triggers EditPopover callback
  * - "Add Skill" (for skills) - triggers EditPopover callback
- * - "Open in New Window" (for newChat only) - uses deep link
+ * - "Open in New Window" (for newSession only) - uses deep link
  */
 
 import * as React from 'react'
+import { useTranslation } from "react-i18next"
 import {
   AppWindow,
+  CheckCheck,
   Settings2,
   Plus,
   Trash2,
@@ -26,7 +28,7 @@ import {
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getDocUrl, type DocFeature } from '@craft-agent/shared/docs/doc-links'
 
-export type SidebarMenuType = 'allChats' | 'flagged' | 'status' | 'sources' | 'skills' | 'labels' | 'views' | 'newChat'
+export type SidebarMenuType = 'allSessions' | 'flagged' | 'status' | 'sources' | 'skills' | 'automations' | 'labels' | 'views' | 'newSession'
 
 export interface SidebarMenuProps {
   /** Type of sidebar item (determines available menu items) */
@@ -35,8 +37,10 @@ export interface SidebarMenuProps {
   statusId?: string
   /** Label ID — when set, this is an individual label item (enables Delete Label) */
   labelId?: string
-  /** Handler for "Configure Statuses" action - only for allChats/status/flagged types */
+  /** Handler for "Configure Statuses" action - only for allSessions/status/flagged types */
   onConfigureStatuses?: () => void
+  /** Handler for "Mark All Read" action - only for allSessions type */
+  onMarkAllRead?: () => void
   /** Handler for "Configure Labels" action - receives labelId when triggered from a specific label */
   onConfigureLabels?: (labelId?: string) => void
   /** Handler for "Add New Label" action - creates a label (parentId = labelId if set) */
@@ -47,6 +51,8 @@ export interface SidebarMenuProps {
   onAddSource?: () => void
   /** Handler for "Add Skill" action - only for skills type */
   onAddSkill?: () => void
+  /** Handler for "Add Automation" action - only for automations type */
+  onAddAutomation?: () => void
   /** Source type filter for "Learn More" link - determines which docs page to open */
   sourceType?: 'api' | 'mcp' | 'local'
   /** Handler for "Edit Views" action - for views type */
@@ -66,36 +72,51 @@ export function SidebarMenu({
   statusId,
   labelId,
   onConfigureStatuses,
+  onMarkAllRead,
   onConfigureLabels,
   onAddLabel,
   onDeleteLabel,
   onAddSource,
   onAddSkill,
+  onAddAutomation,
   sourceType,
   onConfigureViews,
   viewId,
   onDeleteView,
 }: SidebarMenuProps) {
+  const { t } = useTranslation()
+
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator } = useMenuComponents()
 
-  // New Chat: only shows "Open in New Window"
-  if (type === 'newChat') {
+  // New Session: only shows "Open in New Window"
+  if (type === 'newSession') {
     return (
-      <MenuItem onClick={() => window.electronAPI.openUrl('craftagents://action/new-chat?window=focused')}>
+      <MenuItem onClick={() => window.electronAPI.openUrl('craftagents://action/new-session?window=focused')}>
         <AppWindow className="h-3.5 w-3.5" />
-        <span className="flex-1">Open in New Window</span>
+        <span className="flex-1">{t("sidebarMenu.openInNewWindow")}</span>
       </MenuItem>
     )
   }
 
-  // All Chats / Status / Flagged: show "Configure Statuses"
-  if ((type === 'allChats' || type === 'status' || type === 'flagged') && onConfigureStatuses) {
+  // All Sessions / Status / Flagged: show "Configure Statuses" (+ "Mark All Read" for allSessions)
+  if ((type === 'allSessions' || type === 'status' || type === 'flagged') && onConfigureStatuses) {
     return (
-      <MenuItem onClick={onConfigureStatuses}>
-        <Settings2 className="h-3.5 w-3.5" />
-        <span className="flex-1">Configure Statuses</span>
-      </MenuItem>
+      <>
+        {type === 'allSessions' && onMarkAllRead && (
+          <>
+            <MenuItem onClick={onMarkAllRead}>
+              <CheckCheck className="h-3.5 w-3.5" />
+              <span className="flex-1">{t("sidebarMenu.markAllRead")}</span>
+            </MenuItem>
+            <Separator />
+          </>
+        )}
+        <MenuItem onClick={onConfigureStatuses}>
+          <Settings2 className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sidebarMenu.configureStatuses")}</span>
+        </MenuItem>
+      </>
     )
   }
 
@@ -108,13 +129,13 @@ export function SidebarMenu({
         {onAddLabel && (
           <MenuItem onClick={() => onAddLabel(labelId)}>
             <Plus className="h-3.5 w-3.5" />
-            <span className="flex-1">Add New Label</span>
+            <span className="flex-1">{t("sidebarMenu.addNewLabel")}</span>
           </MenuItem>
         )}
         {onConfigureLabels && (
           <MenuItem onClick={() => onConfigureLabels(labelId)}>
             <Settings2 className="h-3.5 w-3.5" />
-            <span className="flex-1">Edit Labels</span>
+            <span className="flex-1">{t("sidebarMenu.editLabels")}</span>
           </MenuItem>
         )}
         {labelId && onDeleteLabel && (
@@ -122,7 +143,7 @@ export function SidebarMenu({
             <Separator />
             <MenuItem onClick={() => onDeleteLabel(labelId)}>
               <Trash2 className="h-3.5 w-3.5" />
-              <span className="flex-1">Delete Label</span>
+              <span className="flex-1">{t("sidebarMenu.deleteLabel")}</span>
             </MenuItem>
           </>
         )}
@@ -137,7 +158,7 @@ export function SidebarMenu({
         {onConfigureViews && (
           <MenuItem onClick={onConfigureViews}>
             <Settings2 className="h-3.5 w-3.5" />
-            <span className="flex-1">Edit Views</span>
+            <span className="flex-1">{t("sidebarMenu.editViews")}</span>
           </MenuItem>
         )}
         {viewId && onDeleteView && (
@@ -145,7 +166,7 @@ export function SidebarMenu({
             <Separator />
             <MenuItem onClick={() => onDeleteView(viewId)}>
               <Trash2 className="h-3.5 w-3.5" />
-              <span className="flex-1">Delete View</span>
+              <span className="flex-1">{t("sidebarMenu.deleteView")}</span>
             </MenuItem>
           </>
         )}
@@ -162,19 +183,19 @@ export function SidebarMenu({
 
     // Display label varies by source type
     const learnMoreLabel = sourceType === 'api'
-      ? 'Learn More about APIs'
+      ? t('sidebarMenu.learnMoreApis')
       : sourceType === 'mcp'
-        ? 'Learn More about MCP'
+        ? t('sidebarMenu.learnMoreMcp')
         : sourceType === 'local'
-          ? 'Learn More about Local Folders'
-          : 'Learn More about Sources'
+          ? t('sidebarMenu.learnMoreLocalFolders')
+          : t('sidebarMenu.learnMoreSources')
 
     return (
       <>
         {onAddSource && (
           <MenuItem onClick={onAddSource}>
             <Plus className="h-3.5 w-3.5" />
-            <span className="flex-1">Add Source</span>
+            <span className="flex-1">{t("sidebarMenu.addSource")}</span>
           </MenuItem>
         )}
         <Separator />
@@ -191,8 +212,27 @@ export function SidebarMenu({
     return (
       <MenuItem onClick={onAddSkill}>
         <Plus className="h-3.5 w-3.5" />
-        <span className="flex-1">Add Skill</span>
+        <span className="flex-1">{t("sidebarMenu.addSkill")}</span>
       </MenuItem>
+    )
+  }
+
+  // Automations: show "Add Automation" and "Learn More"
+  if (type === 'automations') {
+    return (
+      <>
+        {onAddAutomation && (
+          <MenuItem onClick={onAddAutomation}>
+            <Plus className="h-3.5 w-3.5" />
+            <span className="flex-1">{t("sidebarMenu.addAutomation")}</span>
+          </MenuItem>
+        )}
+        <Separator />
+        <MenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('automations'))}>
+          <ExternalLink className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sidebarMenu.learnMoreAutomations")}</span>
+        </MenuItem>
+      </>
     )
   }
 

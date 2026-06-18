@@ -14,6 +14,9 @@ import noLocalStorage from './eslint-rules/no-localstorage.cjs'
 import noDirectPlatformCheck from './eslint-rules/no-direct-platform-check.cjs'
 import noHardcodedPathSeparator from './eslint-rules/no-hardcoded-path-separator.cjs'
 import noDirectFileOpen from './eslint-rules/no-direct-file-open.cjs'
+import noInlineSourceAuthCheck from './eslint-rules/no-inline-source-auth-check.cjs'
+import noHardcodedZIndex from './eslint-rules/no-hardcoded-z-index.cjs'
+import noNonstandardShadows from './eslint-rules/no-nonstandard-shadows.cjs'
 
 export default [
   // Ignore patterns
@@ -69,6 +72,19 @@ export default [
           'no-direct-file-open': noDirectFileOpen,
         },
       },
+      // Custom plugin for source auth checks (shared with packages/shared)
+      'craft-sources': {
+        rules: {
+          'no-inline-source-auth-check': noInlineSourceAuthCheck,
+        },
+      },
+      // Custom style rules
+      'craft-styles': {
+        rules: {
+          'no-hardcoded-z-index': noHardcodedZIndex,
+          'no-nonstandard-shadows': noNonstandardShadows,
+        },
+      },
     },
     settings: {
       react: {
@@ -92,6 +108,102 @@ export default [
 
       // Custom link interceptor rule — prevents bypassing in-app file preview
       'craft-links/no-direct-file-open': 'error',
+
+      // Custom source auth check rule — use isSourceUsable() instead of inline checks
+      'craft-sources/no-inline-source-auth-check': 'error',
+
+      // Custom style rule — use z-index token scale instead of hardcoded literals
+      'craft-styles/no-hardcoded-z-index': 'error',
+
+      // Custom style rule — enforce approved shadow classes/tokens only
+      'craft-styles/no-nonstandard-shadows': ['error', {
+        allowedClasses: [
+          'shadow-none',
+          'shadow-xs',
+          'shadow-minimal',
+          'shadow-tinted',
+          'shadow-thin',
+          'shadow-middle',
+          'shadow-strong',
+          'shadow-panel-focused',
+          'shadow-modal-small',
+          'shadow-bottom-border',
+          'shadow-bottom-border-thin',
+        ],
+        allowInlineNone: true,
+      }],
+
+      // Enforce centralized action registry for keyboard shortcuts
+      'no-restricted-imports': ['error', {
+        paths: [
+          {
+            name: 'react-hotkeys-hook',
+            message: 'Use useAction from @/actions instead. See actions/index.ts'
+          }
+        ],
+      }],
+    },
+  },
+
+  // Temporary exceptions for unresolved shadow migrations.
+  {
+    files: [
+      'src/renderer/components/ui/sortable-list.tsx',
+      'src/main/browser-pane-manager.ts',
+      'src/shared/browser-live-fx.ts',
+      'src/renderer/components/KeyboardShortcutsDialog.tsx',
+      'src/renderer/playground/**/*.{ts,tsx}',
+    ],
+    rules: {
+      'craft-styles/no-nonstandard-shadows': 'off',
+    },
+  },
+
+  // Enforce backend abstraction boundary in Electron main process.
+  {
+    files: ['src/main/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [
+          {
+            name: '@craft-agent/shared/codex',
+            message: 'Use provider-agnostic APIs from @craft-agent/shared/agent/backend instead.',
+          },
+          {
+            name: '@craft-agent/shared/agent/claude-agent',
+            message: 'Provider backends must stay behind @craft-agent/shared/agent/backend.',
+          },
+          {
+            name: '@craft-agent/shared/agent/pi-agent',
+            message: 'Provider backends must stay behind @craft-agent/shared/agent/backend.',
+          },
+        ],
+      }],
+    },
+  },
+
+  // Keep main model fetchers provider-agnostic (delegate to shared backend APIs only).
+  {
+    files: ['src/main/model-fetchers/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': ['error',
+        {
+          selector: "CallExpression[callee.name='fetch']",
+          message: 'Do not call provider APIs directly in Electron model fetchers. Delegate to fetchBackendModels() from @craft-agent/shared/agent/backend.',
+        },
+        {
+          selector: "ImportDeclaration[source.value='@anthropic-ai/claude-agent-sdk']",
+          message: 'Provider SDK usage must stay in backend drivers under packages/shared/src/agent/backend/internal/drivers.',
+        },
+        {
+          selector: "ImportDeclaration[source.value='@mariozechner/pi-ai']",
+          message: 'Provider SDK usage must stay in backend drivers under packages/shared/src/agent/backend/internal/drivers.',
+        },
+        {
+          selector: "ImportDeclaration[source.value='@mariozechner/pi-coding-agent']",
+          message: 'Provider SDK usage must stay in backend drivers under packages/shared/src/agent/backend/internal/drivers.',
+        },
+      ],
     },
   },
 ]

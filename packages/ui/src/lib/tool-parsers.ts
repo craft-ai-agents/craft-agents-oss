@@ -182,6 +182,8 @@ export interface CodeOverlayData {
   totalLines?: number
   numLines?: number
   error?: string
+  /** Original shell command (for Codex reads) - displayed in overlay */
+  command?: string
 }
 
 export interface TerminalOverlayData {
@@ -221,6 +223,18 @@ export interface DocumentOverlayData {
 
 export type OverlayData = CodeOverlayData | TerminalOverlayData | GenericOverlayData | JSONOverlayData | DocumentOverlayData
 
+/** Generic overlay card model (tab item) for activity details. */
+export interface OverlayCard {
+  /** Stable card identifier (e.g. input, output, metadata) */
+  id: string
+  /** Display label shown in card navigator */
+  label: string
+  /** Card payload rendered by overlay */
+  data: OverlayData
+  /** Optional CLI-style command preview (shown on Input cards) */
+  commandPreview?: string
+}
+
 // ============================================================================
 // Main Extraction Function
 // ============================================================================
@@ -251,6 +265,8 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
       totalLines: parsed.totalLines,
       numLines: parsed.numLines,
       error: activity.error,
+      // Pass through command if present (Codex reads via shell commands)
+      command: input?._command as string | undefined,
     }
   }
 
@@ -336,6 +352,54 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
     }
   }
 
+  // LLM Query tool (call_llm) → Document overlay with input prompt + output response
+  if (toolName === 'mcp__session__call_llm') {
+    const prompt = (input?.prompt as string) || ''
+    const model = input?.model as string | undefined
+    const systemPrompt = input?.systemPrompt as string | undefined
+    const attachments = input?.attachments as unknown[] | undefined
+    const outputFormat = input?.outputFormat as string | undefined
+    const outputSchema = input?.outputSchema as Record<string, unknown> | undefined
+
+    const sections: string[] = []
+
+    // Input section
+    sections.push('## Prompt')
+
+    // Metadata (only show when present)
+    const meta: string[] = []
+    if (model) meta.push(`**Model:** ${model}`)
+    if (systemPrompt) meta.push(`**System Prompt:** ${systemPrompt}`)
+    if (outputFormat) meta.push(`**Output Format:** ${outputFormat}`)
+    if (outputSchema) meta.push(`**Output Schema:**\n\`\`\`json\n${JSON.stringify(outputSchema, null, 2)}\n\`\`\``)
+    if (attachments && attachments.length > 0) {
+      const paths = attachments
+        .map(a => typeof a === 'string' ? a : (a as { path: string }).path)
+        .filter(Boolean)
+      if (paths.length > 0) meta.push(`**Attachments:** ${paths.join(', ')}`)
+    }
+    if (meta.length > 0) {
+      sections.push(meta.join('\n\n'))
+    }
+
+    sections.push(prompt)
+
+    // Output section
+    if (rawContent) {
+      sections.push('---')
+      sections.push('## Response')
+      sections.push(rawContent)
+    }
+
+    return {
+      type: 'document',
+      content: sections.join('\n\n'),
+      filePath: 'LLM Query',
+      toolName: 'call_llm',
+      error: activity.error,
+    }
+  }
+
   // Try to detect JSON content for unknown tools (MCP tools, WebFetch, etc.)
   // JSON objects/arrays get interactive tree viewer, other content falls through to generic
   const trimmedContent = rawContent.trim()
@@ -362,4 +426,144 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
     title: activity.displayName || activity.toolName || 'Activity',
     error: activity.error,
   }
+}
+
+function normalizeToolCommandName(toolName?: string): string {
+  const raw = toolName || 'tool'
+  if (raw.startsWith('mcp__session__')) return raw.slice('mcp__session__'.length)
+  if (raw.startsWith('mcp__workspace__')) return raw.slice('mcp__workspace__'.length)
+  return raw
+}
+
+function formatCliValue(value: unknown): string {
+  if (typeof value === 'string') {
+    const needsQuoting = /\s|"|\\/.test(value)
+    if (!needsQuoting) return value
+    return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+  }
+  return JSON.stringify(value)
+}
+
+/** Build a deterministic, Bash-like command preview from tool name + input. */
+export function formatToolCommandPreview(
+  toolName: string | undefined,
+  input: Record<string, unknown> | undefined,
+): string | undefined {
+  if (!toolName) return undefined
+  const normalized = normalizeToolCommandName(toolName)
+
+  if (!input || Object.keys(input).length === 0) {
+    return normalized
+  }
+
+  // Wrapper commands pass through the raw CLI input for best fidelity.
+  if (normalized === 'browser_tool' && typeof input.command === 'string' && input.command.trim()) {
+    return input.command.trim()
+  }
+
+  const entries = Object.entries(input)
+    .filter(([key, value]) => key !== '_intent' && key !== '_displayName' && value !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b))
+
+  const flags = entries.map(([key, value]) => {
+    if (typeof value === 'boolean') return value ? `--${key}` : `--${key} false`
+    return `--${key} ${formatCliValue(value)}`
+  })
+
+  return flags.length > 0 ? `${normalized} ${flags.join(' ')}` : normalized
+}
+
+/**
+ * Extract one or more overlay cards from an activity.
+ *
+ * Current cards:
+ * - Input: toolInput (when present)
+ * - Output: parsed tool result/content (when meaningful)
+ *
+ * This intentionally returns an array to support future card types
+ * without changing the overlay contract.
+ */
+export function extractOverlayCards(activity: ActivityItem): OverlayCard[] {
+  if (!activity) return []
+
+  const cards: OverlayCard[] = []
+  const input = activity.toolInput as Record<string, unknown> | undefined
+  const hasInput = !!input && Object.keys(input).length > 0
+
+  // Input card (JSON-first, generic fallback)
+  let inputJson = ''
+  const commandPreview = formatToolCommandPreview(activity.toolName, input)
+  if (hasInput) {
+    try {
+      inputJson = JSON.stringify(input, null, 2)
+      cards.push({
+        id: 'input',
+        label: 'Input',
+        commandPreview,
+        data: {
+          type: 'json',
+          data: input,
+          rawContent: inputJson,
+          title: `${activity.displayName || activity.toolName || 'Tool'} Input`,
+        },
+      })
+    } catch {
+      cards.push({
+        id: 'input',
+        label: 'Input',
+        commandPreview,
+        data: {
+          type: 'generic',
+          content: String(input),
+          title: `${activity.displayName || activity.toolName || 'Tool'} Input`,
+        },
+      })
+    }
+  }
+
+  // Output card (always present for consistent Input/Output UX)
+  const output = extractOverlayData(activity)
+  const rawContent = (activity.content || '').trim()
+  const isInputMirrorFallback =
+    hasInput &&
+    rawContent.length === 0 &&
+    output?.type === 'generic' &&
+    !!inputJson &&
+    output.content.trim() === inputJson.trim()
+
+  const outputData: OverlayData = isInputMirrorFallback
+    ? {
+        type: 'generic',
+        content: 'No output captured for this tool call.',
+        title: `${activity.displayName || activity.toolName || 'Tool'} Output`,
+        error: activity.error,
+      }
+    : (output || {
+      type: 'generic',
+      content: rawContent || 'No output captured for this tool call.',
+      title: `${activity.displayName || activity.toolName || 'Tool'} Output`,
+      error: activity.error,
+    })
+
+  cards.push({
+    id: 'output',
+    label: 'Output',
+    data: outputData,
+  })
+
+  // Last-resort fallback (kept for defensive safety)
+  if (cards.length === 0) {
+    cards.push({
+      id: 'output',
+      label: 'Output',
+      data: {
+        type: 'generic',
+        content: 'No output captured for this tool call.',
+        title: activity.displayName || activity.toolName || 'Activity',
+        error: activity.error,
+      },
+    })
+  }
+
+  return cards
 }

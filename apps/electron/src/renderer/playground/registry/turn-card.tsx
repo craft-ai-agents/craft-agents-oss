@@ -1386,7 +1386,6 @@ function CodePreviewOverlayPlayground({
         totalLines={totalLines}
         numLines={numLines}
         error={error}
-        onOpenFile={(path) => console.log('[Playground] Open file:', path)}
       />
     </div>
   )
@@ -1539,7 +1538,6 @@ function MultiDiffPreviewOverlayPlayground({
         changes={changes}
         consolidated={consolidated}
         focusedChangeId={focusedChangeId}
-        onOpenFile={(path) => console.log('[Playground] Open file:', path)}
       />
     </div>
   )

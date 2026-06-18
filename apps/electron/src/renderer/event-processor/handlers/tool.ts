@@ -5,8 +5,9 @@
  * Pure functions that return new state - no side effects.
  */
 
-import type { SessionState, ToolStartEvent, ToolResultEvent, TaskBackgroundedEvent, ShellBackgroundedEvent, TaskProgressEvent } from '../types'
+import type { SessionState, ToolStartEvent, ToolResultEvent, TaskBackgroundedEvent, ShellBackgroundedEvent, TaskProgressEvent, TaskCompletedEvent } from '../types'
 import type { Message } from '../../../shared/types'
+import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
 import {
   findToolMessage,
   updateMessageAt,
@@ -47,7 +48,7 @@ export function handleToolStart(
     id: generateMessageId(),
     role: 'tool',
     content: '',
-    timestamp: Date.now(),
+    timestamp: event.timestamp ?? Date.now(),
     toolUseId: event.toolUseId,
     toolName: event.toolName,
     toolInput: event.toolInput,
@@ -79,19 +80,35 @@ export function handleToolResult(
 
   const toolIndex = findToolMessage(session.messages, event.toolUseId)
 
+  const inferredError = event.isError === true || /^\s*(\[ERROR\]|Error:|error:)/.test(event.result || '')
+
   if (toolIndex !== -1) {
+    // Detect "persisted output" - SDK marks as error but data was actually saved successfully
+    const isPersistedOutput = inferredError && (
+      event.result?.includes('Output has been saved to') ||
+      event.result?.includes('Full output saved to')
+    )
+
+    const effectiveIsError = isPersistedOutput ? false : inferredError
+
+    // If the tool is already backgrounded, preserve that status — task_completed will set the final status.
+    // tool_result arrives with the agentId but the task is still running in the background.
+    const existingMessage = session.messages[toolIndex]
+    const isBackgrounded = existingMessage?.toolStatus === 'backgrounded' || existingMessage?.isBackground
+    const newToolStatus = isBackgrounded ? 'backgrounded' : (effectiveIsError ? 'error' : 'completed')
+
     // Update existing tool message
     let updatedSession = updateMessageAt(session, toolIndex, {
       toolResult: event.result,
-      toolStatus: 'completed',
-      isError: event.isError,
+      toolStatus: newToolStatus,
+      isError: effectiveIsError,
+      errorCode: isPersistedOutput ? 'response_too_large' : undefined,
     })
 
     // Safety net: when a parent Task completes, auto-complete any still-pending child tools.
     // This handles the case where child tool_result events never arrive.
-    const PARENT_TOOLS = ['Task', 'TaskOutput']
     const completedTool = updatedSession.messages[toolIndex]
-    if (completedTool && PARENT_TOOLS.includes(completedTool.toolName || '')) {
+    if (completedTool && (isParentTaskTool(completedTool.toolName || '') || completedTool.toolName === 'TaskOutput')) {
       const hasOrphanedChildren = updatedSession.messages.some(
         m => m.parentToolUseId === event.toolUseId
           && m.toolStatus !== 'completed'
@@ -119,16 +136,26 @@ export function handleToolResult(
   // This is normal for background subagent child tools where tool_result arrives
   // without a prior tool_start. If tool_start arrives later, findToolMessage will
   // locate this message by toolUseId and update it with input/intent/displayMeta.
+
+  // Detect "persisted output" - SDK marks as error but data was actually saved successfully
+  const isPersistedOutput = inferredError && (
+    event.result?.includes('Output has been saved to') ||
+    event.result?.includes('Full output saved to')
+  )
+
+  const effectiveIsError = isPersistedOutput ? false : inferredError
+
   const toolMessage: Message = {
     id: generateMessageId(),
     role: 'tool',
     content: '',
-    timestamp: Date.now(),
+    timestamp: event.timestamp ?? Date.now(),
     toolUseId: event.toolUseId,
     toolName: event.toolName,
     toolResult: event.result,
-    toolStatus: 'completed',
-    isError: event.isError,
+    toolStatus: effectiveIsError ? 'error' : 'completed',
+    isError: effectiveIsError,
+    errorCode: isPersistedOutput ? 'response_too_large' : undefined,
     turnId: event.turnId,
     parentToolUseId: event.parentToolUseId,
   }
@@ -221,5 +248,33 @@ export function handleTaskProgress(
   }
 
   // Tool not found - shouldn't happen, but return state unchanged
+  return state
+}
+
+/**
+ * Handle task_completed - update background task message on completion
+ *
+ * When a background task completes, the SDK sends a task_notification.
+ * This handler finds the tool message by taskId and updates its status
+ * and result summary.
+ */
+export function handleTaskCompleted(
+  state: SessionState,
+  event: TaskCompletedEvent
+): SessionState {
+  const { session, streaming } = state
+
+  // Find the tool message by taskId (set when task_backgrounded was processed)
+  const toolIndex = session.messages.findIndex(m => m.taskId === event.taskId)
+
+  if (toolIndex !== -1) {
+    const updatedSession = updateMessageAt(session, toolIndex, {
+      toolStatus: event.status === 'failed' ? 'error' : 'completed',
+      toolResult: event.summary || `Background task ${event.status}`,
+    })
+    return { session: updatedSession, streaming }
+  }
+
+  // Tool not found by taskId - return state unchanged
   return state
 }

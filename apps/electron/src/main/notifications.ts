@@ -11,9 +11,15 @@ import { Notification, app, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
 import { readFileSync } from 'fs'
 import { mainLog } from './logger'
+import { RPC_CHANNELS } from '../shared/types'
 import type { WindowManager } from './window-manager'
+import type { EventSink } from '@craft-agent/server-core/transport'
+
+type ClientResolver = (webContentsId: number) => string | undefined
 
 let windowManager: WindowManager | null = null
+let eventSink: EventSink | null = null
+let clientResolver: ClientResolver | null = null
 let baseIconPath: string | null = null
 let baseIconDataUrl: string | null = null
 let currentBadgeCount: number = 0
@@ -24,6 +30,17 @@ let instanceNumber: number | null = null  // Multi-instance dev: instance number
  */
 export function initNotificationService(wm: WindowManager): void {
   windowManager = wm
+}
+
+/**
+ * Set the event sink for notification broadcasts (called after server creation).
+ *
+ * When a resolver is provided we can route session navigation events to a
+ * single client instead of broadcasting to every window in the workspace.
+ */
+export function setNotificationEventSink(sink: EventSink, resolver?: ClientResolver): void {
+  eventSink = sink
+  clientResolver = resolver ?? null
 }
 
 /**
@@ -88,11 +105,22 @@ function handleNotificationClick(workspaceId: string, sessionId: string): void {
     }
     window.focus()
 
-    // Send navigation event to renderer to open the session
-    window.webContents.send('notification:navigate', {
-      workspaceId,
-      sessionId,
-    })
+    // Send navigation event to renderer to open the session.
+    // Prefer a single-client target to avoid cross-window navigation side effects.
+    if (eventSink) {
+      const clientId = clientResolver?.(window.webContents.id)
+      if (clientId) {
+        eventSink(RPC_CHANNELS.notification.NAVIGATE, { to: 'client', clientId }, {
+          workspaceId,
+          sessionId,
+        })
+      } else {
+        eventSink(RPC_CHANNELS.notification.NAVIGATE, { to: 'workspace', workspaceId }, {
+          workspaceId,
+          sessionId,
+        })
+      }
+    }
   }
 }
 
@@ -144,12 +172,9 @@ export function updateBadgeCount(count: number): void {
 function updateBadgeCountMacOS(count: number): void {
   try {
     if (count > 0) {
-      // Draw badge onto icon using the renderer process
-      // We'll send this to the renderer which has Canvas API
-      const windows = BrowserWindow.getAllWindows()
-      const window = windows[0]
-      if (window && !window.isDestroyed() && !window.webContents.isDestroyed() && baseIconDataUrl) {
-        window.webContents.send('badge:draw', { count, iconDataUrl: baseIconDataUrl })
+      // Draw badge onto icon using the renderer process (Canvas API)
+      if (eventSink && baseIconDataUrl) {
+        eventSink(RPC_CHANNELS.badge.DRAW, { to: 'all' }, { count, iconDataUrl: baseIconDataUrl })
       }
     } else {
       // Reset to original icon (no badge)
@@ -169,21 +194,19 @@ function updateBadgeCountMacOS(count: number): void {
  */
 function updateBadgeCountWindows(count: number): void {
   try {
-    const windows = BrowserWindow.getAllWindows()
-    const window = windows[0]
-    if (!window || window.isDestroyed()) {
-      return
-    }
-
     if (count > 0) {
-      // Create a simple overlay icon with the count
-      // We'll ask the renderer to draw it and send back via IPC
-      if (!window.webContents.isDestroyed() && baseIconDataUrl) {
-        window.webContents.send('badge:draw-windows', { count })
+      // Draw overlay icon using the renderer process (Canvas API)
+      if (eventSink) {
+        eventSink(RPC_CHANNELS.badge.DRAW_WINDOWS, { to: 'all' }, { count })
       }
     } else {
-      // Clear the overlay
-      window.setOverlayIcon(null, '')
+      // Clear the overlay on all windows
+      const windows = BrowserWindow.getAllWindows()
+      for (const window of windows) {
+        if (!window.isDestroyed()) {
+          window.setOverlayIcon(null, '')
+        }
+      }
     }
     mainLog.info('Badge count updated (Windows):', count)
   } catch (error) {

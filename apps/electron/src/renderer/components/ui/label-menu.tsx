@@ -3,20 +3,14 @@ import { Check, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LabelIcon } from './label-icon'
 import type { LabelConfig } from '@craft-agent/shared/labels'
-import { flattenLabels } from '@craft-agent/shared/labels'
-import type { TodoState } from '@/config/todo-states'
+import { createLabelMenuItems, filterItems, segmentScore, type LabelMenuItem } from './label-menu-utils'
+import { getStatusIconStyle, type SessionStatus } from '@/config/session-status-config'
+
+export { createLabelMenuItems, filterItems, type LabelMenuItem } from './label-menu-utils'
 
 // ============================================================================
 // Types
 // ============================================================================
-
-export interface LabelMenuItem {
-  id: string
-  label: string
-  config: LabelConfig
-  /** Breadcrumb path for nested labels (e.g. "Priority / ") */
-  parentPath?: string
-}
 
 export interface InlineLabelMenuProps {
   open: boolean
@@ -30,7 +24,7 @@ export interface InlineLabelMenuProps {
   className?: string
   // ── State selection (optional — when provided, shows a "States" section) ──
   /** Available workflow states to show in the menu */
-  states?: TodoState[]
+  states?: SessionStatus[]
   /** Currently active state ID (shows checkmark) */
   activeStateId?: string
   /** Callback when a state is selected */
@@ -51,85 +45,10 @@ const MENU_ITEM_SELECTED = 'bg-foreground/5'
 // ============================================================================
 
 /**
- * Score how well a segment matches a path part.
- * 3 = starts with segment (best: "pri" → "Priority")
- * 2 = word boundary match (after space/hyphen/underscore: "high" → "super-high")
- * 1 = contains anywhere (mid-word: "ior" → "Priority")
- * 0 = no match
- */
-function segmentScore(part: string, segment: string): number {
-  const lower = part.toLowerCase()
-  if (lower.startsWith(segment)) return 3
-  if (new RegExp(`[\\s\\-_]${segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(lower)) return 2
-  if (lower.includes(segment)) return 1
-  return 0
-}
-
-/**
- * Unified hierarchical filter with scoring.
- * Splits the filter by "/" into segments (single segment if no "/").
- * Each segment is matched in order against the item's full path (parentPath parts + label).
- * Results are sorted by total match score (starts-with > word-boundary > contains).
- *
- * Examples:
- *   "pri"   → one segment, matches any part containing "pri" → shows parent + children
- *   "pri/h" → two segments → "Priority / High" scores highest
- *   "pa/b"  → matches "Parent / Balint"
- */
-export function filterItems(items: LabelMenuItem[], filter: string): LabelMenuItem[] {
-  if (!filter) return items
-
-  const segments = filter.toLowerCase().split('/').map(s => s.trim()).filter(Boolean)
-  if (segments.length === 0) return items
-
-  // Score each item: try to match segments against path parts in order
-  const scored: { item: LabelMenuItem; score: number }[] = []
-
-  for (const item of items) {
-    // Build full path: parentPath parts + item label
-    const parentParts = item.parentPath
-      ? item.parentPath.split(' / ').filter(Boolean)
-      : []
-    const fullParts = [...parentParts, item.label]
-
-    // Match segments against parts in order, accumulating score
-    let totalScore = 0
-    let partIndex = 0
-    let matched = true
-
-    for (const seg of segments) {
-      let bestScore = 0
-      let found = false
-      // Scan forward through remaining parts to find the best match for this segment
-      while (partIndex < fullParts.length) {
-        const s = segmentScore(fullParts[partIndex], seg)
-        if (s > 0) {
-          bestScore = s
-          found = true
-          partIndex++
-          break
-        }
-        partIndex++
-      }
-      if (!found) { matched = false; break }
-      totalScore += bestScore
-    }
-
-    if (matched) {
-      scored.push({ item, score: totalScore })
-    }
-  }
-
-  // Sort: higher score first, then alphabetical by label
-  scored.sort((a, b) => b.score - a.score || a.item.label.localeCompare(b.item.label))
-  return scored.map(s => s.item)
-}
-
-/**
  * Filter states by a simple text match on the state label.
  * Uses the same segmentScore logic for consistency with label filtering.
  */
-export function filterStates(states: TodoState[], filter: string): TodoState[] {
+export function filterSessionStatuses(states: SessionStatus[], filter: string): SessionStatus[] {
   if (!filter) return states
 
   const segments = filter.toLowerCase().split('/').map(s => s.trim()).filter(Boolean)
@@ -137,7 +56,7 @@ export function filterStates(states: TodoState[], filter: string): TodoState[] {
 
   // States are flat (no hierarchy), so just match the first segment against the label
   const segment = segments[0]
-  const scored: { state: TodoState; score: number }[] = []
+  const scored: { state: SessionStatus; score: number }[] = []
 
   for (const state of states) {
     const score = segmentScore(state.label, segment)
@@ -176,7 +95,7 @@ export function InlineLabelMenu({
   const listRef = React.useRef<HTMLDivElement>(null)
   const [selectedIndex, setSelectedIndex] = React.useState(0)
   const filteredItems = filterItems(items, filter)
-  const filteredStates_ = filterStates(states, filter)
+  const filteredStates_ = filterSessionStatuses(states, filter)
 
   // Build a unified flat index for keyboard navigation:
   // [0..filteredStates_.length-1] = states, [filteredStates_.length..] = labels
@@ -276,6 +195,7 @@ export function InlineLabelMenu({
   return (
     <div
       ref={menuRef}
+      data-inline-menu
       className={cn('fixed z-dropdown', MENU_CONTAINER_STYLE, className)}
       style={{ left: Math.round(position.x) - 10, bottom: bottomPosition, minWidth: 200, maxWidth: 260 }}
     >
@@ -308,8 +228,6 @@ export function InlineLabelMenu({
                 {filteredStates_.map((state, index) => {
                   const isSelected = index === selectedIndex
                   const isActive = state.id === activeStateId
-                  // Apply status color to icon if the icon supports currentColor
-                  const applyColor = state.iconColorable
                   return (
                     <div
                       key={`state-${state.id}`}
@@ -328,7 +246,7 @@ export function InlineLabelMenu({
                       {/* State icon with resolved color */}
                       <span
                         className="shrink-0 flex items-center w-4 h-4 [&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full [&>span]:text-sm"
-                        style={applyColor ? { color: state.resolvedColor } : undefined}
+                        style={getStatusIconStyle(state)}
                       >
                         {state.icon}
                       </span>
@@ -418,7 +336,7 @@ export interface UseInlineLabelMenuOptions {
   onSelect: (labelId: string) => void
   // ── State selection (optional — enables states in the # menu) ──
   /** Available workflow states */
-  todoStates?: TodoState[]
+  sessionStatuses?: SessionStatus[]
   /** Currently active state ID */
   activeStateId?: string
 }
@@ -429,7 +347,7 @@ export interface UseInlineLabelMenuReturn {
   position: { x: number; y: number }
   items: LabelMenuItem[]
   /** Workflow states passed through for the menu component */
-  states: TodoState[]
+  states: SessionStatus[]
   /** Currently active state ID */
   activeStateId?: string
   handleInputChange: (value: string, cursorPosition: number) => void
@@ -448,7 +366,7 @@ export function useInlineLabelMenu({
   labels,
   sessionLabels = [],
   onSelect,
-  todoStates = [],
+  sessionStatuses = [],
   activeStateId,
 }: UseInlineLabelMenuOptions): UseInlineLabelMenuReturn {
   const [isOpen, setIsOpen] = React.useState(false)
@@ -459,36 +377,10 @@ export function useInlineLabelMenu({
   const currentInputRef = React.useRef({ value: '', cursorPosition: 0 })
 
   // Build flat menu items from label tree, excluding already-applied labels
-  const items = React.useMemo((): LabelMenuItem[] => {
-    const flat = flattenLabels(labels)
-    return flat
-      .filter(label => !sessionLabels.includes(label.id))
-      .map(label => {
-        // Build parent path breadcrumb for nested labels
-        let parentPath: string | undefined
-        const findParentPath = (tree: LabelConfig[], targetId: string, path: string[]): string[] | null => {
-          for (const node of tree) {
-            if (node.id === targetId) return path
-            if (node.children) {
-              const result = findParentPath(node.children, targetId, [...path, node.name])
-              if (result) return result
-            }
-          }
-          return null
-        }
-        const pathParts = findParentPath(labels, label.id, [])
-        if (pathParts && pathParts.length > 0) {
-          parentPath = pathParts.join(' / ') + ' / '
-        }
-
-        return {
-          id: label.id,
-          label: label.name,
-          config: label,
-          parentPath,
-        }
-      })
-  }, [labels, sessionLabels])
+  const items = React.useMemo(
+    () => createLabelMenuItems(labels, sessionLabels),
+    [labels, sessionLabels],
+  )
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect
@@ -557,7 +449,7 @@ export function useInlineLabelMenu({
     filter,
     position,
     items,
-    states: todoStates,
+    states: sessionStatuses,
     activeStateId,
     handleInputChange,
     close,

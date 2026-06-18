@@ -1,54 +1,33 @@
 /**
  * Cross-platform asset copy script.
  *
- * Replaces the 4 platform-specific shell scripts (build:resources, build:resources:win,
- * build:assets, build:assets:win) with a single script using Node's fs.cpSync.
+ * Copies the resources/ directory to dist/resources/.
+ * All bundled assets (docs, themes, permissions, tool-icons) now live in resources/
+ * which electron-builder handles natively via directories.buildResources.
  *
- * Copies two categories of files into dist/:
- * 1. Electron-specific resources (icons, DMG backgrounds) → dist/resources/
- * 2. Bundled config assets (docs, tool-icons, themes, permissions, config-defaults) → dist/assets/
- *
- * The dist/assets/ directory is the canonical location for all bundled assets.
  * At Electron startup, setBundledAssetsRoot(__dirname) is called, and then
- * getBundledAssetsDir('docs') resolves to <__dirname>/assets/docs/, etc.
+ * getBundledAssetsDir('docs') resolves to <__dirname>/resources/docs/, etc.
  *
  * Run: bun scripts/copy-assets.ts
  */
 
-import { cpSync, mkdirSync, existsSync } from 'fs';
+import { cpSync, copyFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
 
-// ============================================================
-// 1. Electron-specific resources (icons, DMG backgrounds, etc.)
-// ============================================================
+// Copy all resources (icons, themes, docs, permissions, tool-icons, etc.)
 cpSync('resources', 'dist/resources', { recursive: true });
 
-// ============================================================
-// 2. Shared config assets → dist/assets/
-//    These are resolved at runtime via getBundledAssetsDir(subfolder)
-// ============================================================
-mkdirSync('dist/assets', { recursive: true });
+console.log('✓ Copied resources/ → dist/resources/');
 
-// Shared assets from packages/shared/assets/
-const sharedAssetsRoot = '../../packages/shared/assets';
-for (const dir of ['docs', 'tool-icons']) {
-  const src = `${sharedAssetsRoot}/${dir}`;
-  if (existsSync(src)) {
-    cpSync(src, `dist/assets/${dir}`, { recursive: true });
-  }
+// Copy PowerShell parser script (for Windows command validation in Explore mode)
+// Source: packages/shared/src/agent/powershell-parser.ps1
+// Destination: dist/resources/powershell-parser.ps1
+const psParserSrc = join('..', '..', 'packages', 'shared', 'src', 'agent', 'powershell-parser.ps1');
+const psParserDest = join('dist', 'resources', 'powershell-parser.ps1');
+try {
+  copyFileSync(psParserSrc, psParserDest);
+  console.log('✓ Copied powershell-parser.ps1 → dist/resources/');
+} catch (err) {
+  // Only warn - PowerShell validation is optional on non-Windows platforms
+  console.log('⚠ powershell-parser.ps1 copy skipped (not critical on non-Windows)');
 }
-
-// Config assets from resources/ → also copy to dist/assets/
-// (themes and permissions currently live under resources/ alongside Electron icons)
-for (const dir of ['themes', 'permissions']) {
-  const src = `resources/${dir}`;
-  if (existsSync(src)) {
-    cpSync(src, `dist/assets/${dir}`, { recursive: true });
-  }
-}
-
-// Config defaults file (single JSON, not a directory)
-if (existsSync('resources/config-defaults.json')) {
-  cpSync('resources/config-defaults.json', 'dist/assets/config-defaults.json');
-}
-
-// Note: PDF.js worker is handled by Vite via ?url import in PDFPreviewOverlay.tsx

@@ -80,7 +80,7 @@ export function handleTextComplete(
   state: SessionState,
   event: TextCompleteEvent
 ): SessionState {
-  const { session } = state
+  const { session, streaming } = state
 
   // Find message by turnId (try streaming first, then any assistant)
   let msgIndex = findStreamingMessage(session.messages, event.turnId)
@@ -89,16 +89,36 @@ export function handleTextComplete(
   }
 
   if (msgIndex !== -1) {
+    const existingMsg = session.messages[msgIndex]
+
+    // Don't overwrite a completed intermediate message with another intermediate —
+    // each thinking block (e.g. Codex reasoning between tool calls) should be distinct
+    if (!existingMsg.isStreaming && existingMsg.isIntermediate && event.isIntermediate) {
+      msgIndex = -1
+    }
+  }
+
+  if (msgIndex !== -1) {
     // Update existing message with final content
     // Only update lastMessageAt for final (non-intermediate) messages
     const shouldUpdateTimestamp = !event.isIntermediate
+    const existingMsg = session.messages[msgIndex]
+    // Fallback chain: SDK event text → accumulated streaming content → existing message content.
+    // Guards against SDK quirks or race conditions where event.text arrives empty.
+    const resolvedContent = event.text || streaming?.content || existingMsg?.content || ''
     const updatedSession = updateMessageAt(session, msgIndex, {
-      content: event.text,  // Complete text from SDK
+      // Replace temporary renderer-generated ID with authoritative main-process ID
+      // so branchFromMessageId always resolves against persisted session.jsonl.
+      ...(event.messageId ? { id: event.messageId } : {}),
+      content: resolvedContent,
       isStreaming: false,
       isPending: false,
       isIntermediate: event.isIntermediate,
       turnId: event.turnId,
       parentToolUseId: event.parentToolUseId,
+      // Overwrite text_delta's Date.now() with main process monotonic timestamp
+      // This ensures reload order matches live order
+      ...(event.timestamp ? { timestamp: event.timestamp } : {}),
     }, shouldUpdateTimestamp)
     return { session: updatedSession, streaming: null }
   }
@@ -107,10 +127,10 @@ export function handleTextComplete(
   // This handles the race condition where text_complete arrives
   // before text_delta's setSessions has been processed
   const newMessage: Message = {
-    id: generateMessageId(),
+    id: event.messageId ?? generateMessageId(),
     role: 'assistant',
-    content: event.text,
-    timestamp: Date.now(),
+    content: event.text || streaming?.content || '',
+    timestamp: event.timestamp ?? Date.now(),
     isStreaming: false,
     isPending: false,
     isIntermediate: event.isIntermediate,

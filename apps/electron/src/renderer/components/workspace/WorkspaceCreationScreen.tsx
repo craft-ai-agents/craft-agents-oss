@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import { X } from "lucide-react"
 import { motion } from "motion/react"
 import { Dithering } from "@paper-design/shaders-react"
@@ -8,9 +9,11 @@ import { overlayTransitionIn } from "@/lib/animations"
 import { AddWorkspaceStep_Choice } from "./AddWorkspaceStep_Choice"
 import { AddWorkspaceStep_CreateNew } from "./AddWorkspaceStep_CreateNew"
 import { AddWorkspaceStep_OpenFolder } from "./AddWorkspaceStep_OpenFolder"
+import { AddWorkspaceStep_ConnectRemote } from "./AddWorkspaceStep_ConnectRemote"
 import type { Workspace } from "../../../shared/types"
+import { toast } from "sonner"
 
-type CreationStep = 'choice' | 'create' | 'open'
+type CreationStep = 'choice' | 'create' | 'open' | 'remote'
 
 interface WorkspaceCreationScreenProps {
   /** Callback when a workspace is created successfully */
@@ -18,6 +21,10 @@ interface WorkspaceCreationScreenProps {
   /** Callback when the screen is dismissed */
   onClose: () => void
   className?: string
+  /** When set, skip choice step and open ConnectRemote in reconnect mode */
+  reconnectWorkspace?: Workspace
+  /** Reconnect an existing remote workspace and resolve only on real success. */
+  onReconnectWorkspace?: (workspaceId: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }) => Promise<void>
 }
 
 /**
@@ -31,9 +38,13 @@ interface WorkspaceCreationScreenProps {
 export function WorkspaceCreationScreen({
   onWorkspaceCreated,
   onClose,
-  className
+  className,
+  reconnectWorkspace,
+  onReconnectWorkspace,
 }: WorkspaceCreationScreenProps) {
-  const [step, setStep] = useState<CreationStep>('choice')
+  const { t } = useTranslation()
+  // Start at 'remote' step directly when reconnecting
+  const [step, setStep] = useState<CreationStep>(reconnectWorkspace ? 'remote' : 'choice')
   const [isCreating, setIsCreating] = useState(false)
   const [dimensions, setDimensions] = useState({ width: 1920, height: 1080 })
 
@@ -55,15 +66,33 @@ export function WorkspaceCreationScreen({
     }
   }, [isCreating, onClose])
 
-  const handleCreateWorkspace = useCallback(async (folderPath: string, name: string) => {
+  const handleCreateWorkspace = useCallback(async (folderPath: string, name: string, remoteServer?: { url: string; token: string; remoteWorkspaceId: string }) => {
     setIsCreating(true)
     try {
-      const workspace = await window.electronAPI.createWorkspace(folderPath, name)
+      const workspace = await window.electronAPI.createWorkspace(folderPath, name, remoteServer)
       onWorkspaceCreated(workspace)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      toast.error(t('toast.failedToCreateWorkspace'), {
+        description: message,
+      })
     } finally {
       setIsCreating(false)
     }
   }, [onWorkspaceCreated])
+
+  const handleReconnectWorkspace = useCallback(async (workspaceId: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }) => {
+    if (!onReconnectWorkspace) {
+      throw new Error('Reconnect handler not configured')
+    }
+
+    setIsCreating(true)
+    try {
+      await onReconnectWorkspace(workspaceId, remoteServer)
+    } finally {
+      setIsCreating(false)
+    }
+  }, [onReconnectWorkspace])
 
   const renderStep = () => {
     switch (step) {
@@ -72,6 +101,7 @@ export function WorkspaceCreationScreen({
           <AddWorkspaceStep_Choice
             onCreateNew={() => setStep('create')}
             onOpenFolder={() => setStep('open')}
+            onConnectRemote={() => setStep('remote')}
           />
         )
 
@@ -90,6 +120,23 @@ export function WorkspaceCreationScreen({
             onBack={() => setStep('choice')}
             onCreate={handleCreateWorkspace}
             isCreating={isCreating}
+          />
+        )
+
+      case 'remote':
+        return (
+          <AddWorkspaceStep_ConnectRemote
+            onBack={reconnectWorkspace ? onClose : () => setStep('choice')}
+            onCreate={handleCreateWorkspace}
+            isCreating={isCreating}
+            initialUrl={reconnectWorkspace?.remoteServer?.url}
+            initialToken={reconnectWorkspace?.remoteServer?.token}
+            reconnectWorkspace={reconnectWorkspace?.remoteServer ? {
+              id: reconnectWorkspace.id,
+              name: reconnectWorkspace.name,
+              remoteWorkspaceId: reconnectWorkspace.remoteServer.remoteWorkspaceId,
+            } : undefined}
+            onUpdate={handleReconnectWorkspace}
           />
         )
 

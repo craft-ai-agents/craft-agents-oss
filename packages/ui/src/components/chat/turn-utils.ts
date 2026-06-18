@@ -6,6 +6,10 @@
  */
 
 import type { Message, StoredMessage, MessageRole } from '@craft-agent/core'
+import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
+import { storedToMessage } from '@craft-agent/core'
+
+export { storedToMessage }
 import type { ActivityItem, ActivityStatus, ActivityType, ResponseContent, TodoItem } from './TurnCard'
 
 // Re-export ActivityItem for consumers
@@ -16,65 +20,19 @@ export type { ActivityItem }
 // ============================================================================
 
 /**
- * Strip XML-like error wrapper tags from SDK error messages.
+ * Strip error wrapper tags and prefixes from tool error messages.
  * The Claude Agent SDK wraps errors in tags like <error><tool_use_error>...</tool_use_error></error>
- * which aren't user-friendly. This extracts the inner message.
+ * which aren't user-friendly. Additionally, errorResponse() and blockWithReason() prefix
+ * messages with "[ERROR] " so the Codex model can detect failures (the OpenAI API has no
+ * error signaling field). We strip that prefix here for clean UI display.
  */
 function stripErrorTags(content: string | undefined): string | undefined {
   if (!content) return content
   return content
     .replace(/<\/?error>/gi, '')
     .replace(/<\/?tool_use_error>/gi, '')
+    .replace(/^\[ERROR]\s*/i, '')
     .trim()
-}
-
-/** Convert StoredMessage to Message format for turn processing */
-export function storedToMessage(stored: StoredMessage): Message {
-  return {
-    id: stored.id,
-    role: stored.type,
-    content: stored.content,
-    timestamp: stored.timestamp ?? Date.now(),
-    toolName: stored.toolName,
-    toolUseId: stored.toolUseId,
-    toolInput: stored.toolInput,
-    toolResult: stored.toolResult,
-    toolStatus: stored.toolStatus,
-    toolDuration: stored.toolDuration,
-    toolIntent: stored.toolIntent,
-    toolDisplayName: stored.toolDisplayName,
-    toolDisplayMeta: stored.toolDisplayMeta,  // Includes base64 icon for viewer
-    parentToolUseId: stored.parentToolUseId,
-    taskId: stored.taskId,
-    shellId: stored.shellId,
-    elapsedSeconds: stored.elapsedSeconds,
-    isBackground: stored.isBackground,
-    attachments: stored.attachments,
-    isError: stored.isError,
-    isIntermediate: stored.isIntermediate,
-    turnId: stored.turnId,
-    errorCode: stored.errorCode,
-    errorTitle: stored.errorTitle,
-    errorDetails: stored.errorDetails,
-    errorOriginal: stored.errorOriginal,
-    errorCanRetry: stored.errorCanRetry,
-    ultrathink: stored.ultrathink,
-    planPath: stored.planPath,
-    // Auth-request fields
-    authRequestId: stored.authRequestId,
-    authRequestType: stored.authRequestType,
-    authSourceSlug: stored.authSourceSlug,
-    authSourceName: stored.authSourceName,
-    authStatus: stored.authStatus,
-    authCredentialMode: stored.authCredentialMode,
-    authHeaderName: stored.authHeaderName,
-    authLabels: stored.authLabels,
-    authDescription: stored.authDescription,
-    authHint: stored.authHint,
-    authError: stored.authError,
-    authEmail: stored.authEmail,
-    authWorkspace: stored.authWorkspace,
-  }
 }
 
 // ============================================================================
@@ -117,6 +75,21 @@ export interface AuthRequestTurn {
 }
 
 export type Turn = AssistantTurn | UserTurn | SystemTurn | AuthRequestTurn
+
+/**
+ * Build a stable UI identity key for an assistant turn card.
+ *
+ * Why this exists:
+ * - Backend turnId can be reused across visually split assistant cards
+ *   (e.g., steer/interruption boundaries).
+ * - Expansion state must be keyed by UI-card identity, not raw backend turnId.
+ */
+export function getAssistantTurnUiKey(turn: AssistantTurn, index: number): string {
+  if (turn.response?.messageId) {
+    return `assistant:msg:${turn.response.messageId}`
+  }
+  return `assistant:turn:${turn.turnId}:${turn.timestamp}:${index}`
+}
 
 // ============================================================================
 // Turn Lifecycle Phase
@@ -221,7 +194,12 @@ export function shouldShowThinkingIndicator(phase: TurnPhase, isBuffering: boole
 
 /** Convert tool status from message to ActivityStatus */
 function getToolStatus(message: Message): ActivityStatus {
+  // response_too_large is success (data was saved, just too large for inline display)
+  if (message.errorCode === 'response_too_large') return 'completed'
   if (message.isError) return 'error'
+  // Backgrounded takes priority — tool_result arrives before task_backgrounded,
+  // so toolResult is set but the task is still running in the background
+  if (message.toolStatus === 'backgrounded') return 'backgrounded'
   // Check explicit toolStatus first (set by tool_result handler)
   if (message.toolStatus === 'completed') return 'completed'
   // Fallback: check if toolResult exists (handles empty string results)
@@ -251,11 +229,16 @@ function messageToActivity(message: Message, existingActivities: ActivityItem[] 
     displayName: message.toolDisplayName,  // LLM-generated human-friendly name
     toolDisplayMeta: message.toolDisplayMeta,  // Embedded metadata with base64 icon for viewer
     timestamp: message.timestamp,
-    error: message.isError ? stripErrorTags(message.content) : undefined,
+    error: message.isError ? stripErrorTags(message.toolResult || message.content) : undefined,
     // parentId: The toolUseId of the parent tool (e.g., Task subagent).
     // This is tracked by session manager's parentToolStack, NOT the SDK's
     // parent_tool_use_id which is for result-matching, not hierarchy.
     parentId: message.parentToolUseId,
+    // Background task fields
+    taskId: message.taskId,
+    shellId: message.shellId,
+    elapsedSeconds: message.elapsedSeconds,
+    isBackground: message.isBackground,
   }
 
   // Calculate depth incrementally using existing activities
@@ -345,6 +328,20 @@ function extractTodosFromActivities(activities: ActivityItem[]): TodoItem[] | un
 // Main Grouping Function
 // ============================================================================
 
+export interface GroupTurnsOptions {
+  /**
+   * Whether the session is still actively processing.
+   *
+   * When `false`, the open turn (if any has activities) is marked complete
+   * before the final flush, so the existing "promote last intermediate text
+   * to response" branch fires and the chat doesn't sit on "Thinking…" forever
+   * when a turn ends on a tool call with no non-intermediate `text_complete`.
+   *
+   * Mirrors the messaging-gateway/renderer.ts lastAssistantText fallback.
+   */
+  isSessionProcessing?: boolean
+}
+
 /**
  * Groups messages into turns for TurnCard rendering
  *
@@ -360,7 +357,7 @@ function extractTodosFromActivities(activities: ActivityItem[]): TodoItem[] | un
  * as the signal: isIntermediate=true means more work coming, isIntermediate=false
  * means final response.
  */
-export function groupMessagesByTurn(messages: Message[]): Turn[] {
+export function groupMessagesByTurn(messages: Message[], options: GroupTurnsOptions = {}): Turn[] {
   // Sort by timestamp for correct chronological order
   // This ensures correct turn grouping even if messages are added out of order during streaming
   const sortedMessages = [...messages].sort((a, b) => a.timestamp - b.timestamp)
@@ -401,8 +398,10 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
 
       // If no response but we have intermediate text, promote the last one to response
       // Don't do this for interrupted turns - respect user interruptions
+      // Don't do this for turns with plans - the plan is the final output
       // Only promote when turn is complete (processing indicator hidden)
-      if (!interrupted && !currentTurn.response && currentTurn.isComplete && currentTurn.activities.length > 0) {
+      const hasPlan = currentTurn.activities.some(a => a.type === 'plan')
+      if (!interrupted && !hasPlan && !currentTurn.response && currentTurn.isComplete && currentTurn.activities.length > 0) {
         // Find the last intermediate text activity (reverse to get most recent)
         const lastTextActivity = [...currentTurn.activities]
           .reverse()
@@ -412,6 +411,7 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
           currentTurn.response = {
             text: lastTextActivity.content,
             isStreaming: false,
+            messageId: lastTextActivity.id,
           }
         }
       }
@@ -509,7 +509,8 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
       continue
     }
 
-    // Plan messages are treated as the response of the current turn (like assistant messages)
+    // Plan messages are added as activities to be time-sorted with tool calls
+    // This ensures SubmitPlan tool appears before the plan content chronologically
     if (message.role === 'plan') {
       if (!currentTurn) {
         // Edge case: plan without preceding activities
@@ -524,12 +525,17 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
           timestamp: message.timestamp,
         }
       }
-      // Set plan as the response (like a final assistant message)
-      currentTurn.response = {
-        text: message.content,
-        isStreaming: false,
-        isPlan: true,
-      }
+      // Add plan as an activity so it gets time-sorted with other activities
+      currentTurn.activities.push({
+        id: message.id,
+        type: 'plan' as ActivityType,
+        status: 'completed',
+        content: message.content,
+        messageId: message.id,
+        annotations: message.annotations,
+        displayName: 'Plan',
+        timestamp: message.timestamp,
+      })
       currentTurn.isStreaming = false
       currentTurn.isComplete = true
       flushCurrentTurn()
@@ -538,8 +544,8 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
 
     // Tool messages belong to current assistant turn
     if (message.role === 'tool') {
-      // Tool is complete if toolStatus is 'completed' OR toolResult exists
-      const isToolComplete = message.toolStatus === 'completed' || message.toolResult !== undefined
+      // Tool is complete if toolStatus is 'completed' OR toolResult exists (but NOT if backgrounded)
+      const isToolComplete = (message.toolStatus === 'completed' || message.toolResult !== undefined) && message.toolStatus !== 'backgrounded'
       if (!currentTurn) {
         // Start a new turn
         currentTurn = {
@@ -627,6 +633,8 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
         text: message.content,
         isStreaming: !!message.isStreaming,
         streamStartTime: message.isStreaming ? message.timestamp : undefined,
+        messageId: message.id,
+        annotations: message.annotations,
       }
       currentTurn.isStreaming = !!message.isStreaming
       currentTurn.isComplete = !message.isStreaming
@@ -637,6 +645,19 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
       }
       continue
     }
+  }
+
+  // Session-complete fallback (mirrors messaging-gateway/renderer.ts lastAssistantText fallback).
+  // When the session has stopped processing and the open turn has activities but never received
+  // a non-intermediate assistant final, mark it complete so the existing "promote last
+  // intermediate to response" branch in flushCurrentTurn fires. Without this the chat sits on
+  // "Thinking…" forever when a turn ends on a tool call.
+  if (
+    options.isSessionProcessing === false
+    && currentTurn
+    && (currentTurn as AssistantTurn).activities.length > 0
+  ) {
+    (currentTurn as AssistantTurn).isComplete = true
   }
 
   // Flush any remaining turn
@@ -664,7 +685,7 @@ export function getTurnIntent(turn: AssistantTurn): string | undefined {
  * Check if any activity in the turn is still running
  */
 export function hasPendingActivities(turn: AssistantTurn): boolean {
-  return turn.activities.some(a => a.status === 'running' || a.status === 'pending')
+  return turn.activities.some(a => a.status === 'running' || a.status === 'pending' || a.status === 'backgrounded')
 }
 
 /**
@@ -1069,7 +1090,7 @@ export function groupActivitiesByParent(
   // First, build a set of valid Task toolUseIds (parents that actually exist)
   const taskToolUseIds = new Set<string>()
   for (const activity of activities) {
-    if (activity.toolName === 'Task' && activity.toolUseId) {
+    if (isParentTaskTool(activity.toolName ?? '') && activity.toolUseId) {
       taskToolUseIds.add(activity.toolUseId)
     }
   }
@@ -1114,7 +1135,7 @@ export function groupActivitiesByParent(
   // When Task runs with run_in_background: true, the result contains "agentId: xyz"
   const taskToAgentId = new Map<string, string>()
   for (const activity of activities) {
-    if (activity.toolName === 'Task' && activity.status === 'completed' && activity.content) {
+    if (isParentTaskTool(activity.toolName ?? '') && (activity.status === 'completed' || activity.status === 'backgrounded') && activity.content) {
       // Parse agent ID from Task result - look for "agentId: xyz" pattern
       const agentIdMatch = activity.content.match(/agentId:\s*([a-zA-Z0-9_-]+)/)
       const capturedAgentId = agentIdMatch?.[1]
@@ -1138,8 +1159,8 @@ export function groupActivitiesByParent(
       continue
     }
 
-    // Task tools become groups with their children
-    if (activity.toolName === 'Task') {
+    // Task/Agent tools become groups with their children
+    if (isParentTaskTool(activity.toolName ?? '')) {
       const children = activity.toolUseId
         ? (childrenByParent.get(activity.toolUseId) || [])
         : []

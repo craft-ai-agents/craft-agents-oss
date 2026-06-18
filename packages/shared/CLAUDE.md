@@ -1,155 +1,196 @@
-# CLAUDE.md
+# CLAUDE.md — `@craft-agent/shared`
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this package.
+## Purpose
+Core business logic package for Craft Agent:
+- Agent backends and session-scoped tools
+- Sources, credentials, sessions, and config
+- Permission modes and validation
 
-**Important:** Keep this file and the root `CLAUDE.md` up-to-date whenever functionality changes.
+## Key folders
+- `src/agent/` — `claude-agent.ts`, `pi-agent.ts`, `base-agent.ts`, tools, permissions
+- `src/sources/` — source storage/types/services
+- `src/sessions/` — session persistence/index
+- `src/config/` — config/preferences/theme/watcher
+- `src/credentials/` — encrypted credential management
 
-## Overview
-
-`@craft-agent/shared` is the core business logic package for Craft Agent. It contains:
-- Agent implementation (CraftAgent, session-scoped tools, permission modes)
-- Authentication (OAuth, credentials, auth state)
-- Configuration (storage, preferences, themes, watcher)
-- MCP client and validation
-- Headless execution mode
-- Dynamic status system
-- Session persistence
-
-## Package Exports
-
-This package uses subpath exports for clean imports:
-
-```typescript
-import { CraftAgent, getPermissionMode, setPermissionMode } from '@craft-agent/shared/agent';
-import { loadStoredConfig, type Workspace } from '@craft-agent/shared/config';
-import { getCredentialManager } from '@craft-agent/shared/credentials';
-import { CraftMcpClient } from '@craft-agent/shared/mcp';
-import { loadWorkspaceSources, type LoadedSource } from '@craft-agent/shared/sources';
-import { loadStatusConfig, createStatus } from '@craft-agent/shared/statuses';
-import { resolveTheme } from '@craft-agent/shared/config/theme';
-import { debug } from '@craft-agent/shared/utils';
-```
-
-## Directory Structure
-
-```
-src/
-├── agent/              # CraftAgent, session-scoped-tools, mode-manager, mode-types, permissions-config
-├── auth/               # OAuth, craft-token, claude-token, state
-├── config/             # Storage, preferences, models, theme, watcher
-├── credentials/        # Secure credential storage (AES-256-GCM)
-├── headless/           # Non-interactive execution mode
-├── mcp/                # MCP client and connection validation
-├── prompts/            # System prompt generation
-├── sessions/           # Session index, storage, persistence-queue
-├── sources/            # Source types, storage, service
-├── statuses/           # Dynamic status types, CRUD, storage
-├── subscription/       # Craft subscription checking
-├── utils/              # Debug logging, file handling, summarization
-├── validation/         # URL validation
-├── version/            # Version management, install scripts
-├── workspaces/         # Workspace storage
-├── branding.ts         # Branding constants
-└── network-interceptor.ts    # Fetch interceptor for API errors and MCP schema injection
-```
-
-## Key Concepts
-
-### CraftAgent (`src/agent/craft-agent.ts`)
-The main agent class that wraps the Claude Agent SDK. Handles:
-- MCP server connections
-- Tool permissions via PreToolUse hook
-- Large result summarization via PostToolUse hook
-- Permission mode integration (safe/ask/allow-all)
-- Session continuity
-
-### Permission Modes (`src/agent/mode-manager.ts`, `mode-types.ts`)
-Three-level permission system per session:
-
-| Mode | Display Name | Behavior |
-|------|--------------|----------|
-| `'safe'` | Explore | Read-only, blocks write operations |
-| `'ask'` | Ask to Edit | Prompts for bash commands (default) |
-| `'allow-all'` | Auto | Auto-approves all commands |
-
-- **Per-session state:** No global contamination between sessions
-- **Keyboard shortcut:** SHIFT+TAB cycles through modes
-- **UI config:** `PERMISSION_MODE_CONFIG` provides display names, colors, SVG icons
-
-### Permissions Configuration (`src/agent/permissions-config.ts`)
-Customizable safety rules at two levels (additive merging):
-- Workspace: `~/.craft-agent/workspaces/{id}/permissions.json`
-- Source: `~/.craft-agent/workspaces/{id}/sources/{slug}/permissions.json`
-
-**Rule types:**
-- `blockedTools` - Tools to block (extends defaults)
-- `allowedBashPatterns` - Regex for read-only bash commands
-- `allowedMcpPatterns` - Regex for allowed MCP tools
-- `allowedApiEndpoints` - Fine-grained API rules `{ method, pathPattern }`
-- `allowedWritePaths` - Glob patterns for writable directories
-
-### Session-Scoped Tools (`src/agent/session-scoped-tools.ts`)
-Tools available within agent sessions with callback registry:
-
-**Source management:** `source_test`, `source_oauth_trigger`, `source_google_oauth_trigger`, `source_credential_prompt`
-
-**Utilities:** `SubmitPlan`, `config_validate`
-
-**Callbacks:** `onPlanSubmitted`, `onOAuthBrowserOpen`, `onOAuthSuccess`, `onOAuthError`, `onCredentialRequest`, `onSourcesChanged`, `onSourceActivated`
-
-### Dynamic Status System (`src/statuses/`)
-Workspace-level customizable workflow states:
-
-**Storage:** `~/.craft-agent/workspaces/{id}/statuses/config.json`
-
-**Status properties:** `id`, `label`, `color`, `icon`, `shortcut`, `category` (open/closed), `isFixed`, `isDefault`, `order`
-
-**Default statuses:** Todo, In Progress, Needs Review, Done, Cancelled
-
-**CRUD:** `createStatus()`, `updateStatus()`, `deleteStatus()`, `reorderStatuses()`
-
-### Theme System (`src/config/theme.ts`)
-Cascading theme configuration: app → workspace (last wins)
-
-**Storage:**
-- App: `~/.craft-agent/theme.json`
-- Workspace: `~/.craft-agent/workspaces/{id}/theme.json`
-
-**6-color system:** `background`, `foreground`, `accent`, `info`, `success`, `destructive`
-
-**Functions:** `resolveTheme()`, `themeToCSS()`, dark mode support via `dark: { ... }` overrides
-
-### Session Persistence (`src/sessions/`)
-- **persistence-queue.ts:** Debounced async session writes (500ms)
-- **storage.ts:** Session CRUD, portable path format
-- **index.ts:** Session listing and metadata
-
-### Credentials (`src/credentials/`)
-All sensitive credentials (API keys, OAuth tokens) are stored in an AES-256-GCM encrypted file at `~/.craft-agent/credentials.enc`. The `CredentialManager` provides the API for reading and writing credentials.
-
-### Configuration (`src/config/storage.ts`)
-Multi-workspace configuration stored in `~/.craft-agent/config.json`. Supports:
-- Multiple workspaces with separate MCP servers and sessions
-- Default permission mode for new sessions
-- Extended cache TTL preference
-- Token display mode
-
-### Config Watcher (`src/config/watcher.ts`)
-File watcher for live config updates:
-- Watches `config.json`, `theme.json`, `permissions.json` at all levels
-- Callbacks: `onConfigChange`, `onThemeChange`, `onWorkspacePermissionsChange`, `onSourcePermissionsChange`
-
-### Sources (`src/sources/`)
-Sources are external data connections (MCP servers, APIs, local filesystems). Stored at `~/.craft-agent/workspaces/{id}/sources/{slug}/` with config.json and guide.md. Types: `mcp`, `api`, `local`, `gmail`.
-
-## Dependencies
-
-- `@craft-agent/core` - Shared types
-- `@anthropic-ai/claude-agent-sdk` - Claude Agent SDK
-
-## Type Checking
-
+## Commands
+From repo root:
 ```bash
-# From monorepo root
 cd packages/shared && bun run tsc --noEmit
 ```
+
+## Hard rules
+- Permission modes are fixed: `safe`, `ask`, `allow-all`.
+- Source types are fixed: `mcp`, `api`, `local`.
+- Keep credential handling in `src/credentials/` pathways (no ad-hoc secret storage).
+- Keep user-facing tool contracts backward-compatible where possible.
+
+## Notes
+- `ClaudeAgent` is the primary class in `src/agent/claude-agent.ts`.
+- Claude SDK subprocess env is sanitized to strip Claude-specific Bedrock routing vars (`CLAUDE_CODE_USE_BEDROCK`, `AWS_BEARER_TOKEN_BEDROCK`, `ANTHROPIC_BEDROCK_BASE_URL`). Pi Bedrock uses its own AWS env path instead.
+- Backward alias export (`CraftAgent`) exists for compatibility.
+- Prefer routing new model vendors through the existing Pi path (`providerType: 'pi'` + `piAuthProvider`) unless they truly need a distinct runtime/backend. The Pi provider catalog and display metadata live in `src/config/models-pi.ts`.
+- Custom endpoint model capabilities must preserve explicit per-model overrides end-to-end. In particular, `supportsImages: true` enables image input for one model and `supportsImages: false` must remain available to override a global endpoint image default. Active Pi custom-endpoint sessions refresh runtime capabilities via `updateRuntimeConfig`; capability changes are pushed proactively from the `llmConnections.SAVE` handler through `SessionManager.refreshConnectionRuntime`, with the lazy `getOrCreateAgent` path acting as a backstop. The session layer still gates image attachments at send time so disabled images are not sent even if a subprocess refresh fails.
+- `update_runtime_config` IPC carries `model, providerType, authType, baseUrl, customEndpoint, customModels` only — `piAuthProvider`, `slug`, and the broader credential/provider routing state cannot be re-routed inside a live Pi subprocess. `runtime-config.ts:buildRestartRequiredSignature` hashes those fields separately from the in-place-safe ones; when the restart signature drifts, `tryRefreshAgentRuntime` skips the in-place attempt and goes straight to dispose + recreate so the new auth/provider state actually takes effect.
+- Session lifecycle distinguishes **hard aborts** from **UI handoff interrupts**:
+  - use hard aborts for true cancellation/teardown (`UserStop`, redirect fallback)
+  - use handoff interrupts for pause points where control moves to the UI (`AuthRequest`, `PlanSubmitted`)
+- Remote workspace handoff summaries are injected as one-shot hidden context on the destination session's first turn.
+- WebUI source OAuth uses a stable relay redirect URI (`https://agents.craft.do/auth/callback`); the deployment-specific callback target is carried in a relay-owned outer `state` envelope and unwrapped by the router worker.
+- Automations matching is unified through canonical matcher adapters in `src/automations/utils.ts` (`matcherMatches*`). Avoid direct primitive-only matcher checks in feature code so condition gating stays consistent across app and agent events.
+- Automation matchers may declare an optional `telegramTopic?: string` to route spawned sessions into a Telegram forum topic in the workspace's paired supergroup. The field is plumbed through `PendingPrompt` and `ExecutePromptAutomationInput`; runtime resolution and topic creation live in `@craft-agent/messaging-gateway`'s `TopicRegistry` and `MessagingGatewayRegistry.bindAutomationSession`. SessionManager picks up the resolution via the optional `setAutomationBinder` hook installed by the messaging-gateway bootstrap.
+- The OpenAI Chat Completions strip stream (`unified-network-interceptor.ts:createOpenAiSseStrippingStream`) emits **one consolidated SSE event per logical tool call** with `id + name + cleanArgs` together — never split across init + args-only deltas. Some downstream SDKs (Pi SDK) treat args-only deltas as new tool_calls instead of merging by index, which produces duplicate empty-id entries on parallel-tool turns from DeepSeek and other relays. `sanitizeOpenAiHistoryInPlace` recovers sessions whose history was persisted by the pre-fix split-emit version.
+- `LlmConnection.midStreamBehavior` controls whether mid-stream user sends try to steer the in-flight turn or hold for the next turn. Default is per-`providerType` via `defaultMidStreamBehavior()` (anthropic→`'queue'`, pi/pi_compat→`'steer'`). **Read everywhere via `resolveMidStreamBehavior(connection)`** — never branch on `providerType` directly for this decision; legacy connections without the field rely on the resolver's fallback. New connections persist the explicit default at `createBuiltInConnection` time so the Settings → AI submenu shows a checkmark on first load. The decision is made in `SessionManager.sendMessage`'s mid-stream branch only — backend code (`claude-agent.ts`, `pi-agent.ts`) is unchanged: `'queue'` mode skips `agent.redirect()` entirely and lets the current turn finish before replay.
+- The network interceptor (`unified-network-interceptor.ts`) is currently **Pi-only**: it preloads into the Pi subprocess via Bun `--preload`. The Claude SDK no longer runs under Bun (since 0.2.113 it spawns a per-platform native `claude` binary), so `--preload` is not available there. Features that used to live in the interceptor for Claude (rich tool intent, fast-mode override, MalformedBodyError validation, etc.) are tracked as Phase-2 work in `plans/sdk-uplift-plan.md` — they'll need to move to SDK hooks or a local proxy. In dev / monorepo runs, the Pi interceptor still preloads from the .ts source so changes propagate without a rebuild; packaged builds use `apps/electron/dist/interceptor.cjs`. See `agent/backend/internal/runtime-resolver.ts:resolveInterceptorBundlePath`.
+- Per-message context is split into **volatile** vs **stable** blocks (`PromptBuilder.buildVolatileContextParts()` / `buildStableContextParts()`, composed by `buildContextParts()`). Volatile = date/time, `session_state`, `sources` (change per turn); stable = workspace capabilities, working directory (invariant per session). **Claude** keeps all blocks on the user-message tail (system prompt stays cacheable). **Pi** folds only stable blocks into the system prefix and routes volatile blocks to the user tail — otherwise a per-minute re-stamp invalidates pi-ai's cached system prefix and all downstream history (#862). `buildVolatileContextParts` consumes the one-shot mode-change signal (`consumeModeChangeUserSignal`), so call it **exactly once per turn** — never re-invoke a builder to compute a cache-debug hash (hash the produced string instead).
+- Anthropic OAuth identity (account/org) is captured from the token-exchange response in `auth/claude-oauth.ts` (`parseClaudeOAuthIdentity`; fields are optional/fail-soft, never block login) and persisted on `LlmConnection` (`oauthAccountUuid/Email`, `oauthOrganizationUuid/Name`, `oauthProfileVerifiedAt`) by threading it through the `SETUP_LLM_CONNECTION` payload (`oauthIdentity`), **not** the EXCHANGE handler — the connection record is created by SETUP, which runs after the exchange. `updateLlmConnection` rebuilds connections from a hardcoded allowlist, so any new persisted field must be added there too or it is dropped on the next save (#838).
+- **Mythos-class thinking (Claude Fable 5 / Mythos 5).** These models have adaptive thinking **always on** and the Messages API **rejects `thinking: { type: 'disabled' }`** (unlike Opus/Sonnet/Haiku, whose API is unchanged). `resolveClaudeThinkingOptions` therefore detects them via `isAdaptiveThinkingAlwaysOnModel()` (`config/models.ts`) and maps the "off"/`minimizeThinking` case to `{ thinking: { type: 'adaptive' }, effort: 'low' }` instead of `disabled` — there is no way to turn thinking off on these models. `runMiniCompletion` is unaffected (it runs on the resolved mini model, which is always Haiku). Model id is the dateless pinned snapshot `claude-fable-5` (1M context, 128k max output); registered in `MODEL_REGISTRY`.
+
+## i18n (Internationalization)
+
+Translations live in `src/i18n/locales/{lang}.json`. All user-facing strings must use `t()` (React) or `i18n.t()` (non-React).
+
+### Locale registry (single source of truth)
+
+All locale metadata lives in **`src/i18n/registry.ts`**. To add a new locale:
+
+1. Create `src/i18n/locales/{code}.json` with all keys (copy from `en.json`)
+2. Import the messages and `date-fns` locale in `registry.ts`
+3. Add one entry to `LOCALE_REGISTRY`
+
+**That's it.** `SUPPORTED_LANGUAGE_CODES`, `LANGUAGES`, i18n resources, and `getDateLocale()` are all derived automatically. No other file needs to change.
+
+### Key naming convention
+
+Keys use **flat dot-notation** with a category prefix:
+
+| Prefix | Scope | Example |
+|--------|-------|---------|
+| `common.*` | Shared labels (Cancel, Save, Close, Edit, Loading...) | `common.cancel` |
+| `menu.*` | App menu items (File, Edit, View, Window) | `menu.toggleSidebar` |
+| `sidebar.*` | Left sidebar navigation items | `sidebar.allSessions` |
+| `sidebarMenu.*` | Sidebar context menu actions | `sidebarMenu.addSource` |
+| `sessionMenu.*` | Session context menu actions | `sessionMenu.archive` |
+| `settings.*` | Settings pages — nested by page ID | `settings.ai.connections` |
+| `chat.*` | Chat input, session viewer, inline UI | `chat.attachFiles` |
+| `toast.*` | Toast/notification messages | `toast.failedToShare` |
+| `errors.*` | Error screens | `errors.sessionNotFound` |
+| `onboarding.*` | Onboarding flow — nested by step | `onboarding.welcome.title` |
+| `dialog.*` | Modal dialogs | `dialog.reset.title` |
+| `apiSetup.*` | API connection setup | `apiSetup.modelTier.best` |
+| `workspace.*` | Workspace creation/management | `workspace.createNew` |
+| `sourceInfo.*` | Source detail page | `sourceInfo.connection` |
+| `skillInfo.*` | Skill detail page | `skillInfo.metadata` |
+| `automations.*` | Automation list/detail/menus | `automations.runTest` |
+| `sourcesList.*` | Sources list panel | `sourcesList.noSourcesConfigured` |
+| `skillsList.*` | Skills list panel | `skillsList.addSkill` |
+| `editPopover.*` | EditPopover labels/placeholders | `editPopover.label.addSource` |
+| `status.*` | Session status names (by status ID) | `status.needs-review` |
+| `mode.*` | Permission mode names (by mode ID) | `mode.safe` |
+| `hints.*` | Empty state workflow suggestions | `hints.summarizeGmail` |
+| `table.*` | Data table column headers | `table.access` |
+| `time.*` | Relative time strings | `time.minutesAgo_other` |
+| `session.*` | Session list UI | `session.noSessionsYet` |
+| `shortcuts.*` | Keyboard shortcuts descriptions | `shortcuts.sendMessage` |
+| `sendToWorkspace.*` | Send to workspace dialog | `sendToWorkspace.title` |
+| `webui.*` | WebUI-specific strings | `webui.connectionFailed` |
+| `auth.*` | Auth banner/prompts | `auth.connectionRequired` |
+| `browser.*` | Browser empty state | `browser.readyTitle` |
+
+### Rules
+
+1. **Never call `i18n.t()` at module level** — store `labelKey` strings and resolve in components/functions.
+2. **Use i18next pluralization** (`_one`/`_other`), never manual `count === 1 ?` logic.
+3. **Keep brand names in English**: Craft, Craft Agents, Agents, Workspace, Claude, Anthropic, OpenAI, MCP, API, SDK.
+4. **Include `...` in the translation value** if the UI needs an ellipsis — don't append it in JSX.
+5. **Use `<Trans>` component** for translations containing HTML tags (e.g. `<strong>`).
+6. **Use `i18n.resolvedLanguage`** (not `i18n.language`) when comparing against supported language codes.
+7. **Keys must exist in all locale files** (`en.json`, `es.json`, `zh-Hans.json`, and any future locales). Keep alphabetically sorted.
+8. **Watch translation length for constrained UI elements.** Translations can be 20-100%+ longer than English. For buttons, badges, tab labels, and dropdown items, keep translations concise — use shorter synonyms if needed. High-risk areas:
+   - Permission mode badges (3-5 characters max)
+   - Settings tab labels (≤10 characters ideal)
+   - Button labels (avoid exceeding 2x the English length)
+   - Menu items (flexible, but avoid 3x+ growth)
+
+### Validation
+
+Three checks gate i18n correctness, all wired into pre-commit (`lint:i18n:staged`) and `validate:ci`:
+
+| Script | Catches |
+|--------|---------|
+| `lint:i18n:sorted` | locale keys not alphabetical |
+| `lint:i18n:parity` | non-EN locale missing keys present in `en.json`, or vice versa |
+| `lint:i18n:coverage` | `t('...')` callsite referencing a key that doesn't exist in `en.json` |
+
+`parity` alone is insufficient — it can't detect symmetric losses across all locales (a merge that drops the same 50 keys from every locale file passes parity but breaks the UI). `coverage` closes that gap by verifying every literal `t(...)` / `i18n.t(...)` / `<Trans i18nKey>` reference resolves against `en.json`. Dynamic keys (`t(\`status.${id}\`)`) are skipped — those surface via i18next's runtime missing-key warnings.
+
+When resolving locale merge conflicts, run `bun run validate:ci` and trust the result — no manual key auditing needed if all three pass.
+
+### Adding a new translated string
+
+1. Add the key + English value to `en.json` (alphabetical order)
+2. Add the key + translated value to all other locale files (`es.json`, `zh-Hans.json`)
+3. Use `t("your.key")` in the component (add `useTranslation()` hook if not present)
+4. For non-React code, use `i18n.t("your.key")` — but only inside functions, never at module level
+
+### Adding a new locale
+
+1. Create `src/i18n/locales/{code}.json` with all keys from `en.json`
+2. Add the entry to `LOCALE_REGISTRY` in `src/i18n/registry.ts` (messages + date-fns locale + native name)
+3. Run tests — the registry tests will catch any missing wiring
+
+### Cross-process language persistence
+
+The main-process i18n instance has **no detection plugin** (no `localStorage` in Node) and would otherwise reset to `fallbackLng: 'en'` on every restart. To keep main + renderer in sync across launches:
+
+- **Renderer** uses `i18next-browser-languagedetector` → `localStorage` (`i18nextLng`). Survives restart.
+- **Main** hydrates on startup from `preferences.uiLanguage` in `~/.craft-agent/preferences.json`. Maintained only by the `i18n:changeLanguage` IPC handler in `apps/electron/src/main/index.ts`.
+- **Renderer → main sync** happens on every Appearance change AND once at renderer startup (so a freshly-installed app immediately learns the persisted language).
+- The IPC handler validates the incoming code against `SUPPORTED_LANGUAGE_CODES` and `setPersistedUiLanguage()` no-ops if the value is unchanged — startup pushes don't churn the file or the config watcher.
+
+`uiLanguage` is **not** user-editable through `update_user_preferences`. The Appearance dropdown is the only writer.
+
+## Token refresh for API sources
+
+API sources can auto-refresh tokens via two paths:
+- **OAuth** — Google, Slack, Microsoft, or generic OAuth (`authType: 'oauth'`)
+- **Renew endpoint** — custom bearer-token APIs with `api.renewEndpoint` in config.json
+
+For renew-endpoint sources, the current access token is sent to the configured endpoint and a new token is extracted from the response. No separate refresh token is needed (MVP scope).
+
+Key integration points:
+- `isRefreshableSource()` in `types.ts` — single guard for "can this source auto-refresh?"
+- `SourceCredentialManager.refreshApiRenew()` — calls the renew endpoint
+- `TokenRefreshManager` — treats renew-endpoint sources as refreshable even without `refreshToken`
+- `server-builder.ts` — passes a token getter (not static credential) for renew-endpoint sources
+
+## `queryLlm` backend contract
+
+Every `AgentBackend.queryLlm(request: LLMQueryRequest)` implementation MUST:
+- honor `request.model` (with backend-specific fallback only when the model is
+  unresolvable/unsupported; always report the *effective* model in
+  `LLMQueryResult.model`)
+- honor `request.systemPrompt`
+
+SHOULD:
+- honor `request.outputSchema` (at minimum via prompt injection — see
+  `buildCallLlmRequest` in `agent/llm-tool.ts`, which already handles this
+  pre-backend)
+
+MAY:
+- honor `request.maxTokens` and `request.temperature` if the underlying SDK
+  supports passing these to its generation call
+
+MUST NOT:
+- return a fabricated `LLMQueryResult.model` that doesn't match what was actually
+  used — downstream UI treats this as authoritative
+
+IPC envelopes between the main process and any subprocess backend (Pi today,
+potentially others) MUST carry the full `LLMQueryRequest`, not a subset.
+A backend that invents a narrower envelope is guaranteed to drift over time
+(see #596). The round-trip invariant is guarded by
+`packages/shared/src/agent/__tests__/pi-query-llm.test.ts`.
+
+## Source of truth
+- Package exports: `packages/shared/src/index.ts` and subpath export entries.
+- Agent exports: `packages/shared/src/agent/index.ts`

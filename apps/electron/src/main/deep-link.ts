@@ -6,9 +6,9 @@
  * URL Formats (workspace is optional - uses active window if omitted):
  *
  * Compound format (hierarchical navigation):
- *   craftagents://allChats[/chat/{sessionId}]            - Chat list (all chats)
- *   craftagents://flagged[/chat/{sessionId}]             - Chat list (flagged filter)
- *   craftagents://state/{stateId}[/chat/{sessionId}]     - Chat list (state filter)
+ *   craftagents://allSessions[/session/{sessionId}]            - Session list (all sessions)
+ *   craftagents://flagged[/session/{sessionId}]             - Session list (flagged filter)
+ *   craftagents://state/{stateId}[/session/{sessionId}]     - Session list (state filter)
  *   craftagents://sources[/source/{sourceSlug}]          - Sources list
  *   craftagents://settings[/{subpage}]                   - Settings (general, shortcuts, preferences)
  *
@@ -25,31 +25,32 @@
  *   unflag-session/{id}       - Unflag session
  *
  * Examples:
- *   craftagents://allChats                               (all chats view)
- *   craftagents://allChats/chat/abc123                   (specific chat)
+ *   craftagents://allSessions                               (all sessions view)
+ *   craftagents://allSessions/session/abc123                (specific session)
  *   craftagents://settings/shortcuts                     (shortcuts page)
  *   craftagents://sources/source/github                  (github source info)
  *   craftagents://action/new-chat                        (uses active window)
  *   craftagents://action/resume-sdk-session/{sdkId}      (resume Claude Code session)
- *   craftagents://workspace/ws123/allChats/chat/abc123   (targets specific workspace)
+ *   craftagents://workspace/ws123/allSessions/session/abc123   (targets specific workspace)
  */
 
 import type { BrowserWindow } from 'electron'
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
-import { IPC_CHANNELS } from '../shared/types'
+import { RPC_CHANNELS } from '../shared/types'
+import type { EventSink } from '@craft-agent/server-core/transport'
 
 export interface DeepLinkTarget {
   /** Workspace ID - undefined means use active window */
   workspaceId?: string
-  /** Compound route format (e.g., 'allChats/chat/abc123', 'settings/shortcuts') */
+  /** Compound route format (e.g., 'allSessions/session/abc123', 'settings/shortcuts') */
   view?: string
   /** Action route (e.g., 'new-chat', 'delete-session') */
   action?: string
   actionParams?: Record<string, string>
   /** Window mode - if set, opens in a new window instead of navigating in existing */
   windowMode?: 'focused' | 'full'
-  /** Right sidebar param (e.g., 'sessionMetadata', 'files/path/to/file') */
+  /** Right sidebar param (e.g., 'files/path/to/file', 'history') */
   rightSidebar?: string
 }
 
@@ -63,7 +64,7 @@ export interface DeepLinkResult {
  * Navigation payload sent to renderer via IPC
  */
 export interface DeepLinkNavigation {
-  /** Compound route format (e.g., 'allChats/chat/abc123', 'settings/shortcuts') */
+  /** Compound route format (e.g., 'allSessions/session/abc123', 'settings/shortcuts') */
   view?: string
   /** Action route (e.g., 'new-chat', 'delete-session') */
   action?: string
@@ -101,7 +102,7 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
 
     // For custom protocols, the hostname contains the first path segment
     // e.g., craftagents://workspace/ws123 → hostname='workspace', pathname='/ws123'
-    // e.g., craftagents://allChats/chat/abc → hostname='allChats', pathname='/chat/abc'
+    // e.g., craftagents://allSessions/chat/abc → hostname='allSessions', pathname='/chat/abc'
     const host = parsed.hostname
     const pathParts = parsed.pathname.split('/').filter(Boolean)
     const windowMode = parseWindowMode(parsed)
@@ -114,10 +115,10 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
 
     // Compound route prefixes
     const COMPOUND_ROUTE_PREFIXES = [
-      'allChats', 'flagged', 'state', 'sources', 'settings', 'skills'
+      'allSessions', 'flagged', 'state', 'sources', 'settings', 'skills'
     ]
 
-    // craftagents://allChats/..., craftagents://settings/..., etc. (compound routes)
+    // craftagents://allSessions/..., craftagents://settings/..., etc. (compound routes)
     if (COMPOUND_ROUTE_PREFIXES.includes(host)) {
       // Reconstruct the full compound route from host + pathname
       const viewRoute = pathParts.length > 0 ? `${host}/${pathParts.join('/')}` : host
@@ -140,7 +141,7 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
       const routeType = pathParts[1]
 
       // Parse compound routes: /workspace/{id}/{compoundRoute}
-      // e.g., /workspace/ws123/allChats/chat/abc123
+      // e.g., /workspace/ws123/allSessions/session/abc123
       if (routeType && COMPOUND_ROUTE_PREFIXES.includes(routeType)) {
         const viewRoute = pathParts.slice(1).join('/')
         result.view = viewRoute
@@ -233,7 +234,10 @@ function buildDeepLinkWithoutWindowParam(url: string): string {
  */
 export async function handleDeepLink(
   url: string,
-  windowManager: WindowManager
+  windowManager: WindowManager,
+  sink?: EventSink,
+  resolveClientId?: (webContentsId: number) => string | undefined,
+  preferredClientId?: string,
 ): Promise<DeepLinkResult> {
   const target = parseDeepLink(url)
 
@@ -320,8 +324,17 @@ export async function handleDeepLink(
       action: target.action,
       actionParams: target.actionParams,
     }
-    if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
-      window.webContents.send(IPC_CHANNELS.DEEP_LINK_NAVIGATE, navigation)
+    const wsId = target.workspaceId ?? windowManager.getWorkspaceForWindow(window.webContents.id)
+    const resolvedClientId = resolveClientId?.(window.webContents.id)
+
+    // Prefer the resolved target window client. Only use preferredClientId as
+    // fallback when no resolver was provided (legacy call sites).
+    const clientId = resolvedClientId ?? (!resolveClientId ? preferredClientId : undefined)
+
+    if (sink && clientId) {
+      sink(RPC_CHANNELS.deeplink.NAVIGATE, { to: 'client', clientId }, navigation)
+    } else if (sink && wsId) {
+      sink(RPC_CHANNELS.deeplink.NAVIGATE, { to: 'workspace', workspaceId: wsId }, navigation)
     }
   }
 

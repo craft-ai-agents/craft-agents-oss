@@ -1,5 +1,8 @@
-import type { Session } from "../../shared/types"
+import * as React from "react"
+import i18next from "i18next"
+import type { Session, Message } from "../../shared/types"
 import type { SessionMeta } from "../atoms/sessions"
+import type { SessionStatusId } from "../config/session-status-config"
 
 /** Common session fields used by getSessionTitle */
 type SessionLike = Pick<Session, 'name' | 'preview'> & { messages?: Session['messages'] }
@@ -17,13 +20,22 @@ function sanitizePreview(content: string): string {
 }
 
 /**
+ * Display-layer fix for titles whose source title-cased a leading URL scheme
+ * (e.g. "Https://example.com" instead of "https://example.com"). Idempotent —
+ * returns identity when the title doesn't start with a known scheme.
+ */
+function normalizeTitleCasing(title: string): string {
+  return title.replace(/^(https?|mailto|file|ftp):/i, (m) => m.toLowerCase())
+}
+
+/**
  * Get display title for a session.
  * Priority: custom name > first user message > preview (from metadata) > "New chat"
  * Works with both Session (full) and SessionMeta (lightweight)
  */
 export function getSessionTitle(session: SessionLike | SessionMeta): string {
   if (session.name) {
-    return session.name
+    return normalizeTitleCasing(session.name)
   }
 
   // Check loaded messages first (only available on full Session)
@@ -33,7 +45,8 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
       const sanitized = sanitizePreview(firstUserMessage.content)
       if (sanitized) {
         const trimmed = sanitized.slice(0, 50)
-        return trimmed.length < sanitized.length ? trimmed + '…' : trimmed
+        const truncated = trimmed.length < sanitized.length ? trimmed + '…' : trimmed
+        return normalizeTitleCasing(truncated)
       }
     }
   }
@@ -43,21 +56,72 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
     const sanitized = sanitizePreview(session.preview)
     if (sanitized) {
       const trimmed = sanitized.slice(0, 50)
-      return trimmed.length < sanitized.length ? trimmed + '…' : trimmed
+      const truncated = trimmed.length < sanitized.length ? trimmed + '…' : trimmed
+      return normalizeTitleCasing(truncated)
     }
   }
 
-  return 'New chat'
+  return i18next.t('session.defaultTitle', 'New chat')
 }
 
 /**
- * Get the ID of the last final assistant message (not intermediate)
+ * Get a compact preview line for session-list rows.
+ * Prefers the stored preview/first user message, but avoids duplicating the title.
+ */
+export function getSessionPreviewText(session: SessionLike | SessionMeta, maxLength = 88): string | null {
+  const source = session.preview
+    || (('messages' in session && session.messages)
+      ? session.messages.find(m => m.role === 'user')?.content
+      : undefined)
+
+  if (!source) return null
+
+  const sanitized = sanitizePreview(source)
+  if (!sanitized) return null
+
+  const title = getSessionTitle(session).replace(/…$/, '').trim()
+  const normalizedTitle = sanitizePreview(title)
+  if (normalizedTitle) {
+    const sanitizedLower = sanitized.toLowerCase()
+    const titleLower = normalizedTitle.toLowerCase()
+    // Hide preview entirely if it exactly matches the title.
+    if (sanitizedLower === titleLower) {
+      return null
+    }
+    // Strip leading title prefix so "https://… Analyze the article" → "Analyze the article".
+    if (sanitizedLower.startsWith(titleLower)) {
+      let remainder = sanitized.slice(normalizedTitle.length)
+      // If the title was truncated mid-token (e.g. mid-URL), the next character
+      // continues that same token. Eat the rest of it so we don't render
+      // "alyze the feature" — the tail of "Analyze" — as the new preview start.
+      const titleEnd = sanitized.charAt(normalizedTitle.length - 1)
+      const remainderHead = remainder.charAt(0)
+      if (titleEnd && remainderHead && /\S/.test(titleEnd) && /\S/.test(remainderHead)) {
+        const partialToken = remainder.match(/^\S+/)
+        if (partialToken) {
+          remainder = remainder.slice(partialToken[0].length)
+        }
+      }
+      remainder = remainder.replace(/^[\s\-–—:|·•]+/, '').trim()
+      if (!remainder) return null
+      const trimmed = remainder.slice(0, maxLength)
+      return trimmed.length < remainder.length ? `${trimmed.trimEnd()}…` : trimmed
+    }
+  }
+
+  const trimmed = sanitized.slice(0, maxLength)
+  return trimmed.length < sanitized.length ? `${trimmed.trimEnd()}…` : trimmed
+}
+
+/**
+ * Get the ID of the last final assistant or plan message (not intermediate)
  * Used for unread message tracking
  */
 export function getLastFinalAssistantMessageId(session: Session): string | undefined {
   for (let i = session.messages.length - 1; i >= 0; i--) {
     const msg = session.messages[i]
-    if (msg.role === 'assistant' && !msg.isIntermediate) {
+    // Include plan messages as final responses (they're AI-generated content)
+    if ((msg.role === 'assistant' || msg.role === 'plan') && !msg.isIntermediate) {
       return msg.id
     }
   }
@@ -81,25 +145,88 @@ export function hasUnreadMessages(session: Session): boolean {
  * Returns the count of final assistant messages after lastReadMessageId
  */
 export function countUnreadMessages(session: Session): number {
+  // Helper to check if message is a final response (assistant or plan)
+  const isFinalResponse = (msg: Message) =>
+    (msg.role === 'assistant' || msg.role === 'plan') && !msg.isIntermediate
+
   if (!session.lastReadMessageId) {
-    // Never read - count all final assistant messages
-    return session.messages.filter(msg => msg.role === 'assistant' && !msg.isIntermediate).length
+    // Never read - count all final messages
+    return session.messages.filter(isFinalResponse).length
   }
 
   // Find the index of the last read message
   const lastReadIndex = session.messages.findIndex(msg => msg.id === session.lastReadMessageId)
   if (lastReadIndex === -1) {
-    // Last read message not found - count all final assistant messages
-    return session.messages.filter(msg => msg.role === 'assistant' && !msg.isIntermediate).length
+    // Last read message not found - count all final messages
+    return session.messages.filter(isFinalResponse).length
   }
 
-  // Count final assistant messages after the last read index
+  // Count final messages after the last read index
   let count = 0
   for (let i = lastReadIndex + 1; i < session.messages.length; i++) {
-    const msg = session.messages[i]
-    if (msg.role === 'assistant' && !msg.isIntermediate) {
+    if (isFinalResponse(session.messages[i])) {
       count++
     }
   }
   return count
+}
+
+// ---------------------------------------------------------------------------
+// SessionMeta helpers (lightweight, no full Session needed)
+// ---------------------------------------------------------------------------
+
+export function getSessionStatus(session: SessionMeta): SessionStatusId {
+  return (session.sessionStatus as SessionStatusId) || 'todo'
+}
+
+export function hasUnreadMeta(session: SessionMeta): boolean {
+  return session.hasUnread === true
+}
+
+export function hasMessagesMeta(session: SessionMeta): boolean {
+  return session.lastFinalMessageId !== undefined
+}
+
+// ---------------------------------------------------------------------------
+// Display helpers
+// ---------------------------------------------------------------------------
+
+/** Short relative time locale for date-fns formatDistanceToNowStrict.
+ *  Produces compact strings: "7m", "2h", "3d", "2w", "5mo", "1y"
+ *  Uses i18n keys (time.compact.*) so output is localized. */
+export const shortTimeLocale = {
+  formatDistance: (token: string, count: number) => {
+    const tokenToKey: Record<string, string> = {
+      xSeconds: 'time.compact.seconds',
+      xMinutes: 'time.compact.minutes',
+      xHours: 'time.compact.hours',
+      xDays: 'time.compact.days',
+      xWeeks: 'time.compact.weeks',
+      xMonths: 'time.compact.months',
+      xYears: 'time.compact.years',
+    }
+    const key = tokenToKey[token]
+    return key ? i18next.t(key, { count }) : `${count}`
+  },
+}
+
+/** Highlight matching text in a string with yellow background spans. */
+export function highlightMatch(text: string, query: string): React.ReactNode {
+  if (!query.trim()) return text
+
+  const lowerText = text.toLowerCase()
+  const lowerQuery = query.toLowerCase()
+  const index = lowerText.indexOf(lowerQuery)
+
+  if (index === -1) return text
+
+  const before = text.slice(0, index)
+  const match = text.slice(index, index + query.length)
+  const after = text.slice(index + query.length)
+
+  return React.createElement(React.Fragment, null,
+    before,
+    React.createElement('span', { className: 'bg-yellow-300/30 rounded-[2px]' }, match),
+    highlightMatch(after, query),
+  )
 }

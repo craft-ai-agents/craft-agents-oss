@@ -12,7 +12,7 @@
  */
 
 import * as React from 'react'
-import { useI18n } from '@/i18n'
+import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
@@ -38,7 +38,7 @@ export const meta: DetailsPageMeta = {
 }
 
 export default function LabelsSettingsPage() {
-  const { t } = useI18n('settings')
+  const { t } = useTranslation()
   const { activeWorkspaceId } = useAppShellContext()
   const activeWorkspace = useActiveWorkspace()
   const { labels, isLoading } = useLabels(activeWorkspaceId)
@@ -50,13 +50,13 @@ export default function LabelsSettingsPage() {
 
   // Secondary action: open the labels config file directly in system editor
   const editFileAction = rootPath ? {
-    label: t('labels.editFile'),
+    label: t("common.editFile"),
     filePath: `${rootPath}/labels/config.json`,
   } : undefined
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title={t('labels.title')} actions={<HeaderMenu route={routes.view.settings('labels')} />} />
+      <PanelHeader title={t("settings.labels.title")} actions={<HeaderMenu route={routes.view.settings('labels')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
@@ -68,17 +68,17 @@ export default function LabelsSettingsPage() {
               ) : (
                 <>
                   {/* About Section */}
-                  <SettingsSection title={t('labels.aboutLabels.title')}>
+                  <SettingsSection title={t("settings.labels.aboutLabels")}>
                     <SettingsCard className="px-4 py-3.5">
                       <div className="text-sm text-muted-foreground leading-relaxed space-y-1.5">
                         <p>
-                          {t('labels.aboutLabels.paragraph1')}
+                          {t("settings.labels.aboutText1")}
                         </p>
                         <p>
-                          {t('labels.aboutLabels.paragraph2')}
+                          {t("settings.labels.aboutText2")}
                         </p>
                         <p>
-                          {t('labels.aboutLabels.paragraph3')}
+                          {t("settings.labels.aboutText3")}
                         </p>
                         <p>
                           <button
@@ -86,7 +86,7 @@ export default function LabelsSettingsPage() {
                             onClick={() => window.electronAPI?.openUrl(getDocUrl('labels'))}
                             className="text-foreground/70 hover:text-foreground underline underline-offset-2"
                           >
-                            {t('labels.aboutLabels.learnMore')}
+                            {t("chat.learnMore")}
                           </button>
                         </p>
                       </div>
@@ -95,13 +95,14 @@ export default function LabelsSettingsPage() {
 
                   {/* Label Hierarchy Section */}
                   <SettingsSection
-                    title={t('labels.labelHierarchy.title')}
-                    description={t('labels.labelHierarchy.description')}
+                    title={t("settings.labels.labelHierarchy")}
+                    description={t("settings.labels.labelHierarchyDesc")}
                     action={
                       <EditPopover
                         trigger={<EditButton />}
                         context={labelsEditConfig.context}
                         example={labelsEditConfig.example}
+                        displayLabel={labelsEditConfig.displayLabel}
                         model={labelsEditConfig.model}
                         systemPromptPreset={labelsEditConfig.systemPromptPreset}
                         secondaryAction={editFileAction}
@@ -115,13 +116,13 @@ export default function LabelsSettingsPage() {
                           searchable
                           maxHeight={350}
                           fullscreen
-                          fullscreenTitle={t('labels.labelHierarchy.title')}
+                          fullscreenTitle={t("settings.labels.labelHierarchy")}
                         />
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">
-                          <p className="text-sm">{t('labels.labelHierarchy.empty')}</p>
+                          <p className="text-sm">{t("settings.labels.noLabels")}</p>
                           <p className="text-xs mt-1 text-foreground/40">
-                            {t('labels.labelHierarchy.emptyHint')}
+                            {t("settings.labels.noLabelsDesc")}
                           </p>
                         </div>
                       )}
@@ -130,13 +131,14 @@ export default function LabelsSettingsPage() {
 
                   {/* Auto-Apply Rules Section */}
                   <SettingsSection
-                    title={t('labels.autoRules.title')}
-                    description={t('labels.autoRules.description')}
+                    title={t("settings.labels.autoApplyRules")}
+                    description={t("settings.labels.autoApplyRulesDesc")}
                     action={
                       <EditPopover
                         trigger={<EditButton />}
                         context={autoRulesEditConfig.context}
                         example={autoRulesEditConfig.example}
+                        displayLabel={autoRulesEditConfig.displayLabel}
                         model={autoRulesEditConfig.model}
                         systemPromptPreset={autoRulesEditConfig.systemPromptPreset}
                         secondaryAction={editFileAction}
@@ -149,7 +151,7 @@ export default function LabelsSettingsPage() {
                         searchable
                         maxHeight={350}
                         fullscreen
-                        fullscreenTitle={t('labels.autoRules.fullscreenTitle')}
+                        fullscreenTitle={t("settings.labels.autoApplyRules")}
                       />
                     </SettingsCard>
                   </SettingsSection>

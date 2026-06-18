@@ -45,7 +45,7 @@ export interface PreviewOverlayProps {
     variant: BadgeVariant
   }
 
-  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in Finder" */
+  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in {file manager}" */
   filePath?: string
   /** Title — displayed as badge. Fallback when no file path. */
   title?: string

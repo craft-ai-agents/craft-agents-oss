@@ -159,14 +159,16 @@ export function deriveConnectionStatus(source: {
 
   // Derive from auth state
   const api = source.config.api
-  const requiresAuth = (mcp?.authType && mcp.authType !== 'none') ||
-                       (api?.authType && api.authType !== 'none')
+  const authType = mcp?.authType ?? api?.authType
+  const isAuthenticated = authType === 'none' || authType === undefined
+    ? true
+    : source.config['isAuthenticated'] === true
 
-  if (requiresAuth && !source.config.isAuthenticated) {
+  if (!isAuthenticated) {
     return 'needs_auth'
   }
 
-  if (source.config.isAuthenticated) {
+  if (isAuthenticated) {
     return 'connected'
   }
 

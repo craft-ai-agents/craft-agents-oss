@@ -3,24 +3,20 @@
  *
  * Used by:
  * - SessionList (dropdown via "..." button, context menu via right-click)
- * - ChatPage (title dropdown menu)
+ * - ChatPage (title dropdown menu, desktop only — compact mode uses
+ *   `CompactSessionMenu` which renders these same actions in a Drawer)
  *
- * Uses MenuComponents context to render with either DropdownMenu or ContextMenu
- * primitives, allowing the same component to work in both scenarios.
- *
- * Provides consistent session actions:
- * - Share / Shared submenu
- * - Status submenu
- * - Flag/Unflag
- * - Mark as Unread
- * - Rename
- * - Open in New Window
- * - View in Finder
- * - Delete
+ * Renders menu items via `useMenuComponents()` so the same content works
+ * inside DropdownMenu or ContextMenu primitives. Side-effect handlers and
+ * optimistic label state come from `useSessionMenuActions`, shared with
+ * the compact-mode drawer to keep behaviour in one place.
  */
 
 import * as React from 'react'
+import { useTranslation } from "react-i18next"
 import {
+  Archive,
+  ArchiveRestore,
   Trash2,
   Pencil,
   Flag,
@@ -28,52 +24,45 @@ import {
   MailOpen,
   FolderOpen,
   Copy,
-  Link2Off,
   AppWindow,
+  Columns2,
   CloudUpload,
-  Globe,
   RefreshCw,
   Tag,
-  Check,
+  Send,
 } from 'lucide-react'
-import { toast } from 'sonner'
-import { useMenuComponents, type MenuComponents } from '@/components/ui/menu-context'
-import { getStateColor, getStateIcon, type TodoStateId } from '@/config/todo-states'
-import type { TodoState } from '@/config/todo-states'
+import { useMenuComponents } from '@/components/ui/menu-context'
+import { getStateColor, getStateIcon, type SessionStatusId } from '@/config/session-status-config'
+import type { SessionStatus } from '@/config/session-status-config'
 import type { LabelConfig } from '@craft-agent/shared/labels'
-import { extractLabelId } from '@craft-agent/shared/labels'
-import { LabelIcon } from '@/components/ui/label-icon'
+import { LabelMenuItems, StatusMenuItems, ShareMenuItems } from './SessionMenuParts'
+import { getFileManagerName } from '@/lib/platform'
+import type { SessionMeta } from '@/atoms/sessions'
+import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
+import { MessagingSessionMenuItem } from '@/components/messaging/MessagingSessionMenuItem'
+import { useSessionMenuActions } from '@/hooks/useSessionMenuActions'
 
 export interface SessionMenuProps {
-  /** Session ID */
-  sessionId: string
-  /** Session name for rename dialog */
-  sessionName: string
-  /** Whether session is flagged */
-  isFlagged: boolean
-  /** Shared URL if session is shared */
-  sharedUrl?: string | null
-  /** Whether session has messages */
-  hasMessages: boolean
-  /** Whether session has unread messages */
-  hasUnreadMessages: boolean
-  /** Current todo state */
-  currentTodoState: TodoStateId
+  /** Session data — display state is derived from this */
+  item: SessionMeta
   /** Available todo states */
-  todoStates: TodoState[]
-  /** Current labels applied to this session (e.g. ["bug", "priority::3"]) */
-  sessionLabels?: string[]
+  sessionStatuses: SessionStatus[]
   /** All available label configs (tree structure) for the labels submenu */
   labels?: LabelConfig[]
   /** Callback when labels are toggled (receives full updated labels array) */
   onLabelsChange?: (labels: string[]) => void
+  /** Whether multiple workspaces exist (enables "Send to Workspace" item) */
+  hasRemoteWorkspaces?: boolean
   /** Callbacks */
   onRename: () => void
   onFlag: () => void
   onUnflag: () => void
+  onArchive: () => void
+  onUnarchive: () => void
   onMarkUnread: () => void
-  onTodoStateChange: (state: TodoStateId) => void
+  onSessionStatusChange: (state: SessionStatusId) => void
   onOpenInNewWindow: () => void
+  onSendToWorkspace?: () => void
   onDelete: () => void
 }
 
@@ -82,111 +71,34 @@ export interface SessionMenuProps {
  * This is the content only, not wrapped in a DropdownMenu
  */
 export function SessionMenu({
-  sessionId,
-  sessionName,
-  isFlagged,
-  sharedUrl,
-  hasMessages,
-  hasUnreadMessages,
-  currentTodoState,
-  todoStates,
-  sessionLabels = [],
+  item,
+  sessionStatuses,
   labels = [],
   onLabelsChange,
   onRename,
   onFlag,
   onUnflag,
+  onArchive,
+  onUnarchive,
   onMarkUnread,
-  onTodoStateChange,
+  onSessionStatusChange,
   onOpenInNewWindow,
+  onSendToWorkspace,
   onDelete,
+  hasRemoteWorkspaces,
 }: SessionMenuProps) {
-  // Share handlers
-  const handleShare = async () => {
-    const result = await window.electronAPI.sessionCommand(sessionId, { type: 'shareToViewer' }) as { success: boolean; url?: string; error?: string } | undefined
-    if (result?.success && result.url) {
-      await navigator.clipboard.writeText(result.url)
-      toast.success('Link copied to clipboard', {
-        description: result.url,
-        action: {
-          label: 'Open',
-          onClick: () => window.electronAPI.openUrl(result.url!),
-        },
-      })
-    } else {
-      toast.error('Failed to share', { description: result?.error || 'Unknown error' })
-    }
-  }
+  const { t } = useTranslation()
 
-  const handleOpenInBrowser = () => {
-    if (sharedUrl) window.electronAPI.openUrl(sharedUrl)
-  }
+  const sessionId = item.id
+  const isFlagged = item.isFlagged ?? false
+  const isArchived = item.isArchived ?? false
+  const sharedUrl = item.sharedUrl
+  const currentSessionStatus = getSessionStatus(item)
+  const sessionLabels = item.labels ?? []
+  const _hasMessages = hasMessagesMeta(item)
+  const _hasUnread = hasUnreadMeta(item)
 
-  const handleCopyLink = async () => {
-    if (sharedUrl) {
-      await navigator.clipboard.writeText(sharedUrl)
-      toast.success('Link copied to clipboard')
-    }
-  }
-
-  const handleUpdateShare = async () => {
-    const result = await window.electronAPI.sessionCommand(sessionId, { type: 'updateShare' })
-    if (result?.success) {
-      toast.success('Share updated')
-    } else {
-      toast.error('Failed to update share', { description: result?.error })
-    }
-  }
-
-  const handleRevokeShare = async () => {
-    const result = await window.electronAPI.sessionCommand(sessionId, { type: 'revokeShare' })
-    if (result?.success) {
-      toast.success('Sharing stopped')
-    } else {
-      toast.error('Failed to stop sharing', { description: result?.error })
-    }
-  }
-
-  const handleShowInFinder = () => {
-    window.electronAPI.sessionCommand(sessionId, { type: 'showInFinder' })
-  }
-
-  const handleCopyPath = async () => {
-    const result = await window.electronAPI.sessionCommand(sessionId, { type: 'copyPath' }) as { success: boolean; path?: string } | undefined
-    if (result?.success && result.path) {
-      await navigator.clipboard.writeText(result.path)
-      toast.success('Path copied to clipboard')
-    }
-  }
-
-  const handleRefreshTitle = async () => {
-    const result = await window.electronAPI.sessionCommand(sessionId, { type: 'refreshTitle' }) as { success: boolean; title?: string; error?: string } | undefined
-    if (result?.success) {
-      toast.success('Title refreshed', { description: result.title })
-    } else {
-      toast.error('Failed to refresh title', { description: result?.error || 'Unknown error' })
-    }
-  }
-
-  // Set of currently applied label IDs (extracted from entries like "priority::3" → "priority")
-  const appliedLabelIds = React.useMemo(
-    () => new Set(sessionLabels.map(extractLabelId)),
-    [sessionLabels]
-  )
-
-  // Toggle a label: add if not applied, remove if applied (by base ID)
-  const handleLabelToggle = React.useCallback((labelId: string) => {
-    if (!onLabelsChange) return
-    const isApplied = appliedLabelIds.has(labelId)
-    if (isApplied) {
-      // Remove all entries matching this label ID (handles valued labels too)
-      const updated = sessionLabels.filter(entry => extractLabelId(entry) !== labelId)
-      onLabelsChange(updated)
-    } else {
-      // Add as a boolean label (just the ID, no value)
-      onLabelsChange([...sessionLabels, labelId])
-    }
-  }, [sessionLabels, appliedLabelIds, onLabelsChange])
+  const actions = useSessionMenuActions({ item, onLabelsChange })
 
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
@@ -195,73 +107,61 @@ export function SessionMenu({
     <>
       {/* Share/Shared based on shared state */}
       {!sharedUrl ? (
-        <MenuItem onClick={handleShare}>
+        <MenuItem onClick={actions.share}>
           <CloudUpload className="h-3.5 w-3.5" />
-          <span className="flex-1">Share</span>
+          <span className="flex-1">{t("sessionMenu.share")}</span>
         </MenuItem>
       ) : (
         <Sub>
           <SubTrigger className="pr-2">
             <CloudUpload className="h-3.5 w-3.5" />
-            <span className="flex-1">Shared</span>
+            <span className="flex-1">{t("sessionMenu.shared")}</span>
           </SubTrigger>
           <SubContent>
-            <MenuItem onClick={handleOpenInBrowser}>
-              <Globe className="h-3.5 w-3.5" />
-              <span className="flex-1">Open in Browser</span>
-            </MenuItem>
-            <MenuItem onClick={handleCopyLink}>
-              <Copy className="h-3.5 w-3.5" />
-              <span className="flex-1">Copy Link</span>
-            </MenuItem>
-            <MenuItem onClick={handleUpdateShare}>
-              <RefreshCw className="h-3.5 w-3.5" />
-              <span className="flex-1">Update Share</span>
-            </MenuItem>
-            <MenuItem onClick={handleRevokeShare} variant="destructive">
-              <Link2Off className="h-3.5 w-3.5" />
-              <span className="flex-1">Stop Sharing</span>
-            </MenuItem>
+            <ShareMenuItems
+              onOpenInBrowser={actions.openSharedInBrowser}
+              onCopyLink={actions.copySharedLink}
+              onUpdateShare={actions.updateShare}
+              onRevokeShare={actions.revokeShare}
+              menu={{ MenuItem, Separator }}
+            />
           </SubContent>
         </Sub>
       )}
+
+      {/* Send to Workspace — visible when at least one other workspace exists */}
+      {hasRemoteWorkspaces && onSendToWorkspace && (
+        <MenuItem onClick={onSendToWorkspace}>
+          <Send className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sessionMenu.sendToWorkspace")}</span>
+        </MenuItem>
+      )}
+
+      {/* Connect to Messaging — pairing code flow */}
+      <MessagingSessionMenuItem sessionId={sessionId} />
+
       <Separator />
 
       {/* Status submenu - includes all statuses plus Flag/Unflag at the bottom */}
       <Sub>
         <SubTrigger className="pr-2">
-          <span style={{ color: getStateColor(currentTodoState, todoStates) ?? 'var(--foreground)' }}>
+          <span style={{ color: getStateColor(currentSessionStatus, sessionStatuses) ?? 'var(--foreground)' }}>
             {(() => {
-              const icon = getStateIcon(currentTodoState, todoStates)
+              const icon = getStateIcon(currentSessionStatus, sessionStatuses)
               return React.isValidElement(icon)
                 ? React.cloneElement(icon as React.ReactElement<{ bare?: boolean }>, { bare: true })
                 : icon
             })()}
           </span>
-          <span className="flex-1">Status</span>
+          <span className="flex-1">{t("sessionMenu.status")}</span>
         </SubTrigger>
         <SubContent>
-          {todoStates.map((state) => {
-            // Only apply color if icon is colorable (uses currentColor)
-            const applyColor = state.iconColorable
-            // Clone icon with bare prop to render without EntityIcon container
-            const bareIcon = React.isValidElement(state.icon)
-              ? React.cloneElement(state.icon as React.ReactElement<{ bare?: boolean }>, { bare: true })
-              : state.icon
-            return (
-              <MenuItem
-                key={state.id}
-                onClick={() => onTodoStateChange(state.id)}
-                className={currentTodoState === state.id ? 'bg-foreground/5' : ''}
-              >
-                <span style={applyColor ? { color: state.resolvedColor } : undefined}>
-                  {bareIcon}
-                </span>
-                <span className="flex-1">{state.label}</span>
-              </MenuItem>
-            )
-          })}
-
+          <StatusMenuItems
+            sessionStatuses={sessionStatuses}
+            activeStateId={currentSessionStatus}
+            onSelect={onSessionStatusChange}
+            menu={{ MenuItem }}
+          />
         </SubContent>
       </Sub>
 
@@ -270,7 +170,7 @@ export function SessionMenu({
         <Sub>
           <SubTrigger className="pr-2">
             <Tag className="h-3.5 w-3.5" />
-            <span className="flex-1">Labels</span>
+            <span className="flex-1">{t("sessionMenu.labels")}</span>
             {sessionLabels.length > 0 && (
               <span className="text-[10px] text-muted-foreground tabular-nums -mr-2.5">
                 {sessionLabels.length}
@@ -280,8 +180,8 @@ export function SessionMenu({
           <SubContent>
             <LabelMenuItems
               labels={labels}
-              appliedLabelIds={appliedLabelIds}
-              onToggle={handleLabelToggle}
+              appliedLabelIds={actions.appliedLabelIds}
+              onToggle={actions.toggleLabel}
               menu={{ MenuItem, Separator, Sub, SubTrigger, SubContent }}
             />
           </SubContent>
@@ -292,20 +192,33 @@ export function SessionMenu({
       {!isFlagged ? (
         <MenuItem onClick={onFlag}>
           <Flag className="h-3.5 w-3.5 text-info" />
-          <span className="flex-1">Flag</span>
+          <span className="flex-1">{t("sessionMenu.flag")}</span>
         </MenuItem>
       ) : (
         <MenuItem onClick={onUnflag}>
           <FlagOff className="h-3.5 w-3.5" />
-          <span className="flex-1">Unflag</span>
+          <span className="flex-1">{t("sessionMenu.unflag")}</span>
+        </MenuItem>
+      )}
+
+      {/* Archive/Unarchive */}
+      {!isArchived ? (
+        <MenuItem onClick={onArchive}>
+          <Archive className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sessionMenu.archive")}</span>
+        </MenuItem>
+      ) : (
+        <MenuItem onClick={onUnarchive}>
+          <ArchiveRestore className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sessionMenu.unarchive")}</span>
         </MenuItem>
       )}
 
       {/* Mark as Unread - only show if session has been read */}
-      {!hasUnreadMessages && hasMessages && (
+      {!_hasUnread && _hasMessages && (
         <MenuItem onClick={onMarkUnread}>
           <MailOpen className="h-3.5 w-3.5" />
-          <span className="flex-1">Mark as Unread</span>
+          <span className="flex-1">{t("sessionMenu.markAsUnread")}</span>
         </MenuItem>
       )}
 
@@ -314,33 +227,39 @@ export function SessionMenu({
       {/* Rename */}
       <MenuItem onClick={onRename}>
         <Pencil className="h-3.5 w-3.5" />
-        <span className="flex-1">Rename</span>
+        <span className="flex-1">{t("common.rename")}</span>
       </MenuItem>
 
       {/* Regenerate Title - AI-generate based on recent messages */}
-      <MenuItem onClick={handleRefreshTitle}>
+      <MenuItem onClick={actions.refreshTitle}>
         <RefreshCw className="h-3.5 w-3.5" />
-        <span className="flex-1">Regenerate Title</span>
+        <span className="flex-1">{t("sessionMenu.regenerateTitle")}</span>
       </MenuItem>
 
       <Separator />
 
+      {/* Open in New Panel */}
+      <MenuItem onClick={actions.openInNewPanel}>
+        <Columns2 className="h-3.5 w-3.5" />
+        <span className="flex-1">{t("sessionMenu.openInNewPanel")}</span>
+      </MenuItem>
+
       {/* Open in New Window */}
       <MenuItem onClick={onOpenInNewWindow}>
         <AppWindow className="h-3.5 w-3.5" />
-        <span className="flex-1">Open in New Window</span>
+        <span className="flex-1">{t("sessionMenu.openInNewWindow")}</span>
       </MenuItem>
 
-      {/* View in Finder */}
-      <MenuItem onClick={handleShowInFinder}>
+      {/* Show in file manager */}
+      <MenuItem onClick={actions.showInFinder}>
         <FolderOpen className="h-3.5 w-3.5" />
-        <span className="flex-1">View in Finder</span>
+        <span className="flex-1">{t("sessionMenu.showInFileManager", { fileManager: getFileManagerName() })}</span>
       </MenuItem>
 
       {/* Copy Path */}
-      <MenuItem onClick={handleCopyPath}>
+      <MenuItem onClick={actions.copyPath}>
         <Copy className="h-3.5 w-3.5" />
-        <span className="flex-1">Copy Path</span>
+        <span className="flex-1">{t("sessionMenu.copyPath")}</span>
       </MenuItem>
 
       <Separator />
@@ -348,116 +267,8 @@ export function SessionMenu({
       {/* Delete */}
       <MenuItem onClick={onDelete} variant="destructive">
         <Trash2 className="h-3.5 w-3.5" />
-        <span className="flex-1">Delete</span>
+        <span className="flex-1">{t("common.delete")}</span>
       </MenuItem>
-    </>
-  )
-}
-
-/**
- * Count how many labels in a subtree (including the root) are currently applied.
- * Used to show selection counts on parent SubTriggers so users can see
- * where in the tree their selections are.
- */
-function countAppliedInSubtree(label: LabelConfig, appliedIds: Set<string>): number {
-  let count = appliedIds.has(label.id) ? 1 : 0
-  if (label.children) {
-    for (const child of label.children) {
-      count += countAppliedInSubtree(child, appliedIds)
-    }
-  }
-  return count
-}
-
-/**
- * LabelMenuItems - Recursive component for rendering label tree as nested sub-menus.
- *
- * Labels with children render as nested Sub/SubTrigger/SubContent menus (the parent
- * itself appears as the first toggleable item inside its submenu, followed by children).
- * Leaf labels render as simple toggleable menu items with checkmarks.
- * Parent triggers show a count of applied descendants so users can see where selections are.
- *
- * Menu primitives are passed as props so this works in both DropdownMenu and ContextMenu.
- */
-function LabelMenuItems({
-  labels,
-  appliedLabelIds,
-  onToggle,
-  menu,
-}: {
-  labels: LabelConfig[]
-  appliedLabelIds: Set<string>
-  onToggle: (labelId: string) => void
-  menu: Pick<MenuComponents, 'MenuItem' | 'Separator' | 'Sub' | 'SubTrigger' | 'SubContent'>
-}) {
-  const { MenuItem, Separator, Sub, SubTrigger, SubContent } = menu
-
-  return (
-    <>
-      {labels.map(label => {
-        const hasChildren = label.children && label.children.length > 0
-        const isApplied = appliedLabelIds.has(label.id)
-
-        if (hasChildren) {
-          // Count applied labels in this subtree (parent + all descendants)
-          const subtreeCount = countAppliedInSubtree(label, appliedLabelIds)
-
-          // Parent label: render as a submenu trigger with nested child items
-          return (
-            <Sub key={label.id}>
-              <SubTrigger className="pr-2">
-                <LabelIcon label={label} size="sm" hasChildren />
-                <span className="flex-1">{label.name}</span>
-                {subtreeCount > 0 && (
-                  <span className="text-[10px] text-muted-foreground tabular-nums -mr-2.5">
-                    {subtreeCount}
-                  </span>
-                )}
-              </SubTrigger>
-              <SubContent>
-                {/* Parent label itself is toggleable as the first item */}
-                <MenuItem
-                  onSelect={(e: Event) => {
-                    e.preventDefault()
-                    onToggle(label.id)
-                  }}
-                >
-                  <LabelIcon label={label} size="sm" hasChildren />
-                  <span className="flex-1">{label.name}</span>
-                  <span className="w-3.5 ml-4">
-                    {isApplied && <Check className="h-3.5 w-3.5 text-foreground" />}
-                  </span>
-                </MenuItem>
-                <Separator />
-                {/* Recurse into children */}
-                <LabelMenuItems
-                  labels={label.children!}
-                  appliedLabelIds={appliedLabelIds}
-                  onToggle={onToggle}
-                  menu={menu}
-                />
-              </SubContent>
-            </Sub>
-          )
-        }
-
-        // Leaf label: simple toggleable item with checkmark
-        return (
-          <MenuItem
-            key={label.id}
-            onSelect={(e: Event) => {
-              e.preventDefault()
-              onToggle(label.id)
-            }}
-          >
-            <LabelIcon label={label} size="sm" />
-            <span className="flex-1">{label.name}</span>
-            <span className="w-3.5 ml-4">
-              {isApplied && <Check className="h-3.5 w-3.5 text-foreground" />}
-            </span>
-          </MenuItem>
-        )
-      })}
     </>
   )
 }

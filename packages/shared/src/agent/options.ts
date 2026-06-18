@@ -1,15 +1,13 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import { join, dirname } from "path";
+import { join } from "path";
 import { homedir } from "os";
 import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from "fs";
 import { debug } from "../utils/debug";
+import { getProxyEnvVars } from "../config/proxy-env.ts";
 
 declare const CRAFT_AGENT_CLI_VERSION: string | undefined;
 
-let optionsEnv: Record<string, string> = {};
 let customPathToClaudeCodeExecutable: string | null = null;
-let customInterceptorPath: string | null = null;
-let customExecutable: string | null = null;
 let claudeConfigChecked = false;
 
 // UTF-8 BOM character — Windows editors/processes sometimes prepend this to files.
@@ -20,9 +18,9 @@ const UTF8_BOM = '\uFEFF';
  * Ensure ~/.claude.json exists and contains valid, BOM-free JSON before
  * the SDK subprocess starts.
  *
- * Background: The SDK's cli.js reads this file on startup. If it's missing
+ * Background: The SDK's Claude Code executable reads this file on startup. If it's missing
  * (with a .backup file present), empty, BOM-prefixed, or contains invalid JSON,
- * the CLI writes plain-text error/recovery messages to process.stdout.
+ * the executable writes plain-text error/recovery messages to process.stdout.
  * The SDK transport expects only JSON on stdout, so any plain text causes:
  *   "CLI output was not valid JSON"
  *
@@ -42,8 +40,8 @@ function ensureClaudeConfig(): void {
     const configPath = join(homedir(), '.claude.json');
 
     // Clean up stale .backup file — if present and .claude.json is missing,
-    // the CLI writes "A backup file exists at..." to stdout, crashing the SDK.
-    // We remove it so the CLI sees a clean "missing file" state (which it handles silently).
+    // the Claude Code executable writes "A backup file exists at..." to stdout, crashing the SDK.
+    // We remove it so the executable sees a clean "missing file" state (which it handles silently).
     const backupPath = `${configPath}.backup`;
     if (existsSync(backupPath)) {
         try {
@@ -55,7 +53,7 @@ function ensureClaudeConfig(): void {
     }
 
     // Clean up .corrupted.* files — these accumulate on Windows and signal
-    // to the CLI that a previous corruption was detected, altering its stdout output.
+    // to Claude Code that a previous corruption was detected, altering its stdout output.
     try {
         const homeDir = homedir();
         const files = readdirSync(homeDir);
@@ -152,94 +150,92 @@ export function resetClaudeConfigCheck(): void {
     claudeConfigChecked = false;
 }
 
-export function setAnthropicOptionsEnv(env: Record<string, string>) {
-    optionsEnv = env;
-}
-
 /**
- * Override the path to the Claude Code executable (cli.js from the SDK).
- * This is needed when the SDK is bundled (e.g., in Electron) and can't auto-detect the path.
+ * Override the path to the Claude Code executable.
+ *
+ * Since SDK 0.2.113 this is the **native** `claude` binary shipped via the
+ * platform-specific optional dependency (`@anthropic-ai/claude-agent-sdk-{platform}-{arch}`),
+ * not a JS file. Override is only needed when the SDK can't auto-discover the
+ * binary — typically packaged Electron builds where module resolution from
+ * `sdk.mjs` doesn't find the per-platform package.
  */
 export function setPathToClaudeCodeExecutable(path: string) {
     customPathToClaudeCodeExecutable = path;
 }
 
 /**
- * Set the path to the network interceptor for the SDK subprocess.
- * This interceptor captures API errors and adds metadata to MCP tool schemas.
+ * Read the currently-configured custom path (set via setPathToClaudeCodeExecutable).
+ *
+ * Returns `undefined` (not `null`) so callers can pass it directly into SDK option
+ * fields typed `string | undefined`. The CLI/dev-runtime path that doesn't go
+ * through the custom setter is captured at SDK options-build time in claude-agent.ts.
  */
-export function setInterceptorPath(path: string) {
-    customInterceptorPath = path;
+export function getPathToClaudeCodeExecutable(): string | undefined {
+    return customPathToClaudeCodeExecutable ?? undefined;
 }
 
 /**
- * Set the path to the JavaScript runtime executable (e.g., bun or node).
- * This is needed when bundling a runtime with the app (e.g., in Electron).
+ * Get default SDK options for spawning the Claude Code subprocess.
+ *
+ * @param envOverrides - Per-session environment variable overrides.
+ *   These are spread AFTER process.env so they take precedence.
+ *   Used to pass per-session config like ANTHROPIC_BASE_URL that would
+ *   otherwise be clobbered by concurrent sessions mutating process.env.
  */
-export function setExecutable(path: string) {
-    customExecutable = path;
+export function buildClaudeSubprocessEnv(
+    envOverrides?: Record<string, string>,
+): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        ...getProxyEnvVars(),
+        ...envOverrides,
+        // Propagate debug mode from argv flag OR existing env var
+        CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+    };
+
+    // Bedrock must never be routed through the Claude SDK path.
+    // Strip only Claude-specific Bedrock routing vars here; keep generic AWS_*
+    // untouched so user shell/tooling behavior inside the subprocess remains intact.
+    delete env.CLAUDE_CODE_USE_BEDROCK;
+    delete env.AWS_BEARER_TOKEN_BEDROCK;
+    delete env.ANTHROPIC_BEDROCK_BASE_URL;
+
+    return env;
 }
 
-export function getDefaultOptions(): Partial<Options> {
+/** Filename of the per-platform native Claude binary inside its npm package. */
+function nativeBinaryName(): string {
+    return process.platform === 'win32' ? 'claude.exe' : 'claude';
+}
+
+export function getDefaultOptions(envOverrides?: Record<string, string>): Partial<Options> {
     // Repair corrupted ~/.claude.json before the SDK subprocess reads it
     ensureClaudeConfig();
 
-    // SECURITY: Disable Bun's automatic .env file loading in the SDK subprocess.
-    // Without this, Bun loads .env from the subprocess cwd (user's working directory),
-    // which can inject ANTHROPIC_API_KEY and override our OAuth auth — silently charging
-    // the user's API key instead of their Max subscription.
-    // See: https://github.com/lukilabs/craft-agents-oss/issues/39
-    // Use platform-appropriate null device (NUL on Windows, /dev/null on Unix)
-    const nullDevice = process.platform === 'win32' ? 'NUL' : '/dev/null';
-    const envFileFlag = `--env-file=${nullDevice}`;
+    const env = buildClaudeSubprocessEnv(envOverrides);
 
-    // If custom path is set (e.g., for Electron), use it with minimal options
+    // If custom path is set (e.g., for Electron packaged build), point the SDK at it.
+    // This is the native `claude` binary, not a JS file.
     if (customPathToClaudeCodeExecutable) {
-        const executableArgs = [envFileFlag];
-        // Add interceptor preload if path is set (needed for cache TTL patching)
-        if (customInterceptorPath) {
-            executableArgs.push('--preload', customInterceptorPath);
-        }
         return {
             pathToClaudeCodeExecutable: customPathToClaudeCodeExecutable,
-            // Use custom executable if set, otherwise default to 'bun'
-            executable: (customExecutable || 'bun') as 'bun',
-            executableArgs,
-            env: {
-                ...process.env,
-                ... optionsEnv,
-                // Propagate debug mode from argv flag OR existing env var
-                CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
-            }
+            env,
         };
     }
 
+    // Standalone CLI distribution (`scripts/install.sh`) lays the per-version
+    // SDK out at ~/.local/share/craft/versions/<version>/claude-agent-sdk/<binary>
     if (typeof CRAFT_AGENT_CLI_VERSION !== 'undefined' && CRAFT_AGENT_CLI_VERSION != null) {
         const baseDir = join(homedir(), '.local', 'share', 'craft', 'versions', CRAFT_AGENT_CLI_VERSION);
         return {
-            pathToClaudeCodeExecutable: join(baseDir, 'claude-agent-sdk', 'cli.js'),
-            // Use the compiled binary itself as the runtime via BUN_BE_BUN=1
-            // This makes the compiled Bun executable act as the full Bun CLI,
-            // eliminating the need for external Node or Bun installation
-            executable: process.execPath as 'bun',
-            // Inject network interceptor into SDK subprocess for API error capture and MCP schema injection
-            executableArgs: [envFileFlag, '--preload', join(baseDir, 'network-interceptor.ts')],
-            env: {
-                ...process.env,
-                BUN_BE_BUN: '1',
-                ... optionsEnv,
-                // Propagate debug mode from argv flag OR existing env var
-                CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
-            }
-        }
+            pathToClaudeCodeExecutable: join(baseDir, 'claude-agent-sdk', nativeBinaryName()),
+            env,
+        };
     }
-    return {
-        executableArgs: [envFileFlag],
-        env: {
-            ... process.env,
-            ... optionsEnv,
-            // Propagate debug mode from argv flag OR existing env var
-            CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
-        }
-    };
+
+    // Default: let the SDK auto-discover the native binary via standard
+    // node_modules resolution from `sdk.mjs`. The matching platform package
+    // (e.g. `@anthropic-ai/claude-agent-sdk-darwin-arm64`) is installed via
+    // optionalDependencies.
+    return { env };
 }

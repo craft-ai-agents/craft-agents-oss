@@ -1,3 +1,5 @@
+import { getDismissibleLayerBridge } from './dismissible-layer-bridge'
+
 /**
  * Overlay Detection Utilities
  *
@@ -33,6 +35,12 @@ const OVERLAY_SELECTORS = [
 
   // Command palette (when open inside a dialog, the dialog selector catches it)
   // But standalone command menus would need: '[data-slot="command"]'
+
+  // Inline menus (@mention, /slash, #label autocomplete)
+  '[data-inline-menu]',
+
+  // Dialog-mode islands (from @craft-agent/ui Island primitive)
+  '[data-ca-island-dialog="true"][data-state="open"]',
 ]
 
 /**
@@ -43,6 +51,11 @@ const OVERLAY_SELECTORS = [
  * the escape should trigger chat interrupt or be handled by the overlay.
  */
 export function hasOpenOverlay(): boolean {
+  const bridge = getDismissibleLayerBridge()
+  if (bridge?.hasOpenLayers()) {
+    return true
+  }
+
   const selector = OVERLAY_SELECTORS.join(', ')
   return document.querySelector(selector) !== null
 }

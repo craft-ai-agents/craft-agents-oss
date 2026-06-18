@@ -6,6 +6,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { CheckCircle2, XCircle, X } from 'lucide-react'
 import { cn } from '@craft-agent/ui'
 import { ActivityStatusIcon, SIZE_CONFIG, type ActivityItem, type ActivityStatus } from './TurnCard'
@@ -82,6 +83,7 @@ export function InlineExecution({
   onRetry,
   className,
 }: InlineExecutionProps) {
+  const { t } = useTranslation()
   // Executing state
   if (status === 'executing') {
     return (
@@ -90,7 +92,7 @@ export function InlineExecution({
         <div className="flex items-center gap-2">
           <LoadingIndicator animated showElapsed />
           <span className={cn("text-foreground/80", SIZE_CONFIG.fontSize)}>
-            Editing...
+            {t('common.editing')}
           </span>
         </div>
 
@@ -113,7 +115,7 @@ export function InlineExecution({
               SIZE_CONFIG.fontSize
             )}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         </div>
       </div>
@@ -128,7 +130,7 @@ export function InlineExecution({
         <div className="flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-success" />
           <span className={cn("text-foreground font-medium", SIZE_CONFIG.fontSize)}>
-            Done
+            {t('common.done')}
           </span>
         </div>
 
@@ -150,7 +152,7 @@ export function InlineExecution({
             )}
           >
             <CheckCircle2 className="w-3 h-3" />
-            Done
+            {t('common.done')}
           </button>
         </div>
       </div>
@@ -164,7 +166,7 @@ export function InlineExecution({
       <div className="flex items-center gap-2">
         <XCircle className="w-4 h-4 text-destructive" />
         <span className={cn("text-foreground font-medium", SIZE_CONFIG.fontSize)}>
-          Failed
+          {t('common.failed')}
         </span>
       </div>
 
@@ -186,7 +188,7 @@ export function InlineExecution({
           )}
         >
           <X className="w-3 h-3" />
-          Dismiss
+          {t('common.dismiss')}
         </button>
         {onRetry && (
           <button
@@ -197,7 +199,7 @@ export function InlineExecution({
               SIZE_CONFIG.fontSize
             )}
           >
-            Retry
+            {t('common.retry')}
           </button>
         )}
       </div>

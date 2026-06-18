@@ -23,8 +23,6 @@ import { cn } from '@/lib/utils'
 export interface NavigatorPanelProps {
   /** Panel title (e.g., "Conversations", "Sources") */
   title: string
-  /** Whether the sidebar is visible (affects header margin animation) */
-  isSidebarVisible: boolean
   /** Panel width in pixels */
   width: number
   /** Action buttons rendered in the header (filter, add, etc.) */
@@ -37,7 +35,6 @@ export interface NavigatorPanelProps {
 
 export function NavigatorPanel({
   title,
-  isSidebarVisible,
   width,
   headerActions,
   children,
@@ -48,7 +45,6 @@ export function NavigatorPanel({
       <PanelHeader
         title={title}
         actions={headerActions}
-        compensateForStoplight={!isSidebarVisible}
       />
       {children}
     </Panel>

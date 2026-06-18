@@ -1,4 +1,5 @@
 import type { PermissionRequest, CredentialRequest, CredentialResponse } from '../../../../../shared/types'
+import type { AdminApprovalRequestData } from './AdminApprovalRequest'
 
 /**
  * Input mode determines which component is rendered in InputContainer
@@ -8,7 +9,7 @@ export type InputMode = 'freeform' | 'structured'
 /**
  * Types of structured input UIs
  */
-export type StructuredInputType = 'permission' | 'credential'
+export type StructuredInputType = 'permission' | 'credential' | 'admin_approval'
 
 /**
  * Union type for structured input data
@@ -16,13 +17,14 @@ export type StructuredInputType = 'permission' | 'credential'
 export type StructuredInputData =
   | { type: 'permission'; data: PermissionRequest }
   | { type: 'credential'; data: CredentialRequest }
+  | { type: 'admin_approval'; data: AdminApprovalRequestData }
 
 /**
  * State for structured input
  */
 export interface StructuredInputState {
   type: StructuredInputType
-  data: PermissionRequest | CredentialRequest
+  data: PermissionRequest | CredentialRequest | AdminApprovalRequestData
 }
 
 /**
@@ -35,9 +37,18 @@ export interface PermissionResponse {
 }
 
 /**
+ * Response from admin approval request
+ */
+export interface AdminApprovalResponse {
+  type: 'admin_approval'
+  approved: boolean
+  rememberForMinutes?: number
+}
+
+/**
  * Union type for all structured responses
  */
-export type StructuredResponse = PermissionResponse | CredentialResponse
+export type StructuredResponse = PermissionResponse | CredentialResponse | AdminApprovalResponse
 
 // Re-export CredentialResponse for convenience
 export type { CredentialResponse }

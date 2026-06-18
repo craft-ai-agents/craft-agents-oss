@@ -33,7 +33,7 @@ interface AddWorkspaceContainerProps {
 export function AddWorkspaceContainer({ children, className }: AddWorkspaceContainerProps) {
   return (
     <div className={cn(
-      "flex w-[28rem] flex-col items-center",
+      "flex w-full max-w-[28rem] flex-col items-center",
       "bg-background rounded-[20px] shadow-strong p-8",
       className
     )}>

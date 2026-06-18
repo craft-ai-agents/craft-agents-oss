@@ -2,6 +2,10 @@
 // Guard against browser/renderer contexts where process is undefined
 let debugEnabled = typeof process !== 'undefined' && process.env?.CRAFT_DEBUG === '1';
 
+function isCliJsonOnlyMode(): boolean {
+  return typeof process !== 'undefined' && process.env?.CRAFT_CLI_JSON_ONLY === '1';
+}
+
 /**
  * Runtime environment detection
  */
@@ -24,6 +28,25 @@ function detectEnvironment(): Environment {
   return 'cli';
 }
 
+let electronLog: unknown | null = null;
+let electronLogChecked = false;
+
+function getElectronLog(): { info?: (message: string) => void } | null {
+  if (electronLogChecked) {
+    return (electronLog as { info?: (message: string) => void } | null) ?? null;
+  }
+  electronLogChecked = true;
+  try {
+    // Optional dependency - only available in Electron main process.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const loaded = require('electron-log/main');
+    electronLog = loaded?.default ?? loaded ?? null;
+  } catch {
+    electronLog = null;
+  }
+  return (electronLog as { info?: (message: string) => void } | null) ?? null;
+}
+
 /**
  * Enable debug logging. Call this when --debug flag is passed.
  */
@@ -35,6 +58,7 @@ export function enableDebug(): void {
  * Check if debug mode is enabled.
  */
 export function isDebugEnabled(): boolean {
+  if (isCliJsonOnlyMode()) return false;
   return debugEnabled;
 }
 
@@ -80,6 +104,12 @@ function formatMessage(scope: string | undefined, message: string, args: unknown
 function output(formatted: string): void {
   const env = detectEnvironment();
 
+  // Mirror debug logs into electron-log when available so they appear in main.log.
+  if (env === 'electron-main') {
+    const log = getElectronLog();
+    log?.info?.(formatted.trim());
+  }
+
   if (env === 'electron-renderer') {
     // Use console.log in renderer for DevTools
     console.log(formatted.trim());
@@ -106,7 +136,7 @@ function output(formatted: string): void {
  * debug('User data', { id: 123 })
  */
 export function debug(message: string, ...args: unknown[]): void {
-  if (!debugEnabled) return;
+  if (!isDebugEnabled()) return;
   output(formatMessage(undefined, message, args));
 }
 
@@ -122,7 +152,7 @@ export function debug(message: string, ...args: unknown[]): void {
  */
 export function createLogger(scope: string) {
   const logWithLevel = (level: string, message: string, args: unknown[]) => {
-    if (!debugEnabled) return;
+    if (!isDebugEnabled()) return;
     const levelStr = level.toUpperCase().padEnd(5);
     output(formatMessage(scope, `${levelStr} ${message}`, args));
   };

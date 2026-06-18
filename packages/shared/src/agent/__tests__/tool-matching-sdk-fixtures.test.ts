@@ -320,6 +320,33 @@ describe('Fixture: Backgrounded Task', () => {
       intent: 'Analyze codebase',
     })
   })
+
+  it('does NOT detect background for foreground Task with agentId in result', () => {
+    const index = new ToolIndex()
+    const emitted = new Set<string>()
+
+    // Foreground Task — no run_in_background
+    const taskStart: ContentBlock[] = [
+      toolUse('toolu_fg_task', 'Task', {
+        prompt: 'Quick lookup',
+        _intent: 'Find something',
+      }),
+    ]
+    extractToolStarts(taskStart, null, index, emitted)
+
+    // Result happens to contain agentId (SDK correlation)
+    const taskResult: ContentBlock[] = [
+      toolResult('toolu_fg_task', 'Result found.\nagentId: fg_agent_abc'),
+    ]
+    const events = extractToolResults(taskResult, null, undefined, index)
+
+    // Should ONLY produce tool_result — no task_backgrounded
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      type: 'tool_result',
+      toolUseId: 'toolu_fg_task',
+    })
+  })
 })
 
 // ============================================================================

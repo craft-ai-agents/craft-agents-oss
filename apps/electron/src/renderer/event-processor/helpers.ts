@@ -118,6 +118,11 @@ export function appendMessage(
   message: Message,
   updateTimestamp = false
 ): Session {
+  // Guard: skip if message with same ID already exists (prevents duplicate events on Windows)
+  if (message.id && session.messages.some(m => m.id === message.id)) {
+    return session
+  }
+
   // Determine if this message role should update lastMessageRole (for badge display)
   const badgeRoles = ['user', 'assistant', 'plan', 'tool', 'error'] as const
   const roleForBadge = badgeRoles.includes(message.role as typeof badgeRoles[number])

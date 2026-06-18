@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { writeFileSync, existsSync, mkdirSync } from 'fs'
+import { readJsonFileSync } from '@craft-agent/shared/utils/files'
 import { mainLog } from './logger'
 import { join } from 'path'
 import { homedir } from 'os'
@@ -57,8 +58,7 @@ export function loadWindowState(): WindowState | null {
       return null
     }
 
-    const content = readFileSync(WINDOW_STATE_FILE, 'utf-8')
-    const raw = JSON.parse(content)
+    const raw = readJsonFileSync(WINDOW_STATE_FILE)
 
     // Validate format
     const state = raw as WindowState

@@ -1,4 +1,4 @@
-import { useI18n } from '@/i18n'
+import { useTranslation } from "react-i18next"
 import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
 import { StepFormLayout, ContinueButton } from "./primitives"
 
@@ -22,7 +22,7 @@ export function WelcomeStep({
   isExistingUser = false,
   isLoading = false
 }: WelcomeStepProps) {
-  const { t } = useI18n('onboarding')
+  const { t } = useTranslation()
 
   return (
     <StepFormLayout
@@ -31,15 +31,15 @@ export function WelcomeStep({
           <CraftAgentsSymbol className="size-10 text-accent" />
         </div>
       }
-      title={isExistingUser ? t('welcome.existingUserTitle') : t('welcome.newUserTitle')}
+      title={isExistingUser ? t("onboarding.welcome.updateTitle") : t("onboarding.welcome.title")}
       description={
         isExistingUser
-          ? t('welcome.existingUserDescription')
-          : t('welcome.newUserDescription')
+          ? t("onboarding.welcome.updateDescription")
+          : t("onboarding.welcome.description")
       }
       actions={
-        <ContinueButton onClick={onContinue} className="w-full" loading={isLoading} loadingText={t('welcome.checkingText')}>
-          {isExistingUser ? t('welcome.continueButton') : t('welcome.getStartedButton')}
+        <ContinueButton onClick={onContinue} className="w-full" loading={isLoading} loadingText={t("common.checking")}>
+          {isExistingUser ? t("onboarding.welcome.continue") : t("onboarding.welcome.getStarted")}
         </ContinueButton>
       }
     />

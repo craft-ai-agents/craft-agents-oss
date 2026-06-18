@@ -1,10 +1,12 @@
-import { FolderPlus, FolderOpen } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import { FolderPlus, FolderOpen, Cloud } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AddWorkspaceContainer, AddWorkspaceStepHeader } from "./primitives"
 
 interface AddWorkspaceStep_ChoiceProps {
   onCreateNew: () => void
   onOpenFolder: () => void
+  onConnectRemote: () => void
 }
 
 interface ChoiceCardProps {
@@ -54,30 +56,39 @@ function ChoiceCard({ icon, title, description, onClick, variant = 'secondary' }
  */
 export function AddWorkspaceStep_Choice({
   onCreateNew,
-  onOpenFolder
+  onOpenFolder,
+  onConnectRemote,
 }: AddWorkspaceStep_ChoiceProps) {
+  const { t } = useTranslation()
   return (
     <AddWorkspaceContainer>
       <div className="mt-2" />
       <AddWorkspaceStepHeader
-        title="Add Workspace"
-        description="Where your ideas meet the tools to make them happen."
+        title={t("workspace.addWorkspace")}
+        description={t("workspace.addWorkspaceDesc")}
       />
 
       <div className="mt-8 w-full space-y-3">
         <ChoiceCard
           icon={<FolderPlus className="h-5 w-5" />}
-          title="Create new"
-          description="Start fresh with an empty workspace."
+          title={t("workspace.createNew")}
+          description={t("workspace.createNewDesc")}
           onClick={onCreateNew}
           variant="primary"
         />
 
         <ChoiceCard
           icon={<FolderOpen className="h-5 w-5" />}
-          title="Open folder"
-          description="Choose an existing folder as workspace."
+          title={t("workspace.openFolder")}
+          description={t("workspace.openFolderDesc")}
           onClick={onOpenFolder}
+        />
+
+        <ChoiceCard
+          icon={<Cloud className="h-5 w-5" />}
+          title={t("workspace.connectRemote")}
+          description={t("workspace.connectRemoteDesc")}
+          onClick={onConnectRemote}
         />
       </div>
     </AddWorkspaceContainer>

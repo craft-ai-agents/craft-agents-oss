@@ -7,6 +7,7 @@
 
 import * as React from 'react'
 import { useCallback, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Copy, Check } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
@@ -21,7 +22,9 @@ export interface CopyButtonProps {
   className?: string
 }
 
-export function CopyButton({ content, title = 'Copy', className }: CopyButtonProps) {
+export function CopyButton({ content, title, className }: CopyButtonProps) {
+  const { t } = useTranslation()
+  const resolvedTitle = title ?? t('common.copy')
   const [copied, setCopied] = useState(false)
 
   const handleCopy = useCallback(async () => {
@@ -45,7 +48,7 @@ export function CopyButton({ content, title = 'Copy', className }: CopyButtonPro
         'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
         className
       )}
-      title={copied ? 'Copied!' : title}
+      title={copied ? t('common.copied') : resolvedTitle}
     >
       {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
     </button>

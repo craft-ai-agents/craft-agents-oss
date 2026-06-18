@@ -22,8 +22,8 @@ export interface FuzzyResult<T> {
   item: T
   /** Match score - higher is better */
   score: number
-  /** Character ranges for highlighting: [[start, end], ...] */
-  ranges?: number[][]
+  /** Character indices for highlighting (flat array from uFuzzy) */
+  ranges?: number[]
 }
 
 /**
@@ -56,9 +56,13 @@ export function fuzzyFilter<T>(
   const info = uf.info(idxs, haystack, query)
   const order = uf.sort(info, haystack, query)
 
-  return order.map((i) => ({
-    item: items[idxs[i]],
-    score: info.score?.[i] ?? 0,
+  // Use sort order position as score (higher position = better match)
+  // uFuzzy's sort() orders by relevance but doesn't expose scores directly
+  // Note: order contains indices into idxs, and idxs contains indices into items
+  // Both are guaranteed to be valid by uFuzzy's API contract
+  return order.map((i, orderIndex) => ({
+    item: items[idxs[i]!]!,
+    score: order.length - orderIndex, // Higher score for better matches
     ranges: info.ranges?.[i],
   }))
 }
@@ -81,9 +85,9 @@ export function fuzzyScore(text: string, query: string): number {
   const idxs = uf.filter([text], query)
   if (!idxs || idxs.length === 0) return 0
 
-  const info = uf.info(idxs, [text], query)
-  // info.score can be undefined if no scoring info available
-  return info.score?.[0] ?? 1
+  // If we have a match, return 1 (matched)
+  // For simple single-text scoring, presence of match is what matters
+  return 1
 }
 
 /**

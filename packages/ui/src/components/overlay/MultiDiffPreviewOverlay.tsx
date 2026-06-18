@@ -16,8 +16,9 @@
 import * as React from 'react'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { PencilLine, FilePlus, X } from 'lucide-react'
-import { parseDiffFromFile, type FileContents } from '@pierre/diffs'
+import { parseDiffFromFile, parsePatchFiles, type FileContents } from '@pierre/diffs'
 import { ShikiDiffViewer, getDiffStats } from '../code-viewer/ShikiDiffViewer'
+import { UnifiedDiffViewer, getUnifiedDiffStats } from '../code-viewer/UnifiedDiffViewer'
 import { DiffViewerControls } from '../code-viewer/DiffViewerControls'
 import { LANGUAGE_MAP } from '../code-viewer/language-map'
 import { PreviewOverlay, type BadgeVariant } from './PreviewOverlay'
@@ -26,6 +27,10 @@ import { cn } from '../../lib/utils'
 
 /**
  * A single file change (Edit or Write)
+ *
+ * Supports two formats:
+ * - Claude Code: original/modified strings (computed diff)
+ * - Codex: unifiedDiff string (pre-computed unified diff patch)
  */
 export interface FileChange {
   /** Unique ID for this change */
@@ -38,6 +43,8 @@ export interface FileChange {
   original: string
   /** For Edit: the new_string; For Write: the written content */
   modified: string
+  /** Codex format: raw unified diff string (alternative to original/modified) */
+  unifiedDiff?: string
   /** Error message if the tool failed */
   error?: string
 }
@@ -113,7 +120,14 @@ function createFileSections(changes: FileChange[], consolidated: boolean): FileS
 }
 
 /** Compute diff stats for a single change */
-function computeChangeStats(change: FileChange) {
+function computeChangeStats(change: FileChange): { additions: number; deletions: number } {
+  // Handle Codex format: unified diff string
+  if (change.unifiedDiff) {
+    const stats = getUnifiedDiffStats(change.unifiedDiff, change.filePath)
+    return stats || { additions: 0, deletions: 0 }
+  }
+
+  // Handle Claude Code format: original/modified strings
   const ext = change.filePath.split('.').pop()?.toLowerCase() || ''
   const lang = LANGUAGE_MAP[ext] || 'text'
   const oldFile: FileContents = { name: change.filePath, contents: change.original, lang: lang as any }
@@ -343,7 +357,20 @@ export function MultiDiffPreviewOverlay({
                           </div>
                         </div>
                       </div>
+                    ) : change.unifiedDiff ? (
+                      // Codex format: pre-computed unified diff
+                      <UnifiedDiffViewer
+                        unifiedDiff={change.unifiedDiff}
+                        filePath={change.filePath}
+                        diffStyle={diffStyle}
+                        disableBackground={disableBackground}
+                        disableFileHeader={false}
+                        onFileHeaderClick={onOpenFileExternal}
+                        theme={theme}
+                        onReady={handleDiffReady}
+                      />
                     ) : (
+                      // Claude Code format: original/modified strings
                       <ShikiDiffViewer
                         original={change.original}
                         modified={change.modified}

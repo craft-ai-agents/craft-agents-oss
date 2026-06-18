@@ -10,6 +10,7 @@
 
 import * as React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -19,10 +20,8 @@ import {
   SettingsSection,
   SettingsCard,
   SettingsInput,
-  SettingsSelect,
   SettingsTextarea,
 } from '@/components/settings'
-import { useI18n } from '@/i18n'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
@@ -34,7 +33,6 @@ export const meta: DetailsPageMeta = {
 interface PreferencesFormState {
   name: string
   timezone: string
-  language: string
   city: string
   country: string
   notes: string
@@ -43,7 +41,6 @@ interface PreferencesFormState {
 const emptyFormState: PreferencesFormState = {
   name: '',
   timezone: '',
-  language: '',
   city: '',
   country: '',
   notes: '',
@@ -56,7 +53,6 @@ function parsePreferences(json: string): PreferencesFormState {
     return {
       name: prefs.name || '',
       timezone: prefs.timezone || '',
-      language: prefs.language || '',
       city: prefs.location?.city || '',
       country: prefs.location?.country || '',
       notes: prefs.notes || '',
@@ -72,7 +68,6 @@ function serializePreferences(state: PreferencesFormState): string {
 
   if (state.name) prefs.name = state.name
   if (state.timezone) prefs.timezone = state.timezone
-  if (state.language) prefs.language = state.language
 
   if (state.city || state.country) {
     const location: Record<string, string> = {}
@@ -88,7 +83,7 @@ function serializePreferences(state: PreferencesFormState): string {
 }
 
 export default function PreferencesPage() {
-  const { language, changeLanguage, t } = useI18n('settings')
+  const { t } = useTranslation()
   const [formState, setFormState] = useState<PreferencesFormState>(emptyFormState)
   const [isLoading, setIsLoading] = useState(true)
   const [preferencesPath, setPreferencesPath] = useState<string | null>(null)
@@ -193,44 +188,30 @@ export default function PreferencesPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title={t('preferences.title')} actions={<HeaderMenu route={routes.view.settings('preferences')} helpFeature="preferences" />} />
+      <PanelHeader title={t("settings.preferences.title")} actions={<HeaderMenu route={routes.view.settings('preferences')} helpFeature="preferences" />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto space-y-8">
           {/* Basic Info */}
           <SettingsSection
-            title={t('preferences.basicInfo.title')}
-            description={t('preferences.basicInfo.description')}
+            title={t("settings.preferences.basicInfo")}
+            description={t("settings.preferences.basicInfoDesc")}
           >
             <SettingsCard divided>
               <SettingsInput
-                label={t('preferences.basicInfo.name')}
-                description={t('preferences.basicInfo.nameDescription')}
+                label={t("settings.preferences.name")}
+                description={t("settings.preferences.nameDesc")}
                 value={formState.name}
                 onChange={(v) => updateField('name', v)}
-                placeholder={t('preferences.basicInfo.namePlaceholder')}
+                placeholder={t("settings.preferences.namePlaceholder")}
                 inCard
               />
               <SettingsInput
-                label={t('preferences.basicInfo.timezone')}
-                description={t('preferences.basicInfo.timezoneDescription')}
+                label={t("settings.preferences.timezone")}
+                description={t("settings.preferences.timezoneDesc")}
                 value={formState.timezone}
                 onChange={(v) => updateField('timezone', v)}
-                placeholder={t('preferences.basicInfo.timezonePlaceholder')}
-                inCard
-              />
-              <SettingsSelect
-                label={t('preferences.basicInfo.language')}
-                description={t('preferences.basicInfo.languageDescription')}
-                value={language}
-                onValueChange={(lng) => {
-                  changeLanguage(lng)
-                  updateField('language', lng)
-                }}
-                options={[
-                  { value: 'en', label: 'English' },
-                  { value: 'fr', label: 'Français' },
-                ]}
+                placeholder={t("settings.preferences.timezonePlaceholder")}
                 inCard
               />
             </SettingsCard>
@@ -238,24 +219,24 @@ export default function PreferencesPage() {
 
           {/* Location */}
           <SettingsSection
-            title={t('preferences.location.title')}
-            description={t('preferences.location.description')}
+            title={t("settings.preferences.location")}
+            description={t("settings.preferences.locationDesc")}
           >
             <SettingsCard divided>
               <SettingsInput
-                label={t('preferences.location.city')}
-                description={t('preferences.location.cityDescription')}
+                label={t("settings.preferences.city")}
+                description={t("settings.preferences.cityDesc")}
                 value={formState.city}
                 onChange={(v) => updateField('city', v)}
-                placeholder={t('preferences.location.cityPlaceholder')}
+                placeholder={t("settings.preferences.cityPlaceholder")}
                 inCard
               />
               <SettingsInput
-                label={t('preferences.location.country')}
-                description={t('preferences.location.countryDescription')}
+                label={t("settings.preferences.country")}
+                description={t("settings.preferences.countryDesc")}
                 value={formState.country}
                 onChange={(v) => updateField('country', v)}
-                placeholder={t('preferences.location.countryPlaceholder')}
+                placeholder={t("settings.preferences.countryPlaceholder")}
                 inCard
               />
             </SettingsCard>
@@ -263,8 +244,8 @@ export default function PreferencesPage() {
 
           {/* Notes */}
           <SettingsSection
-            title={t('preferences.notes.title')}
-            description={t('preferences.notes.description')}
+            title={t("settings.preferences.notes")}
+            description={t("settings.preferences.notesDesc")}
             action={
               // EditPopover for AI-assisted notes editing with "Edit File" as secondary action
               preferencesPath ? (
@@ -272,7 +253,7 @@ export default function PreferencesPage() {
                   trigger={<EditButton />}
                   {...getEditConfig('preferences-notes', preferencesPath)}
                   secondaryAction={{
-                    label: t('preferences.notes.editFile'),
+                    label: t("common.editFile"),
                     filePath: preferencesPath!,
                   }}
                 />
@@ -283,7 +264,7 @@ export default function PreferencesPage() {
               <SettingsTextarea
                 value={formState.notes}
                 onChange={(v) => updateField('notes', v)}
-                placeholder={t('preferences.notes.placeholder')}
+                placeholder={t("settings.preferences.notesPlaceholder")}
                 rows={5}
                 inCard
               />

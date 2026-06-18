@@ -7,6 +7,8 @@ dist
 *.tgz
 .build
 apps/electron/release
+apps/electron/resources/session-mcp-server/
+apps/electron/resources/pi-agent-server/
 
 # code coverage
 coverage
@@ -37,6 +39,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # IntelliJ based IDEs
 .idea
 
+# Python bytecode
+__pycache__/
+*.pyc
+
 # Finder (MacOS) folder config
 .DS_Store
 
@@ -62,3 +68,7 @@ id_ed25519*
 # Credentials files
 credentials.enc
 *.credentials
+
+# act (local GitHub Actions runner)
+.secrets
+.actrc

@@ -3,9 +3,10 @@ import { motion, AnimatePresence, useMotionValue, useMotionValueEvent, animate }
 import { cn } from '@/lib/utils'
 import { FreeFormInput, type FreeFormInputProps } from './FreeFormInput'
 import { StructuredInput } from './StructuredInput'
-import { UltrathinkGlow } from '@/components/ui/ultrathink-glow'
 import type { RichTextInputHandle } from '@/components/ui/rich-text-input'
+import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import type { StructuredInputState, StructuredResponse, InputMode } from './structured/types'
+import { getStructuredInputMaxHeight } from './structured-height'
 
 interface InputContainerProps extends Omit<FreeFormInputProps, 'inputRef'> {
   /** Structured input state - when present, shows structured UI instead of freeform */
@@ -28,6 +29,7 @@ const FALLBACK_HEIGHTS: Record<InputMode | string, number> = {
   'freeform-compact': 70,  // Smaller for compact mode
   permission: 200,
   credential: 240,  // Taller for form fields + hint
+  admin_approval: 220,
 }
 
 /**
@@ -48,33 +50,21 @@ export function InputContainer({
   onAnimatedHeightChange,
   ...freeFormProps
 }: InputContainerProps) {
+  const appShellContext = useOptionalAppShellContext()
+  const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
   const mode: InputMode = structuredInput ? 'structured' : 'freeform'
   const measureRef = React.useRef<HTMLDivElement>(null)
-  const containerRef = React.useRef<HTMLDivElement>(null)
   // Separate height states: freeform uses callback, structured uses measuring div
   // Use smaller fallback height for compact mode
   const [freeformHeight, setFreeformHeight] = React.useState<number>(
     compactMode ? FALLBACK_HEIGHTS['freeform-compact'] : FALLBACK_HEIGHTS.freeform
   )
   const [structuredHeight, setStructuredHeight] = React.useState<number | null>(null)
-  const [containerWidth, setContainerWidth] = React.useState<number>(600)
+  const [viewportHeight, setViewportHeight] = React.useState<number>(() =>
+    typeof window === 'undefined' ? 0 : window.innerHeight
+  )
   const [isFocused, setIsFocused] = React.useState(false)
   const hasInitializedRef = React.useRef(false)
-
-  // Track container width for shader corner radius calculation
-  React.useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width)
-      }
-    })
-
-    observer.observe(container)
-    return () => observer.disconnect()
-  }, [])
 
   // Create a stable key for the current content
   const contentKey = mode === 'freeform' ? 'freeform' : `structured-${structuredInput?.type}`
@@ -101,18 +91,41 @@ export function InputContainer({
     }
   }, [contentKey, isTransitioning])
 
-  // Track isProcessing changes in compact mode - animate height collapse/expand
-  const prevIsProcessingRef = React.useRef(isProcessing)
+  // Compact-mode collapse-during-thinking is escapable: the user can hover or
+  // click the collapsed bar to bring the input back without waiting for the
+  // agent to finish. State resets the moment processing ends so the next
+  // thinking cycle starts collapsed again.
+  const [expandedDuringProcessing, setExpandedDuringProcessing] = React.useState(false)
+
   React.useEffect(() => {
-    if (compactMode && prevIsProcessingRef.current !== isProcessing) {
-      prevIsProcessingRef.current = isProcessing
-      setIsAnimating(true)
-      const timer = setTimeout(() => {
-        setIsAnimating(false)
-      }, TRANSITION_DURATION * 1000 + 100)
-      return () => clearTimeout(timer)
+    if (!isProcessing && expandedDuringProcessing) {
+      setExpandedDuringProcessing(false)
     }
-  }, [compactMode, isProcessing])
+  }, [isProcessing, expandedDuringProcessing])
+
+  const handleRequestExpand = React.useCallback(() => {
+    setExpandedDuringProcessing(true)
+  }, [])
+
+  const isCollapsedInCompact = compactMode && isProcessing && !expandedDuringProcessing
+
+  // Animate height when either isProcessing flips OR the user manually expands
+  // / re-collapses the input during a thinking cycle.
+  const prevIsProcessingRef = React.useRef(isProcessing)
+  const prevExpandedRef = React.useRef(expandedDuringProcessing)
+  React.useEffect(() => {
+    if (!compactMode) return
+    const isProcessingChanged = prevIsProcessingRef.current !== isProcessing
+    const expandedChanged = prevExpandedRef.current !== expandedDuringProcessing
+    prevIsProcessingRef.current = isProcessing
+    prevExpandedRef.current = expandedDuringProcessing
+    if (!isProcessingChanged && !expandedChanged) return
+    setIsAnimating(true)
+    const timer = setTimeout(() => {
+      setIsAnimating(false)
+    }, TRANSITION_DURATION * 1000 + 100)
+    return () => clearTimeout(timer)
+  }, [compactMode, isProcessing, expandedDuringProcessing])
 
   // Handle height changes from FreeFormInput (synchronous, no measuring div needed)
   const handleFreeformHeightChange = React.useCallback((height: number) => {
@@ -125,6 +138,15 @@ export function InputContainer({
   // Handle focus changes from FreeFormInput
   const handleFocusChange = React.useCallback((focused: boolean) => {
     setIsFocused(focused)
+  }, [])
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const updateViewportHeight = () => setViewportHeight(window.innerHeight)
+    updateViewportHeight()
+    window.addEventListener('resize', updateViewportHeight)
+    return () => window.removeEventListener('resize', updateViewportHeight)
   }, [])
 
   // Use ResizeObserver only for structured inputs (freeform uses onHeightChange callback)
@@ -154,10 +176,15 @@ export function InputContainer({
     return () => observer.disconnect()
   }, [contentKey, mode])
 
-  // Use appropriate height source based on mode
-  const targetHeight = mode === 'freeform'
+  // Use appropriate height source based on mode. Structured prompts are clamped
+  // to viewport-aware bounds; their internals scroll so action buttons stay reachable.
+  const rawTargetHeight = mode === 'freeform'
     ? freeformHeight
     : (structuredHeight ?? FALLBACK_HEIGHTS[structuredInput?.type ?? 'freeform'] ?? FALLBACK_HEIGHTS.freeform)
+  const structuredMaxHeight = getStructuredInputMaxHeight(viewportHeight)
+  const targetHeight = mode === 'freeform'
+    ? rawTargetHeight
+    : Math.min(rawTargetHeight, structuredMaxHeight)
 
   // Motion value for frame-synchronized height animation
   const heightMotionValue = useMotionValue(targetHeight)
@@ -198,6 +225,8 @@ export function InputContainer({
           {...freeFormProps}
           compactMode={compactMode}
           isProcessing={isProcessing}
+          isCollapsedInCompact={isCollapsedInCompact}
+          onRequestExpand={handleRequestExpand}
           inputRef={forMeasuring ? undefined : textareaRef}
           onHeightChange={forMeasuring ? undefined : handleFreeformHeightChange}
           onFocusChange={forMeasuring ? undefined : handleFocusChange}
@@ -231,19 +260,16 @@ export function InputContainer({
 
       {/* Visible animated container */}
       <motion.div
-        ref={containerRef}
         className={cn(
-          "input-container relative rounded-[12px] shadow-middle overflow-hidden transition-colors bg-background"
+          "input-container relative rounded-[12px] overflow-hidden transition-colors",
+          isFocusedPanel ? "shadow-middle" : "shadow-minimal",
+          "bg-background"
         )}
-        style={{ height: heightMotionValue }}
+        style={{
+          height: heightMotionValue,
+          ...(mode !== 'freeform' ? { maxHeight: structuredMaxHeight } : {}),
+        }}
       >
-        {/* Ultrathink Pulsing Border shader effect - covers entire input */}
-        <UltrathinkGlow
-          enabled={freeFormProps.ultrathinkEnabled ?? false}
-          width={containerWidth}
-          height={targetHeight}
-        />
-
         {/* Crossfading content - freeform anchored to bottom (for auto-grow), others fill */}
         <AnimatePresence mode="sync" initial={false}>
           <motion.div

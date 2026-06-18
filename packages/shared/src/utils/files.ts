@@ -1,10 +1,52 @@
-import { existsSync, readFileSync, statSync, writeFileSync, unlinkSync, mkdtempSync } from 'fs';
+import { existsSync, readFileSync, statSync, writeFileSync, unlinkSync, mkdtempSync, renameSync } from 'fs';
 import { extname, basename, resolve, join, relative } from 'path';
 import { execSync } from 'child_process';
 import { tmpdir } from 'os';
 
+/**
+ * Strip UTF-8 BOM (Byte Order Mark) from a string.
+ * BOM (\uFEFF) can appear when files are written by certain editors or tools
+ * and causes JSON.parse() to fail with "Unexpected token" errors.
+ */
+export function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+}
+
+/**
+ * Parse a JSON string, stripping any leading UTF-8 BOM.
+ * Use this instead of raw JSON.parse() for any content that may originate from a file.
+ */
+export function safeJsonParse(text: string): unknown {
+  return JSON.parse(stripBom(text));
+}
+
+/**
+ * Read and parse a JSON file, handling UTF-8 BOM transparently.
+ * Replaces the common JSON.parse(readFileSync(path, 'utf-8')) pattern.
+ */
+export function readJsonFileSync<T = unknown>(filePath: string): T {
+  return JSON.parse(stripBom(readFileSync(filePath, 'utf-8'))) as T;
+}
+
+/**
+ * Atomically write a file by writing to a temp file then renaming.
+ * This prevents partial writes from corrupting the file on crash/interrupt.
+ * Uses write-to-temp-then-rename pattern which is atomic on POSIX systems.
+ */
+export function atomicWriteFileSync(filePath: string, data: string): void {
+  const tmpPath = filePath + '.tmp';
+  try {
+    writeFileSync(tmpPath, data);
+    renameSync(tmpPath, filePath);
+  } catch (error) {
+    // Clean up temp file if rename failed
+    try { unlinkSync(tmpPath); } catch {}
+    throw error;
+  }
+}
+
 export interface FileAttachment {
-  type: 'image' | 'text' | 'pdf' | 'office' | 'unknown';
+  type: 'image' | 'text' | 'pdf' | 'office' | 'audio' | 'unknown';
   path: string;
   name: string;
   mimeType: string;
@@ -54,6 +96,19 @@ const OFFICE_EXTENSIONS: Record<string, string> = {
   '.ppt': 'application/vnd.ms-powerpoint',
 };
 
+// Audio file extensions (forwarded as base64; backends decide how to handle)
+const AUDIO_EXTENSIONS: Record<string, string> = {
+  '.ogg': 'audio/ogg',
+  '.opus': 'audio/ogg',
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.wav': 'audio/wav',
+  '.flac': 'audio/flac',
+  '.weba': 'audio/webm',
+  '.webm': 'audio/webm',
+};
+
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB limit
 const MAX_TEXT_SIZE = 100 * 1024; // 100KB for text files
 
@@ -70,6 +125,8 @@ export interface ImageValidationResult {
   valid: boolean;
   /** Hard error - image cannot be sent */
   error?: string;
+  /** Error code for programmatic handling */
+  errorCode?: 'dimension_exceeded' | 'size_exceeded';
   /** Warning - image will work but may have issues */
   warning?: string;
   /** Image needs resizing for optimal performance */
@@ -91,21 +148,23 @@ export function validateImageForClaudeAPI(
   width?: number,
   height?: number
 ): ImageValidationResult {
-  // Check file size first (hard limit)
+  // Check file size first (hard limit - cannot resize to fix)
   if (size > MAX_IMAGE_SIZE) {
     const sizeMB = (size / 1024 / 1024).toFixed(1);
     return {
       valid: false,
+      errorCode: 'size_exceeded',
       error: `Image too large (${sizeMB}MB). Claude API limit is 5MB. Please resize or compress the image.`,
     };
   }
 
   // Check dimensions if provided
   if (width !== undefined && height !== undefined) {
-    // Hard limit on dimensions
+    // Hard limit on dimensions - can be fixed by resizing
     if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
       return {
         valid: false,
+        errorCode: 'dimension_exceeded',
         error: `Image dimensions too large (${width}×${height}). Maximum is ${MAX_IMAGE_DIMENSION}×${MAX_IMAGE_DIMENSION} pixels.`,
       };
     }
@@ -132,8 +191,14 @@ export function validateImageForClaudeAPI(
 // Export constants for use in other modules
 export const IMAGE_LIMITS = {
   MAX_SIZE: MAX_IMAGE_SIZE,
+  /** Max raw file size before base64 encoding (base64 inflates by 4/3, so 5MB base64 ≈ 3.75MB raw) */
+  MAX_RAW_SIZE: Math.floor(MAX_IMAGE_SIZE * 3 / 4),
   MAX_DIMENSION: MAX_IMAGE_DIMENSION,
   OPTIMAL_EDGE: OPTIMAL_IMAGE_EDGE,
+  /** JPEG quality for photo-like images */
+  JPEG_QUALITY_HIGH: 90,
+  /** JPEG quality for fallback compression when size still exceeds limits */
+  JPEG_QUALITY_FALLBACK: 75,
 } as const;
 
 /**
@@ -228,7 +293,7 @@ export function resolvePath(filePath: string): string {
  * Determine the type of a file based on extension
  * Falls back to 'text' for unknown extensions (will try to read as text)
  */
-export function getFileType(filePath: string): 'image' | 'text' | 'pdf' | 'office' | 'unknown' {
+export function getFileType(filePath: string): 'image' | 'text' | 'pdf' | 'office' | 'audio' | 'unknown' {
   const ext = extname(filePath).toLowerCase();
 
   if (ext in IMAGE_EXTENSIONS) {
@@ -239,6 +304,9 @@ export function getFileType(filePath: string): 'image' | 'text' | 'pdf' | 'offic
   }
   if (ext in OFFICE_EXTENSIONS) {
     return 'office';
+  }
+  if (ext in AUDIO_EXTENSIONS) {
+    return 'audio';
   }
   if (TEXT_EXTENSIONS.has(ext)) {
     return 'text';
@@ -265,6 +333,10 @@ export function getMimeType(filePath: string): string {
   const officeMime = OFFICE_EXTENSIONS[ext];
   if (officeMime) {
     return officeMime;
+  }
+  const audioMime = AUDIO_EXTENSIONS[ext];
+  if (audioMime) {
+    return audioMime;
   }
 
   // Default to text for known text extensions
@@ -328,6 +400,13 @@ export function readFileAttachment(filePath: string): FileAttachment | null {
       attachment.base64 = buffer.toString('base64');
     } else if (type === 'office') {
       // Read Office files as base64 (will be converted to markdown later)
+      const buffer = readFileSync(resolved);
+      attachment.base64 = buffer.toString('base64');
+    } else if (type === 'audio') {
+      // Read audio as base64 — backends that recognize 'audio' decide how to
+      // forward it (transcription, native audio input, etc). Backends that
+      // don't recognize 'audio' fall through to their existing 'unknown'
+      // branches so the attachment is at least visible.
       const buffer = readFileSync(resolved);
       attachment.base64 = buffer.toString('base64');
     }

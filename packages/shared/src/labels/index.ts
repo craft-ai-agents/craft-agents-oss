@@ -18,5 +18,8 @@ export * from './tree.ts';
 // Value utilities (parse/format label::value entries)
 export * from './values.ts';
 
+// Session label resolution (validate user input against configured labels)
+export * from './resolve.ts';
+
 // Auto-labels: import directly from '@craft-agent/shared/labels/auto' to keep
 // regex evaluation code out of the renderer bundle (backend-only concern).

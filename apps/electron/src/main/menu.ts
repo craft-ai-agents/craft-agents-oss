@@ -1,11 +1,18 @@
 import { Menu, app, shell, BrowserWindow } from 'electron'
-import { IPC_CHANNELS } from '../shared/types'
+import { i18n } from '@craft-agent/shared/i18n'
+import { RPC_CHANNELS, type BroadcastEventMap } from '../shared/types'
+import { EDIT_MENU, VIEW_MENU, WINDOW_MENU } from '../shared/menu-schema'
+import type { MenuItem } from '../shared/menu-schema'
 import type { WindowManager } from './window-manager'
-import { mainLog } from './logger'
-import i18n from './i18n'
+import type { EventSink } from '@craft-agent/server-core/transport'
+import { mainLog, isDebugMode } from './logger'
 
-// Store reference for rebuilding menu
+type ClientResolver = (webContentsId: number) => string | undefined
+
+// Store references for rebuilding menu
 let cachedWindowManager: WindowManager | null = null
+let cachedEventSink: EventSink | null = null
+let cachedClientResolver: ClientResolver | null = null
 
 /**
  * Creates and sets the application menu for macOS.
@@ -13,9 +20,20 @@ let cachedWindowManager: WindowManager | null = null
  *
  * Call rebuildMenu() when update state changes to refresh the menu.
  */
-export function createApplicationMenu(windowManager: WindowManager): void {
+export function createApplicationMenu(windowManager: WindowManager, sink?: EventSink, resolver?: ClientResolver): void {
   cachedWindowManager = windowManager
+  cachedEventSink = sink ?? null
+  cachedClientResolver = resolver ?? null
   rebuildMenu()
+}
+
+/**
+ * Set the event sink and client resolver after server creation.
+ * Called separately from createApplicationMenu since the server may not exist at menu init time.
+ */
+export function setMenuEventSink(sink: EventSink, resolver: ClientResolver): void {
+  cachedEventSink = sink
+  cachedClientResolver = resolver
 }
 
 /**
@@ -43,19 +61,16 @@ export async function rebuildMenu(): Promise<void> {
   const updateInfo = getUpdateInfo()
   const updateReady = updateInfo.available && updateInfo.downloadState === 'ready'
 
-  // Helper to translate menu strings
-  const t = (key: string, options?: any) => i18n.t(key, options)
-
   // Build the update menu item based on state
   const updateMenuItem: Electron.MenuItemConstructorOptions = updateReady
     ? {
-        label: `${t('menu.app.installUpdate')}\t【${updateInfo.latestVersion}】`,
+        label: i18n.t("menu.installUpdateVersion", { version: updateInfo.latestVersion }),
         click: async () => {
           await installUpdate()
         }
       }
     : {
-        label: t('menu.app.checkForUpdates'),
+        label: i18n.t("menu.checkForUpdatesEllipsis"),
         click: async () => {
           await checkForUpdates({ autoDownload: true })
         }
@@ -66,35 +81,38 @@ export async function rebuildMenu(): Promise<void> {
     ...(isMac ? [{
       label: 'Craft Agents',
       submenu: [
-        { role: 'about' as const, label: t('menu.app.about') },
+        { role: 'about' as const, label: i18n.t('menu.aboutCraftAgents') },
         updateMenuItem,
         { type: 'separator' as const },
         {
-          label: t('menu.app.settings'),
+          label: i18n.t("menu.settings"),
           accelerator: 'CmdOrCtrl+,',
-          click: () => sendToRenderer(IPC_CHANNELS.MENU_OPEN_SETTINGS)
+          registerAccelerator: false,  // Action registry handles the keyboard shortcut
+          click: () => sendToRenderer(RPC_CHANNELS.menu.OPEN_SETTINGS)
         },
         { type: 'separator' as const },
-        { role: 'hide' as const, label: t('menu.app.hide') },
-        { role: 'hideOthers' as const, label: t('menu.app.hideOthers') },
-        { role: 'unhide' as const, label: t('menu.app.unhide') },
+        { role: 'hide' as const, label: i18n.t('menu.hideCraftAgents') },
+        { role: 'hideOthers' as const },
+        { role: 'unhide' as const },
         { type: 'separator' as const },
-        { role: 'quit' as const, label: t('menu.app.quit') }
+        { role: 'quit' as const, label: i18n.t('menu.quitCraftAgents') }
       ]
     }] : []),
 
     // File menu
     {
-      label: t('menu.file.title'),
+      label: i18n.t("menu.file"),
       submenu: [
         {
-          label: t('menu.file.newChat'),
+          label: i18n.t("menu.newChat"),
           accelerator: 'CmdOrCtrl+N',
-          click: () => sendToRenderer(IPC_CHANNELS.MENU_NEW_CHAT)
+          registerAccelerator: false,  // Action registry handles the keyboard shortcut
+          click: () => sendToRenderer(RPC_CHANNELS.menu.NEW_CHAT)
         },
         {
-          label: t('menu.file.newWindow'),
+          label: i18n.t("menu.newWindow"),
           accelerator: 'CmdOrCtrl+Shift+N',
+          registerAccelerator: false,  // Action registry handles the keyboard shortcut
           click: () => {
             const focused = BrowserWindow.getFocusedWindow()
             if (focused) {
@@ -106,61 +124,77 @@ export async function rebuildMenu(): Promise<void> {
           }
         },
         { type: 'separator' as const },
-        isMac ? { role: 'close' as const, label: t('menu.file.close') } : { role: 'quit' as const, label: t('menu.file.quit') }
+        isMac ? { role: 'close' as const } : { role: 'quit' as const }
       ]
     },
 
-    // Edit menu (standard roles for text editing)
+    // Edit menu (from shared schema)
     {
-      label: t('menu.edit.title'),
-      submenu: [
-        { role: 'undo' as const, label: t('menu.edit.undo') },
-        { role: 'redo' as const, label: t('menu.edit.redo') },
-        { type: 'separator' as const },
-        { role: 'cut' as const, label: t('menu.edit.cut') },
-        { role: 'copy' as const, label: t('menu.edit.copy') },
-        { role: 'paste' as const, label: t('menu.edit.paste') },
-        { role: 'selectAll' as const, label: t('menu.edit.selectAll') }
-      ]
+      label: i18n.t(EDIT_MENU.labelKey),
+      submenu: EDIT_MENU.items.map(toElectronMenuItem),
     },
 
-    // View menu
+    // View menu (from shared schema + dev-only items)
     {
-      label: t('menu.view.title'),
+      label: i18n.t(VIEW_MENU.labelKey),
       submenu: [
-        { role: 'zoomIn' as const, label: t('menu.view.zoomIn') },
-        { role: 'zoomOut' as const, label: t('menu.view.zoomOut') },
-        { role: 'resetZoom' as const, label: t('menu.view.resetZoom') },
-        // Dev tools only in development
-        ...(!app.isPackaged ? [
+        ...VIEW_MENU.items.map(toElectronMenuItem),
+        // Dev tools — available in dev mode or when started with --debug
+        ...(!app.isPackaged || isDebugMode ? [
           { type: 'separator' as const },
-          { role: 'reload' as const, label: t('menu.view.reload') },
-          { role: 'forceReload' as const, label: t('menu.view.forceReload') },
-          { type: 'separator' as const },
-          { role: 'toggleDevTools' as const, label: t('menu.view.toggleDevTools') }
+          ...(!app.isPackaged ? [
+            {
+              label: i18n.t("menu.reload"),
+              accelerator: 'CmdOrCtrl+R',
+              click: (_menuItem: Electron.MenuItem, window: Electron.BaseWindow | undefined) => {
+                const browserWindow = window instanceof BrowserWindow ? window : BrowserWindow.getFocusedWindow()
+                if (!browserWindow) return
+                const views = browserWindow.getBrowserViews()
+                if (views.length > 0) {
+                  views[0].webContents.reload()
+                } else {
+                  browserWindow.webContents.reload()
+                }
+              }
+            },
+            {
+              label: i18n.t("menu.forceReload"),
+              accelerator: 'CmdOrCtrl+Shift+R',
+              click: (_menuItem: Electron.MenuItem, window: Electron.BaseWindow | undefined) => {
+                const browserWindow = window instanceof BrowserWindow ? window : BrowserWindow.getFocusedWindow()
+                if (!browserWindow) return
+                const views = browserWindow.getBrowserViews()
+                if (views.length > 0) {
+                  views[0].webContents.reloadIgnoringCache()
+                } else {
+                  browserWindow.webContents.reloadIgnoringCache()
+                }
+              }
+            },
+          ] : []),
+          { role: 'toggleDevTools' as const },
         ] : [])
       ]
     },
 
-    // Window menu
+    // Window menu (from shared schema + macOS-specific items)
     {
-      label: t('menu.window.title'),
+      label: i18n.t(WINDOW_MENU.labelKey),
       submenu: [
-        { role: 'minimize' as const, label: t('menu.window.minimize') },
-        { role: 'zoom' as const, label: t('menu.window.zoom') },
+        ...WINDOW_MENU.items.map(toElectronMenuItem),
         ...(isMac ? [
           { type: 'separator' as const },
-          { role: 'front' as const, label: t('menu.window.bringAllToFront') }
+          { role: 'front' as const }
         ] : [])
       ]
     },
 
     // Debug menu (development only)
     ...(!app.isPackaged ? [{
-      label: t('menu.debug.title'),
+      label: i18n.t("menu.debug"),
       submenu: [
         {
-          label: t('menu.debug.checkForUpdates'),
+          label: i18n.t("menu.checkForUpdates"),
           click: async () => {
             const { checkForUpdates } = await import('./auto-update')
             const info = await checkForUpdates({ autoDownload: true })
@@ -168,7 +202,7 @@ export async function rebuildMenu(): Promise<void> {
           }
         },
         {
-          label: t('menu.debug.installUpdate'),
+          label: i18n.t("menu.installUpdate"),
           click: async () => {
             const { installUpdate } = await import('./auto-update')
             try {
@@ -180,14 +214,14 @@ export async function rebuildMenu(): Promise<void> {
         },
         { type: 'separator' as const },
         {
-          label: t('menu.debug.resetToDefaults'),
+          label: i18n.t("menu.resetToDefaults"),
           click: async () => {
             const { dialog } = await import('electron')
             await dialog.showMessageBox({
               type: 'info',
-              message: t('menu.debug.resetMessage'),
-              detail: t('menu.debug.resetDetail'),
-              buttons: ['OK']
+              message: i18n.t("menu.resetToDefaultsTitle"),
+              detail: i18n.t("menu.resetToDefaultsDetail"),
+              buttons: [i18n.t("common.ok")]
             })
           }
         }
@@ -196,16 +230,17 @@ export async function rebuildMenu(): Promise<void> {
 
     // Help menu
     {
-      label: t('menu.help.title'),
+      label: i18n.t("menu.help"),
       submenu: [
         {
-          label: t('menu.help.helpDocumentation'),
+          label: i18n.t("menu.helpAndDocs"),
           click: () => shell.openExternal('https://agents.craft.do/docs')
         },
         {
-          label: t('menu.help.keyboardShortcuts'),
+          label: i18n.t("menu.keyboardShortcuts"),
           accelerator: 'CmdOrCtrl+/',
-          click: () => sendToRenderer(IPC_CHANNELS.MENU_KEYBOARD_SHORTCUTS)
+          registerAccelerator: false,  // Action registry handles the keyboard shortcut
+          click: () => sendToRenderer(RPC_CHANNELS.menu.KEYBOARD_SHORTCUTS)
         }
       ]
     }
@@ -215,12 +250,45 @@ export async function rebuildMenu(): Promise<void> {
   Menu.setApplicationMenu(menu)
 }
 
+/** Menu channels that are main→renderer push events in BroadcastEventMap */
+type MenuBroadcastChannel = Extract<keyof BroadcastEventMap, `menu:${string}`>
+
 /**
- * Sends an IPC message to the focused renderer window.
+ * Sends an event to the focused renderer window via the RPC event sink.
  */
-function sendToRenderer(channel: string): void {
+function sendToRenderer(channel: MenuBroadcastChannel): void {
+  if (!cachedEventSink || !cachedClientResolver) return
   const win = BrowserWindow.getFocusedWindow()
   if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
-    win.webContents.send(channel)
+    const clientId = cachedClientResolver(win.webContents.id)
+    if (clientId) {
+      cachedEventSink(channel, { to: 'client', clientId })
+    }
   }
+}
+
+/**
+ * Converts a MenuItem from the shared schema to Electron MenuItemConstructorOptions.
+ */
+function toElectronMenuItem(item: MenuItem): Electron.MenuItemConstructorOptions {
+  if (item.type === 'separator') {
+    return { type: 'separator' }
+  }
+
+  if (item.type === 'role') {
+    // Use Electron's built-in role - it handles accelerators automatically
+    return { role: item.role as Electron.MenuItemConstructorOptions['role'] }
+  }
+
+  if (item.type === 'action') {
+    return {
+      label: i18n.t(item.labelKey),
+      accelerator: item.shortcut,
+      registerAccelerator: false,  // Action registry handles the keyboard shortcut
+      click: () => sendToRenderer(item.ipcChannel as MenuBroadcastChannel),
+    }
+  }
+
+  // Should never reach here
+  return { type: 'separator' }
 }

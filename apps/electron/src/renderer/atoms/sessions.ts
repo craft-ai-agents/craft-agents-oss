@@ -9,6 +9,7 @@
  */
 
 import { atom } from 'jotai'
+import type { Getter, Setter } from 'jotai/vanilla'
 import { atomFamily } from 'jotai-family'
 import type { Session, Message } from '../../shared/types'
 
@@ -44,8 +45,8 @@ export interface SessionMeta {
   labels?: string[]
   /** Permission mode ('safe', 'ask', 'allow-all') — used by view expressions */
   permissionMode?: string
-  /** Todo state for filtering */
-  todoState?: string
+  /** Session status for filtering */
+  sessionStatus?: string
   /** Role/type of the last message (for badge display without loading messages) */
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   /** Whether an async operation is ongoing (sharing, updating share, revoking, title regeneration) */
@@ -54,6 +55,8 @@ export interface SessionMeta {
   isRegeneratingTitle?: boolean
   /** Model override for this session */
   model?: string
+  /** LLM connection slug for this session */
+  llmConnection?: string
   /** Token usage stats (from JSONL header, available without loading messages) */
   tokenUsage?: {
     inputTokens: number
@@ -68,15 +71,20 @@ export interface SessionMeta {
   messageCount?: number
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean
+  /** Whether this session is archived */
+  isArchived?: boolean
+  /** Timestamp when session was archived (for retention policy) */
+  archivedAt?: number
 }
 
 /**
- * Find the last final (non-intermediate) assistant message ID
+ * Find the last final (non-intermediate) assistant or plan message ID
  */
 function findLastFinalMessageId(messages: Message[]): string | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]
-    if (msg.role === 'assistant' && !msg.isIntermediate) {
+    // Include plan messages as final responses (they're AI-generated content)
+    if ((msg.role === 'assistant' || msg.role === 'plan') && !msg.isIntermediate) {
       return msg.id
     }
   }
@@ -88,41 +96,23 @@ function findLastFinalMessageId(messages: Message[]): string | undefined {
  */
 export function extractSessionMeta(session: Session): SessionMeta {
   const messages = session.messages || []
-  // Prefer pre-computed lastFinalMessageId from session storage (available without loading messages).
-  // Fall back to computing from messages for newly created sessions or when messages are loaded.
-  const lastFinalMessageId = session.lastFinalMessageId ?? findLastFinalMessageId(messages)
+
+  // Destructure fields that don't exist on SessionMeta or need overrides
+  const {
+    messages: _msgs, sessionFolderPath: _sf, supportsBranching: _sb,
+    workspaceName: _wn, thinkingLevel: _tl, currentStatus: _cs,
+    isAsyncOperationOngoing, isRegeneratingTitle,
+    messageCount, lastFinalMessageId: sessionLastFinal,
+    ...sessionFields
+  } = session
 
   return {
-    id: session.id,
-    name: session.name,
-    preview: session.preview,
-    workspaceId: session.workspaceId,
-    lastMessageAt: session.lastMessageAt,
-    isProcessing: session.isProcessing,
-    isFlagged: session.isFlagged,
-    lastReadMessageId: session.lastReadMessageId,
-    workingDirectory: session.workingDirectory,
-    enabledSourceSlugs: session.enabledSourceSlugs,
-    sharedUrl: session.sharedUrl,
-    sharedId: session.sharedId,
-    lastFinalMessageId,
-    // Explicit unread flag - source of truth for NEW badge
-    hasUnread: session.hasUnread,
-    labels: session.labels,
-    permissionMode: session.permissionMode,
-    todoState: session.todoState,
-    lastMessageRole: session.lastMessageRole,
-    // Use isAsyncOperationOngoing if available, fall back to deprecated isRegeneratingTitle
-    isAsyncOperationOngoing: session.isAsyncOperationOngoing ?? session.isRegeneratingTitle,
-    isRegeneratingTitle: session.isRegeneratingTitle,
-    // Fields needed by view expressions (messageCount, model, createdAt, tokenUsage)
-    messageCount: session.messageCount ?? session.messages?.length ?? 0,
-    model: session.model,
-    createdAt: session.createdAt,
-    tokenUsage: session.tokenUsage,
-    // Hidden sessions (e.g., mini edit sessions in EditPopover)
-    hidden: session.hidden,
-  }
+    ...sessionFields,
+    lastFinalMessageId: sessionLastFinal ?? findLastFinalMessageId(messages),
+    messageCount: messageCount ?? messages.length ?? 0,
+    isAsyncOperationOngoing: isAsyncOperationOngoing ?? isRegeneratingTitle,
+    isRegeneratingTitle,
+  } as SessionMeta
 }
 
 /**
@@ -208,6 +198,33 @@ export const updateSessionMetaAtom = atom(
       const newMetaMap = new Map(metaMap)
       newMetaMap.set(sessionId, { ...existing, ...updates })
       set(sessionMetaMapAtom, newMetaMap)
+    }
+  }
+)
+
+/**
+ * Action atom: replace a session with an authoritative full session payload.
+ *
+ * Use this for data returned by getSessionMessages() or createSession(), where
+ * the `messages` array is known to represent the loaded transcript. Keeping the
+ * full session atom and loadedSessionsAtom in one write prevents the chat panel
+ * from hiding real messages behind a stale lazy-loading spinner.
+ */
+export const replaceLoadedSessionAtom = atom(
+  null,
+  (get, set, session: Session) => {
+    set(sessionAtomFamily(session.id), session)
+
+    const metaMap = get(sessionMetaMapAtom)
+    const newMetaMap = new Map(metaMap)
+    newMetaMap.set(session.id, extractSessionMeta(session))
+    set(sessionMetaMapAtom, newMetaMap)
+
+    const loadedSessions = get(loadedSessionsAtom)
+    if (!loadedSessions.has(session.id)) {
+      const newLoadedSessions = new Set(loadedSessions)
+      newLoadedSessions.add(session.id)
+      set(loadedSessionsAtom, newLoadedSessions)
     }
   }
 )
@@ -301,6 +318,85 @@ export const initializeSessionsAtom = atom(
     // Sessions from getSessions() have empty messages: [] to save memory
     // Messages are lazy-loaded via ensureSessionMessagesLoadedAtom when session is opened
     // This reduces initial memory usage from ~500MB to ~50MB for 300+ sessions
+  }
+)
+
+/**
+ * Action atom: refresh session metadata after a stale reconnect.
+ *
+ * Unlike initializeSessionsAtom (which resets everything for workspace switches),
+ * this preserves messages for already-loaded sessions and only marks overwritten
+ * metadata-only sessions as unloaded for lazy re-fetching.
+ *
+ * All cross-atom mutations happen inside a single write transaction so that
+ * React subscribers see one consistent update instead of intermediate states.
+ */
+export const refreshSessionsMetadataAtom = atom(
+  null,
+  (
+    get,
+    set,
+    payload: { sessions: Session[]; loadedSessionIds: Set<string>; removeMissing?: boolean }
+  ): Map<string, SessionMeta> => {
+    const { sessions, loadedSessionIds, removeMissing = true } = payload
+
+    // Remove stale sessions only for authoritative refreshes. Stale reconnect
+    // recovery can receive a transient partial list immediately after sleep/wake;
+    // treating that as authoritative is what makes the sidebar collapse to the
+    // single active session. In non-destructive mode we upsert returned sessions
+    // and preserve missing metadata until a confirmed delete/workspace reload.
+    const currentIds = get(sessionIdsAtom)
+    const latestIds = new Set(sessions.map(s => s.id))
+    if (removeMissing) {
+      for (const staleId of currentIds) {
+        if (!latestIds.has(staleId)) {
+          set(removeSessionAtom, staleId)
+        }
+      }
+    }
+
+    // Update each session atom, preserving messages for loaded sessions
+    const unloadedIds: string[] = []
+    for (const session of sessions) {
+      const currentSession = get(sessionAtomFamily(session.id))
+      const shouldPreserveMessages = !!currentSession && loadedSessionIds.has(session.id)
+      const nextSession = shouldPreserveMessages && currentSession
+        ? { ...session, messages: currentSession.messages }
+        : session
+
+      set(sessionAtomFamily(session.id), nextSession)
+
+      // Track sessions that lost their messages so lazy-loading re-fetches them
+      if (!shouldPreserveMessages && loadedSessionIds.has(session.id)) {
+        unloadedIds.push(session.id)
+      }
+    }
+
+    // Remove overwritten sessions from loadedSessionsAtom
+    if (unloadedIds.length > 0) {
+      const nextLoaded = new Set(get(loadedSessionsAtom))
+      for (const id of unloadedIds) nextLoaded.delete(id)
+      set(loadedSessionsAtom, nextLoaded)
+    }
+
+    // Build and set metadata map. Non-destructive refresh starts from the
+    // existing map so sessions omitted by a transient partial response remain
+    // visible. Returned sessions are still authoritative for their own fields.
+    const nextMetaMap = removeMissing
+      ? new Map<string, SessionMeta>()
+      : new Map(get(sessionMetaMapAtom))
+    for (const session of sessions) {
+      nextMetaMap.set(session.id, extractSessionMeta(session))
+    }
+    set(sessionMetaMapAtom, nextMetaMap)
+
+    // Set ordered IDs from the metadata map we actually exposed to the UI.
+    const nextIds = Array.from(nextMetaMap.values())
+      .sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0))
+      .map(s => s.id)
+    set(sessionIdsAtom, nextIds)
+
+    return nextMetaMap
   }
 )
 
@@ -445,83 +541,135 @@ export const syncSessionsToAtomsAtom = atom(
  * Uses promise deduplication to prevent redundant IPC calls from concurrent requests.
  *
  * IMPORTANT: This only merges messages into the existing session atom.
- * UI state fields (hasUnread, isFlagged, todoState, etc.) are preserved from
+ * UI state fields (hasUnread, isFlagged, sessionStatus, etc.) are preserved from
  * the in-memory atom, NOT overwritten with potentially stale disk data.
  * This prevents a race condition where optimistic updates (e.g., clearing the
  * NEW badge on session view) get clobbered by async message loading that reads
  * older state from disk.
  */
-export const ensureSessionMessagesLoadedAtom = atom(
-  null,
-  async (get, set, sessionId: string): Promise<Session | null> => {
+async function loadSessionMessages(
+  get: Getter,
+  set: Setter,
+  sessionId: string,
+  options?: { force?: boolean },
+): Promise<Session | null> {
+  const force = options?.force ?? false
+
+  if (force) {
+    const nextLoadedSessions = new Set(get(loadedSessionsAtom))
+    nextLoadedSessions.delete(sessionId)
+    set(loadedSessionsAtom, nextLoadedSessions)
+
+    // Clear any stale in-flight request so the caller gets a fresh fetch.
+    sessionLoadingPromises.delete(sessionId)
+  } else {
     const loadedSessions = get(loadedSessionsAtom)
 
     // Already loaded, return current session
     if (loadedSessions.has(sessionId)) {
       return get(sessionAtomFamily(sessionId))
     }
+  }
 
-    // Check if already loading - return existing promise to deduplicate concurrent calls
-    const existingPromise = sessionLoadingPromises.get(sessionId)
-    if (existingPromise) {
-      return existingPromise
+  // Check if already loading - return existing promise to deduplicate concurrent calls
+  const existingPromise = sessionLoadingPromises.get(sessionId)
+  if (existingPromise) {
+    return existingPromise
+  }
+
+  // Create the loading promise with all the fetch and update logic
+  const loadPromise = (async (): Promise<Session | null> => {
+    // Fetch messages from main process
+    const loadedSession = await window.electronAPI.getSessionMessages(sessionId)
+    if (!loadedSession) {
+      return get(sessionAtomFamily(sessionId))
     }
 
-    // Create the loading promise with all the fetch and update logic
-    const loadPromise = (async (): Promise<Session | null> => {
-      // Fetch messages from main process
-      const loadedSession = await window.electronAPI.getSessionMessages(sessionId)
-      if (!loadedSession) {
-        return get(sessionAtomFamily(sessionId))
-      }
+    // Merge messages and disk-only fields into existing session, preserving in-memory UI state.
+    // The renderer's atom is authoritative for UI fields (hasUnread, isFlagged, etc.)
+    // because optimistic updates may have changed them since the disk write.
+    // tokenUsage and sessionFolderPath are only returned by getSession() (not getSessions()),
+    // so they must be explicitly merged here to be available after app restart.
+    const existingSession = get(sessionAtomFamily(sessionId))
+    const preservedStaleMessages = !!existingSession
+      && existingSession.messages.length > 0
+      && (!loadedSession.messages || loadedSession.messages.length === 0)
 
-      // Merge messages and disk-only fields into existing session, preserving in-memory UI state.
-      // The renderer's atom is authoritative for UI fields (hasUnread, isFlagged, etc.)
-      // because optimistic updates may have changed them since the disk write.
-      // tokenUsage and sessionFolderPath are only returned by getSession() (not getSessions()),
-      // so they must be explicitly merged here to be available after app restart.
-      const existingSession = get(sessionAtomFamily(sessionId))
-      const mergedSession = existingSession
-        ? {
-            ...existingSession,
-            messages: loadedSession.messages,
-            tokenUsage: loadedSession.tokenUsage ?? existingSession.tokenUsage,
-            sessionFolderPath: loadedSession.sessionFolderPath ?? existingSession.sessionFolderPath,
-          }
-        : loadedSession
-      set(sessionAtomFamily(sessionId), mergedSession)
-
-      // Update only lastFinalMessageId in metadata (now computable from loaded messages).
-      // Don't replace the full meta entry — other fields are maintained through
-      // optimistic updates and IPC events, and may be ahead of disk state.
-      const lastFinalMessageId = findLastFinalMessageId(loadedSession.messages)
-      if (lastFinalMessageId) {
-        const metaMap = get(sessionMetaMapAtom)
-        const existingMeta = metaMap.get(sessionId)
-        if (existingMeta && existingMeta.lastFinalMessageId !== lastFinalMessageId) {
-          const newMetaMap = new Map(metaMap)
-          newMetaMap.set(sessionId, { ...existingMeta, lastFinalMessageId })
-          set(sessionMetaMapAtom, newMetaMap)
+    const mergedSession = existingSession
+      ? {
+          ...existingSession,
+          // CRITICAL: Don't clobber messages if session is actively streaming
+          // AND already has messages in the atom. Streaming events update the atom
+          // directly and may contain messages the IPC response doesn't know about
+          // (race window between IPC request and response).
+          // The `messages.length > 0` guard ensures Cmd+R reload works: after reload,
+          // the atom starts with messages=[] from getSessions(), so IPC response
+          // (which has full history from main process memory) must be used.
+          // Also guard against sleep/wake edge case: the server may return
+          // empty messages if the session subprocess hasn't finished lazy-loading.
+          messages: preservedStaleMessages
+            ? existingSession.messages
+            : existingSession.isProcessing && existingSession.messages.length > 0
+              ? existingSession.messages
+              : loadedSession.messages,
+          tokenUsage: loadedSession.tokenUsage ?? existingSession.tokenUsage,
+          sessionFolderPath: loadedSession.sessionFolderPath ?? existingSession.sessionFolderPath,
         }
-      }
+      : loadedSession
+    set(sessionAtomFamily(sessionId), mergedSession)
 
-      // Mark as loaded
+    // Update only lastFinalMessageId in metadata (now computable from loaded messages).
+    // Don't replace the full meta entry — other fields are maintained through
+    // optimistic updates and IPC events, and may be ahead of disk state.
+    const lastFinalMessageId = findLastFinalMessageId(loadedSession.messages)
+    if (lastFinalMessageId) {
+      const metaMap = get(sessionMetaMapAtom)
+      const existingMeta = metaMap.get(sessionId)
+      if (existingMeta && existingMeta.lastFinalMessageId !== lastFinalMessageId) {
+        const newMetaMap = new Map(metaMap)
+        newMetaMap.set(sessionId, { ...existingMeta, lastFinalMessageId })
+        set(sessionMetaMapAtom, newMetaMap)
+      }
+    }
+
+    // Mark as loaded only when we received a fresh payload.
+    // If we had to preserve stale in-memory messages because the backend returned
+    // an empty array during lazy-load recovery, keep the session reloadable.
+    if (!preservedStaleMessages) {
       const newLoadedSessions = new Set(get(loadedSessionsAtom))
       newLoadedSessions.add(sessionId)
       set(loadedSessionsAtom, newLoadedSessions)
-
-      return mergedSession
-    })()
-
-    // Cache the promise before awaiting
-    sessionLoadingPromises.set(sessionId, loadPromise)
-
-    try {
-      return await loadPromise
-    } finally {
-      // Always clean up the cache, whether success or failure
-      sessionLoadingPromises.delete(sessionId)
     }
+
+    return mergedSession
+  })()
+
+  // Cache the promise before awaiting
+  sessionLoadingPromises.set(sessionId, loadPromise)
+
+  try {
+    return await loadPromise
+  } finally {
+    // Always clean up the cache, whether success or failure
+    sessionLoadingPromises.delete(sessionId)
+  }
+}
+
+export const ensureSessionMessagesLoadedAtom = atom(
+  null,
+  async (get, set, sessionId: string): Promise<Session | null> => {
+    return loadSessionMessages(get, set, sessionId)
+  }
+)
+
+/**
+ * Force-refresh session messages even if the session is currently marked as loaded.
+ * Used by reconnect recovery when a session atom is stuck in an empty-but-loaded state.
+ */
+export const forceSessionMessagesReloadAtom = atom(
+  null,
+  async (get, set, sessionId: string): Promise<Session | null> => {
+    return loadSessionMessages(get, set, sessionId, { force: true })
   }
 )
 
@@ -553,3 +701,14 @@ export const backgroundTasksAtomFamily = atomFamily(
   (a, b) => a === b
 )
 
+/**
+ * Window's current workspace ID — shared between Root (ThemeProvider) and App.
+ * Written by App on workspace switch, read by Root to keep the theme in sync.
+ */
+export const windowWorkspaceIdAtom = atom<string | null>(null)
+
+/**
+ * State for "Send to Workspace" dialog.
+ * Set session IDs to open; clear to close.
+ */
+export const sendToWorkspaceAtom = atom<string[]>([])

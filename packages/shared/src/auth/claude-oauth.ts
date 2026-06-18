@@ -10,6 +10,8 @@
 import { randomBytes, createHash } from 'node:crypto'
 import { CLAUDE_OAUTH_CONFIG } from './claude-oauth-config'
 import { openUrl } from '../utils/open-url.ts'
+import { APP_VERSION } from '../version/index.ts'
+import { debug } from '../utils/debug.ts'
 
 // OAuth configuration from shared config
 const CLAUDE_CLIENT_ID = CLAUDE_OAUTH_CONFIG.CLIENT_ID
@@ -19,11 +21,59 @@ const REDIRECT_URI = CLAUDE_OAUTH_CONFIG.REDIRECT_URI
 const OAUTH_SCOPES = CLAUDE_OAUTH_CONFIG.SCOPES
 const STATE_EXPIRY_MS = 10 * 60 * 1000 // 10 minutes
 
-export interface ClaudeTokens {
+/**
+ * Resolved Anthropic identity returned alongside the OAuth tokens (issue #838).
+ * Populated from the token-exchange response when present; entirely optional and
+ * fail-soft — a missing block simply means no identity is surfaced in the UI.
+ */
+export interface ClaudeOAuthIdentity {
+  account?: {
+    uuid?: string
+    emailAddress?: string
+  }
+  organization?: {
+    uuid?: string
+    name?: string
+  }
+}
+
+export interface ClaudeTokens extends ClaudeOAuthIdentity {
   accessToken: string
   refreshToken?: string
   expiresAt?: number
   scopes?: string[]
+}
+
+// One-time guard so the runtime confirmation log (keys only, never values) fires
+// at most once per process — just enough to confirm the response shape on the
+// real `platform.claude.com` endpoint without spamming logs on every re-auth.
+let loggedTokenResponseShape = false
+
+/**
+ * Normalize the raw token-response identity blocks into {@link ClaudeOAuthIdentity}.
+ * Reads `email_address` with an `email` fallback (the exact field name is not
+ * fully confirmed on platform.claude.com — see the one-time keys-only log in
+ * {@link exchangeClaudeCode}). Returns an empty object when neither block is
+ * present, so it spreads cleanly into the token result.
+ */
+export function parseClaudeOAuthIdentity(data: {
+  account?: { uuid?: string; email_address?: string; email?: string }
+  organization?: { uuid?: string; name?: string }
+}): ClaudeOAuthIdentity {
+  const identity: ClaudeOAuthIdentity = {}
+  if (data.account) {
+    identity.account = {
+      uuid: data.account.uuid,
+      emailAddress: data.account.email_address ?? data.account.email,
+    }
+  }
+  if (data.organization) {
+    identity.organization = {
+      uuid: data.organization.uuid,
+      name: data.organization.name,
+    }
+  }
+  return identity
 }
 
 export interface ClaudeOAuthState {
@@ -55,21 +105,16 @@ function generatePKCE(): { codeVerifier: string; codeChallenge: string } {
 }
 
 /**
- * Start the OAuth flow by generating the login URL and opening the browser
+ * Prepare the OAuth flow by generating PKCE, state, and the auth URL.
+ * Does NOT open the browser — the caller is responsible for that.
  *
- * Returns the authorization URL that was opened. The user will authenticate
- * and then need to copy the authorization code from the callback page.
+ * Returns the authorization URL. The caller should open it on the user's
+ * machine (client-side), not on the server.
  */
-export async function startClaudeOAuth(
-  onStatus?: (message: string) => void
-): Promise<string> {
-  onStatus?.('Generating authentication URL...')
-
-  // Generate secure random values
+export function prepareClaudeOAuth(): string {
   const state = generateState()
   const { codeVerifier, codeChallenge } = generatePKCE()
 
-  // Store state for later verification
   const now = Date.now()
   currentOAuthState = {
     state,
@@ -78,7 +123,6 @@ export async function startClaudeOAuth(
     expiresAt: now + STATE_EXPIRY_MS,
   }
 
-  // Build OAuth URL
   const params = new URLSearchParams({
     code: 'true',
     client_id: CLAUDE_CLIENT_ID,
@@ -90,9 +134,23 @@ export async function startClaudeOAuth(
     state,
   })
 
-  const authUrl = `${CLAUDE_AUTH_URL}?${params.toString()}`
+  return `${CLAUDE_AUTH_URL}?${params.toString()}`
+}
 
-  // Open browser
+/**
+ * Start the OAuth flow by generating the login URL and opening the browser.
+ *
+ * @deprecated Use prepareClaudeOAuth() + open browser on the client instead.
+ * This function opens the browser on the server host, which fails in remote mode.
+ */
+export async function startClaudeOAuth(
+  onStatus?: (message: string) => void
+): Promise<string> {
+  onStatus?.('Generating authentication URL...')
+
+  const authUrl = prepareClaudeOAuth()
+
+  // Open browser (server-side — broken in remote mode)
   onStatus?.('Opening browser for authentication...')
   await openUrl(authUrl)
 
@@ -162,12 +220,8 @@ export async function exchangeClaudeCode(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        Accept: 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        Referer: 'https://claude.ai/',
-        Origin: 'https://claude.ai',
+        'User-Agent': `CraftAgents/${APP_VERSION}`,
+        Accept: 'application/json',
       },
       body: JSON.stringify(params),
     })
@@ -189,6 +243,20 @@ export async function exchangeClaudeCode(
       refresh_token?: string
       expires_in?: number
       scope?: string
+      // Resolved identity (issue #838). Optional — read defensively.
+      account?: { uuid?: string; email_address?: string; email?: string }
+      organization?: { uuid?: string; name?: string }
+    }
+
+    // Runtime confirmation (issue #838): log the response KEYS ONLY — never
+    // values/secrets — once per process, to confirm `account`/`organization`
+    // are present on platform.claude.com and the exact nested field names
+    // (`email_address` vs `email`). Object.keys never emits secret values.
+    if (!loggedTokenResponseShape) {
+      loggedTokenResponseShape = true
+      debug('[claude-oauth] token response keys: ' + Object.keys(data).join(','))
+      if (data.account) debug('[claude-oauth] account keys: ' + Object.keys(data.account).join(','))
+      if (data.organization) debug('[claude-oauth] organization keys: ' + Object.keys(data.organization).join(','))
     }
 
     // Clear state after successful exchange
@@ -201,6 +269,7 @@ export async function exchangeClaudeCode(
       refreshToken: data.refresh_token,
       expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
       scopes: data.scope ? data.scope.split(' ') : ['user:inference', 'user:profile'],
+      ...parseClaudeOAuthIdentity(data),
     }
   } catch (error) {
     if (error instanceof Error) {

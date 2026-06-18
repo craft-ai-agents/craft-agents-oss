@@ -11,8 +11,8 @@ import { cn } from '@/lib/utils'
 import { settingsUI } from './SettingsUIConstants'
 
 export interface SettingsToggleProps {
-  /** Toggle label */
-  label: string
+  /** Toggle label (string or JSX for custom rendering) */
+  label: React.ReactNode
   /** Optional description below label */
   description?: string
   /** Current checked state */
@@ -53,6 +53,7 @@ export function SettingsToggle({
 
   return (
     <div
+      data-layout="settings-row"
       className={cn(
         'flex items-center justify-between',
         inCard ? 'px-4 py-3.5' : 'py-3',
@@ -71,6 +72,7 @@ export function SettingsToggle({
         checked={checked}
         onCheckedChange={onCheckedChange}
         disabled={disabled}
+        data-layout="settings-control"
         className="ml-4 shrink-0"
       />
     </div>

@@ -13,6 +13,8 @@ import { EntityIcon } from '@/components/ui/entity-icon'
 import { useEntityIcon } from '@/lib/icon-cache'
 import type { IconSize } from '@craft-agent/shared/icons'
 
+const LOCAL_STATUS_ICON_FILENAME_PATTERN = /^[^/\\]+\.(svg|png|jpe?g|webp)$/i
+
 interface StatusIconProps {
   /** Status identifier (used to discover icon file) */
   statusId: string
@@ -30,6 +32,24 @@ interface StatusIconProps {
   bare?: boolean
 }
 
+export function resolveStatusIconSource(
+  statusId: string,
+  icon?: string
+): { iconPath?: string; iconValue?: string; iconFileName?: string } {
+  const trimmedIcon = typeof icon === 'string' ? icon.trim() : undefined
+
+  if (trimmedIcon && LOCAL_STATUS_ICON_FILENAME_PATTERN.test(trimmedIcon)) {
+    return {
+      iconPath: `statuses/icons/${trimmedIcon}`,
+    }
+  }
+
+  return {
+    iconValue: trimmedIcon,
+    iconFileName: statusId,
+  }
+}
+
 export function StatusIcon({
   statusId,
   icon,
@@ -39,14 +59,16 @@ export function StatusIcon({
   chromeless,
   bare,
 }: StatusIconProps) {
+  const { iconPath, iconValue, iconFileName } = resolveStatusIconSource(statusId, icon)
   const resolved = useEntityIcon({
     workspaceId,
     entityType: 'status',
     identifier: statusId,
+    iconPath,
     iconDir: 'statuses/icons',
-    iconValue: icon,
+    iconValue,
     // Status icons use {statusId}.ext naming (not icon.ext)
-    iconFileName: statusId,
+    iconFileName,
   })
 
   return (

@@ -3,25 +3,23 @@
  *
  * These error types map HTTP status codes and error patterns to
  * actionable error information that can be displayed to users.
+ *
+ * The `ErrorCode` union is owned by `@craft-agent/core` so the wire
+ * format (which crosses package boundaries) stays in one place; this
+ * file owns the user-facing text and recovery actions for each code.
  */
 
-export type ErrorCode =
-  | 'invalid_api_key'
-  | 'invalid_credentials'    // Generic credential issue (from diagnostics)
-  | 'expired_oauth_token'
-  | 'token_expired'          // Workspace token expired (from diagnostics)
-  | 'rate_limited'
-  | 'service_error'
-  | 'service_unavailable'    // Service unavailable (from diagnostics)
-  | 'network_error'
-  | 'mcp_auth_required'
-  | 'mcp_unreachable'        // MCP server unreachable (from diagnostics)
-  | 'billing_error'          // HTTP 402 Payment Required
-  | 'model_no_tool_support'  // Model doesn't support tool/function calling
-  | 'invalid_model'          // Model ID not found
-  | 'data_policy_error'      // OpenRouter data policy restriction
-  | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
-  | 'unknown_error';
+import type { ErrorCode } from '@craft-agent/core/types';
+import { getProviderMetadata } from '../config/provider-metadata.ts';
+
+export type { ErrorCode };
+
+/** Provider info attached to errors for user-facing context */
+export interface ProviderInfo {
+  name: string;
+  statusPageUrl?: string;
+  dashboardUrl?: string;
+}
 
 export interface RecoveryAction {
   /** Keyboard shortcut (single letter) */
@@ -31,7 +29,11 @@ export interface RecoveryAction {
   /** Slash command to execute (e.g., '/settings') */
   command?: string;
   /** Custom action type for special handling */
-  action?: 'retry' | 'settings' | 'reauth';
+  action?: 'retry' | 'settings' | 'reauth' | 'open_url' | 'reconnect_source';
+  /** URL to open (for 'open_url' action) */
+  url?: string;
+  /** Source slug (for 'reconnect_source' action) */
+  sourceSlug?: string;
 }
 
 export interface AgentError {
@@ -51,6 +53,8 @@ export interface AgentError {
   originalError?: string;
   /** Diagnostic check results for debugging */
   details?: string[];
+  /** Provider info for user-facing context */
+  providerInfo?: ProviderInfo;
 }
 
 /**
@@ -59,7 +63,7 @@ export interface AgentError {
 const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalError' | 'details'>> = {
   invalid_api_key: {
     title: 'Invalid API Key',
-    message: 'Your Anthropic API key was rejected. It may be invalid or expired.',
+    message: 'Your API key was rejected. It may be invalid or expired.',
     actions: [
       { key: 's', label: 'Update API key', command: '/settings', action: 'settings' },
     ],
@@ -73,9 +77,17 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     ],
     canRetry: false,
   },
+  // response_too_large is set by the UI tool-result handler; parseError
+  // never produces it, but the union requires a definition entry.
+  response_too_large: {
+    title: 'Response Too Large',
+    message: 'The tool response was too large to display inline. The full output has been saved to disk.',
+    actions: [],
+    canRetry: false,
+  },
   expired_oauth_token: {
     title: 'Session Expired',
-    message: 'Your Claude Max session has expired.',
+    message: 'Your session has expired. Please try signing in again.',
     actions: [
       { key: 'r', label: 'Re-authenticate', action: 'reauth' },
       { key: 's', label: 'Switch API setup', command: '/settings', action: 'settings' },
@@ -92,7 +104,7 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
   },
   rate_limited: {
     title: 'Rate Limited',
-    message: 'Too many requests. Please wait a moment.',
+    message: 'Rate limit reached. Will auto-retry shortly.',
     actions: [
       { key: 'r', label: 'Retry', action: 'retry' },
     ],
@@ -101,7 +113,7 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
   },
   service_error: {
     title: 'Service Error',
-    message: 'The AI service is temporarily unavailable.',
+    message: 'The AI service is temporarily unavailable. This usually resolves on its own.',
     actions: [
       { key: 'r', label: 'Retry', action: 'retry' },
     ],
@@ -119,12 +131,22 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
   },
   network_error: {
     title: 'Connection Error',
-    message: 'Could not connect to the server. Check your internet connection.',
+    message: 'Could not reach the AI service. Check your internet connection or VPN settings.',
     actions: [
       { key: 'r', label: 'Retry', action: 'retry' },
     ],
     canRetry: true,
     retryDelayMs: 1000,
+  },
+  proxy_error: {
+    title: 'Network Proxy Error',
+    message: 'A proxy, firewall, or captive portal intercepted the API request and returned an HTML page instead of the expected response.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+      { key: 's', label: 'Check proxy settings', command: '/settings', action: 'settings' },
+    ],
+    canRetry: true,
+    retryDelayMs: 2000,
   },
   mcp_auth_required: {
     title: 'Workspace Authentication Required',
@@ -145,7 +167,7 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
   },
   billing_error: {
     title: 'Payment Required',
-    message: 'Your account has a billing issue. Check your Anthropic account status.',
+    message: 'Your account has a billing issue. Check your provider account status.',
     actions: [
       { key: 's', label: 'Update credentials', command: '/settings', action: 'settings' },
     ],
@@ -183,9 +205,56 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     ],
     canRetry: true,
   },
+  image_too_large: {
+    title: 'Image Too Large',
+    message: 'The image exceeds API limits (max 8000px or 5MB). Please resize or use a smaller image.',
+    actions: [],
+    canRetry: false,
+  },
+  provider_error: {
+    title: 'AI Provider Error',
+    message: 'The AI provider is experiencing issues. This usually resolves on its own — retry in a moment.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
+    retryDelayMs: 5000,
+  },
+  queued_message_replay_failed: {
+    title: 'Queued message could not be sent',
+    message: 'A message you sent while the agent was running could not be re-sent automatically. Tap retry to send it now.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
+  },
+  sdk_binary_missing: {
+    title: 'Claude Code binary missing from app bundle',
+    message:
+      'The Claude Agent SDK binary expected on disk is not present. ' +
+      'This usually means the app bundle is incomplete (interrupted download, partial update, ' +
+      'or a security tool removed it). Reinstalling Craft Agents typically fixes this.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
+    retryDelayMs: 1000,
+  },
+  sdk_cwd_missing: {
+    title: 'Branch source unavailable on this machine',
+    message:
+      "The folder this branched session was forked from doesn't exist on this machine. " +
+      'This typically happens after importing a session from another workspace. ' +
+      'Retrying will start a fresh fork from a summary of the parent conversation.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
+    retryDelayMs: 1000,
+  },
   unknown_error: {
     title: 'Error',
-    message: 'An unexpected error occurred.',
+    message: 'Something went wrong. If this persists, check the provider status page or retry.',
     actions: [
       { key: 'r', label: 'Retry', action: 'retry' },
     ],
@@ -219,10 +288,92 @@ function extractErrorMessages(error: unknown): string {
   return messages.join(' ');
 }
 
+const HTML_DOC_HINTS = ['<html', '<!doctype html', '<head', '<body', '<title', '<h1'] as const;
+const HTML_PROXY_HINTS = [
+  'cloudflare',
+  'cf-ray',
+  'captcha',
+  'security check',
+  'access denied',
+  'attention required',
+  'web application firewall',
+  'waf',
+  'proxy authentication required',
+  'sucuri',
+  'imperva',
+  'akamai',
+] as const;
+const HTML_STATUS_PATTERN = /\b(400|401|403|407|408|409|429|500|502|503|504)\b/;
+
+function looksLikeHtmlPayload(textLower: string): boolean {
+  if (textLower.includes('<!doctype html') || textLower.includes('<html')) {
+    return true;
+  }
+
+  let hintCount = 0;
+  for (const hint of HTML_DOC_HINTS) {
+    if (textLower.includes(hint)) hintCount++;
+  }
+
+  return hintCount >= 3;
+}
+
+function hasHtmlErrorPageSignals(textLower: string): boolean {
+  const hasKnownHttpTitle =
+    textLower.includes('bad request') ||
+    textLower.includes('unauthorized') ||
+    textLower.includes('forbidden') ||
+    textLower.includes('service unavailable') ||
+    textLower.includes('bad gateway') ||
+    textLower.includes('gateway timeout') ||
+    textLower.includes('proxy authentication required');
+
+  return HTML_STATUS_PATTERN.test(textLower) && hasKnownHttpTitle;
+}
+
+function isLikelyProxyInterception(textLower: string): boolean {
+  if (textLower.includes('unexpected html error page') || textLower.includes('network proxy')) {
+    return true;
+  }
+
+  if (!looksLikeHtmlPayload(textLower)) {
+    return false;
+  }
+
+  if (HTML_PROXY_HINTS.some((hint) => textLower.includes(hint))) {
+    return true;
+  }
+
+  return hasHtmlErrorPageSignals(textLower);
+}
+
+function buildProxyErrorMessage(errorMessage: string, fullErrorText: string): string {
+  const lowerErrorMessage = errorMessage.toLowerCase();
+  if (!looksLikeHtmlPayload(lowerErrorMessage)) {
+    // Interceptor-produced proxy messages are already user-safe and actionable.
+    return errorMessage;
+  }
+
+  const details: string[] = [];
+  const statusMatch = fullErrorText.match(HTML_STATUS_PATTERN);
+  if (statusMatch?.[1]) {
+    details.push(`HTTP ${statusMatch[1]}`);
+  }
+  if (fullErrorText.toLowerCase().includes('cloudflare')) {
+    details.push('Cloudflare');
+  }
+
+  const suffix = details.length > 0 ? ` (${details.join(', ')})` : '';
+  return `Received an unexpected HTML error page${suffix} instead of a JSON API response. This is usually caused by a proxy, firewall, or captive portal intercepting the request. Check your proxy settings in Settings > Network.`;
+}
+
 /**
  * Parse an error and return a typed AgentError with user-friendly info
  */
-export function parseError(error: unknown): AgentError {
+export function parseError(
+  error: unknown,
+  providerContext?: { providerType?: string; piAuthProvider?: string },
+): AgentError {
   // Extract all error messages including nested causes and subprocess output
   const fullErrorText = extractErrorMessages(error);
   const errorMessage = error instanceof Error ? error.message : String(error);
@@ -243,18 +394,26 @@ export function parseError(error: unknown): AgentError {
     lowerMessage.includes('function calling not available') ||
     lowerMessage.includes('tools are not supported') ||
     lowerMessage.includes('doesn\'t support tool') ||
-    lowerMessage.includes('tool use is not supported') ||
-    (lowerMessage.includes('invalid_request_error') && lowerMessage.includes('tool')) ||
-    // Generic pattern: "tool" + "not" + "support" anywhere in message
-    (lowerMessage.includes('tool') && lowerMessage.includes('not') && lowerMessage.includes('support'))
+    lowerMessage.includes('tool use is not supported')
+    // NOTE: do NOT match on `invalid_request_error + tool` or `tool + not + support`
+    // alone. Anthropic 400 errors frequently mention `tools` (e.g. the cache_control
+    // ordering error "blocks are processed in the following order: `tools`, `system`,
+    // `messages`") which would otherwise be misclassified as "Model Does Not Support
+    // Tools". The specific phrases above are tight enough to catch real tool-support
+    // refusals without these broad fallbacks.
   ) {
     code = 'model_no_tool_support';
-  } else if (lowerMessage.includes('is not a valid model') || lowerMessage.includes('model not found') || lowerMessage.includes('invalid model')) {
+  } else if (lowerMessage.includes('is not a valid model') || lowerMessage.includes('model not found') || lowerMessage.includes('invalid model') || lowerMessage.includes('model identifier is invalid')) {
     code = 'invalid_model';
+  // HTML-intercepted responses (proxy/firewall/captive portal).
+  // Must be checked BEFORE status codes: a 502 Cloudflare page or 401 proxy login
+  // page would otherwise be misclassified as service_error or invalid_api_key.
+  } else if (isLikelyProxyInterception(lowerMessage)) {
+    code = 'proxy_error';
   // Check for specific HTTP status codes or patterns
   } else if (lowerMessage.includes('402') || lowerMessage.includes('payment required')) {
     code = 'billing_error';
-  } else if (lowerMessage.includes('401') || lowerMessage.includes('unauthorized') || lowerMessage.includes('invalid api key') || lowerMessage.includes('invalid x-api-key') || lowerMessage.includes('authentication failed')) {
+  } else if (lowerMessage.includes('401') || lowerMessage.includes('unauthorized') || lowerMessage.includes('invalid api key') || lowerMessage.includes('invalid x-api-key') || lowerMessage.includes('authentication failed') || lowerMessage.includes('token is expired') || lowerMessage.includes('token expired')) {
     // Distinguish between API key and OAuth errors
     if (lowerMessage.includes('oauth') || lowerMessage.includes('token') || lowerMessage.includes('session')) {
       code = 'expired_oauth_token';
@@ -269,6 +428,12 @@ export function parseError(error: unknown): AgentError {
     code = 'network_error';
   } else if (lowerMessage.includes('mcp') && (lowerMessage.includes('auth') || lowerMessage.includes('401'))) {
     code = 'mcp_auth_required';
+  } else if (
+    lowerMessage.includes('image') &&
+    (lowerMessage.includes('dimension') || lowerMessage.includes('8000') || lowerMessage.includes('5mb')) &&
+    (lowerMessage.includes('exceed') || lowerMessage.includes('too large'))
+  ) {
+    code = 'image_too_large';
   } else if (lowerMessage.includes('exited with code') || lowerMessage.includes('process exited')) {
     // SDK subprocess crashed - likely auth/setup issue
     // Check if the error contains more specific info
@@ -277,9 +442,36 @@ export function parseError(error: unknown): AgentError {
     } else {
       code = 'service_error';
     }
+  } else if (lowerMessage.includes('invalid_request_error') || lowerMessage.includes('400 ')) {
+    // Generic Anthropic-style API validation failures (cache_control ordering, malformed
+    // payloads, etc.). Lands here only after all the more specific branches above have
+    // declined; better than falling through to "unknown_error" which hides the message.
+    code = 'invalid_request';
   }
 
-  const definition = ERROR_DEFINITIONS[code];
+  // ErrorCode is a finite union and ERROR_DEFINITIONS covers every member,
+  // so the lookup is exhaustive — non-null assert to satisfy the
+  // noUncheckedIndexedAccess compiler option after the cross-module import.
+  const definition = ERROR_DEFINITIONS[code]!;
+
+  // Resolve provider info from context
+  const providerInfo = providerContext
+    ? getProviderMetadata(
+        providerContext.providerType ?? 'anthropic',
+        providerContext.piAuthProvider,
+      ) ?? undefined
+    : undefined;
+
+  // For proxy_error, prefer safe user-facing text over raw HTML payloads.
+  if (code === 'proxy_error') {
+    return {
+      code,
+      ...definition,
+      message: buildProxyErrorMessage(errorMessage, fullErrorText),
+      originalError: errorMessage,
+      providerInfo,
+    };
+  }
 
   // For model_no_tool_support errors, try to extract the model name for a more helpful message
   if (code === 'model_no_tool_support') {
@@ -293,6 +485,7 @@ export function parseError(error: unknown): AgentError {
         ...definition,
         message: `Model "${modelMatch[1]}" does not support tool/function calling, which is required for Craft Agent. Please choose a different model with tool support in Settings.`,
         originalError: errorMessage,
+        providerInfo,
       };
     }
   }
@@ -301,6 +494,7 @@ export function parseError(error: unknown): AgentError {
     code,
     ...definition,
     originalError: errorMessage,
+    providerInfo,
   };
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/shared",
-  "version": "0.3.1",
+  "version": "0.10.3",
   "license": "Apache-2.0",
   "description": "Shared business logic for Craft Agents - agent, auth, config, credentials, MCP integration",
   "type": "module",
@@ -8,7 +8,8 @@
   "types": "src/index.ts",
   "scripts": {
     "test": "bun test",
-    "test:watch": "bun test --watch"
+    "test:watch": "bun test --watch",
+    "sync:craft-agent-bash-patterns": "bun run src/config/sync-craft-agent-bash-patterns.ts"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -24,12 +25,12 @@
     "./docs/doc-links": "./src/docs/doc-links.ts",
     "./config/types": "./src/config/types.ts",
     "./credentials": "./src/credentials/index.ts",
-    "./headless": "./src/headless/index.ts",
     "./mcp": "./src/mcp/index.ts",
     "./prompts": "./src/prompts/index.ts",
     "./sessions": "./src/sessions/index.ts",
     "./sources": "./src/sources/index.ts",
     "./sources/types": "./src/sources/types.ts",
+    "./skills": "./src/skills/index.ts",
     "./workspaces": "./src/workspaces/index.ts",
     "./utils": "./src/utils/index.ts",
     "./utils/toolNames": "./src/utils/toolNames.ts",
@@ -39,31 +40,51 @@
     "./icons": "./src/icons/index.ts",
     "./colors": "./src/colors/index.ts",
     "./utils/icon-constants": "./src/utils/icon-constants.ts",
+    "./utils/url-safety": "./src/utils/url-safety.ts",
+    "./utils/workspace": "./src/utils/workspace.ts",
+    "./utils/workspace-slug": "./src/utils/workspace-slug.ts",
     "./labels": "./src/labels/index.ts",
     "./labels/auto": "./src/labels/auto/index.ts",
     "./labels/storage": "./src/labels/storage.ts",
+    "./labels/crud": "./src/labels/crud.ts",
     "./views": "./src/views/index.ts",
     "./views/storage": "./src/views/storage.ts",
     "./validation": "./src/validation/index.ts",
     "./version": "./src/version/index.ts",
     "./branding": "./src/branding.ts",
-    "./network-interceptor": "./src/network-interceptor.ts",
-    "./search": "./src/search/index.ts"
+    "./feature-flags": "./src/feature-flags.ts",
+    "./interceptor": "./src/interceptor-common.ts",
+    "./search": "./src/search/index.ts",
+    "./tools": "./src/tools/index.ts",
+    "./mentions": "./src/mentions/index.ts",
+    "./skills/types": "./src/skills/types.ts",
+    "./automations": "./src/automations/index.ts",
+    "./automations/resolve-config-path": "./src/automations/resolve-config-path.ts",
+    "./protocol": "./src/protocol/index.ts",
+    "./i18n": "./src/i18n/index.ts",
+    "./resources": "./src/resources/index.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
+    "@craft-agent/session-tools-core": "workspace:*",
     "@isaacs/ttlcache": "^2.1.4",
     "@leeoniya/ufuzzy": "^1.0.19",
     "bash-parser": "^0.5.0",
+    "croner": "^10.0.1",
     "filtrex": "^3.1.0",
+    "glob": "^13.0.0",
+    "date-fns": "^4.1.0",
+    "i18next": "^26.0.3",
     "incr-regex-package": "^1.0.4",
-    "shell-quote": "^1.8.3"
+    "shell-quote": "^1.8.3",
+    "@mariozechner/pi-agent-core": "0.73.1",
+    "@mariozechner/pi-ai": "0.73.1",
+    "@mariozechner/pi-coding-agent": "0.73.1"
   },
   "peerDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.19",
-    "@anthropic-ai/sdk": ">=0.70.0",
-    "@modelcontextprotocol/sdk": ">=1.0.0",
-    "zod": ">=3.0.0"
+    "@anthropic-ai/claude-agent-sdk": "0.3.170",
+    "@modelcontextprotocol/sdk": ">=1.29.0",
+    "zod": ">=4.0.0"
   },
   "devDependencies": {
     "@types/shell-quote": "^1.7.5",

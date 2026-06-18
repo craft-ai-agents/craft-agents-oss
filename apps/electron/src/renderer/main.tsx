@@ -1,14 +1,39 @@
-import React, { Suspense } from 'react'
+import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { init as sentryInit } from '@sentry/electron/renderer'
 import * as Sentry from '@sentry/react'
 import { captureConsoleIntegration } from '@sentry/react'
-import { Provider as JotaiProvider } from 'jotai'
+import { Provider as JotaiProvider, useAtomValue } from 'jotai'
 import App from './App'
 import { ThemeProvider } from './context/ThemeContext'
+import { windowWorkspaceIdAtom } from './atoms/sessions'
 import { Toaster } from '@/components/ui/sonner'
+import { setupI18n, i18n } from '@craft-agent/shared/i18n'
+import { initReactI18next } from 'react-i18next'
+import LanguageDetector from 'i18next-browser-languagedetector'
 import './index.css'
-import '@/i18n' // Initialize i18next
+
+// Initialize i18n before any React rendering
+setupI18n([LanguageDetector, initReactI18next])
+
+// One-shot bootstrap: ensure the main process's i18n + preferences.json learn
+// the language we just restored from localStorage. The main-process IPC handler
+// validates the code and persists idempotently, so this is safe to run on every
+// renderer startup. Without this push, a freshly-installed (or freshly-upgraded)
+// app would still generate titles in English until the user manually re-picks
+// the language in Appearance.
+const resolvedLanguage = i18n.resolvedLanguage
+// Diagnostic: console-log the bootstrap push so it shows up in DevTools and
+// (via captureConsoleIntegration) in Sentry, alongside the main-process
+// [i18n] startup hydration log. If these two diverge, the renderer's
+// localStorage isn't tracking the user's Appearance selection.
+console.info('[i18n] renderer bootstrap push', {
+  resolvedLanguage: resolvedLanguage ?? null,
+  localStorageI18nextLng: typeof window !== 'undefined' ? window.localStorage?.getItem('i18nextLng') : null,
+})
+if (resolvedLanguage) {
+  void window.electronAPI?.changeLanguage?.(resolvedLanguage)
+}
 
 // Known-harmless console messages that should NOT be sent to Sentry.
 // These are dev-mode noise or expected warnings that aren't actionable.
@@ -24,13 +49,13 @@ const IGNORED_CONSOLE_PATTERNS = [
 // Combines Electron IPC transport (sentryInit) with React error boundary support (sentryReactInit).
 // DSN and config are inherited from the main process init.
 //
-// captureConsoleIntegration promotes console.warn/error calls into Sentry events,
+// captureConsoleIntegration promotes console.error calls into Sentry events,
 // giving Sentry the same rich context visible in DevTools without needing sourcemaps.
 //
 // NOTE: Source map upload is intentionally disabled — see main/index.ts for details.
 sentryInit(
   {
-    integrations: [captureConsoleIntegration({ levels: ['warn', 'error'] })],
+    integrations: [captureConsoleIntegration({ levels: ['error'] })],
 
     beforeSend(event) {
       // Drop events matching known-harmless console patterns to avoid Sentry quota waste
@@ -86,24 +111,27 @@ function CrashFallback() {
 }
 
 /**
- * Root component - always renders App
+ * Root component - loads workspace ID for theme context and renders App
  * App.tsx handles window mode detection internally (main vs tab-content)
  */
 function Root() {
-  return <App />
+  // Shared atom — written by App on init & workspace switch, read here for ThemeProvider
+  const workspaceId = useAtomValue(windowWorkspaceIdAtom)
+
+  return (
+    <ThemeProvider activeWorkspaceId={workspaceId}>
+      <App />
+      <Toaster />
+    </ThemeProvider>
+  )
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <Sentry.ErrorBoundary fallback={<CrashFallback />}>
-      <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-        <JotaiProvider>
-          <ThemeProvider>
-            <Root />
-            <Toaster />
-          </ThemeProvider>
-        </JotaiProvider>
-      </Suspense>
+      <JotaiProvider>
+        <Root />
+      </JotaiProvider>
     </Sentry.ErrorBoundary>
   </React.StrictMode>
 )

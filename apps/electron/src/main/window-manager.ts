@@ -1,9 +1,12 @@
 import { BrowserWindow, shell, nativeTheme, Menu, app } from 'electron'
 import { windowLog } from './logger'
-import { join } from 'path'
+import { join, resolve, sep } from 'path'
 import { existsSync } from 'fs'
 import { release } from 'os'
-import { IPC_CHANNELS } from '../shared/types'
+import { fileURLToPath } from 'url'
+import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import { classifyExternalUrl, formatBlockedUrlError } from '@craft-agent/shared/utils/url-safety'
+import { RPC_CHANNELS, type WindowCloseRequestSource } from '../shared/types'
 import type { SavedWindow } from './window-state'
 
 // Vite dev server URL for hot reload
@@ -53,6 +56,137 @@ export interface CreateWindowOptions {
 export class WindowManager {
   private windows: Map<number, ManagedWindow> = new Map()  // webContents.id → ManagedWindow
   private focusedModeWindows: Set<number> = new Set()  // webContents.id of windows in focused mode
+  private pendingCloseTimeouts: Map<number, NodeJS.Timeout> = new Map()  // Fallback timeouts for window close
+  private eventSink: ((channel: string, target: import('@craft-agent/shared/protocol').PushTarget, ...args: any[]) => void) | null = null
+  private clientResolver: ((wcId: number) => string | undefined) | null = null
+  private keyboardCloseIntents: Set<number> = new Set()  // webContents.id flagged by Cmd/Ctrl+W before close
+  private keyboardCloseIntentTimeouts: Map<number, NodeJS.Timeout> = new Map()  // Auto-clear stale keyboard-close intents
+  private isAppQuitting = false  // Skip layered close interception during app quit
+
+  /**
+   * Set the event sink and client resolver for pushing events via the RPC server
+   * instead of webContents.send. Called after server creation.
+   */
+  setRpcEventSink(
+    sink: (channel: string, target: import('@craft-agent/shared/protocol').PushTarget, ...args: any[]) => void,
+    resolver: (wcId: number) => string | undefined
+  ): void {
+    this.eventSink = sink
+    this.clientResolver = resolver
+  }
+
+  /** Return current RPC event sink, if transport has been initialized. */
+  getRpcEventSink(): ((channel: string, target: import('@craft-agent/shared/protocol').PushTarget, ...args: any[]) => void) | null {
+    return this.eventSink
+  }
+
+  /** Resolve a window's current clientId from transport handshake state. */
+  getClientIdForWindow(webContentsId: number): string | undefined {
+    return this.clientResolver?.(webContentsId)
+  }
+
+  /** Push an event to a specific window via the RPC event sink. Falls back to webContents.send. */
+  private pushToWindow(window: BrowserWindow, channel: string, ...args: any[]): void {
+    if (this.eventSink && this.clientResolver) {
+      const clientId = this.clientResolver(window.webContents.id)
+      if (clientId) {
+        this.eventSink(channel, { to: 'client', clientId }, ...args)
+        return
+      }
+    }
+    // Fallback: direct webContents.send (used before WS handshake completes)
+    if (!window.isDestroyed() && !window.webContents.isDestroyed() && window.webContents.mainFrame) {
+      window.webContents.send(channel, ...args)
+    }
+  }
+
+  private isRendererAppUrl(url: string): boolean {
+    if (VITE_DEV_SERVER_URL) {
+      try {
+        const parsed = new URL(url)
+        const devServer = new URL(VITE_DEV_SERVER_URL)
+        if (parsed.origin === devServer.origin) return true
+      } catch {
+        // Fall through to file:// handling below.
+      }
+    }
+
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol !== 'file:') return false
+
+      const filePath = resolve(fileURLToPath(parsed))
+      const rendererRoot = resolve(join(__dirname, 'renderer'))
+      return filePath === join(rendererRoot, 'index.html') || filePath.startsWith(rendererRoot + sep)
+    } catch {
+      return false
+    }
+  }
+
+  private openExternalFromRenderer(url: string, context: string, sourceWindow?: BrowserWindow): void {
+    const classification = classifyExternalUrl(url)
+
+    if (classification.kind === 'dangerous') {
+      windowLog.warn(`[url-safety] Blocked ${context}: ${formatBlockedUrlError(classification)} url=${url}`)
+      return
+    }
+
+    if (classification.kind === 'internal-deeplink') {
+      if (!sourceWindow) {
+        windowLog.warn(`[url-safety] Blocked ${context}: internal deep link has no target window url=${url}`)
+        return
+      }
+
+      void import('./deep-link').then(async ({ handleDeepLink }) => {
+        const result = await handleDeepLink(
+          url,
+          this,
+          this.eventSink ?? undefined,
+          this.clientResolver ?? undefined,
+          this.clientResolver?.(sourceWindow.webContents.id),
+        )
+        if (!result.success) {
+          windowLog.warn(`[url-safety] Blocked ${context}: unsupported internal deep link url=${url} error=${result.error ?? 'unknown'}`)
+        }
+      }).catch((error) => {
+        windowLog.warn(`[url-safety] Failed to route internal deep link from ${context}: ${error instanceof Error ? error.message : String(error)}`)
+      })
+      return
+    }
+
+    void shell.openExternal(url).catch((error) => {
+      windowLog.warn(`[url-safety] Failed to open external URL from ${context}: ${error instanceof Error ? error.message : String(error)}`)
+    })
+  }
+
+  /**
+   * Apply the window-title policy across all managed windows:
+   *   1 window  → app name ("Craft Agents") on the lone window
+   *   ≥2 windows → workspace name on each window, app-name fallback when the
+   *                workspace can't be resolved (e.g. onboarding window).
+   *
+   * Called after createWindow() registers a new window and after the closed
+   * handler removes one, so titles always reflect the current window count.
+   * Renderer-driven page-title-updated events are suppressed in createWindow
+   * so these setTitle() calls aren't clobbered by the static <title> tag.
+   */
+  private refreshWindowTitles(): void {
+    const defaultTitle = app.getName()
+    const showWorkspaceName = this.windows.size > 1
+    for (const { window, workspaceId } of this.windows.values()) {
+      if (window.isDestroyed()) continue
+      let title = defaultTitle
+      if (showWorkspaceName && workspaceId) {
+        try {
+          const ws = getWorkspaceByNameOrId(workspaceId)
+          if (ws?.name) title = ws.name
+        } catch (err) {
+          windowLog.warn('refreshWindowTitles: workspace lookup failed', { workspaceId, err })
+        }
+      }
+      window.setTitle(title)
+    }
+  }
 
   /**
    * Create a new window for a workspace
@@ -62,15 +196,16 @@ export class WindowManager {
     const { workspaceId, focused = false, initialDeepLink, restoreUrl } = options
 
     // Load platform-specific app icon
+    // In packaged app, resources are at dist/resources/ (same level as __dirname)
+    // In dev, resources are at ../resources/ (sibling of dist/)
     const getIconPath = () => {
-      const resourcesDir = join(__dirname, '../resources')
-      if (process.platform === 'darwin') {
-        return join(resourcesDir, 'icon.icns')
-      } else if (process.platform === 'win32') {
-        return join(resourcesDir, 'icon.ico')
-      } else {
-        return join(resourcesDir, 'icon.png')
-      }
+      const iconName = process.platform === 'darwin' ? 'icon.icns'
+        : process.platform === 'win32' ? 'icon.ico'
+        : 'icon.png'
+      return [
+        join(__dirname, 'resources', iconName),
+        join(__dirname, '../resources', iconName),
+      ].find(p => existsSync(p)) ?? join(__dirname, '../resources', iconName)
     }
 
     const iconPath = getIconPath()
@@ -100,7 +235,7 @@ export class WindowManager {
       // macOS-specific: hidden title bar with inset traffic lights
       ...(isMac && {
         titleBarStyle: 'hiddenInset',
-        trafficLightPosition: { x: 18, y: 18 },
+        trafficLightPosition: { x: 18, y: 16 },
         vibrancy: 'under-window',
         visualEffectState: 'active',
       }),
@@ -119,16 +254,11 @@ export class WindowManager {
         autoHideMenuBar: true,
       }),
       webPreferences: {
-        preload: join(__dirname, 'preload.cjs'),
+        preload: join(__dirname, 'bootstrap-preload.cjs'),
         contextIsolation: true,
         nodeIntegration: false,
-        // SECURITY NOTE: Sandbox is disabled to allow preload script access to process.versions
-        // for the getVersions() API (returns node/chrome/electron versions).
-        // This is a minimal exposure since contextIsolation is enabled and nodeIntegration
-        // is disabled - the preload only exposes safe, read-only version data via IPC.
-        // If sandbox is re-enabled, process.versions becomes undefined.
         sandbox: false,
-        webviewTag: true // Enable webview for browser panel
+        webviewTag: false // Browser integration uses WebContentsView, not <webview>
       }
     })
 
@@ -137,22 +267,23 @@ export class WindowManager {
       window.show()
     })
 
-    // Open external links in default browser
+    // Open external links in default browser, but never hand known-dangerous
+    // schemes directly to shell.openExternal. Markdown normal-clicks go through
+    // OPEN_URL; middle-clicks/window.open/top-navigation land here.
     window.webContents.setWindowOpenHandler((details) => {
-      shell.openExternal(details.url)
+      this.openExternalFromRenderer(details.url, 'window-open', window)
       return { action: 'deny' }
     })
 
-    // Handle navigation in webviews to external URLs
+    // Handle external navigation attempts from renderer WebContents
     window.webContents.on('will-navigate', (event, url) => {
-      // Allow navigation within the app (file:// in prod, localhost dev server)
-      const isInternalUrl = url.startsWith('file://') ||
-        (VITE_DEV_SERVER_URL && url.startsWith(VITE_DEV_SERVER_URL))
+      // Allow only the actual app shell (file:// in prod, Vite dev server in dev).
+      // Any other navigation is treated as an external URL and goes through the
+      // same URL-safety classifier used by OPEN_URL.
+      if (this.isRendererAppUrl(url)) return
 
-      if (!isInternalUrl) {
-        event.preventDefault()
-        shell.openExternal(url)
-      }
+      event.preventDefault()
+      this.openExternalFromRenderer(url, 'will-navigate', window)
     })
 
     // Enable right-click context menu in development
@@ -166,6 +297,29 @@ export class WindowManager {
           { label: 'Paste', role: 'paste', enabled: params.editFlags.canPaste },
         ]).popup()
       })
+    }
+
+    // The renderer's index.html ships with `<title>Craft Agents</title>`, so
+    // without this Electron auto-syncs every window's title back to that on
+    // load — clobbering the workspace-name policy applied below. Suppress the
+    // default sync so setTitle() calls from refreshWindowTitles() stick.
+    window.on('page-title-updated', (event) => {
+      event.preventDefault()
+    })
+
+    // Store the window mapping BEFORE loadURL — bootstrap preload uses
+    // __get-workspace-id (via sendSync) which reads this map during eval.
+    const webContentsId = window.webContents.id
+    this.windows.set(webContentsId, { window, workspaceId })
+
+    // Apply window-title policy now that the map size reflects this window —
+    // covers both the new window and any existing windows that should switch
+    // from app name → workspace name as the count crosses 1 → 2.
+    this.refreshWindowTitles()
+
+    // Track focused mode state for persistence
+    if (focused) {
+      this.focusedModeWindows.add(webContentsId)
     }
 
     // Load the renderer - use restoreUrl if provided, otherwise build from options
@@ -216,9 +370,21 @@ export class WindowManager {
 
     // Fallback: if the renderer fails to load (e.g. stale path, disk error),
     // recover gracefully by loading the default state instead of showing a white screen. See #13.
+    // In dev mode, retry the Vite dev server (it may not be ready yet) instead of falling back
+    // to file:// which doesn't exist during development.
+    let failLoadRetries = 0
     window.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-      windowLog.warn('Failed to load renderer, falling back to default state:', errorCode, errorDescription)
-      window.loadFile(join(__dirname, 'renderer/index.html'), { query: { workspaceId } })
+      windowLog.warn('Failed to load renderer:', errorCode, errorDescription)
+      if (VITE_DEV_SERVER_URL && failLoadRetries < 5) {
+        failLoadRetries++
+        windowLog.info(`Retrying Vite dev server (attempt ${failLoadRetries}/5)...`)
+        setTimeout(() => {
+          const params = new URLSearchParams({ workspaceId }).toString()
+          window.loadURL(`${VITE_DEV_SERVER_URL}?${params}`)
+        }, 1000)
+      } else {
+        window.loadFile(join(__dirname, 'renderer/index.html'), { query: { workspaceId } })
+      }
     })
 
     // If an initial deep link was provided, navigate to it after the window is ready
@@ -230,71 +396,131 @@ export class WindowManager {
           if (target && (target.view || target.action)) {
             // Wait a bit for React to mount and register IPC listeners
             setTimeout(() => {
-              if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
-                window.webContents.send(IPC_CHANNELS.DEEP_LINK_NAVIGATE, {
-                  view: target.view,
-                  action: target.action,
-                  actionParams: target.actionParams,
-                })
-              }
+              this.pushToWindow(window, RPC_CHANNELS.deeplink.NAVIGATE, {
+                view: target.view,
+                action: target.action,
+                actionParams: target.actionParams,
+              })
             }, 100)
           }
         })
       })
     }
 
-    // Store the window mapping
-    const webContentsId = window.webContents.id
-    this.windows.set(webContentsId, { window, workspaceId })
-
-    // Track focused mode state for persistence
-    if (focused) {
-      this.focusedModeWindows.add(webContentsId)
-    }
-
     // Listen for system theme changes and notify this window's renderer
     const themeHandler = () => {
-      // Check mainFrame - it becomes null when render frame is disposed
-      if (!window.isDestroyed() && !window.webContents.isDestroyed() && window.webContents.mainFrame) {
-        window.webContents.send(IPC_CHANNELS.SYSTEM_THEME_CHANGED, nativeTheme.shouldUseDarkColors)
-      }
+      this.pushToWindow(window, RPC_CHANNELS.theme.SYSTEM_CHANGED, nativeTheme.shouldUseDarkColors)
     }
     nativeTheme.on('updated', themeHandler)
 
     // Handle focus/blur to broadcast window focus state
     window.on('focus', () => {
-      if (!window.isDestroyed() && !window.webContents.isDestroyed() && window.webContents.mainFrame) {
-        window.webContents.send(IPC_CHANNELS.WINDOW_FOCUS_STATE, true)
-      }
+      this.pushToWindow(window, RPC_CHANNELS.window.FOCUS_STATE, true)
     })
     window.on('blur', () => {
-      if (!window.isDestroyed() && !window.webContents.isDestroyed() && window.webContents.mainFrame) {
-        window.webContents.send(IPC_CHANNELS.WINDOW_FOCUS_STATE, false)
-      }
+      this.pushToWindow(window, RPC_CHANNELS.window.FOCUS_STATE, false)
     })
 
-    // Handle window close request (X button, Cmd+W) - intercept to allow modal closing first
-    // The renderer can respond via WINDOW_CONFIRM_CLOSE to actually close the window
+    // Detect Cmd/Ctrl+W before close events so renderer can distinguish close source.
+    // Intent is short-lived to avoid stale classification.
+    window.webContents.on('before-input-event', (_event, input) => {
+      if (!input || input.type !== 'keyDown') return
+      const key = input.key?.toLowerCase?.()
+      if (key !== 'w') return
+
+      const isCloseShortcut = process.platform === 'darwin'
+        ? !!input.meta
+        : !!input.control
+
+      if (!isCloseShortcut) return
+
+      const wcId = window.webContents.id
+      this.keyboardCloseIntents.add(wcId)
+      const existingTimeout = this.keyboardCloseIntentTimeouts.get(wcId)
+      if (existingTimeout) clearTimeout(existingTimeout)
+
+      this.keyboardCloseIntentTimeouts.set(wcId, setTimeout(() => {
+        this.keyboardCloseIntentTimeouts.delete(wcId)
+        this.keyboardCloseIntents.delete(wcId)
+      }, 500))
+    })
+
+    // Handle window close request (traffic-light button, menu close, Cmd/Ctrl+W)
+    // and send source metadata so renderer can decide layered dismiss vs direct close.
     window.on('close', (event) => {
+      // During app quit, bypass layered close behavior and allow native close flow.
+      // This preserves expected Cmd+Q semantics (quit app instead of closing overlays/panels first).
+      if (this.isAppQuitting) {
+        return
+      }
+
       // Check if renderer is ready (mainFrame exists) - if not, allow close directly
       if (!window.webContents.isDestroyed() && window.webContents.mainFrame) {
         event.preventDefault()
-        // Send close request to renderer - it will either close a modal or confirm close
-        window.webContents.send(IPC_CHANNELS.WINDOW_CLOSE_REQUESTED)
+        const wcId = window.webContents.id
+        let source: WindowCloseRequestSource = 'window-button'
+        if (this.keyboardCloseIntents.has(wcId)) {
+          source = 'keyboard-shortcut'
+          this.keyboardCloseIntents.delete(wcId)
+          const keyboardIntentTimeout = this.keyboardCloseIntentTimeouts.get(wcId)
+          if (keyboardIntentTimeout) {
+            clearTimeout(keyboardIntentTimeout)
+            this.keyboardCloseIntentTimeouts.delete(wcId)
+          }
+        }
+
+        // Send close request to renderer - it will either close a modal/panel or confirm close.
+        this.pushToWindow(window, RPC_CHANNELS.window.CLOSE_REQUESTED, { source })
+
+        // Fallback timeout: if IPC fails (e.g., on Hyprland/Wayland), force close after 3s.
+        // Reset timeout on each attempt so active users closing modals aren't interrupted.
+        const existingTimeout = this.pendingCloseTimeouts.get(wcId)
+        if (existingTimeout) clearTimeout(existingTimeout)
+
+        this.pendingCloseTimeouts.set(wcId, setTimeout(() => {
+          this.pendingCloseTimeouts.delete(wcId)
+          if (!window.isDestroyed()) window.destroy()
+        }, 3000))
       }
       // If renderer not ready, allow default close behavior
     })
 
     // Handle window closed - clean up theme listener and internal state
     window.on('closed', () => {
+      // Clean up any pending close timeout to prevent memory leaks
+      const timeout = this.pendingCloseTimeouts.get(webContentsId)
+      if (timeout) {
+        clearTimeout(timeout)
+        this.pendingCloseTimeouts.delete(webContentsId)
+      }
+
+      // Clean up short-lived keyboard-close intent tracking.
+      const keyboardIntentTimeout = this.keyboardCloseIntentTimeouts.get(webContentsId)
+      if (keyboardIntentTimeout) {
+        clearTimeout(keyboardIntentTimeout)
+        this.keyboardCloseIntentTimeouts.delete(webContentsId)
+      }
+      this.keyboardCloseIntents.delete(webContentsId)
+
       nativeTheme.removeListener('updated', themeHandler)
       this.windows.delete(webContentsId)
       this.focusedModeWindows.delete(webContentsId)
+      // Re-apply window-title policy — surviving windows revert from workspace
+      // name back to app name when the count drops from 2 → 1.
+      this.refreshWindowTitles()
       windowLog.info(`Window closed for workspace ${workspaceId}`)
     })
 
     windowLog.info(`Created window for workspace ${workspaceId} (focused: ${focused})`)
     return window
+  }
+
+  /**
+   * Get window by webContents.id (used by IPC handlers instead of BrowserWindow.fromId)
+   */
+  getWindowByWebContentsId(wcId: number): BrowserWindow | null {
+    const managed = this.windows.get(wcId)
+    return managed?.window ?? null
   }
 
   /**
@@ -337,6 +563,14 @@ export class WindowManager {
   }
 
   /**
+   * Mark whether the app is in quit flow.
+   * When true, window close events bypass layered close interception.
+   */
+  setAppQuitting(isQuitting: boolean): void {
+    this.isAppQuitting = isQuitting
+  }
+
+  /**
    * Close window by webContents.id (triggers close event which may be intercepted)
    */
   closeWindow(webContentsId: number): void {
@@ -351,11 +585,30 @@ export class WindowManager {
    * Used when renderer confirms the close action (no modals to close).
    */
   forceCloseWindow(webContentsId: number): void {
+    // Clear any pending close timeout since renderer confirmed
+    const timeout = this.pendingCloseTimeouts.get(webContentsId)
+    if (timeout) {
+      clearTimeout(timeout)
+      this.pendingCloseTimeouts.delete(webContentsId)
+    }
+
     const managed = this.windows.get(webContentsId)
     if (managed && !managed.window.isDestroyed()) {
       // Remove close listener temporarily to avoid infinite loop,
       // then destroy the window directly
       managed.window.destroy()
+    }
+  }
+
+  /**
+   * Cancel a pending close request (renderer handled it by closing a modal/panel).
+   * Clears the fallback timeout so the window stays open.
+   */
+  cancelPendingClose(webContentsId: number): void {
+    const timeout = this.pendingCloseTimeouts.get(webContentsId)
+    if (timeout) {
+      clearTimeout(timeout)
+      this.pendingCloseTimeouts.delete(webContentsId)
     }
   }
 
@@ -380,6 +633,9 @@ export class WindowManager {
     if (managed) {
       const oldWorkspaceId = managed.workspaceId
       managed.workspaceId = workspaceId
+      // Re-apply window-title policy so in-window workspace switches update
+      // the titlebar immediately (relevant when ≥2 windows are open).
+      this.refreshWindowTitles()
       windowLog.info(`Updated window ${webContentsId} from workspace ${oldWorkspaceId} to ${workspaceId}`)
       return true
     }
@@ -397,6 +653,8 @@ export class WindowManager {
   registerWindow(window: BrowserWindow, workspaceId: string): void {
     const webContentsId = window.webContents.id
     this.windows.set(webContentsId, { window, workspaceId })
+    // Re-apply window-title policy after re-registration (e.g. post-refresh).
+    this.refreshWindowTitles()
     windowLog.info(`Registered window ${webContentsId} for workspace ${workspaceId}`)
   }
 
@@ -480,20 +738,6 @@ export class WindowManager {
   }
 
   /**
-   * Send IPC message to all windows
-   */
-  broadcastToAll(channel: string, ...args: unknown[]): void {
-    for (const managed of this.getAllWindows()) {
-      // Check mainFrame - it becomes null when render frame is disposed
-      if (!managed.window.isDestroyed() &&
-          !managed.window.webContents.isDestroyed() &&
-          managed.window.webContents.mainFrame) {
-        managed.window.webContents.send(channel, ...args)
-      }
-    }
-  }
-
-  /**
    * Show or hide macOS traffic light buttons (close/minimize/maximize).
    * Used to hide them when fullscreen overlays are open to prevent accidental clicks.
    * No-op on non-macOS platforms.
@@ -508,7 +752,7 @@ export class WindowManager {
       // setWindowButtonVisibility can reset position to default, so we need
       // to restore the custom position using the modern setWindowButtonPosition API
       if (visible) {
-        managed.window.setWindowButtonPosition({ x: 18, y: 18 })
+        managed.window.setWindowButtonPosition({ x: 18, y: 19 })
       }
     }
   }

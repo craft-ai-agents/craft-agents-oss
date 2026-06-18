@@ -4,7 +4,8 @@
  * Features:
  * - Recursive tree view with expandable folders (matches sidebar styling)
  * - File watcher for auto-refresh when files change
- * - Click to reveal in Finder, double-click to open
+ * - Click to preview in-app, double-click to open
+ * - Right-click context menu with "Open" / "Show in {file manager}" actions
  * - Persisted expanded folder state per session
  *
  * Styling matches LeftSidebar patterns:
@@ -14,13 +15,22 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
-import { File, Folder, FolderOpen, FileText, Image, FileCode, ChevronRight } from 'lucide-react'
+import { File, Folder, FolderOpen, FileText, Image, FileCode, ChevronRight, ExternalLink } from 'lucide-react'
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  StyledContextMenuContent,
+  StyledContextMenuItem,
+} from '@/components/ui/styled-context-menu'
 import type { SessionFile } from '../../../shared/types'
 import { cn } from '@/lib/utils'
 import * as storage from '@/lib/local-storage'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { getFileManagerName } from '@/lib/platform'
+import { restoreSessionFileWatch } from './session-files-watch'
 
 /**
  * Stagger animation variants for child items - matches LeftSidebar pattern
@@ -61,6 +71,10 @@ const itemVariants: Variants = {
 export interface SessionFilesSectionProps {
   sessionId?: string
   className?: string
+  /** Absolute session folder path for header actions (e.g. View in Finder) */
+  sessionFolderPath?: string
+  /** Hide section header when embedded inside compact containers (e.g. popovers) */
+  hideHeader?: boolean
 }
 
 /**
@@ -71,6 +85,23 @@ function formatFileSize(bytes?: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/** Collect all directory paths recursively so the tree can start fully expanded. */
+function collectDirectoryPaths(entries: SessionFile[]): string[] {
+  const directories: string[] = []
+  const visit = (items: SessionFile[]) => {
+    for (const item of items) {
+      if (item.type === 'directory') {
+        directories.push(item.path)
+        if (item.children && item.children.length > 0) {
+          visit(item.children)
+        }
+      }
+    }
+  }
+  visit(entries)
+  return directories
 }
 
 /**
@@ -112,6 +143,17 @@ const PREVIEWABLE_EXTENSIONS = new Set([
 ])
 
 /**
+ * Extensions that get lightweight image previews in web mode.
+ * Excludes pdf/psd/ai/svg — not rendered as <img> thumbnails here.
+ */
+const WEB_PREVIEWABLE_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico',
+])
+
+/** True when running in web UI (browser) rather than Electron. */
+const isWebMode = window.electronAPI.getRuntimeEnvironment() === 'web'
+
+/**
  * Constructs a thumbnail:// protocol URL for a given file path.
  * The path is URI-encoded so it can be embedded safely in a URL.
  * Works cross-platform (macOS paths start with /, Windows with C:\).
@@ -123,28 +165,46 @@ function getThumbnailUrl(filePath: string): string {
 /**
  * FileThumbnail — Renders an image thumbnail with cross-fade from icon fallback.
  *
- * Shows the Lucide icon immediately, then loads the thumbnail from the
- * custom thumbnail:// protocol. On load, the icon fades out and the
- * thumbnail fades in (200ms CSS transition). If loading fails, the icon
- * stays visible — no layout shift, no error state.
+ * In Electron: loads via the custom thumbnail:// protocol (efficient 64x64 resize).
+ * In Web mode: loads via readFilePreviewDataUrl RPC (server-side resized preview).
+ *
+ * Shows the Lucide icon immediately, then cross-fades to the thumbnail on load.
+ * If loading fails, the icon stays visible — no layout shift, no error state.
  */
 const FileThumbnail = memo(function FileThumbnail({ file }: { file: SessionFile }) {
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [dataUrl, setDataUrl] = useState<string | null>(null)
 
   // Reset state when file changes (e.g. watcher triggered re-render)
   useEffect(() => {
     setLoaded(false)
     setFailed(false)
+    setDataUrl(null)
   }, [file.path])
 
   const ext = file.name.split('.').pop()?.toLowerCase() || ''
-  const canPreview = PREVIEWABLE_EXTENSIONS.has(ext)
+  const previewableSet = isWebMode ? WEB_PREVIEWABLE_EXTENSIONS : PREVIEWABLE_EXTENSIONS
+  const canPreview = previewableSet.has(ext)
+
+  // Web mode: load a small preview via RPC as a base64 data URL
+  useEffect(() => {
+    if (!isWebMode || !canPreview || failed) return
+    let cancelled = false
+    window.electronAPI.readFilePreviewDataUrl(file.path, 64).then((url) => {
+      if (!cancelled) setDataUrl(url)
+    }).catch(() => {
+      if (!cancelled) setFailed(true)
+    })
+    return () => { cancelled = true }
+  }, [file.path, canPreview, failed])
 
   // Fall back to regular icon if not previewable or thumbnail failed
   if (!canPreview || failed) {
     return getFileIcon(file)
   }
+
+  const imgSrc = isWebMode ? dataUrl : getThumbnailUrl(file.path)
 
   return (
     <>
@@ -158,17 +218,19 @@ const FileThumbnail = memo(function FileThumbnail({ file }: { file: SessionFile 
         {getFileIcon(file)}
       </span>
       {/* Thumbnail — fades in on successful load */}
-      <img
-        src={getThumbnailUrl(file.path)}
-        alt=""
-        loading="lazy"
-        onLoad={() => setLoaded(true)}
-        onError={() => setFailed(true)}
-        className={cn(
-          'absolute inset-0 h-full w-full rounded-[2px] object-cover transition-opacity duration-200',
-          loaded ? 'opacity-100' : 'opacity-0'
-        )}
-      />
+      {imgSrc && (
+        <img
+          src={imgSrc}
+          alt=""
+          loading="lazy"
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+          className={cn(
+            'absolute inset-0 h-full w-full rounded-[2px] object-cover transition-opacity duration-200',
+            loaded ? 'opacity-100' : 'opacity-0'
+          )}
+        />
+      )}
     </>
   )
 })
@@ -180,6 +242,7 @@ interface FileTreeItemProps {
   onToggleExpand: (path: string) => void
   onFileClick: (file: SessionFile) => void
   onFileDoubleClick: (file: SessionFile) => void
+  onRevealInFileManager: (path: string) => void
   /** Whether this item is inside an expanded folder (for stagger animation) */
   isNested?: boolean
 }
@@ -198,8 +261,10 @@ function FileTreeItem({
   onToggleExpand,
   onFileClick,
   onFileDoubleClick,
+  onRevealInFileManager,
   isNested,
 }: FileTreeItemProps) {
+  const { t } = useTranslation()
   const isDirectory = file.type === 'directory'
   const isExpanded = expandedPaths.has(file.path)
   const hasChildren = isDirectory && file.children && file.children.length > 0
@@ -273,10 +338,32 @@ function FileTreeItem({
     </button>
   )
 
+  const fileManagerName = getFileManagerName()
+
   // Inner content: button and expandable children (wrapped in group/section like LeftSidebar)
   const innerContent = (
     <div className="group/section min-w-0">
-      {buttonElement}
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          {buttonElement}
+        </ContextMenuTrigger>
+        <StyledContextMenuContent>
+          {/* Open — files only (folders just show "Show in file manager") */}
+          {file.type !== 'directory' && (
+            <StyledContextMenuItem onSelect={() => onFileClick(file)}>
+              <ExternalLink className="h-3.5 w-3.5" />
+              {t("chat.openFile")}
+            </StyledContextMenuItem>
+          )}
+          {/* Show in file manager */}
+          <StyledContextMenuItem
+            onSelect={() => onRevealInFileManager(file.path)}
+          >
+            <FolderOpen className="h-3.5 w-3.5" />
+            {t("chat.showInFileManager", { fileManager: fileManagerName })}
+          </StyledContextMenuItem>
+        </StyledContextMenuContent>
+      </ContextMenu>
       {/* Expandable children with framer-motion animation - matches LeftSidebar exactly */}
       {hasChildren && (
         <AnimatePresence initial={false}>
@@ -311,6 +398,7 @@ function FileTreeItem({
                         onToggleExpand={onToggleExpand}
                         onFileClick={onFileClick}
                         onFileDoubleClick={onFileDoubleClick}
+                        onRevealInFileManager={onRevealInFileManager}
                         isNested={true}
                       />
                     </motion.div>
@@ -332,19 +420,30 @@ function FileTreeItem({
 /**
  * Section displaying session files as a tree
  */
-export function SessionFilesSection({ sessionId, className }: SessionFilesSectionProps) {
+export function SessionFilesSection({ sessionId, className, sessionFolderPath, hideHeader = false }: SessionFilesSectionProps) {
+  const { t } = useTranslation()
   const [files, setFiles] = useState<SessionFile[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
+  const [hasSavedExpandedState, setHasSavedExpandedState] = useState(false)
   const mountedRef = useRef(true)
 
-  // Load expanded paths from storage when session changes
+  // Load expanded paths from storage when session changes.
+  // If no value exists yet, we default to "expand all" after files load.
   useEffect(() => {
     if (sessionId) {
-      const saved = storage.get<string[]>(storage.KEYS.sessionFilesExpandedFolders, [], sessionId)
-      setExpandedPaths(new Set(saved))
+      const raw = storage.getRaw(storage.KEYS.sessionFilesExpandedFolders, sessionId)
+      if (raw !== null) {
+        const saved = storage.get<string[]>(storage.KEYS.sessionFilesExpandedFolders, [], sessionId)
+        setExpandedPaths(new Set(saved))
+        setHasSavedExpandedState(true)
+      } else {
+        setExpandedPaths(new Set())
+        setHasSavedExpandedState(false)
+      }
     } else {
       setExpandedPaths(new Set())
+      setHasSavedExpandedState(false)
     }
   }, [sessionId])
 
@@ -367,6 +466,16 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
       const sessionFiles = await window.electronAPI.getSessionFiles(sessionId)
       if (mountedRef.current) {
         setFiles(sessionFiles)
+
+        // Default behavior: expand the entire folder tree when there's no saved state yet.
+        if (!hasSavedExpandedState) {
+          const allDirectoryPaths = new Set(collectDirectoryPaths(sessionFiles))
+          if (allDirectoryPaths.size > 0) {
+            setExpandedPaths(allDirectoryPaths)
+            saveExpandedPaths(allDirectoryPaths)
+            setHasSavedExpandedState(true)
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to load session files:', error)
@@ -378,7 +487,7 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
         setIsLoading(false)
       }
     }
-  }, [sessionId])
+  }, [sessionId, hasSavedExpandedState, saveExpandedPaths])
 
   // Initial load and file watcher setup
   useEffect(() => {
@@ -387,19 +496,25 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
 
     if (sessionId) {
       // Start watching for file changes
-      window.electronAPI.watchSessionFiles(sessionId)
+      void window.electronAPI.watchSessionFiles(sessionId)
 
       // Listen for file change events
       const unsubscribe = window.electronAPI.onSessionFilesChanged((changedSessionId) => {
         if (changedSessionId === sessionId && mountedRef.current) {
-          loadFiles()
+          void loadFiles()
         }
+      })
+
+      const unsubscribeReconnect = window.electronAPI.onReconnected(() => {
+        if (!mountedRef.current) return
+        void restoreSessionFileWatch(sessionId, loadFiles)
       })
 
       return () => {
         mountedRef.current = false
         unsubscribe()
-        window.electronAPI.unwatchSessionFiles()
+        unsubscribeReconnect()
+        void window.electronAPI.unwatchSessionFiles()
       }
     }
 
@@ -409,10 +524,16 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
   }, [sessionId, loadFiles])
 
   // Use the link interceptor (via context) so file clicks show in-app previews
-  // instead of always opening in Finder / default app.
+  // instead of always opening in the file manager / default app.
   const { onOpenFile } = useAppShellContext()
+  const fileManagerName = getFileManagerName()
 
-  // Handle file click — preview in-app if possible, open directory in Finder
+  // Reveal a file/folder in the system file manager
+  const handleRevealInFileManager = useCallback((path: string) => {
+    window.electronAPI.showInFolder(path)
+  }, [])
+
+  // Handle file click — preview in-app if possible, open directory in file manager
   const handleFileClick = useCallback((file: SessionFile) => {
     if (file.type === 'directory') {
       // eslint-disable-next-line craft-links/no-direct-file-open -- directories can't be previewed in-app
@@ -453,9 +574,20 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
   return (
     <div className={cn('flex flex-col h-full min-h-0', className)}>
       {/* Header - matches sidebar styling with select-none, extra top padding for visual balance */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
-        <span className="text-xs font-medium text-muted-foreground">Files</span>
-      </div>
+      {!hideHeader && (
+        <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
+          <span className="text-xs font-medium text-muted-foreground">{t("chat.sessionFiles")}</span>
+          {sessionFolderPath && (
+            <button
+              type="button"
+              onClick={() => window.electronAPI.showInFolder(sessionFolderPath)}
+              className="text-xs text-foreground/50 hover:text-foreground/80 hover:underline underline-offset-2 transition-colors"
+            >
+              {t("chat.viewInFileManager", { fileManager: fileManagerName })}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* File tree - px-2 is on nav to match LeftSidebar exactly (constrains grid width) */}
       {/* overflow-x-hidden prevents horizontal scroll, forcing truncation */}
@@ -463,7 +595,7 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
         {files.length === 0 ? (
           <div className="px-4 text-muted-foreground select-none">
             <p className="text-xs">
-              {isLoading ? 'Loading...' : 'Files attached or created by this chat will appear here.'}
+              {isLoading ? t('chat.sessionFilesLoading') : t('chat.sessionFilesEmpty')}
             </p>
           </div>
         ) : (
@@ -478,6 +610,7 @@ export function SessionFilesSection({ sessionId, className }: SessionFilesSectio
                 onToggleExpand={handleToggleExpand}
                 onFileClick={handleFileClick}
                 onFileDoubleClick={handleFileDoubleClick}
+                onRevealInFileManager={handleRevealInFileManager}
               />
             ))}
           </nav>

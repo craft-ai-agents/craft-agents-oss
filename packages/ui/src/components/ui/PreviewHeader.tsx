@@ -9,6 +9,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, type LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
@@ -129,6 +130,7 @@ export function PreviewHeader({
   className,
   style,
 }: PreviewHeaderProps) {
+  const { t } = useTranslation()
   return (
     <div
       className={cn(
@@ -156,7 +158,7 @@ export function PreviewHeader({
               'opacity-70 hover:opacity-100 transition-opacity',
               'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
             )}
-            title="Close (Esc)"
+            title={t('common.closeEsc')}
           >
             <X className="w-4 h-4" />
           </button>

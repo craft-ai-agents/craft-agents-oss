@@ -1,12 +1,39 @@
 import log from 'electron-log/main'
-import { app } from 'electron'
+import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { homedir } from 'node:os'
+import type {
+  MessagingLogContext,
+  MessagingLogMeta,
+  MessagingLogger,
+} from '@craft-agent/messaging-gateway'
 
 /**
- * Debug mode is enabled when running from source (not packaged) or with --debug flag.
- * - true: `bun run electron:start` or `electron .` or packaged app with `--debug`
- * - false: bundled .app/.exe release without --debug flag
+ * Resolve debug mode deterministically across runtimes.
+ *
+ * Priority:
+ * 1) --debug flag always enables debug mode
+ * 2) CRAFT_IS_PACKAGED env (when explicitly set)
+ * 3) Electron runtime heuristic (defaultApp => dev, otherwise packaged)
+ * 4) Non-Electron runtimes default to debug mode (headless Bun / node --check)
  */
-export const isDebugMode = !app.isPackaged || process.argv.includes('--debug')
+function resolveDebugMode(): boolean {
+  if (process.argv.includes('--debug')) return true
+
+  const packagedEnv = process.env.CRAFT_IS_PACKAGED
+  if (packagedEnv === 'true') return false
+  if (packagedEnv === 'false') return true
+
+  const isElectronRuntime = typeof process.versions?.electron === 'string'
+  if (isElectronRuntime) {
+    if (process.defaultApp) return true
+    return false
+  }
+
+  return true
+}
+
+export const isDebugMode = resolveDebugMode()
 
 // Configure transports based on debug mode
 if (isDebugMode) {
@@ -43,18 +70,148 @@ if (isDebugMode) {
 // Export scoped loggers for different modules
 export const mainLog = log.scope('main')
 export const sessionLog = log.scope('session')
-export const ipcLog = log.scope('ipc')
+export const handlerLog = log.scope('handler')
 export const windowLog = log.scope('window')
 export const agentLog = log.scope('agent')
 export const searchLog = log.scope('search')
 
 /**
- * Get the path to the current log file.
+ * Dedicated messaging gateway log.
+ *
+ * Kept outside the Electron-managed logs folder so messaging issues can be
+ * inspected independently at a stable path across debug and production builds.
+ */
+export const messagingGatewayLogPath = join(homedir(), '.craft-agent', 'logs', 'messaging-gateway.log')
+const messagingGatewayBackupPath = `${messagingGatewayLogPath}.1`
+const MESSAGING_LOG_MAX_BYTES = 5 * 1024 * 1024 // 5MB
+
+function ensureMessagingLogDir(): void {
+  mkdirSync(dirname(messagingGatewayLogPath), { recursive: true })
+}
+
+function rotateMessagingLogIfNeeded(nextLineBytes: number): void {
+  if (!existsSync(messagingGatewayLogPath)) return
+  try {
+    const currentSize = statSync(messagingGatewayLogPath).size
+    if (currentSize + nextLineBytes <= MESSAGING_LOG_MAX_BYTES) return
+    if (existsSync(messagingGatewayBackupPath)) {
+      rmSync(messagingGatewayBackupPath, { force: true })
+    }
+    renameSync(messagingGatewayLogPath, messagingGatewayBackupPath)
+  } catch (error) {
+    mainLog.warn('[messaging-gateway] failed to rotate dedicated log file', normalizeLogValue(error))
+  }
+}
+
+function normalizeLogValue(value: unknown, depth = 0): unknown {
+  if (depth > 4) return '[truncated]'
+  if (value instanceof Error) {
+    const out: Record<string, unknown> = {
+      name: value.name,
+      message: value.message,
+    }
+    const code = (value as { code?: unknown }).code
+    if (code !== undefined) out.code = code
+    const cause = (value as { cause?: unknown }).cause
+    if (cause !== undefined) out.cause = normalizeLogValue(cause, depth + 1)
+    if (value.stack) out.stack = value.stack
+    return out
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeLogValue(item, depth + 1))
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [key, inner] of Object.entries(value)) {
+      out[key] = normalizeLogValue(inner, depth + 1)
+    }
+    return out
+  }
+  return value
+}
+
+function normalizeMeta(meta?: MessagingLogMeta): Record<string, unknown> {
+  if (!meta) return {}
+  const normalized = normalizeLogValue(meta)
+  return normalized && typeof normalized === 'object' && !Array.isArray(normalized)
+    ? normalized as Record<string, unknown>
+    : { meta: normalized }
+}
+
+function writeMessagingGatewayLog(
+  level: 'info' | 'warn' | 'error',
+  context: MessagingLogContext,
+  message: string,
+  meta?: MessagingLogMeta,
+): void {
+  const entry = {
+    timestamp: new Date().toISOString(),
+    level,
+    scope: 'messaging-gateway',
+    ...context,
+    ...normalizeMeta(meta),
+    message,
+  }
+
+  const line = JSON.stringify(entry) + '\n'
+  try {
+    ensureMessagingLogDir()
+    rotateMessagingLogIfNeeded(Buffer.byteLength(line))
+    appendFileSync(messagingGatewayLogPath, line, 'utf8')
+  } catch (error) {
+    mainLog.warn('[messaging-gateway] failed to write dedicated log entry', {
+      error: normalizeLogValue(error),
+      attemptedEntry: entry,
+    })
+  }
+
+  if (level === 'error') {
+    mainLog.error('[messaging-gateway]', message, entry)
+  } else if (level === 'warn') {
+    mainLog.warn('[messaging-gateway]', message, entry)
+  } else if (isDebugMode) {
+    mainLog.info('[messaging-gateway]', message, entry)
+  }
+}
+
+class StructuredMessagingGatewayLogger implements MessagingLogger {
+  constructor(private readonly context: MessagingLogContext = {}) {}
+
+  child(context: MessagingLogContext): MessagingLogger {
+    return new StructuredMessagingGatewayLogger({
+      ...this.context,
+      ...context,
+    })
+  }
+
+  info(message: string, meta?: MessagingLogMeta): void {
+    writeMessagingGatewayLog('info', this.context, message, meta)
+  }
+
+  warn(message: string, meta?: MessagingLogMeta): void {
+    writeMessagingGatewayLog('warn', this.context, message, meta)
+  }
+
+  error(message: string, meta?: MessagingLogMeta): void {
+    writeMessagingGatewayLog('error', this.context, message, meta)
+  }
+}
+
+export const messagingGatewayLog: MessagingLogger = new StructuredMessagingGatewayLogger({
+  component: 'root',
+})
+
+/**
+ * Get the path to the current Electron main log file.
  * Returns undefined if file logging is disabled.
  */
 export function getLogFilePath(): string | undefined {
   if (!isDebugMode) return undefined
   return log.transports.file.getFile()?.path
+}
+
+export function getMessagingGatewayLogFilePath(): string {
+  return messagingGatewayLogPath
 }
 
 export default log

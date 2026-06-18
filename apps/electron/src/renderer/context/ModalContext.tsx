@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useCallback, useRef } from 'react'
 
 /**
- * Modal registry context - tracks open modals for intercepting window close.
+ * Modal registry context - tracks open modals for layered close handling.
  *
- * When the user clicks the X button or presses Cmd+W, the system first checks
- * if any modals are open. If so, the topmost modal is closed instead of the window.
+ * Cmd+W (keyboard close) checks this registry first: if a modal is open,
+ * the topmost modal is closed before panels/window.
  *
  * Modals register themselves with a priority (higher = closed first) and a close handler.
  */

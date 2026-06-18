@@ -12,8 +12,9 @@
  */
 
 import type { LoadedSource, ApiConfig } from './types.ts';
-import type { ApiCredential } from './credential-manager.ts';
-import { createApiServer } from './api-tools.ts';
+import { isMultiHeaderCredential, type ApiCredential } from './credential-manager.ts';
+import { isSourceUsable } from './storage.ts';
+import { createApiServer, type SummarizeCallback } from './api-tools.ts';
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { debug } from '../utils/debug.ts';
 
@@ -23,6 +24,7 @@ import { debug } from '../utils/debug.ts';
  */
 export const SERVER_BUILD_ERRORS = {
   AUTH_REQUIRED: 'Authentication required',
+  TOKEN_EXPIRED: 'Token expired',
   CREDENTIALS_NEEDED: 'Credentials needed',
 } as const;
 
@@ -79,8 +81,9 @@ export class SourceServerBuilder {
    *
    * @param source - The source configuration
    * @param token - Authentication token (null for public/stdio sources)
+   * @param credential - Multi-header credential from credential store (null if not set)
    */
-  buildMcpServer(source: LoadedSource, token: string | null): McpServerConfig | null {
+  buildMcpServer(source: LoadedSource, token: string | null, credential?: ApiCredential | null): McpServerConfig | null {
     if (source.config.type !== 'mcp' || !source.config.mcp) {
       return null;
     }
@@ -110,19 +113,39 @@ export class SourceServerBuilder {
     const url = normalizeMcpUrl(mcp.url);
 
     const config: McpServerConfig = {
-      type: url.includes('/sse') ? 'sse' : 'http',
+      type: mcp.transport === 'sse' ? 'sse' : 'http',
       url,
     };
 
-    // Handle authentication for HTTP/SSE
+    // Layer headers with increasing precedence:
+    // 1. Static headers from config (non-secret)
+    // 2. Credential-store headers (secret API keys via headerNames)
+    // 3. Authorization bearer token (OAuth/bearer auth — highest priority)
+    let mergedHeaders: Record<string, string> = {};
+
+    // 1. Static headers from config (e.g., X-Custom-Header: value)
+    if (mcp.headers) {
+      mergedHeaders = { ...mcp.headers };
+    }
+
+    // 2. Credential-store headers (e.g., X-API-Key from credential store)
+    if (credential && isMultiHeaderCredential(credential)) {
+      mergedHeaders = { ...mergedHeaders, ...credential };
+    }
+
+    // 3. Auth token (highest priority — OAuth/bearer overrides everything)
     if (mcp.authType !== 'none') {
       if (token) {
-        (config as { headers?: Record<string, string> }).headers = { Authorization: `Bearer ${token}` };
+        mergedHeaders = { ...mergedHeaders, Authorization: `Bearer ${token}` };
       } else if (source.config.isAuthenticated) {
-        // Expected token but not provided - needs re-auth
+        // Source claims to be authenticated but token is missing - needs re-auth
         debug(`[SourceServerBuilder] Source ${source.config.slug} needs re-authentication`);
         return null;
       }
+    }
+
+    if (Object.keys(mergedHeaders).length > 0) {
+      (config as { headers?: Record<string, string> }).headers = mergedHeaders;
     }
 
     return config;
@@ -140,7 +163,9 @@ export class SourceServerBuilder {
     source: LoadedSource,
     credential: ApiCredential | null,
     getToken?: () => Promise<string>,
-    sessionPath?: string
+    sessionPath?: string,
+    summarize?: SummarizeCallback,
+    getCredential?: () => Promise<ApiCredential | null>
   ): Promise<ReturnType<typeof createSdkMcpServer> | null> {
     if (source.config.type !== 'api') return null;
     if (!source.config.api) {
@@ -153,6 +178,7 @@ export class SourceServerBuilder {
     const provider = source.config.provider;
 
     // Google APIs - use token getter with auto-refresh
+    // Note: Direct isAuthenticated check is safe - Google OAuth always requires auth
     if (provider === 'google') {
       if (!source.config.isAuthenticated || !getToken) {
         debug(`[SourceServerBuilder] Google API source ${source.config.slug} not authenticated`);
@@ -162,10 +188,11 @@ export class SourceServerBuilder {
       const config = this.buildApiConfig(source);
       // Pass the token getter function - it will be called before each request
       // to get a fresh token (with auto-refresh if expired)
-      return createApiServer(config, getToken, sessionPath);
+      return createApiServer(config, getToken, sessionPath, summarize);
     }
 
     // Slack APIs - use token getter with auto-refresh
+    // Note: Direct isAuthenticated check is safe - Slack OAuth always requires auth
     if (provider === 'slack') {
       if (!source.config.isAuthenticated || !getToken) {
         debug(`[SourceServerBuilder] Slack API source ${source.config.slug} not authenticated`);
@@ -175,25 +202,61 @@ export class SourceServerBuilder {
       const config = this.buildApiConfig(source);
       // Pass the token getter function - it will be called before each request
       // to get a fresh token (with auto-refresh if expired)
-      return createApiServer(config, getToken, sessionPath);
+      return createApiServer(config, getToken, sessionPath, summarize);
+    }
+
+    // Generic OAuth APIs — use token getter with auto-refresh
+    // Order matters: provider-specific checks (google, slack) come first
+    if (authType === 'oauth') {
+      if (!source.config.isAuthenticated || !getToken) {
+        debug(`[SourceServerBuilder] Generic OAuth source ${source.config.slug} not authenticated`);
+        return null;
+      }
+      debug(`[SourceServerBuilder] Building generic OAuth API server for ${source.config.slug}`);
+      const config = this.buildApiConfig(source);
+      return createApiServer(config, getToken, sessionPath, summarize);
     }
 
     // Public APIs (no auth) can be used immediately
     if (authType === 'none') {
       debug(`[SourceServerBuilder] Building public API server for ${source.config.slug}`);
       const config = this.buildApiConfig(source);
-      return createApiServer(config, '', sessionPath);
+      return createApiServer(config, '', sessionPath, summarize);
     }
 
-    // API key/bearer/header/query/basic auth - use static credential
+    // Renew-endpoint sources use a token getter for auto-refresh instead of a static credential
+    if (getToken && apiConfig.renewEndpoint) {
+      debug(`[SourceServerBuilder] Building API server for ${source.config.slug} (auth: ${authType}, renew-endpoint)`);
+      const config = this.buildApiConfig(source);
+      return createApiServer(config, getToken, sessionPath, summarize);
+    }
+
+    // API key/bearer/header/query/basic auth.
+    //
+    // Use a per-request credential getter when available so that credential
+    // updates (e.g. user pasting a fresh JWT via source_credential_prompt)
+    // are picked up by the next tool call WITHOUT a session restart.
+    //
+    // The closure captured by createApiTool used to be a static string snapshot
+    // of the credential at build time, which meant the in-process tool kept
+    // using a stale token indefinitely. With a getter, the latest value is
+    // read from the vault on every request.
+    if (getCredential) {
+      debug(`[SourceServerBuilder] Building API server for ${source.config.slug} (auth: ${authType}, per-request credential)`);
+      const config = this.buildApiConfig(source);
+      return createApiServer(config, getCredential, sessionPath, summarize);
+    }
+
+    // Fallback: no getter provided — preserve legacy static-credential behavior
+    // (still used by tests and callers that don't pass a getter).
     if (!credential) {
       debug(`[SourceServerBuilder] API source ${source.config.slug} needs credentials`);
       return null;
     }
 
-    debug(`[SourceServerBuilder] Building API server for ${source.config.slug} (auth: ${authType})`);
+    debug(`[SourceServerBuilder] Building API server for ${source.config.slug} (auth: ${authType}, static credential)`);
     const config = this.buildApiConfig(source);
-    return createApiServer(config, credential, sessionPath);
+    return createApiServer(config, credential, sessionPath, summarize);
   }
 
   /**
@@ -205,7 +268,9 @@ export class SourceServerBuilder {
     const config: ApiConfig = {
       name: source.config.slug,
       baseUrl: api.baseUrl,
-      documentation: source.guide?.raw || '',
+      // documentation is no longer inlined into the tool description (see #683
+      // and api-tools.ts:buildToolDescription). The model reads guide.md via
+      // the prerequisite-manager-enforced Read instead.
       defaultHeaders: api.defaultHeaders,
     };
 
@@ -223,6 +288,10 @@ export class SourceServerBuilder {
       case 'basic':
         config.auth = { type: 'basic' };
         break;
+      case 'oauth':
+        // Generic OAuth tokens are sent as Bearer tokens
+        config.auth = { type: 'bearer', authScheme: api.authScheme ?? 'Bearer' };
+        break;
       case 'none':
       default:
         config.auth = { type: 'none' };
@@ -235,24 +304,31 @@ export class SourceServerBuilder {
    * Build all MCP and API servers for enabled sources
    *
    * @param sourcesWithCredentials - Sources with their pre-loaded credentials
-   * @param getTokenForSource - Function to get token getter for OAuth sources
+   * @param getTokenForSource - Function to get token getter for OAuth / renew-endpoint sources
    * @param sessionPath - Optional path to session folder for saving large API responses
+   * @param summarize - Optional summarize callback for large API responses
+   * @param getCredentialForSource - Function to get a per-request credential getter for
+   *   non-OAuth API sources (bearer/header/query/basic). When provided, the in-process
+   *   tool reads the credential from the vault on every call instead of caching a
+   *   stale snapshot — required for mid-session credential updates to take effect.
    */
   async buildAll(
     sourcesWithCredentials: SourceWithCredential[],
     getTokenForSource?: (source: LoadedSource) => (() => Promise<string>) | undefined,
-    sessionPath?: string
+    sessionPath?: string,
+    summarize?: SummarizeCallback,
+    getCredentialForSource?: (source: LoadedSource) => (() => Promise<ApiCredential | null>) | undefined
   ): Promise<BuiltServers> {
     const mcpServers: Record<string, McpServerConfig> = {};
     const apiServers: Record<string, ReturnType<typeof createSdkMcpServer>> = {};
     const errors: BuiltServers['errors'] = [];
 
     for (const { source, token, credential } of sourcesWithCredentials) {
-      if (!source.config.enabled) continue;
+      if (!isSourceUsable(source)) continue;
 
       try {
         if (source.config.type === 'mcp') {
-          const config = this.buildMcpServer(source, token ?? null);
+          const config = this.buildMcpServer(source, token ?? null, credential);
           if (config) {
             debug(`[SourceServerBuilder] Built MCP server for ${source.config.slug}`);
             mcpServers[source.config.slug] = config;
@@ -267,7 +343,15 @@ export class SourceServerBuilder {
           }
         } else if (source.config.type === 'api') {
           const getToken = getTokenForSource?.(source);
-          const server = await this.buildApiServer(source, credential ?? null, getToken, sessionPath);
+          const getCredential = getCredentialForSource?.(source);
+          const server = await this.buildApiServer(
+            source,
+            credential ?? null,
+            getToken,
+            sessionPath,
+            summarize,
+            getCredential
+          );
           if (server) {
             apiServers[source.config.slug] = server;
           }
@@ -286,23 +370,10 @@ export class SourceServerBuilder {
 /**
  * Normalize MCP URL to standard format
  * - Removes trailing slashes
- * - Preserves /sse suffix for SSE type detection
- * - Ensures /mcp suffix for HTTP type
+ * - Preserves the user-configured path as-is (no /mcp suffix appended)
  */
 export function normalizeMcpUrl(url: string): string {
-  url = url.replace(/\/+$/, '');
-
-  // If URL ends with /sse, keep it for SSE type detection
-  if (url.endsWith('/sse')) {
-    return url;
-  }
-
-  // Ensure /mcp suffix for HTTP type
-  if (!url.endsWith('/mcp')) {
-    url = url + '/mcp';
-  }
-
-  return url;
+  return url.replace(/\/+$/, '');
 }
 
 // Singleton instance

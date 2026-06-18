@@ -10,6 +10,8 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import { FileText } from 'lucide-react'
 import type { StoredSession } from '@craft-agent/core'
 import {
   SessionViewer,
@@ -19,7 +21,10 @@ import {
   TerminalPreviewOverlay,
   JSONPreviewOverlay,
   DocumentFormattedMarkdownOverlay,
+  TooltipProvider,
   extractOverlayData,
+  detectLanguage,
+  openExternalUrl,
   type PlatformActions,
   type ActivityItem,
   type OverlayData,
@@ -47,6 +52,7 @@ function getSessionIdFromUrl(): string | null {
 }
 
 export function App() {
+  const { t } = useTranslation()
   const [session, setSession] = useState<StoredSession | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -68,9 +74,9 @@ export function App() {
         const response = await fetch(`/s/api/${sessionId}`)
         if (!response.ok) {
           if (response.status === 404) {
-            setError('Session not found')
+            setError(t('errors.sessionNotFound'))
           } else {
-            setError('Failed to load session')
+            setError(t('errors.failedToLoadSession'))
           }
           return
         }
@@ -79,7 +85,7 @@ export function App() {
         setSession(data)
       } catch (err) {
         console.error('Failed to fetch session:', err)
-        setError('Failed to load session')
+        setError(t('errors.failedToLoadSession'))
       } finally {
         setIsLoading(false)
       }
@@ -141,14 +147,17 @@ export function App() {
   const handleActivityClick = useCallback((activity: ActivityItem) => {
     if (activity.toolName === 'Edit' || activity.toolName === 'Write') {
       const input = activity.toolInput as Record<string, unknown> | undefined
+      // Claude fields are primary; PI fields are additive fallbacks.
       const filePath = (input?.file_path as string) || (input?.path as string) || 'unknown'
       const change: FileChange = {
         id: activity.id,
         filePath,
         toolType: activity.toolName,
-        original: activity.toolName === 'Edit' ? ((input?.old_string as string) || '') : '',
+        original: activity.toolName === 'Edit'
+          ? ((input?.old_string as string) || (input?.oldText as string) || '')
+          : '',
         modified: activity.toolName === 'Edit'
-          ? ((input?.new_string as string) || '')
+          ? ((input?.new_string as string) || (input?.newText as string) || '')
           : ((input?.content as string) || ''),
         error: activity.error || undefined,
       }
@@ -172,7 +181,11 @@ export function App() {
   // Platform actions for the viewer (limited functionality)
   const platformActions: PlatformActions = {
     onOpenUrl: (url) => {
-      window.open(url, '_blank', 'noopener,noreferrer')
+      const result = openExternalUrl(url)
+      if (!result.opened) {
+        const detail = result.reason === 'dangerous' ? result.detail : result.reason
+        console.warn('[viewer:onOpenUrl] blocked URL:', detail, url)
+      }
     },
     onCopyToClipboard: async (text) => {
       await navigator.clipboard.writeText(text)
@@ -182,6 +195,7 @@ export function App() {
   const theme = isDark ? 'dark' : 'light'
 
   return (
+    <TooltipProvider>
     <div className="h-full flex flex-col bg-foreground-2 text-foreground">
       <Header
         hasSession={!!session}
@@ -237,6 +251,7 @@ export function App() {
           numLines={overlayData.numLines}
           theme={theme}
           error={overlayData.error}
+          command={overlayData.command}
         />
       )}
 
@@ -284,22 +299,33 @@ export function App() {
           onClose={handleCloseOverlay}
           content={overlayData.content}
           filePath={overlayData.filePath}
-          typeBadge={{ label: overlayData.toolName, variant: 'default' }}
+          typeBadge={{ icon: FileText, label: overlayData.toolName, variant: 'default' }}
           onOpenUrl={platformActions.onOpenUrl}
           error={overlayData.error}
         />
       )}
 
-      {/* Generic overlay for unknown tools */}
+      {/* Generic overlay for unknown tools - route markdown to fullscreen viewer */}
       {overlayData?.type === 'generic' && (
-        <GenericOverlay
-          isOpen={!!overlayActivity}
-          onClose={handleCloseOverlay}
-          content={overlayData.content}
-          title={overlayData.title}
-          theme={theme}
-        />
+        detectLanguage(overlayData.content) === 'markdown' ? (
+          <DocumentFormattedMarkdownOverlay
+            isOpen={!!overlayActivity}
+            onClose={handleCloseOverlay}
+            content={overlayData.content}
+            onOpenUrl={platformActions.onOpenUrl}
+            error={overlayData.error}
+          />
+        ) : (
+          <GenericOverlay
+            isOpen={!!overlayActivity}
+            onClose={handleCloseOverlay}
+            content={overlayData.content}
+            title={overlayData.title}
+            theme={theme}
+          />
+        )
       )}
     </div>
+    </TooltipProvider>
   )
 }

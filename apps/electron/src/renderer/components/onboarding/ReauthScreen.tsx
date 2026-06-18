@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@craft-agent/ui"
@@ -17,6 +18,7 @@ interface ReauthScreenProps {
  * is missing or expired. Much simpler than full onboarding - just re-authenticate.
  */
 export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
+  const { t } = useTranslation()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -44,15 +46,15 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
               <AlertCircle className="size-8 text-info" />
             </div>
           }
-          title="Session Expired"
+          title={t("onboarding.reauth.title")}
           description={
             <>
-              Your Craft session has expired or is no longer valid.
+              {t("onboarding.reauth.expired")}
               <br />
-              Please log in again to continue using Craft Agents.
+              {t("onboarding.reauth.loginAgain")}
               <br />
               <span className="text-muted-foreground/70 text-xs mt-2 block">
-                Your conversations and settings are preserved.
+                {t("onboarding.reauth.preserved")}
               </span>
             </>
           }
@@ -67,12 +69,12 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
                 {isLoading ? (
                   <>
                     <Spinner className="mr-2" />
-                    Logging in...
+                    {t("onboarding.reauth.loggingIn")}
                   </>
                 ) : (
                   <>
                     <RefreshCw className="mr-2 size-4" />
-                    Log In with Craft
+                    {t("onboarding.reauth.loginWithCraft")}
                   </>
                 )}
               </Button>
@@ -83,7 +85,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
                 className="w-full max-w-[320px] bg-foreground-2 shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
                 size="sm"
               >
-                Reset app and start fresh...
+                {t("onboarding.reauth.resetApp")}
               </Button>
             </div>
           }

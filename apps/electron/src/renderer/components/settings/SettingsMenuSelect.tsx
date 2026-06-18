@@ -7,6 +7,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from "react-i18next"
 import { Check, ChevronDown, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -61,8 +62,10 @@ export function SettingsMenuSelect({
   menuWidth = 280,
   onHover,
   searchable,
-  searchPlaceholder = 'Search...',
+  searchPlaceholder,
 }: SettingsMenuSelectProps) {
+  const { t } = useTranslation()
+  const effectiveSearchPlaceholder = searchPlaceholder ?? t("common.search")
   const [isOpen, setIsOpen] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
   const searchInputRef = React.useRef<HTMLInputElement>(null)
@@ -138,7 +141,7 @@ export function SettingsMenuSelect({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={searchPlaceholder}
+              placeholder={effectiveSearchPlaceholder}
               className={cn(
                 'w-full h-8 pl-8 pr-3 text-sm rounded-md',
                 'bg-foreground/5 border-0',
@@ -238,6 +241,7 @@ export function SettingsMenuSelectRow({
 }: SettingsMenuSelectRowProps) {
   return (
     <div
+      data-layout="settings-row"
       className={cn(
         'flex items-center justify-between',
         inCard ? 'px-4 py-3.5' : 'py-3',
@@ -250,7 +254,7 @@ export function SettingsMenuSelectRow({
           <p className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>{description}</p>
         )}
       </div>
-      <div className="ml-4 shrink-0">
+      <div data-layout="settings-control" className="ml-4 shrink-0">
         <SettingsMenuSelect
           value={value}
           onValueChange={onValueChange}

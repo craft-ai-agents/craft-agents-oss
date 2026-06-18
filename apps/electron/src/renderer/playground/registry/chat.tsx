@@ -5,14 +5,19 @@ import { SetupAuthBanner } from '@/components/app-shell/SetupAuthBanner'
 import { TurnCard, type ActivityItem } from '@craft-agent/ui'
 import type { BackgroundTask } from '@/components/app-shell/ActiveTasksBar'
 import { ActiveOptionBadges } from '@/components/app-shell/ActiveOptionBadges'
-import { InputContainer } from '@/components/app-shell/input'
+import { ChatInputZone, InputContainer } from '@/components/app-shell/input'
+import { setRecentWorkingDirs } from '@/components/app-shell/input/working-directory-history'
 import type { StructuredResponse } from '@/components/app-shell/input/structured/types'
 import { EmptyStateHint, getHintCount, getHintTemplate } from '@/components/chat/EmptyStateHint'
 import { Button } from '@/components/ui/button'
 import { motion } from 'motion/react'
-import { ArrowUp, Paperclip, ChevronDown, Sparkles } from 'lucide-react'
-import type { FileAttachment, PermissionRequest } from '../../../shared/types'
+import { ArrowUp, Paperclip, ChevronDown, Circle, Sparkles } from 'lucide-react'
+import type { LabelConfig } from '@craft-agent/shared/labels'
+import type { SessionStatus } from '@/config/session-status-config'
+import type { FileAttachment, PermissionRequest, PermissionMode } from '../../../shared/types'
 import { cn } from '@/lib/utils'
+import { AppShellProvider } from '@/context/AppShellContext'
+import { ModalProvider } from '@/context/ModalContext'
 import {
   ensureMockElectronAPI,
   mockInputCallbacks,
@@ -21,6 +26,8 @@ import {
   sampleImageAttachment,
   samplePdfAttachment,
 } from '../mock-utils'
+import { mockAdminApprovalRequest } from '../adapters/input-adapters'
+import { getRecentDirsForScenario, type RecentDirScenario } from '../recent-working-dirs'
 
 const sampleCodeAttachment: FileAttachment = {
   type: 'text',
@@ -126,6 +133,82 @@ const longRunningTasks: BackgroundTask[] = [
     intent: 'Run tests',
   },
 ]
+
+const inputContainerSampleLabels: LabelConfig[] = [
+  { id: 'bug', name: 'Bug', color: { light: '#EF4444', dark: '#F87171' } },
+  { id: 'priority', name: 'Priority', color: { light: '#F59E0B', dark: '#FBBF24' }, valueType: 'number' },
+  { id: 'due-date', name: 'Due Date', color: { light: '#3B82F6', dark: '#60A5FA' }, valueType: 'date' },
+  { id: 'sprint', name: 'Sprint', color: { light: '#8B5CF6', dark: '#A78BFA' }, valueType: 'string' },
+]
+
+const inputContainerSampleStatuses: SessionStatus[] = [
+  {
+    id: 'todo',
+    label: 'Todo',
+    resolvedColor: 'var(--muted-foreground)',
+    icon: <Circle className="h-3.5 w-3.5" strokeWidth={1.5} />,
+    iconColorable: true,
+    category: 'open',
+  },
+  {
+    id: 'in-progress',
+    label: 'In Progress',
+    resolvedColor: 'var(--info)',
+    icon: <Circle className="h-3.5 w-3.5" strokeWidth={1.5} />,
+    iconColorable: true,
+    category: 'open',
+  },
+  {
+    id: 'done',
+    label: 'Done',
+    resolvedColor: 'var(--success)',
+    icon: <Circle className="h-3.5 w-3.5" strokeWidth={1.5} />,
+    iconColorable: true,
+    category: 'closed',
+  },
+]
+
+const playgroundAppShellContext = {
+  workspaces: [{ id: 'playground-workspace', name: 'Playground', path: '/playground', rootPath: '/playground' }],
+  activeWorkspaceId: 'playground-workspace',
+  activeWorkspaceSlug: 'playground-workspace',
+  llmConnections: [],
+  workspaceDefaultLlmConnection: undefined,
+  refreshLlmConnections: async () => {},
+  pendingPermissions: new Map(),
+  pendingCredentials: new Map(),
+  getDraft: () => '',
+  sessionOptions: new Map(),
+  onCreateSession: async () => ({
+    id: 'playground-session',
+    workspaceId: 'playground-workspace',
+    workspaceName: 'Playground',
+    messages: [],
+    isProcessing: false,
+    lastMessageAt: Date.now(),
+  }),
+  onSendMessage: () => {},
+  onRenameSession: () => {},
+  onFlagSession: () => {},
+  onUnflagSession: () => {},
+  onArchiveSession: () => {},
+  onUnarchiveSession: () => {},
+  onMarkSessionRead: () => {},
+  onMarkSessionUnread: () => {},
+  onSetActiveViewingSession: () => {},
+  onSessionStatusChange: () => {},
+  onDeleteSession: async () => true,
+  onOpenFile: () => {},
+  onOpenUrl: () => {},
+  onSelectWorkspace: () => {},
+  onRefreshWorkspaces: () => {},
+  onOpenSettings: () => {},
+  onOpenKeyboardShortcuts: () => {},
+  onOpenStoredUserPreferences: () => {},
+  onReset: () => {},
+  onSessionOptionsChange: () => {},
+  onInputChange: () => {},
+}
 
 // ============================================================================
 // Sample Nested Tool Activities (Task subagent with child tools)
@@ -441,6 +524,261 @@ const deepNestedActivities: ActivityItem[] = [
   },
 ]
 
+type InputContainerMode = 'freeform' | 'permission' | 'admin_approval'
+
+interface InputContainerPlaygroundProps {
+  disabled?: boolean
+  isProcessing?: boolean
+  placeholder?: string
+  currentModel?: string
+  permissionMode?: PermissionMode
+  workingDirectory?: string
+  inputMode?: InputContainerMode
+  compactMode?: boolean
+  showOptionBadges?: boolean
+  showTasks?: boolean
+  showLabels?: boolean
+  showStatuses?: boolean
+  labelCount?: number
+  showSources?: boolean
+  sourceCount?: number
+  showWorkingDirectory?: boolean
+  seedRecentDirs?: boolean
+  recentDirScenario?: RecentDirScenario
+  showAttachments?: boolean
+  attachmentCount?: number
+  showFollowUps?: boolean
+  followUpCount?: number
+}
+
+function InputContainerPlayground({
+  disabled = false,
+  isProcessing = false,
+  placeholder = 'Message Craft Agent...',
+  currentModel = 'claude-sonnet-4-6',
+  permissionMode = 'ask',
+  workingDirectory = '/Users/demo/projects/craft-agent',
+  inputMode = 'freeform',
+  compactMode = false,
+  showOptionBadges = true,
+  showTasks = true,
+  showLabels = true,
+  showStatuses = true,
+  labelCount = 3,
+  showSources = true,
+  sourceCount = 2,
+  showWorkingDirectory = true,
+  seedRecentDirs = true,
+  recentDirScenario = 'few',
+  showAttachments = false,
+  attachmentCount = 2,
+  showFollowUps = false,
+  followUpCount = 2,
+}: InputContainerPlaygroundProps) {
+  const playgroundSessionId = 'playground-session'
+  const [model, setModel] = React.useState(currentModel)
+  const [mode, setMode] = React.useState<PermissionMode>(permissionMode)
+  const [inputValue, setInputValue] = React.useState('')
+  const [currentSessionStatus, setCurrentSessionStatus] = React.useState('in-progress')
+  const [cwd, setCwd] = React.useState(workingDirectory)
+
+  React.useEffect(() => {
+    ensureMockElectronAPI()
+  }, [])
+
+  React.useEffect(() => {
+    if (!seedRecentDirs) return
+    setRecentWorkingDirs(getRecentDirsForScenario(recentDirScenario))
+  }, [seedRecentDirs, recentDirScenario])
+
+  React.useEffect(() => {
+    setModel(currentModel)
+  }, [currentModel])
+
+  React.useEffect(() => {
+    setMode(permissionMode)
+  }, [permissionMode])
+
+  React.useEffect(() => {
+    setCwd(workingDirectory)
+  }, [workingDirectory])
+
+  const labels = React.useMemo(() => inputContainerSampleLabels.slice(0, Math.max(1, Math.min(labelCount, inputContainerSampleLabels.length))), [labelCount])
+
+  const [sessionLabels, setSessionLabels] = React.useState<string[]>(['bug', 'priority::2', 'sprint::Q1-S3'])
+
+  React.useEffect(() => {
+    const next = labels.map((label) => {
+      if (label.id === 'priority') return 'priority::2'
+      if (label.id === 'due-date') return 'due-date::2026-03-15'
+      if (label.id === 'sprint') return 'sprint::Q1-S3'
+      return label.id
+    })
+    setSessionLabels(next)
+  }, [labels])
+
+  const sources = React.useMemo(() => mockSources.slice(0, Math.max(1, Math.min(sourceCount, mockSources.length))), [sourceCount])
+  const defaultEnabled = React.useMemo(() => sources.slice(0, Math.min(2, sources.length)).map(source => source.config.slug), [sources])
+  const [enabledSourceSlugs, setEnabledSourceSlugs] = React.useState<string[]>(defaultEnabled)
+
+  React.useEffect(() => {
+    setEnabledSourceSlugs(defaultEnabled)
+  }, [defaultEnabled])
+
+  const followUpItems = React.useMemo(() => {
+    const samples = [
+      {
+        id: 'fu-a',
+        messageId: 'assistant-msg-1',
+        annotationId: 'annotation-1',
+        index: 1,
+        noteLabel: 'Prevent stale token from discarding draft input.',
+        selectedText: 'Include OAuth refresh edge cases',
+        color: 'info',
+      },
+      {
+        id: 'fu-b',
+        messageId: 'assistant-msg-1',
+        annotationId: 'annotation-2',
+        index: 2,
+        noteLabel: 'Check compact mode and quick mode switching.',
+        selectedText: 'Validate animation with permission mode transitions',
+        color: 'info',
+      },
+      {
+        id: 'fu-c',
+        messageId: 'assistant-msg-2',
+        annotationId: 'annotation-3',
+        index: 3,
+        noteLabel: 'Review spacing and overflow for label/source badge density.',
+        selectedText: 'Review label + source badge density on narrow widths',
+        color: 'info',
+      },
+      {
+        id: 'fu-d',
+        messageId: 'assistant-msg-3',
+        annotationId: 'annotation-4',
+        index: 4,
+        noteLabel: 'Add chip click affordance for jumping back to annotation',
+        selectedText: 'Add chip click affordance for jumping back to annotation',
+        color: 'info',
+      },
+    ]
+    if (!showFollowUps) return []
+    return samples.slice(0, Math.max(1, Math.min(followUpCount, samples.length)))
+  }, [showFollowUps, followUpCount])
+
+  const attachmentFiles = React.useMemo(() => {
+    if (!showAttachments) return [] as File[]
+
+    const imageBytes = sampleImageAttachment.base64
+      ? Uint8Array.from(atob(sampleImageAttachment.base64), char => char.charCodeAt(0))
+      : new Uint8Array([137, 80, 78, 71])
+
+    const samples: File[] = [
+      new File([imageBytes], sampleImageAttachment.name, { type: sampleImageAttachment.mimeType }),
+      new File(['%PDF-1.4\n% Playground sample\n'], samplePdfAttachment.name, { type: samplePdfAttachment.mimeType }),
+      new File(['export function App() {\n  return <div>Hello Playground</div>\n}\n'], sampleCodeAttachment.name, { type: sampleCodeAttachment.mimeType }),
+    ]
+
+    return samples.slice(0, Math.max(1, Math.min(attachmentCount, samples.length)))
+  }, [showAttachments, attachmentCount])
+
+  const attachmentSeedKey = React.useMemo(() => {
+    if (!showAttachments) return 'none'
+    return attachmentFiles.map(file => `${file.name}:${file.size}`).join('|')
+  }, [showAttachments, attachmentFiles])
+
+  React.useEffect(() => {
+    if (!showAttachments || attachmentFiles.length === 0) return
+
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('craft:paste-files', {
+        detail: {
+          files: attachmentFiles,
+          sessionId: playgroundSessionId,
+        },
+      }))
+    }, 0)
+
+    return () => clearTimeout(timer)
+  }, [showAttachments, attachmentSeedKey, attachmentFiles, playgroundSessionId])
+
+  const structuredInput = React.useMemo(() => {
+    if (inputMode === 'permission') {
+      return {
+        type: 'permission' as const,
+        data: samplePermissionRequest,
+      }
+    }
+
+    if (inputMode === 'admin_approval') {
+      return {
+        type: 'admin_approval' as const,
+        data: mockAdminApprovalRequest({
+          appName: 'Docker Desktop',
+          reason: 'Homebrew needs admin access to complete post-install steps.',
+          impact: 'May install files in /Applications and system-managed directories.',
+          command: 'brew install --cask docker',
+        }),
+      }
+    }
+
+    return undefined
+  }, [inputMode])
+
+  return (
+    <ModalProvider>
+    <AppShellProvider value={playgroundAppShellContext as any}>
+      <div className="w-full h-full flex flex-col bg-background">
+        <div className="flex-1" />
+
+        <ChatInputZone
+          key={`input:${inputMode}:${compactMode ? 'compact' : 'full'}:${showAttachments ? attachmentSeedKey : 'none'}:${showFollowUps ? followUpCount : 0}:${seedRecentDirs ? recentDirScenario : 'unseeded'}`}
+          compactMode={compactMode}
+          showOptionBadges={showOptionBadges}
+          permissionMode={mode}
+          onPermissionModeChange={setMode}
+          tasks={showTasks ? sampleBackgroundTasks : []}
+          sessionId={playgroundSessionId}
+          onKillTask={(taskId) => console.log('[Playground] Kill task:', taskId)}
+          onInsertMessage={setInputValue}
+          sessionLabels={showLabels ? sessionLabels : []}
+          labels={showLabels ? labels : []}
+          onLabelsChange={setSessionLabels}
+          sessionStatuses={showStatuses ? inputContainerSampleStatuses : []}
+          currentSessionStatus={showStatuses ? currentSessionStatus : undefined}
+          onSessionStatusChange={setCurrentSessionStatus}
+          inputProps={{
+            placeholder,
+            disabled,
+            isProcessing,
+            structuredInput,
+            onStructuredResponse: (response) => {
+              console.log('[Playground] Structured response:', response)
+            },
+            currentModel: model,
+            sources: showSources ? sources : [],
+            enabledSourceSlugs: showSources ? enabledSourceSlugs : [],
+            onSourcesChange: showSources ? setEnabledSourceSlugs : undefined,
+            workingDirectory: showWorkingDirectory ? cwd : undefined,
+            onWorkingDirectoryChange: showWorkingDirectory ? setCwd : undefined,
+            followUpItems,
+            onSubmit: mockInputCallbacks.onSubmit,
+            onModelChange: setModel,
+            onInputChange: setInputValue,
+            inputValue,
+            onHeightChange: mockInputCallbacks.onHeightChange,
+            onFocusChange: mockInputCallbacks.onFocusChange,
+            onStop: mockInputCallbacks.onStop,
+          }}
+        />
+      </div>
+    </AppShellProvider>
+    </ModalProvider>
+  )
+}
+
 /**
  * Contextual wrapper for ActiveTasksBar showing it with messages and input
  */
@@ -449,8 +787,7 @@ interface ActiveTasksBarContextProps {
 }
 
 function ActiveTasksBarContext({ tasks = sampleBackgroundTasks }: ActiveTasksBarContextProps) {
-  const [permissionMode, setPermissionMode] = React.useState<'safe' | 'ask' | 'allow-all'>('ask')
-  const [ultrathinkEnabled, setUltrathinkEnabled] = React.useState(false)
+  const [permissionMode, setPermissionMode] = React.useState<PermissionMode>('ask')
 
   // Inject mock electronAPI for file attachments
   React.useEffect(() => {
@@ -480,8 +817,6 @@ function ActiveTasksBarContext({ tasks = sampleBackgroundTasks }: ActiveTasksBar
       <div className="mx-auto w-full px-4 pb-4 mt-1" style={{ maxWidth: 'var(--content-max-width, 960px)' }}>
         {/* Active option badges and tasks */}
         <ActiveOptionBadges
-          ultrathinkEnabled={ultrathinkEnabled}
-          onUltrathinkChange={setUltrathinkEnabled}
           permissionMode={permissionMode}
           onPermissionModeChange={setPermissionMode}
           tasks={tasks}
@@ -494,11 +829,9 @@ function ActiveTasksBarContext({ tasks = sampleBackgroundTasks }: ActiveTasksBar
           placeholder="Message Craft Agent..."
           disabled={false}
           isProcessing={false}
-          currentModel="claude-sonnet-4-5-20250929"
+          currentModel="claude-sonnet-4-6"
           permissionMode={permissionMode}
           onPermissionModeChange={setPermissionMode}
-          ultrathinkEnabled={ultrathinkEnabled}
-          onUltrathinkChange={setUltrathinkEnabled}
           sources={mockSources}
           enabledSourceSlugs={['github-api', 'local-files']}
           workingDirectory="/Users/demo/projects/craft-agent"
@@ -529,8 +862,7 @@ interface PermissionInputToggleProps {
 
 function PermissionInputToggle({ autoToggle = false, autoToggleInterval = 3000, useLongCommand = false }: PermissionInputToggleProps) {
   const [showPermission, setShowPermission] = React.useState(false)
-  const [permissionMode, setPermissionMode] = React.useState<'safe' | 'ask' | 'allow-all'>('ask')
-  const [ultrathinkEnabled, setUltrathinkEnabled] = React.useState(false)
+  const [permissionMode, setPermissionMode] = React.useState<PermissionMode>('ask')
 
   const permissionRequest = useLongCommand ? veryLongPermissionRequest : samplePermissionRequest
 
@@ -591,8 +923,6 @@ function PermissionInputToggle({ autoToggle = false, autoToggleInterval = 3000, 
 
       {/* Active option badges */}
       <ActiveOptionBadges
-        ultrathinkEnabled={ultrathinkEnabled}
-        onUltrathinkChange={setUltrathinkEnabled}
         permissionMode={permissionMode}
         onPermissionModeChange={setPermissionMode}
       />
@@ -602,11 +932,9 @@ function PermissionInputToggle({ autoToggle = false, autoToggleInterval = 3000, 
         placeholder="Message Craft Agent..."
         disabled={false}
         isProcessing={false}
-        currentModel="claude-sonnet-4-5-20250929"
+        currentModel="claude-sonnet-4-6"
         permissionMode={permissionMode}
         onPermissionModeChange={setPermissionMode}
-        ultrathinkEnabled={ultrathinkEnabled}
-        onUltrathinkChange={setUltrathinkEnabled}
         sources={mockSources}
         enabledSourceSlugs={['github-api', 'local-files']}
         workingDirectory="/Users/demo/projects/craft-agent"
@@ -727,15 +1055,9 @@ export const chatComponents: ComponentEntry[] = [
     id: 'active-option-badges',
     name: 'ActiveOptionBadges',
     category: 'Chat',
-    description: 'Shows active options (ultrathink, permission mode) and background tasks as badge pills above chat input',
+    description: 'Shows active options (permission mode) and background tasks as badge pills above chat input',
     component: ActiveOptionBadges,
     props: [
-      {
-        name: 'ultrathinkEnabled',
-        description: 'Show ultrathink badge',
-        control: { type: 'boolean' },
-        defaultValue: false,
-      },
       {
         name: 'permissionMode',
         description: 'Current permission mode',
@@ -763,21 +1085,19 @@ export const chatComponents: ComponentEntry[] = [
       },
     ],
     variants: [
-      { name: 'Ultrathink Only', props: { ultrathinkEnabled: true, permissionMode: 'ask', tasks: [], sessionId: 'session-1' } },
-      { name: 'Permission Mode (Ask)', props: { ultrathinkEnabled: false, permissionMode: 'ask', tasks: [], sessionId: 'session-1' } },
-      { name: 'Permission Mode (Safe)', props: { ultrathinkEnabled: false, permissionMode: 'safe', tasks: [], sessionId: 'session-1' } },
-      { name: 'Permission Mode (Allow All)', props: { ultrathinkEnabled: false, permissionMode: 'allow-all', tasks: [], sessionId: 'session-1' } },
-      { name: 'Single Task', props: { ultrathinkEnabled: false, permissionMode: 'ask', tasks: singleBackgroundTask, sessionId: 'session-1' } },
-      { name: 'Multiple Tasks', props: { ultrathinkEnabled: false, permissionMode: 'ask', tasks: sampleBackgroundTasks, sessionId: 'session-1' } },
-      { name: 'Long Running Tasks', props: { ultrathinkEnabled: false, permissionMode: 'ask', tasks: longRunningTasks, sessionId: 'session-1' } },
-      { name: 'All Active (Everything)', props: { ultrathinkEnabled: true, permissionMode: 'ask', tasks: sampleBackgroundTasks, sessionId: 'session-1' } },
-      { name: 'Tasks in Safe Mode', props: { ultrathinkEnabled: false, permissionMode: 'safe', tasks: sampleBackgroundTasks, sessionId: 'session-1' } },
-      { name: 'Cycle Variant', props: { ultrathinkEnabled: false, permissionMode: 'ask', tasks: sampleBackgroundTasks, variant: 'cycle', sessionId: 'session-1' } },
+      { name: 'Permission Mode (Ask)', props: { permissionMode: 'ask', tasks: [], sessionId: 'session-1' } },
+      { name: 'Permission Mode (Safe)', props: { permissionMode: 'safe', tasks: [], sessionId: 'session-1' } },
+      { name: 'Permission Mode (Allow All)', props: { permissionMode: 'allow-all', tasks: [], sessionId: 'session-1' } },
+      { name: 'Single Task', props: { permissionMode: 'ask', tasks: singleBackgroundTask, sessionId: 'session-1' } },
+      { name: 'Multiple Tasks', props: { permissionMode: 'ask', tasks: sampleBackgroundTasks, sessionId: 'session-1' } },
+      { name: 'Long Running Tasks', props: { permissionMode: 'ask', tasks: longRunningTasks, sessionId: 'session-1' } },
+      { name: 'All Active (Everything)', props: { permissionMode: 'ask', tasks: sampleBackgroundTasks, sessionId: 'session-1' } },
+      { name: 'Tasks in Safe Mode', props: { permissionMode: 'safe', tasks: sampleBackgroundTasks, sessionId: 'session-1' } },
+      { name: 'Cycle Variant', props: { permissionMode: 'ask', tasks: sampleBackgroundTasks, variant: 'cycle', sessionId: 'session-1' } },
     ],
     mockData: () => ({
       tasks: sampleBackgroundTasks,
       sessionId: 'session-playground',
-      onUltrathinkChange: (enabled: boolean) => console.log('[Playground] Ultrathink changed:', enabled),
       onPermissionModeChange: (mode: string) => console.log('[Playground] Permission mode changed:', mode),
       onKillTask: (taskId: string) => console.log('[Playground] Kill task:', taskId),
     }),
@@ -903,7 +1223,7 @@ export const chatComponents: ComponentEntry[] = [
     id: 'active-tasks-bar-context',
     name: 'Active Tasks & Badges',
     category: 'Chat',
-    description: 'Integrated display of option badges (ultrathink, permission mode) and background tasks in a horizontally scrollable row. Shows full chat context with messages above and input below.',
+    description: 'Integrated display of option badges (permission mode) and background tasks in a horizontally scrollable row. Shows full chat context with messages above and input below.',
     component: ActiveTasksBarContext,
     layout: 'full',
     props: [],
@@ -921,10 +1241,24 @@ export const chatComponents: ComponentEntry[] = [
     id: 'input-container',
     name: 'InputContainer',
     category: 'Chat Inputs',
-    description: 'Full-featured chat input with attachments, model selector, slash commands, permission mode, sources, and working directory',
-    component: InputContainer,
+    description: 'App-like input zone with max-width layout, active option badges, labels, statuses, tasks, and full InputContainer behavior',
+    component: InputContainerPlayground,
     layout: 'full',
+    previewOverflow: 'visible',
     props: [
+      {
+        name: 'inputMode',
+        description: 'Input mode rendered by InputContainer',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'Freeform', value: 'freeform' },
+            { label: 'Permission', value: 'permission' },
+            { label: 'Admin Approval', value: 'admin_approval' },
+          ],
+        },
+        defaultValue: 'freeform',
+      },
       {
         name: 'disabled',
         description: 'Disable all inputs',
@@ -934,6 +1268,12 @@ export const chatComponents: ComponentEntry[] = [
       {
         name: 'isProcessing',
         description: 'Show processing state (disables send, shows stop)',
+        control: { type: 'boolean' },
+        defaultValue: false,
+      },
+      {
+        name: 'compactMode',
+        description: 'Compact mode used by embedded editors/popovers',
         control: { type: 'boolean' },
         defaultValue: false,
       },
@@ -949,12 +1289,13 @@ export const chatComponents: ComponentEntry[] = [
         control: {
           type: 'select',
           options: [
-            { label: 'Sonnet 4.5', value: 'claude-sonnet-4-5-20250929' },
-            { label: 'Opus 4.5', value: 'claude-opus-4-5-20251101' },
+            { label: 'Opus 4.8', value: 'claude-opus-4-8' },
+            { label: 'Opus 4.7', value: 'claude-opus-4-7' },
+            { label: 'Sonnet 4.6', value: 'claude-sonnet-4-6' },
             { label: 'Haiku 3.5', value: 'claude-3-5-haiku-20241022' },
           ],
         },
-        defaultValue: 'claude-sonnet-4-5-20250929',
+        defaultValue: 'claude-sonnet-4-6',
       },
       {
         name: 'permissionMode',
@@ -970,10 +1311,52 @@ export const chatComponents: ComponentEntry[] = [
         defaultValue: 'ask',
       },
       {
-        name: 'ultrathinkEnabled',
-        description: 'Show ultrathink toggle',
+        name: 'showOptionBadges',
+        description: 'Show the ActiveOptionBadges row above input',
         control: { type: 'boolean' },
-        defaultValue: false,
+        defaultValue: true,
+      },
+      {
+        name: 'showTasks',
+        description: 'Include background tasks in badges row',
+        control: { type: 'boolean' },
+        defaultValue: true,
+      },
+      {
+        name: 'showLabels',
+        description: 'Include label badges and value editing',
+        control: { type: 'boolean' },
+        defaultValue: true,
+      },
+      {
+        name: 'labelCount',
+        description: 'Number of label configs to show',
+        control: { type: 'number', min: 1, max: 4, step: 1 },
+        defaultValue: 3,
+      },
+      {
+        name: 'showStatuses',
+        description: 'Include session status badge and menu',
+        control: { type: 'boolean' },
+        defaultValue: true,
+      },
+      {
+        name: 'showSources',
+        description: 'Enable sources selector badge and source mentions',
+        control: { type: 'boolean' },
+        defaultValue: true,
+      },
+      {
+        name: 'sourceCount',
+        description: 'How many sources are available in selector',
+        control: { type: 'number', min: 1, max: 4, step: 1 },
+        defaultValue: 2,
+      },
+      {
+        name: 'showWorkingDirectory',
+        description: 'Show working directory context badge',
+        control: { type: 'boolean' },
+        defaultValue: true,
       },
       {
         name: 'workingDirectory',
@@ -981,48 +1364,167 @@ export const chatComponents: ComponentEntry[] = [
         control: { type: 'string', placeholder: '/path/to/project' },
         defaultValue: '/Users/demo/projects/craft-agent',
       },
+      {
+        name: 'seedRecentDirs',
+        description: 'Seed recent working directory history in playground local storage',
+        control: { type: 'boolean' },
+        defaultValue: true,
+      },
+      {
+        name: 'recentDirScenario',
+        description: 'Fixture set used for recent working directory history',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'Few (3 items)', value: 'few' },
+            { label: 'Many (9 items + filter)', value: 'many' },
+            { label: 'None (empty)', value: 'none' },
+          ],
+        },
+        defaultValue: 'few',
+      },
+      {
+        name: 'showAttachments',
+        description: 'Show preloaded attachment chips above editor',
+        control: { type: 'boolean' },
+        defaultValue: false,
+      },
+      {
+        name: 'attachmentCount',
+        description: 'Number of preloaded attachments to preview',
+        control: { type: 'number', min: 1, max: 3, step: 1 },
+        defaultValue: 2,
+      },
+      {
+        name: 'showFollowUps',
+        description: 'Show follow-up annotation chips above editor',
+        control: { type: 'boolean' },
+        defaultValue: false,
+      },
+      {
+        name: 'followUpCount',
+        description: 'Number of follow-up chips to preview',
+        control: { type: 'number', min: 1, max: 4, step: 1 },
+        defaultValue: 2,
+      },
     ],
-    mockData: () => {
-      // Ensure electronAPI is available
-      ensureMockElectronAPI()
-
-      return {
-        sources: mockSources,
-        enabledSourceSlugs: ['github-api', 'local-files'],
-        sessionId: 'playground-session',
-        ...mockInputCallbacks,
-      }
-    },
+    mockData: () => ({}),
     variants: [
       {
-        name: 'Default',
-        description: 'Normal state',
+        name: 'Default (Comprehensive)',
+        description: 'App-like full setup with badges, labels, statuses, sources, and working directory',
         props: {},
       },
       {
-        name: 'Processing',
-        description: 'While agent is processing',
+        name: 'Working Dir History (Few)',
+        description: 'Recent working directory list with a few entries (remove button testing)',
+        props: {
+          showWorkingDirectory: true,
+          seedRecentDirs: true,
+          recentDirScenario: 'few',
+        },
+      },
+      {
+        name: 'Working Dir History (Many + Filter)',
+        description: 'Recent working directory list with many entries to trigger filter input path',
+        props: {
+          showWorkingDirectory: true,
+          seedRecentDirs: true,
+          recentDirScenario: 'many',
+        },
+      },
+      {
+        name: 'Working Dir History (Empty)',
+        description: 'No recent directory history (empty state)',
+        props: {
+          showWorkingDirectory: true,
+          seedRecentDirs: true,
+          recentDirScenario: 'none',
+        },
+      },
+      {
+        name: 'Minimal',
+        description: 'Input only — no badges, no sources, no cwd badge',
+        props: {
+          showOptionBadges: false,
+          showSources: false,
+          showWorkingDirectory: false,
+        },
+      },
+      {
+        name: 'Processing + Tasks',
+        description: 'Streaming/processing state with background task badges',
         props: {
           isProcessing: true,
+          showTasks: true,
+          showOptionBadges: true,
         },
       },
       {
-        name: 'Safe Mode',
-        description: 'Read-only permission mode',
+        name: 'Safe + Compact',
+        description: 'Explore mode style in compact embedding',
         props: {
           permissionMode: 'safe',
+          compactMode: true,
+          showTasks: false,
         },
       },
       {
-        name: 'Ultrathink',
-        description: 'With ultrathink enabled',
+        name: 'Permission Mode UI',
+        description: 'Structured permission request replaces freeform input',
         props: {
-          ultrathinkEnabled: true,
+          inputMode: 'permission',
+          showFollowUps: false,
+        },
+      },
+      {
+        name: 'Admin Approval UI',
+        description: 'Structured admin approval request state',
+        props: {
+          inputMode: 'admin_approval',
+          showFollowUps: false,
+        },
+      },
+      {
+        name: 'Label-heavy Review',
+        description: 'Many labels + status for metadata density checks',
+        props: {
+          showLabels: true,
+          labelCount: 4,
+          showStatuses: true,
+          showTasks: false,
+        },
+      },
+      {
+        name: 'Source-heavy Review',
+        description: 'Multiple source avatars and source selector stress test',
+        props: {
+          showSources: true,
+          sourceCount: 4,
+          showWorkingDirectory: false,
+        },
+      },
+      {
+        name: 'Follow-up Review',
+        description: 'Follow-up annotation chips visible in input',
+        props: {
+          showFollowUps: true,
+          followUpCount: 3,
+        },
+      },
+      {
+        name: 'Attachments + Follow-ups',
+        description: 'Preloaded attachments with follow-up annotation chips visible together',
+        props: {
+          showAttachments: true,
+          attachmentCount: 2,
+          showFollowUps: true,
+          followUpCount: 3,
         },
       },
       {
         name: 'Disabled',
-        description: 'Fully disabled',
+        description: 'Fully disabled state',
         props: {
           disabled: true,
         },
