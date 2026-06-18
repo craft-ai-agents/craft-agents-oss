@@ -34,6 +34,7 @@ metadata:
 - RS 分区：`rs-uk` `rs-jp` `rs-hk`；`rs-us`（=Allied 美区，**需住宅代理**，仅生产可用）
 - `verical`（**Verical = Arrow 自营商城，机房直连可达、实时报盘**）：型号|品牌|描述|库存|价格|链接 一应俱全。**arrow 本站被反爬封死，要 arrow 货源就用它**（比聚合站 octopart 数据更实时）。
 - `element14-cn`（**e络盟中国店 cn.element14.com，机房直连可达、RMB 阶梯价**）：型号|品牌|规格|库存|阶梯价|交期|datasheet 全有，中文页。**element14/Farnell/Newark 国际站被反爬封、官方 API 门户长期 500——要 element14 货源就用这个中国店**。
+- `avnet`（**Avnet 安富利本站，主业分销真库存 + USD 阶梯价 + 交期**，2026-06-18 实测出料：如 LM358DR2G 现货 22.7 万、阶梯价、Min/Mult）：本站 PerimeterX 防护**间歇放行**，脚本已用「首页预热 + 命中才停的最多 4 轮重试」打穿——**能出真数据但较慢**（每轮十几秒，最坏 ~1 分钟）；多轮仍被挡时如实标"被拦未取到"，octopart 兜底。
 
 **连接器 / 机电互连：**
 - `peigenesis`（PEI-Genesis 连接器专家）`darisus`（德，连接器）`heilind`（赫联，连接器/机电）`sager`（电源/连接器/机电）
@@ -59,10 +60,10 @@ metadata:
 
 ## 反爬挡住/未接（如实告知，别硬试）
 
-- `arrow`、`element14`（网页）、`avnet`：Akamai/门户反爬把 IP 信誉拉黑（中国机房 + 住宅代理两个 IP 都被封，2026-06-18 实测仍 403 Access Denied），网页路径攻不下。**别再硬撞本站，按出路走**：
+- `arrow`、`element14` 国际站：Akamai/门户反爬把 IP 信誉拉黑（中国机房 + 住宅代理两个 IP 都被封，2026-06-18 实测仍 403 Access Denied），本站网页攻不下。**别硬撞，按出路走**：
   - **arrow 货源 → `--source verical`**（Arrow 自营商城，机房直连可达、实时报盘，**优先**）+ `octopart` 兜底。
   - **element14 货源 → `--source element14-cn`**（e络盟中国店，机房直连可达、RMB 阶梯价+库存+交期，2026-06-18 实测出料，**无需 key**）。Newark/国际站被封、官方 API 注册门户长期 HTTP 500——都别用。
-  - **avnet 货源 → `--source element14-cn` + `octopart`**（**Avnet 拥有 element14/e络盟**，目录高度重叠，e络盟中国店已间接覆盖 avnet 货；avnet 本站无 .cn 域、shop 被反爬挡，无独立直连路，不强求）。
+  - **avnet 货源 → `--source avnet`**（本站可查，见上「货源清单」；PerimeterX 间歇、脚本靠预热+多轮重试打穿，能出主业分销真库存+阶梯价，较慢；多轮仍被挡再用 octopart 兜底）。
 - 不接 / 受限：
   - `TI`（德州仪器）：**`ti.com.cn/product/cn/<MPN>` 中国产品页机房直连可达**（2026-06-18 实测未被挡），给 datasheet + 该 GPN 的全部可订变体 OPN（封装/卷带后缀），作**原厂参考/变体枚举**用；但**库存/价格在 store 接口 `productmodel/gpn/<GPN>/tistoresegmented`、401 受 PerimeterX 会话门控**——拿不到价/库存。TI 料 Digikey/Mouser/element14-cn 已覆盖，不强求其报价。
   - `chip1stop`：整站 502（被 Arrow 吞并、迁移中），货源≈arrow，已被 `verical` 覆盖，等站恢复再评估。

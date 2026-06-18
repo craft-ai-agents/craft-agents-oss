@@ -627,8 +627,9 @@ GENERIC = {
     # 官方 API 注册门户长期 500 拿不到 key。但 **e络盟中国店 cn.element14.com 从中国机房直连可达**
     # （2026-06-18 实测未被挡、RMB 报价、中文页），这才是 element14 货源的出路。
     "element14-cn": ("https://cn.element14.com/search?st={q}", False),
-    # ⚠️ 反爬（Akamai/403）——住宅 IP 信誉被拉黑，网页路径攻不下，需更干净住宅代理重测。
-    "avnet":     ("https://www.avnet.com/shop/us/search/?term={q}", True),
+    # avnet 不在此表——本站 PerimeterX 防护（间歇放行），需首页预热+多次重试，走专用 scrape_avnet。
+    # ⚠️ arrow 本站 Akamai 边缘封死（中国机房 + 住宅代理两 IP 都 403 Access Denied），网页路径死路——
+    # arrow 货源走 `--source verical`（Arrow 自营商城，见上），不要查这个。
     "arrow":     ("https://www.arrow.com/en/search-result.html?keyword={q}", True),
     # rs-us 不在此表——它是 Magento+DataDome+GroupBy 搜索，走专用 scrape_rs_us（拦 XHR+重试）
     # ❌ 不接（已查实，非架构问题）：
@@ -833,6 +834,55 @@ def scrape_jbchip(part, wait, limit):
         b.close()
 
 
+def scrape_avnet(part, wait, limit):
+    """Avnet（安富利）本站搜索：PerimeterX 防护，间歇放行（实测约 1/3）。破法同 tti——先访问 americas
+    首页让 PX 过自动挑战/种 cookie，再同上下文跳 search；被挡（Challenge Validation/空壳）就重试，最多 4 轮。
+    命中时渲染出真实产品行：Avnet 料号 + 库存 + 阶梯价。走住宅代理（直连必被 PX 挡），并**摘掉 env 代理
+    只用 launch 代理**（生产 agent 环境 HTTP_PROXY + launch 双代理会干扰这种重 SPA 的渲染）。"""
+    q = _q(part)
+    url = f"https://www.avnet.com/americas/products/c/search?search={q}"
+    saved = {}
+    for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+        if k in os.environ:
+            saved[k] = os.environ.pop(k)
+    try:
+        result = {"platform": "avnet", "url": url,
+                  "text": "（被反爬拦截未取到，不代表无货）", "hit": False, "blocked": True}
+        for _attempt in range(4):
+            b = launch(headless=True, humanize=True, proxy=MIHOMO)
+            try:
+                p = b.new_page()
+                try:
+                    p.goto("https://www.avnet.com/americas/", wait_until="domcontentloaded", timeout=wait * 1000)
+                except Exception:
+                    pass
+                p.wait_for_timeout(6000)   # 让 PerimeterX 自动挑战过墙
+                try:
+                    p.goto(url, wait_until="domcontentloaded", timeout=wait * 1000)
+                except Exception:
+                    pass
+                p.wait_for_timeout(15000)  # 重 SPA：等 PerimeterX 过墙 + 产品/定价 XHR 渲进 DOM
+                try:
+                    text = " ".join((p.inner_text("body") or "").split())
+                    final_url = p.url
+                except Exception:
+                    text, final_url = "", url
+                blocked = bool(BLOCK_PAT.search(text[:3000])) or len(text) < 80
+                hit = (not blocked) and (part.lower() in text.lower())
+                result = {"platform": "avnet", "url": final_url,
+                          "text": text[:4000] or "（被反爬拦截/未渲染未取到，不代表无货）",
+                          "hit": hit, "blocked": blocked}
+                # 只在真命中（渲出含该型号的产品行）时停；否则（被挡 / Products(0) 未渲染）重试，
+                # 因为对真实型号 no-hit 多半是 PerimeterX 没过或渲染没完成，不是"无此料"。
+                if hit:
+                    break
+            finally:
+                b.close()
+        return result
+    finally:
+        os.environ.update(saved)
+
+
 SCRAPERS = {
     # ── 聚合站（默认不查，按需 --source；聚合数据可能滞后，原始站优先）──
     "octopart": scrape_octopart,        # 多分销商报价聚合（Avnet/Newark/Arrow/DigiKey/Mouser/LCSC 等）
@@ -848,6 +898,7 @@ SCRAPERS = {
     "jbchip": scrape_jbchip,    # 京北通宇电子商城(中国)，Vue SPA 拦 /api/item/goods/v1
     "rs-us": scrape_rs_us,      # RS美区(=Allied)，GroupBy搜索API+DataDome重试，需住宅代理
     "tti": scrape_tti,          # 被动/连接器/机电(sager源头)，首页预热过 PerimeterX，需住宅代理
+    "avnet": scrape_avnet,      # Avnet 安富利本站，PerimeterX 间歇放行：首页预热+最多4轮重试，需住宅代理
 }
 
 # 把通用原始站注册进同一张分发表，main() 无需加任何分支
