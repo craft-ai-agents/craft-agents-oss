@@ -385,7 +385,7 @@ export function createWebFetchTool(
 
       const contentType = (response.headers.get('content-type') || '')
         .toLowerCase()
-        .split(';')[0]
+        .split(';')[0]!
         .trim();
 
       // Binary content types — stream with size limit
