@@ -33,6 +33,7 @@ metadata:
 **通用电子料 / 西方·欧洲分销：**
 - `future`（Future）`newark`（Newark）`tme`（波兰/欧）`xonelec`（X-ON）`componentonline`（Component Electronics）
 - RS 分区：`rs-uk` `rs-jp` `rs-hk`；`rs-us`（=Allied 美区，**需住宅代理**，仅生产可用）
+- `verical`（**Verical = Arrow 自营商城，机房直连可达、实时报盘**）：型号|品牌|描述|库存|价格|链接 一应俱全。**arrow 本站被反爬封死，要 arrow 货源就用它**（比聚合站 octopart 数据更实时）。
 
 **连接器 / 机电互连：**
 - `peigenesis`（PEI-Genesis 连接器专家）`darisus`（德，连接器）`heilind`（赫联，连接器/机电）`sager`（电源/连接器/机电）
@@ -58,7 +59,10 @@ metadata:
 
 ## 反爬挡住/未接（如实告知，别硬试）
 
-- `arrow`、`element14`（网页）、`avnet`：Akamai/门户反爬把住宅 IP 信誉拉黑，网页路径攻不下。**element14 改走官方 API**（上面 `--source element14`，配 key 即可）。arrow/avnet 的货源 octopart 有覆盖。
+- `arrow`、`element14`（网页）、`avnet`：Akamai/门户反爬把 IP 信誉拉黑（中国机房 + 住宅代理两个 IP 都被封，2026-06-18 实测仍 403 Access Denied），网页路径攻不下。**别再硬撞本站，按出路走**：
+  - **arrow 货源 → `--source verical`**（Arrow 自营商城，机房直连可达、实时报盘，**优先**）+ `octopart` 兜底。
+  - **element14 → 官方 API `--source element14`**（端点可达，只缺 key；配好 `ELEMENT14_API_KEY` 即通，partner.element14.com 注册）。
+  - **avnet → `octopart`**（无干净 API/直连路，靠聚合站覆盖）。
 - 不接：`rs-cn`（无可搜中国 storefront）、`chip1stop`（整站 502，被 Arrow 吞并迁移中，货源≈arrow）、`kirikaeki`（已关站）、`distrelec`（=RS 集团跳转）、`TI`（无通用关键词搜索，按 `ti.com/product/<MPN>` 作原厂产品页）。
 
 ## 取数与重试（已固化在脚本里）
