@@ -23,6 +23,7 @@ import {
   FilePenLine,
   GitBranch,
   Play,
+  ExternalLink,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
@@ -263,6 +264,13 @@ export interface ActivityItem {
   isBackground?: boolean  // Flag for UI differentiation
 }
 
+function extractMessageAgentChildSessionId(activity: ActivityItem): string | null {
+  const toolName = activity.toolName ?? ''
+  if (toolName !== 'message_agent' && !toolName.endsWith('__message_agent')) return null
+  const match = activity.content?.match(/^childSessionId:\s*([^\s]+)\s*$/m)
+  return match?.[1] ?? null
+}
+
 export interface ResponseContent {
   text: string
   isStreaming: boolean
@@ -328,6 +336,8 @@ export interface TurnCardProps {
   onOpenDetails?: () => void
   /** Callback to open individual activity details in Monaco */
   onOpenActivityDetails?: (activity: ActivityItem) => void
+  /** Callback to open a hidden delegated child session. */
+  onOpenSubagentSession?: (sessionId: string) => void
   /** Callback to open all edits/writes in multi-file diff view */
   onOpenMultiFileDiff?: () => void
   /** Whether this turn has any Edit or Write activities */
@@ -878,6 +888,8 @@ interface ActivityRowProps {
   sessionFolderPath?: string
   /** Display mode: 'detailed' shows all info, 'informative' hides MCP/API names and params */
   displayMode?: 'informative' | 'detailed'
+  /** Callback to open a hidden delegated child session. */
+  onOpenSubagentSession?: (sessionId: string) => void
 }
 
 /**
@@ -899,7 +911,7 @@ function TreeViewConnector({ depth }: { depth: number; isLastChild?: boolean }) 
 }
 
 /** Single activity row in expanded view */
-function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, displayMode = 'detailed' }: ActivityRowProps) {
+function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, displayMode = 'detailed', onOpenSubagentSession }: ActivityRowProps) {
   const depth = activity.depth || 0
 
   // Intermediate messages (LLM commentary) - render with dashed circle icon
@@ -1012,6 +1024,7 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
   const diffStats = computeEditWriteDiffStats(activity.toolName, activity.toolInput)
   const isComplete = activity.status === 'completed' || activity.status === 'error'
   const isBackgrounded = activity.status === 'backgrounded'
+  const childSessionId = isComplete ? extractMessageAgentChildSessionId(activity) : null
 
   // For backgrounded tasks, show task/shell ID and elapsed time
   const backgroundInfo = isBackgrounded
@@ -1176,6 +1189,19 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
             <span className="truncate min-w-0 max-w-[300px] text-accent">{backgroundInfo}</span>
           </>
         )}
+        {childSessionId && onOpenSubagentSession && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenSubagentSession(childSessionId)
+            }}
+            className="ml-1 inline-flex shrink-0 items-center gap-1 rounded-[6px] border border-white/[0.08] bg-white/[0.045] px-1.5 py-0.5 text-[10px] text-white/62 transition-colors hover:bg-white/[0.075] hover:text-white/82"
+          >
+            <ExternalLink className="h-3 w-3" aria-hidden="true" />
+            <span>Open subagent</span>
+          </button>
+        )}
         {/* No spacer needed - both MCP/API and native tools now have flex-1 on their compound spans */}
         {/* Open details button */}
         {onOpenDetails && isComplete && (
@@ -1223,13 +1249,15 @@ interface ActivityGroupRowProps {
   sessionFolderPath?: string
   /** Display mode: 'detailed' shows all info, 'informative' hides MCP/API names and params */
   displayMode?: 'informative' | 'detailed'
+  /** Callback to open a hidden delegated child session. */
+  onOpenSubagentSession?: (sessionId: string) => void
 }
 
 /**
  * Renders a Task subagent with its child activities grouped together.
  * Provides visual containment and collapsible children.
  */
-function ActivityGroupRow({ group, expandedGroups: externalExpandedGroups, onExpandedGroupsChange, onOpenActivityDetails, animationIndex = 0, sessionFolderPath, displayMode = 'detailed' }: ActivityGroupRowProps) {
+function ActivityGroupRow({ group, expandedGroups: externalExpandedGroups, onExpandedGroupsChange, onOpenActivityDetails, animationIndex = 0, sessionFolderPath, displayMode = 'detailed', onOpenSubagentSession }: ActivityGroupRowProps) {
   // Use local state if no controlled state provided
   const [localExpandedGroups, setLocalExpandedGroups] = useState<Set<string>>(new Set())
   const expandedGroups = externalExpandedGroups ?? localExpandedGroups
@@ -1369,6 +1397,7 @@ function ActivityGroupRow({ group, expandedGroups: externalExpandedGroups, onExp
                     isLastChild={idx === group.children.length - 1}
                     sessionFolderPath={sessionFolderPath}
                     displayMode={displayMode}
+                    onOpenSubagentSession={onOpenSubagentSession}
                   />
                 </motion.div>
               ))}
@@ -2719,6 +2748,7 @@ export const TurnCard = React.memo(function TurnCard({
   onPopOut,
   onOpenDetails,
   onOpenActivityDetails,
+  onOpenSubagentSession,
   onOpenMultiFileDiff,
   hasEditOrWriteActivities,
   todos,
@@ -2994,6 +3024,7 @@ export const TurnCard = React.memo(function TurnCard({
                           animationIndex={index}
                           sessionFolderPath={sessionFolderPath}
                           displayMode={displayMode}
+                          onOpenSubagentSession={onOpenSubagentSession}
                         />
                       ) : (
                         <motion.div
@@ -3011,6 +3042,7 @@ export const TurnCard = React.memo(function TurnCard({
                             onOpenDetails={onOpenActivityDetails ? () => onOpenActivityDetails(item) : undefined}
                             sessionFolderPath={sessionFolderPath}
                             displayMode={displayMode}
+                            onOpenSubagentSession={onOpenSubagentSession}
                           />
                         </motion.div>
                       )
@@ -3035,6 +3067,7 @@ export const TurnCard = React.memo(function TurnCard({
                           isLastChild={lastChildSet.has(activity.id)}
                           sessionFolderPath={sessionFolderPath}
                           displayMode={displayMode}
+                          onOpenSubagentSession={onOpenSubagentSession}
                         />
                       </motion.div>
                     ))
