@@ -411,6 +411,7 @@ function StepCard({
             ['Failure', stepDef?.onFailure],
             ['Completion', formatCompletionSummary(step.completion)],
             ['Agent receipt', formatExecutionReceiptSummary(step.executionReceipt)],
+            ['Subagents', formatAgentMessageReceiptsSummary(step.agentMessageReceipts)],
             ['Session', step.sessionId],
           ]}
         />
@@ -442,6 +443,7 @@ function StepCard({
       )}
       <div className="mt-2 ml-7 flex flex-col gap-1.5">
         <DetailBlock title="Agent execution receipt" value={step.executionReceipt} />
+        <DetailBlock title="Subagent message receipts" value={step.agentMessageReceipts} defaultOpen={(step.agentMessageReceipts?.length ?? 0) > 0} />
         <DetailBlock title="Resolved input / prompt" value={resolvedInput} defaultOpen={!!resolvedInput && step.state !== 'queued'} />
         {stepDef?.input && stepDef.input !== resolvedInput && (
           <DetailBlock title="Input template" value={stepDef.input} />
@@ -683,6 +685,19 @@ function formatExecutionReceiptSummary(receipt: WorkflowRunStep['executionReceip
     receipt.prompt.sha256 ? `sha256:${receipt.prompt.sha256.slice(0, 12)}` : undefined,
   ].filter(Boolean)
   return parts.join(' · ')
+}
+
+function formatAgentMessageReceiptsSummary(receipts: WorkflowRunStep['agentMessageReceipts']): string | undefined {
+  if (!receipts || receipts.length === 0) return undefined
+  const byStatus = receipts.reduce<Record<string, number>>((acc, receipt) => {
+    acc[receipt.status] = (acc[receipt.status] ?? 0) + 1
+    return acc
+  }, {})
+  const statuses = Object.entries(byStatus)
+    .map(([status, count]) => `${count} ${status}`)
+    .join(' · ')
+  const targets = Array.from(new Set(receipts.map((receipt) => receipt.targetAgentSlug).filter(Boolean))).slice(0, 3)
+  return [statuses, targets.length ? `@${targets.join(', @')}` : undefined].filter(Boolean).join(' · ')
 }
 
 function formatScalar(value: unknown): string | undefined {

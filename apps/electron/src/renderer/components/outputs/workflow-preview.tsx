@@ -8,6 +8,7 @@ export interface WorkflowGraphNode {
   label: string
   agent?: string
   state: WorkflowNodeState
+  subagents?: number
 }
 
 export interface WorkflowGraphSpec {
@@ -97,6 +98,11 @@ function WorkflowNodes({ nodes }: { nodes: WorkflowGraphNode[] }) {
             <text x={x + 18} y={y + 29} fill={style.text} fontSize="15" fontWeight="600">{truncate(node.label, 20)}</text>
             <text x={x + 18} y={y + 52} fill="#a1a1aa" fontSize="11">{node.agent ? truncate(node.agent, 20) : node.state}</text>
             <StatePill x={x + NODE_WIDTH + 24} y={y + 20} state={node.state} />
+            {node.subagents ? (
+              <text x={x + NODE_WIDTH + 176} y={y + 39} fill="#a1a1aa" fontSize="11">
+                {node.subagents} subagent{node.subagents === 1 ? '' : 's'}
+              </text>
+            ) : null}
           </g>
         )
       })}
@@ -205,6 +211,7 @@ function parseRunStepArray(value: unknown, metadata?: Record<string, unknown> | 
       label: asString(def?.description) ?? id,
       agent: asString(def?.agent) ?? readRunStepAgent(step),
       state: normalizeState(step.state),
+      subagents: readSubagentCount(step),
     }]
   })
 }
@@ -213,6 +220,12 @@ function readRunStepAgent(step: Record<string, unknown>): string | undefined {
   const receipt = isRecord(step.executionReceipt) ? step.executionReceipt : null
   const agent = isRecord(receipt?.agent) ? receipt.agent : null
   return asString(agent?.name) ?? asString(agent?.slug)
+}
+
+function readSubagentCount(step: Record<string, unknown>): number | undefined {
+  const receipts = step.agentMessageReceipts
+  if (!Array.isArray(receipts) || receipts.length === 0) return undefined
+  return receipts.length
 }
 
 function normalizeState(value: unknown): WorkflowNodeState {

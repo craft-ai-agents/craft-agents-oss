@@ -35,7 +35,15 @@ describe('parseWorkflowGraphSpec', () => {
         },
       },
       steps: [
-        { id: 'research', state: 'succeeded', attempts: 1 },
+        {
+          id: 'research',
+          state: 'succeeded',
+          attempts: 1,
+          agentMessageReceipts: [
+            { receiptId: 'r1', targetAgentSlug: 'critic', status: 'succeeded' },
+            { receiptId: 'r2', targetAgentSlug: 'fact-checker', status: 'succeeded' },
+          ],
+        },
         { id: 'write', state: 'running', attempts: 1 },
       ],
     }))
@@ -48,6 +56,8 @@ describe('parseWorkflowGraphSpec', () => {
         ['research', 'Research', 'researcher', 'succeeded'],
         ['write', 'Write', 'writer', 'running'],
       ])
+      expect(result.spec.nodes[0]?.subagents).toBe(2)
+      expect(result.spec.nodes[1]?.subagents).toBeUndefined()
     }
   })
 
