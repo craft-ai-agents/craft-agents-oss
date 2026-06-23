@@ -259,3 +259,60 @@ export async function exchangeIdTokenForApiKey(idToken: string): Promise<string>
 
   return data.access_token;
 }
+
+// ---------------------------------------------------------------------------
+// Identity extraction
+// ---------------------------------------------------------------------------
+
+/**
+ * Parsed identity from a ChatGPT/Codex id_token.
+ *
+ * The id_token is an OIDC JWT issued by OpenAI. Standard claims:
+ *   - `sub`        — unique user ID (e.g. "user-abc123")
+ *   - `email`      — user email (may be absent for some org accounts)
+ *   - `name`       — display name (may be absent)
+ *
+ * When `id_token_add_organizations: true` was requested during auth, the
+ * token may also contain:
+ *   - `https://api.openai.com/auth.chatgpt_account_id`
+ *   - `https://api.openai.com/auth.organization_id`
+ *   - `https://api.openai.com/auth.organization_name`
+ *
+ * We only base64url-decode the payload (no signature verification) since the
+ * token was just received moments ago from the OAuth endpoint.
+ */
+export interface ChatGptOAuthIdentity {
+  accountUuid?: string
+  accountEmail?: string
+  accountName?: string
+  organizationUuid?: string
+  organizationName?: string
+}
+
+const OPENAI_CLAIM_NS = 'https://api.openai.com/auth'
+
+export function parseChatGptIdToken(idToken: string): ChatGptOAuthIdentity | null {
+  try {
+    const parts = idToken.split('.')
+    if (parts.length !== 3) return null
+
+    const payload = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf-8')) as Record<string, unknown>
+
+    const ns = payload[OPENAI_CLAIM_NS] as Record<string, unknown> | undefined
+    const sub = typeof payload.sub === 'string' ? payload.sub : undefined
+    const email = typeof payload.email === 'string' ? payload.email : undefined
+    const name = typeof payload.name === 'string' ? payload.name : undefined
+    const orgId = typeof ns?.organization_id === 'string' ? ns.organization_id : undefined
+    const orgName = typeof ns?.organization_name === 'string' ? ns.organization_name : undefined
+    const accountId = typeof ns?.chatgpt_account_id === 'string' ? ns.chatgpt_account_id : undefined
+
+    // Prefer namespaced accountId over generic sub
+    const accountUuid = accountId ?? sub
+
+    if (!accountUuid && !email && !orgId) return null
+
+    return { accountUuid, accountEmail: email, accountName: name, organizationUuid: orgId, organizationName: orgName }
+  } catch {
+    return null
+  }
+}
