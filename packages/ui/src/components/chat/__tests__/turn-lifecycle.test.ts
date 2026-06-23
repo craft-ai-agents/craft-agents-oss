@@ -373,3 +373,40 @@ describe('edge cases', () => {
     expect(deriveTurnPhase(turn)).toBe('awaiting')
   })
 })
+
+describe('message_agent activity metadata', () => {
+  it('hydrates delegated child session metadata from a persisted tool result', () => {
+    resetCounters()
+    const messages: Message[] = [
+      createUserMessage('Ask a specialist'),
+      {
+        id: `tool-${++messageIdCounter}`,
+        role: 'tool',
+        content: '',
+        timestamp: Date.now() + messageIdCounter * 100,
+        toolName: 'message_agent',
+        toolUseId: `tu-${messageIdCounter}`,
+        toolInput: { agentSlug: 'reviewer' },
+        toolStatus: 'completed',
+        toolResult: [
+          'Agent "reviewer" completed delegated task.',
+          'receiptId: receipt-123',
+          'childSessionId: child-session-456',
+          'toolUseCount: 2',
+          'summary: Looks good.',
+        ].join('\n'),
+        turnId: 'turn-agent',
+      },
+    ]
+
+    const turns = groupMessagesByTurn(messages)
+    const turn = getLastAssistantTurn(turns)
+
+    expect(turn?.activities[0]?.agentMessage).toEqual({
+      receiptId: 'receipt-123',
+      childSessionId: 'child-session-456',
+      targetAgentSlug: 'reviewer',
+      status: 'succeeded',
+    })
+  })
+})

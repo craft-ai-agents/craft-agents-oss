@@ -262,13 +262,16 @@ export interface ActivityItem {
   shellId?: string        // For background Bash shells
   elapsedSeconds?: number // Live progress updates
   isBackground?: boolean  // Flag for UI differentiation
+  agentMessage?: {
+    receiptId?: string
+    childSessionId?: string
+    targetAgentSlug?: string
+    status?: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed-out'
+  }
 }
 
 function extractMessageAgentChildSessionId(activity: ActivityItem): string | null {
-  const toolName = activity.toolName ?? ''
-  if (toolName !== 'message_agent' && !toolName.endsWith('__message_agent')) return null
-  const match = activity.content?.match(/^childSessionId:\s*([^\s]+)\s*$/m)
-  return match?.[1] ?? null
+  return activity.agentMessage?.childSessionId ?? null
 }
 
 export interface ResponseContent {

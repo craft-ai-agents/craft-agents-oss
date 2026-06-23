@@ -35,6 +35,23 @@ function stripErrorTags(content: string | undefined): string | undefined {
     .trim()
 }
 
+function parseMessageAgentToolResult(message: Message): ActivityItem['agentMessage'] | undefined {
+  const toolName = message.toolName ?? ''
+  if (toolName !== 'message_agent' && !toolName.endsWith('__message_agent')) return undefined
+
+  const content = message.toolResult ?? message.content
+  const receiptId = content.match(/^receiptId:\s*([^\s]+)\s*$/m)?.[1]
+  const childSessionId = content.match(/^childSessionId:\s*([^\s]+)\s*$/m)?.[1]
+  if (!receiptId && !childSessionId) return undefined
+
+  return {
+    receiptId,
+    childSessionId,
+    targetAgentSlug: typeof message.toolInput?.agentSlug === 'string' ? message.toolInput.agentSlug : undefined,
+    status: message.isError ? 'failed' : 'succeeded',
+  }
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -239,6 +256,7 @@ function messageToActivity(message: Message, existingActivities: ActivityItem[] 
     shellId: message.shellId,
     elapsedSeconds: message.elapsedSeconds,
     isBackground: message.isBackground,
+    agentMessage: parseMessageAgentToolResult(message),
   }
 
   // Calculate depth incrementally using existing activities
