@@ -14,6 +14,7 @@
 import type { WorkflowMetadata } from './types.ts';
 import type { PermissionMode } from '../agent/mode-types.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
+import type { AgentMessageStatus } from '../agent-messaging/types.ts';
 
 /** Compact per-step receipt of the agent bundle used to execute a step. */
 export interface WorkflowStepExecutionReceipt {
@@ -41,6 +42,19 @@ export interface WorkflowStepExecutionReceipt {
     chars: number;
     sha256: string;
   };
+}
+
+/** Compact per-step trace of subagents spawned via `message_agent`. */
+export interface WorkflowStepAgentMessageReceipt {
+  receiptId: string;
+  childSessionId?: string;
+  targetAgentSlug: string;
+  status: AgentMessageStatus;
+  summary?: string;
+  error?: { code: string; message: string };
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
 }
 
 /** Run-level lifecycle. See `02-runtime.md` for the state diagram. */
@@ -76,6 +90,8 @@ export interface WorkflowRunStep {
   sessionId?: string;
   /** Compact receipt of the resolved agent bundle used for this step. */
   executionReceipt?: WorkflowStepExecutionReceipt;
+  /** Compact receipts for subagents this step spawned via `message_agent`. */
+  agentMessageReceipts?: WorkflowStepAgentMessageReceipt[];
   startedAt?: string;
   completedAt?: string;
   /** Phase 1: last assistant text. Phase 2: parsed JSON when outputSchema set. */

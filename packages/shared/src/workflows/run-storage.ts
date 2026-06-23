@@ -20,7 +20,16 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import type { WorkflowRunSnapshot, WorkflowRunState, WorkflowRunStepState } from './run-types.ts';
+import {
+  listAgentMessageReceipts,
+  type AgentMessageReceipt,
+} from '../agent-messaging/index.ts';
+import type {
+  WorkflowRunSnapshot,
+  WorkflowRunState,
+  WorkflowStepAgentMessageReceipt,
+  WorkflowRunStepState,
+} from './run-types.ts';
 import { isValidOutputId } from '../outputs/validation.ts';
 
 const RUN_FILE = 'run.json';
@@ -76,6 +85,52 @@ function resolveRunDir(workspaceRootPath: string, runId: string): string | null 
   const runsRoot = resolve(workspaceRootPath, RUNS_DIR);
   const runDir = resolve(runsRoot, runId);
   return isContainedPath(runsRoot, runDir) ? runDir : null;
+}
+
+function compactAgentMessageReceipt(receipt: AgentMessageReceipt): WorkflowStepAgentMessageReceipt {
+  return {
+    receiptId: receipt.id,
+    childSessionId: receipt.childSessionId,
+    targetAgentSlug: receipt.targetAgentSlug,
+    status: receipt.status,
+    summary: receipt.result?.summary,
+    error: receipt.error,
+    createdAt: receipt.createdAt,
+    updatedAt: receipt.updatedAt,
+    completedAt: receipt.completedAt,
+  };
+}
+
+export function attachAgentMessageReceipts(
+  workspaceRootPath: string,
+  run: WorkflowRunSnapshot,
+): WorkflowRunSnapshot {
+  let receipts: AgentMessageReceipt[];
+  try {
+    receipts = listAgentMessageReceipts(workspaceRootPath).filter(
+      (receipt) => receipt.parentRunId === run.id && receipt.parentStepId,
+    );
+  } catch {
+    return run;
+  }
+  if (receipts.length === 0) return run;
+
+  for (const step of run.steps) {
+    if (!step.sessionId) continue;
+    const stepReceipts = receipts
+      .filter((receipt) => (
+        receipt.parentStepId === step.id
+        && receipt.parentSessionId === step.sessionId
+      ))
+      .map(compactAgentMessageReceipt)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    if (stepReceipts.length === 0) {
+      delete step.agentMessageReceipts;
+      continue;
+    }
+    step.agentMessageReceipts = stepReceipts;
+  }
+  return run;
 }
 
 function isWorkflowRunSnapshot(value: unknown, expectedRunId: string): value is WorkflowRunSnapshot {
@@ -177,7 +232,7 @@ export function readRun(workspaceRootPath: string, runId: string): WorkflowRunSn
   try {
     const parsed = JSON.parse(readFileSync(file, 'utf-8')) as unknown;
     if (!isWorkflowRunSnapshot(parsed, runId)) return null;
-    return parsed;
+    return attachAgentMessageReceipts(workspaceRootPath, parsed);
   } catch {
     return null;
   }

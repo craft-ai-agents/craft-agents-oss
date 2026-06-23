@@ -68,6 +68,7 @@ export { normalizeWorkflowTriggerInputs } from './trigger-inputs.ts';
 export type {
   WorkflowRunState,
   WorkflowRunStepState,
+  WorkflowStepAgentMessageReceipt,
   WorkflowStepExecutionReceipt,
   WorkflowRunStep,
   WorkflowRunSnapshot,
@@ -77,6 +78,7 @@ export {
   getRunsDir,
   getRunDir,
   getRunFile,
+  attachAgentMessageReceipts,
   isValidWorkflowRunId,
   assertValidWorkflowRunId,
   writeRun,

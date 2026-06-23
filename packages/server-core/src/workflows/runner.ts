@@ -26,6 +26,7 @@ import type { CreateSessionOptions } from '@craft-agent/shared/protocol';
 import {
   appendOutputSchemaInstruction,
   assertValidWorkflowRunId,
+  attachAgentMessageReceipts,
   markRunningRunsInterrupted,
   parseStructuredStepOutput,
   readRun,
@@ -489,6 +490,7 @@ export class WorkflowRunner {
         stepRecord.completion = undefined;
         stepRecord.sessionId = undefined;
         stepRecord.executionReceipt = undefined;
+        stepRecord.agentMessageReceipts = undefined;
         stepRecord.completedAt = undefined;
         this.touch(active);
 
@@ -780,6 +782,7 @@ export class WorkflowRunner {
   private persist(active: ActiveRun): void {
     const root = this.deps.getWorkspaceRootPath(active.snapshot.workspaceId);
     active.snapshot = this.adoptPersistedOutputState(root, active.snapshot);
+    active.snapshot = attachAgentMessageReceipts(root, active.snapshot);
     writeRun(root, active.snapshot);
   }
 
