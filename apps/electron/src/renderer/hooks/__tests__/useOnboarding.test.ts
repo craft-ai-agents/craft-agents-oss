@@ -163,6 +163,17 @@ describe('reauth slug resolution', () => {
     expect(setup.slug).toBe('chatgpt-plus-2')
   })
 
+  it('copilot new connection flow generates unique slugs when base is taken', () => {
+    const existingSlugs = new Set(['github-copilot'])
+    const setup = apiSetupMethodToConnectionSetup(
+      'pi_copilot_oauth',
+      {},
+      null,
+      existingSlugs,
+    )
+    expect(setup.slug).toBe('github-copilot-2')
+  })
+
   it('copilot reauth uses override slug', () => {
     const existingSlugs = new Set(['github-copilot'])
     const slug = resolveSlugForMethod('pi_copilot_oauth', 'github-copilot', existingSlugs)

@@ -27,6 +27,15 @@ export function stripPiPrefixForDisplay(value: string): string {
 
 export type ConnectionGroup = [groupName: string, connections: LlmConnection[]]
 
+export function getConnectionIdentityLabel(connection: Pick<LlmConnection, 'oauthAccountEmail' | 'oauthOrganizationName'>): string | null {
+  const parts = [connection.oauthOrganizationName, connection.oauthAccountEmail].filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
+export function getConnectionPickerMeta(connection: LlmConnection): string | null {
+  return getConnectionIdentityLabel(connection)
+}
+
 /**
  * Group connections by provider type for hierarchical picker rendering.
  * Each provider section can contain multiple connections (API Key, OAuth, …).

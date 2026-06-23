@@ -39,6 +39,7 @@ import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { derivePickerMode } from './picker-mode'
 import {
   formatTokenCount,
+  getConnectionPickerMeta,
   groupConnectionsByProvider,
   stripPiPrefixForDisplay,
 } from './model-picker-helpers'
@@ -243,6 +244,7 @@ export function CompactModelSelector({
                   const isCurrentConnection = effectiveConnection === conn.slug
                   const isAuthenticated = conn.isAuthenticated
                   const isExpanded = expandedConnection === conn.slug
+                  const connectionMeta = getConnectionPickerMeta(conn)
                   return (
                     <React.Fragment key={conn.slug}>
                       <button
@@ -261,6 +263,9 @@ export function CompactModelSelector({
                         <ConnectionIcon connection={conn} size={14} />
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium truncate">{conn.name}</div>
+                          {connectionMeta && (
+                            <div className="text-xs text-foreground/50 truncate mt-0.5">{connectionMeta}</div>
+                          )}
                           {!isAuthenticated && (
                             <div className="text-xs text-muted-foreground">
                               {t('settings.ai.notAuthenticated')}

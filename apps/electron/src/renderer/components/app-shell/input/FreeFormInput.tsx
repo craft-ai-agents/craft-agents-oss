@@ -92,6 +92,7 @@ import { CompactPermissionModeSelector } from './CompactPermissionModeSelector'
 import { CompactModelSelector } from './CompactModelSelector'
 import {
   formatTokenCount,
+  getConnectionPickerMeta,
   groupConnectionsByProvider,
   stripPiPrefixForDisplay,
 } from './model-picker-helpers'
@@ -2141,6 +2142,7 @@ export function FreeFormInput({
                     {connections.map((conn) => {
                       const isCurrentConnection = effectiveConnection === conn.slug
                       const isAuthenticated = conn.isAuthenticated
+                      const connectionMeta = getConnectionPickerMeta(conn)
                       return (
                         <DropdownMenuSub key={conn.slug}>
                           <StyledDropdownMenuSubTrigger
@@ -2156,6 +2158,9 @@ export function FreeFormInput({
                                 {conn.name}
                                 {isCurrentConnection && <Check className="h-3 w-3 text-foreground" />}
                               </div>
+                              {connectionMeta && (
+                                <div className="text-xs text-muted-foreground truncate mt-0.5">{connectionMeta}</div>
+                              )}
                               {!isAuthenticated && (
                                 <div className="text-xs text-muted-foreground">{t('settings.ai.notAuthenticated')}</div>
                               )}

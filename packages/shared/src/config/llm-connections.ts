@@ -219,6 +219,18 @@ export interface LlmConnectionWithStatus extends LlmConnection {
   /** Error message if authentication check failed */
   authError?: string;
 
+  /** OAuth access-token expiration timestamp, when known. Status-only; not persisted on the connection. */
+  oauthExpiresAt?: number;
+
+  /** Remaining time until OAuth access-token expiration, when known. Status-only; not persisted on the connection. */
+  oauthTimeRemainingMs?: number;
+
+  /** Whether this OAuth credential has a refresh token available. Status-only; not persisted on the connection. */
+  oauthRefreshable?: boolean;
+
+  /** Error from an automatic OAuth refresh attempt. Status-only; not persisted on the connection. */
+  oauthRefreshError?: string;
+
   /** Whether this is the global default connection */
   isDefault?: boolean;
 }
