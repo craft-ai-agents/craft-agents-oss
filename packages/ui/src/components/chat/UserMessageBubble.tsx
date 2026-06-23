@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Clock, ExternalLink } from 'lucide-react'
-import type { AgentMessageNoticeMetadata, StoredAttachment, ContentBadge } from '@craft-agent/core'
+import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
 import { normalizePath } from '@craft-agent/core/utils'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
@@ -27,6 +27,13 @@ const SKILL_ICON_TEXT = '✦'
 const SOURCE_ICON_TEXT = '⊕'
 const CONTEXT_ICON_TEXT = '⚙'
 const COMMAND_ICON_TEXT = '/'
+
+type AgentMessageNoticeMetadata = {
+  receiptId?: string
+  childSessionId?: string
+  targetAgentSlug?: string
+  status?: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed-out'
+}
 
 /**
  * Check if a badge is an edit_request badge (identified by XML tag in rawText)

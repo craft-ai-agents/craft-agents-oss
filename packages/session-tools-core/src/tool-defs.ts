@@ -43,6 +43,7 @@ import { handleListSkills } from './handlers/list-skills.ts';
 import { handleListSources } from './handlers/list-sources.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 import { handleMessageAgent } from './handlers/message-agent.ts';
+import { handleListAgentMessageReceipts } from './handlers/list-agent-message-receipts.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
 import { handleCreateAgent } from './handlers/create-agent.ts';
 import { handleCreateAutomation } from './handlers/create-automation.ts';
@@ -344,6 +345,13 @@ export const MessageAgentSchema = z.object({
   maxTurns: z.number().optional().describe('Currently capped at 1 turn.'),
   priority: z.enum(['low', 'normal', 'high']).optional().describe('Scheduling hint for future runners.'),
   background: z.boolean().optional().describe('When true, start the child agent and return immediately. The receipt updates when it finishes.'),
+});
+
+export const ListAgentMessageReceiptsSchema = z.object({
+  receiptId: z.string().optional().describe('Specific receipt ID to inspect. Omit to list recent receipts.'),
+  status: z.enum(['running', 'succeeded', 'failed', 'cancelled', 'timed-out']).optional().describe('Optional status filter.'),
+  agentSlug: z.string().optional().describe('Optional caller or target agent slug filter.'),
+  limit: z.number().optional().describe('Max receipts to return when listing. Defaults to 20, max 100.'),
 });
 
 export const ListMessagingChannelsSchema = z.object({
@@ -900,6 +908,11 @@ The target session receives your message with a sender envelope containing your 
 Creates a hidden child session using the target agent's normal prompt, sources, skills, timeout, receipt, and permission boundary.
 Use background=true for longer specialist work you do not need to block on; the receipt updates when the child finishes.`,
 
+  list_agent_message_receipts: `Inspect recent message_agent delegation receipts in the current workspace.
+
+Use this after background delegation, failures, or audit questions to find receipt IDs, child session IDs, status, summary, tools, and errors.
+This is read-only and scoped to the current workspace's agent-messages directory.`,
+
   list_messaging_channels: `List messaging channels (Telegram, WhatsApp) bound to a session.
 Shows which external chat apps are connected and can send/receive messages.`,
 
@@ -1193,6 +1206,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   // Inter-session messaging
   { name: 'send_agent_message', description: TOOL_DESCRIPTIONS.send_agent_message, inputSchema: SendAgentMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendAgentMessage },
   { name: 'message_agent', description: TOOL_DESCRIPTIONS.message_agent, inputSchema: MessageAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleMessageAgent },
+  { name: 'list_agent_message_receipts', description: TOOL_DESCRIPTIONS.list_agent_message_receipts, inputSchema: ListAgentMessageReceiptsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAgentMessageReceipts },
   // Messaging gateway tools
   { name: 'list_messaging_channels', description: TOOL_DESCRIPTIONS.list_messaging_channels, inputSchema: ListMessagingChannelsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListMessagingChannels },
   { name: 'unbind_messaging_channel', description: TOOL_DESCRIPTIONS.unbind_messaging_channel, inputSchema: UnbindMessagingChannelSchema, executionMode: 'registry', safeMode: 'block', handler: handleUnbindMessagingChannel },
