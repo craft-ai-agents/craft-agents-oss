@@ -88,6 +88,7 @@ export interface ISessionManager {
     _isAuthRetry?: boolean,
     onAck?: (messageId: string) => void,
     rpcContext?: { callerClientId?: string },
+    _internalRetryKind?: 'auth' | 'failover',
   ): Promise<void>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>

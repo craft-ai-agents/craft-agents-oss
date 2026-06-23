@@ -14,9 +14,89 @@ import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { randomUUID } from 'node:crypto'
 import { CLIENT_OPEN_EXTERNAL } from '@craft-agent/server-core/transport'
+import { refreshClaudeToken, isTokenExpired } from '@craft-agent/shared/auth/claude-token'
+import { refreshChatGptTokens } from '@craft-agent/shared/auth/chatgpt-oauth'
 
 // Local OAuth state
 let copilotOAuthAbort: AbortController | null = null
+
+type StoredLlmOAuth = {
+  accessToken: string
+  refreshToken?: string
+  expiresAt?: number
+  idToken?: string
+}
+
+function shouldRefreshOAuth(oauth: StoredLlmOAuth): boolean {
+  if (!oauth.refreshToken) return false
+  if (!oauth.expiresAt) return false
+  return isTokenExpired(oauth.expiresAt)
+}
+
+async function refreshLlmOAuthIfNeeded(
+  connection: LlmConnection,
+  manager: ReturnType<typeof getCredentialManager>,
+  logger?: HandlerDeps['platform']['logger'],
+): Promise<{ oauth: StoredLlmOAuth | null; refreshError?: string }> {
+  let oauth = await manager.getLlmOAuth(connection.slug)
+
+  // Fallback: for Anthropic connections whose credentials predate per-connection
+  // storage (v0.3.0), check the legacy global Claude OAuth store.
+  if (!oauth && connection.providerType === 'anthropic') {
+    const legacy = await manager.getClaudeOAuthCredentials()
+    if (legacy?.accessToken) {
+      // Migrate legacy creds into the per-connection store so future reads skip this path
+      await manager.setLlmOAuth(connection.slug, {
+        accessToken: legacy.accessToken,
+        refreshToken: legacy.refreshToken,
+        expiresAt: legacy.expiresAt,
+      })
+      oauth = await manager.getLlmOAuth(connection.slug)
+    }
+  }
+
+  if (!oauth) return { oauth: null }
+  if (!shouldRefreshOAuth(oauth)) return { oauth }
+
+  if (!oauth.refreshToken) return { oauth }
+
+  try {
+    if (connection.providerType === 'anthropic') {
+      const refreshed = await refreshClaudeToken(oauth.refreshToken)
+      await manager.setLlmOAuth(connection.slug, {
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken,
+        expiresAt: refreshed.expiresAt,
+      })
+    } else if (connection.providerType === 'pi' && connection.piAuthProvider === 'openai-codex') {
+      const refreshed = await refreshChatGptTokens(oauth.refreshToken)
+      await manager.setLlmOAuth(connection.slug, {
+        accessToken: refreshed.accessToken,
+        idToken: refreshed.idToken,
+        refreshToken: refreshed.refreshToken,
+        expiresAt: refreshed.expiresAt,
+      })
+    } else if (connection.providerType === 'pi' && connection.piAuthProvider === 'github-copilot') {
+      const { refreshGitHubCopilotToken } = await import('@mariozechner/pi-ai/oauth')
+      const refreshed = await refreshGitHubCopilotToken(oauth.refreshToken)
+      await manager.setLlmOAuth(connection.slug, {
+        accessToken: refreshed.access,
+        refreshToken: refreshed.refresh,
+        expiresAt: refreshed.expires,
+      })
+    } else {
+      return { oauth }
+    }
+
+    const refreshedOauth = await manager.getLlmOAuth(connection.slug)
+    logger?.info(`Auto-refreshed OAuth token for LLM connection: ${connection.slug}`)
+    return { oauth: refreshedOauth }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger?.warn(`OAuth auto-refresh failed for ${connection.slug}: ${message}`)
+    return { oauth, refreshError: message }
+  }
+}
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.LIST,
@@ -412,11 +492,60 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     const defaultSlug = getDefaultLlmConnection()
 
     return Promise.all(connections.map(async (conn): Promise<LlmConnectionWithStatus> => {
-      // Check if credentials exist for this connection
-      const hasCredentials = await credentialManager.hasLlmCredentials(conn.slug, conn.authType)
+      const { oauth, refreshError } = conn.authType === 'oauth'
+        ? await refreshLlmOAuthIfNeeded(conn, credentialManager, deps.platform.logger)
+        : { oauth: null, refreshError: undefined }
+
+      // Check if credentials exist for this connection after any automatic refresh.
+      const hasCredentials = await credentialManager.hasLlmCredentials(conn.slug, conn.authType, conn.providerType)
+      const oauthTimeRemainingMs = oauth?.expiresAt ? oauth.expiresAt - Date.now() : undefined
+      const oauthExpired = conn.authType === 'oauth'
+        && !!oauth?.expiresAt
+        && oauth.expiresAt <= Date.now()
+
+      // Lazy identity migration: for ChatGPT/Codex connections that already have
+      // credentials but were created before we started stamping identity onto the
+      // connection config, parse the stored idToken and backfill oauthAccountEmail etc.
+      if (
+        !conn.oauthAccountEmail && !conn.oauthOrganizationName
+        && conn.authType === 'oauth'
+        && oauth?.idToken
+        && conn.providerType === 'pi'
+        && conn.piAuthProvider === 'openai-codex'
+      ) {
+        try {
+          const { parseChatGptIdToken } = await import('@craft-agent/shared/auth')
+          const identity = parseChatGptIdToken(oauth.idToken)
+          if (identity?.accountUuid || identity?.accountEmail) {
+            updateLlmConnection(conn.slug, {
+              oauthAccountUuid: identity.accountUuid,
+              oauthAccountEmail: identity.accountEmail,
+              oauthOrganizationUuid: identity.organizationUuid,
+              oauthOrganizationName: identity.organizationName,
+              oauthProfileVerifiedAt: Date.now(),
+            })
+            // Update the local conn object so this response includes the identity
+            conn.oauthAccountUuid = identity.accountUuid
+            conn.oauthAccountEmail = identity.accountEmail
+            conn.oauthOrganizationUuid = identity.organizationUuid
+            conn.oauthOrganizationName = identity.organizationName
+            conn.oauthProfileVerifiedAt = Date.now()
+          }
+        } catch {
+          // Non-critical migration
+        }
+      }
+
       return {
         ...conn,
-        isAuthenticated: conn.authType === 'none' || hasCredentials,
+        isAuthenticated: conn.authType === 'none' || (hasCredentials && !oauthExpired),
+        authError: oauthExpired
+          ? (refreshError ? 'OAuth auto-refresh failed. Re-authenticate to continue.' : 'OAuth token expired. Re-authenticate to continue.')
+          : undefined,
+        oauthExpiresAt: oauth?.expiresAt,
+        oauthTimeRemainingMs,
+        oauthRefreshable: !!oauth?.refreshToken,
+        oauthRefreshError: refreshError,
         isDefault: conn.slug === defaultSlug,
       }
     }))
@@ -675,7 +804,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     }
 
     try {
-      const { exchangeChatGptTokens } = await import('@craft-agent/shared/auth')
+      const { exchangeChatGptTokens, parseChatGptIdToken } = await import('@craft-agent/shared/auth')
       const credentialManager = getCredentialManager()
 
       const tokens = await exchangeChatGptTokens(code, flow.codeVerifier)
@@ -686,6 +815,18 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
       })
+
+      // Parse identity from id_token and stamp onto connection
+      const identity = parseChatGptIdToken(tokens.idToken)
+      if (identity) {
+        updateLlmConnection(flow.connectionSlug, {
+          oauthAccountUuid: identity.accountUuid,
+          oauthAccountEmail: identity.accountEmail,
+          oauthOrganizationUuid: identity.organizationUuid,
+          oauthOrganizationName: identity.organizationName,
+          oauthProfileVerifiedAt: Date.now(),
+        })
+      }
 
       pendingChatGptFlows.delete(state)
       deps.platform.logger?.info(`[ChatGPT OAuth] Flow complete for ${flow.connectionSlug}`)
@@ -813,6 +954,27 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       })
 
       deps.platform.logger?.info('GitHub Copilot OAuth completed successfully')
+
+      // Fetch GitHub identity (username/login) from the refresh token (GitHub access token)
+      // and stamp onto connection for display in settings + model picker.
+      try {
+        const ghRes = await fetch('https://api.github.com/user', {
+          headers: { Authorization: `Bearer ${credentials.refresh}`, 'User-Agent': 'CraftAgents' },
+        })
+        if (ghRes.ok) {
+          const ghUser = (await ghRes.json()) as { login?: string; email?: string; name?: string }
+          if (ghUser.login || ghUser.email) {
+            updateLlmConnection(connectionSlug, {
+              oauthAccountUuid: ghUser.login,
+              oauthAccountEmail: ghUser.email,
+              oauthProfileVerifiedAt: Date.now(),
+            })
+          }
+        }
+      } catch {
+        // Non-critical: identity is best-effort
+      }
+
       return { success: true }
     } catch (error) {
       copilotOAuthAbort = null
