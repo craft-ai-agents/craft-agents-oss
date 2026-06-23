@@ -8,7 +8,12 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+import {
+  listAgentMessageReceipts,
+  type AgentMessageReceipt,
+} from '../agent-messaging/index.ts';
 import type {
+  DeepResearchStepAgentMessageReceipt,
   DeepResearchPlanPolicy,
   DeepResearchRunSnapshot,
   DeepResearchRunState,
@@ -60,6 +65,52 @@ function resolveRunDir(workspaceRootPath: string, runId: string): string | null 
   const runsRoot = resolve(workspaceRootPath, RUNS_DIR);
   const runDir = resolve(runsRoot, runId);
   return isContainedPath(runsRoot, runDir) ? runDir : null;
+}
+
+function compactAgentMessageReceipt(receipt: AgentMessageReceipt): DeepResearchStepAgentMessageReceipt {
+  return {
+    receiptId: receipt.id,
+    childSessionId: receipt.childSessionId,
+    targetAgentSlug: receipt.targetAgentSlug,
+    status: receipt.status,
+    summary: receipt.result?.summary,
+    error: receipt.error,
+    createdAt: receipt.createdAt,
+    updatedAt: receipt.updatedAt,
+    completedAt: receipt.completedAt,
+  };
+}
+
+export function attachDeepResearchAgentMessageReceipts(
+  workspaceRootPath: string,
+  run: DeepResearchRunSnapshot,
+): DeepResearchRunSnapshot {
+  let receipts: AgentMessageReceipt[];
+  try {
+    receipts = listAgentMessageReceipts(workspaceRootPath).filter(
+      (receipt) => receipt.parentRunId === run.id && receipt.parentStepId,
+    );
+  } catch {
+    return run;
+  }
+  if (receipts.length === 0) return run;
+
+  for (const step of run.steps) {
+    if (!step.sessionId) continue;
+    const stepReceipts = receipts
+      .filter((receipt) => (
+        receipt.parentStepId === step.id
+        && receipt.parentSessionId === step.sessionId
+      ))
+      .map(compactAgentMessageReceipt)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    if (stepReceipts.length === 0) {
+      delete step.agentMessageReceipts;
+      continue;
+    }
+    step.agentMessageReceipts = stepReceipts;
+  }
+  return run;
 }
 
 function isDeepResearchRunSnapshot(value: unknown, expectedRunId: string): value is DeepResearchRunSnapshot {
@@ -164,7 +215,9 @@ export function readDeepResearchRun(workspaceRootPath: string, runId: string): D
   if (!existsSync(file)) return null;
   try {
     const parsed = JSON.parse(readFileSync(file, 'utf-8')) as unknown;
-    return isDeepResearchRunSnapshot(parsed, runId) ? parsed : null;
+    return isDeepResearchRunSnapshot(parsed, runId)
+      ? attachDeepResearchAgentMessageReceipts(workspaceRootPath, parsed)
+      : null;
   } catch {
     return null;
   }

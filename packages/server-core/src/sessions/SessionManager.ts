@@ -470,6 +470,7 @@ function completeLaunchReceipt(
         }
       : undefined),
     workflow: receipt?.workflow,
+    deepResearch: receipt?.deepResearch,
     automation: receipt?.automation,
     config: {
       ...receipt?.config,
@@ -5122,8 +5123,8 @@ user a clickable link to where the thing now lives.`
           return service.messageAgent({
             workspaceId: managed.workspace.id,
             parentSessionId: managed.id,
-            parentRunId: managed.launchReceipt?.workflow?.runId,
-            parentStepId: managed.launchReceipt?.workflow?.stepId,
+            parentRunId: managed.launchReceipt?.workflow?.runId ?? managed.launchReceipt?.deepResearch?.runId,
+            parentStepId: managed.launchReceipt?.workflow?.stepId ?? managed.launchReceipt?.deepResearch?.stepId,
             callerAgentSlug: managed.spawnedFromAgent?.agentSlug,
             callerAgentName: managed.spawnedFromAgent?.agentName,
             parentPermissionMode: managed.permissionMode ?? 'ask',

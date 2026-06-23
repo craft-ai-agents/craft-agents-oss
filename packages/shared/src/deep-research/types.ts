@@ -50,6 +50,18 @@ export interface DeepResearchPlanStep {
   requiredSourceSlugs: string[];
 }
 
+export interface DeepResearchStepAgentMessageReceipt {
+  receiptId: string;
+  childSessionId?: string;
+  targetAgentSlug: string;
+  status: AgentMessageStatus;
+  summary?: string;
+  error?: { code: string; message: string };
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
 export interface DeepResearchPlan {
   id: string;
   title: string;
@@ -74,6 +86,7 @@ export interface DeepResearchStepRun {
   title: string;
   state: DeepResearchStepState;
   sessionId?: string;
+  agentMessageReceipts?: DeepResearchStepAgentMessageReceipt[];
   output?: string;
   error?: string;
   startedAt?: string;
@@ -133,3 +146,4 @@ export interface DeepResearchRunEventEnvelope {
   run: DeepResearchRunSnapshot;
   eventType: 'created' | 'updated' | 'completed';
 }
+import type { AgentMessageStatus } from '../agent-messaging/types.ts';

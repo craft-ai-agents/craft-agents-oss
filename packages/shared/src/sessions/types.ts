@@ -94,7 +94,7 @@ export interface SessionTokenUsage {
 
 export interface SessionLaunchReceipt {
   createdAt: number;
-  origin: 'manual' | 'agent' | 'concierge' | 'workflow' | 'automation' | 'branch' | 'spawned-session';
+  origin: 'manual' | 'agent' | 'concierge' | 'workflow' | 'deep-research' | 'automation' | 'branch' | 'spawned-session';
   summary?: string;
   agent?: {
     slug: string;
@@ -107,6 +107,10 @@ export interface SessionLaunchReceipt {
   workflow?: {
     runId?: string;
     slug: string;
+    stepId?: string;
+  };
+  deepResearch?: {
+    runId?: string;
     stepId?: string;
   };
   automation?: {

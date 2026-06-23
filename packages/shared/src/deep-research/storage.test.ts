@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, test } from 'bun:test'
+import { writeAgentMessageReceipt } from '../agent-messaging/storage.ts'
 import {
   deleteDeepResearchRun,
   listDeepResearchRuns,
@@ -70,6 +71,92 @@ describe('deep research run storage', () => {
     const run = sampleRun()
     writeDeepResearchRun(root, run)
     expect(readDeepResearchRun(root, run.id)).toEqual(run)
+  })
+
+  test('hydrates compact message_agent child receipts by step session', () => {
+    const root = tempRoot()
+    const run = sampleRun()
+    run.state = 'running'
+    run.steps[0]!.state = 'running'
+    run.steps[0]!.sessionId = 'parent-session-1'
+    writeDeepResearchRun(root, run)
+    writeAgentMessageReceipt(root, {
+      schemaVersion: 1,
+      id: 'receipt-1',
+      workspaceId: run.workspaceId,
+      parentSessionId: 'parent-session-1',
+      parentRunId: run.id,
+      parentStepId: 'collect-evidence',
+      childSessionId: 'child-session-1',
+      targetAgentSlug: 'critic',
+      task: 'Sensitive child task text',
+      status: 'succeeded',
+      policy: {
+        permissionMode: 'safe',
+        timeoutSeconds: 120,
+        maxTurns: 1,
+        maxDepth: 3,
+        depth: 1,
+      },
+      constraints: {
+        sourceSlugs: [],
+        skillSlugs: [],
+      },
+      result: {
+        summary: 'Child review passed.',
+        output: 'ok',
+        toolUseCount: 1,
+        toolNames: ['read_file'],
+      },
+      createdAt: '2026-05-23T12:00:01.000Z',
+      updatedAt: '2026-05-23T12:00:02.000Z',
+      completedAt: '2026-05-23T12:00:02.000Z',
+    })
+    writeAgentMessageReceipt(root, {
+      schemaVersion: 1,
+      id: 'stale-receipt',
+      workspaceId: run.workspaceId,
+      parentSessionId: 'old-parent-session',
+      parentRunId: run.id,
+      parentStepId: 'collect-evidence',
+      targetAgentSlug: 'critic',
+      task: 'stale',
+      status: 'succeeded',
+      policy: {
+        permissionMode: 'safe',
+        timeoutSeconds: 120,
+        maxTurns: 1,
+        maxDepth: 3,
+        depth: 1,
+      },
+      constraints: {
+        sourceSlugs: [],
+        skillSlugs: [],
+      },
+      result: {
+        summary: 'Stale',
+        toolUseCount: 0,
+        toolNames: [],
+      },
+      createdAt: '2026-05-23T12:00:00.000Z',
+      updatedAt: '2026-05-23T12:00:00.000Z',
+    })
+
+    const read = readDeepResearchRun(root, run.id)
+    expect(read?.steps[0]!.agentMessageReceipts).toEqual([
+      {
+        receiptId: 'receipt-1',
+        childSessionId: 'child-session-1',
+        targetAgentSlug: 'critic',
+        status: 'succeeded',
+        summary: 'Child review passed.',
+        createdAt: '2026-05-23T12:00:01.000Z',
+        updatedAt: '2026-05-23T12:00:02.000Z',
+        completedAt: '2026-05-23T12:00:02.000Z',
+      },
+    ])
+    expect(JSON.stringify(read?.steps[0]!.agentMessageReceipts)).not.toContain('Sensitive child task text')
+    expect(JSON.stringify(read?.steps[0]!.agentMessageReceipts)).not.toContain('stale-receipt')
   })
 
   test('lists newest runs first', () => {

@@ -4,6 +4,7 @@ import {
 } from '@craft-agent/shared/outputs'
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol'
 import {
+  attachDeepResearchAgentMessageReceipts,
   readDeepResearchRun,
   markRunningDeepResearchRunsInterrupted,
   writeDeepResearchRun,
@@ -41,6 +42,16 @@ interface ActiveDeepResearchRun {
   abort: AbortController
   currentSessionId?: string
 }
+
+const DEEP_RESEARCH_SYSTEM_PROMPT = [
+  'You are RunnerOS Deep Research.',
+  'You run a real research loop, not a single lookup.',
+  'Use selected MCP/API/local/browser/search tools when they are available.',
+  'When a search tool such as Exa is selected, use it for discovery before synthesis.',
+  'When a browser/computer-use tool is selected, open and inspect promising pages/items instead of relying only on snippets.',
+  'After initial findings, identify gaps or contradictions and run follow-up searches when budget allows.',
+  'If evidence is missing, say exactly what is missing.',
+].join('\n')
 
 function nowIso(): string {
   return new Date().toISOString()
@@ -348,15 +359,23 @@ export class DeepResearchRunner {
         permissionMode: active.snapshot.planPolicy === 'auto' ? 'allow-all' : 'ask',
         enabledSourceSlugs: active.snapshot.sourceReadiness.usable,
         sessionStatus: 'in-progress',
-        customSystemPrompt: [
-          'You are RunnerOS Deep Research.',
-          'You run a real research loop, not a single lookup.',
-          'Use selected MCP/API/local/browser/search tools when they are available.',
-          'When a search tool such as Exa is selected, use it for discovery before synthesis.',
-          'When a browser/computer-use tool is selected, open and inspect promising pages/items instead of relying only on snippets.',
-          'After initial findings, identify gaps or contradictions and run follow-up searches when budget allows.',
-          'If evidence is missing, say exactly what is missing.',
-        ].join('\n'),
+        customSystemPrompt: DEEP_RESEARCH_SYSTEM_PROMPT,
+        launchReceipt: {
+          createdAt: Date.now(),
+          origin: 'deep-research',
+          summary: `Deep research "${active.snapshot.title}" step "${planStep.title}".`,
+          deepResearch: {
+            runId: active.snapshot.id,
+            stepId: planStep.id,
+          },
+          config: {},
+          injected: {
+            skills: [],
+            sources: active.snapshot.sourceReadiness.usable,
+            contextDocs: [],
+            systemPromptChars: DEEP_RESEARCH_SYSTEM_PROMPT.length,
+          },
+        },
       })
       stepRun.sessionId = session.id
       active.currentSessionId = session.id
@@ -528,7 +547,9 @@ export class DeepResearchRunner {
   }
 
   private persist(run: DeepResearchRunSnapshot): void {
-    writeDeepResearchRun(this.deps.getWorkspaceRootPath(run.workspaceId), run)
+    const root = this.deps.getWorkspaceRootPath(run.workspaceId)
+    attachDeepResearchAgentMessageReceipts(root, run)
+    writeDeepResearchRun(root, run)
   }
 
   private emit(event: DeepResearchRunnerEvent): void {

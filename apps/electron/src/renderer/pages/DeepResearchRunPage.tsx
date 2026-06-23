@@ -125,16 +125,27 @@ export default function DeepResearchRunPage({ runId, workspaceId }: Props) {
         <section className="rounded-[10px] border border-white/[0.08] bg-white/[0.035] p-4">
           <div className="mb-3 text-sm font-medium text-white/85">Execution</div>
           <div className="space-y-3">
-            {run.steps.map((step) => (
-              <div key={step.id} className="rounded-[8px] border border-white/[0.06] bg-black/10 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm text-white/78">{step.title}</div>
-                  <StateLabel state={step.state} />
+            {run.steps.map((step) => {
+              const subagentSummary = formatAgentMessageReceiptsSummary(step.agentMessageReceipts)
+              return (
+                <div key={step.id} className="rounded-[8px] border border-white/[0.06] bg-black/10 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm text-white/78">{step.title}</div>
+                      {subagentSummary && (
+                        <div className="mt-1 text-xs text-white/42">
+                          Subagents: {subagentSummary}
+                        </div>
+                      )}
+                    </div>
+                    <StateLabel state={step.state} />
+                  </div>
+                  {step.output && <p className="mt-2 line-clamp-6 whitespace-pre-wrap text-xs leading-5 text-white/56">{step.output}</p>}
+                  {step.error && <p className="mt-2 text-xs text-red-300">{step.error}</p>}
+                  <ReceiptDetails receipts={step.agentMessageReceipts} />
                 </div>
-                {step.output && <p className="mt-2 line-clamp-6 whitespace-pre-wrap text-xs leading-5 text-white/56">{step.output}</p>}
-                {step.error && <p className="mt-2 text-xs text-red-300">{step.error}</p>}
-              </div>
-            ))}
+              )
+            })}
           </div>
         </section>
       </div>
@@ -151,4 +162,27 @@ function StateLabel({ state }: { state: string }) {
         ? 'text-sky-300'
         : 'text-amber-300'
   return <span className={tone}>{state.replaceAll('_', ' ')}</span>
+}
+
+function formatAgentMessageReceiptsSummary(receipts: DeepResearchRunDTO['steps'][number]['agentMessageReceipts']): string | undefined {
+  if (!receipts || receipts.length === 0) return undefined
+  const byStatus = receipts.reduce<Record<string, number>>((acc, receipt) => {
+    acc[receipt.status] = (acc[receipt.status] ?? 0) + 1
+    return acc
+  }, {})
+  const statuses = Object.entries(byStatus).map(([status, count]) => `${count} ${status}`).join(' · ')
+  const targets = Array.from(new Set(receipts.map((receipt) => receipt.targetAgentSlug).filter(Boolean))).slice(0, 3)
+  return [statuses, targets.length ? `@${targets.join(', @')}` : undefined].filter(Boolean).join(' · ')
+}
+
+function ReceiptDetails({ receipts }: { receipts: DeepResearchRunDTO['steps'][number]['agentMessageReceipts'] }) {
+  if (!receipts || receipts.length === 0) return null
+  return (
+    <details className="mt-2 text-xs text-white/42">
+      <summary className="cursor-pointer select-none hover:text-white/78">Subagent message receipts</summary>
+      <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[8px] border border-white/[0.07] bg-black/25 p-2 font-mono text-[11px] leading-relaxed text-white/64">
+        {JSON.stringify(receipts, null, 2)}
+      </pre>
+    </details>
+  )
 }
