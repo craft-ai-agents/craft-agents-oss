@@ -23,7 +23,6 @@
     "@hono/node-server": "^2.0.1",
     "@isaacs/brace-expansion": "^5.0.1",
     "@anthropic-ai/sdk": "0.91.1",
-    "ajv": "^6.15.0",
     "axios": "^1.16.0",
     "basic-ftp": "^5.3.1",
     "exiftool-vendored": "^35.19.0",

@@ -9,6 +9,12 @@ mock.module('electron', () => ({
   nativeImage: {
     createFromPath: () => ({ isEmpty: () => true }),
   },
+  protocol: { handle: () => {} },
+  session: {
+    fromPartition: () => ({
+      protocol: { handle: () => {} },
+    }),
+  },
 }))
 
 mock.module('@sentry/electron/main', () => ({

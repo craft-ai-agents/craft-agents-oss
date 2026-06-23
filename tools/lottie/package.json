@@ -1,0 +1,15 @@
+{
+  "name": "@runneros/lottie-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "runner-lottie": "bin/lottie.mjs"
+  },
+  "scripts": {
+    "doctor": "node bin/lottie.mjs doctor",
+    "init": "node bin/lottie.mjs init",
+    "dev": "node bin/lottie.mjs dev",
+    "validate": "node bin/lottie.mjs validate"
+  }
+}

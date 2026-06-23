@@ -78,7 +78,16 @@ export interface SessionScopedToolCallbacks {
   /** Resolve a status display name to its ID. */
   resolveStatusFn?: (status: string) => import('@craft-agent/session-tools-core').ResolvedStatusResult;
   /** Send a message to another session (inter-session messaging). */
-  sendAgentMessageFn?: (sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>) => Promise<void>;
+  sendAgentMessageFn?: (
+    sessionId: string,
+    message: string,
+    attachments?: Array<{ path: string; name?: string }>,
+    options?: { deliveryMode?: 'normal' | 'passive' },
+  ) => Promise<void>;
+  /** Delegate a bounded task to a saved agent and return a receipt/result. */
+  messageAgentFn?: (
+    input: import('@craft-agent/session-tools-core').MessageAgentToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').MessageAgentToolResult>;
   /**
    * Activate a source in the running session (source_test auto-enable flow).
    * Wired by SessionManager to the per-session onSourceActivationRequest callback

@@ -6,7 +6,7 @@
  * connection tests, and auth verification.
  */
 
-import { basename, join } from 'node:path';
+import { basename, isAbsolute, join, resolve } from 'node:path';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult, SourceConfig, ConnectionStatus } from '../types.ts';
 import { errorResponse } from '../response.ts';
@@ -68,28 +68,35 @@ export async function handleSourceTest(
   let connectionStatus: ConnectionStatus = 'unknown';
   let connectionError: string | undefined;
 
-  // 1. Check source exists
-  if (!sourceExists(ctx.workspacePath, sourceSlug)) {
+  const source = ctx.loadSourceConfig(sourceSlug);
+  const hasWorkspaceSourceFolder = sourceExists(ctx.workspacePath, sourceSlug);
+
+  // 1. Check source exists. Built-in sources may not have a workspace folder,
+  // but the backend context can still expose their config.
+  if (!hasWorkspaceSourceFolder && !source) {
     return errorResponse(`Source '${sourceSlug}' not found in workspace.`);
   }
 
   // 2. Schema validation
   lines.push('## Schema Validation');
-  const configPath = getSourceConfigPath(ctx.workspacePath, sourceSlug);
-  const schemaResult = validateJsonFileHasFields(configPath, ['slug', 'name', 'type']);
+  if (hasWorkspaceSourceFolder) {
+    const configPath = getSourceConfigPath(ctx.workspacePath, sourceSlug);
+    const schemaResult = validateJsonFileHasFields(configPath, ['slug', 'name', 'type']);
 
-  if (schemaResult.valid) {
-    lines.push('✓ Config schema valid');
-  } else {
-    hasErrors = true;
-    lines.push('✗ Config schema invalid:');
-    for (const error of schemaResult.errors) {
-      lines.push(`  - ${error.message}`);
+    if (schemaResult.valid) {
+      lines.push('✓ Config schema valid');
+    } else {
+      hasErrors = true;
+      lines.push('✗ Config schema invalid:');
+      for (const error of schemaResult.errors) {
+        lines.push(`  - ${error.message}`);
+      }
     }
+  } else {
+    lines.push('✓ Built-in source config loaded');
   }
 
   // 3. Load config for further checks
-  const source = ctx.loadSourceConfig(sourceSlug);
   if (!source) {
     return errorResponse(`Failed to load source config for '${sourceSlug}'.`);
   }
@@ -112,9 +119,13 @@ export async function handleSourceTest(
 
   // 5. Completeness check
   lines.push('\n## Completeness Check');
-  const completenessResult = checkCompleteness(ctx, sourcePath, source);
-  lines.push(...completenessResult.lines);
-  if (completenessResult.hasWarning) hasWarnings = true;
+  if (hasWorkspaceSourceFolder) {
+    const completenessResult = checkCompleteness(ctx, sourcePath, source);
+    lines.push(...completenessResult.lines);
+    if (completenessResult.hasWarning) hasWarnings = true;
+  } else {
+    lines.push('✓ Built-in source metadata is bundled');
+  }
 
   // 6. Connection test
   lines.push('\n## Connection Test');
@@ -398,7 +409,7 @@ async function testConnection(
     hasError = result.hasError;
     error = result.error;
   } else if (source.type === 'local') {
-    const result = testLocalConnection(ctx, source);
+    const result = await testLocalConnection(ctx, source);
     lines.push(...result.lines);
     success = result.success;
     hasError = result.hasError;
@@ -840,10 +851,10 @@ async function testMcpConnection(
   return { lines, success, hasError, error };
 }
 
-function testLocalConnection(
+async function testLocalConnection(
   ctx: SessionToolContext,
   source: SourceConfig
-): { lines: string[]; success: boolean; hasError: boolean; error?: string } {
+): Promise<{ lines: string[]; success: boolean; hasError: boolean; error?: string }> {
   const lines: string[] = [];
   let success = false;
   let hasError = false;
@@ -856,11 +867,29 @@ function testLocalConnection(
     return { lines, success, hasError, error };
   }
 
-  if (ctx.fs.exists(source.local.path)) {
+  const localPath = isAbsolute(source.local.path)
+    ? source.local.path
+    : resolve(ctx.workspacePath, source.local.path);
+
+  if (ctx.fs.exists(localPath)) {
     success = true;
-    const isDir = ctx.fs.isDirectory(source.local.path);
+    const isDir = ctx.fs.isDirectory(localPath);
     lines.push(`✓ Local path exists: ${source.local.path}`);
     lines.push(`  Type: ${isDir ? 'Directory' : 'File'}`);
+
+    if (ctx.testLocalSource) {
+      const result = await ctx.testLocalSource(source);
+      if (result.lines?.length) {
+        lines.push(...result.lines);
+      } else {
+        lines.push(`${result.success ? '✓' : '✗'} ${result.message}`);
+      }
+      if (!result.success) {
+        success = false;
+        hasError = true;
+        error = result.error ?? result.message;
+      }
+    }
   } else {
     hasError = true;
     error = 'Path not found';

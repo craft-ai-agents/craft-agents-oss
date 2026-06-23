@@ -141,6 +141,13 @@ export type {
   MemoryType,
 } from './memory.ts';
 
+// Agent messaging
+export { handleMessageAgent } from './message-agent.ts';
+export type {
+  MessageAgentToolInput,
+  MessageAgentToolResult,
+} from './message-agent.ts';
+
 // Outputs
 export { handleCreateOutput } from './outputs.ts';
 export type {

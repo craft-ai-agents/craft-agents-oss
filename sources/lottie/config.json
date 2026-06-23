@@ -1,0 +1,17 @@
+{
+  "id": "lottie_20260611",
+  "name": "Lottie",
+  "slug": "lottie",
+  "enabled": true,
+  "provider": "diffusionstudio-lottie",
+  "type": "local",
+  "icon": "L",
+  "tagline": "Bundled local CLI wrapper for official diffusionstudio/lottie Skia player projects.",
+  "local": {
+    "path": "tools/lottie",
+    "format": "cli-tool"
+  },
+  "connectionStatus": "untested",
+  "createdAt": 1781136000000,
+  "updatedAt": 1781136000000
+}

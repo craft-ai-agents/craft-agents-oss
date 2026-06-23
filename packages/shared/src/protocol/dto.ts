@@ -226,7 +226,7 @@ export interface SendMessageOptions {
   skillSlugs?: string[]
   badges?: ContentBadge[]
   optimisticMessageId?: string
-  displayIntent?: 'canvas-visual-review'
+  displayIntent?: 'canvas-visual-review' | 'agent-message-passive'
 }
 
 // ---------------------------------------------------------------------------

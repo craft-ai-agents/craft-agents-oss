@@ -171,6 +171,9 @@ export interface SessionToolContext {
   /** Working directory (project root) for the session, if set */
   workingDirectory?: string;
 
+  /** Active agent slug when the session is running as a named agent. */
+  activeAgentSlug?: string;
+
   // ============================================================
   // Callbacks (transport-agnostic)
   // ============================================================
@@ -287,6 +290,12 @@ export interface SessionToolContext {
    */
   testGoogleSource?(source: SourceConfig): Promise<ApiTestResult>;
 
+  /**
+   * Test a local CLI source with backend-owned readiness checks.
+   * Handlers fall back to path existence when this is unavailable.
+   */
+  testLocalSource?(source: SourceConfig): Promise<LocalSourceTestResult>;
+
   // ============================================================
   // Preferences (for update_user_preferences)
   // ============================================================
@@ -401,6 +410,12 @@ export interface SessionToolContext {
   recallMemory?(input: import('./handlers/memory.ts').RecallMemoryToolInput): Promise<import('./handlers/memory.ts').RecallMemoryResult>;
 
   /**
+   * Delegate a bounded task to another saved agent. Backend creates a hidden
+   * child session, enforces readiness/permission limits, and returns a receipt.
+   */
+  messageAgent?(input: import('./handlers/message-agent.ts').MessageAgentToolInput): Promise<import('./handlers/message-agent.ts').MessageAgentToolResult>;
+
+  /**
    * Publish a first-class user-facing output from the current session.
    * Backend owns output storage, provenance, asset validation, and route creation.
    */
@@ -423,7 +438,12 @@ export interface SessionToolContext {
   // ============================================================
 
   /** Send a message to another session. Injected by backend (SessionManager). */
-  sendAgentMessage?(sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>): Promise<void>;
+  sendAgentMessage?(
+    sessionId: string,
+    message: string,
+    attachments?: Array<{ path: string; name?: string }>,
+    options?: { deliveryMode?: 'normal' | 'passive' },
+  ): Promise<void>;
 
   /**
    * Activate a source in the running session: add to enabledSourceSlugs,
@@ -768,6 +788,16 @@ export interface ApiTestResult {
   status?: number;
   error?: string;
   hint?: string;
+}
+
+/**
+ * Result from local source readiness test
+ */
+export interface LocalSourceTestResult {
+  success: boolean;
+  message: string;
+  error?: string;
+  lines?: string[];
 }
 
 // ============================================================

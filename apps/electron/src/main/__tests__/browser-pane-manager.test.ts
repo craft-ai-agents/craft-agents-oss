@@ -173,8 +173,10 @@ mock.module('electron', () => ({
   shell: {
     openExternal: mockShellOpenExternal,
   },
+  protocol: { handle: () => {} },
   session: {
     fromPartition: mock(() => ({
+      protocol: { handle: () => {} },
       setPermissionCheckHandler: mock(() => {}),
       setPermissionRequestHandler: mock(() => {}),
       webRequest: {

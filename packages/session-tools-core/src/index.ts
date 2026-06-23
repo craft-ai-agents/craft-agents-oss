@@ -82,6 +82,11 @@ export {
   getEffectiveHeaderNames,
 } from './source-helpers.ts';
 
+export type {
+  MessageAgentToolInput,
+  MessageAgentToolResult,
+} from './handlers/message-agent.ts';
+
 // Validation
 export {
   // Result helpers

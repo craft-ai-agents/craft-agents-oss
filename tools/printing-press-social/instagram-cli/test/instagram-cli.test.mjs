@@ -4,9 +4,10 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { isInstagramLoggedIn } from '../src/cli.mjs';
 
-const cli = path.resolve('src/cli.mjs');
+const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));
 
 function run(args, env = {}) {
   return execFileSync(process.execPath, [cli, ...args], {

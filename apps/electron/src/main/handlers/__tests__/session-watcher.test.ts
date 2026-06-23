@@ -28,7 +28,12 @@ mock.module('electron', () => ({
   shell: { openExternal: async () => {}, openPath: async () => '', showItemInFolder: () => {} },
   BrowserWindow: { fromWebContents: () => null, getFocusedWindow: () => null, getAllWindows: () => [] },
   Menu: { buildFromTemplate: () => ({ popup: () => {} }) },
-  session: {},
+  protocol: { handle: () => {} },
+  session: {
+    fromPartition: () => ({
+      protocol: { handle: () => {} },
+    }),
+  },
 }))
 
 // ---------------------------------------------------------------------------

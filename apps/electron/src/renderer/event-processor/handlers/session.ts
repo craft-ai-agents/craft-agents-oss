@@ -576,9 +576,11 @@ export function handleUserMessage(
         ...session,
         messages: updatedMessages,
         lastMessageAt: Date.now(),
-        lastMessageRole: 'user',  // Clear plan badge when user responds
+        ...(message.role === 'user' ? { lastMessageRole: 'user' as const } : {}),
         // Set isProcessing when message is accepted/processing (enables multi-window sync)
-        isProcessing: status === 'accepted' || status === 'processing',
+        isProcessing: message.role === 'user'
+          ? status === 'accepted' || status === 'processing'
+          : session.isProcessing,
       },
       streaming,
     },
@@ -946,4 +948,3 @@ export function handleUsageUpdate(
     effects: [],
   }
 }
-

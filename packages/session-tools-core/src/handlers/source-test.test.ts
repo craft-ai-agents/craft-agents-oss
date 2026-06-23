@@ -24,6 +24,8 @@ interface CtxOverrides {
   validateStdioMcpConnection?: SessionToolContext['validateStdioMcpConnection'];
   validateMcpConnection?: SessionToolContext['validateMcpConnection'];
   credentialManager?: SessionToolContext['credentialManager'];
+  loadSourceConfig?: SessionToolContext['loadSourceConfig'];
+  testLocalSource?: SessionToolContext['testLocalSource'];
 }
 
 function createCtx(workspacePath: string, overrides: CtxOverrides = {}): SessionToolContext {
@@ -54,11 +56,11 @@ function createCtx(workspacePath: string, overrides: CtxOverrides = {}): Session
         return { size: s.size, isDirectory: () => s.isDirectory() };
       },
     },
-    loadSourceConfig: (slug: string) => {
+    loadSourceConfig: overrides.loadSourceConfig ?? ((slug: string) => {
       const configPath = join(workspacePath, 'sources', slug, 'config.json');
       if (!existsSync(configPath)) return null;
       return JSON.parse(readFileSync(configPath, 'utf-8')) as SourceConfig;
-    },
+    }),
     saveSourceConfig: (source: SourceConfig) => {
       saved.last = source;
       const configPath = join(workspacePath, 'sources', source.slug, 'config.json');
@@ -68,11 +70,42 @@ function createCtx(workspacePath: string, overrides: CtxOverrides = {}): Session
     validateStdioMcpConnection: overrides.validateStdioMcpConnection,
     validateMcpConnection: overrides.validateMcpConnection,
     credentialManager: overrides.credentialManager,
+    testLocalSource: overrides.testLocalSource,
     activateSourceInSession: overrides.activateSourceInSession,
   } as unknown as SessionToolContext;
   // Expose saved for assertions (test-only — not on real ctx).
   (ctx as unknown as { _saved: typeof saved })._saved = saved;
   return ctx;
+}
+
+function writeLocalSource(
+  workspacePath: string,
+  slug: string,
+  localPath: string,
+  overrides: Partial<SourceConfig> = {}
+): void {
+  const sourcePath = join(workspacePath, 'sources', slug);
+  mkdirSync(sourcePath, { recursive: true });
+  const config: SourceConfig = {
+    id: slug,
+    slug,
+    name: `Test ${slug}`,
+    enabled: true,
+    provider: 'test',
+    type: 'local',
+    tagline: 'A test local source',
+    icon: 'L',
+    local: {
+      path: localPath,
+      format: 'cli-tool',
+    },
+    ...overrides,
+  } as SourceConfig;
+  writeFileSync(join(sourcePath, 'config.json'), JSON.stringify(config, null, 2));
+  writeFileSync(
+    join(sourcePath, 'guide.md'),
+    '# Guide\n\nThis local source guide has enough words to avoid the completeness warning while the test focuses on local doctor readiness behavior and connection status persistence.'
+  );
 }
 
 function writeSource(
@@ -404,6 +437,99 @@ describe('source_test API connection branches', () => {
     expect((stub.calls[0]?.init?.headers as Record<string, string>)?.['X-Test-Probe']).toBe('yes');
     expect((stub.calls[0]?.init?.headers as Record<string, string>)?.['Content-Type']).toBe('application/json');
     expect(stub.calls[0]?.url).toBe('https://api.example.test/v1/things');
+  });
+});
+
+describe('source_test local source readiness', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'source-test-local-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('uses backend local source doctor when available', async () => {
+    const toolDir = join(tempDir, 'tools', 'lottie');
+    mkdirSync(toolDir, { recursive: true });
+    writeLocalSource(tempDir, 'lottie', toolDir);
+
+    let activated = false;
+    const result = await handleSourceTest(createCtx(tempDir, {
+      testLocalSource: async () => ({
+        success: false,
+        message: 'Lottie tool is not ready.',
+        error: 'Install Node.js/npm or fix PATH, then rerun doctor.',
+        lines: ['✗ npm: missing'],
+      }),
+      activateSourceInSession: async () => {
+        activated = true;
+        return { ok: true };
+      },
+    }), { sourceSlug: 'lottie' });
+
+    const text = result.content[0]?.text ?? '';
+    expect(result.isError).toBe(true);
+    expect(text).toContain('Local path exists');
+    expect(text).toContain('✗ npm: missing');
+    expect(activated).toBe(false);
+
+    const persisted = JSON.parse(
+      readFileSync(join(tempDir, 'sources', 'lottie', 'config.json'), 'utf-8')
+    ) as SourceConfig;
+    expect(persisted.connectionStatus).toBe('error');
+    expect(persisted.connectionError).toContain('Install Node.js/npm');
+  });
+
+  it('resolves relative local source paths against the workspace root', async () => {
+    mkdirSync(join(tempDir, 'tools', 'lottie'), { recursive: true });
+    writeLocalSource(tempDir, 'lottie', 'tools/lottie');
+
+    const result = await handleSourceTest(createCtx(tempDir, {
+      testLocalSource: async () => ({
+        success: true,
+        message: 'Lottie tool ready.',
+        lines: ['✓ Node: v1'],
+      }),
+    }), { sourceSlug: 'lottie', autoEnable: false });
+
+    const text = result.content[0]?.text ?? '';
+    expect(result.isError).toBe(false);
+    expect(text).toContain('Local path exists: tools/lottie');
+    expect(text).toContain('✓ Node: v1');
+  });
+
+  it('tests built-in local sources loaded from context without a workspace source folder', async () => {
+    const toolDir = join(tempDir, 'tools', 'lottie');
+    mkdirSync(toolDir, { recursive: true });
+
+    const result = await handleSourceTest(createCtx(tempDir, {
+      loadSourceConfig: () => ({
+        id: 'builtin-lottie',
+        slug: 'lottie',
+        name: 'Lottie',
+        provider: 'diffusionstudio-lottie',
+        type: 'local',
+        enabled: true,
+        local: { path: toolDir, format: 'cli-tool' },
+        tagline: 'Bundled Lottie wrapper',
+        icon: '🎞️',
+        isAuthenticated: true,
+      }),
+      testLocalSource: async () => ({
+        success: true,
+        message: 'Lottie tool ready.',
+        lines: ['✓ Lottie doctor passed'],
+      }),
+    }), { sourceSlug: 'lottie', autoEnable: false });
+
+    const text = result.content[0]?.text ?? '';
+    expect(result.isError).toBe(false);
+    expect(text).toContain('Built-in source config loaded');
+    expect(text).toContain('Built-in source metadata is bundled');
+    expect(text).toContain('✓ Lottie doctor passed');
   });
 });
 

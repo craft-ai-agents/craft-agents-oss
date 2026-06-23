@@ -14,6 +14,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./agent-messaging": "./src/agent-messaging/index.ts",
     "./agent": "./src/agent/index.ts",
     "./agent/modes": "./src/agent/mode-types.ts",
     "./agent/mode-types": "./src/agent/mode-types.ts",

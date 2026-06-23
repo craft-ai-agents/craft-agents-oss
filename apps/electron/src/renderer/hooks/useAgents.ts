@@ -41,7 +41,13 @@ export interface UseAgentsResult {
 }
 
 const NULL_WORKSPACE_KEY = '__no_workspace__'
-const SYSTEM_AGENT_SLUGS = [CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SOCIAL_PUBLISHER_SLUG] as const
+const BUILTIN_VISIBLE_AGENT_SLUGS = [
+  CONCIERGE_SLUG,
+  ORCHESTRATOR_SLUG,
+  SOCIAL_PUBLISHER_SLUG,
+  'lottie-animation-agent',
+  'video-editor-agent',
+] as const
 const inFlightRefreshes = new Map<string, Promise<void>>()
 const mountedWorkspaceKeys = new Map<string, number>()
 let globalDefinitionsCleanup: (() => void) | null = null
@@ -57,7 +63,7 @@ function sortAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {
 
 function withSystemActiveSlugs(slugs: string[], agents: AgentDefinitionDTO[]): string[] {
   const next = new Set(slugs)
-  for (const systemSlug of SYSTEM_AGENT_SLUGS) {
+  for (const systemSlug of BUILTIN_VISIBLE_AGENT_SLUGS) {
     if (agents.some((agent) => agent.slug === systemSlug)) next.add(systemSlug)
   }
   return Array.from(next)
@@ -139,7 +145,7 @@ export function useAgents(activeWorkspaceId: string | null | undefined): UseAgen
 
   const setActive = useCallback(async (slug: string, active: boolean) => {
     if (!activeWorkspaceId) return
-    if ((SYSTEM_AGENT_SLUGS as readonly string[]).includes(slug) && !active) {
+    if ((BUILTIN_VISIBLE_AGENT_SLUGS as readonly string[]).includes(slug) && !active) {
       setState((prev) => ({ ...prev, activeSlugs: withSystemActiveSlugs(prev.activeSlugs, prev.allAgents) }))
       return
     }

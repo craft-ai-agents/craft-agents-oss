@@ -123,6 +123,7 @@ export type {
 export {
   getComputerUseSource,
   getFieldTheorySource,
+  getLottieSource,
   getVideoStudioSource,
   getZeroSource,
   getDocsSource,

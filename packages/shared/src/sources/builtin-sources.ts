@@ -14,6 +14,7 @@ const COMPUTER_USE_SLUG = 'computer-use';
 const FIELD_THEORY_SLUG = 'field-theory';
 const PRINTING_PRESS_SOCIAL_SLUG = 'printing-press-social';
 const HYPERMOTION_SLUG = 'hypermotion';
+const LOTTIE_SLUG = 'lottie';
 const VIDEO_STUDIO_SLUG = 'video-studio';
 const GOOGLE_ADS_SLUG = 'google-ads';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
@@ -107,6 +108,20 @@ function getHypermotionPath(): string {
       join(process.cwd(), 'tools', 'hypermotion'),
     ],
     join('tools', 'hypermotion')
+  );
+}
+
+function getLottiePath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'lottie') : '',
+      join(appRoot, 'tools', 'lottie'),
+      join(process.cwd(), 'tools', 'lottie'),
+    ],
+    join('tools', 'lottie')
   );
 }
 
@@ -234,6 +249,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getFieldTheorySource(workspaceId, workspaceRootPath),
     getPrintingPressSocialSource(workspaceId, workspaceRootPath),
     getHypermotionSource(workspaceId, workspaceRootPath),
+    getLottieSource(workspaceId, workspaceRootPath),
     getVideoStudioSource(workspaceId, workspaceRootPath),
     getGoogleAdsSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
@@ -442,6 +458,58 @@ export function getHypermotionSource(workspaceId: string, workspaceRootPath: str
         '5. Publish generated HTML previews, poster frames, MP4s, and receipts as Canvas-visible outputs when useful.',
         '',
         'Do not claim a render succeeded until the output file exists. Confirm before paid API/provider calls or long renders.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
+ * Built-in source for the managed Lottie animation wrapper.
+ *
+ * This is a local CLI source that gives agents a portable path to the bundled
+ * diffusionstudio/lottie player harness in dev and packaged Electron builds.
+ */
+export function getLottieSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getLottiePath();
+  const config: FolderSourceConfig = {
+    id: 'builtin-lottie',
+    name: 'Lottie',
+    slug: LOTTIE_SLUG,
+    enabled: true,
+    provider: 'diffusionstudio-lottie',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    tagline: 'Bundled local CLI wrapper for official diffusionstudio/lottie Skia player projects.',
+    icon: '🎞️',
+    isAuthenticated: true,
+    connectionStatus: existsSync(toolPath) ? 'connected' : 'failed',
+    connectionError: existsSync(toolPath) ? undefined : 'Bundled Lottie tool folder not found',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# Lottie',
+        '',
+        'Use this source to create, preview, and validate production-ready Lottie JSON animations through the official diffusionstudio/lottie Skia player harness.',
+        '',
+        'Workflow:',
+        '1. Use the displayed local path as the tool directory.',
+        '2. Run `node bin/lottie.mjs doctor` before production work.',
+        '3. Create isolated player projects with `node bin/lottie.mjs init <workspace-local-dir>`.',
+        '4. Write the animation to `<project-dir>/public/lottie.json` and optional controls to `<project-dir>/public/controls.json`.',
+        '5. Validate with `node bin/lottie.mjs validate <project-dir>`.',
+        '6. Preview with `node bin/lottie.mjs dev <project-dir> -- --host 127.0.0.1 --port 5173`.',
+        '',
+        'Do not hand-roll a custom viewer or switch to lottie-web as the verification source of truth. No API key is required.',
       ].join('\n'),
     },
     isBuiltin: true,
@@ -1010,6 +1078,7 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === FIELD_THEORY_SLUG
     || slug === PRINTING_PRESS_SOCIAL_SLUG
     || slug === HYPERMOTION_SLUG
+    || slug === LOTTIE_SLUG
     || slug === VIDEO_STUDIO_SLUG
     || slug === GOOGLE_ADS_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG

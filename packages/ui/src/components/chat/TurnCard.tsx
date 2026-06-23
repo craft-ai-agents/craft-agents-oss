@@ -2413,7 +2413,7 @@ export function ResponseCard({
         <div
           className={cn(
             "relative group text-white/78",
-            isPlan && "overflow-hidden rounded-[14px] border border-white/[0.07] bg-[#101013]/92 shadow-[0_18px_46px_rgba(0,0,0,0.28)]"
+            isPlan && "overflow-hidden rounded-[14px] border border-white/[0.07] bg-[#101013]/92 shadow-middle"
           )}
         >
           {/* Fullscreen button - desktop only; compact mode keeps message chrome minimal */}

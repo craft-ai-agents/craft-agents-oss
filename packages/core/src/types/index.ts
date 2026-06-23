@@ -27,6 +27,7 @@ export type {
   ToolStatus,
   ToolDisplayMeta,
   AttachmentType,
+  AgentMessageNoticeMetadata,
   MessageAttachment,
   StoredAttachment,
   ContentBadge,
@@ -63,4 +64,3 @@ export type {
   SessionProcessingStatus,
   ActiveSessionInfo,
 } from './server.ts';
-

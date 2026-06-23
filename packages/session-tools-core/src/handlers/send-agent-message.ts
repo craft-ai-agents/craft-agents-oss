@@ -6,6 +6,7 @@ export interface SendAgentMessageArgs {
   sessionId: string;
   message: string;
   attachments?: Array<{ path: string; name?: string }>;
+  deliveryMode?: 'normal' | 'passive';
 }
 
 export async function handleSendAgentMessage(
@@ -29,6 +30,10 @@ export async function handleSendAgentMessage(
     return errorResponse('Cannot send a message to your own session. Use a different sessionId.');
   }
 
+  if (args.deliveryMode === 'passive' && args.attachments?.length) {
+    return errorResponse('Passive agent messages do not support attachments. Use deliveryMode "normal" or omit attachments.');
+  }
+
   try {
     // Build sender envelope so the target session knows who sent the message
     const senderName = ctx.getSessionInfo?.()?.name ?? ctx.sessionId;
@@ -41,10 +46,14 @@ export async function handleSendAgentMessage(
       args.message,
     ].join('\n');
 
-    await ctx.sendAgentMessage(args.sessionId, wrappedMessage, args.attachments);
+    await ctx.sendAgentMessage(args.sessionId, wrappedMessage, args.attachments, {
+      deliveryMode: args.deliveryMode ?? 'normal',
+    });
 
     return successResponse(
-      `Message sent to session ${args.sessionId}. The session will process it independently.`
+      args.deliveryMode === 'passive'
+        ? `Passive message delivered to session ${args.sessionId}.`
+        : `Message sent to session ${args.sessionId}. The session will process it independently.`
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

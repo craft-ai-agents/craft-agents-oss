@@ -61,6 +61,7 @@ files:
   # Include bundled local CLI tools
   - tools/printing-press-social/**/*
   - tools/hypermotion/**/*
+  - tools/lottie/**/*
   - tools/video-studio/**/*
   - tools/google-ads/**/*
   - tools/shopify/**/*
@@ -120,6 +121,11 @@ mac:
         - "**/*"
     - from: ../../tools/hypermotion/node_modules
       to: app/tools/hypermotion/node_modules
+      filter:
+        - "**/*"
+    # Managed local Lottie animation wrapper.
+    - from: ../../tools/lottie
+      to: app/tools/lottie
       filter:
         - "**/*"
     # Managed local Video Studio project/render wrapper.
@@ -229,6 +235,11 @@ win:
       to: app/tools/hypermotion/node_modules
       filter:
         - "**/*"
+    # Managed local Lottie animation wrapper.
+    - from: ../../tools/lottie
+      to: app/tools/lottie
+      filter:
+        - "**/*"
     # Managed local Video Studio project/render wrapper.
     - from: ../../tools/video-studio
       to: app/tools/video-studio
@@ -297,6 +308,11 @@ linux:
         - "**/*"
     - from: ../../tools/hypermotion/node_modules
       to: app/tools/hypermotion/node_modules
+      filter:
+        - "**/*"
+    # Managed local Lottie animation wrapper.
+    - from: ../../tools/lottie
+      to: app/tools/lottie
       filter:
         - "**/*"
     # Managed local Video Studio project/render wrapper.

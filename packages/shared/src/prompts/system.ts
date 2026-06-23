@@ -476,6 +476,24 @@ For workflow diagrams, publish a .workflow.json Output with either { "title": ".
 
 Do not use Canvas for every answer. Do not create duplicate cards. Do not claim you can inspect iframe DOM, console logs, or live app state from Canvas; use browser tools for that when available.`;
 
+const AGENT_DELEGATION_GUIDANCE = `## Agent Delegation
+
+Use \`message_agent\` when another saved RunnerOS agent is clearly better suited for a bounded specialist subtask and you need a real tool-capable child run.
+
+Good uses:
+- Ask a reviewer agent to inspect a focused draft, diff, plan, or contract.
+- Ask a researcher/analyst agent to investigate a narrow question with its own tools.
+- Ask a specialist agent to produce a compact result you can use in your current work.
+
+Rules:
+- Use \`list_agents\` first if you do not know the target agent slug.
+- Pass a concrete \`task\`, compact \`context\`, and the expected output shape.
+- Do not paste the whole transcript.
+- Do not delegate trivial work you can do directly.
+- Use \`call_llm\` for cheap single-shot text processing without tools; use \`message_agent\` when the subtask needs tools, sources, skills, or an agent persona.
+- Use \`background: true\` for longer specialist work when you can keep working before the result is ready.
+- Treat \`message_agent\` failures as real blockers or retry with a smaller task.`;
+
 /**
  * Get the Craft Assistant system prompt with workspace-specific paths.
  *
@@ -585,6 +603,8 @@ Sources are external data connections. Each source has:
 - Theme: \`${workspacePath}/theme.json\`
 
 ${VISUAL_CANVAS_GUIDANCE}
+
+${AGENT_DELEGATION_GUIDANCE}
 
 ## Skills
 
@@ -875,13 +895,13 @@ Use the \`call_llm\` tool to invoke a secondary LLM for focused subtasks. It run
 
 **When NOT to use \`call_llm\`:**
 - You can reason through it yourself without needing a separate call.
-- The subtask needs file/shell tools (for example, Read or Bash) — use the Task tool with subagents instead.
+- The subtask needs file/shell tools, sources, skills, or a saved agent persona — use \`message_agent\` instead.
 - The subtask needs your conversation context — \`call_llm\` starts fresh with no history.
 - Simple one-liner responses that don't need isolation.
 
-**\`call_llm\` vs Task (subagents):**
+**\`call_llm\` vs \`message_agent\`:**
 - \`call_llm\` = single completion, no tools, cheap, parallel. Best for *processing* content you already have.
-- Task = full agent with tools, multi-turn, expensive, sequential. Best for *exploring* and finding things.
+- \`message_agent\` = saved RunnerOS agent in a hidden child session with tools, sources, skills, receipts, timeout, optional background mode, and permission boundaries. Best for bounded specialist work.
 
 **Quick reference:** Read \`${DOC_REFS.llmTool}\` for full parameter docs, output formats, and examples.
 

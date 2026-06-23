@@ -516,6 +516,37 @@ body
     expect(hypermotionAgent?.systemPrompt).toContain('showInCanvas')
   })
 
+  test('starter library includes the Lottie Animation Agent with official player workflow', () => {
+    const lottieAgent = STARTER_AGENTS.find((agent) => agent.slug === 'lottie-animation-agent')
+
+    expect(lottieAgent).toBeDefined()
+    expect(lottieAgent?.metadata.visualAgent).toBe(true)
+    expect(lottieAgent?.metadata.permissionMode).toBe('ask')
+    expect(lottieAgent?.metadata.tags).toContain('lottie')
+    expect(lottieAgent?.metadata.sources).toContain('lottie')
+    expect(lottieAgent?.systemPrompt).toContain('node bin/lottie.mjs doctor')
+    expect(lottieAgent?.systemPrompt).toContain('node bin/lottie.mjs init')
+    expect(lottieAgent?.systemPrompt).toContain('node bin/lottie.mjs validate')
+    expect(lottieAgent?.systemPrompt).toContain('public/lottie.json')
+    expect(lottieAgent?.systemPrompt).toContain('?frame=<n>&paused=1')
+    expect(lottieAgent?.systemPrompt).toContain('Do not hand-roll a custom viewer')
+  })
+
+  test('starter library includes the Video Editor Agent with Video Studio tools', () => {
+    const videoAgent = STARTER_AGENTS.find((agent) => agent.slug === 'video-editor-agent')
+
+    expect(videoAgent).toBeDefined()
+    expect(videoAgent?.metadata.visualAgent).toBe(true)
+    expect(videoAgent?.metadata.permissionMode).toBe('ask')
+    expect(videoAgent?.metadata.tags).toContain('video')
+    expect(videoAgent?.metadata.sources).toContain('video-studio')
+    expect(videoAgent?.systemPrompt).toContain('video_project_create')
+    expect(videoAgent?.systemPrompt).toContain('video_media_import')
+    expect(videoAgent?.systemPrompt).toContain('video_clip_add')
+    expect(videoAgent?.systemPrompt).toContain('video_export')
+    expect(videoAgent?.systemPrompt).toContain('placeholder')
+  })
+
   test('starter library includes the Shopify Agent with bundled Shopify source', () => {
     const shopifyAgent = STARTER_AGENTS.find((agent) => agent.slug === 'shopify-agent')
 

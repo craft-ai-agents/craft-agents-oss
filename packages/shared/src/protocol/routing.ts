@@ -228,6 +228,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.sessions.DELETE,
   RPC_CHANNELS.sessions.GET_MESSAGES,
   RPC_CHANNELS.sessions.SEND_MESSAGE,
+  RPC_CHANNELS.sessions.QUEUE_CANVAS_VISUAL_REVIEW,
   RPC_CHANNELS.sessions.CANCEL,
   RPC_CHANNELS.sessions.KILL_SHELL,
   RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION,
@@ -274,6 +275,13 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
 
   // credentials — remote server's credential state
   RPC_CHANNELS.credentials.HEALTH_CHECK,
+
+  // secrets — runtime/user env vault on the owning server
+  RPC_CHANNELS.secrets.LIST,
+  RPC_CHANNELS.secrets.SAVE,
+  RPC_CHANNELS.secrets.DELETE,
+  RPC_CHANNELS.secrets.ZERO_STATUS,
+  RPC_CHANNELS.secrets.INSTALL_ZERO,
 
   // llmConnections — LLM config lives on server running workspace
   RPC_CHANNELS.llmConnections.LIST,

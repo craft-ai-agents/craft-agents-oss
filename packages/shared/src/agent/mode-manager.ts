@@ -1872,6 +1872,14 @@ export function shouldAllowToolInMode(
     return { allowed: true };
   }
 
+  if (toolName === 'send_agent_message' || toolName.endsWith('__send_agent_message')) {
+    const input = toolInput as Record<string, unknown> | null;
+    const attachments = input?.attachments;
+    if (input?.deliveryMode === 'passive' && (!Array.isArray(attachments) || attachments.length === 0)) {
+      return { allowed: true };
+    }
+  }
+
   // Handle Bash - check if command is read-only
   // Uses detailed rejection reasons to provide helpful error messages
   if (toolName === 'Bash') {

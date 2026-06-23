@@ -1,0 +1,20 @@
+{
+  "allowedBashPatterns": [
+    {
+      "pattern": "^cd\\s+tools/lottie\\s+&&\\s+node\\s+bin/lottie\\.mjs\\s+doctor(\\s+--json)?(\\s+--live)?$",
+      "comment": "Check bundled Lottie source readiness"
+    },
+    {
+      "pattern": "^cd\\s+tools/lottie\\s+&&\\s+node\\s+bin/lottie\\.mjs\\s+init\\s+.+$",
+      "comment": "Scaffold the official diffusionstudio/lottie player project"
+    },
+    {
+      "pattern": "^cd\\s+tools/lottie\\s+&&\\s+node\\s+bin/lottie\\.mjs\\s+validate\\s+.+$",
+      "comment": "Validate generated public/lottie.json and optional controls.json"
+    },
+    {
+      "pattern": "^cd\\s+tools/lottie\\s+&&\\s+node\\s+bin/lottie\\.mjs\\s+dev\\s+.+$",
+      "comment": "Run the official Lottie preview server"
+    }
+  ]
+}

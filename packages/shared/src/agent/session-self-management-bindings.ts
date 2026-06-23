@@ -151,6 +151,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'messageAgent', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.messageAgentFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'activateSourceInSession', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.activateSourceInSessionFn;

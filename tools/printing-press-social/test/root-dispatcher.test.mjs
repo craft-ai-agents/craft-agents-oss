@@ -4,8 +4,9 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-const cli = path.resolve('src/social.mjs');
+const cli = fileURLToPath(new URL('../src/social.mjs', import.meta.url));
 
 function run(args, env = {}) {
   return execFileSync(process.execPath, [cli, ...args], {

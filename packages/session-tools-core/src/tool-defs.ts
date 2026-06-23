@@ -42,6 +42,7 @@ import { handleListAgents } from './handlers/list-agents.ts';
 import { handleListSkills } from './handlers/list-skills.ts';
 import { handleListSources } from './handlers/list-sources.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
+import { handleMessageAgent } from './handlers/message-agent.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
 import { handleCreateAgent } from './handlers/create-agent.ts';
 import { handleCreateAutomation } from './handlers/create-automation.ts';
@@ -327,6 +328,22 @@ export const SendAgentMessageSchema = z.object({
     path: z.string().describe('Absolute file path on disk'),
     name: z.string().optional().describe('Display name (defaults to file basename)'),
   })).optional().describe('Files to include with the message'),
+  deliveryMode: z.enum(['normal', 'passive']).optional().describe('normal sends a turn to process; passive records a message without starting a turn. Passive cannot include attachments.'),
+});
+
+export const MessageAgentSchema = z.object({
+  agentSlug: z.string().describe('Target saved agent slug. Use list_agents first if unsure.'),
+  task: z.string().describe('Concrete bounded task for the target agent.'),
+  context: z.string().optional().describe('Compact context the target agent needs. Do not paste the whole transcript.'),
+  expectedOutput: z.string().optional().describe('Plain-language expected result shape.'),
+  outputSchema: z.record(z.string(), z.unknown()).optional().describe('Optional JSON Schema for structured final output.'),
+  sourceSlugs: z.array(z.string()).optional().describe('Optional source slugs to allow for this delegated run. Defaults to the target agent sources.'),
+  skillSlugs: z.array(z.string()).optional().describe('Optional skill slugs to request for this delegated run. Defaults to the target agent skills.'),
+  permissionMode: z.enum(['safe', 'ask', 'allow-all']).optional().describe('Permission mode for the child run. Cannot exceed parent permission mode.'),
+  timeoutSeconds: z.number().optional().describe('Hard timeout in seconds. Defaults to 300, max 1800.'),
+  maxTurns: z.number().optional().describe('Currently capped at 1 turn.'),
+  priority: z.enum(['low', 'normal', 'high']).optional().describe('Scheduling hint for future runners.'),
+  background: z.boolean().optional().describe('When true, start the child agent and return immediately. The receipt updates when it finishes.'),
 });
 
 export const ListMessagingChannelsSchema = z.object({
@@ -878,6 +895,11 @@ Use list_sessions to find session IDs, or use the sessionId returned by spawn_se
 
 The target session receives your message with a sender envelope containing your session ID, so it can use send_agent_message to reply.`,
 
+  message_agent: `Delegate a bounded task to a saved RunnerOS agent.
+
+Creates a hidden child session using the target agent's normal prompt, sources, skills, timeout, receipt, and permission boundary.
+Use background=true for longer specialist work you do not need to block on; the receipt updates when the child finishes.`,
+
   list_messaging_channels: `List messaging channels (Telegram, WhatsApp) bound to a session.
 Shows which external chat apps are connected and can send/receive messages.`,
 
@@ -1170,6 +1192,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'cancel_workflow_run', description: TOOL_DESCRIPTIONS.cancel_workflow_run, inputSchema: CancelWorkflowRunSchema, executionMode: 'registry', safeMode: 'block', handler: handleCancelWorkflowRun },
   // Inter-session messaging
   { name: 'send_agent_message', description: TOOL_DESCRIPTIONS.send_agent_message, inputSchema: SendAgentMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendAgentMessage },
+  { name: 'message_agent', description: TOOL_DESCRIPTIONS.message_agent, inputSchema: MessageAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleMessageAgent },
   // Messaging gateway tools
   { name: 'list_messaging_channels', description: TOOL_DESCRIPTIONS.list_messaging_channels, inputSchema: ListMessagingChannelsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListMessagingChannels },
   { name: 'unbind_messaging_channel', description: TOOL_DESCRIPTIONS.unbind_messaging_channel, inputSchema: UnbindMessagingChannelSchema, executionMode: 'registry', safeMode: 'block', handler: handleUnbindMessagingChannel },

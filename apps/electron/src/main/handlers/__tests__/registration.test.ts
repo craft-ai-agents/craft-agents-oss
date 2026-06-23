@@ -39,7 +39,16 @@ mock.module('electron', () => ({
   Menu: {
     buildFromTemplate: () => ({ popup: () => {} }),
   },
-  session: {},
+  protocol: {
+    handle: () => {},
+  },
+  session: {
+    fromPartition: () => ({
+      protocol: {
+        handle: () => {},
+      },
+    }),
+  },
 }))
 
 function createMockServer(): RpcServer {

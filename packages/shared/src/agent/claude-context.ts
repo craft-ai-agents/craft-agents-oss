@@ -9,7 +9,8 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from 'fs';
-import { join, basename } from 'path';
+import { join, basename, isAbsolute, resolve } from 'path';
+import { spawnSync } from 'node:child_process';
 import { CONFIG_DIR } from '../config/paths.ts';
 import type {
   SessionToolContext,
@@ -53,6 +54,7 @@ import {
   loadSourceConfig as loadSourceConfigImpl,
   saveSourceConfig as saveSourceConfigImpl,
   getSourcePath,
+  getSourcesBySlugs,
 } from '../sources/storage.ts';
 import type { FolderSourceConfig, LoadedSource as SharedLoadedSource } from '../sources/types.ts';
 import { getSourceCredentialManager } from '../sources/index.ts';
@@ -216,6 +218,54 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
     }
   };
 
+  const testLocalSource = async (source: SourceConfig) => {
+    if (source.slug !== 'lottie' && source.slug !== 'video-studio') {
+      return { success: true, message: 'Local path exists.' };
+    }
+
+    const localPath = source.local?.path;
+    if (!localPath) {
+      return { success: false, message: 'No local path configured.', error: 'No local path configured.' };
+    }
+
+    const dir = isAbsolute(localPath) ? localPath : resolve(workspacePath, localPath);
+    const isVideoStudio = source.slug === 'video-studio';
+    const script = isVideoStudio ? 'bin/video-studio.mjs' : 'bin/lottie.mjs';
+    const label = isVideoStudio ? 'Video Studio' : 'Lottie';
+    const result = spawnSync(process.execPath, [script, 'doctor', '--json'], {
+      cwd: dir,
+      encoding: 'utf-8',
+      env: process.env,
+    });
+
+    if (result.error) {
+      return {
+        success: false,
+        message: result.error.message,
+        error: result.error.message,
+        lines: [`✗ ${label} doctor failed: ${result.error.message}`],
+      };
+    }
+
+    let parsed: { lines?: string[]; fix?: string } | null = null;
+    try {
+      parsed = result.stdout ? JSON.parse(result.stdout) : null;
+    } catch {
+      parsed = null;
+    }
+
+    const lines = parsed?.lines?.length
+      ? parsed.lines
+      : [result.stdout, result.stderr].filter(Boolean).join('\n').split('\n').filter(Boolean);
+    const success = result.status === 0;
+    return {
+      success,
+      message: success ? `${label} tool ready.` : `${label} tool is not ready.`,
+      error: success ? undefined : parsed?.fix ?? (result.stderr || `${label} doctor failed.`),
+      lines,
+    };
+  };
+
   // Build context
   const context: SessionToolContext = {
     sessionId,
@@ -241,7 +291,9 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
     },
     // Source management
     loadSourceConfig: (sourceSlug: string): SourceConfig | null => {
-      const config = loadSourceConfigImpl(workspacePath, sourceSlug);
+      const config = loadSourceConfigImpl(workspacePath, sourceSlug)
+        ?? getSourcesBySlugs(workspacePath, [sourceSlug])[0]?.config
+        ?? null;
       return config as unknown as SourceConfig | null;
     },
     saveSourceConfig: (source: SourceConfig) => {
@@ -267,6 +319,7 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
     // MCP validation
     validateStdioMcpConnection,
     validateMcpConnection,
+    testLocalSource,
 
     // Icon helpers (simplified - full implementation would use logo.ts)
     isIconUrl: (value: string): boolean => {

@@ -36,6 +36,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # OSS sync temp directory
 .oss-sync-temp/
 
+# Local git worktrees kept inside the repo folder
+.worktrees/
+
 # IntelliJ based IDEs
 .idea
 

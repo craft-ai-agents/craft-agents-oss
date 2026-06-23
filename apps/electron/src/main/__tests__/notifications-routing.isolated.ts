@@ -33,6 +33,12 @@ mock.module('electron', () => {
       createFromPath: () => ({}),
       createFromDataURL: () => ({}),
     },
+    protocol: { handle: () => {} },
+    session: {
+      fromPartition: () => ({
+        protocol: { handle: () => {} },
+      }),
+    },
   }
 })
 

@@ -36,6 +36,12 @@ mock.module('electron', () => ({
     getAllWindows: () => [],
     getFocusedWindow: () => null,
   },
+  protocol: { handle: () => {} },
+  session: {
+    fromPartition: () => ({
+      protocol: { handle: () => {} },
+    }),
+  },
 }))
 
 mock.module('@sentry/electron/main', () => ({

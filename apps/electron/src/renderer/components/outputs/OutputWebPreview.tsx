@@ -117,7 +117,7 @@ export function OutputWebPreview({ target, refreshKey, className, onPreviewSettl
         </Button>
       </div>
       <div className="relative min-h-0 flex-1 bg-white">
-        <div className="absolute bottom-2 left-2 z-[1] rounded border border-black/10 bg-white/88 px-2 py-1 text-[10px] text-zinc-600 shadow-sm backdrop-blur">
+        <div className="absolute bottom-2 left-2 z-[1] rounded border border-black/10 bg-white/88 px-2 py-1 text-[10px] text-zinc-600 shadow-xs backdrop-blur">
           {statusText}
         </div>
         {isLoading && !loadError ? (

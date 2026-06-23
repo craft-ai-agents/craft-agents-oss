@@ -32,8 +32,20 @@ describe('system prompt guidance', () => {
   it('does not mention Grep in call_llm tool-dependency guidance', () => {
     const prompt = getSystemPrompt(undefined, undefined, '/tmp/workspace', '/tmp/workspace')
 
-    expect(prompt).toContain('The subtask needs file/shell tools (for example, Read or Bash)')
+    expect(prompt).toContain('The subtask needs file/shell tools, sources, skills, or a saved agent persona')
     expect(prompt).not.toContain('The subtask needs tools (Read, Bash, Grep)')
+  })
+
+  it('teaches agents when to use message_agent for specialist delegation', () => {
+    const prompt = getSystemPrompt(undefined, undefined, '/tmp/workspace', '/tmp/workspace')
+
+    expect(prompt).toContain('## Agent Delegation')
+    expect(prompt).toContain('Use `message_agent` when another saved RunnerOS agent is clearly better suited')
+    expect(prompt).toContain('Use `list_agents` first if you do not know the target agent slug')
+    expect(prompt).toContain('Do not paste the whole transcript')
+    expect(prompt).toContain('use `message_agent` when the subtask needs tools, sources, skills, or an agent persona')
+    expect(prompt).toContain('Use `background: true` for longer specialist work')
+    expect(prompt).toContain('`message_agent` = saved RunnerOS agent in a hidden child session')
   })
 
   it('teaches agents the shared Canvas and Outputs workflow', () => {
