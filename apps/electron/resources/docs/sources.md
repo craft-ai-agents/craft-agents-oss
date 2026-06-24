@@ -266,6 +266,8 @@ Each source folder contains:
   "tagline": "Brief description for agent context",
 
   // For MCP sources:
+  // Path fields (command, args, env values) support variables:
+  // ~, ${HOME}, ${CRAFT_CONFIG_DIR}, ${WORKSPACE}, ${SOURCE_DIR}
   "mcp": {
     "url": "https://mcp.example.com",
     "authType": "oauth" | "bearer" | "none"
@@ -300,6 +302,84 @@ Each source folder contains:
   "updatedAt": 1704067200000
 }
 ```
+
+## Path Variables (Cross-Machine Portability)
+
+Source configs often contain absolute paths (e.g., to MCP server binaries,
+project directories, or virtual environments). These paths differ between
+machines, making configs hard to share across a team.
+
+**Path variables** are expanded automatically when a source is loaded.
+They make configs portable without changing existing behavior.
+
+### Supported Variables
+
+| Variable | Resolves To | Example |
+|----------|-------------|--------|
+| `~` / `~/` | Home directory | `~/Development/my-mcp` |
+| `${HOME}` | Home directory | `${HOME}/.crawl4ai/venv/bin/python` |
+| `${CRAFT_CONFIG_DIR}` | Craft Agent config directory (default: `~/.craft-agent`) | `${CRAFT_CONFIG_DIR}/sources/my-mcp` |
+| `${WORKSPACE}` | Current workspace root | `${WORKSPACE}/mcp-servers/my-server` |
+| `${SOURCE_DIR}` | This source's own folder | `${SOURCE_DIR}/server/index.js` |
+
+### Where Variables Are Expanded
+
+For **MCP sources** (stdio transport):
+- `command` — the executable path
+- `args` — each argument string
+- `env` — each environment variable value
+
+For **local sources**:
+- `path` — the folder path
+
+### Examples
+
+**Portable local MCP with home-relative paths:**
+```json
+{
+  "type": "mcp",
+  "mcp": {
+    "transport": "stdio",
+    "command": "${HOME}/.crawl4ai/venv/bin/python",
+    "args": ["-m", "crawler_agent.mcp_server"],
+    "env": {
+      "PYTHONPATH": "${HOME}/.crawl4ai/crawl4ai-mcp-server"
+    },
+    "authType": "none"
+  }
+}
+```
+
+**MCP stored inside a source folder:**
+```json
+{
+  "type": "mcp",
+  "mcp": {
+    "transport": "stdio",
+    "command": "node",
+    "args": ["${SOURCE_DIR}/server/index.js"],
+    "authType": "none"
+  }
+}
+```
+
+**Portable local source:**
+```json
+{
+  "type": "local",
+  "local": {
+    "path": "~/Documents/MyProject"
+  }
+}
+```
+
+### Backward Compatibility
+
+Existing configs with absolute paths (no variables) continue to work
+exactly as before. Variables are purely opt-in — a path without `${...}`
+or `~` passes through unchanged.
+
+---
 
 ## Source Types
 
@@ -351,6 +431,10 @@ After creating, use `source_credential_prompt` with mode "bearer".
 **Stdio transport (local command):**
 
 For MCP servers that run locally via command line (npx, node, python), use the stdio transport.
+
+> **Cross-machine tip:** Use path variables (`${HOME}`, `${SOURCE_DIR}`)
+> instead of absolute paths to make configs portable across machines.
+> See [Path Variables](#path-variables-cross-machine-portability) above.
 
 Users often provide configs in Claude Desktop / Claude Code format:
 ```json
@@ -695,6 +779,17 @@ Filesystem access for local folders.
   "provider": "obsidian",
   "local": {
     "path": "/Users/me/Documents/ObsidianVault"
+  }
+}
+```
+
+Use path variables for cross-machine portability:
+```json
+{
+  "type": "local",
+  "provider": "obsidian",
+  "local": {
+    "path": "~/Documents/ObsidianVault"
   }
 }
 ```

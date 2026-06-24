@@ -2,27 +2,44 @@
  * Path Portability Utilities
  *
  * Functions for making filesystem paths portable across machines.
- * Supports ~ and ${HOME} path variables for cross-machine compatibility.
+ * Supports ~, ${HOME}, ${CRAFT_CONFIG_DIR}, and caller-provided variables
+ * for cross-machine compatibility.
  */
 
 import { homedir } from 'os';
 import { resolve, join, normalize, isAbsolute } from 'path';
 import { existsSync } from 'fs';
+import { CONFIG_DIR } from '../config/paths';
 
 /**
- * Expand path variables (~, ${HOME}, $HOME) to absolute paths.
+ * Extra path variables that callers can provide for context-aware expansion.
+ * Values should be absolute paths.
+ */
+export interface PathVars {
+  [key: string]: string;
+}
+
+/**
+ * Expand path variables (~, ${HOME}, $HOME, ${CRAFT_CONFIG_DIR}, and caller-provided vars)
+ * to absolute paths.
+ *
+ * Idempotent: absolute paths without variables pass through unchanged.
+ * This makes it safe to apply to legacy configs without behavioral change.
  *
  * @param inputPath - Path that may contain variables
  * @param basePath - Base path for relative path resolution (defaults to cwd)
+ * @param extraVars - Additional named variables (e.g. { WORKSPACE: '/path', SOURCE_DIR: '/path' })
  * @returns Absolute path with all variables expanded
  *
  * @example
  * expandPath('~')                    // '/Users/alice'
  * expandPath('~/Documents')          // '/Users/alice/Documents'
  * expandPath('${HOME}/projects')     // '/Users/alice/projects'
- * expandPath('/absolute/path')       // '/absolute/path' (unchanged)
+ * expandPath('${CRAFT_CONFIG_DIR}/data') // '~/.craft-agent/data'
+ * expandPath('${SOURCE_DIR}/server.js', undefined, { SOURCE_DIR: '/app/src/foo' })  // '/app/src/foo/server.js'
+ * expandPath('/absolute/path')       // '/absolute/path' (unchanged — legacy compat)
  */
-export function expandPath(inputPath: string, basePath?: string): string {
+export function expandPath(inputPath: string, basePath?: string, extraVars?: PathVars): string {
   if (!inputPath) return inputPath;
 
   let expanded = inputPath;
@@ -41,6 +58,20 @@ export function expandPath(inputPath: string, basePath?: string): string {
   // Handle ${HOME} and $HOME variables
   expanded = expanded.replace(/\$\{HOME\}/g, home);
   expanded = expanded.replace(/\$HOME(?=\/|$)/g, home);
+
+  // Handle ${CRAFT_CONFIG_DIR} — centralized config directory
+  expanded = expanded.replace(/\$\{CRAFT_CONFIG_DIR\}/g, CONFIG_DIR);
+
+  // Handle caller-provided extra variables (WORKSPACE, SOURCE_DIR, etc.)
+  if (extraVars) {
+    for (const [key, value] of Object.entries(extraVars)) {
+      if (!value) continue;
+      // ${VAR} form
+      expanded = expanded.replace(new RegExp(`\\$\{${key}\}`, 'g'), value);
+      // $VAR form (only at word boundaries: followed by / or end of string)
+      expanded = expanded.replace(new RegExp(`\\$${key}(?=/|$)`, 'g'), value);
+    }
+  }
 
   // If still not absolute, resolve from base path
   if (!isAbsolute(expanded)) {

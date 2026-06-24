@@ -21,7 +21,7 @@ import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync } from '../utils/files.ts';
 import { getBuiltinSources, isBuiltinSource, getDocsSource } from './builtin-sources.ts';
-import { expandPath, toPortablePath } from '../utils/paths.ts';
+import { expandPath, toPortablePath, type PathVars } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 // Circular import (credential-manager imports from this file) is safe here:
 // getSourceCredentialManager is only referenced lazily inside saveSourceConfig,
@@ -73,9 +73,29 @@ export function loadSourceConfig(
   try {
     const config = readJsonFileSync<FolderSourceConfig>(configPath);
 
-    // Expand path variables in local source paths for portability
+    // Expand path variables for portability across machines.
+    // Idempotent — absolute paths without variables pass through unchanged.
+    const sourceDir = getSourcePath(workspaceRootPath, sourceSlug);
+    const vars: PathVars = {
+      WORKSPACE: workspaceRootPath,
+      SOURCE_DIR: sourceDir,
+    };
+
+    // Local source paths
     if (config.type === 'local' && config.local?.path) {
-      config.local.path = expandPath(config.local.path);
+      config.local.path = expandPath(config.local.path, undefined, vars);
+    }
+
+    // MCP stdio fields (command, args, env values)
+    if (config.type === 'mcp' && config.mcp && config.mcp.transport === 'stdio') {
+      const mcp = config.mcp;
+      if (mcp.command) mcp.command = expandPath(mcp.command, undefined, vars);
+      if (mcp.args) mcp.args = mcp.args.map(a => expandPath(a, undefined, vars));
+      if (mcp.env) {
+        for (const [k, v] of Object.entries(mcp.env)) {
+          if (typeof v === 'string') mcp.env[k] = expandPath(v, undefined, vars);
+        }
+      }
     }
 
     return config;
