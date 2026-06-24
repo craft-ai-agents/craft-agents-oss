@@ -373,6 +373,64 @@ For **local sources**:
 }
 ```
 
+### Platform Overrides (Cross-OS Configs)
+
+For MCP stdio sources, you can override `command`, `args`, and `env` per
+platform. Keys match Node.js `process.platform` values: `win32`, `darwin`, `linux`.
+
+**Override rules:**
+- `command` — **replaces** the default command
+- `args` — **replaces** the default args entirely
+- `env` — **merges** on top of the default env (not replaced)
+
+**Example — different command on Windows:**
+```json
+{
+  "type": "mcp",
+  "mcp": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+    "platform": {
+      "win32": {
+        "command": "npx.cmd"
+      }
+    }
+  }
+}
+```
+
+**Example — platform-specific paths with variables:**
+```json
+{
+  "type": "mcp",
+  "mcp": {
+    "transport": "stdio",
+    "command": "dart",
+    "args": ["${SOURCE_DIR}/server/main.dart"],
+    "env": {
+      "DART_SDK": "${HOME}/.dart-sdk"
+    },
+    "platform": {
+      "win32": {
+        "command": "dart.exe",
+        "env": {
+          "DART_SDK": "C:\\tools\\dart-sdk"
+        }
+      },
+      "darwin": {
+        "env": {
+          "DART_SDK": "/opt/homebrew/opt/dart"
+        }
+      }
+    }
+  }
+}
+```
+
+Path variables (`${HOME}`, `${SOURCE_DIR}`, etc.) are expanded inside platform
+overrides exactly the same as in default fields.
+
 ### Backward Compatibility
 
 Existing configs with absolute paths (no variables) continue to work

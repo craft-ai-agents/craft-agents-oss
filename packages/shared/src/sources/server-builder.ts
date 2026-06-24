@@ -17,7 +17,7 @@ import { isSourceUsable } from './storage.ts';
 import { createApiServer, type SummarizeCallback } from './api-tools.ts';
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { debug } from '../utils/debug.ts';
-import { expandVars, type PathVars } from '../utils/paths.ts';
+import { expandVars, resolveStdioConfig } from '../utils/paths.ts';
 
 /**
  * Standard error messages for server build failures.
@@ -97,22 +97,21 @@ export class SourceServerBuilder {
         debug(`[SourceServerBuilder] Stdio source ${source.config.slug} missing command`);
         return null;
       }
-      // Expand path variables at build time (runtime-only, not persisted).
-      // Uses expandVars (not expandPath) so bare commands like "dart", "npx",
-      // and non-path env values like "true" pass through unchanged.
-      const vars: PathVars = {
-        WORKSPACE: source.workspaceRootPath,
-        SOURCE_DIR: source.folderPath,
-      };
+      // Resolve platform overrides + expand path variables (runtime-only).
+      const resolved = resolveStdioConfig(
+        mcp,
+        source.workspaceRootPath,
+        source.folderPath,
+      );
+      if (!resolved) {
+        debug(`[SourceServerBuilder] Failed to resolve stdio config for ${source.config.slug}`);
+        return null;
+      }
       return {
         type: 'stdio',
-        command: expandVars(mcp.command, vars),
-        args: mcp.args?.map(a => expandVars(a, vars)),
-        env: mcp.env
-          ? Object.fromEntries(
-              Object.entries(mcp.env).map(([k, v]) => [k, expandVars(v, vars)])
-            )
-          : undefined,
+        command: resolved.command,
+        args: resolved.args,
+        env: resolved.env,
       };
     }
 

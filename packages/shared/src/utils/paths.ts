@@ -100,6 +100,64 @@ export function expandPath(inputPath: string, basePath?: string, extraVars?: Pat
 }
 
 /**
+ * Resolved stdio config after platform overrides and variable expansion.
+ */
+export interface ResolvedStdioConfig {
+  command: string;
+  args: string[];
+  env: Record<string, string> | undefined;
+}
+
+/**
+ * Resolve a stdio MCP config for the current platform.
+ *
+ * Applies platform overrides (command replaces, args replace, env merges),
+ * then expands path variables (${HOME}, ${CRAFT_CONFIG_DIR}, ${WORKSPACE},
+ * ${SOURCE_DIR}) at runtime — never mutating the original config.
+ *
+ * @param mcp - The raw MCP config from config.json
+ * @param workspacePath - Workspace root path
+ * @param sourceDir - This source's folder path
+ * @returns Resolved command, args, and env with variables expanded
+ */
+export function resolveStdioConfig(
+  mcp: { command?: string; args?: string[]; env?: Record<string, string>; platform?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }> },
+  workspacePath: string,
+  sourceDir: string,
+): ResolvedStdioConfig | null {
+  if (!mcp.command) return null;
+
+  const vars: PathVars = {
+    WORKSPACE: workspacePath,
+    SOURCE_DIR: sourceDir,
+  };
+
+  // Start with defaults
+  let command = mcp.command;
+  let args = mcp.args || [];
+  let env = mcp.env ? { ...mcp.env } : undefined;
+
+  // Apply platform override if present
+  const platformKey = process.platform as string;
+  const override = mcp.platform?.[platformKey];
+  if (override) {
+    if (override.command) command = override.command;
+    if (override.args) args = override.args;
+    if (override.env) env = { ...(env || {}), ...override.env };
+  }
+
+  return {
+    command: expandVars(command, vars),
+    args: args.map(a => expandVars(a, vars)),
+    env: env
+      ? Object.fromEntries(
+          Object.entries(env).map(([k, v]) => [k, expandVars(v, vars)])
+        )
+      : undefined,
+  };
+}
+
+/**
  * Convert absolute path to portable form.
  * If path is within home directory, converts to ~ prefix.
  *
