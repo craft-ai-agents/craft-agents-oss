@@ -757,6 +757,7 @@ async function testMcpConnection(
             command: expandedCommand,
             args: expandedArgs,
             env: expandedEnv,
+            cwd: getSourcePath(ctx.workspacePath, sourceSlug),
           });
           if (result.success) {
             success = true;
