@@ -20,60 +20,77 @@ export interface PathVars {
 }
 
 /**
- * Expand path variables (~, ${HOME}, $HOME, ${CRAFT_CONFIG_DIR}, and caller-provided vars)
- * to absolute paths.
+ * Expand ONLY variable references (~, ${HOME}, ${CRAFT_CONFIG_DIR}, caller vars)
+ * without converting relative paths to absolute.
  *
- * Idempotent: absolute paths without variables pass through unchanged.
- * This makes it safe to apply to legacy configs without behavioral change.
+ * Use this for values where bare strings like "true", "dart", or "production"
+ * should pass through unchanged — e.g. env values, command names, args.
+ *
+ * For file/folder paths where relative paths should be resolved to absolute,
+ * use `expandPath()` instead.
+ *
+ * @param input - String that may contain variables
+ * @param extraVars - Additional named variables
+ * @returns String with variables substituted; non-variable strings unchanged
+ *
+ * @example
+ * expandVars('dart')                 // 'dart' (unchanged — bare command)
+ * expandVars('true')                 // 'true' (unchanged — env flag)
+ * expandVars('${HOME}/.venv/bin/python')  // '/Users/alice/.venv/bin/python'
+ * expandVars('${SOURCE_DIR}/server.js', { SOURCE_DIR: '/app/foo' })  // '/app/foo/server.js'
+ */
+export function expandVars(input: string, extraVars?: PathVars): string {
+  if (!input) return input;
+
+  let result = input;
+  const home = homedir();
+
+  // Handle ~ alone
+  if (result === '~') return home;
+
+  // Handle ~/ prefix
+  if (result.startsWith('~/')) {
+    result = join(home, result.slice(2));
+  }
+
+  // Handle ${HOME} and $HOME variables
+  result = result.replace(/\$\{HOME\}/g, home);
+  result = result.replace(/\$HOME(?=\/|$)/g, home);
+
+  // Handle ${CRAFT_CONFIG_DIR} — centralized config directory
+  result = result.replace(/\$\{CRAFT_CONFIG_DIR\}/g, CONFIG_DIR);
+
+  // Handle caller-provided extra variables
+  if (extraVars) {
+    for (const [key, value] of Object.entries(extraVars)) {
+      if (!value) continue;
+      result = result.replace(new RegExp(`\\$\{${key}\}`, 'g'), value);
+      result = result.replace(new RegExp(`\\$${key}(?=/|$)`, 'g'), value);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Expand path variables (~, ${HOME}, $HOME, ${CRAFT_CONFIG_DIR}, and caller-provided vars)
+ * to absolute paths. Relative paths are resolved against basePath (defaults to cwd).
+ *
+ * Use this for file/folder paths only — NOT for env values or command names.
+ * For env values, command names, and args, use `expandVars()` instead.
  *
  * @param inputPath - Path that may contain variables
  * @param basePath - Base path for relative path resolution (defaults to cwd)
  * @param extraVars - Additional named variables (e.g. { WORKSPACE: '/path', SOURCE_DIR: '/path' })
  * @returns Absolute path with all variables expanded
- *
- * @example
- * expandPath('~')                    // '/Users/alice'
- * expandPath('~/Documents')          // '/Users/alice/Documents'
- * expandPath('${HOME}/projects')     // '/Users/alice/projects'
- * expandPath('${CRAFT_CONFIG_DIR}/data') // '~/.craft-agent/data'
- * expandPath('${SOURCE_DIR}/server.js', undefined, { SOURCE_DIR: '/app/src/foo' })  // '/app/src/foo/server.js'
- * expandPath('/absolute/path')       // '/absolute/path' (unchanged — legacy compat)
  */
 export function expandPath(inputPath: string, basePath?: string, extraVars?: PathVars): string {
   if (!inputPath) return inputPath;
 
-  let expanded = inputPath;
-  const home = homedir();
+  // First do variable-only expansion
+  let expanded = expandVars(inputPath, extraVars);
 
-  // Handle ~ alone
-  if (expanded === '~') {
-    return home;
-  }
-
-  // Handle ~/ prefix
-  if (expanded.startsWith('~/')) {
-    expanded = join(home, expanded.slice(2));
-  }
-
-  // Handle ${HOME} and $HOME variables
-  expanded = expanded.replace(/\$\{HOME\}/g, home);
-  expanded = expanded.replace(/\$HOME(?=\/|$)/g, home);
-
-  // Handle ${CRAFT_CONFIG_DIR} — centralized config directory
-  expanded = expanded.replace(/\$\{CRAFT_CONFIG_DIR\}/g, CONFIG_DIR);
-
-  // Handle caller-provided extra variables (WORKSPACE, SOURCE_DIR, etc.)
-  if (extraVars) {
-    for (const [key, value] of Object.entries(extraVars)) {
-      if (!value) continue;
-      // ${VAR} form
-      expanded = expanded.replace(new RegExp(`\\$\{${key}\}`, 'g'), value);
-      // $VAR form (only at word boundaries: followed by / or end of string)
-      expanded = expanded.replace(new RegExp(`\\$${key}(?=/|$)`, 'g'), value);
-    }
-  }
-
-  // If still not absolute, resolve from base path
+  // Then resolve relative paths to absolute
   if (!isAbsolute(expanded)) {
     const base = basePath || process.cwd();
     expanded = resolve(base, expanded);

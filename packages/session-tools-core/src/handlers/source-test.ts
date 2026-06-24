@@ -10,6 +10,7 @@ import { basename, join } from 'node:path';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult, SourceConfig, ConnectionStatus } from '../types.ts';
 import { errorResponse } from '../response.ts';
+import { expandVars, type PathVars } from '@craft-agent/shared/utils';
 import {
   validateJsonFileHasFields,
   validateSourceConfigBasic,
@@ -733,14 +734,27 @@ async function testMcpConnection(
   let error: string | undefined;
 
   if (source.mcp?.transport === 'stdio') {
+    // Expand path variables for the test command (runtime-only).
+    const vars: PathVars = {
+      WORKSPACE: ctx.workspacePath,
+      SOURCE_DIR: getSourcePath(ctx.workspacePath, sourceSlug),
+    };
+    const expandedCommand = expandVars(source.mcp.command!, vars);
+    const expandedArgs = source.mcp.args?.map(a => expandVars(a, vars)) || [];
+    const expandedEnv = source.mcp.env
+      ? Object.fromEntries(
+          Object.entries(source.mcp.env).map(([k, v]) => [k, expandVars(v, vars)])
+        )
+      : undefined;
+
     // Stdio MCP - use validateStdioMcpConnection if available
     if (ctx.validateStdioMcpConnection && source.mcp.command) {
-      lines.push(`ℹ Testing stdio MCP: ${source.mcp.command}`);
+      lines.push(`ℹ Testing stdio MCP: ${expandedCommand}`);
       try {
         const result = await ctx.validateStdioMcpConnection({
-          command: source.mcp.command,
-          args: source.mcp.args || [],
-          env: source.mcp.env,
+          command: expandedCommand,
+          args: expandedArgs,
+          env: expandedEnv,
         });
         if (result.success) {
           success = true;
@@ -771,9 +785,9 @@ async function testMcpConnection(
       }
     } else if (source.mcp?.command) {
       // Basic check - just report config
-      lines.push(`ℹ Stdio MCP source: ${source.mcp.command}`);
-      if (source.mcp.args?.length) {
-        lines.push(`  Args: ${source.mcp.args.join(' ')}`);
+      lines.push(`ℹ Stdio MCP source: ${expandedCommand}`);
+      if (expandedArgs.length) {
+        lines.push(`  Args: ${expandedArgs.join(' ')}`);
       }
       lines.push('  Connection test not available in this context — call the source\'s MCP tools directly to verify');
       success = true; // Config looks ok
