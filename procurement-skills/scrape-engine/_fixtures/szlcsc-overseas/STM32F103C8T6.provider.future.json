@@ -1,0 +1,420 @@
+{
+  "code": 200,
+  "msg": null,
+  "result": [
+    {
+      "provider": "future",
+      "providerLogoUrl": null,
+      "providerPortalUrl": "",
+      "pageNumber": 1,
+      "pageTotal": 1,
+      "total": 2,
+      "products": [
+        {
+          "uuid": null,
+          "catalog1": null,
+          "provider": "future",
+          "productCodeProvider": "STM32F103C8T6",
+          "productCodeManufacturer": "STM32F103C8T6",
+          "productCodeManufacturerHighlight": "<SPAN CLASS='LUCENE_HIGHLIGHT_CLASS'>STM32F103C8T6</SPAN>",
+          "productGradePlateName": "STMicroelectronics",
+          "productGradePlateNameHighlight": "STMicroelectronics",
+          "stockNumber": 1250,
+          "encapsulationModel": "",
+          "encapsulationModelHighlight": "",
+          "minBuyNumber": 250,
+          "productMinEncapsulationNumber": 250,
+          "theRatio": 250,
+          "unit": "个",
+          "deliveryTimeWayDays": "10-20个工作日",
+          "breviaryImageUrl": "https://media.futureelectronics.com/semiconductors/microcontrollers/32-bit/STM32F100C4T6B-STM-FNT-MED.JPG?m=Ry1iky",
+          "bigImageUrl": "https://media.futureelectronics.com/semiconductors/microcontrollers/32-bit/STM32F100C4T6B-STM-FNT-MED.JPG?m=Ry1iky",
+          "tieredPrices": [
+            {
+              "countStart": 250,
+              "countEnd": 499,
+              "price": 35.608705,
+              "rmbPrice": null
+            },
+            {
+              "countStart": 500,
+              "countEnd": 749,
+              "price": 35.386844,
+              "rmbPrice": null
+            },
+            {
+              "countStart": 750,
+              "countEnd": 999,
+              "price": 35.164983,
+              "rmbPrice": null
+            },
+            {
+              "countStart": 1000,
+              "countEnd": 1249,
+              "price": 35.054053,
+              "rmbPrice": null
+            },
+            {
+              "countStart": 1250,
+              "countEnd": null,
+              "price": 34.61033,
+              "rmbPrice": null
+            }
+          ],
+          "tieredPricesSell": null,
+          "futureTieredPrices": null,
+          "productRegion": "EMEA",
+          "spiderRate": null,
+          "manualTariff": null,
+          "isCommercialInspection": 0,
+          "commercialInspectionCharge": 0,
+          "isTariff": null,
+          "tariffRate": null,
+          "tariff": null,
+          "showTariffList": null,
+          "categoryTaxRate": null,
+          "usEquivalentTaxRate": null,
+          "usImposedTaxRate": null,
+          "presetTaxRate1": null,
+          "presetTaxRate2": null,
+          "presetTaxRate3": null,
+          "is3c": null,
+          "certification3cFee": 0,
+          "isProhibitedProduct": null,
+          "vendorCode": null,
+          "vendorCodeEncode": null,
+          "isLcscBook": null,
+          "productDesc": "STM32F Series 64 kB Flash 20 kB RAM 72 MHz 32-Bit Microcontroller - LQFP-48",
+          "productDescHighlight": "STM32F Series 64 kB Flash 20 kB RAM 72 MHz 32-Bit Microcontroller - LQFP-48",
+          "packagingList": [
+            "per Tray"
+          ],
+          "totalCount": 2,
+          "dataSheetUrl": "http://www.st.com/content/ccc/resource/technical/document/datasheet/33/d4/6f/1d/df/0b/4c/6d/CD00161566.pdf/files/CD00161566.pdf/jcr:content/translations/en.CD00161566.pdf",
+          "updateTime": null,
+          "eccn": null,
+          "brandId": 74,
+          "brandName": "ST(意法半导体)",
+          "packaging": "per Tray",
+          "sourcePartId": "E7957939",
+          "sourceCd": null,
+          "detailUrl": null,
+          "batchNumber": "2435",
+          "placeOfOrigin": null,
+          "isValidateByEs": null,
+          "updateDate": null,
+          "updateSource": null,
+          "eccnOffsale": null,
+          "productClassfyOffsale": null,
+          "brandOffsale": null,
+          "catalogOffsale": null,
+          "handleOffsale": null,
+          "offSaleOperateRealName": null,
+          "offSaleOperateId": null,
+          "offSaleOperateTime": null,
+          "isOnsaleProduct": null,
+          "incrementalQuantity": 250,
+          "dataErrorOffsale": null,
+          "specsInfos": null,
+          "score": null,
+          "otherFee": null,
+          "productCode": "C8734",
+          "productDiscount": 0.97,
+          "discountTieredPrices": [
+            {
+              "countStart": 250,
+              "countEnd": 499,
+              "price": 35.608705,
+              "discount": 0.97,
+              "discountPrice": 34.540444
+            },
+            {
+              "countStart": 500,
+              "countEnd": 749,
+              "price": 35.386844,
+              "discount": 0.97,
+              "discountPrice": 34.325239
+            },
+            {
+              "countStart": 750,
+              "countEnd": 999,
+              "price": 35.164983,
+              "discount": 0.97,
+              "discountPrice": 34.110034
+            },
+            {
+              "countStart": 1000,
+              "countEnd": 1249,
+              "price": 35.054053,
+              "discount": 0.97,
+              "discountPrice": 34.002431
+            },
+            {
+              "countStart": 1250,
+              "countEnd": null,
+              "price": 34.61033,
+              "discount": 0.97,
+              "discountPrice": 33.57202
+            }
+          ],
+          "productCodeHighlight": "C8734",
+          "brandNameHighlight": "ST(意法半导体)",
+          "isUseEsStock": null,
+          "brandLevel": "internation",
+          "selfStandard": "LQFP-48(7x7)",
+          "selfParamAll": "ARM Cortex-M3 , 72MHz , 32 Bit , 64KB , FLASH , 20KB , 37 , 12bit , 内置 , 2V~3.6V , -40℃~+85℃ , -",
+          "selfProductIntro": "特性：Arm 32位Cortex-M3 CPU内核。最高72 MHz频率，在0等待状态内存访问时性能为1.25 DMIPS/MHz (DPrystone 2.1)。单周期乘法和硬件除法。64或128 KB的闪存。20 KB的SRAM。2.0至3.6V的应用电源和I/O",
+          "uploadTime": "2026-06-23 21:30:11",
+          "tag": null,
+          "deliveryRate": null,
+          "providerBrandSort": null,
+          "adjustScore": 7713402.5,
+          "selfBreviaryImageUrl": null,
+          "selfLuceneBreviaryImageUrls": null,
+          "selfParams": [
+            {
+              "parameterName": "CPU内核",
+              "parameterCode": null,
+              "parameterDetailValue": "ARM Cortex-M3",
+              "sort": 1,
+              "normUnit": null
+            },
+            {
+              "parameterName": "CPU最大主频",
+              "parameterCode": null,
+              "parameterDetailValue": "72MHz",
+              "sort": 2,
+              "normUnit": "Hz"
+            },
+            {
+              "parameterName": "CPU位数",
+              "parameterCode": null,
+              "parameterDetailValue": "32 Bit",
+              "sort": 3,
+              "normUnit": null
+            },
+            {
+              "parameterName": "程序存储容量",
+              "parameterCode": null,
+              "parameterDetailValue": "64KB",
+              "sort": 4,
+              "normUnit": "Byte"
+            }
+          ],
+          "isShowPrice": null,
+          "isRealPrice": null,
+          "isBomAllowPayment": null,
+          "lcCatalogName": null,
+          "bomMaxDeliveryTimeWayDay": 12,
+          "bomMinDeliveryTimeWayDay": 10,
+          "isBomPriorityMatch": null,
+          "roHs": null
+        },
+        {
+          "uuid": null,
+          "catalog1": null,
+          "provider": "future",
+          "productCodeProvider": "STM32F103C8T6",
+          "productCodeManufacturer": "STM32F103C8T6",
+          "productCodeManufacturerHighlight": "<SPAN CLASS='LUCENE_HIGHLIGHT_CLASS'>STM32F103C8T6</SPAN>",
+          "productGradePlateName": "STMicroelectronics",
+          "productGradePlateNameHighlight": "STMicroelectronics",
+          "stockNumber": 1966,
+          "encapsulationModel": "",
+          "encapsulationModelHighlight": "",
+          "minBuyNumber": 16,
+          "productMinEncapsulationNumber": 250,
+          "theRatio": 1,
+          "unit": "个",
+          "deliveryTimeWayDays": "10-20个工作日",
+          "breviaryImageUrl": "https://media.futureelectronics.com/semiconductors/microcontrollers/32-bit/STM32F100C4T6B-STM-FNT-MED.JPG?m=Ry1iky",
+          "bigImageUrl": "https://media.futureelectronics.com/semiconductors/microcontrollers/32-bit/STM32F100C4T6B-STM-FNT-MED.JPG?m=Ry1iky",
+          "tieredPrices": [
+            {
+              "countStart": 10,
+              "countEnd": 24,
+              "price": 36.939872,
+              "rmbPrice": null
+            },
+            {
+              "countStart": 25,
+              "countEnd": 39,
+              "price": 36.385219,
+              "rmbPrice": null
+            },
+            {
+              "countStart": 40,
+              "countEnd": 99,
+              "price": 36.052428,
+              "rmbPrice": null
+            },
+            {
+              "countStart": 100,
+              "countEnd": 149,
+              "price": 35.497775,
+              "rmbPrice": null
+            },
+            {
+              "countStart": 150,
+              "countEnd": null,
+              "price": 34.943122,
+              "rmbPrice": null
+            }
+          ],
+          "tieredPricesSell": null,
+          "futureTieredPrices": null,
+          "productRegion": "AMERICAS",
+          "spiderRate": null,
+          "manualTariff": null,
+          "isCommercialInspection": 0,
+          "commercialInspectionCharge": 0,
+          "isTariff": null,
+          "tariffRate": null,
+          "tariff": null,
+          "showTariffList": null,
+          "categoryTaxRate": null,
+          "usEquivalentTaxRate": null,
+          "usImposedTaxRate": null,
+          "presetTaxRate1": null,
+          "presetTaxRate2": null,
+          "presetTaxRate3": null,
+          "is3c": null,
+          "certification3cFee": 0,
+          "isProhibitedProduct": null,
+          "vendorCode": null,
+          "vendorCodeEncode": null,
+          "isLcscBook": null,
+          "productDesc": "STM32F Series 64 kB Flash 20 kB RAM 72 MHz 32-Bit Microcontroller - LQFP-48",
+          "productDescHighlight": "STM32F Series 64 kB Flash 20 kB RAM 72 MHz 32-Bit Microcontroller - LQFP-48",
+          "packagingList": [
+            "per Tray"
+          ],
+          "totalCount": 2,
+          "dataSheetUrl": "http://www.st.com/content/ccc/resource/technical/document/datasheet/33/d4/6f/1d/df/0b/4c/6d/CD00161566.pdf/files/CD00161566.pdf/jcr:content/translations/en.CD00161566.pdf",
+          "updateTime": null,
+          "eccn": null,
+          "brandId": 74,
+          "brandName": "ST(意法半导体)",
+          "packaging": "per Tray",
+          "sourcePartId": "C6124222",
+          "sourceCd": null,
+          "detailUrl": null,
+          "batchNumber": "2304",
+          "placeOfOrigin": null,
+          "isValidateByEs": null,
+          "updateDate": null,
+          "updateSource": null,
+          "eccnOffsale": null,
+          "productClassfyOffsale": null,
+          "brandOffsale": null,
+          "catalogOffsale": null,
+          "handleOffsale": null,
+          "offSaleOperateRealName": null,
+          "offSaleOperateId": null,
+          "offSaleOperateTime": null,
+          "isOnsaleProduct": null,
+          "incrementalQuantity": 1,
+          "dataErrorOffsale": null,
+          "specsInfos": null,
+          "score": null,
+          "otherFee": null,
+          "productCode": "C8734",
+          "productDiscount": 0.97,
+          "discountTieredPrices": [
+            {
+              "countStart": 10,
+              "countEnd": 24,
+              "price": 36.939872,
+              "discount": 0.97,
+              "discountPrice": 35.831676
+            },
+            {
+              "countStart": 25,
+              "countEnd": 39,
+              "price": 36.385219,
+              "discount": 0.97,
+              "discountPrice": 35.293662
+            },
+            {
+              "countStart": 40,
+              "countEnd": 99,
+              "price": 36.052428,
+              "discount": 0.97,
+              "discountPrice": 34.970855
+            },
+            {
+              "countStart": 100,
+              "countEnd": 149,
+              "price": 35.497775,
+              "discount": 0.97,
+              "discountPrice": 34.432842
+            },
+            {
+              "countStart": 150,
+              "countEnd": null,
+              "price": 34.943122,
+              "discount": 0.97,
+              "discountPrice": 33.894828
+            }
+          ],
+          "productCodeHighlight": "C8734",
+          "brandNameHighlight": "ST(意法半导体)",
+          "isUseEsStock": null,
+          "brandLevel": "internation",
+          "selfStandard": "LQFP-48(7x7)",
+          "selfParamAll": "ARM Cortex-M3 , 72MHz , 32 Bit , 64KB , FLASH , 20KB , 37 , 12bit , 内置 , 2V~3.6V , -40℃~+85℃ , -",
+          "selfProductIntro": "特性：Arm 32位Cortex-M3 CPU内核。最高72 MHz频率，在0等待状态内存访问时性能为1.25 DMIPS/MHz (DPrystone 2.1)。单周期乘法和硬件除法。64或128 KB的闪存。20 KB的SRAM。2.0至3.6V的应用电源和I/O",
+          "uploadTime": "2026-06-23 21:30:11",
+          "tag": null,
+          "deliveryRate": null,
+          "providerBrandSort": null,
+          "adjustScore": 7713402.5,
+          "selfBreviaryImageUrl": null,
+          "selfLuceneBreviaryImageUrls": null,
+          "selfParams": [
+            {
+              "parameterName": "CPU内核",
+              "parameterCode": null,
+              "parameterDetailValue": "ARM Cortex-M3",
+              "sort": 1,
+              "normUnit": null
+            },
+            {
+              "parameterName": "CPU最大主频",
+              "parameterCode": null,
+              "parameterDetailValue": "72MHz",
+              "sort": 2,
+              "normUnit": "Hz"
+            },
+            {
+              "parameterName": "CPU位数",
+              "parameterCode": null,
+              "parameterDetailValue": "32 Bit",
+              "sort": 3,
+              "normUnit": null
+            },
+            {
+              "parameterName": "程序存储容量",
+              "parameterCode": null,
+              "parameterDetailValue": "64KB",
+              "sort": 4,
+              "normUnit": "Byte"
+            }
+          ],
+          "isShowPrice": null,
+          "isRealPrice": null,
+          "isBomAllowPayment": null,
+          "lcCatalogName": null,
+          "bomMaxDeliveryTimeWayDay": 12,
+          "bomMinDeliveryTimeWayDay": 10,
+          "isBomPriorityMatch": null,
+          "roHs": null
+        }
+      ],
+      "isLcscBookShow": false,
+      "track_zone": "s_ovs__\"STM32F103C8T6\"",
+      "canDetailsPage": null
+    }
+  ],
+  "ok": true
+}

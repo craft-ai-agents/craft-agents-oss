@@ -1,0 +1,19 @@
+{
+  "code": 200,
+  "msg": null,
+  "result": [
+    {
+      "provider": "mouser",
+      "providerLogoUrl": null,
+      "providerPortalUrl": null,
+      "pageNumber": null,
+      "pageTotal": null,
+      "total": 0,
+      "products": [],
+      "isLcscBookShow": null,
+      "track_zone": "s_ovs__\"GRM188R71H104KA93D\"",
+      "canDetailsPage": null
+    }
+  ],
+  "ok": true
+}

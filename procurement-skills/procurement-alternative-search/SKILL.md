@@ -15,12 +15,16 @@ metadata:
 找替代的本质是“候选规格 vs 原型号规格”，先把原型号关键规格搞清，作为后面判断的标尺。怎么拿：
 
 - 用 `procurement-model-info-search`（查清品牌/品类/封装/核心规格/生命周期），或
-- 直接 `python3 .agents/skills/procurement-platform-search/scripts/api_search.py --part "<原型号>"`（拿厂牌/品类/封装/datasheet/描述），或
+- 直接 `cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<原型号>" --source digikey,mouser`（拿厂牌/品类/封装/datasheet/描述），或
 - 从第一步 octopart-alt 对比表的左列（This Part）直接读。
 
 记下关键项作标尺：**封装/引脚、核心参数（电压/精度/容值/频率/Memory/接口等）、温度/认证、生命周期**。
 
+⚠️ **跨品牌找等效，匹配键是 datasheet 上的真实参数，不是型号字符串里的数字。** 各家型号的数字段编码规则不同，拿原厂型号里的数字去拼别家型号的数字段，几乎必错。先从 datasheet 把关键工作参数抄出来，用参数找别家同规格料。
+
 ## 第一步：找候选（多个源，cloak 源可分别起 Bash）
+
+**先分清源的分工，别把找替代干成"全平台搜现货"。** 找替代只需要三种源：①**规格基线**（引擎 API 源 / model-info，1~2 次够了）②**等效候选**（octopart-alt、ickey-replace、网查 cross-reference）③**候选验证**（拿候选反查它的规格）。**不要逐个在现货/比价平台反复搜原型号**——那是查现货的活，对"找替代料"零价值，只会拖时间。发现自己在多个平台搜同一个料的库存，就是跑偏了，停下来回到 ①②③。
 
 **按"直接程度"找，越直接的越优先，最直接的那种最容易被漏，先找它：**
 
@@ -33,13 +37,13 @@ metadata:
 
 ### ① Octopart 替代料（跨品牌 + 规格逐项对比）：
 
-       cloakbrowser-python .agents/skills/procurement-platform-search/scripts/cloak_search.py --part "<型号>" --source octopart-alt 2>/dev/null
+       cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --source octopart-alt 2>/dev/null
 
    返回 Octopart 详情页 Alternate Parts 对比表：原型号 vs 替代型号（含**跨品牌**，如 STM32 ↔ Microchip ATSAM），逐列对比封装/引脚/内核/主频/Memory/电压/接口/外设 + Price@1000/库存。**这张表同时给了候选和第二步判断要的规格对比。**
 
 ### ② 云汉原生替代料接口（国内料，带规格摘要）：
 
-       cloakbrowser-python .agents/skills/procurement-platform-search/scripts/cloak_search.py --part "<型号>" --source ickey-replace 2>/dev/null
+       cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --source ickey-replace 2>/dev/null
 
 返回每个替代料：`型号 | 规格摘要 | 品类 | 库存 | 交期 | 阶梯价 | datasheet`。
 
@@ -49,7 +53,9 @@ WebSearch `"<型号>" cross reference / replacement / equivalent / 替代型号`
 
 ### ④ 同品类同规格换品牌（不同芯片，最后考虑）
 
-用上面拿到的规格（封装+核心参数），在平台搜其它品牌的同规格料作候选。
+用上面拿到的真实参数（封装+核心规格），在平台搜其它品牌的同规格料作候选。
+
+⚠️ **凭命名规律推断出来的别家型号，必须反查确认才能进清单。** 权威替代源（①②）经常空手，这时按命名规律自己猜一个候选型号是可以的，但**猜完必须拿它去平台/datasheet 反查**：查到、规格对得上，才进清单；查不到或对不上，标「需采购确认」列出来——**不要因为没验证上就默默丢掉、退回只推同品牌**。型号字符串猜得再像，没反查过就不是结论。
 
 把候选去重，每个记：替代型号、品牌、规格、来源、库存/价（有就带）。
 
@@ -75,6 +81,7 @@ WebSearch `"<型号>" cross reference / replacement / equivalent / 替代型号`
 
 ## 边界
 
+- **停产/EOL 的同系列后继、原厂官方替代，照样列出并标生命周期，别自己剔掉。** 生命周期是注记不是淘汰理由——原型号往往本身就停产了，采购要的常常正是那个 EOL 的官方后继。已经查到的后继型号不要因为它 EOL 就从清单里删掉。
 - 规格摘要相近 ≠ 能替；结论以差异判断为准。
 - 最终可用性要采购/工程确认（pin compatible、认证、客户是否接受）。
 - 本 skill 负责找候选 + 判断能不能替。

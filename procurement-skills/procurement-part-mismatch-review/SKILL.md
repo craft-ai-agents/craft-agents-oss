@@ -18,15 +18,15 @@ metadata:
 
 1. **Octopart 对比表（最省事，原型号 vs 替代并排列规格）**：
 
-       cloakbrowser-python .agents/skills/procurement-platform-search/scripts/cloak_search.py --part "<采购型号>" --source octopart-alt 2>/dev/null
+       cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<采购型号>" --source octopart-alt 2>/dev/null
 
    若报价型号正好在它的 Alternate Parts 里，直接读两边封装/引脚/电参数/温度等对比。
 
-2. **api_search（Digikey/Mouser，拿厂牌/描述/封装/datasheet）**，对两个型号各跑一次：
+2. **引擎 API 源（Digikey/Mouser，拿厂牌/描述/封装/datasheet）**，对两个型号各跑一次：
 
-       python3 .agents/skills/procurement-platform-search/scripts/api_search.py --part "<型号>"
+       cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --source digikey,mouser
 
-3. **datasheet / 原厂页**：上面给了 datasheet 链接，需要细规格（精度/温度/pin 定义）就用 WebFetch 打开核对；原厂页反爬抓不到时用 `cloak_search.py --source master` 或 `cloak_fetch.py`。需要系统化搜原厂资料时读 [references/search-workflow.md](references/search-workflow.md)。
+3. **datasheet / 原厂页**：上面给了 datasheet 链接，需要细规格（精度/温度/pin 定义）就用 WebFetch 打开核对；原厂页反爬抓不到时用 `scrape-engine` 引擎 `--source master` 或 `cloak_fetch.py`。需要系统化搜原厂资料时读 [references/search-workflow.md](references/search-workflow.md)。
 
 按品类锁定**关键规格项**：封装/引脚、核心电参数（电压/电流/精度/容值/阻值/功率/频率/速度）、Memory/接口/协议、温度等级、认证、生命周期。
 

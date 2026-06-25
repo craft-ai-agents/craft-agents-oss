@@ -68,7 +68,7 @@
 | 芯片 / 电容电解 | 线上平台是主力渠道，结果已较全面 |
 | 连接器 | "连接器类代理/经销商通常更有优势，需要帮你查一下供应商档案吗？" |
 | 工控产品 | "工控类线上平台覆盖有限，建议同步联系代理/经销商" |
-| 定制 / 非标 | "定制品建议 1688/淘宝找工厂，需要帮你搜吗？" |
+| 定制 / 非标 | "需要帮你叠加查更多原始分销站吗？"（按品类走 `procurement-platform-search-more` 选源，见上面"核心四家不够"） |
 
 ## 品牌中英文对照
 
@@ -102,7 +102,7 @@
 ## 工具与环境
 
 - 联网查资料：用你自己的 WebSearch / WebFetch（必要时 searxng）。
-- 平台采购报价：Digikey/Mouser 走 API（procurement-platform-search 的 api_search.py）；云汉/master 有反爬，走 CloakBrowser（同 skill 的 cloak_search.py），别用普通 fetch 硬撞。
+- 平台采购报价：统一走 `scrape-engine` 引擎（`engine.py --source <ids>`）——Digikey/Mouser 是 API 模式、云汉/master/avnet 等反爬站引擎用 CloakBrowser 过，别用普通 fetch 硬撞。
 - 飞书多维表（库存、供应商、写表）：用 lark-cli / lark-base。
 - 业务数据在飞书 Base《供应商管理（正式版）》，具体表名/ID 见各 skill 的 SKILL.md。
 - 读取业务 Base《供应商管理（正式版）》时使用 `--as user`。有些 Base/表用 `--as bot` 会返回 `91403 you don't have permission`，遇到这类权限差异时可以切到 `--as user`。
@@ -113,14 +113,23 @@
 
 | 平台 | 正确工具 | 说明 |
 |------|---------|------|
-| Digikey、Mouser | `procurement-platform-search` 的 `api_search.py` | 官方 API，最快最准 |
-| 云汉(ickey)、master | `procurement-platform-search` 的 `cloak_search.py` | CloakBrowser 过反爬（核心四家） |
-| 更多原始站 / Octopart 等聚合站 | `procurement-platform-search-more` 的脚本 | 按需选源；Octopart 等聚合站默认不查 |
+| Digikey、Mouser | `scrape-engine` 引擎 `--source digikey,mouser` | 官方 API 模式，最快最准 |
+| 云汉(ickey)、master | `scrape-engine` 引擎 `--source ickey,master` | 引擎用 CloakBrowser 过反爬 |
+| 更多原始站 / 聚合站 | `scrape-engine` 引擎 `--source <id>` | 按需选源；聚合站 szlcsc-overseas/octopart 默认不查 |
 | 1688、淘宝、Misumi、立创 | `cloakbrowser` skill | 通用 CloakBrowser 取页面 |
 | 其它反爬站（403/空页面） | `cloakbrowser` skill | 遇到 WebFetch 失败就换这个 |
 | 普通网页（原厂产品页、datasheet、资讯站） | WebFetch | 没有反爬的才用 |
 
 **WebSearch**（走 searxng）搜索本身没问题。但搜到的链接如果属于上面的反爬平台，**不要 WebFetch 去开**，用对应的工具。
+
+### 三条效率硬规则（违反会让查询又慢又错）
+
+1. **只调引擎，绝不自己写 CloakBrowser 代码。** 查平台一律 `cloakbrowser-python .agents/skills/scrape-engine/engine.py --part … --source <ids>`，**禁止**用 `cloakbrowser-python << 'PYEOF'` / `-c "import …"` 自己手写浏览器脚本——反爬绕法已固化在引擎里，自己写必报错、白等十几秒。引擎不支持的站要整页渲染时，用 `procurement-platform-search-more/scripts/cloak_fetch.py <URL>`，不要自己写。
+
+2. **这些站名只要出现在 URL 里，绝不 WebFetch**（直接抓必超时/被拦，单次拖 30-85 秒）：`octopart.com`、`molex.com`、`digikey.com/产品页`、`mouser`、`panasonic`/`industrial.panasonic`、`mitsubishielectric`/`mitsubishifactoryautomation`、`te.com`、`amazon`、`rs-online`、`element14`/`farnell`、`tme`。
+   - 要这些站的数据 → 料号查 `scrape-engine` 引擎 `--source <id>`，整页渲染查 `cloak_fetch.py`。
+
+3. **先引擎、后 WebFetch，WebFetch 是补充不是主力。** 顺序：① `scrape-engine` 引擎 `--source <ids>`（API 源 digikey/mouser 最快，xhr/聚合源次之，浏览器源最后）→ ② 只有引擎拿不到、且目标站不在上面反爬名单里时，才 WebFetch 单页补规格。**别一上来就 WebSearch+WebFetch 满天飞**——一次替代料查询 WebFetch 不该超过 5 次。
 
 ## 工作流程：
 
@@ -138,7 +147,7 @@
 - **“没查到”必须分清两种情况，别用模糊的“暂时查不到”一笔带过**（模糊会让采购误以为“没有这个料”，反而有害）：
   - ① **平台确实没有这个型号** → 明说“XX 平台没有收录这个型号”（这是确定结论）。
   - ② **有这个料、但这次没取到**（需要登录、访问受限、连接不稳等）→ 要**说清是“这次没取到”而不是“没有”**，并用业务话点明原因，例如“这个平台需要登录才能看完整库存和价格，这次没取到”“这个海外渠道这次访问受限，没能取到（不代表没有这个料），可以稍后再试或换个渠道”。让采购知道这不是定论、能继续行动。
-- **面向非技术采购人员说话**：输出只说“查到什么、来源是哪个平台/原厂/分销商”，用业务语言、结构化短结论。**绝不出现技术名词或工具名**——如 CloakBrowser、脚本、代码、API、接口、cloak_search/api_search/lark-cli、命令、403/反爬/超时等报错术语；也不要解释“怎么查到的”。平台/分销商/原厂名（Digikey、Mouser、云汉、Octopart、立创、STMicro 等）可以正常出现，但不能说“用某工具爬的/调接口拿的”。把上面②那类技术原因翻成“需要登录/访问受限/这次没连上”这种采购能懂的话。
+- **面向非技术采购人员说话**：输出只说“查到什么、来源是哪个平台/原厂/分销商”，用业务语言、结构化短结论。**绝不出现技术名词或工具名**——如 CloakBrowser、脚本、代码、API、接口、scrape-engine/engine.py/cloak_fetch/lark-cli、命令、403/反爬/超时等报错术语；也不要解释“怎么查到的”。平台/分销商/原厂名（Digikey、Mouser、云汉、Octopart、立创、STMicro 等）可以正常出现，但不能说“用某工具爬的/调接口拿的”。把上面②那类技术原因翻成“需要登录/访问受限/这次没连上”这种采购能懂的话。
 - 写飞书表只写 `AI-` 前缀表，先 dry-run 给用户确认再写，绝不碰业务表。
 - **需要采购在几个具体选项里二选一/多选一时，用 `ask_user` 工具出选择题**（它会渲染成可点的按钮，采购点一下就行，不用打字）。典型场景：查到多个替代料让他选哪个、问"内部没货，要不要继续查平台"、多个供应商/单据模板里挑一个。`question` 写一句话、`options` 给 2–6 个短选项。**只在"从少量固定选项里挑"时用**；如果答案是开放的（要他给个型号、数量），就直接用文字问，别硬塞成选择题。
 - **结尾的"接下来要做什么 / 下一步建议"必须用 `ask_user`，不要用文字罗列**。凡是你想说"需要我进一步做什么？比如 ①查替代料 ②写进飞书表 ③……"这种，**一律改成 `ask_user` 出按钮**（如 `options=["查替代料","写进飞书表","找供应商","就这样"]`）。绝不要在正文里用文字列"比如…/或者…"让采购打字回。

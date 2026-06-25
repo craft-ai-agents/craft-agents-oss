@@ -14,27 +14,24 @@ metadata:
 
 不做供应商真假、价格优劣、是否下单、是否可替代判断。
 
-## 默认就这么做（四家都查，两个脚本都跑，可并发）
+## 默认就这么做（四家一起查，一条命令）
 
-**Digikey + Mouser —— 官方 API：**
+四家统一走 **scrape-engine 引擎**，一条命令并发查完:
 
-    python3 .agents/skills/procurement-platform-search/scripts/api_search.py --part "<型号>"
+    cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --source digikey,mouser,ickey,master 2>/dev/null
 
-**云汉(ickey) + master —— CloakBrowser（有反爬/需真浏览器）：**
+`--source` 逗号分隔源 id；批量多个型号用 `--parts "A,B,C"`；`--gate 2` 控并发(4C4G 上保持小)。`2>/dev/null` 必加(否则日志污染 JSON)。输出 `{"rows":[...],"errors":[...]}`，rows 已是**结构化行**(平台/型号是否命中/库存:int/阶梯价/datasheet/链接)，不用再 parse 文本。
 
-    cloakbrowser-python .agents/skills/procurement-platform-search/scripts/cloak_search.py --part "<型号>" 2>/dev/null
+## 这些已固化在引擎里（你不用重新摸）
 
-两个脚本都要跑（独立，可并发起两个 Bash），把结果**合并**给采购。`2>/dev/null` 必加，否则日志污染 JSON。CloakBrowser 串行、每平台十几秒。
-
-## 这些已固化在脚本里（你不用重新摸）
-
-- **Digikey/Mouser** 有官方 API，api_search.py 直接调，凭证在 /etc/craft-agent.env，走代理。**别用浏览器**。
-- **master + 云汉(ickey)** 有反爬（master=Akamai Bot Manager、云汉=点击验证码），普通 curl/WebFetch 一律失败，脚本用 CloakBrowser 真 Chromium 过，怎么过已固化。**别试 curl**。
-- **找替代料**：`--source ickey-replace`（云汉替代接口，给型号返回替代/相似料候选）。
+- **Digikey/Mouser** 走官方 API(引擎 api 模式)，凭证在 /etc/craft-agent.env，走代理。
+- **master + 云汉(ickey)** 有反爬(master=Akamai、云汉=点击验证码)，引擎用 CloakBrowser 真 Chromium 过，已固化。**别试 curl**。
+- **找替代料**：`--source ickey-replace`(云汉替代接口)。
+- 引擎按 proxy 分桶复用浏览器、gate 控并发防 OOM、站内串行/站间并行——你只管给 `--source`，别自己写浏览器代码。
 
 → **反爬怎么绕已固化在脚本里，别重新摸、别试 curl。** 但**查不到货不等于没货，你要为"尽量查到"负责**：
-- 脚本对**单平台 0 命中已自动回退型号变体**一档（原始 → 去连字符 → 去末位封装字母，如 Tape&Reel 的尾缀 `S`）；命中时结果里带 `matched_query`，说明命中的是变体而非原串，输出时要点明"封装/包装可能不同"。
-- 回退后**仍为空或结果可疑**时，**该自己再试**：换更激进的型号变体、调 `--limit`，或叠加 `procurement-platform-search-more` 扩货源。别一 miss 就报"无此料"。
+- 脚本默认只查用户给定的原始型号，不再自动回退型号变体，避免 0 命中时反复开浏览器拖慢。
+- 结果为空或可疑时，再由你按业务需要手动改搜索词、调 `--limit`，或叠加 `procurement-platform-search-more` 扩货源。别一 miss 就报"无此料"。
 - 例外：`master` 目录偏继电器/保护/被动件，LED/MCU 这类**确实可能没收录**，回退后仍空就如实写"该平台无此料"，不用硬凑。
 
 ## 输出

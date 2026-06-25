@@ -12,20 +12,16 @@ metadata:
 
 **按型号品类选 `--source`，不要一次全开**（几十个站串行会很慢）。下面按品类列了该选哪些。聚合站 octopart **默认不查**（聚合数据可能滞后，原始站优先），只在确实要扩货源时按需加。
 
-## 两个脚本
+## 用引擎查（一条命令，按需选源）
 
-**API 源（无需浏览器，快）—— `api_search.py`：**
+统一走 **scrape-engine 引擎**，`--source` 必填(逗号分隔)选源，批量 `--parts "A,B"`，`--gate 2` 控并发:
 
-    python3 .agents/skills/procurement-platform-search-more/scripts/api_search.py --part "<型号>" --source vanlinkon
+    cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --source future,newark 2>/dev/null
 
-- `vanlinkon`（连可连，中国连接器商城）：多仓报盘（自营/代销/RS），库存/¥价/交期。
-- ~~`element14` 官方 API~~：注册门户 partner.element14.com 长期 HTTP 500、拿不到 key，**废**。element14 货源改走渲染源 `--source element14-cn`（e络盟中国店，见下，无需 key）。
+`2>/dev/null` 必加(日志污染 JSON)。**只选相关的几个源**(几十站全开会慢)；引擎自动按 proxy 分桶复用浏览器、gate 控并发防 OOM、站内串行/站间并行。输出 `{"rows":[...],"errors":[...]}`，结构化行(库存:int/阶梯价/datasheet)。
 
-**渲染/专用源（CloakBrowser，有反爬）—— `cloak_search.py`，必须 `--source`：**
-
-    cloakbrowser-python .agents/skills/procurement-platform-search-more/scripts/cloak_search.py --part "<型号>" --source future,newark 2>/dev/null
-
-`2>/dev/null` 必加（日志污染 JSON）。串行、每站十几秒，**只选相关的几个**。
+- `vanlinkon`(连可连)：连接器商城,api 模式,**境内直连、无 key**,多仓报盘(自营/代销/RS,含库存/¥价/交期)。
+- ~~`element14` 官方 API 废~~ → 用 `--source element14-cn`(e络盟中国店,见下,无需 key)。
 
 ## 货源清单（按品类选 `--source`）
 
@@ -73,7 +69,7 @@ metadata:
 ## 取数与重试（已固化在脚本里）
 
 - 抽取策略：渲染站把搜索页**渲染成可见文本交你直接读**（型号/库存/价格自己解析，不写选择器）；SPA/有接口的站**拦数据接口取结构化字段**——技术细节在各 scraper 函数注释里，你不用管。
-- 单站 0 命中**自动回退型号变体**一档（去连字符 / 去末位封装字母）；命中变体时带 `matched_query`，输出要点明"封装/包装可能不同"。
+- 单站默认只查用户给定的原始型号，不自动回退型号变体；需要扩大搜索时由你手动换词，避免脚本反复开浏览器拖慢。
 - 结果里 `blocked=true` = 被反爬拦（不是无货），如实标"被拦未取到"，别当"无此料"。
 
 ## 输出与边界
