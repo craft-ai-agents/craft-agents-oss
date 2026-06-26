@@ -73,10 +73,14 @@ ADAPTER = Adapter(
     needs_proxy=True,                       # 走住宅代理（Akamai 直连必挡）
     url=url,
     extract=extract,
-    # Akamai profile owns retry/block-check. Old scrape_master had NO warmup goto
-    # (warmup_url=None => engine skips warmup) and a 1s post-goto settle.
+    # Akamai profile owns warmup/retry/block-check. The old scrape_master skipped
+    # warmup (warmup_url=None) and got blocked=true — Akamai needs the homepage hop
+    # to seed the _abck cookie BEFORE the search goto, which is exactly what the
+    # akamai profile does when given a warmup_url. Hit cold, the search page is
+    # blocked; warm via the homepage first.
     defense=Defense(
         profile="akamai",
+        warmup_url="https://www.masterelectronics.com/en",
         settle_wait_ms=1000,                # old: p.wait_for_timeout(1000)
     ),
     host_key="www.masterelectronics.com",
