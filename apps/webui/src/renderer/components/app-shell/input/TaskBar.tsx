@@ -92,8 +92,8 @@ export function TaskBar({ onSubmit, sessionId, sessionFolderPath }: TaskBarProps
           {/* 字段 */}
           <div className="space-y-1.5">
             {activeForm.fields.map((field, idx) => (
-              <label key={field.key} className="flex items-center gap-2.5 text-[13px]">
-                <span className="w-14 shrink-0 text-muted-foreground">{field.label}</span>
+              <label key={field.key} className={`flex gap-2.5 text-[13px] ${field.type === 'textarea' ? 'items-start' : 'items-center'}`}>
+                <span className={`w-14 shrink-0 text-muted-foreground ${field.type === 'textarea' ? 'pt-1.5' : ''}`}>{field.label}</span>
                 {field.type === 'select' ? (
                   <select
                     className="flex-1 h-8 rounded-[8px] border border-border bg-background px-2.5 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -104,6 +104,20 @@ export function TaskBar({ onSubmit, sessionId, sessionFolderPath }: TaskBarProps
                       <option key={opt} value={opt}>{opt}</option>
                     ))}
                   </select>
+                ) : field.type === 'textarea' ? (
+                  <textarea
+                    className="flex-1 min-h-[64px] max-h-44 rounded-[8px] border border-border bg-background px-2.5 py-1.5 text-[13px] text-foreground resize-y focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    placeholder={field.placeholder}
+                    value={values[field.key] ?? ''}
+                    autoFocus={idx === 0}
+                    onChange={(e) => setField(field.key, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault()
+                        handleSubmit()
+                      }
+                    }}
+                  />
                 ) : (
                   <Input
                     className="flex-1 h-8 rounded-[8px] text-[13px]"

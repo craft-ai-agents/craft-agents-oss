@@ -2,10 +2,17 @@ import { describe, it, expect } from 'bun:test'
 import { TASK_FORMS, isFormComplete, getTaskForm } from '../task-forms'
 
 describe('task-forms registry', () => {
-  it('恰好 4 个工作流任务且 id 唯一', () => {
-    expect(TASK_FORMS.length).toBe(4)
+  it('恰好 5 个工作流任务且 id 唯一', () => {
+    expect(TASK_FORMS.length).toBe(5)
     const ids = TASK_FORMS.map((f) => f.id)
-    expect(new Set(ids).size).toBe(4)
+    expect(new Set(ids).size).toBe(5)
+  })
+
+  it('批量找料 → batch 触发语含清单 + 批量关键词', () => {
+    const msg = getTaskForm('batch')!.toMessage({ parts: 'TPS92550TZX\nTLP350\nNE555' })
+    expect(msg).toContain('批量找料')
+    expect(msg).toContain('TPS92550TZX')
+    expect(msg).toContain('TLP350')
   })
 
   it('找料 → inventory-first 触发语', () => {

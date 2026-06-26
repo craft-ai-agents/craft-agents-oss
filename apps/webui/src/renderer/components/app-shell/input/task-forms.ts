@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
-import { Search, Replace, GitCompareArrows, FileText } from 'lucide-react'
+import { Search, Replace, GitCompareArrows, FileText, ListChecks } from 'lucide-react'
 
-export type TaskFieldType = 'text' | 'select'
+export type TaskFieldType = 'text' | 'select' | 'textarea'
 
 export interface TaskField {
   /** 模板取值用的键 */
@@ -39,6 +39,14 @@ export const TASK_FORMS: TaskForm[] = [
     fields: [{ key: 'mpn', label: '型号', type: 'text', placeholder: '如 TPS92550TZX', required: true }],
     toMessage: (v) =>
       `帮我找一下 ${val(v, 'mpn')}：先查本地库存（自家 + 各级供应商），再查各平台原始分销渠道，给我现货数量、阶梯价、MOQ、供应商和货期，优先原厂 / 授权渠道；查不到也明确告诉我。`,
+  },
+  {
+    id: 'batch',
+    label: '批量找料',
+    icon: ListChecks,
+    fields: [{ key: 'parts', label: '型号清单', type: 'textarea', placeholder: '每行一个型号（可从表格直接粘贴一列）', required: true }],
+    toMessage: (v) =>
+      `这一批型号帮我批量找料（用 procurement-batch-orchestration 技能）：\n${val(v, 'parts')}`,
   },
   {
     id: 'alt',
