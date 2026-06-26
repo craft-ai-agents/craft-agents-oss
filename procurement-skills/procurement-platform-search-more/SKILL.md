@@ -10,7 +10,7 @@ metadata:
 
 本 skill 查核心四家（Digikey/Mouser/云汉/master）之外的更多货源：一批原始分销站 + 聚合站。核心四家不够、或要特定品类货源时用它补。
 
-**按型号品类选 `--source`，不要一次全开**（几十个站串行会很慢）。下面按品类列了该选哪些。聚合站 octopart **默认不查**（聚合数据可能滞后，原始站优先），只在确实要扩货源时按需加。
+**选源有成本之分——先读下面「选源原则」再挑 `--source`,别一次全开**（几十站很慢）。
 
 ## 用引擎查（一条命令，按需选源）
 
@@ -23,14 +23,27 @@ metadata:
 - `vanlinkon`(连可连)：连接器商城,api 模式,**境内直连、无 key**,多仓报盘(自营/代销/RS,含库存/¥价/交期)。
 - ~~`element14` 官方 API 废~~ → 用 `--source element14-cn`(e络盟中国店,见下,无需 key)。
 
-## 货源清单（按品类选 `--source`）
+## 选源原则：直连聚合器优先，住宅代理源兜底（重要，先读这条）
+
+源分两类,**默认只用第一类**:
+
+**① ✅ 直连结构化源(不耗住宅代理、快、默认用):**
+- **聚合器(跨分销商首选)**:`octopart`(实时报盘:**avnet/future/arrow/digikey/mouser/rs/element14/tme** 一把抓,带刷新时间戳)、`szlcsc-overseas`(立创海外比价:mouser/digikey/rs/element14/verical/tme)、`octopart-alt`(跨品牌替代料)
+- 境内/机房直连:`vanlinkon` `element14-cn` `verical` `ickey` `ickey-replace` `lcsc` `szlcsc` `jbchip` `misumi` `misumi-jp` `monotaro` `corestaff` `heilind` `sager` `rochester` `ocpneumatics` `future`
+
+**② 🏠 住宅代理源(慢、占代理流量、仅 prod 可用,默认不碰):**
+`avnet` `master` `rs-us` `rs-uk` `rs-jp` `rs-hk` `newark` `tme` `arrow` `xonelec` `peigenesis` `componentonline`
+
+**铁律:要 avnet / future / rs / arrow 的库存价,默认走 `octopart`(直连),别去单查它们的 🏠 本站爬虫**——本站慢(十几秒~1分钟)、占住宅代理流量,而 octopart 已直连给了同一份数据(实测 avnet 库存数一致)。**只有**聚合器对某料覆盖太薄、又确实要更深/更权威时,才单点 🏠 源,并明知它慢。
+
+## 货源清单（直连源默认用；标 🏠 的是住宅代理兜底）
 
 **通用电子料 / 西方·欧洲分销：**
 - `future`（Future）`newark`（Newark）`tme`（波兰/欧）`xonelec`（X-ON）`componentonline`（Component Electronics）
 - RS 分区：`rs-uk` `rs-jp` `rs-hk`；`rs-us`（=Allied 美区，**需住宅代理**，仅生产可用）
 - `verical`（**Verical = Arrow 自营商城，机房直连可达、实时报盘**）：型号|品牌|描述|库存|价格|链接 一应俱全。**arrow 本站被反爬封死，要 arrow 货源就用它**（比聚合站 octopart 数据更实时）。
 - `element14-cn`（**e络盟中国店 cn.element14.com，机房直连可达、RMB 阶梯价**）：型号|品牌|规格|库存|阶梯价|交期|datasheet 全有，中文页。**element14/Farnell/Newark 国际站被反爬封、官方 API 门户长期 500——要 element14 货源就用这个中国店**。
-- `avnet`（**Avnet 安富利本站，主业分销真库存 + USD 阶梯价 + 交期**，2026-06-18 实测出料：如 LM358DR2G 现货 22.7 万、阶梯价、Min/Mult）：本站 PerimeterX 防护**间歇放行**，脚本已用「首页预热 + 命中才停的最多 4 轮重试」打穿——**能出真数据但较慢**（每轮十几秒，最坏 ~1 分钟）；多轮仍被挡时如实标"被拦未取到"，octopart 兜底。
+- 🏠 `avnet`（Avnet 本站,PerimeterX,**住宅代理、慢**）：**默认别单查——avnet 的库存/价 `octopart` 已直连给了**(同一份数据,实测 stock 一致)。只在要 avnet 更权威/更深时才单点本站,明知慢(十几秒~1分钟)、占代理流量;被挡标"被拦未取到"。
 
 **连接器 / 机电互连：**
 - `peigenesis`（PEI-Genesis 连接器专家）`darisus`（德，连接器）`heilind`（赫联，连接器/机电）`sager`（电源/连接器/机电）
@@ -50,31 +63,33 @@ metadata:
 **MRO / 工业：**
 - `monotaro`（日本 MRO，带部分电子/IC 料）`corestaff`（CoreStaff 日本/ZaikoStore）`ocpneumatics`（SMC 气动元件经销）
 
-**聚合站（默认不查，确需扩货源才按需加）：**
-- `octopart`（多分销商报价聚合：Avnet/Newark/Arrow/DigiKey/Mouser/LCSC 等）
-- `octopart-alt`（octopart 部件详情页的跨品牌替代料对比表）
+**聚合站（✅ 直连、跨分销商首选——要西方分销商数据默认用它，见上「选源原则」）：**
+- `octopart`（多分销商实时报盘:Avnet/Future/Arrow/DigiKey/Mouser/RS/element14/TME 一把抓,带刷新时间戳。**替代 🏠 个体爬虫的首选**）
+- `octopart-alt`（octopart 跨品牌替代料,替代料 eval 用）
+- `szlcsc-overseas`（立创海外比价,另一个直连聚合器）
 
 ## 反爬挡住/未接（如实告知，别硬试）
 
 - `arrow`、`element14` 国际站：Akamai/门户反爬把 IP 信誉拉黑（中国机房 + 住宅代理两个 IP 都被封，2026-06-18 实测仍 403 Access Denied），本站网页攻不下。**别硬撞，按出路走**：
   - **arrow 货源 → `--source verical`**（Arrow 自营商城，机房直连可达、实时报盘，**优先**）+ `octopart` 兜底。
   - **element14 货源 → `--source element14-cn`**（e络盟中国店，机房直连可达、RMB 阶梯价+库存+交期，2026-06-18 实测出料，**无需 key**）。Newark/国际站被封、官方 API 注册门户长期 HTTP 500——都别用。
-  - **avnet 货源 → `--source avnet`**（本站可查，见上「货源清单」；PerimeterX 间歇、脚本靠预热+多轮重试打穿，能出主业分销真库存+阶梯价，较慢；多轮仍被挡再用 octopart 兜底）。
+  - **avnet 货源 → 默认 `--source octopart`**（直连聚合器,已含 avnet 实时报盘,见「选源原则」）；要 avnet 本站更权威数据再 `--source avnet`(🏠 住宅代理、PerimeterX、慢,引擎预热重试打穿,被挡标"被拦未取到")。
 - 不接 / 受限：
   - `TI`（德州仪器）：**`ti.com.cn/product/cn/<MPN>` 中国产品页机房直连可达**（2026-06-18 实测未被挡），给 datasheet + 该 GPN 的全部可订变体 OPN（封装/卷带后缀），作**原厂参考/变体枚举**用；但**库存/价格在 store 接口 `productmodel/gpn/<GPN>/tistoresegmented`、401 受 PerimeterX 会话门控**——拿不到价/库存。TI 料 Digikey/Mouser/element14-cn 已覆盖，不强求其报价。
   - `chip1stop`：整站 502（被 Arrow 吞并、迁移中），货源≈arrow，已被 `verical` 覆盖，等站恢复再评估。
   - `rs-cn`：RS 无可搜中国 storefront（cn 域 Akamai Invalid URL）。
   - ~~`distrelec`（=RS 集团跳转，与 rs-* 重复）、`kirikaeki`（已关站）~~：死站/重复，已从关注清单删除。
 
-## 取数与重试（已固化在脚本里）
+## 取数与并发（已固化在引擎里，你不用管）
 
-- 抽取策略：渲染站把搜索页**渲染成可见文本交你直接读**（型号/库存/价格自己解析，不写选择器）；SPA/有接口的站**拦数据接口取结构化字段**——技术细节在各 scraper 函数注释里，你不用管。
-- 单站默认只查用户给定的原始型号，不自动回退型号变体；需要扩大搜索时由你手动换词，避免脚本反复开浏览器拖慢。
-- 结果里 `blocked=true` = 被反爬拦（不是无货），如实标"被拦未取到"，别当"无此料"。
+- **输出已是结构化行**：每行带 平台/型号/品牌/库存(int)/阶梯价/datasheet/链接/`blocked`——不用解析文本、不写选择器。引擎按源类型自动选模式(API / 拦 JSON 接口 / 渲染页取文本)，你只管 `--source`。
+- 引擎按 proxy 分桶**复用浏览器**(不是每次重开冷启)、`--gate` 控并发防 OOM、站内串行/站间并行、反爬站自动预热重试——全固化。
+- 单源默认只查原始型号，不自动回退变体；要扩大搜索由你手动换词。
+- 结果里 `blocked=true` = 被反爬拦(不是无货)，如实标"被拦未取到"，别当"无此料"。
 
 ## 输出与边界
 
 - 合并进核心四家结果一起给采购：平台、是否命中、品牌/品类、库存、价格/MOQ、**交期（现货/期货/天数）**、链接、备注、阻碍项。
 - 平台有结果 ≠ 本地可采购；alternate/similar ≠ 替代成立；价格/库存数字结合上下文（可能混 MOQ/倍数）。
 - FA 机械件（misumi）是货源线索不是报价，系列级无单价，价格要进详情页配置后才有。
-- CloakBrowser 串行+用完即关防 OOM，**别在脚本内并发多开**。
+- 并发/防 OOM 已固化在引擎(gate + 按 proxy 分桶复用浏览器,4C4G 上 `--gate` 默认 2)，你不用管。

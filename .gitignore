@@ -93,3 +93,6 @@ procurement-skills/procurement-doc-export/templates/*.xlsx
 procurement-skills/procurement-doc-export/templates/*.docx
 # 客户抬头对照表含真实客户地址/联系人，同样只留本地
 procurement-skills/procurement-doc-export/customers.json
+
+# eval 本地 skill 软链(.agents/skills→procurement-skills)
+.agents/

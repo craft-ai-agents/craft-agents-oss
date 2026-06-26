@@ -7,7 +7,7 @@
 四家（Digikey/Mouser/云汉/master）用 api_search.py + cloak_search.py，不要用这个。
 
 必须用 cloakbrowser-python 跑，务必加 2>/dev/null（否则日志污染 JSON）：
-  cloakbrowser-python .agents/skills/procurement-platform-search/scripts/cloak_fetch.py "<分销商搜索页URL>" 2>/dev/null
+  cloakbrowser-python .agents/skills/procurement-platform-search-more/scripts/cloak_fetch.py "<分销商搜索页URL>" 2>/dev/null
 
   --proxy           走住宅代理（海外站，如美国分销商）；境内站（立创等）不加
   --selector ".x"   只抽匹配元素文本（找到商品行选择器时用，输出更干净）
@@ -15,7 +15,10 @@
 """
 import argparse
 import json
+import os
 import sys
+
+os.environ.setdefault("CLOAKBROWSER_AUTO_UPDATE", "false")
 
 try:
     from cloakbrowser import launch
@@ -23,7 +26,7 @@ except ImportError:
     print(json.dumps({"error": "no cloakbrowser module — 用 cloakbrowser-python 跑本脚本"}, ensure_ascii=False))
     sys.exit(1)
 
-MIHOMO = "http://127.0.0.1:7899"
+MIHOMO = os.environ.get("MIHOMO_PROXY", "http://127.0.0.1:7899")
 
 
 def main():
@@ -31,7 +34,7 @@ def main():
     ap.add_argument("url")
     ap.add_argument("--proxy", action="store_true", help="走住宅代理（海外站用）")
     ap.add_argument("--selector", default=None, help="只抽该 CSS 选择器命中的元素文本")
-    ap.add_argument("--wait", type=int, default=30, help="页面超时秒")
+    ap.add_argument("--wait", type=int, default=12, help="页面导航超时秒")
     ap.add_argument("--max-chars", type=int, default=6000, help="无选择器时文本上限")
     a = ap.parse_args()
 
@@ -42,10 +45,10 @@ def main():
     try:
         p = b.new_page()
         try:
-            p.goto(a.url, wait_until="networkidle", timeout=a.wait * 1000)
+            p.goto(a.url, wait_until="domcontentloaded", timeout=a.wait * 1000)
         except Exception:
             pass
-        p.wait_for_timeout(2500)
+        p.wait_for_timeout(1000)
         if a.selector:
             els = p.query_selector_all(a.selector)
             rows = []

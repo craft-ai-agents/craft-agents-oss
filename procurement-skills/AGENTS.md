@@ -28,7 +28,7 @@
 - 找料 / 帮我找这个型号 / 哪里能搞到 / 查库存 / 有没有货 → **见上面的流程，先查库存**
 - 不认识某个型号、要查它是什么（品牌/品类/规格/封装/生命周期）→ `procurement-model-info-search`
 - 查平台/分销商报价、现货、产品页、替代料 → `procurement-platform-search`（默认核心四家：Digikey/Mouser/云汉/master）
-- 核心四家不够、要更多原始分销站或特定品类货源（连接器/电源/FA机械件/停产料/气动件等）→ 叠加 `procurement-platform-search-more`。**别自己瞎猜要查哪些站——用 `ask_user` 让采购选**：先按这个料的品类/区域挑出相关的几组货源（≤6 个选项），出一道选择题让采购点，再按所选的组去查。常见分组（按品类只给相关的，别全列）：「欧美分销(Future/Newark/RS/TME)」「中国境内现货(立创/京北通宇)」「日本·MRO工业(MonotaRO/CoreStaff)」「连接器·机电(PEI/Heilind/Sager)」「停产/EOL料(Rochester)」「聚合站(Octopart)」；可加「都查一遍」「不用了」。选项文字用采购看得懂的话，别出现脚本/参数名。
+- 核心四家不够、要更多货源 → 叠加 `procurement-platform-search-more`。**先用直连聚合器 `octopart` / `szlcsc-overseas` 拿西方分销商(avnet/future/rs/arrow/element14/tme…)的库存价**——快、不占住宅代理、一把抓,**别默认去单查这些站的本站爬虫**(慢、占住宅代理流量,而聚合器已给同一份数据)。只有聚合器对某料太薄、或要特定品类专门源(连接器/FA机械件/停产料/气动件等)时,才按品类叠加单站:**别自己瞎猜——用 `ask_user` 让采购选**(≤6 个选项,按品类只给相关的)：「跨分销商聚合(Octopart/立创海外)」「中国境内现货(立创/京北通宇/连可连)」「日本·MRO(MonotaRO/CoreStaff)」「连接器·机电(PEI/Heilind/Sager)」「停产/EOL(Rochester)」「西方分销本站·慢(Future/Newark/RS/TME,需住宅代理)」;可加「不用了」。选项用采购看得懂的话,别出现脚本/参数名。
 - 按品牌/品类列供应商候选 → `procurement-supplier-shortlist`
 - 采购型号和报价型号不一致、判断能不能用 → `procurement-part-mismatch-review`
 - 找替代料 / 停产或缺货想换料 / pin 兼容料 → `procurement-alternative-search`
@@ -158,7 +158,7 @@
 
 ## 工具报错 → 先报告，别闷头绕
 
-lark-cli / 飞书 API / 采集脚本 / WebFetch 报错时：
+lark-cli / 飞书 API / 采集引擎 / WebFetch 报错时：
 
 1. **第一时间把错误原文和上下文摆给用户**（用业务话翻译，不贴技术栈名）。
 2. **不要自行换参数、换命令、换身份重试超过 1 次**——1 次快速修正（如拼写/格式明显错）可以，但如果第二次还报错就停下来告诉用户。

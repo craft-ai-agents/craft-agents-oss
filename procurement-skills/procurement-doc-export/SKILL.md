@@ -32,7 +32,7 @@ metadata:
 
     python3 .agents/skills/procurement-doc-export/scripts/build_pi_context.py --order <订单号> \
       | uv run --with openpyxl python3 .agents/skills/procurement-doc-export/scripts/render_pi.py \
-          --template .agents/skills/procurement-doc-export/templates/美金请款发票模板PI.xlsx \
+          --template procurement-skills/procurement-doc-export/templates/美金请款发票模板PI.xlsx \
           --out "PI_<订单号>.xlsx"
 
 模板自带公式（金额=单价×数量、合计 SUM），**只填 料号/数量/描述/单价**，金额合计开表自动算。货品行数不固定已处理（插行/删行 + 合并单元格 + 公式范围顺延）。`--out` 写到会话工作区。
