@@ -17,7 +17,7 @@ import type {
   AgentSessionEvent,
 } from '@mariozechner/pi-coding-agent';
 import type { AssistantMessage, AssistantMessageEvent } from '@mariozechner/pi-ai';
-import { isContextOverflow } from '@mariozechner/pi-ai';
+import { isContextOverflow, getModel, calculateCost } from '@mariozechner/pi-ai';
 import { BaseEventAdapter } from '../base-event-adapter.ts';
 import { PI_TOOL_NAME_MAP } from './constants.ts';
 import { toolMetadataStore } from '../../../interceptor-common.ts';
@@ -85,7 +85,7 @@ export class PiEventAdapter extends BaseEventAdapter {
   private miniModel: string | undefined;
 
   // Track last usage for emitting with complete event
-  private lastUsage: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number; cost: { total: number } } | undefined;
+  private lastUsage: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number; cost: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number } } | undefined;
 
   // ============================================================
   // Overflow-recovery state machine
@@ -265,6 +265,8 @@ export class PiEventAdapter extends BaseEventAdapter {
         }
         if (this.lastUsage) {
           const inputTokens = this.lastUsage.input + (this.lastUsage.cacheRead || 0);
+          const cost = this.lastUsage.cost;
+          const costTotal = (cost.input ?? 0) + (cost.output ?? 0) + (cost.cacheRead ?? 0) + (cost.cacheWrite ?? 0);
           yield {
             type: 'complete',
             usage: {
@@ -272,7 +274,7 @@ export class PiEventAdapter extends BaseEventAdapter {
               outputTokens: this.lastUsage.output,
               cacheReadTokens: this.lastUsage.cacheRead,
               cacheCreationTokens: this.lastUsage.cacheWrite,
-              costUsd: this.lastUsage.cost.total,
+              costUsd: costTotal || (cost as { total?: number }).total,
               contextWindow: this.contextWindow,
             },
           };
@@ -361,6 +363,14 @@ export class PiEventAdapter extends BaseEventAdapter {
           break;
         }
 
+        // Surface the model's reasoning/thinking (DeepSeek reasoning_content →
+        // Pi SDK ThinkingContent). Emitted before the answer text so the trace
+        // reads "想 → 答" in order. captureContent gating happens downstream.
+        const thinkingContent = this.extractThinkingFromMessage(event.message);
+        if (thinkingContent) {
+          yield { type: 'reasoning', text: thinkingContent };
+        }
+
         // Extract text content from the final assistant message
         const textContent = this.extractTextFromMessage(event.message);
         // Pi SDK stopReason: 'toolUse' means the model will call tools next (intermediate commentary),
@@ -384,6 +394,21 @@ export class PiEventAdapter extends BaseEventAdapter {
 
         // Emit usage_update if the assistant message includes token usage
         if (msg.usage && typeof msg.usage.input === 'number') {
+          // Pi SDK's openai-completions path doesn't auto-run calculateCost(),
+          // so usage.cost stays zeroed. Compute it ourselves from the model's
+          // pricing table (provider+model travel on the assistant message).
+          try {
+            const fullMsg = event.message as { provider?: string; model?: string };
+            const cost = msg.usage.cost as { total?: number } | undefined;
+            if (fullMsg.provider && fullMsg.model && (!cost || !cost.total)) {
+              const model = getModel(fullMsg.provider as never, fullMsg.model as never);
+              if (model) {
+                // calculateCost writes into usage.cost.* — ensure the object exists first.
+                if (!msg.usage.cost) (msg.usage as { cost: unknown }).cost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
+                calculateCost(model, msg.usage as never);
+              }
+            }
+          } catch { /* pricing missing → leave cost as-is */ }
           this.lastUsage = msg.usage;
           const inputTokens = msg.usage.input + (msg.usage.cacheRead || 0);
           yield {
@@ -768,6 +793,28 @@ export class PiEventAdapter extends BaseEventAdapter {
     }
 
     return null;
+  }
+
+  /**
+   * Extract the model's thinking/reasoning from a Pi SDK assistant message.
+   * Pi maps DeepSeek's reasoning_content into ThinkingContent blocks
+   * ({ type: 'thinking', thinking: string }). Redacted blocks (safety-filtered)
+   * carry no plaintext and are skipped.
+   */
+  private extractThinkingFromMessage(message: unknown): string | null {
+    if (!message || typeof message !== 'object') return null;
+    const content = (message as { content?: unknown }).content;
+    if (!Array.isArray(content)) return null;
+
+    const parts = content
+      .filter(
+        (c): c is { type: string; thinking?: string; redacted?: boolean } =>
+          !!c && typeof c === 'object' && (c as { type?: string }).type === 'thinking',
+      )
+      .filter((c) => !c.redacted && typeof c.thinking === 'string' && c.thinking.length > 0)
+      .map((c) => c.thinking as string);
+
+    return parts.length > 0 ? parts.join('') : null;
   }
 
   /**

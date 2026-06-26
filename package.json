@@ -36,6 +36,7 @@
     "test:shared:config": "cd packages/shared && bun test src/config/__tests__/llm-connections.test.ts src/config/__tests__/storage-migrations.test.ts src/config/__tests__/storage-startup-migration.test.ts src/config/__tests__/default-thinking-level.test.ts",
     "test:shared:all": "bun run test:shared:llm-connections && bun run test:shared:models-pi && bun run test:shared:config",
     "eval:phoenix": "cd packages/eval && bun run eval",
+    "eval:workspace:ensure": "cd packages/eval && bun run workspace:ensure",
     "eval:phoenix:serve": "PHOENIX_WORKING_DIR=${PHOENIX_WORKING_DIR:-.phoenix} uvx --from arize-phoenix phoenix serve --port ${PHOENIX_PORT:-6006}",
     "eval:procurement:sample-base": "cd packages/eval && bun run sample:procurement-base",
     "eval:procurement:generate-cases": "cd packages/eval && bun run generate:procurement-cases",

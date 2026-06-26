@@ -11,12 +11,15 @@
   },
   "scripts": {
     "eval": "bun run src/cli.ts",
+    "workspace:ensure": "bun run src/scripts/ensure-eval-workspace.ts",
     "sample:procurement-base": "bun run src/scripts/sample-procurement-base.ts",
     "generate:procurement-cases": "bun run src/scripts/generate-procurement-cases.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@arizeai/phoenix-client": "6.10.0",
+    "@arizeai/phoenix-evals": "^1.0.3",
+    "@arizeai/phoenix-otel": "^1.0.2",
     "@craft-agent/server-core": "workspace:*",
     "@craft-agent/shared": "workspace:*",
     "js-yaml": "^4.1.1"

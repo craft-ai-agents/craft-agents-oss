@@ -1,5 +1,5 @@
 export { loadEvalCases, casesToPhoenixExamples } from './cases'
-export { defaultEvaluators } from './evaluators'
+export { getEvaluators, EVALUATOR_SETS } from './evaluators'
 export { runPhoenixEval, type RunPhoenixEvalOptions } from './phoenix'
 export { runCraftAgentCase, type CraftAgentRunnerOptions } from './runner/craft-agent'
 export type {

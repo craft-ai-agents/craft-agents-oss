@@ -1,5 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises'
-import { existsSync, lstatSync, mkdirSync, symlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SessionManager, setSessionPlatform } from '@craft-agent/server-core/sessions'
@@ -31,29 +31,27 @@ function ensureHeadlessPlatform(): void {
   headlessPlatformReady = true
 }
 
-function pathExists(path: string): boolean {
-  try {
-    lstatSync(path)
-    return true
-  } catch {
-    return false
-  }
-}
+let skillsLinked = false
 
-function ensureProjectSkillLinks(skillSlugs: string[] | undefined): void {
-  if (!skillSlugs?.length) return
+// .agents/skills 是指向 procurement-skills 的 SYMLINK —— procurement-skills 是唯一真源。
+// 为什么要这步:agent 扫 .agents/skills/ 加载 skill、SKILL.md 里命令也写死走
+// `.agents/skills/<…>`,但真源在 procurement-skills/,两个路径对不上。软链一次把它们对上:
+// 零拷贝、永不过期(改 procurement-skills/ 立即生效,不会像拷贝那样漂移),而且全部 skill +
+// 它们共享的工具(scrape-engine —— 平台/替代/差异 skill 调的 CLI 引擎)自动在位,跟生产一致。
+// agent 的 skill 扫描只认 SKILL.md,非 skill 文件(AGENTS.md/knowledge-base/scrape-engine)
+// 自动跳过。(生产那边 deploy 是 rsync 到远程机、不能软链;eval 本地可以。)skillSlugs 不再
+// 决定文件,只喂 `[skill:X]` 提示。整进程做一次。
+function ensureProjectSkills(skillSlugs: string[] | undefined): void {
+  if (!skillSlugs?.length || skillsLinked) return
 
-  const projectSkillsDir = join(REPO_ROOT, '.agents', 'skills')
-  for (const slug of new Set(skillSlugs)) {
-    const sourceDir = join(REPO_ROOT, 'procurement-skills', slug)
-    const skillFile = join(sourceDir, 'SKILL.md')
-    if (!existsSync(skillFile)) continue
+  const sourceTree = join(REPO_ROOT, 'procurement-skills')
+  const linkPath = join(REPO_ROOT, '.agents', 'skills')
+  if (!existsSync(sourceTree)) return
 
-    mkdirSync(projectSkillsDir, { recursive: true })
-    const linkPath = join(projectSkillsDir, slug)
-    if (pathExists(linkPath)) continue
-    symlinkSync(sourceDir, linkPath, 'dir')
-  }
+  mkdirSync(dirname(linkPath), { recursive: true }) // 确保 .agents/ 存在
+  rmSync(linkPath, { recursive: true, force: true }) // 去掉旧拷贝目录或旧软链
+  symlinkSync(sourceTree, linkPath)                  // .agents/skills → procurement-skills
+  skillsLinked = true
 }
 
 export interface CraftAgentRunnerOptions {
@@ -139,7 +137,7 @@ export async function runCraftAgentCase(
 ): Promise<CraftEvalOutput> {
   ensureConfigDir()
   ensureHeadlessPlatform()
-  ensureProjectSkillLinks(input.skillSlugs)
+  ensureProjectSkills(input.skillSlugs)
 
   const events: SessionEvent[] = []
   const toolEvents: ToolEventSummary[] = []

@@ -1,6 +1,7 @@
 import { asExperimentEvaluator } from '@arizeai/phoenix-client/experiments'
 import type { EvaluatorParams } from '@arizeai/phoenix-client/types/experiments'
 import type { CraftEvalOutput, EvalTaskExpected, ToolEventSummary } from './types'
+import { extractSubstitutesPayload, scoreSubstitutes } from './substitutes'
 
 const INTERNAL_SOURCE_TERMS = ['内部库存', '本地库存', '供应商库存', '自家库存', '动态库存', '库存表', '供应商档案']
 const DEFAULT_MISSING_FIELD_TERMS = ['未填写', '待确认', '缺失', '为空', '未提供', '暂无', '没有提供']
@@ -303,10 +304,36 @@ export const evidenceContractEvaluator = asExperimentEvaluator({
   },
 })
 
-export const defaultEvaluators = [
-  outcomeEvaluator,
-  traceContractEvaluator,
-  toolCallContractEvaluator,
-  answerContractEvaluator,
-  evidenceContractEvaluator,
-]
+export const substitutesContractEvaluator = asExperimentEvaluator({
+  name: 'substitutes_contract',
+  kind: 'CODE',
+  evaluate: (params: EvaluatorParams) => {
+    const expected = expectedFrom(params)
+    if (!expected.substitutes) {
+      return result(true, 'case does not define a substitutes contract')
+    }
+    const answer = finalAnswerText(params)
+    const payload = extractSubstitutesPayload(answer)
+    const score = scoreSubstitutes(payload, expected.substitutes)
+    return result(score.pass, score.reason, {
+      recall: score.recall,
+      precision: score.precision,
+      recommended: score.recommended,
+      hit: score.hit,
+      missedMustFind: score.missedMustFind,
+      forbiddenHit: score.forbiddenHit,
+    })
+  },
+})
+
+/** 按场景选 evaluator,不要全家桶空跑 */
+export const EVALUATOR_SETS: Record<string, ReturnType<typeof asExperimentEvaluator>[]> = {
+  substitutes: [outcomeEvaluator, substitutesContractEvaluator],
+  inventory: [outcomeEvaluator, traceContractEvaluator, toolCallContractEvaluator, answerContractEvaluator, evidenceContractEvaluator],
+}
+
+export function getEvaluators(scenario: string): ReturnType<typeof asExperimentEvaluator>[] {
+  const set = EVALUATOR_SETS[scenario]
+  if (!set) throw new Error(`Unknown evaluator scenario: ${scenario}. Available: ${Object.keys(EVALUATOR_SETS).join(', ')}`)
+  return set
+}

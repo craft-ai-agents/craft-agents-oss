@@ -1,4 +1,5 @@
 import type { SessionEvent } from '@craft-agent/shared/protocol'
+import type { SubstitutesExpected } from './substitutes'
 
 export type AssertionType = 'code' | 'manual' | 'llm'
 
@@ -43,6 +44,8 @@ export interface EvalExpected {
   toolCalls?: EvalToolCallsExpected
   answer?: EvalAnswerExpected
   evidence?: EvalEvidenceExpected
+  /** 替代料 labeled 参考答案(closed 集);存进 Phoenix example 的 expected。 */
+  substitutes?: SubstitutesExpected
 
   /**
    * Legacy flat fields kept so older case files remain runnable.

@@ -1,14 +1,16 @@
+import { createClient } from '@arizeai/phoenix-client'
 import { createDataset } from '@arizeai/phoenix-client/datasets'
 import { runExperiment } from '@arizeai/phoenix-client/experiments'
 import type { ExperimentTask } from '@arizeai/phoenix-client/types/experiments'
+import type { ExperimentEvaluatorLike } from '@arizeai/phoenix-client/types/experiments'
 import { casesToPhoenixExamples } from './cases'
-import { defaultEvaluators } from './evaluators'
 import { runCraftAgentCase, type CraftAgentRunnerOptions } from './runner/craft-agent'
 import { runDryCase } from './runner/dry-run'
 import type { CraftEvalOutput, EvalCase, EvalTaskInput } from './types'
 
 export interface RunPhoenixEvalOptions {
   cases: EvalCase[]
+  evaluators: ExperimentEvaluatorLike[]
   datasetName: string
   datasetDescription: string
   experimentName?: string
@@ -22,8 +24,10 @@ export interface RunPhoenixEvalOptions {
 }
 
 export async function runPhoenixEval(options: RunPhoenixEvalOptions) {
+  const client = createClient()
   const examples = casesToPhoenixExamples(options.cases)
   const { datasetId } = await createDataset({
+    client,
     name: options.datasetName,
     description: options.datasetDescription,
     examples,
@@ -41,6 +45,7 @@ export async function runPhoenixEval(options: RunPhoenixEvalOptions) {
   }
 
   return runExperiment({
+    client,
     dataset: { datasetId },
     experimentName: options.experimentName,
     experimentDescription: options.experimentDescription,
@@ -50,7 +55,7 @@ export async function runPhoenixEval(options: RunPhoenixEvalOptions) {
       workspaceId: options.realRunnerOptions?.workspaceId ?? null,
     },
     task,
-    evaluators: defaultEvaluators,
+    evaluators: options.evaluators,
     repetitions: options.repetitions,
     concurrency: options.concurrency,
     dryRun: options.phoenixDryRun,

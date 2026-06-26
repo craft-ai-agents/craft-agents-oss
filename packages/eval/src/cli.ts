@@ -1,16 +1,18 @@
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { shutdownRuntimeTelemetry } from '@craft-agent/server-core/telemetry'
+import { initRuntimeTelemetry, shutdownRuntimeTelemetry } from '@craft-agent/server-core/telemetry'
 import type { PermissionMode } from '@craft-agent/shared/agent/mode-types'
 import { loadEvalCases } from './cases'
+import { getEvaluators, EVALUATOR_SETS } from './evaluators'
 import { runPhoenixEval } from './phoenix'
 
-const DEFAULT_CASES_FILE = fileURLToPath(new URL('../cases/procurement.yaml', import.meta.url))
+const DEFAULT_CASES_FILE = fileURLToPath(new URL('../cases/procurement-substitutes.yaml', import.meta.url))
 
 interface CliOptions {
   casesFile: string
   filter?: string
   limit?: number
+  scenario: string
   datasetName: string
   experimentName?: string
   runner: 'real' | 'dry-run'
@@ -57,13 +59,19 @@ function parseArgs(args: string[]): CliOptions {
     ?? process.env.CRAFT_EVAL_CASES
     ?? DEFAULT_CASES_FILE
 
+  const scenario = readArg(args, '--scenario') ?? 'substitutes'
+  if (!(scenario in EVALUATOR_SETS)) {
+    throw new Error(`Unknown --scenario ${scenario}. Available: ${Object.keys(EVALUATOR_SETS).join(', ')}`)
+  }
+
   return {
     casesFile: resolve(casesFile),
     filter: readArg(args, '--filter'),
     limit: readNumber(args, '--limit', 0) || undefined,
+    scenario,
     datasetName: readArg(args, '--dataset')
       ?? process.env.CRAFT_EVAL_DATASET
-      ?? 'craft-procurement-regression',
+      ?? `craft-${scenario}`,
     experimentName: readArg(args, '--experiment'),
     runner,
     workspaceId: readArg(args, '--workspace') ?? process.env.CRAFT_EVAL_WORKSPACE_ID,
@@ -82,13 +90,26 @@ async function main() {
     throw new Error('real runner requires --workspace or CRAFT_EVAL_WORKSPACE_ID')
   }
 
+  // 自动开 trace:每条 agent turn 的 span 发到 craft-eval 项目,嵌在实验 run 下可下钻。
+  // batch=false → 跑完立即可读;无需手设一堆 CRAFT_OTEL_* env。
+  if (options.runner === 'real') {
+    initRuntimeTelemetry({
+      projectName: process.env.CRAFT_EVAL_PROJECT?.trim() || 'craft-eval',
+      url: process.env.PHOENIX_HOST?.trim() || 'http://localhost:6006',
+      captureContent: true,
+      batch: false,
+    })
+  }
+
   const cases = loadEvalCases(options.casesFile, options.filter, options.limit)
   if (cases.length === 0) {
     throw new Error('No eval cases matched the provided filters')
   }
 
+  const evaluators = getEvaluators(options.scenario)
   const experiment = await runPhoenixEval({
     cases,
+    evaluators,
     datasetName: options.datasetName,
     datasetDescription: `Craft Agent eval dataset generated from ${options.casesFile}`,
     experimentName: options.experimentName,

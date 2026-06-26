@@ -25,6 +25,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@arizeai/phoenix-otel": "^1.0.2",
     "@craft-agent/core": "workspace:*",
     "@craft-agent/shared": "workspace:*",
     "@mariozechner/pi-ai": "0.73.1",

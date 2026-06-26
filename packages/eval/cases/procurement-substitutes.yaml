@@ -1,0 +1,220 @@
+# 替代料 eval 用例。标准答案由业务确认(2026-06-24)。
+#
+# 判分:
+#   - mustFind = 业务确认的标准替代(厂商 OPN)
+#   - acceptable 起步 = mustFind + 复审补进的合理替代
+#   - minPrecision: 0 — 不门 precision,precision 只记录
+#   - forbidden 起步空,复审填
+
+- id: alt-001-g6e134p
+  name: 替代料 - G6E134P-US DC24V
+  category: procurement_substitute
+  input: 查找 G6E134P-US DC24V 的替代料
+  context: &ctx >-
+    完成查找后,只输出一个 ```substitutes 代码块,块内为合法 JSON,块后不得有任何文字。格式:
+    {"original": "<原型号>", "substitutes": [{"mpn": "<OPN>", "type": "drop_in|param_compatible|downgrade", "reason": "<替代依据>"}]}
+    规范:mpn 一律用厂商 datasheet 上的完整订货型号(OPN)原样书写,不加空格、品牌或备注;
+    type 三选一(drop_in=pin对pin / param_compatible=参数兼容 / downgrade=降级可用);
+    若无可替代,substitutes 给空数组。
+  skillSlugs: &skills
+    - procurement-alternative-search
+    - procurement-model-info-search
+    - procurement-platform-search
+    - procurement-platform-search-more
+    - procurement-part-mismatch-review
+  expected:
+    substitutes: { acceptable: ["G6S-2 DC24"], mustFind: ["G6S-2 DC24"], forbidden: [], minPrecision: 0 }
+  assertions: &asserts
+    - type: code
+      criterion: 必须找到业务确认的替代料
+
+- id: alt-002-mg10ada400e
+  name: 替代料 - MG10ADA400E
+  category: procurement_substitute
+  input: 查找 MG10ADA400E 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["HDWG7400"], mustFind: ["HDWG7400"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-003-trellix
+  name: 替代料 - Trellix Protect Plus (MV2)
+  category: procurement_substitute
+  input: 查找 Trellix Protect Plus（MV2）的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["Trellix Endpoint Essentials", "Trellix Endpoint Core", "Trellix Endpoint Enterprise"], mustFind: ["Trellix Endpoint Essentials"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-004-af8gud4a-ebaxm
+  name: 替代料 - AF8GUD4A-EBAXM
+  category: procurement_substitute
+  input: 查找 AF8GUD4A-EBAXM 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["FA16G0UD4APEBFC"], mustFind: ["FA16G0UD4APEBFC"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-005-hdmcsdhc8gpsljp3
+  name: 替代料 - HDMCSDHC8GPSLJP3
+  category: procurement_substitute
+  input: 查找 HDMCSDHC8GPSLJP3 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["SDCIT2/8GB"], mustFind: ["SDCIT2/8GB"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-006-so-dimm-4
+  name: 替代料 - SO-DIMM 4
+  category: procurement_substitute
+  input: 查找 SO-DIMM 4 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["TS128MSQ64V8U"], mustFind: ["TS128MSQ64V8U"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-007-dz3200-c8g
+  name: 替代料 - DZ3200-C8G
+  category: procurement_substitute
+  input: 查找 DZ3200-C8G 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["DZ3200-C8G/ST"], mustFind: ["DZ3200-C8G/ST"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-008-erzv05d331
+  name: 替代料 - ERZV05D331
+  category: procurement_substitute
+  input: 查找 ERZV05D331 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["B72205S0231K101"], mustFind: ["B72205S0231K101"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-009-erzv10d621
+  name: 替代料 - ERZV10D621
+  category: procurement_substitute
+  input: 查找 ERZV10D621 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["B72210S0381K101"], mustFind: ["B72210S0381K101"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-010-erzv14d431
+  name: 替代料 - ERZV14D431
+  category: procurement_substitute
+  input: 查找 ERZV14D431 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["B72214S0271K101"], mustFind: ["B72214S0271K101"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-011-fx5-eip
+  name: 替代料 - FX5-EIP
+  category: procurement_substitute
+  input: 查找 FX5-EIP 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["FX5-ENET/IP"], mustFind: ["FX5-ENET/IP"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-012-534260490
+  name: 替代料 - 534260490
+  category: procurement_substitute
+  input: 查找 534260490 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    # Molex 同料两种官方印法:9 位连写 534260410 = 5+4 连字符 53426-0410
+    substitutes: { acceptable: ["534260410", "53426-0410"], mustFind: [["534260410", "53426-0410"]], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-013-emmc08g-mv36-ge02
+  name: 替代料 - EMMC08G-MV36-GE02
+  category: procurement_substitute
+  input: 查找 EMMC08G-MV36-GE02 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["EMMC08G-MV36-GA02"], mustFind: ["EMMC08G-MV36-GA02"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-014-ecquaaf225k
+  name: 替代料 - ECQUAAF225K
+  category: procurement_substitute
+  input: 查找 ECQUAAF225K 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["ECQUAAF225KA"], mustFind: ["ECQUAAF225KA"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-015-mt62f1536m64d8ek-023-aatb
+  name: "替代料 - MT62F1536M64D8EK-023 AAT:B"
+  category: procurement_substitute
+  input: "查找 MT62F1536M64D8EK-023 AAT:B 的替代料"
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["MT62F1536M64D8EK-023 AAT:C"], mustFind: ["MT62F1536M64D8EK-023 AAT:C"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-016-mt62f1g64d4ek-023-aatc
+  name: "替代料 - MT62F1G64D4EK-023 AAT:C"
+  category: procurement_substitute
+  input: "查找 MT62F1G64D4EK-023 AAT:C 的替代料"
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["MT62F1G64D4EK-023 AAT:B"], mustFind: ["MT62F1G64D4EK-023 AAT:B"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-017-44a0111-22-0-ca
+  name: 替代料 - 44A0111-22-0-CA
+  category: procurement_substitute
+  input: 查找 44A0111-22-0-CA 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["44A0111-22-0-MX"], mustFind: ["44A0111-22-0-MX"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-018-vcxu-65c-r
+  name: "替代料 - VCXU-65C.R (11175751)"
+  category: procurement_substitute
+  input: "查找 VCXU-65C.R (11175751) 的替代料"
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["VCXU.2-65C.R"], mustFind: ["VCXU.2-65C.R"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-019-mt60b3g8rw-64bb
+  name: "替代料 - MT60B3G8RW-64B:B"
+  category: procurement_substitute
+  input: "查找 MT60B3G8RW-64B:B 的替代料"
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["MT60B3G8JF-64B:C"], mustFind: ["MT60B3G8JF-64B:C"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts
+
+- id: alt-020-rtc-7301-sf-l1
+  name: 替代料 - RTC-7301-SF-L1
+  category: procurement_substitute
+  input: 查找 RTC-7301-SF-L1 的替代料
+  context: *ctx
+  skillSlugs: *skills
+  expected:
+    substitutes: { acceptable: ["RTC-7301SF"], mustFind: ["RTC-7301SF"], forbidden: [], minPrecision: 0 }
+  assertions: *asserts

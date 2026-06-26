@@ -161,8 +161,21 @@ export class TurnTracer {
           if (event.usage) this.emitLlmSpan(event.usage)
           break
         case 'text_complete':
-          if (this.captureContent && !event.isIntermediate) {
-            this.rootSpan.setAttribute(OI_OUTPUT, serialize(event.text))
+          if (this.captureContent) {
+            if (event.isIntermediate) {
+              // 中间助手文本(模型在调工具前写的思路)——记成时间戳事件,
+              // 在 Phoenix 时间线上和 tool span 交错,可读出"想→做"的过程。
+              this.rootSpan.addEvent('assistant.text', { 'output.value': truncate(event.text) })
+            } else {
+              this.rootSpan.setAttribute(OI_OUTPUT, serialize(event.text))
+            }
+          }
+          break
+        case 'reasoning':
+          // 模型的推理/思考(DeepSeek reasoning_content)——时间戳事件,
+          // 排在它触发的工具/答案之前,直接回答"它当时在想什么"。
+          if (this.captureContent && event.text) {
+            this.rootSpan.addEvent('reasoning', { 'reasoning.text': truncate(event.text) })
           }
           break
         case 'error':

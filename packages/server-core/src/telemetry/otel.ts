@@ -1,8 +1,17 @@
 import { trace, type Tracer } from '@opentelemetry/api'
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
-import { resourceFromAttributes } from '@opentelemetry/resources'
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
+import { register as registerPhoenix } from '@arizeai/phoenix-otel'
+
+/**
+ * Phoenix OTLP tracing setup.
+ *
+ * 单一 provider 注册走官方 `@arizeai/phoenix-otel` 的 `registerPhoenix`(global),
+ * 不再手搓 OTLPExporter/NodeTracerProvider + 一坨 endpoint/header 解析。turn-tracer
+ * 用 `trace.getTracer` 自动接上这个全局 provider,逐 turn/tool/llm 的富 span 照常发。
+ *
+ * 两条初始化路径:
+ *  - 编程式 `initRuntimeTelemetry(opts)`：eval / 任何宿主显式开,带 project/url/capture。
+ *  - env 兜底 lazy：生产保持 `CRAFT_OTEL_ENABLED` 一开即用,无需改启动代码。
+ */
 
 interface RuntimeTelemetryState {
   enabled: boolean
@@ -12,6 +21,7 @@ interface RuntimeTelemetryState {
 }
 
 let telemetryState: RuntimeTelemetryState | null = null
+let captureContentFlag = false
 
 function envFlag(name: string, defaultValue = false): boolean {
   const raw = process.env[name]?.trim().toLowerCase()
@@ -19,79 +29,33 @@ function envFlag(name: string, defaultValue = false): boolean {
   return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
 }
 
-function parseHeaders(raw: string | undefined): Record<string, string> {
-  const trimmed = raw?.trim()
-  if (!trimmed) return {}
-
-  if (trimmed.startsWith('{')) {
-    try {
-      const parsed = JSON.parse(trimmed) as Record<string, unknown>
-      return Object.fromEntries(
-        Object.entries(parsed)
-          .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0),
-      )
-    } catch {
-      return {}
-    }
-  }
-
-  const headers: Record<string, string> = {}
-  for (const part of trimmed.split(/[,\n;]/)) {
-    const index = part.indexOf('=')
-    if (index <= 0) continue
-    const key = part.slice(0, index).trim()
-    const value = part.slice(index + 1).trim()
-    if (key && value) headers[key] = value
-  }
-  return headers
+export interface InitRuntimeTelemetryOptions {
+  /** Phoenix 项目名(trace 归类),如 'craft-eval' / 'craft-prod'。 */
+  projectName: string
+  /** Phoenix collector URL;缺省读 PHOENIX_HOST,再缺省 localhost:6006。registerPhoenix 会补 /v1/traces。 */
+  url?: string
+  /** 鉴权 key;缺省读 PHOENIX_API_KEY。 */
+  apiKey?: string
+  /** 是否把输入/输出内容写进 span(eval 调试想要;生产默认关)。 */
+  captureContent?: boolean
+  /** 批量导出(默认 true);eval 传 false → 立即导出,跑完即可读。 */
+  batch?: boolean
 }
 
-function resolveEndpoint(): string {
-  const explicit = process.env.CRAFT_OTEL_ENDPOINT?.trim()
-  if (explicit) return explicit
-
-  const tracesEndpoint = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?.trim()
-  if (tracesEndpoint) return tracesEndpoint
-
-  const baseEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()
-  if (baseEndpoint) return `${baseEndpoint.replace(/\/+$/, '')}/v1/traces`
-
-  return 'http://localhost:6006/v1/traces'
-}
-
-function resolveHeaders(): Record<string, string> {
-  const headers = parseHeaders(process.env.CRAFT_OTEL_HEADERS ?? process.env.OTEL_EXPORTER_OTLP_HEADERS)
-  const phoenixApiKey = process.env.PHOENIX_API_KEY?.trim()
-  if (phoenixApiKey && !Object.keys(headers).some((key) => key.toLowerCase() === 'authorization')) {
-    headers.authorization = `Bearer ${phoenixApiKey}`
-  }
-  return headers
-}
-
-export function getRuntimeTelemetry(): RuntimeTelemetryState {
+/**
+ * 显式初始化 telemetry(幂等)。返回 turn-tracer 消费的 state 形状。
+ */
+export function initRuntimeTelemetry(opts: InitRuntimeTelemetryOptions): RuntimeTelemetryState {
   if (telemetryState) return telemetryState
 
-  if (!envFlag('CRAFT_OTEL_ENABLED')) {
-    telemetryState = { enabled: false }
-    return telemetryState
-  }
-
   try {
-    const exporter = new OTLPTraceExporter({
-      url: resolveEndpoint(),
-      headers: resolveHeaders(),
-      timeoutMillis: Number(process.env.CRAFT_OTEL_EXPORT_TIMEOUT_MS ?? 10_000),
+    const provider = registerPhoenix({
+      projectName: opts.projectName,
+      url: opts.url ?? process.env.PHOENIX_HOST?.trim() ?? 'http://localhost:6006',
+      apiKey: opts.apiKey ?? process.env.PHOENIX_API_KEY?.trim(),
+      batch: opts.batch ?? true,
     })
-    const processor = new BatchSpanProcessor(exporter)
-    const provider = new NodeTracerProvider({
-      resource: resourceFromAttributes({
-        'service.name': process.env.CRAFT_OTEL_SERVICE_NAME?.trim() || 'craft-agent-server',
-        'openinference.project.name': process.env.CRAFT_OTEL_PROJECT?.trim() || process.env.PHOENIX_PROJECT_NAME?.trim() || 'craft-prod',
-      }),
-      spanProcessors: [processor],
-    })
-
-    provider.register()
+    captureContentFlag = opts.captureContent ?? false
     telemetryState = {
       enabled: true,
       tracer: trace.getTracer('craft-agent-runtime'),
@@ -105,9 +69,28 @@ export function getRuntimeTelemetry(): RuntimeTelemetryState {
   return telemetryState
 }
 
+export function getRuntimeTelemetry(): RuntimeTelemetryState {
+  if (telemetryState) return telemetryState
+
+  // 生产 env 兜底:CRAFT_OTEL_ENABLED 一开,首个 turn 触发 lazy 初始化,无需改启动代码。
+  if (envFlag('CRAFT_OTEL_ENABLED')) {
+    return initRuntimeTelemetry({
+      projectName:
+        process.env.CRAFT_OTEL_PROJECT?.trim() ||
+        process.env.PHOENIX_PROJECT_NAME?.trim() ||
+        'craft-prod',
+      captureContent: envFlag('CRAFT_OTEL_CAPTURE_CONTENT'),
+    })
+  }
+
+  telemetryState = { enabled: false }
+  return telemetryState
+}
+
 export async function shutdownRuntimeTelemetry(): Promise<void> {
   const shutdown = telemetryState?.shutdown
   telemetryState = null
+  captureContentFlag = false
   if (shutdown) await shutdown()
 }
 
@@ -116,7 +99,7 @@ export function shouldForceFlushPerTurn(): boolean {
 }
 
 export function shouldCaptureTraceContent(): boolean {
-  return envFlag('CRAFT_OTEL_CAPTURE_CONTENT')
+  return captureContentFlag || envFlag('CRAFT_OTEL_CAPTURE_CONTENT')
 }
 
 export function shouldIncludeRawUserId(): boolean {
