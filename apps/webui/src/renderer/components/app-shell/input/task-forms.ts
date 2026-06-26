@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Search, Replace, GitCompareArrows, Users, FileText } from 'lucide-react'
+import { Search, Replace, GitCompareArrows, FileText } from 'lucide-react'
 
 export type TaskFieldType = 'text' | 'select'
 
@@ -37,31 +37,27 @@ export const TASK_FORMS: TaskForm[] = [
     label: '找料',
     icon: Search,
     fields: [{ key: 'mpn', label: '型号', type: 'text', placeholder: '如 TPS92550TZX', required: true }],
-    toMessage: (v) => `帮我找一下 ${val(v, 'mpn')}`,
+    toMessage: (v) =>
+      `帮我找一下 ${val(v, 'mpn')}：先查本地库存（自家 + 各级供应商），再查各平台原始分销渠道，给我现货数量、阶梯价、MOQ、供应商和货期，优先原厂 / 授权渠道；查不到也明确告诉我。`,
   },
   {
     id: 'alt',
     label: '找替代料',
     icon: Replace,
     fields: [{ key: 'mpn', label: '型号', type: 'text', placeholder: '如 TPS92550TZX', required: true }],
-    toMessage: (v) => `帮我找 ${val(v, 'mpn')} 的替代料`,
+    toMessage: (v) =>
+      `帮我找 ${val(v, 'mpn')} 的替代料：给 pin-to-pin 和功能替代候选，逐项说明关键参数差异（封装 / 电压 / 电流 / 精度 / 温度等）和能否替代的结论，并标注品牌、货源和大致价格。`,
   },
   {
     id: 'compare',
-    label: '能不能替',
+    label: '替代料判断',
     icon: GitCompareArrows,
     fields: [
       { key: 'need', label: '需求型号', type: 'text', required: true },
       { key: 'quote', label: '报价型号', type: 'text', required: true },
     ],
-    toMessage: (v) => `需求型号 ${val(v, 'need')}，报价型号 ${val(v, 'quote')}，这俩能不能替代、有没有区别？`,
-  },
-  {
-    id: 'supplier',
-    label: '补供应商',
-    icon: Users,
-    fields: [{ key: 'brand', label: '品牌/品类', type: 'text', placeholder: '如 Omron', required: true }],
-    toMessage: (v) => `帮我按 ${val(v, 'brand')} 补几个供应商候选`,
+    toMessage: (v) =>
+      `需求型号 ${val(v, 'need')}，报价型号 ${val(v, 'quote')}，这俩能不能替代？请逐项对比关键参数（封装 / 电气规格 / 温度范围 / 认证等），指出差异点，给出能否直接替代的明确结论和需要注意的风险。`,
   },
   {
     id: 'doc',

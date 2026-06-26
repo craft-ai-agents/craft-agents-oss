@@ -2,29 +2,28 @@ import { describe, it, expect } from 'bun:test'
 import { TASK_FORMS, isFormComplete, getTaskForm } from '../task-forms'
 
 describe('task-forms registry', () => {
-  it('恰好 5 个工作流任务且 id 唯一', () => {
-    expect(TASK_FORMS.length).toBe(5)
+  it('恰好 4 个工作流任务且 id 唯一', () => {
+    expect(TASK_FORMS.length).toBe(4)
     const ids = TASK_FORMS.map((f) => f.id)
-    expect(new Set(ids).size).toBe(5)
+    expect(new Set(ids).size).toBe(4)
   })
 
   it('找料 → inventory-first 触发语', () => {
-    expect(getTaskForm('find')!.toMessage({ mpn: 'TPS92550TZX' })).toBe('帮我找一下 TPS92550TZX')
+    const msg = getTaskForm('find')!.toMessage({ mpn: 'TPS92550TZX' })
+    expect(msg).toContain('帮我找一下 TPS92550TZX')
+    expect(msg).toContain('本地库存')
   })
 
   it('找替代料 → alternative-search 触发语', () => {
-    expect(getTaskForm('alt')!.toMessage({ mpn: 'TLP350' })).toBe('帮我找 TLP350 的替代料')
+    const msg = getTaskForm('alt')!.toMessage({ mpn: 'TLP350' })
+    expect(msg).toContain('帮我找 TLP350 的替代料')
   })
 
-  it('能不能替 → 含两个型号 + 替代触发词', () => {
+  it('替代料判断 → 含两个型号 + 替代触发词', () => {
     const msg = getTaskForm('compare')!.toMessage({ need: 'A', quote: 'B' })
     expect(msg).toContain('需求型号 A')
     expect(msg).toContain('报价型号 B')
     expect(msg).toContain('能不能替代')
-  })
-
-  it('补供应商 → supplier-shortlist 触发语', () => {
-    expect(getTaskForm('supplier')!.toMessage({ brand: 'Omron' })).toBe('帮我按 Omron 补几个供应商候选')
   })
 
   it('生成单据 → doc-export 触发语', () => {
@@ -33,7 +32,7 @@ describe('task-forms registry', () => {
   })
 
   it('toMessage 去空白、缺值不产出 undefined', () => {
-    expect(getTaskForm('find')!.toMessage({ mpn: '  X  ' })).toBe('帮我找一下 X')
+    expect(getTaskForm('find')!.toMessage({ mpn: '  X  ' })).toContain('帮我找一下 X')
     expect(getTaskForm('find')!.toMessage({})).not.toContain('undefined')
   })
 
