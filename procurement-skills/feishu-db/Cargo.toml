@@ -1,0 +1,22 @@
+[package]
+name = "feishu-db"
+version = "0.1.0"
+edition = "2021"
+description = "飞书库存/供应商表本地 SQLite 缓存 CLI —— sync 并发拉飞书,query 查本地(热路径零飞书调用,绕开限流)"
+
+[[bin]]
+name = "feishu-db"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync"] }
+futures = "0.3"
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+anyhow = "1"
+
+[profile.release]
+opt-level = 2
+strip = true
+lto = true

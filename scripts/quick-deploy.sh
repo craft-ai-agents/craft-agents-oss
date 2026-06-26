@@ -80,6 +80,7 @@ rsync -az --delete \
   --exclude='.git/' --exclude='node_modules/' --exclude='build-skills/' \
   --exclude='.env' --exclude='*.tar.gz' \
   --exclude='vendor/' --exclude='resources/bin/' \
+  --exclude='target/' \
   -e ssh ./ "$SERVER:/tmp/craft-app-sync/"
 ssh "$SERVER" "sudo rsync -a --delete \
   --exclude='node_modules/' \
@@ -87,6 +88,7 @@ ssh "$SERVER" "sudo rsync -a --delete \
 
 echo "==> [3/4] rsync skill 真源 → $REMOTE_SKILLS（排除 AGENTS.md，它走全局指令位置）"
 rsync -az --delete --exclude=__pycache__ --exclude='*.pyc' --exclude='AGENTS.md' \
+  --exclude='target/' \
   -e ssh "$SKILLS_SRC/" "$SERVER:/tmp/craft-skills-sync/"
 ssh "$SERVER" "sudo mkdir -p $REMOTE_SKILLS && sudo rsync -a --delete \
   /tmp/craft-skills-sync/ $REMOTE_SKILLS/ && sudo chown -R craft:craft /home/craft/.agents"
