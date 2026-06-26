@@ -26,6 +26,7 @@
 ## 按任务选 skill
 
 - 找料 / 帮我找这个型号 / 哪里能搞到 / 查库存 / 有没有货 → **见上面的流程，先查库存**
+- **一次给多个型号 / 粘贴一张表 / "这一批都帮我查"** → `procurement-batch-orchestration`（每个型号起一个子会话并行找料、回传父会话汇总；单个型号别用）
 - 不认识某个型号、要查它是什么（品牌/品类/规格/封装/生命周期）→ `procurement-model-info-search`
 - 查平台/分销商报价、现货、产品页、替代料 → `procurement-platform-search`（默认核心四家：Digikey/Mouser/云汉/master）
 - 核心四家不够、要更多货源 → 叠加 `procurement-platform-search-more`。**先用直连聚合器 `octopart` / `szlcsc-overseas` 拿西方分销商(avnet/future/rs/arrow/element14/tme…)的库存价**——快、不占住宅代理、一把抓,**别默认去单查这些站的本站爬虫**(慢、占住宅代理流量,而聚合器已给同一份数据)。只有聚合器对某料太薄、或要特定品类专门源(连接器/FA机械件/停产料/气动件等)时,才按品类叠加单站:**别自己瞎猜——用 `ask_user` 让采购选**(≤6 个选项,按品类只给相关的)：「跨分销商聚合(Octopart/立创海外)」「中国境内现货(立创/京北通宇/连可连)」「日本·MRO(MonotaRO/CoreStaff)」「连接器·机电(PEI/Heilind/Sager)」「停产/EOL(Rochester)」「西方分销本站·慢(Future/Newark/RS/TME,需住宅代理)」;可加「不用了」。选项用采购看得懂的话,别出现脚本/参数名。
