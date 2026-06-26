@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
-"""TTI (德州 TTI Inc, sager 源头) adapter — mode=dom, needs_proxy, PerimeterX
-Press&Hold warmup.
+"""TTI (德州 TTI Inc, sager 源头) adapter — mode=dom, needs_proxy.
+
+⚠ 2026-06-26 prod 实测:TTI 实际在 **Incapsula/Imperva** 后(`_Incapsula_Resource`、
+首页 403、GeoIPLogging/gdprCountryCodes 等后端服务 403),**不是 PerimeterX**。引擎没有
+Incapsula profile,下面沿用 perimeterx 只为做首页 warmup 拿到主 HTML;但搜索结果依赖的
+后端服务被 Incapsula 403,产品多半渲染不出 → 这个源经常 blocked=False 却无结果。真修需造
+Incapsula(reese84/JS 挑战)求解器,成本高、ROI 低;被动/连接器品类优先用 sager(同集团、
+直连无反爬、已 script 结构化)。下面是当年照搬旧 PerimeterX 假设的实现,保留备用。
+
 Ported from procurement-platform-search-more/scripts/cloak_search.py
 (scrape_tti) byte-faithfully.
 
@@ -57,7 +64,7 @@ async def extract(page: Any, part: str) -> list[Row]:
     except Exception:
         final_url = url(part)
     return [Row(part=part, platform="tti", product_url=final_url,
-                note=text[:4000] or "(空白页——PerimeterX 预热可能失败)")]
+                note=text[:4000] or "(空白/无结果——TTI 在 Incapsula 后、后端被 403，常取不到，不代表无货)")]
 
 
 ADAPTER = Adapter(
