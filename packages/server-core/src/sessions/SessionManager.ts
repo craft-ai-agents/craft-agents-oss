@@ -1706,8 +1706,12 @@ export class SessionManager implements ISessionManager {
           }
 
           // Initialize mode-manager state for restored sessions even before agent creation.
-          // This keeps diagnostics/effective mode aligned with persisted session metadata.
-          setPermissionMode(meta.id, managed.permissionMode ?? 'ask', { changedBy: 'restore' })
+          // Execute-only product: 'safe'/Explore (read-only) was retired and the UI has no
+          // way to switch out, so any restored session must land in allow-all — otherwise
+          // stale 'safe' state strands it read-only (Bash/Write/spawn_session all blocked).
+          // Force allow-all and write it back so the corrected mode persists.
+          managed.permissionMode = 'allow-all'
+          setPermissionMode(meta.id, 'allow-all', { changedBy: 'restore' })
           if (managed.previousPermissionMode) {
             hydratePreviousPermissionMode(meta.id, managed.previousPermissionMode)
           }
@@ -2759,8 +2763,10 @@ export class SessionManager implements ISessionManager {
     }
 
     // Initialize mode-manager state immediately to avoid UI/enforcement races
-    // before the agent instance is lazily created.
-    setPermissionMode(storedSession.id, managed.permissionMode ?? 'ask', { changedBy: 'restore' })
+    // before the agent instance is lazily created. Execute-only product: force
+    // allow-all (see restore path above) so stale 'safe' can't strand the session.
+    managed.permissionMode = 'allow-all'
+    setPermissionMode(storedSession.id, 'allow-all', { changedBy: 'restore' })
     if (managed.previousPermissionMode) {
       hydratePreviousPermissionMode(storedSession.id, managed.previousPermissionMode)
     }
