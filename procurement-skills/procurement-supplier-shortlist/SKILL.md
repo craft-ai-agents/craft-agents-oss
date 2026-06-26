@@ -37,9 +37,13 @@ metadata:
 
 > JSON 字段挑上面这些给采购,别整段照搬。
 
-## 兜底:缓存不可用时才走 live
+## 查不到 = 没有:空结果是权威答案,别 fallback
 
-仅当命令报错(二进制缺失)或 `rows` 空且疑似缓存未同步时,退回直接查飞书(子命令带 `+` 前缀;中英文两次查询串行、不并发):
+本地缓存是飞书供应商档案表的**完整镜像**(整表同步)。命令成功(输出里有 `synced_at`)时:`rows` 空 = **档案里确实没有供该品牌/品类的供应商**,如实写"档案内暂无匹配供应商(截至 `synced_at`)",**不要再查 lark-cli**。查不到是档案本来就没有,live 查同源只会同样空、更慢、撞限流。不要因为没查到就怀疑工具、退回 live。
+
+## 只有缓存真的坏了才 fallback
+
+仅当命令**本身失败**(二进制缺失 / 报错 / 输出非 JSON)或 `synced_at` **为空**(从未同步过)时,才退回直接查飞书(子命令带 `+` 前缀;中英文两次查询串行、不并发):
 
     lark-cli base +record-search --as user --base-token Mjlkb49B9aoptssVw8Jc0wGwnhh --table-id tblbtuMHFIOr6Oss --json '{"keyword":"<品牌>","search_fields":["主营品牌","优势产品","询价品牌"]}'
 
