@@ -28,6 +28,11 @@ turndown.remove(NOISE_ELEMENTS);
 
 const MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_TEXT_LENGTH = 50_000;
+// Total budget for the whole fetch — connect + headers + reading the body.
+// One AbortSignal drives every await below, so a slow/streaming server can't
+// hang the read for 30-85s after the headers come back (the real cause of the
+// long WebFetch spans in eval traces).
+const FETCH_TIMEOUT_MS = 15_000;
 
 const MIME_TO_EXT: Record<string, string> = {
   'application/pdf': '.pdf',
@@ -355,65 +360,84 @@ export function createWebFetchTool(
         );
       }
 
-      let response: Response;
+      // One deadline for the whole operation. fetch() AND the body read below
+      // share this signal, so a server that streams the body slowly still gets
+      // aborted at FETCH_TIMEOUT_MS instead of hanging for tens of seconds.
+      const controller = new AbortController();
+      const deadline = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
       try {
-        response = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; CraftAgent/1.0)',
-            Accept:
-              'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          },
-          redirect: 'follow',
-          signal: AbortSignal.timeout(30_000),
-        });
-      } catch (err) {
-        return result(
-          `Failed to fetch ${url}: ${err instanceof Error ? err.message : String(err)}`,
-          true,
-        );
+        let response: Response;
+        try {
+          response = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; CraftAgent/1.0)',
+              Accept:
+                'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            },
+            redirect: 'follow',
+            signal: controller.signal,
+          });
+        } catch (err) {
+          const timedOut = controller.signal.aborted;
+          return result(
+            `Failed to fetch ${url}: ${timedOut ? `timed out after ${FETCH_TIMEOUT_MS / 1000}s` : err instanceof Error ? err.message : String(err)}`,
+            true,
+          );
+        }
+
+        if (!response.ok) {
+          return result(
+            `Failed to fetch ${url}: HTTP ${response.status} ${response.statusText}`,
+            true,
+          );
+        }
+
+        // Use the final URL after redirects for all output messages
+        const finalUrl = response.url || url;
+
+        const contentType = (response.headers.get('content-type') || '')
+          .toLowerCase()
+          .split(';')[0]
+          .trim();
+
+        try {
+          // Binary content types — stream with size limit
+          if (contentType === 'application/pdf') {
+            const buffer = await readResponseBytes(response, MAX_DOWNLOAD_SIZE);
+            return await handlePdf(buffer, finalUrl, saveBinary);
+          }
+
+          if (contentType.startsWith('image/')) {
+            const buffer = await readResponseBytes(response, MAX_DOWNLOAD_SIZE);
+            return await handleImage(buffer, finalUrl, contentType, saveBinary);
+          }
+
+          // Text content types — stream with size limit then decode
+          const text = await readResponseText(response, MAX_DOWNLOAD_SIZE);
+
+          if (contentType.includes('html')) {
+            return handleHtml(text, finalUrl, prompt);
+          }
+
+          if (
+            contentType === 'application/json' ||
+            contentType.endsWith('+json')
+          ) {
+            return handleJson(text, finalUrl);
+          }
+
+          return handleText(text, finalUrl);
+        } catch (err) {
+          const timedOut = controller.signal.aborted;
+          return result(
+            `Failed to read ${finalUrl}: ${timedOut ? `body read timed out after ${FETCH_TIMEOUT_MS / 1000}s` : err instanceof Error ? err.message : String(err)}`,
+            true,
+          );
+        }
+      } finally {
+        clearTimeout(deadline);
       }
-
-      if (!response.ok) {
-        return result(
-          `Failed to fetch ${url}: HTTP ${response.status} ${response.statusText}`,
-          true,
-        );
-      }
-
-      // Use the final URL after redirects for all output messages
-      const finalUrl = response.url || url;
-
-      const contentType = (response.headers.get('content-type') || '')
-        .toLowerCase()
-        .split(';')[0]
-        .trim();
-
-      // Binary content types — stream with size limit
-      if (contentType === 'application/pdf') {
-        const buffer = await readResponseBytes(response, MAX_DOWNLOAD_SIZE);
-        return handlePdf(buffer, finalUrl, saveBinary);
-      }
-
-      if (contentType.startsWith('image/')) {
-        const buffer = await readResponseBytes(response, MAX_DOWNLOAD_SIZE);
-        return handleImage(buffer, finalUrl, contentType, saveBinary);
-      }
-
-      // Text content types — stream with size limit then decode
-      const text = await readResponseText(response, MAX_DOWNLOAD_SIZE);
-
-      if (contentType.includes('html')) {
-        return handleHtml(text, finalUrl, prompt);
-      }
-
-      if (
-        contentType === 'application/json' ||
-        contentType.endsWith('+json')
-      ) {
-        return handleJson(text, finalUrl);
-      }
-
-      return handleText(text, finalUrl);
     },
   };
 }

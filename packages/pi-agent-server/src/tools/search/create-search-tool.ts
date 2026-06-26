@@ -8,7 +8,6 @@
 import { Type } from '@sinclair/typebox';
 import type { ToolDefinition } from '@mariozechner/pi-coding-agent';
 import type { WebSearchProvider, WebSearchResult } from './types.ts';
-import { DDGSearchProvider } from './providers/ddg.ts';
 
 const schema = Type.Object({
   query: Type.String({ description: 'The search query' }),
@@ -21,12 +20,7 @@ const schema = Type.Object({
   ),
 });
 
-function formatResults(
-  query: string,
-  providerName: string,
-  results: WebSearchResult[],
-  note?: string,
-) {
+function formatResults(query: string, providerName: string, results: WebSearchResult[]) {
   const formatted = results
     .map(
       (r, i) =>
@@ -34,29 +28,18 @@ function formatResults(
     )
     .join('\n\n');
 
-  const noteText = note ? `${note}\n\n` : '';
-
   return {
     content: [
       {
         type: 'text' as const,
-        text: `${noteText}Search results for "${query}" (via ${providerName}):\n\n${formatted}`,
+        text: `Search results for "${query}" (via ${providerName}):\n\n${formatted}`,
       },
     ],
     details: {},
   };
 }
 
-function formatErrorSnippet(message: string, max = 180): string {
-  const compact = message.replace(/\s+/g, ' ').trim();
-  if (!compact) return 'unknown error';
-  return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
-}
-
-export function createSearchTool(
-  provider: WebSearchProvider,
-  fallbackProvider: WebSearchProvider = new DDGSearchProvider(),
-): ToolDefinition<typeof schema> {
+export function createSearchTool(provider: WebSearchProvider): ToolDefinition<typeof schema> {
   return {
     name: 'web_search',
     label: 'Web Search',
@@ -74,31 +57,6 @@ export function createSearchTool(
         return formatResults(query, provider.name, results);
       } catch (err) {
         const primaryMsg = err instanceof Error ? err.message : String(err);
-
-        const canFallback = provider.name !== fallbackProvider.name;
-        if (canFallback) {
-          try {
-            const fallbackResults = await fallbackProvider.search(query, count);
-            return formatResults(
-              query,
-              fallbackProvider.name,
-              fallbackResults,
-              `Primary search provider (${provider.name}) failed (${formatErrorSnippet(primaryMsg)}), automatically fell back to ${fallbackProvider.name}.`,
-            );
-          } catch (fallbackErr) {
-            const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `Search failed for "${query}": primary (${provider.name}) failed with "${primaryMsg}"; fallback (${fallbackProvider.name}) failed with "${fallbackMsg}"`,
-                },
-              ],
-              details: { isError: true },
-            };
-          }
-        }
-
         return {
           content: [
             {

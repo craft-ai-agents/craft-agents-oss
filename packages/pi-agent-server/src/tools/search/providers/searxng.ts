@@ -11,6 +11,10 @@
 
 import type { WebSearchProvider, WebSearchResult } from '../types.ts';
 
+function searchLanguage(query: string) {
+  return /[\u3400-\u9fff]/u.test(query) ? 'zh-CN' : 'en';
+}
+
 export class SearXNGSearchProvider implements WebSearchProvider {
   name = 'SearXNG';
 
@@ -21,7 +25,7 @@ export class SearXNGSearchProvider implements WebSearchProvider {
       q: query,
       format: 'json',
       categories: 'general',
-      language: 'auto',
+      language: searchLanguage(query),
     }).toString()}`;
 
     const response = await fetch(url, {
