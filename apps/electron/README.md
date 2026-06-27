@@ -50,21 +50,21 @@ apps/electron/
 
 ### 1. SDK Path Resolution (CRITICAL)
 
-The Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) works by spawning a subprocess that runs `cli.js`. When esbuild bundles the SDK into `main.js`, the SDK's auto-detection of `cli.js` breaks.
+The Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) works by spawning a subprocess that runs the platform-native Claude executable. When esbuild bundles the SDK into `main.js`, the SDK's auto-detection of that executable can break.
 
 **Problem:**
 ```
 Error: The "path" argument must be of type string or an instance of URL. Received undefined
 ```
 
-**Root cause:** The SDK uses `import.meta.url` to find `cli.js`. After bundling, this path is invalid.
+**Root cause:** The SDK uses package-relative resolution to find its executable. After bundling, this path can be invalid.
 
 **Solution:** Explicitly set the path before creating any agents:
 ```typescript
 import { setPathToClaudeCodeExecutable } from '../../../src/agent/options'
 
 // In initialize():
-const cliPath = join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
+const cliPath = join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk-darwin-arm64', 'claude')
 setPathToClaudeCodeExecutable(cliPath)
 ```
 

@@ -1,4 +1,4 @@
-import type { AgentSession } from '@mariozechner/pi-coding-agent';
+import type { AgentSession } from '@earendil-works/pi-coding-agent';
 
 /**
  * Pi resets `state.systemPrompt` from private base prompt fields during prompt

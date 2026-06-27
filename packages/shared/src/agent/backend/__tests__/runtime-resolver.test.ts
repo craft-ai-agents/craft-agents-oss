@@ -6,7 +6,7 @@
  * - Ripgrep path resolution with system rg fallback
  */
 import { describe, it, expect, afterEach } from 'bun:test';
-import { mkdirSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, chmodSync, symlinkSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { resolveBackendRuntimePaths } from '../internal/runtime-resolver.ts';
@@ -56,6 +56,63 @@ describe('resolveServerPath fallback', () => {
 
     const paths = resolveBackendRuntimePaths(hostRuntime);
     expect(paths.piServerPath).toBe(join(primaryDir, 'index.js'));
+  });
+});
+
+describe('resolveClaudeCliPath native SDK binary', () => {
+  const tmpBase = join(tmpdir(), `claude-native-resolver-test-${Date.now()}`);
+
+  afterEach(() => {
+    try { rmSync(tmpBase, { recursive: true, force: true }); } catch {}
+  });
+
+  it('finds the platform-native Claude SDK binary before legacy cli.js', () => {
+    const appRoot = join(tmpBase, 'app');
+    const platform = process.platform === 'win32' ? 'win32' : process.platform === 'linux' ? 'linux' : 'darwin';
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+    const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude';
+    const nativeDir = join(appRoot, 'node_modules', '@anthropic-ai', `claude-agent-sdk-${platform}-${arch}`);
+    const legacyDir = join(appRoot, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
+    mkdirSync(nativeDir, { recursive: true });
+    mkdirSync(legacyDir, { recursive: true });
+    const nativePath = join(nativeDir, binaryName);
+    writeFileSync(nativePath, '#!/bin/sh\n');
+    writeFileSync(join(legacyDir, 'cli.js'), '// legacy');
+
+    const hostRuntime: BackendHostRuntimeContext = {
+      appRootPath: appRoot,
+      resourcesPath: appRoot,
+      isPackaged: true,
+    };
+
+    const paths = resolveBackendRuntimePaths(hostRuntime);
+    expect(paths.claudeCliPath).toBe(nativePath);
+  });
+
+  it('finds the native Claude binary beside a symlinked Bun SDK package', () => {
+    const appRoot = join(tmpBase, 'bun-store-app');
+    const storeRoot = join(tmpBase, '.bun-store', 'node_modules', '@anthropic-ai');
+    const platform = process.platform === 'win32' ? 'win32' : process.platform === 'linux' ? 'linux' : 'darwin';
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+    const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude';
+    const sdkStoreDir = join(storeRoot, 'claude-agent-sdk');
+    const nativeDir = join(storeRoot, `claude-agent-sdk-${platform}-${arch}`);
+    const sdkLinkDir = join(appRoot, 'node_modules', '@anthropic-ai');
+    mkdirSync(sdkStoreDir, { recursive: true });
+    mkdirSync(nativeDir, { recursive: true });
+    mkdirSync(sdkLinkDir, { recursive: true });
+    const nativePath = join(nativeDir, binaryName);
+    writeFileSync(nativePath, '#!/bin/sh\n');
+    symlinkSync(sdkStoreDir, join(sdkLinkDir, 'claude-agent-sdk'), 'dir');
+
+    const hostRuntime: BackendHostRuntimeContext = {
+      appRootPath: appRoot,
+      resourcesPath: appRoot,
+      isPackaged: true,
+    };
+
+    const paths = resolveBackendRuntimePaths(hostRuntime);
+    expect(paths.claudeCliPath).toBe(realpathSync(nativePath));
   });
 });
 

@@ -12,11 +12,11 @@
 import type { AgentEvent as CraftAgentEvent } from '@craft-agent/core/types';
 import type {
   AgentEvent as PiAgentEvent,
-} from '@mariozechner/pi-agent-core';
+} from '@earendil-works/pi-agent-core';
 import type {
   AgentSessionEvent,
-} from '@mariozechner/pi-coding-agent';
-import type { AssistantMessageEvent } from '@mariozechner/pi-ai';
+} from '@earendil-works/pi-coding-agent';
+import type { AssistantMessageEvent } from '@earendil-works/pi-ai';
 import { BaseEventAdapter } from '../base-event-adapter.ts';
 import { PI_TOOL_NAME_MAP } from './constants.ts';
 import { toolMetadataStore } from '../../../interceptor-common.ts';

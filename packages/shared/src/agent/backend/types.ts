@@ -608,7 +608,7 @@ export interface BackendConfig extends CoreBackendConfig {
    * - 'anthropic' → ClaudeAgent (Anthropic SDK)
    * - 'openai' → CodexAgent (OpenAI via app-server)
    * - 'copilot' → CopilotAgent (GitHub Copilot via @github/copilot-sdk)
-   * - 'pi' → PiAgent (Pi via @mariozechner/pi-coding-agent)
+   * - 'pi' → PiAgent (Pi via @earendil-works/pi-coding-agent)
    */
   provider: AgentProvider;
 

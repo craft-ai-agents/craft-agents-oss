@@ -11,6 +11,7 @@ import {
   copyFileSync,
   cpSync,
   lstatSync,
+  realpathSync,
   readdirSync,
 } from 'fs';
 import { join, dirname } from 'path';
@@ -41,6 +42,41 @@ export const BUN_VERSION = 'bun-v1.3.9';
  * Update this when upgrading uv. Check latest at: https://github.com/astral-sh/uv/releases
  */
 export const UV_VERSION = '0.10.6';
+
+export function claudeNativePackageName(platform: Platform, arch: Arch): string {
+  return `claude-agent-sdk-${platform === 'win32' ? 'win32' : platform}-${arch}`;
+}
+
+export function claudeNativeBinaryName(platform: Platform): string {
+  return platform === 'win32' ? 'claude.exe' : 'claude';
+}
+
+export function claudeNativeBinaryPath(baseDir: string, platform: Platform, arch: Arch): string {
+  return join(
+    baseDir,
+    'node_modules',
+    '@anthropic-ai',
+    claudeNativePackageName(platform, arch),
+    claudeNativeBinaryName(platform),
+  );
+}
+
+function resolveClaudeNativePackageSource(rootDir: string, platform: Platform, arch: Arch): string | undefined {
+  const nativePackage = claudeNativePackageName(platform, arch);
+  const directSource = join(rootDir, 'node_modules', '@anthropic-ai', nativePackage);
+  if (existsSync(directSource)) return directSource;
+
+  const sdkSource = join(rootDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
+  if (!existsSync(sdkSource)) return undefined;
+
+  try {
+    const sdkRealPath = realpathSync(sdkSource);
+    const siblingSource = join(dirname(sdkRealPath), nativePackage);
+    if (existsSync(siblingSource)) return siblingSource;
+  } catch { /* best effort for Bun's symlinked package store */ }
+
+  return undefined;
+}
 
 /**
  * Get platform key for resources/bin folder naming.
@@ -314,13 +350,19 @@ export async function installDependencies(config: BuildConfig): Promise<void> {
  * Copy SDK from root node_modules
  */
 export function copySDK(config: BuildConfig): void {
-  const { rootDir, electronDir } = config;
+  const { rootDir, electronDir, platform, arch } = config;
 
   const sdkSource = join(rootDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
   const sdkDest = join(electronDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
+  const nativePackage = claudeNativePackageName(platform, arch);
+  const nativeSource = resolveClaudeNativePackageSource(rootDir, platform, arch);
+  const nativeDest = join(electronDir, 'node_modules', '@anthropic-ai', nativePackage);
 
   if (!existsSync(sdkSource)) {
     throw new Error(`SDK not found at ${sdkSource}. Run 'bun install' first.`);
+  }
+  if (!nativeSource) {
+    throw new Error(`Claude SDK native binary package ${nativePackage} not found. Run 'bun install' for ${platform}-${arch} first.`);
   }
 
   console.log('Copying SDK...');
@@ -331,31 +373,36 @@ export function copySDK(config: BuildConfig): void {
   }
   // Use dereference to follow symlinks and copy actual files (bun uses symlinked node_modules)
   cpSync(sdkSource, sdkDest, { recursive: true, dereference: true });
+  if (existsSync(nativeDest)) {
+    rmSync(nativeDest, { recursive: true, force: true });
+  }
+  cpSync(nativeSource, nativeDest, { recursive: true, dereference: true });
 }
 
 /**
- * Verify SDK was copied correctly (not as symlinks, with expected size)
+ * Verify SDK was copied correctly (not as symlinks, with native binary present)
  */
 export function verifySDKCopy(config: BuildConfig): void {
-  const { electronDir } = config;
+  const { electronDir, platform, arch } = config;
   const cliPath = join(electronDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js');
+  const nativePath = claudeNativeBinaryPath(electronDir, platform, arch);
+  const executablePath = existsSync(nativePath) ? nativePath : cliPath;
 
-  if (!existsSync(cliPath)) {
-    throw new Error(`SDK verification failed: cli.js not found at ${cliPath}`);
+  if (!existsSync(executablePath)) {
+    throw new Error(`SDK verification failed: executable not found at ${nativePath} or ${cliPath}`);
   }
 
-  const stats = lstatSync(cliPath);
+  const stats = lstatSync(executablePath);
   if (stats.isSymbolicLink()) {
-    throw new Error('SDK verification failed: cli.js is a symlink (should be real file)');
+    throw new Error('SDK verification failed: executable is a symlink (should be real file)');
   }
 
   const size = stats.size;
   if (size < 1_000_000) {
-    // cli.js should be ~11MB
-    throw new Error(`SDK verification failed: cli.js too small (${size} bytes, expected ~11MB)`);
+    throw new Error(`SDK verification failed: executable too small (${size} bytes, expected >1MB)`);
   }
 
-  console.log(`  SDK copy verified: cli.js is ${(size / 1024 / 1024).toFixed(1)} MB`);
+  console.log(`  SDK copy verified: ${executablePath} is ${(size / 1024 / 1024).toFixed(1)} MB`);
 }
 
 /**

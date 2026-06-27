@@ -22,7 +22,7 @@
   "overrides": {
     "@hono/node-server": "^2.0.1",
     "@isaacs/brace-expansion": "^5.0.1",
-    "@anthropic-ai/sdk": "0.91.1",
+    "@anthropic-ai/sdk": "0.106.0",
     "axios": "^1.16.0",
     "basic-ftp": "^5.3.1",
     "exiftool-vendored": "^35.19.0",
@@ -153,7 +153,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "husky": "^9.1.7",
-    "openai": "^6.18.0",
+    "openai": "^6.45.0",
     "postcss": "^8.5.14",
     "react-devtools-core": "^6.1.1",
     "tailwindcss": "^4.1.18",
@@ -162,12 +162,12 @@
     "vite": "^6.4.2"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.2.111",
+    "@anthropic-ai/claude-agent-sdk": "0.3.195",
     "@dnd-kit/dom": "^0.4.0-beta-20260227032529",
     "@dnd-kit/helpers": "^0.4.0-beta-20260227032529",
     "@github/copilot-sdk": "^0.3.0",
-    "@mariozechner/pi-ai": "0.73.1",
-    "@mariozechner/pi-coding-agent": "0.73.1",
+    "@earendil-works/pi-ai": "0.80.2",
+    "@earendil-works/pi-coding-agent": "0.80.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-collapsible": "^1.1.12",

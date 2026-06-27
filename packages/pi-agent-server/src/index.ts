@@ -3,7 +3,7 @@
  * Pi Agent Server
  *
  * Out-of-process Pi agent server communicating via JSONL over stdio.
- * Wraps @mariozechner/pi-coding-agent SDK and communicates with the main
+ * Wraps @earendil-works/pi-coding-agent SDK and communicates with the main
  * Electron process using a line-delimited JSON protocol.
  *
  * The main process spawns this as a child process. All Pi SDK interactions
@@ -33,7 +33,7 @@ import {
   createGrepToolDefinition,
   createFindToolDefinition,
   createLsToolDefinition,
-} from '@mariozechner/pi-coding-agent';
+} from '@earendil-works/pi-coding-agent';
 import type {
   AgentSession,
   AgentSessionEvent,
@@ -41,19 +41,10 @@ import type {
   AuthCredential,
   CreateAgentSessionOptions,
   ToolDefinition,
-} from '@mariozechner/pi-coding-agent';
+} from '@earendil-works/pi-coding-agent';
 
 // Pi AI types
-import type { TextContent as PiTextContent } from '@mariozechner/pi-ai';
-
-// Pre-register the Bedrock provider module so the Pi SDK doesn't attempt a
-// dynamic import of "./amazon-bedrock.js" — which fails in the bundled output
-// because bun collapses everything into a single file.
-// With the current Pi SDK (0.70.0 here), pi-ai is deduped (single hoisted
-// copy), so one registration covers both pi-ai and pi-agent-core module scopes.
-import { setBedrockProviderModule } from '@mariozechner/pi-ai';
-import { bedrockProviderModule } from '@mariozechner/pi-ai/bedrock-provider';
-setBedrockProviderModule(bedrockProviderModule);
+import type { TextContent as PiTextContent } from '@earendil-works/pi-ai';
 
 // Model resolution (extracted for testability + custom-endpoint precedence)
 import { resolvePiModel, isDeniedMiniModelId, isModelNotFoundError } from './model-resolution.ts';
@@ -1314,7 +1305,7 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
           message: `Prompt overflow recovery failed: ${retryMsg}`,
           code: 'prompt_overflow_recovery_failed',
         });
-        send({ type: 'event', event: { type: 'agent_end', messages: [] } });
+        send({ type: 'event', event: { type: 'agent_end', messages: [], willRetry: false } });
         return;
       }
     }
@@ -1322,7 +1313,7 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
     debugLog(`Prompt failed: ${errorMsg}`);
     send({ type: 'error', message: errorMsg, code: 'prompt_error' });
     // Send synthetic agent_end so the main process event queue unblocks
-    send({ type: 'event', event: { type: 'agent_end', messages: [] } });
+    send({ type: 'event', event: { type: 'agent_end', messages: [], willRetry: false } });
   }
 }
 

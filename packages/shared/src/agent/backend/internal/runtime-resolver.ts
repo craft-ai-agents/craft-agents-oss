@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import type { BackendHostRuntimeContext } from '../types.ts';
@@ -75,17 +75,54 @@ function resolveBundledRuntimePath(hostRuntime: BackendHostRuntimeContext): stri
   return undefined;
 }
 
+function claudeNativePackageName(platform = process.platform, arch = process.arch): string {
+  const normalizedArch = arch === 'arm64' ? 'arm64' : 'x64';
+  if (platform === 'win32') return `claude-agent-sdk-win32-${normalizedArch}`;
+  if (platform === 'linux') return `claude-agent-sdk-linux-${normalizedArch}`;
+  return `claude-agent-sdk-darwin-${normalizedArch}`;
+}
+
+function claudeNativeBinaryRelative(platform = process.platform, arch = process.arch): string {
+  const binaryName = platform === 'win32' ? 'claude.exe' : 'claude';
+  return join(
+    'node_modules',
+    '@anthropic-ai',
+    claudeNativePackageName(platform, arch),
+    binaryName,
+  );
+}
+
+function resolveClaudeNativeBinaryBesideSdk(baseDir: string): string | undefined {
+  const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  const sdkPackagePath = join(baseDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
+  if (!existsSync(sdkPackagePath)) return undefined;
+
+  try {
+    const sdkRealPath = realpathSync(sdkPackagePath);
+    const nativePath = join(dirname(sdkRealPath), claudeNativePackageName(), binaryName);
+    if (existsSync(nativePath)) return nativePath;
+  } catch { /* best effort for symlinked package stores */ }
+
+  return undefined;
+}
+
 function resolveClaudeCliPath(hostRuntime: BackendHostRuntimeContext): string | undefined {
+  const nativeRelative = claudeNativeBinaryRelative();
   const sdkRelative = join('node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js');
   const result = firstExistingPath([
+    join(hostRuntime.appRootPath, nativeRelative),
+    join(hostRuntime.appRootPath, '..', '..', nativeRelative),
+    resolveClaudeNativeBinaryBesideSdk(hostRuntime.appRootPath),
+    resolveClaudeNativeBinaryBesideSdk(join(hostRuntime.appRootPath, '..', '..')),
     join(hostRuntime.appRootPath, sdkRelative),
     join(hostRuntime.appRootPath, '..', '..', sdkRelative),
-  ]);
+  ].filter((candidate): candidate is string => Boolean(candidate)));
   if (result) return result;
 
   // Dev runtime: walk further up from .app bundle to reach monorepo root
   if (IS_DEV_RUNTIME) {
-    return resolveUpwards(hostRuntime.appRootPath, sdkRelative, 10);
+    return resolveUpwards(hostRuntime.appRootPath, nativeRelative, 10)
+      ?? resolveUpwards(hostRuntime.appRootPath, sdkRelative, 10);
   }
   return undefined;
 }
@@ -258,4 +295,3 @@ export function applyAnthropicRuntimeBootstrap(
     }
   }
 }
-

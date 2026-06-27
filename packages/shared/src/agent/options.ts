@@ -20,7 +20,7 @@ const UTF8_BOM = '\uFEFF';
  * Ensure ~/.claude.json exists and contains valid, BOM-free JSON before
  * the SDK subprocess starts.
  *
- * Background: The SDK's cli.js reads this file on startup. If it's missing
+ * Background: The Claude Code executable reads this file on startup. If it's missing
  * (with a .backup file present), empty, BOM-prefixed, or contains invalid JSON,
  * the CLI writes plain-text error/recovery messages to process.stdout.
  * The SDK transport expects only JSON on stdout, so any plain text causes:
@@ -153,7 +153,7 @@ export function resetClaudeConfigCheck(): void {
 }
 
 /**
- * Override the path to the Claude Code executable (cli.js from the SDK).
+ * Override the path to the Claude Code executable from the SDK.
  * This is needed when the SDK is bundled (e.g., in Electron) and can't auto-detect the path.
  */
 export function setPathToClaudeCodeExecutable(path: string) {
@@ -218,8 +218,19 @@ export function getDefaultOptions(envOverrides?: Record<string, string>): Partia
     const nullDevice = process.platform === 'win32' ? 'NUL' : '/dev/null';
     const envFileFlag = `--env-file=${nullDevice}`;
 
-    // If custom path is set (e.g., for Electron), use it with minimal options
+    const isJavaScriptExecutable = (path: string) => /\.(mjs|cjs|js|ts|tsx|jsx)$/i.test(path);
+
+    // If custom path is set (e.g., for Electron), use it with minimal options.
+    // Newer Claude Agent SDK versions ship a platform-native `claude` binary
+    // instead of `cli.js`; native binaries must be spawned directly, not via Bun.
     if (customPathToClaudeCodeExecutable) {
+        if (!isJavaScriptExecutable(customPathToClaudeCodeExecutable)) {
+            return {
+                pathToClaudeCodeExecutable: customPathToClaudeCodeExecutable,
+                env: buildClaudeSubprocessEnv(envOverrides)
+            };
+        }
+
         const executableArgs = [envFileFlag];
         // Add interceptor preload if path is set (needed for cache TTL patching)
         if (customInterceptorPath) {

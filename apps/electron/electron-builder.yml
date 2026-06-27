@@ -107,13 +107,11 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extraResources:
-    - from: node_modules/@anthropic-ai/claude-agent-sdk
-      to: app/node_modules/@anthropic-ai/claude-agent-sdk
+    - from: node_modules/@anthropic-ai
+      to: app/node_modules/@anthropic-ai
       filter:
-        - "**/*"
-        - "!vendor/ripgrep/arm64-linux/**"
-        - "!vendor/ripgrep/x64-linux/**"
-        - "!vendor/ripgrep/x64-win32/**"
+        - "claude-agent-sdk/**/*"
+        - "claude-agent-sdk-*/**/*"
     # Managed local motion/video tool with its own node_modules.
     - from: ../../tools/hypermotion
       to: app/tools/hypermotion
@@ -218,12 +216,11 @@ win:
     - "!**/resources/bin/win32-x64/**"
   # Copy executables as extraResources to avoid EBUSY file locking (see comment above)
   extraResources:
-    - from: node_modules/@anthropic-ai/claude-agent-sdk
-      to: app/node_modules/@anthropic-ai/claude-agent-sdk
+    - from: node_modules/@anthropic-ai
+      to: app/node_modules/@anthropic-ai
       filter:
-        - "**/*"
-        - "!vendor/ripgrep/arm64-darwin/**"
-        - "!vendor/ripgrep/x64-darwin/**"
+        - "claude-agent-sdk/**/*"
+        - "claude-agent-sdk-*/**/*"
         - "!vendor/ripgrep/arm64-linux/**"
         - "!vendor/ripgrep/x64-linux/**"
     # Managed local motion/video tool with its own node_modules.
@@ -294,12 +291,11 @@ linux:
         - x64
   artifactName: "Runner-${arch}.${ext}"
   extraResources:
-    - from: node_modules/@anthropic-ai/claude-agent-sdk
-      to: app/node_modules/@anthropic-ai/claude-agent-sdk
+    - from: node_modules/@anthropic-ai
+      to: app/node_modules/@anthropic-ai
       filter:
-        - "**/*"
-        - "!vendor/ripgrep/arm64-darwin/**"
-        - "!vendor/ripgrep/x64-darwin/**"
+        - "claude-agent-sdk/**/*"
+        - "claude-agent-sdk-*/**/*"
         - "!vendor/ripgrep/x64-win32/**"
     # Managed local motion/video tool with its own node_modules.
     - from: ../../tools/hypermotion
