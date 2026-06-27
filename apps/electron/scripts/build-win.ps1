@@ -10,6 +10,49 @@ $RootDir = Split-Path -Parent (Split-Path -Parent $ElectronDir)
 # Configuration
 $BunVersion = "bun-v1.3.9"  # Pinned version for reproducible builds
 
+function Copy-ClaudeSdk {
+    $NativePackage = "claude-agent-sdk-win32-x64"
+    $SdkSource = "$RootDir\node_modules\@anthropic-ai\claude-agent-sdk"
+    $NativeSource = "$RootDir\node_modules\@anthropic-ai\$NativePackage"
+
+    if (-not (Test-Path $SdkSource)) {
+        Write-Host "ERROR: Claude Agent SDK not found at $SdkSource" -ForegroundColor Red
+        Write-Host "Run 'bun install' from the repository root first."
+        exit 1
+    }
+
+    if (-not (Test-Path $NativeSource)) {
+        $SdkRealPath = (Resolve-Path $SdkSource).Path
+        $SiblingSource = Join-Path (Split-Path -Parent $SdkRealPath) $NativePackage
+        if (Test-Path $SiblingSource) {
+            $NativeSource = $SiblingSource
+        }
+    }
+
+    if (-not (Test-Path $NativeSource)) {
+        Write-Host "ERROR: Claude native SDK package not found at $NativeSource" -ForegroundColor Red
+        Write-Host "Run 'bun install' for win32-x64 from the repository root first."
+        exit 1
+    }
+
+    $NativeBinary = Join-Path $NativeSource "claude.exe"
+    if (-not (Test-Path $NativeBinary)) {
+        Write-Host "ERROR: Claude native executable not found at $NativeBinary" -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Copying Claude SDK..."
+    New-Item -ItemType Directory -Force -Path "$ElectronDir\node_modules\@anthropic-ai" | Out-Null
+    Copy-Item -Recurse -Force $SdkSource "$ElectronDir\node_modules\@anthropic-ai\"
+    Copy-Item -Recurse -Force $NativeSource "$ElectronDir\node_modules\@anthropic-ai\"
+
+    $PackagedBinary = "$ElectronDir\node_modules\@anthropic-ai\$NativePackage\claude.exe"
+    if (-not (Test-Path $PackagedBinary)) {
+        Write-Host "ERROR: Packaged Claude native executable not found at $PackagedBinary" -ForegroundColor Red
+        exit 1
+    }
+}
+
 Write-Host "=== Building Runner Windows Installer using electron-builder ===" -ForegroundColor Cyan
 
 # Debug: System information
@@ -154,16 +197,8 @@ try {
     Remove-Item -Recurse -Force $TempDir -ErrorAction SilentlyContinue
 }
 
-# 4. Copy SDK from root node_modules (monorepo hoisting)
-$SdkSource = "$RootDir\node_modules\@anthropic-ai\claude-agent-sdk"
-if (-not (Test-Path $SdkSource)) {
-    Write-Host "ERROR: SDK not found at $SdkSource" -ForegroundColor Red
-    Write-Host "Run 'bun install' from the repository root first."
-    exit 1
-}
-Write-Host "Copying SDK..."
-New-Item -ItemType Directory -Force -Path "$ElectronDir\node_modules\@anthropic-ai" | Out-Null
-Copy-Item -Recurse -Force $SdkSource "$ElectronDir\node_modules\@anthropic-ai\"
+# 4. Copy Claude SDK from root node_modules (main package + native executable package).
+Copy-ClaudeSdk
 
 # 5. Copy interceptor
 $InterceptorSource = "$RootDir\packages\shared\src\unified-network-interceptor.ts"

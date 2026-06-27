@@ -11,6 +11,7 @@ let customPathToClaudeCodeExecutable: string | null = null;
 let customInterceptorPath: string | null = null;
 let customExecutable: string | null = null;
 let claudeConfigChecked = false;
+let nativeInterceptorWarningLogged = false;
 
 // UTF-8 BOM character — Windows editors/processes sometimes prepend this to files.
 // JSON parsers reject BOM, but the file content after BOM may be valid JSON.
@@ -225,6 +226,10 @@ export function getDefaultOptions(envOverrides?: Record<string, string>): Partia
     // instead of `cli.js`; native binaries must be spawned directly, not via Bun.
     if (customPathToClaudeCodeExecutable) {
         if (!isJavaScriptExecutable(customPathToClaudeCodeExecutable)) {
+            if (customInterceptorPath && !nativeInterceptorWarningLogged) {
+                nativeInterceptorWarningLogged = true;
+                debug('[options] Claude native executable detected; Bun preload interceptor is not applied to native Claude subprocesses');
+            }
             return {
                 pathToClaudeCodeExecutable: customPathToClaudeCodeExecutable,
                 env: buildClaudeSubprocessEnv(envOverrides)

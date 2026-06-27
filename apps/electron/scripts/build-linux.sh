@@ -18,6 +18,34 @@ require_path() {
     fi
 }
 
+copy_claude_sdk() {
+    local native_package="claude-agent-sdk-linux-${ARCH}"
+    local native_binary="claude"
+    local sdk_source="$ROOT_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
+    local native_source="$ROOT_DIR/node_modules/@anthropic-ai/${native_package}"
+
+    require_path "$sdk_source" "Claude Agent SDK" "Run 'bun install' from the repository root first."
+
+    if [ ! -e "$native_source" ]; then
+        local sdk_real
+        sdk_real="$(cd "$sdk_source" && pwd -P)"
+        local sibling_source
+        sibling_source="$(dirname "$sdk_real")/${native_package}"
+        if [ -e "$sibling_source" ]; then
+            native_source="$sibling_source"
+        fi
+    fi
+
+    require_path "$native_source" "Claude native SDK package (${native_package})" "Run 'bun install' for linux-${ARCH} from the repository root first."
+    require_path "$native_source/$native_binary" "Claude native executable" "The installed Claude SDK package is incomplete."
+
+    echo "Copying Claude SDK..."
+    mkdir -p "$ELECTRON_DIR/node_modules/@anthropic-ai"
+    cp -R "$sdk_source" "$ELECTRON_DIR/node_modules/@anthropic-ai/"
+    cp -R "$native_source" "$ELECTRON_DIR/node_modules/@anthropic-ai/"
+    require_path "$ELECTRON_DIR/node_modules/@anthropic-ai/${native_package}/${native_binary}" "Packaged Claude native executable" "Claude SDK copy failed."
+}
+
 # Load environment variables from .env
 if [ -f "$ROOT_DIR/.env" ]; then
     set -a
@@ -113,14 +141,9 @@ unzip -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip" -d "$TEMP_DIR"
 cp "$TEMP_DIR/${BUN_DOWNLOAD}/bun" "$ELECTRON_DIR/vendor/bun/"
 chmod +x "$ELECTRON_DIR/vendor/bun/bun"
 
-# 4. Copy SDK from root node_modules (monorepo hoisting)
-# Note: The SDK is hoisted to root node_modules by the package manager.
-# We copy it here because electron-builder only sees apps/electron/.
-SDK_SOURCE="$ROOT_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
-require_path "$SDK_SOURCE" "SDK" "Run 'bun install' from the repository root first."
-echo "Copying SDK..."
-mkdir -p "$ELECTRON_DIR/node_modules/@anthropic-ai"
-cp -r "$SDK_SOURCE" "$ELECTRON_DIR/node_modules/@anthropic-ai/"
+# 4. Copy Claude SDK from root node_modules (main package + native executable package).
+# electron-builder only sees apps/electron/, so both packages must exist there.
+copy_claude_sdk
 
 # 5. Copy interceptor
 INTERCEPTOR_SOURCE="$ROOT_DIR/packages/shared/src/unified-network-interceptor.ts"
