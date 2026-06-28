@@ -6,6 +6,9 @@ export const PANEL_GAP = 6
 /** Padding from window edges to outermost panels (right, bottom, left when sidebar hidden) */
 export const PANEL_EDGE_INSET = 6
 
+/** Breathing room after the rightmost main panel. Matches the sidebar nav text inset. */
+export const PANEL_TRAILING_INSET = 32
+
 /** Corner radius for panel edges touching the window boundary (macOS native corners → larger) */
 export const RADIUS_EDGE = isMac ? 14 : 8
 

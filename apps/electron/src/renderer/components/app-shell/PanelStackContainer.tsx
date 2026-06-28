@@ -33,6 +33,7 @@ import { PanelResizeSash } from './PanelResizeSash'
 import {
   PANEL_GAP,
   PANEL_EDGE_INSET,
+  PANEL_TRAILING_INSET,
   PANEL_STACK_VERTICAL_OVERFLOW,
   RADIUS_EDGE,
   RADIUS_INNER,
@@ -144,9 +145,8 @@ export function PanelStackContainer({
         marginTop: -PANEL_STACK_VERTICAL_OVERFLOW + topBreathingRoom,
         // Extend to window bottom so scrollbar sits at the very edge
         marginBottom: -bottomBreathingRoom,
-        // Extra horizontal space for last panel's box-shadow
-        paddingRight: 8,
-        marginRight: -8,
+        // Keep the rightmost panel off the window edge while leaving room for shadows.
+        paddingRight: isCompact ? PANEL_EDGE_INSET : PANEL_TRAILING_INSET,
       }}
     >
       {/* Inner flex container — flex-grow: 1 fills viewport, content can overflow for scroll.
