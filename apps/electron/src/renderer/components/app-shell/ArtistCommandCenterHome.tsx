@@ -559,12 +559,8 @@ function ReleaseBoardTile({
           </span>
           <div className="min-w-0">
             <p className="truncate text-xs font-medium text-white/78">{category.label}</p>
-            <p className="mt-0.5 truncate text-[10px] text-white/32">{category.detail}</p>
           </div>
         </div>
-        <span className="shrink-0 text-[10px] font-medium text-white/38">
-          {progress.done}/{progress.total}
-        </span>
       </div>
       <div className="mt-3 flex gap-1">
         {category.items.map((item) => (
