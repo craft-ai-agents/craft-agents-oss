@@ -1267,9 +1267,10 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
   if (matchesAny(joined, ['spotify', 'playlist', 'youtube intelligence', 'audience', 'research', 'analy', 'insight'])) return 'Audience Intelligence'
   if (matchesAny(joined, ['content', 'tiktok', 'social', 'publisher', 'clip', 'video director', 'video editor', 'hypermotion', 'motion', 'caption'])) return 'Content Studio'
   if (matchesAny(joined, ['ads', 'marketing', 'campaign', 'growth', 'meta ads', 'google ads'])) return 'Growth'
+  if (matchesAny(joined, ['shopify', 'printify', 'merch', 'storefront', 'commerce'])) return 'Merch'
   if (matchesAny(joined, ['brand', 'copy', 'creative', 'visual', 'legendary', 'gaygent', 'lottie', '3d'])) return 'Creative Direction'
   if (matchesAny(joined, ['workflow', 'ops', 'orchestr', 'router', 'guide', 'chat', 'routing'])) return 'Command'
-  if (matchesAny(joined, ['code', 'tool', 'diagnostic', 'reporting', 'shopify'])) return 'Operators'
+  if (matchesAny(joined, ['code', 'tool', 'diagnostic', 'reporting'])) return 'Operators'
   return 'Other Agents'
 }
 
@@ -1279,6 +1280,7 @@ function agentDomainRank(domain: string) {
     'Growth',
     'Audience Intelligence',
     'Creative Direction',
+    'Merch',
     'Command',
     'Operators',
     'Other Agents',
