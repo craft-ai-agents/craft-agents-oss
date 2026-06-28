@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   buildMissionBrief,
   extractMissionBrief,
+  hasSaveableMissionBrief,
   parseMissionBriefDoc,
   serializeMissionBriefBody,
 } from './mission-brief'
@@ -47,5 +48,19 @@ describe('mission brief utilities', () => {
     expect(parsed?.title).toBe('Night Drive')
     expect(parsed?.workspaceId).toBe('workspace-1')
     expect(parsed?.status).toBe('full')
+  })
+
+  test('keeps mission type focused on release format', () => {
+    const result = extractMissionBrief(
+      'This campaign needs merch, a video, tour content, and rollout support for the release.',
+    )
+
+    expect(result.brief.missionType).toBeUndefined()
+  })
+
+  test('does not allow saving a brief with only a release type', () => {
+    expect(hasSaveableMissionBrief({ missionType: 'single' })).toBe(false)
+    expect(hasSaveableMissionBrief({ title: 'Night Drive' })).toBe(true)
+    expect(hasSaveableMissionBrief({ goal: 'Plan the release week.' })).toBe(true)
   })
 })

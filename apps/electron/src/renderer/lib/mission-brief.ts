@@ -3,7 +3,7 @@ import type { ContextDocDTO, ContextDocMetadata } from '../../shared/types'
 export const MISSION_BRIEF_CONTEXT_SLUG = 'mission-brief'
 
 export type MissionStatus = 'empty' | 'light' | 'full'
-export type MissionType = 'single' | 'ep' | 'album' | 'video' | 'tour' | 'merch' | 'campaign' | 'other'
+export type MissionType = 'single' | 'ep' | 'album' | 'other'
 
 export interface MissionReference {
   type: 'artist' | 'song' | 'visual' | 'brand' | 'other'
@@ -18,7 +18,6 @@ export interface MissionBrief {
   missionType?: MissionType
   title?: string
   goal?: string
-  phase?: string
   timeline?: string
   releaseDate?: string
   mood?: string
@@ -54,10 +53,6 @@ function inferMissionType(text: string): MissionType | undefined {
   const lower = text.toLowerCase()
   if (/\b(ep)\b/.test(lower)) return 'ep'
   if (/\balbum\b/.test(lower)) return 'album'
-  if (/\bvideo\b|\bvisualizer\b|\bmusic video\b/.test(lower)) return 'video'
-  if (/\btour\b|\bshow\b|\bconcert\b/.test(lower)) return 'tour'
-  if (/\bmerch\b|\bdrop\b/.test(lower)) return 'merch'
-  if (/\bcampaign\b|\brollout\b/.test(lower)) return 'campaign'
   if (/\bsingle\b|\bsong\b|\btrack\b/.test(lower)) return 'single'
   return undefined
 }
@@ -145,6 +140,10 @@ export function getMissionStatus(brief: Partial<MissionBrief>): MissionStatus {
   return 'empty'
 }
 
+export function hasSaveableMissionBrief(brief: Partial<MissionBrief>): boolean {
+  return Boolean(clean(brief.title) || clean(brief.goal))
+}
+
 export function extractMissionBrief(text: string, existing: Partial<MissionBrief> = {}): MissionExtraction {
   const extracted: Partial<MissionBrief> = {
     ...existing,
@@ -191,7 +190,6 @@ export function buildMissionBrief(workspaceId: string, input: Partial<MissionBri
     missionType: input.missionType,
     title: clean(input.title),
     goal: clean(input.goal),
-    phase: clean(input.phase),
     timeline: clean(input.timeline),
     releaseDate: clean(input.releaseDate),
     mood: clean(input.mood),
@@ -266,7 +264,7 @@ function buildEnhancedSummary(brief: Partial<MissionBrief>, missing: string[]): 
     brief.title ? `Mission: ${brief.title}` : 'Mission: untitled',
     brief.missionType ? `Type: ${brief.missionType}` : null,
     brief.goal ? `Goal: ${brief.goal}` : null,
-    brief.timeline ? `Timeline: ${brief.timeline}` : null,
+    brief.timeline ? `Release target: ${brief.timeline}` : null,
     brief.mood ? `Mood: ${brief.mood}` : null,
     brief.visualWorld ? `Visual world: ${brief.visualWorld}` : null,
     brief.targetListener ? `Target listener: ${brief.targetListener}` : null,

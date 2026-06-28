@@ -411,6 +411,13 @@ export const RPC_CHANNELS = {
     /** Push event when a workspace's context docs changed. */
     CHANGED: 'workspaceContext:changed',
   },
+  missionAssets: {
+    GET: 'missionAssets:get',
+    PLAN_IMPORT: 'missionAssets:planImport',
+    CHOOSE_FILES: 'missionAssets:chooseFiles',
+    IMPORT: 'missionAssets:import',
+    OPEN_FOLDER: 'missionAssets:openFolder',
+  },
   memory: {
     /** List one agent's MEMORY.md entries. */
     LIST_AGENT: 'memory:listAgent',

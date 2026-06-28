@@ -414,6 +414,13 @@ export const CHANNEL_MAP = {
   deleteWorkspaceContextDoc: invoke(RPC_CHANNELS.workspaceContext.DELETE),
   onWorkspaceContextChanged: listener(RPC_CHANNELS.workspaceContext.CHANGED),
 
+  // Mission assets
+  getMissionAssetManifest: invoke(RPC_CHANNELS.missionAssets.GET),
+  planMissionAssetImports: invoke(RPC_CHANNELS.missionAssets.PLAN_IMPORT),
+  chooseMissionAssetFiles: invoke(RPC_CHANNELS.missionAssets.CHOOSE_FILES),
+  importMissionAssets: invoke(RPC_CHANNELS.missionAssets.IMPORT),
+  openMissionAssetsFolder: invoke(RPC_CHANNELS.missionAssets.OPEN_FOLDER),
+
   // Memory (global USER.md + per-agent MEMORY.md)
   listAgentMemory: invoke(RPC_CHANNELS.memory.LIST_AGENT),
   listUserMemory: invoke(RPC_CHANNELS.memory.LIST_USER),

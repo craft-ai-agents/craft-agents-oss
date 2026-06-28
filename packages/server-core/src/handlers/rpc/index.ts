@@ -6,6 +6,7 @@ import { registerAutomationsHandlers } from './automations'
 import { registerAgentDefinitionsHandlers } from './agent-definitions'
 import { registerWorkspaceContextHandlers } from './workspace-context'
 import { registerMemoryHandlers } from './memory'
+import { registerMissionAssetsHandlers } from './mission-assets'
 import { registerWorkflowsHandlers } from './workflows'
 import { registerWorkflowRunsHandlers } from './workflow-runs'
 import { registerDeepResearchHandlers } from './deep-research'
@@ -44,6 +45,7 @@ export function registerCoreRpcHandlers(
   registerAgentDefinitionsHandlers(server, deps)
   registerWorkspaceContextHandlers(server, deps)
   registerMemoryHandlers(server, deps)
+  registerMissionAssetsHandlers(server, deps)
   registerWorkflowsHandlers(server, deps)
   registerWorkflowRunsHandlers(server, deps)
   registerDeepResearchHandlers(server, deps)

@@ -120,6 +120,23 @@ export type { AgentDefinitionMetadataDTO, AgentDefinitionDTO };
 import type { LoadedContextDoc as ContextDocDTO, ContextDocMetadata, ContextDocRouting } from '@craft-agent/shared/workspace-context/types';
 export type { ContextDocDTO, ContextDocMetadata, ContextDocRouting };
 
+import type {
+  MissionAssetImportCandidate,
+  MissionAssetImportOptions,
+  MissionAssetImportResult,
+  MissionAssetKindHint,
+  MissionAssetManifest,
+  MissionAssetRecord,
+} from '@craft-agent/shared/mission-assets';
+export type {
+  MissionAssetImportCandidate,
+  MissionAssetImportOptions,
+  MissionAssetImportResult,
+  MissionAssetKindHint,
+  MissionAssetManifest,
+  MissionAssetRecord,
+};
+
 // Memory — DTOs are plain JSON entries. Import from the browser-safe type
 // module, not the memory barrel, because the barrel also exports file storage.
 import type {
@@ -831,6 +848,16 @@ export interface ElectronAPI {
   }): Promise<ContextDocDTO>
   deleteWorkspaceContextDoc(workspaceId: string, slug: string): Promise<boolean>
   onWorkspaceContextChanged(callback: (workspaceId: string, docs: ContextDocDTO[]) => void): () => void
+
+  // Mission assets (workspace-local source files mirrored into context)
+  getMissionAssetManifest(workspaceId: string): Promise<MissionAssetManifest>
+  planMissionAssetImports(workspaceId: string, filePaths: string[], options?: MissionAssetImportOptions): Promise<{
+    candidates: MissionAssetImportCandidate[]
+    skipped: Array<{ path: string; reason: string }>
+  }>
+  chooseMissionAssetFiles(workspaceId: string, kindHint?: MissionAssetKindHint): Promise<string[]>
+  importMissionAssets(workspaceId: string, filePaths: string[], options?: MissionAssetImportOptions): Promise<MissionAssetImportResult>
+  openMissionAssetsFolder(workspaceId: string): Promise<boolean>
 
   // Memory (global USER.md + per-agent MEMORY.md)
   listAgentMemory(agentSlug: string): Promise<LoadedMemoryFileDTO>

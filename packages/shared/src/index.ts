@@ -19,6 +19,7 @@
  *   - clients: Craft API client
  *   - config: Storage, models, preferences
  *   - credentials: Encrypted credential storage
+ *   - mission-assets: Local mission asset manifests and classification
  *   - mcp: MCP client, connection validation
  *   - prompts: System prompt generation
  *   - sources: Workspace-scoped source management (MCP, API, local)

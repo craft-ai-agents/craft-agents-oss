@@ -11,7 +11,7 @@ source_of_truth: false
 
 Mission intake should be a **right-side operator drawer**, not a popup chat and not a full-page form.
 
-The command center remains the main surface. The agent appears beside the work, extracts useful context, asks better follow-ups, and lets the artist approve what becomes durable mission context.
+The command center remains the main surface. For V1, the drawer is a single structured mission form. Agentic intake can come later as an explicit alternate mode, not mixed into the same first screen.
 
 ## Product Principle
 
@@ -21,7 +21,7 @@ Agent appears beside the work.
 Context becomes the operating system.
 ```
 
-Chat is an input method. The durable output is the mission brief.
+The durable output is the mission brief.
 
 ## First Build
 
@@ -43,21 +43,21 @@ No fake stats. No empty dashboard noise.
 ```text
 Command Center Home                 Mission Brief Drawer
 
-Untitled Mission                    What are we building toward?
-State of Play: Not enough context   [freeform answer box]
+Untitled Mission                    Mission Brief
+State of Play: Not enough context   Title
 Approvals: None yet
 Today: No mission timeline
 
-                                     Extracted so far
-                                     Type: -
-                                     Title: -
-                                     Date: -
+                                     Type: single / EP / album / other
                                      Goal: -
+                                     Release Target: -
+                                     Mood: -
+                                     Visual World: -
 
-                                     [Accept] [Go deeper] [Skip for now]
+                                     [Accept Brief] [Skip]
 ```
 
-The drawer can be dismissed without losing progress.
+The drawer should not ask users to choose between freeform intake and structured editing in the same flow. One screen, one form.
 
 ## Core Objects
 
@@ -84,19 +84,20 @@ This belongs in global creator context / user profile memory.
 
 Scoped to one creative mission.
 
-For artist-first V1, a mission usually maps to a song, EP, album, rollout, video, merch drop, or campaign.
+For artist-first V1, a mission type should describe the release shape: single, EP, album, or other.
+
+Video, merch, tour, content, and campaign work are agents/workflows/assets inside the mission. They are not mission types in V1.
 
 Required minimum:
 
 - `missionType`
 - `title`
 - `goal`
-- `timeline`
+- `timeline` / release target
 
 Recommended:
 
 - `releaseDate`
-- `phase`
 - `mood`
 - `visualWorld`
 - `references`
@@ -224,10 +225,9 @@ type MissionBrief = {
   workspaceId: string
   status: 'empty' | 'light' | 'full'
   completeness: number
-  missionType?: 'single' | 'ep' | 'album' | 'video' | 'tour' | 'merch' | 'campaign' | 'other'
+  missionType?: 'single' | 'ep' | 'album' | 'other'
   title?: string
   goal?: string
-  phase?: string
   timeline?: string
   releaseDate?: string
   mood?: string

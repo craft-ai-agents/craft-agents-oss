@@ -435,6 +435,13 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workspaceContext.DELETE,
   RPC_CHANNELS.workspaceContext.CHANGED,
 
+  // mission assets — workspace-local source files plus agent-readable manifest
+  RPC_CHANNELS.missionAssets.GET,
+  RPC_CHANNELS.missionAssets.PLAN_IMPORT,
+  RPC_CHANNELS.missionAssets.CHOOSE_FILES,
+  RPC_CHANNELS.missionAssets.IMPORT,
+  RPC_CHANNELS.missionAssets.OPEN_FOLDER,
+
   // memory — global USER.md + per-agent MEMORY.md on the owning server
   RPC_CHANNELS.memory.LIST_AGENT,
   RPC_CHANNELS.memory.LIST_USER,

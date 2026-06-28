@@ -6,11 +6,17 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronDown,
+  FileText,
   FileUp,
+  FolderOpen,
+  ImageIcon,
+  Music2,
   ShieldCheck,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
+import type { MissionAssetKindHint, MissionAssetManifest, MissionAssetRecord } from '../../../shared/types'
 import {
   MISSION_BRIEF_CONTEXT_SLUG,
   emptyMissionBrief,
@@ -69,6 +75,8 @@ function CommandCard({
 export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHomeProps) {
   const [drawerOpen, setDrawerOpen] = React.useState(false)
   const [showAgents, setShowAgents] = React.useState(false)
+  const [assetManifest, setAssetManifest] = React.useState<MissionAssetManifest | null>(null)
+  const [assetBusy, setAssetBusy] = React.useState(false)
   const { docs, loading, upsert } = useWorkspaceContext(workspaceId)
 
   const savedMission = React.useMemo(() => {
@@ -92,11 +100,91 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
   const subtitle = hasMission
     ? mission.goal || mission.mood || 'Mission brief started. Add more context when ready.'
     : 'Start with a goal, files, or an agent.'
-  const phase = mission.phase || (hasMission ? mission.missionType || 'Mission active' : 'No brief yet')
+  const focus = mission.timeline || mission.releaseDate || (hasMission ? mission.missionType || 'Mission active' : 'No brief yet')
   const completenessLabel = `${mission.completeness}% context`
 
+  React.useEffect(() => {
+    let cancelled = false
+    if (!workspaceId) return
+    window.electronAPI.getMissionAssetManifest(workspaceId)
+      .then((manifest) => {
+        if (!cancelled) setAssetManifest(manifest)
+      })
+      .catch((err) => {
+        if (!cancelled) toast.error(err instanceof Error ? err.message : String(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [workspaceId])
+
+  const importAssetPaths = React.useCallback(
+    async (filePaths: string[], kindHint: MissionAssetKindHint = 'any') => {
+      if (!hasMission) {
+        setDrawerOpen(true)
+        toast.info('Create the mission first, then add files.')
+        return
+      }
+      if (filePaths.length === 0) return
+      setAssetBusy(true)
+      try {
+        const result = await window.electronAPI.importMissionAssets(workspaceId, filePaths, { kindHint })
+        setAssetManifest(result.manifest)
+        const skipped = result.skipped.length ? ` ${result.skipped.length} skipped.` : ''
+        toast.success(`Added ${result.imported.length} mission asset${result.imported.length === 1 ? '' : 's'}.${skipped}`)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : String(err))
+      } finally {
+        setAssetBusy(false)
+      }
+    },
+    [hasMission, workspaceId],
+  )
+
+  const chooseAndImport = React.useCallback(
+    async (kindHint: MissionAssetKindHint = 'any') => {
+      if (!hasMission) {
+        setDrawerOpen(true)
+        toast.info('Create the mission first, then add files.')
+        return
+      }
+      setAssetBusy(true)
+      try {
+        const filePaths = await window.electronAPI.chooseMissionAssetFiles(workspaceId, kindHint)
+        await importAssetPaths(filePaths, kindHint)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : String(err))
+      } finally {
+        setAssetBusy(false)
+      }
+    },
+    [hasMission, importAssetPaths, workspaceId],
+  )
+
+  const handleDrop = React.useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!event.dataTransfer.files.length) return
+      event.preventDefault()
+      const filePaths = Array.from(event.dataTransfer.files)
+        .map((file) => window.electronAPI.getFilePath(file))
+        .filter((path): path is string => Boolean(path))
+      if (filePaths.length === 0) {
+        toast.error('Could not read dropped files.')
+        return
+      }
+      void importAssetPaths(filePaths, 'any')
+    },
+    [importAssetPaths],
+  )
+
   return (
-    <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
+    <div
+      className="h-full overflow-y-auto bg-[#050505] text-foreground"
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes('Files')) event.preventDefault()
+      }}
+      onDrop={handleDrop}
+    >
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-5 py-6 xl:px-8 xl:py-8">
         <section className="relative min-h-[320px] overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A]">
           <div className="absolute -left-[20%] -top-[40%] h-[600px] w-[600px] rounded-full bg-orange-600/10 blur-[120px]" />
@@ -126,7 +214,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/40">Focus</p>
-                <p className="mt-1.5 text-xs font-medium capitalize text-white/70">{phase}</p>
+                <p className="mt-1.5 text-xs font-medium capitalize text-white/70">{focus}</p>
               </div>
             </div>
 
@@ -173,14 +261,37 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
                   {hasMission ? 'Edit Mission' : 'Create Mission'}
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
-                <button className="inline-flex h-9 items-center gap-2 rounded-full bg-white/[0.02] px-5 text-xs font-medium text-white/70 ring-1 ring-inset ring-white/[0.08] transition-all hover:bg-white/[0.06] hover:text-white">
+                <button
+                  type="button"
+                  onClick={() => void chooseAndImport('any')}
+                  disabled={assetBusy}
+                  aria-busy={assetBusy}
+                  title={hasMission ? 'Add mission files' : 'Create the mission first'}
+                  className="inline-flex h-9 items-center gap-2 rounded-full bg-white/[0.02] px-5 text-xs font-medium text-white/70 ring-1 ring-inset ring-white/[0.08] transition-all hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
                   <FileUp className="h-3.5 w-3.5" />
-                  Drop Files
+                  {assetBusy ? 'Adding...' : 'Add Files'}
                 </button>
               </div>
             </div>
           </div>
         </section>
+
+        {hasMission ? (
+          <MissionAssetsCard
+            manifest={assetManifest}
+            busy={assetBusy}
+            onAdd={chooseAndImport}
+            onOpenFolder={async () => {
+              try {
+                const opened = await window.electronAPI.openMissionAssetsFolder(workspaceId)
+                if (!opened) toast.error('Could not open mission assets folder.')
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : String(err))
+              }
+            }}
+          />
+        ) : null}
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <CommandCard>
@@ -188,7 +299,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
             <div className="grid grid-cols-2 gap-x-4 gap-y-4 pt-1">
               <Metric label="Context" value={hasMission ? `${mission.completeness}%` : 'Empty'} detail={hasMission ? 'Brief saved' : 'No mission brief'} />
               <Metric label="Mission" value={hasMission ? 'Active' : 'Open'} detail={mission.missionType || 'Any creative work'} />
-              <Metric label="Timeline" value={mission.timeline || mission.releaseDate || 'Unknown'} detail={hasMission ? 'User-provided' : 'Not set'} />
+              <Metric label="Release Target" value={mission.timeline || mission.releaseDate || 'Unknown'} detail={hasMission ? 'User-provided' : 'Not set'} />
               <Metric label="Sources" value="Quiet" detail="No connected stats yet" />
             </div>
           </CommandCard>
@@ -258,6 +369,108 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
         saveMissionBrief={upsert}
       />
     </div>
+  )
+}
+
+function MissionAssetsCard({
+  manifest,
+  busy,
+  onAdd,
+  onOpenFolder,
+}: {
+  manifest: MissionAssetManifest | null
+  busy: boolean
+  onAdd: (kindHint: MissionAssetKindHint) => Promise<void>
+  onOpenFolder: () => Promise<void>
+}) {
+  const files = manifest?.files ?? []
+  const master = firstAsset(files, ['master', 'demo'])
+  const lyrics = firstAsset(files, ['lyrics'])
+  const cover = firstAsset(files, ['cover-art'])
+
+  return (
+    <CommandCard className="p-3.5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.035] ring-1 ring-white/[0.05]">
+            <FolderOpen className="h-4 w-4 text-white/55" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-white/82">Mission Assets</p>
+            <p className="mt-0.5 truncate text-xs text-white/38">
+              {files.length ? `${files.length} file${files.length === 1 ? '' : 's'} copied into this workspace` : 'Add the master, lyrics, cover, references, or raw material.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 lg:w-[420px]">
+          <AssetSlot icon={Music2} label="Master" value={master?.label ?? 'Missing'} active={Boolean(master)} />
+          <AssetSlot icon={FileText} label="Lyrics" value={lyrics?.label ?? 'Missing'} active={Boolean(lyrics)} />
+          <AssetSlot icon={ImageIcon} label="Cover" value={cover?.label ?? 'Missing'} active={Boolean(cover)} />
+        </div>
+
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <AssetButton disabled={busy} onClick={() => onAdd('master')}>Master</AssetButton>
+          <AssetButton disabled={busy} onClick={() => onAdd('lyrics')}>Lyrics</AssetButton>
+          <AssetButton disabled={busy} onClick={() => onAdd('cover-art')}>Cover</AssetButton>
+          <button
+            type="button"
+            onClick={() => void onOpenFolder()}
+            className="inline-flex h-8 items-center gap-2 rounded-full border border-white/[0.07] bg-white/[0.015] px-3 text-[11px] font-medium text-white/55 transition-colors hover:bg-white/[0.05] hover:text-white/80"
+          >
+            <FolderOpen className="h-3.5 w-3.5" />
+            Folder
+          </button>
+        </div>
+      </div>
+    </CommandCard>
+  )
+}
+
+function firstAsset(files: MissionAssetRecord[], kinds: MissionAssetRecord['kind'][]): MissionAssetRecord | null {
+  return files.find((file) => file.status === 'available' && kinds.includes(file.kind)) ?? null
+}
+
+function AssetSlot({
+  icon: Icon,
+  label,
+  value,
+  active,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  value: string
+  active: boolean
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-white/[0.04] bg-white/[0.012] px-3 py-2">
+      <div className="mb-1 flex items-center gap-1.5">
+        <Icon className={cn('h-3 w-3', active ? 'text-orange-300/80' : 'text-white/25')} />
+        <span className="text-[8px] font-medium uppercase tracking-[0.18em] text-white/30">{label}</span>
+      </div>
+      <p className={cn('truncate text-[11px] font-medium', active ? 'text-white/75' : 'text-white/25')}>{value}</p>
+    </div>
+  )
+}
+
+function AssetButton({
+  children,
+  disabled,
+  onClick,
+}: {
+  children: React.ReactNode
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex h-8 items-center rounded-full border border-white/[0.07] bg-white/[0.025] px-3 text-[11px] font-medium text-white/65 transition-colors hover:bg-white/[0.07] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {children}
+    </button>
   )
 }
 

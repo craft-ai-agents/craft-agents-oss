@@ -32,6 +32,7 @@
     "./memory": "./src/memory/index.ts",
     "./memory/render": "./src/memory/render.ts",
     "./memory/types": "./src/memory/types.ts",
+    "./mission-assets": "./src/mission-assets/index.ts",
     "./outputs": "./src/outputs/index.ts",
     "./outputs/constants": "./src/outputs/constants.ts",
     "./outputs/web-preview": "./src/outputs/web-preview.ts",
