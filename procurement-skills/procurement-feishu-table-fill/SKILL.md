@@ -1,6 +1,6 @@
 ---
 name: procurement-feishu-table-fill
-description: 把采购线索或分析结果写入飞书 Base 的 AI 专用表，含建表、字段校验、dry-run 预览和用户确认。当用户说“把结果填进表/写到飞书表格/录入这些数据”，需要把前面查到的型号、报价、库存、供应商结果落库时使用。只负责写入；查询类用对应的 procurement-* 查询 skill。
+description: 把采购线索或分析结果写入飞书 Base 的 AI 专用表，含建表、字段校验、dry-run 预览和用户确认。当用户说“把结果填进表/写到飞书表格/录入这些数据”，需要把前面查到的型号、报价、库存、供应商结果入库时使用。只负责写入；查询类用对应的 procurement-* 查询 skill。
 metadata:
   short-description: 飞书表格写入
   lang: zh
@@ -46,6 +46,6 @@ metadata:
 
 ## 边界
 
-- 只写 AI Base 的 `AI-` 表，不碰业务 Base。
-- 不跳 dry-run，未确认不写；append-only 不去重；只校验字段名不校验业务逻辑；建表字段默认文本。
+- 只写 AI Base 的 `AI-` 表，不写入业务 Base。
+- 不跳过 dry-run，未确认不写；append-only 不去重；只校验字段名不校验业务逻辑；建表字段默认文本。
 - 权限/登录失效错误**如实报告**，不要假装写成功。
