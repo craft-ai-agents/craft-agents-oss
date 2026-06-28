@@ -1,14 +1,15 @@
 import * as React from 'react'
-import { CheckCircle2, ExternalLink, Info, KeyRound, Loader2, Plus, RefreshCcw, Trash2, WalletCards } from 'lucide-react'
+import { AlertCircle, CheckCircle2, ExternalLink, Info, KeyRound, Loader2, RefreshCcw, Save, Trash2, WalletCards } from 'lucide-react'
 import { toast } from 'sonner'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { SettingsCard, SettingsMenuSelect, SettingsSection } from '@/components/settings'
+import { SettingsCard, SettingsSection } from '@/components/settings'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
-import type { UserSecretSummary, ZeroStatus } from '../../../shared/types'
+import type { LoadedSource, UserSecretSummary, ZeroStatus } from '../../../shared/types'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { navigate, routes } from '@/lib/navigate'
+import { isSourceUsable } from '@craft-agent/shared/sources/storage'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -25,6 +26,18 @@ type SecretPreset = {
   sourceSlug?: string
   sourceType?: 'api' | 'mcp' | 'local'
 }
+
+type SecretService = {
+  id: string
+  group: string
+  title: string
+  description: string
+  presetNames: string[]
+  optionalPresetNames?: string[]
+  requiredAnyPresetNames?: string[]
+}
+
+type ServiceStatus = 'ready' | 'needs' | 'optional'
 
 const SECRET_PRESETS: SecretPreset[] = [
   {
@@ -54,6 +67,54 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'source',
     sourceSlug: 'youtube-research',
     sourceType: 'local',
+  },
+  {
+    group: 'Promotion',
+    name: 'SPOTIFY_CLIENT_ID',
+    label: 'Spotify client ID',
+    description: 'Used by Spotify playlist and artist-data workflows once Spotify OAuth is wired.',
+    placeholder: 'Spotify client ID',
+    storage: 'env',
+  },
+  {
+    group: 'Promotion',
+    name: 'SPOTIFY_CLIENT_SECRET',
+    label: 'Spotify client secret',
+    description: 'Used with the Spotify client ID for playlist and artist-data workflows.',
+    placeholder: 'Spotify client secret',
+    storage: 'env',
+  },
+  {
+    group: 'Promotion',
+    name: 'SPOTIFY_REDIRECT_URI',
+    label: 'Spotify redirect URI',
+    description: 'Optional callback URL for Spotify OAuth apps.',
+    placeholder: 'http://127.0.0.1:53682/callback',
+    storage: 'env',
+  },
+  {
+    group: 'Promotion',
+    name: 'TRYPOST_API_KEY',
+    label: 'TryPost API key',
+    description: 'Used by the TryPost agent for social publishing through TryPost.',
+    placeholder: 'TryPost API key',
+    storage: 'env',
+  },
+  {
+    group: 'Promotion',
+    name: 'POSTIZ_API_KEY',
+    label: 'Postiz API key',
+    description: 'Used by Postiz-compatible social scheduling and publishing workflows.',
+    placeholder: 'Postiz API key',
+    storage: 'env',
+  },
+  {
+    group: 'Promotion',
+    name: 'POSTIZ_BASE_URL',
+    label: 'Postiz workspace URL',
+    description: 'Optional. Use when your Postiz instance is self-hosted or not the default cloud endpoint.',
+    placeholder: 'https://postiz.example.com',
+    storage: 'env',
   },
   {
     group: 'Commerce',
@@ -213,6 +274,14 @@ const SECRET_PRESETS: SecretPreset[] = [
     label: 'Squad OpenAI API key',
     description: 'Optional isolated OpenAI key for Squad director decisions, image prompts, and image evaluation.',
     placeholder: 'sk-...',
+    storage: 'env',
+  },
+  {
+    group: 'Squad Video',
+    name: 'FAL_API_KEY',
+    label: 'Fal API key',
+    description: 'Generic Fal key used by image/video generation tools when no Squad-specific key is set.',
+    placeholder: 'fal key',
     storage: 'env',
   },
   {
@@ -497,95 +566,183 @@ const SECRET_PRESETS: SecretPreset[] = [
   },
 ]
 
-const SECRET_GROUPS = Array.from(new Set(SECRET_PRESETS.map((preset) => preset.group)))
+const SERVICES: SecretService[] = [
+  {
+    id: 'meta-ads',
+    group: 'Promotion',
+    title: 'Meta Ads',
+    description: 'Connect ad account access for Meta reporting, diagnostics, and planned ad work.',
+    presetNames: ['META_ADS_OAUTH'],
+  },
+  {
+    id: 'google-ads',
+    group: 'Promotion',
+    title: 'Google Ads',
+    description: 'Connect Google Ads for account lookup, reports, diagnostics, and campaign planning.',
+    presetNames: ['GOOGLE_ADS_OAUTH'],
+  },
+  {
+    id: 'youtube-research',
+    group: 'Promotion',
+    title: 'YouTube Research',
+    description: 'Let research agents search videos, transcripts, comments, embeds, and channels.',
+    presetNames: ['YOUTUBE_API_KEY'],
+  },
+  {
+    id: 'spotify',
+    group: 'Promotion',
+    title: 'Spotify',
+    description: 'Credentials for playlist and artist-data workflows.',
+    presetNames: ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REDIRECT_URI'],
+    optionalPresetNames: ['SPOTIFY_REDIRECT_URI'],
+  },
+  {
+    id: 'social-publishing',
+    group: 'Promotion',
+    title: 'Social Publishing',
+    description: 'Optional posting services for agents that publish or schedule content.',
+    presetNames: ['TRYPOST_API_KEY', 'POSTIZ_API_KEY', 'POSTIZ_BASE_URL'],
+    optionalPresetNames: ['TRYPOST_API_KEY', 'POSTIZ_API_KEY', 'POSTIZ_BASE_URL'],
+  },
+  {
+    id: 'shopify',
+    group: 'Commerce',
+    title: 'Shopify',
+    description: 'Connect store access for merch/product agents.',
+    presetNames: ['SHOPIFY_SHOP', 'SHOPIFY_STORE_DOMAIN', 'SHOPIFY_ACCESS_TOKEN', 'SHOPIFY_API_VERSION'],
+    optionalPresetNames: ['SHOPIFY_API_VERSION'],
+    requiredAnyPresetNames: ['SHOPIFY_SHOP', 'SHOPIFY_STORE_DOMAIN'],
+  },
+  {
+    id: 'printify',
+    group: 'Commerce',
+    title: 'Printify',
+    description: 'Connect Printify for print-on-demand merch workflows.',
+    presetNames: ['PRINTIFY_API_TOKEN'],
+  },
+  {
+    id: 'core-ai',
+    group: 'AI + Media',
+    title: 'Core AI Providers',
+    description: 'Fallback keys used by local tools. Main chat models still live under AI settings.',
+    presetNames: ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY', 'DEEPSEEK_API_KEY', 'KIMI_API_KEY', 'QWEN_API_KEY', 'LLM_API_KEY'],
+    optionalPresetNames: ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY', 'DEEPSEEK_API_KEY', 'KIMI_API_KEY', 'QWEN_API_KEY', 'LLM_API_KEY'],
+  },
+  {
+    id: 'voice-audio',
+    group: 'AI + Media',
+    title: 'Voice + Audio',
+    description: 'Speech, voiceover, transcription, and audio intelligence providers.',
+    presetNames: ['ASSEMBLYAI_API_KEY', 'ELEVENLABS_API_KEY', 'FISH_AUDIO_API_KEY', 'SQUAD_FISH_TTS_API_KEY', 'SQUAD_FISH_TTS_REFERENCE_ID', 'INWORLD_API_KEY', 'INWORLD_RUNTIME_KEY', 'INWORLD_TTS_API_KEY', 'SQUAD_INWORLD_TTS_API_KEY', 'SQUAD_INWORLD_TTS_VOICE_ID'],
+    optionalPresetNames: ['ASSEMBLYAI_API_KEY', 'ELEVENLABS_API_KEY', 'FISH_AUDIO_API_KEY', 'SQUAD_FISH_TTS_API_KEY', 'SQUAD_FISH_TTS_REFERENCE_ID', 'INWORLD_API_KEY', 'INWORLD_RUNTIME_KEY', 'INWORLD_TTS_API_KEY', 'SQUAD_INWORLD_TTS_API_KEY', 'SQUAD_INWORLD_TTS_VOICE_ID'],
+  },
+  {
+    id: 'video-generation',
+    group: 'AI + Media',
+    title: 'Video Generation',
+    description: 'Video, avatar, image, and render providers used by content agents.',
+    presetNames: ['SQUAD_OPENAI_API_KEY', 'HEYGEN_API_KEY', 'FAL_API_KEY', 'SQUAD_FAL_API_KEY', 'WAVESPEED_API_KEY', 'SQUAD_WAVESPEED_API_KEY', 'MUAPI_API_KEY', 'RUNPOD_API_KEY', 'RUNPOD_LTX_ENDPOINT_ID'],
+    optionalPresetNames: ['SQUAD_OPENAI_API_KEY', 'HEYGEN_API_KEY', 'FAL_API_KEY', 'SQUAD_FAL_API_KEY', 'WAVESPEED_API_KEY', 'SQUAD_WAVESPEED_API_KEY', 'MUAPI_API_KEY', 'RUNPOD_API_KEY', 'RUNPOD_LTX_ENDPOINT_ID'],
+  },
+  {
+    id: 'squad-avatar',
+    group: 'AI + Media',
+    title: 'Avatar Video',
+    description: 'Optional Squad-specific avatar and voice settings.',
+    presetNames: ['SQUAD_HEYGEN_API_KEY', 'SQUAD_HEYGEN_AVATAR_ID', 'SQUAD_HEYGEN_VOICE_ID', 'SQUAD_HEYGEN_PERSONA_MAP_JSON'],
+    optionalPresetNames: ['SQUAD_HEYGEN_API_KEY', 'SQUAD_HEYGEN_AVATAR_ID', 'SQUAD_HEYGEN_VOICE_ID', 'SQUAD_HEYGEN_PERSONA_MAP_JSON'],
+  },
+  {
+    id: 'developer-cloud',
+    group: 'Developer + Cloud',
+    title: 'Developer + Cloud',
+    description: 'Keys for GitHub, cloud storage, package publishing, and app service work.',
+    presetNames: ['GITHUB_TOKEN', 'GH_TOKEN', 'STRIPE_SECRET_KEY', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'NPM_TOKEN', 'STITCH_API_KEY'],
+    optionalPresetNames: ['GITHUB_TOKEN', 'GH_TOKEN', 'STRIPE_SECRET_KEY', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'NPM_TOKEN', 'STITCH_API_KEY'],
+  },
+  {
+    id: 'mcp-apps',
+    group: 'Developer + Cloud',
+    title: 'MCP + Apps',
+    description: 'Credentials for optional external app integrations.',
+    presetNames: ['BRAVE_API_KEY', 'CANVA_CLIENT_ID', 'CANVA_CLIENT_SECRET'],
+    optionalPresetNames: ['BRAVE_API_KEY', 'CANVA_CLIENT_ID', 'CANVA_CLIENT_SECRET'],
+  },
+  {
+    id: 'automation',
+    group: 'Automation',
+    title: 'Automation Webhooks',
+    description: 'Secrets and webhook URLs used by inbound triggers and outbound notifications.',
+    presetNames: ['CRAFT_WH_SIGNED_HOOK_SECRET', 'CRAFT_WH_GITHUB_SECRET', 'CRAFT_WH_STRIPE_SECRET', 'CRAFT_WH_API_TOKEN', 'CRAFT_WH_SLACK_URL', 'CRAFT_WH_CLIENT_ID', 'CRAFT_WH_CLIENT_SECRET'],
+    optionalPresetNames: ['CRAFT_WH_SIGNED_HOOK_SECRET', 'CRAFT_WH_GITHUB_SECRET', 'CRAFT_WH_STRIPE_SECRET', 'CRAFT_WH_API_TOKEN', 'CRAFT_WH_SLACK_URL', 'CRAFT_WH_CLIENT_ID', 'CRAFT_WH_CLIENT_SECRET'],
+  },
+  {
+    id: 'zero',
+    group: 'Wallet',
+    title: 'Zero Wallet',
+    description: 'Private key fallback for Zero CLI when no local Zero config is present.',
+    presetNames: ['ZERO_PRIVATE_KEY'],
+    optionalPresetNames: ['ZERO_PRIVATE_KEY'],
+  },
+]
+
+const SECRET_GROUPS = Array.from(new Set(SERVICES.map((service) => service.group)))
+const PRESET_BY_NAME = new Map(SECRET_PRESETS.map((preset) => [preset.name, preset]))
 
 export default function SecretsSettingsPage() {
   const { activeWorkspaceId } = useAppShellContext()
   const [secrets, setSecrets] = React.useState<UserSecretSummary[]>([])
+  const [sources, setSources] = React.useState<LoadedSource[]>([])
   const [zero, setZero] = React.useState<ZeroStatus | null>(null)
-  const [name, setName] = React.useState('')
-  const [value, setValue] = React.useState('')
   const [selectedGroup, setSelectedGroup] = React.useState(SECRET_GROUPS[0] ?? '')
-  const [selectedPresetName, setSelectedPresetName] = React.useState('')
+  const [draftValues, setDraftValues] = React.useState<Record<string, string>>({})
   const [loading, setLoading] = React.useState(false)
   const [installing, setInstalling] = React.useState(false)
+  const [busyServiceId, setBusyServiceId] = React.useState<string | null>(null)
 
-  const groupPresets = React.useMemo(
-    () => SECRET_PRESETS.filter((preset) => preset.group === selectedGroup),
+  const services = React.useMemo(
+    () => SERVICES.filter((service) => service.group === selectedGroup),
     [selectedGroup],
   )
-  const selectedPreset = React.useMemo(
-    () => SECRET_PRESETS.find((preset) => preset.name === selectedPresetName) ?? null,
-    [selectedPresetName],
+  const savedByName = React.useMemo(
+    () => new Map(secrets.map((secret) => [secret.name, secret])),
+    [secrets],
   )
-  const isSourcePreset = selectedPreset?.storage === 'source'
-  const isManagedSourcePreset = selectedPreset?.storage === 'managed-source'
+  const sourceBySlug = React.useMemo(
+    () => new Map(sources.map((source) => [source.config.slug, source])),
+    [sources],
+  )
 
   const load = React.useCallback(async () => {
     setLoading(true)
     try {
-      const [secretRows, zeroStatus] = await Promise.all([
+      const [secretRows, zeroStatus, sourceRows] = await Promise.all([
         window.electronAPI.listSecrets(),
         window.electronAPI.getZeroStatus(),
+        activeWorkspaceId ? window.electronAPI.getSources(activeWorkspaceId).catch(() => [] as LoadedSource[]) : Promise.resolve([] as LoadedSource[]),
       ])
       setSecrets(secretRows)
       setZero(zeroStatus)
+      setSources(sourceRows)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeWorkspaceId])
 
   React.useEffect(() => {
     void load()
   }, [load])
 
-  const save = async () => {
-    if (isManagedSourcePreset) {
-      openSelectedSource()
-      return
-    }
-
-    if (isSourcePreset) {
-      if (!activeWorkspaceId || !selectedPreset?.sourceSlug) {
-        toast.error('Select an active workspace before saving this source credential')
-        return
-      }
-      await window.electronAPI.saveSourceCredentials(activeWorkspaceId, selectedPreset.sourceSlug, value)
-      setValue('')
-      toast.success(`${selectedPreset.label} saved`)
-      await load()
-      return
-    }
-
-    const result = await window.electronAPI.saveSecret(name, value)
-    if (!result.success) {
-      toast.error(result.error || 'Could not save secret')
-      return
-    }
-    setName('')
-    setValue('')
-    toast.success('Secret saved')
-    await load()
-  }
-
-  const applyPreset = (presetName: string) => {
-    const preset = SECRET_PRESETS.find((candidate) => candidate.name === presetName)
-    setSelectedPresetName(presetName)
-    if (!preset) return
-    setName(preset.storage === 'env' ? preset.name : '')
-    setValue('')
-  }
-
-  const openSelectedSource = () => {
-    if (!selectedPreset?.sourceSlug) return
-    if (selectedPreset.sourceType === 'mcp') {
-      navigate(routes.view.sourcesMcp(selectedPreset.sourceSlug))
-    } else if (selectedPreset.sourceType === 'api') {
-      navigate(routes.view.sourcesApi(selectedPreset.sourceSlug))
+  const openSource = React.useCallback((preset: SecretPreset) => {
+    if (!preset.sourceSlug) return
+    if (preset.sourceType === 'mcp') {
+      navigate(routes.view.sourcesMcp(preset.sourceSlug))
+    } else if (preset.sourceType === 'api') {
+      navigate(routes.view.sourcesApi(preset.sourceSlug))
     } else {
-      navigate(routes.view.sourcesLocal(selectedPreset.sourceSlug))
+      navigate(routes.view.sourcesLocal(preset.sourceSlug))
     }
-  }
+  }, [])
 
   const remove = async (secretName: string) => {
     await window.electronAPI.deleteSecret(secretName)
@@ -608,11 +765,92 @@ export default function SecretsSettingsPage() {
     }
   }
 
+  const saveService = async (service: SecretService) => {
+    const presets = service.presetNames.map((name) => PRESET_BY_NAME.get(name)).filter(Boolean) as SecretPreset[]
+    const managedPreset = presets.find((preset) => preset.storage === 'managed-source')
+    const changedPresets = presets.filter((preset) => draftValues[preset.name]?.trim())
+    if (managedPreset) {
+      openSource(managedPreset)
+      return
+    }
+
+    const missing = missingRequiredPresets(service, savedByName, sourceBySlug, draftValues)
+    const unsavedRequired = missing.filter((preset) => !draftValues[preset.name]?.trim())
+    if (unsavedRequired.length > 0) {
+      toast.error(`Add ${unsavedRequired[0]!.label} first`)
+      return
+    }
+    if (changedPresets.length === 0) {
+      toast.info(serviceStatus(service, savedByName, sourceBySlug, draftValues) === 'optional' ? 'Paste a key first.' : 'Nothing new to save.')
+      return
+    }
+
+    setBusyServiceId(service.id)
+    try {
+      for (const preset of presets) {
+        const value = draftValues[preset.name]?.trim()
+        if (!value) continue
+
+        if (preset.storage === 'source') {
+          if (!activeWorkspaceId || !preset.sourceSlug) {
+            toast.error('Select an active workspace before saving this connection')
+            return
+          }
+          await window.electronAPI.saveSourceCredentials(activeWorkspaceId, preset.sourceSlug, value)
+        } else if (preset.storage === 'env') {
+          const result = await window.electronAPI.saveSecret(preset.name, value)
+          if (!result.success) {
+            toast.error(result.error || `Could not save ${preset.label}`)
+            return
+          }
+        }
+      }
+
+      setDraftValues((current) => {
+        const next = { ...current }
+        for (const preset of presets) delete next[preset.name]
+        return next
+      })
+      toast.success(`${service.title} saved`)
+      await load()
+    } finally {
+      setBusyServiceId(null)
+    }
+  }
+
+  const testService = (service: SecretService) => {
+    const missing = missingRequiredPresets(service, savedByName, sourceBySlug, draftValues)
+    if (missing.length > 0) {
+      toast.error(`${service.title} is missing ${missing[0]!.label}`)
+      return
+    }
+    if (serviceStatus(service, savedByName, sourceBySlug, draftValues) === 'optional') {
+      toast.info(`${service.title} is optional. Add a key when a workflow needs it.`)
+      return
+    }
+    toast.success(`${service.title} setup looks ready`)
+  }
+
   return (
     <div className="flex h-full flex-col">
-      <PanelHeader title="Secrets" />
+      <PanelHeader title="Connections" />
       <ScrollArea className="flex-1">
-        <div className="space-y-6 p-6">
+        <div className="mx-auto w-full max-w-[1120px] space-y-5 px-6 pb-8 pt-6">
+          <div className="rounded-[18px] border border-white/[0.07] bg-white/[0.025] p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-semibold text-white">Keys and services</h1>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-white/48">
+                  Choose a category, connect the service, then save and test the setup. Keys are stored in RunnerOS encrypted credential storage.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+                {loading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="mr-2 h-3.5 w-3.5" />}
+                Refresh
+              </Button>
+            </div>
+          </div>
+
           <SettingsSection title="Zero">
             <SettingsCard>
               <div className="flex items-start justify-between gap-4 p-4">
@@ -644,89 +882,106 @@ export default function SecretsSettingsPage() {
             </SettingsCard>
           </SettingsSection>
 
-          <SettingsSection title="Environment Secrets">
-            <SettingsCard>
-              <div className="grid gap-4 p-4 lg:grid-cols-[180px_minmax(260px,1fr)]">
-                <SettingsMenuSelect
-                  value={selectedGroup}
-                  onValueChange={(nextGroup) => {
-                    setSelectedGroup(nextGroup)
-                    setSelectedPresetName('')
-                    setName('')
-                    setValue('')
-                  }}
-                  options={SECRET_GROUPS.map((group) => ({ value: group, label: group }))}
-                  placeholder="Category"
-                  menuWidth={220}
-                  className="h-9 w-full"
-                />
-                <SettingsMenuSelect
-                  value={selectedPresetName}
-                  onValueChange={applyPreset}
-                  options={groupPresets.map((preset) => ({
-                    value: preset.name,
-                    label: preset.label,
-                    description: preset.storage === 'managed-source'
-                      ? 'OAuth / source setup'
-                      : preset.storage === 'source'
-                        ? 'Source credential'
-                        : preset.name,
-                  }))}
-                  placeholder="Choose credential..."
-                  menuWidth={360}
-                  className="h-9 w-full"
-                />
-                {selectedPreset && (
-                  <div className="flex gap-2 rounded-md border border-white/[0.06] bg-white/[0.025] p-3 text-xs text-white/45 lg:col-span-2">
-                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/35" />
-                    <div>
-                      <div className="font-medium text-white/68">
-                        {selectedPreset.storage === 'managed-source'
-                          ? 'Managed credential'
-                          : selectedPreset.storage === 'source'
-                            ? 'Source credential'
-                            : selectedPreset.name}
-                      </div>
-                      <div className="mt-1 leading-5">{selectedPreset.description}</div>
-                      {selectedPreset.sourceSlug && (
-                        <Button variant="outline" size="sm" className="mt-3" onClick={openSelectedSource}>
-                          <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                          Open source setup
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </SettingsCard>
+          <SettingsSection title="Services">
+            <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+              <SettingsCard className="self-start">
+                <div className="space-y-1 p-2">
+                  {SECRET_GROUPS.map((group) => {
+                    const groupServices = SERVICES.filter((service) => service.group === group)
+                    const readyCount = groupServices.filter((service) => serviceStatus(service, savedByName, sourceBySlug, draftValues) === 'ready').length
+                    return (
+                      <button
+                        key={group}
+                        type="button"
+                        onClick={() => setSelectedGroup(group)}
+                        className={[
+                          'flex w-full items-center justify-between rounded-[12px] px-3 py-2 text-left text-sm transition-colors',
+                          selectedGroup === group ? 'bg-white/[0.075] text-white' : 'text-white/58 hover:bg-white/[0.045] hover:text-white/82',
+                        ].join(' ')}
+                      >
+                        <span>{group}</span>
+                        <span className="text-[11px] text-white/34">{readyCount}/{groupServices.length}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </SettingsCard>
 
-            <SettingsCard>
-              <div className="grid gap-3 p-4 md:grid-cols-[minmax(180px,240px)_1fr_auto]">
-                <input
-                  value={isSourcePreset ? selectedPreset?.label ?? '' : name}
-                  onChange={(event) => setName(event.target.value.toUpperCase())}
-                  placeholder={selectedPreset && selectedPreset.storage === 'env' ? selectedPreset.name : 'ZERO_PRIVATE_KEY'}
-                  disabled={isSourcePreset || isManagedSourcePreset}
-                  className="h-9 rounded-md border border-white/10 bg-black/20 px-3 text-sm outline-none placeholder:text-white/25 disabled:opacity-60"
-                />
-                <input
-                  value={value}
-                  onChange={(event) => setValue(event.target.value)}
-                  placeholder={selectedPreset && selectedPreset.storage !== 'managed-source' ? selectedPreset.placeholder ?? 'Secret value' : 'Open source setup to connect'}
-                  type="password"
-                  disabled={isManagedSourcePreset}
-                  className="h-9 rounded-md border border-white/10 bg-black/20 px-3 text-sm outline-none placeholder:text-white/25 disabled:opacity-60"
-                />
-                <Button
-                  size="sm"
-                  onClick={save}
-                  disabled={isManagedSourcePreset ? !selectedPreset?.sourceSlug : isSourcePreset ? !value : !name.trim() || !value}
-                >
-                  {isManagedSourcePreset ? <ExternalLink className="mr-2 h-3.5 w-3.5" /> : <Plus className="mr-2 h-3.5 w-3.5" />}
-                  {isManagedSourcePreset ? 'Open' : 'Save'}
-                </Button>
+              <div className="space-y-3">
+                {services.map((service) => {
+                  const presets = service.presetNames.map((name) => PRESET_BY_NAME.get(name)).filter(Boolean) as SecretPreset[]
+                  const status = serviceStatus(service, savedByName, sourceBySlug, draftValues)
+                  const managedPreset = presets.find((preset) => preset.storage === 'managed-source')
+                  const busy = busyServiceId === service.id
+                  return (
+                    <SettingsCard key={service.id}>
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-semibold text-white/90">{service.title}</h3>
+                              <StatusPill status={status} />
+                            </div>
+                            <p className="mt-1 max-w-2xl text-xs leading-5 text-white/45">{service.description}</p>
+                          </div>
+                          {managedPreset ? (
+                            <Button size="sm" variant="outline" onClick={() => openSource(managedPreset)}>
+                              <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                              Open setup
+                            </Button>
+                          ) : null}
+                        </div>
+
+                        {managedPreset ? (
+                          <div className="mt-4 flex gap-2 rounded-[12px] border border-white/[0.06] bg-white/[0.02] p-3 text-xs leading-5 text-white/46">
+                            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/35" />
+                            <span>{managedPreset.description}</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="mt-4 grid gap-3 md:grid-cols-2">
+                              {presets.map((preset) => {
+                                const saved = presetIsSaved(preset, savedByName, sourceBySlug)
+                                const optional = service.optionalPresetNames?.includes(preset.name)
+                                return (
+                                  <div key={preset.name} className="rounded-[12px] border border-white/[0.06] bg-black/20 p-3">
+                                    <div className="mb-2 flex items-center justify-between gap-2">
+                                      <label className="text-xs font-medium text-white/72">{preset.label}</label>
+                                      <span className="shrink-0 text-[10px] uppercase tracking-[0.14em] text-white/28">
+                                        {optional ? 'Optional' : saved ? 'Saved' : 'Required'}
+                                      </span>
+                                    </div>
+                                    <input
+                                      value={draftValues[preset.name] ?? ''}
+                                      onChange={(event) => setDraftValues((current) => ({ ...current, [preset.name]: event.target.value }))}
+                                      placeholder={saved ? savedPlaceholder(preset, savedByName) : preset.placeholder ?? 'Paste key'}
+                                      type={preset.name.includes('DOMAIN') || preset.name.includes('URL') || preset.name.includes('URI') || preset.name.includes('VERSION') || preset.name.includes('ID') ? 'text' : 'password'}
+                                      className="h-9 w-full rounded-[10px] border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white/82 outline-none placeholder:text-white/24 focus:border-[#fb923c]/45"
+                                    />
+                                    <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-white/32">{preset.description}</p>
+                                  </div>
+                                )
+                              })}
+                            </div>
+
+                            <div className="mt-4 flex flex-wrap items-center gap-2">
+                              <Button size="sm" onClick={() => saveService(service)} disabled={busy}>
+                                {busy ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-2 h-3.5 w-3.5" />}
+                                Save
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => testService(service)}>
+                                <CheckCircle2 className="mr-2 h-3.5 w-3.5" />
+                                Test setup
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </SettingsCard>
+                  )
+                })}
               </div>
-            </SettingsCard>
+            </div>
 
             <SettingsCard>
               <div className="divide-y divide-white/[0.06]">
@@ -754,4 +1009,87 @@ export default function SecretsSettingsPage() {
       </ScrollArea>
     </div>
   )
+}
+
+function StatusPill({ status }: { status: ServiceStatus }) {
+  const ready = status === 'ready'
+  const optional = status === 'optional'
+  return (
+    <span className={[
+      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em]',
+      ready ? 'bg-emerald-400/10 text-emerald-300/80' : optional ? 'bg-white/[0.04] text-white/42' : 'bg-amber-400/10 text-amber-200/75',
+    ].join(' ')}
+    >
+      {ready ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+      {ready ? 'Ready' : optional ? 'Optional' : 'Needs key'}
+    </span>
+  )
+}
+
+function savedPlaceholder(preset: SecretPreset, savedByName: Map<string, UserSecretSummary>) {
+  return savedByName.get(preset.name)?.maskedValue ?? preset.placeholder ?? 'Saved'
+}
+
+function serviceStatus(
+  service: SecretService,
+  savedByName: Map<string, UserSecretSummary>,
+  sourceBySlug: Map<string, LoadedSource>,
+  draftValues: Record<string, string>,
+): ServiceStatus {
+  const required = requiredPresets(service)
+  if (required.length === 0 && !serviceHasAnyCredential(service, savedByName, sourceBySlug, draftValues)) return 'optional'
+  return missingRequiredPresets(service, savedByName, sourceBySlug, draftValues).length === 0 ? 'ready' : 'needs'
+}
+
+function missingRequiredPresets(
+  service: SecretService,
+  savedByName: Map<string, UserSecretSummary>,
+  sourceBySlug: Map<string, LoadedSource>,
+  draftValues: Record<string, string>,
+) {
+  const missing = requiredPresets(service)
+    .filter((preset) => !presetIsSaved(preset, savedByName, sourceBySlug) && !draftValues[preset.name]?.trim())
+  const anyRequired = service.requiredAnyPresetNames
+    ?.map((name) => PRESET_BY_NAME.get(name))
+    .filter((preset): preset is SecretPreset => Boolean(preset)) ?? []
+
+  if (
+    anyRequired.length > 0
+    && !anyRequired.some((preset) => presetIsSaved(preset, savedByName, sourceBySlug) || Boolean(draftValues[preset.name]?.trim()))
+  ) {
+    missing.push(anyRequired[0]!)
+  }
+
+  return missing
+}
+
+function requiredPresets(service: SecretService) {
+  return service.presetNames
+    .map((name) => PRESET_BY_NAME.get(name))
+    .filter((preset): preset is SecretPreset => Boolean(preset))
+    .filter((preset) => !service.requiredAnyPresetNames?.includes(preset.name))
+    .filter((preset) => !service.optionalPresetNames?.includes(preset.name))
+}
+
+function serviceHasAnyCredential(
+  service: SecretService,
+  savedByName: Map<string, UserSecretSummary>,
+  sourceBySlug: Map<string, LoadedSource>,
+  draftValues: Record<string, string>,
+) {
+  return service.presetNames
+    .map((name) => PRESET_BY_NAME.get(name))
+    .filter((preset): preset is SecretPreset => Boolean(preset))
+    .some((preset) => presetIsSaved(preset, savedByName, sourceBySlug) || Boolean(draftValues[preset.name]?.trim()))
+}
+
+function presetIsSaved(
+  preset: SecretPreset,
+  savedByName: Map<string, UserSecretSummary>,
+  sourceBySlug: Map<string, LoadedSource>,
+) {
+  if (preset.storage === 'env') return savedByName.has(preset.name)
+  if (!preset.sourceSlug) return false
+  const source = sourceBySlug.get(preset.sourceSlug)
+  return Boolean(source && (isSourceUsable(source) || source.config.connectionStatus === 'untested'))
 }
