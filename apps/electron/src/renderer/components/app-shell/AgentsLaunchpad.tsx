@@ -1263,6 +1263,10 @@ function isContextDocVisibleToAgent(doc: ContextDocDTO, agentSlug: string) {
 }
 
 function getAgentDomain(tags: string[] | undefined, slug: string, name: string, description?: string) {
+  if (slug === 'youtube-research-agent' || slug === 'youtube-intelligence-agent') {
+    return 'Research'
+  }
+
   if (
     slug === 'ig-trending-power-up'
     || slug === 'influencer-campaign-power-up'
