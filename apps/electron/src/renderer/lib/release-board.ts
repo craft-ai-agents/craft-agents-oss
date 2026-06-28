@@ -94,7 +94,7 @@ export function buildDefaultReleaseBoard(workspaceId: string): ReleaseBoard {
 export function releaseBoardMetadata(board: ReleaseBoard): ContextDocMetadata {
   return {
     name: 'Release Board',
-    description: 'Mission-scoped checklist of release pieces, assets, and handoffs.',
+    description: 'Campaign-scoped checklist of release pieces, assets, and handoffs.',
     routing: { mode: 'broadcast' },
     enabled: true,
     status: 'active',
@@ -113,7 +113,7 @@ export function serializeReleaseBoardBody(board: ReleaseBoard): string {
   })
 
   return [
-    'This context is the release board for the current mission. Treat it as mission-scoped execution context: what exists, what is handled, and what still needs attention.',
+    'This context is the release board for the current campaign. Treat it as campaign-scoped execution context: what exists, what is handled, and what still needs attention.',
     '',
     '```json',
     JSON.stringify(board, null, 2),

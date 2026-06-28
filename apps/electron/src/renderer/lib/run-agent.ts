@@ -79,7 +79,7 @@ export function buildAgentCreateSessionOptions(
     launchReceipt: {
       createdAt: Date.now(),
       origin: isConcierge ? 'concierge' : 'agent',
-      summary: isConcierge ? 'HNIC chat session.' : `Started from @${agent.slug}.`,
+      summary: isConcierge ? 'Campaign chat session.' : `Started from @${agent.slug}.`,
       agent: {
         slug: agent.slug,
         name: agent.metadata.name,

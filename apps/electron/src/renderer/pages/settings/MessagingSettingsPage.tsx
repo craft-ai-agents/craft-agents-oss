@@ -118,7 +118,8 @@ export default function MessagingSettingsPage() {
 // ---------------------------------------------------------------------------
 
 type Platform = 'telegram' | 'whatsapp'
-const WHATSAPP_HNIC_AUTOMATION_NAME = 'WhatsApp → HNIC intake'
+const WHATSAPP_CAMPAIGN_AUTOMATION_NAME = 'WhatsApp → Campaign intake'
+const WHATSAPP_LEGACY_HNIC_AUTOMATION_NAME = 'WhatsApp → HNIC intake'
 
 const PLATFORM_LABEL_KEYS: Record<Platform, string> = {
   telegram: 'settings.messaging.telegram.title',
@@ -179,7 +180,7 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
         const enabled = automations.some((automation) =>
           automation.event === 'MessageReceive' &&
           automation.enabled &&
-          automation.name === WHATSAPP_HNIC_AUTOMATION_NAME
+          (automation.name === WHATSAPP_CAMPAIGN_AUTOMATION_NAME || automation.name === WHATSAPP_LEGACY_HNIC_AUTOMATION_NAME)
         )
         if (!cancelled) setHnicRouteEnabled(enabled)
       } catch {
@@ -252,10 +253,10 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
         workspaceId,
         'MessageReceive',
         {
-          name: WHATSAPP_HNIC_AUTOMATION_NAME,
+          name: WHATSAPP_CAMPAIGN_AUTOMATION_NAME,
           enabled: true,
           permissionMode: 'safe',
-          labels: ['whatsapp', 'hnic-intake'],
+          labels: ['whatsapp', 'campaign-intake'],
           conditions: [
             { condition: 'state', field: 'platform', value: 'whatsapp' },
             { condition: 'state', field: 'bound', value: false },
@@ -271,15 +272,15 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
                 'Sender ID: $CRAFT_SENDER_ID\n' +
                 'Channel: $CRAFT_CHANNEL_ID\n' +
                 'Text:\n$CRAFT_TEXT\n\n' +
-                'Act as HNIC. Triage the request, decide whether to answer directly, hand off to the best agent, launch a workflow, or create a follow-up. Keep the response concise and ask for confirmation before risky actions.',
+                'Act as Campaign intake. Triage the request, decide whether to answer directly, hand off to the best worker, launch a workflow, or create a follow-up. Keep the response concise and ask for confirmation before risky actions.',
             },
           ],
         },
       )
       setHnicRouteEnabled(true)
-      toast.success('WhatsApp now routes new messages to HNIC')
+      toast.success('WhatsApp now routes new messages to Campaign intake')
     } catch (err) {
-      toast.error('Failed to enable HNIC routing', {
+      toast.error('Failed to enable Campaign routing', {
         description: err instanceof Error ? err.message : String(err),
       })
     } finally {
@@ -406,10 +407,10 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-sm font-medium text-white">
                   <Route className="h-3.5 w-3.5 text-accent" />
-                  HNIC intake
+                  Campaign intake
                 </div>
                 <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                  New unbound WhatsApp messages become HNIC triage sessions.
+                  New unbound WhatsApp messages become Campaign triage sessions.
                 </div>
               </div>
               {hnicRouteEnabled ? (

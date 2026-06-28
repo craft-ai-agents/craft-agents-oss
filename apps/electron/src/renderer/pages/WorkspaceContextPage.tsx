@@ -577,7 +577,7 @@ function ConnectedRepoCard({
 
 function getSelfEditStatus(target: SelfEditTargetInfo | null): { label: string; detail: string; good: boolean } {
   if (!target) return { label: 'Unknown', detail: '', good: false }
-  if (target.source === 'none') return { label: 'Not set', detail: 'HNIC cannot safely edit RunnerOS until this is configured.', good: false }
+  if (target.source === 'none') return { label: 'Not set', detail: 'Campaign cannot safely edit RunnerOS until this is configured.', good: false }
   if (!target.enabled) return { label: 'Disabled', detail: `${target.source} config found, but self-edit is off.`, good: false }
   if (!target.validation.valid) {
     return {
@@ -605,8 +605,8 @@ function TokenBadge({ tokens, tone }: { tokens: number; tone: 'neutral' | 'amber
 }
 
 function routingSummary(doc: ContextDocDTO): string {
-  if (doc.metadata.routing.mode === 'broadcast') return 'All agents'
-  return doc.metadata.routing.agents.join(', ') || 'All agents'
+  if (doc.metadata.routing.mode === 'broadcast') return 'All workers'
+  return doc.metadata.routing.agents.join(', ') || 'All workers'
 }
 
 function WorkspaceContextEditDialog({
@@ -747,7 +747,7 @@ function WorkspaceContextEditDialog({
                 checked={form.routingMode === 'broadcast'}
                 onChange={() => setForm((prev) => ({ ...prev, routingMode: 'broadcast' }))}
               />
-              All agents
+              All workers
             </label>
             <label className="flex items-center gap-2 text-sm text-white/72">
               <input
@@ -755,12 +755,12 @@ function WorkspaceContextEditDialog({
                 checked={form.routingMode === 'targeted'}
                 onChange={() => setForm((prev) => ({ ...prev, routingMode: 'targeted' }))}
               />
-              Specific agents
+              Specific workers
             </label>
             {form.routingMode === 'targeted' && (
               <div className="max-h-44 overflow-y-auto rounded-[11px] border border-white/[0.08] bg-white/[0.035] p-2">
                 {activeAgents.length === 0 ? (
-                  <p className="px-1 py-1 text-xs text-white/45">No active agents in this workspace.</p>
+                  <p className="px-1 py-1 text-xs text-white/45">No active workers in this workspace.</p>
                 ) : activeAgents.map((agent) => (
                   <label key={agent.slug} className="flex items-start gap-2 rounded-[8px] px-1.5 py-1 text-white/72 hover:bg-white/[0.055]">
                     <input

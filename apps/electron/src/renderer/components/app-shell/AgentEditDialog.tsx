@@ -191,7 +191,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
     const trimmed = form.slug.trim()
     if (!trimmed) return null
     if (allAgents.some((a) => a.slug === trimmed)) {
-      return `An agent with slug "${trimmed}" already exists in the global library.`
+      return `A worker with slug "${trimmed}" already exists in the global library.`
     }
     return null
   }, [allAgents, form.slug, isEditing])
@@ -201,15 +201,15 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
     const trimmedSlug = form.slug.trim()
     const trimmedDescription = form.description.trim()
     if (!trimmedName) {
-      toast.error('Agent needs a name')
+      toast.error('Worker needs a name')
       return
     }
     if (!trimmedSlug) {
-      toast.error('Agent needs a slug')
+      toast.error('Worker needs a slug')
       return
     }
     if (!trimmedDescription) {
-      toast.error('Agent needs a one-sentence description')
+      toast.error('Worker needs a one-sentence description')
       return
     }
     if (slugConflict) {
@@ -249,7 +249,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
       toast.success(isEditing ? `Saved "${trimmedName}"` : `Created "${trimmedName}"`)
       onOpenChange(false)
     } catch (err) {
-      toast.error(isEditing ? 'Failed to save agent' : 'Failed to create agent', {
+      toast.error(isEditing ? 'Failed to save worker' : 'Failed to create worker', {
         description: err instanceof Error ? err.message : String(err),
       })
     } finally {
@@ -262,11 +262,11 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
       <DialogContent className="max-h-[88vh] max-w-3xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-modal-small">
         <DialogHeader className="border-b border-white/[0.06] bg-[radial-gradient(circle_at_18%_0%,rgba(249,115,22,0.20),transparent_34%),#0b0b0f] px-5 pb-3 pt-4">
           <DialogTitle className="text-[20px] font-semibold leading-tight text-white">
-            {isEditing ? `Edit ${agent!.metadata.name}` : 'New agent'}
+            {isEditing ? `Edit ${agent!.metadata.name}` : 'New worker'}
           </DialogTitle>
           <DialogDescription className="max-w-2xl text-sm leading-5 text-white/52">
             {isEditing
-              ? 'Update this agent without touching internal routing names.'
+              ? 'Update this worker without touching internal routing names.'
               : 'Build a saved operator with a prompt, runtime, skills, tools, context, and memory.'}
           </DialogDescription>
         </DialogHeader>
@@ -311,7 +311,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
           </FormSection>
 
           {/* Bundles — skills + sources */}
-          <FormSection title="Bundles" hint="auto-activated with this agent">
+          <FormSection title="Bundles" hint="auto-activated with this worker">
             <div className="grid gap-3 md:grid-cols-2">
               <BundleSummaryButton
                 title="Skills"
@@ -384,7 +384,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
           </FormSection>
 
           {/* Capabilities — collapsible because most users won't fill these on first try */}
-          <CollapsibleSection title="Capabilities (for orchestration)" hint="lets the Orchestrator route to this agent intelligently">
+          <CollapsibleSection title="Capabilities (for orchestration)" hint="lets the Orchestrator route to this worker intelligently">
             <Field label="Takes" hint="one sentence describing input">
               <input
                 type="text"
@@ -431,7 +431,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
             onClick={handleSave}
             disabled={saving}
           >
-            {saving ? 'Saving...' : isEditing ? 'Save' : 'Create agent'}
+            {saving ? 'Saving...' : isEditing ? 'Save' : 'Create worker'}
           </Button>
         </DialogFooter>
 
@@ -603,7 +603,7 @@ function VisualAgentToggle({
           <Eye className="h-3.5 w-3.5" />
         </span>
         <span className="min-w-0">
-          <span className="block text-sm font-medium text-white/82">Visual agent</span>
+          <span className="block text-sm font-medium text-white/82">Visual worker</span>
           <span className="mt-0.5 block text-xs leading-5 text-white/40">
             Automatically uses Canvas for visual, web, media, and document outputs.
           </span>
@@ -688,7 +688,7 @@ function PromptEditorPanel({
           <textarea
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            placeholder="Write the agent system prompt..."
+            placeholder="Write the worker system prompt..."
             className="h-[min(34vh,360px)] min-h-[220px] w-full resize-y rounded-[12px] border border-white/[0.09] bg-black/30 p-3 font-mono text-[13px] leading-6 text-white/84 outline-none transition-colors placeholder:text-white/24 focus:border-[#fb923c]/55"
             autoFocus
           />
@@ -721,7 +721,7 @@ function BundlePickerDialog({
         <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
           <DialogTitle className="text-lg font-semibold text-white">{title}</DialogTitle>
           <DialogDescription className="text-sm text-white/48">
-            Choose what this agent carries into new sessions.
+            Choose what this worker carries into new sessions.
           </DialogDescription>
         </DialogHeader>
 

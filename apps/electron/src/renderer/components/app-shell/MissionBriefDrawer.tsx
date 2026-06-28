@@ -116,14 +116,14 @@ export function MissionBriefDrawer({
         body: serializeMissionBriefBody(brief),
       })
       onSaved(brief)
-      toast.success('Mission brief saved')
+      toast.success('Campaign brief saved')
       if (mission.status === 'empty') {
         setActiveTab('assets')
       } else {
         onOpenChange(false)
       }
     } catch (err) {
-      toast.error('Failed to save mission brief', {
+      toast.error('Failed to save campaign brief', {
         description: err instanceof Error ? err.message : String(err),
       })
     } finally {
@@ -158,17 +158,17 @@ export function MissionBriefDrawer({
             <div>
               <div className="mb-2 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.18em] text-orange-300/70">
                 <ClipboardList className="h-3.5 w-3.5" />
-                Mission Brief
+                Campaign Brief
               </div>
               <DrawerTitle className="text-xl font-medium tracking-tight text-white">
-                {mission.title || 'Create Mission'}
+                {mission.title || 'Create Campaign'}
               </DrawerTitle>
             </div>
             <button
               type="button"
               onClick={() => onOpenChange(false)}
               className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03] text-white/50 hover:bg-white/[0.08] hover:text-white"
-              aria-label="Close mission brief"
+              aria-label="Close campaign brief"
             >
               <X className="h-4 w-4" />
             </button>
@@ -186,7 +186,7 @@ export function MissionBriefDrawer({
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/50">
-                  Mission Brief
+                  Campaign Brief
                 </h3>
               </div>
               <span className="rounded-full border border-white/[0.06] px-2.5 py-1 text-[10px] text-white/42">
@@ -420,7 +420,7 @@ function AssetsSetup({
             <h3 className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/50">
               Provided
             </h3>
-            <p className="mt-1 text-xs text-white/36">{files.length} file{files.length === 1 ? '' : 's'} in mission vault</p>
+            <p className="mt-1 text-xs text-white/36">{files.length} file{files.length === 1 ? '' : 's'} in campaign vault</p>
           </div>
           <button
             type="button"

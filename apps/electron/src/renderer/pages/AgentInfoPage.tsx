@@ -149,22 +149,22 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
         contextDocs,
       })
     } catch (err) {
-      toast.error('Failed to run agent', {
+      toast.error('Failed to run worker', {
         description: err instanceof Error ? err.message : String(err),
       })
     }
   }
 
   const handleDelete = async () => {
-    if (!confirm(`Delete "${agent.metadata.name}" from the global library?\n\nThis is not workspace deactivation. It removes the AGENT.md file and deactivates this agent in every workspace.`)) {
+    if (!confirm(`Delete "${agent.metadata.name}" from the global library?\n\nThis is not workspace deactivation. It removes the AGENT.md file and deactivates this worker in every workspace.`)) {
       return
     }
     try {
       const ok = await remove(agent.slug)
       if (ok) toast.success(`Deleted "${agent.metadata.name}"`)
-      else toast.error('Delete returned no-op (was the agent already gone?)')
+      else toast.error('Delete returned no-op (was the worker already gone?)')
     } catch (err) {
-      toast.error('Failed to delete agent', {
+      toast.error('Failed to delete worker', {
         description: err instanceof Error ? err.message : String(err),
       })
     }
@@ -283,7 +283,7 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
         {(agent.metadata.inputs || agent.metadata.outputs || (agent.metadata.tags?.length ?? 0) > 0) && (
           <Info_Section
             title="Capabilities"
-            description="What this agent expects, what it produces, and tags for browse / orchestration."
+            description="What this worker expects, what it produces, and tags for browse / orchestration."
           >
             <Info_Table>
               {agent.metadata.inputs && (
@@ -310,7 +310,7 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
         {/* Skills + sources */}
         <Info_Section
           title="Bundled skills & sources"
-          description="These activate automatically when this agent runs."
+          description="These activate automatically when this worker runs."
         >
           <Info_Table>
             <Info_Table.Row label="Skills">

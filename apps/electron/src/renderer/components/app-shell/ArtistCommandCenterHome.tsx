@@ -148,14 +148,14 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
     [releaseBoard.categories, selectedReleaseCategoryId],
   )
   const hasMission = mission.status !== 'empty'
-  const title = mission.title || 'Untitled Mission'
+  const title = mission.title || 'Untitled Campaign'
   const subtitle = hasMission
-    ? mission.goal || mission.mood || 'Mission brief started. Add more context when ready.'
-    : 'Start with a goal, files, or an agent.'
-  const focus = mission.timeline || mission.releaseDate || (hasMission ? mission.missionType || 'Mission active' : 'No brief yet')
+    ? mission.goal || mission.mood || 'Campaign brief started. Add more context when ready.'
+    : 'Start with a goal, files, or a worker.'
+  const focus = mission.timeline || mission.releaseDate || (hasMission ? mission.missionType || 'Campaign active' : 'No brief yet')
   const readinessLabel = hasMission ? `${mission.completeness}% ready` : 'Not started'
   const nextMove = React.useMemo(
-    () => hasMission ? missionNextMove(assetManifest) : 'Create the mission brief.',
+    () => hasMission ? missionNextMove(assetManifest) : 'Create the campaign brief.',
     [assetManifest, hasMission],
   )
 
@@ -178,7 +178,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
     async (filePaths: string[], kindHint: MissionAssetKindHint = 'any') => {
       if (!hasMission) {
         setDrawerOpen(true)
-        toast.info('Create the mission first, then add files.')
+        toast.info('Create the campaign first, then add files.')
         return
       }
       if (filePaths.length === 0) return
@@ -193,10 +193,10 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
         })
         const skipped = result.skipped.length ? ` ${result.skipped.length} skipped.` : ''
         if (result.imported.length === 0) {
-          toast.warning(`No mission assets added.${skipped}`)
+          toast.warning(`No campaign assets added.${skipped}`)
           return
         }
-        toast.success(`Added ${result.imported.length} mission asset${result.imported.length === 1 ? '' : 's'}.${skipped}`)
+        toast.success(`Added ${result.imported.length} campaign asset${result.imported.length === 1 ? '' : 's'}.${skipped}`)
       } catch (err) {
         toast.error(err instanceof Error ? err.message : String(err))
       } finally {
@@ -250,7 +250,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
     async (kindHint: MissionAssetKindHint = 'any') => {
       if (!hasMission) {
         setDrawerOpen(true)
-        toast.info('Create the mission first, then add files.')
+        toast.info('Create the campaign first, then add files.')
         return
       }
       setAssetBusy(true)
@@ -274,14 +274,14 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
           <div className="absolute -bottom-[40%] -right-[10%] h-[600px] w-[600px] rounded-full bg-indigo-600/5 blur-[120px]" />
 
           <div className="absolute bottom-7 right-8 hidden w-[28%] rounded-[24px] border border-white/[0.04] bg-white/[0.015] p-4 2xl:block">
-            <p className="mb-2 text-[9px] font-medium uppercase tracking-[0.18em] text-white/35">Mission Context</p>
+            <p className="mb-2 text-[9px] font-medium uppercase tracking-[0.18em] text-white/35">Campaign Context</p>
             <div className="h-1 overflow-hidden rounded-full bg-white/[0.05]">
               <div className="h-full rounded-full bg-orange-400" style={{ width: `${mission.completeness}%` }} />
             </div>
             <p className="mt-3 text-xs leading-5 text-white/42">
               {hasMission
-                ? 'The command center is now using this mission brief as workspace context.'
-                : 'Nothing is required before agents can work. The brief just makes them sharper.'}
+                ? 'The command center is now using this campaign brief as workspace context.'
+                : 'Nothing is required before workers can work. The brief just makes them sharper.'}
             </p>
           </div>
 
@@ -292,7 +292,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
                   <span className={cn('h-1.5 w-1.5 rounded-full', hasMission ? 'bg-emerald-500' : 'bg-white/35')} />
                 </span>
                 <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/70">
-                  {hasMission ? 'Mission Active' : 'Mission Empty'}
+                  {hasMission ? 'Campaign Active' : 'Campaign Empty'}
                 </span>
               </div>
               <div className="text-right">
@@ -321,7 +321,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
                     <div className="h-full rounded-full bg-orange-500/80" style={{ width: `${mission.completeness}%` }} />
                   </div>
                   <p className="mt-2 text-xs font-medium text-white/72">
-                    {hasMission ? 'Mission context saved' : 'No mission brief yet'}
+                    {hasMission ? 'Campaign context saved' : 'No campaign brief yet'}
                   </p>
                 </div>
                 <div className="hidden md:block">
@@ -338,7 +338,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
                   onClick={() => setDrawerOpen(true)}
                   className="inline-flex h-9 items-center gap-2 rounded-full bg-white/90 px-5 text-xs font-medium text-black transition-transform hover:scale-[1.02] active:scale-95"
                 >
-                  {hasMission ? 'Edit Mission' : 'Create Mission'}
+                  {hasMission ? 'Edit Campaign' : 'Create Campaign'}
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -356,7 +356,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
             <SectionTitle icon={ShieldCheck} title="Approvals" meta="None" />
             <EmptyCardLine
               title="No pending approvals"
-              detail={hasMission ? 'Approvals will appear when workflows create review points.' : 'Create a mission before approval workflows matter.'}
+              detail={hasMission ? 'Approvals will appear when workflows create review points.' : 'Create a campaign before approval workflows matter.'}
             />
           </CommandCard>
 
@@ -364,11 +364,11 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
             <SectionTitle icon={CalendarClock} title="Today" meta="Local" />
             {mission.timeline || mission.releaseDate ? (
               <div className="relative mt-2.5 space-y-3.5 pl-3.5 before:absolute before:bottom-1 before:left-[5.5px] before:top-1 before:w-px before:bg-white/[0.04]">
-                <TimelineLine time="Now" title={mission.timeline || mission.releaseDate || 'Mission timeline'} area="Mission" />
-                <TimelineLine time="Next" title="Ask an agent to turn this into a plan" area="Delegation" />
+                <TimelineLine time="Now" title={mission.timeline || mission.releaseDate || 'Campaign timeline'} area="Campaign" />
+                <TimelineLine time="Next" title="Ask a worker to turn this into a plan" area="Delegation" />
               </div>
             ) : (
-              <EmptyCardLine title="No timeline yet" detail="Add a release date or rough window in the mission brief." />
+              <EmptyCardLine title="No timeline yet" detail="Add a release date or rough window in the campaign brief." />
             )}
           </CommandCard>
 
@@ -376,7 +376,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Bot className="h-3 w-3 text-white/40" />
-                <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">Active Agents</h3>
+                <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">Active Workers</h3>
               </div>
               <span className="text-[8px] font-medium uppercase tracking-widest text-white/30">Quiet</span>
             </div>
@@ -385,9 +385,9 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 text-white/32" />
                 <div>
-                  <p className="text-sm font-medium text-white/75">No background agents running</p>
+                  <p className="text-sm font-medium text-white/75">No background workers running</p>
                   <p className="mt-1 text-xs leading-5 text-white/38">
-                    Once a mission workflow starts, agent runs and handoffs can appear here.
+                    Once a campaign workflow starts, worker runs and handoffs can appear here.
                   </p>
                 </div>
               </div>
@@ -411,12 +411,12 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
         onOpenAssetsFolder={async () => {
           if (!hasMission) {
             setDrawerOpen(true)
-            toast.info('Create the mission first, then open the assets folder.')
+            toast.info('Create the campaign first, then open the assets folder.')
             return
           }
           try {
             const opened = await window.electronAPI.openMissionAssetsFolder(workspaceId)
-            if (!opened) toast.error('Could not open mission assets folder.')
+            if (!opened) toast.error('Could not open campaign assets folder.')
           } catch (err) {
             toast.error(err instanceof Error ? err.message : String(err))
           }
@@ -445,10 +445,10 @@ const releaseCategoryIcons: Record<ReleaseBoardCategory['id'], React.ComponentTy
 
 function missionNextMove(manifest: MissionAssetManifest | null): string {
   const files = manifest?.files.filter((file) => file.status === 'available') ?? []
-  if (!files.some((file) => file.kind === 'master' || file.kind === 'demo')) return 'Add the master in Mission Assets.'
-  if (!files.some((file) => file.kind === 'lyrics')) return 'Add lyrics in Mission Assets.'
-  if (!files.some((file) => file.kind === 'cover-art')) return 'Add cover art in Mission Assets.'
-  return 'Use the release board or launch an agent.'
+  if (!files.some((file) => file.kind === 'master' || file.kind === 'demo')) return 'Add the master in Campaign Assets.'
+  if (!files.some((file) => file.kind === 'lyrics')) return 'Add lyrics in Campaign Assets.'
+  if (!files.some((file) => file.kind === 'cover-art')) return 'Add cover art in Campaign Assets.'
+  return 'Use the release board or launch a worker.'
 }
 
 function ReleaseBoardRow({
@@ -586,7 +586,7 @@ function ReleaseBoardDialog({
                         {item.label}
                       </p>
                       {item.linkedAssetId ? (
-                        <p className="mt-0.5 truncate text-[10px] text-emerald-300/48">Matched from mission assets</p>
+                        <p className="mt-0.5 truncate text-[10px] text-emerald-300/48">Matched from campaign assets</p>
                       ) : null}
                     </div>
                     <span className={cn(

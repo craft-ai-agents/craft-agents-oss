@@ -39,7 +39,7 @@ describe('mission brief utilities', () => {
     const parsed = parseMissionBriefDoc({
       slug: 'mission-brief',
       metadata: {
-        name: 'Mission Brief: Night Drive',
+        name: 'Campaign Brief: Night Drive',
         routing: { mode: 'broadcast' },
         enabled: true,
       },

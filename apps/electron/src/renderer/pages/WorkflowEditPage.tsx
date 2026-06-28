@@ -221,15 +221,15 @@ function WorkflowAgentCapabilitiesPanel({
     <aside className="runneros-card p-3 text-xs">
       <div className="mb-3">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-white/45">
-          Agent capabilities
+          Worker capabilities
         </h2>
         <p className="mt-1 text-[11px] leading-relaxed text-white/42">
-          Read-only hints from saved agents used by this workflow.
+          Read-only hints from saved workers used by this workflow.
         </p>
       </div>
 
       {loading && (
-        <p className="text-white/45">Loading agents...</p>
+        <p className="text-white/45">Loading workers...</p>
       )}
       {error && (
         <div className="flex items-center gap-2 rounded-[10px] border border-red-500/30 bg-red-500/10 p-2 text-red-300">
@@ -238,7 +238,7 @@ function WorkflowAgentCapabilitiesPanel({
         </div>
       )}
       {!loading && !error && !parsed && (
-        <p className="text-white/45">Fix the workflow syntax to preview step agents.</p>
+        <p className="text-white/45">Fix the workflow syntax to preview step workers.</p>
       )}
       {!loading && !error && parsed && steps.length === 0 && (
         <p className="text-white/45">No steps declared.</p>
@@ -263,7 +263,7 @@ function WorkflowAgentCapabilitiesPanel({
                       <AgentCapabilitySummary agent={agent} />
                     ) : (
                       <p className="mt-2 text-[11px] leading-relaxed text-white/45">
-                        Add this agent to the global library, or change the step to an existing active agent.
+                        Add this worker to the global library, or change the step to an existing active worker.
                       </p>
                     )}
                   </div>
@@ -326,7 +326,7 @@ function AgentCapabilitySummary({ agent }: { agent: AgentDefinitionDTO }) {
           )}
         </dl>
       ) : (
-        <p className="text-[11px] text-white/45">No capabilities declared for this agent.</p>
+        <p className="text-[11px] text-white/45">No capabilities declared for this worker.</p>
       )}
     </div>
   )

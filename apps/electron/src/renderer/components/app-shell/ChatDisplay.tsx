@@ -1724,7 +1724,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                                 draftInput: conciergeSuggestion.prompt,
                               })
                             } catch (error) {
-                              toast.error('Failed to start agent', {
+                              toast.error('Failed to start worker', {
                                 description: error instanceof Error ? error.message : String(error),
                               })
                             }

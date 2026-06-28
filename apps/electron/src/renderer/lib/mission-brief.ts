@@ -209,8 +209,8 @@ export function buildMissionBrief(workspaceId: string, input: Partial<MissionBri
 
 export function missionBriefMetadata(brief: MissionBrief): ContextDocMetadata {
   return {
-    name: brief.title ? `Mission Brief: ${brief.title}` : 'Mission Brief',
-    description: 'Current creative mission context for command center and agents.',
+    name: brief.title ? `Campaign Brief: ${brief.title}` : 'Campaign Brief',
+    description: 'Current creative campaign context for command center and workers.',
     routing: { mode: 'broadcast' },
     enabled: true,
     status: brief.status === 'empty' ? undefined : 'active',
@@ -221,7 +221,7 @@ export function missionBriefMetadata(brief: MissionBrief): ContextDocMetadata {
 
 export function serializeMissionBriefBody(brief: MissionBrief): string {
   return [
-    'This context is the current creative mission brief. Treat it as mission-scoped context, not global creator identity.',
+    'This context is the current creative campaign brief. Treat it as campaign-scoped context, not global creator identity.',
     '',
     '```json',
     JSON.stringify(brief, null, 2),
@@ -282,7 +282,7 @@ function normalizeDeadline(value: string | undefined): string | undefined {
 
 function buildEnhancedSummary(brief: Partial<MissionBrief>, missing: string[]): string {
   const lines = [
-    brief.title ? `Mission: ${brief.title}` : 'Mission: untitled',
+    brief.title ? `Campaign: ${brief.title}` : 'Campaign: untitled',
     brief.missionType ? `Type: ${brief.missionType}` : null,
     brief.goal ? `Goal: ${brief.goal}` : null,
     brief.timeline ? `Release target: ${brief.timeline}` : null,

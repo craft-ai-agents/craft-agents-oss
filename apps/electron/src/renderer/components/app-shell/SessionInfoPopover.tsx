@@ -267,8 +267,8 @@ function LaunchReceiptSection({ receipt }: { receipt: SessionLaunchReceipt }) {
 
         {(receipt.routing || agentCatalog.length > 0) && (
           <ReceiptGroup
-            title="HNIC routing"
-            summary={receipt.routing ? `${receipt.routing.activeAgentCount} active agents` : formatCount(agentCatalog.length, 'agent')}
+            title="Campaign routing"
+            summary={receipt.routing ? `${receipt.routing.activeAgentCount} active workers` : formatCount(agentCatalog.length, 'worker')}
           >
             {receipt.routing && (
               <>

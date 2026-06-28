@@ -82,7 +82,7 @@ export function AgentSessionsPanel({ agentSlug, workspaceId, remoteWorkspaceId }
         contextDocs,
       })
     } catch (err) {
-      toast.error('Failed to run agent', {
+      toast.error('Failed to run worker', {
         description: err instanceof Error ? err.message : String(err),
       })
     }
@@ -187,7 +187,7 @@ function EmptyState({ agentName, onRun }: EmptyStateProps) {
       <div>
         <p className="text-sm text-foreground/70">No sessions yet for {agentName}.</p>
         <p className="text-xs text-foreground/50 mt-1 max-w-xs mx-auto">
-          Every time you summon this agent, the session lands here — it becomes
+          Every time you summon this worker, the session lands here — it becomes
           your work-stream for {agentName}.
         </p>
       </div>

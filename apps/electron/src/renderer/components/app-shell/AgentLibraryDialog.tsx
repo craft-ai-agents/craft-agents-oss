@@ -66,9 +66,9 @@ export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLib
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[86vh] max-w-2xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-modal-small">
         <DialogHeader className="border-b border-white/[0.06] bg-[radial-gradient(circle_at_18%_0%,rgba(249,115,22,0.20),transparent_34%),#0b0b0f] px-6 py-5">
-          <DialogTitle className="text-[22px] font-semibold leading-tight text-white">Manage agents</DialogTitle>
+          <DialogTitle className="text-[22px] font-semibold leading-tight text-white">Manage workers</DialogTitle>
           <DialogDescription className="max-w-xl text-sm leading-6 text-white/52">
-            Choose which agents appear in this workspace.
+            Choose which workers appear in this workspace.
           </DialogDescription>
         </DialogHeader>
 
@@ -77,7 +77,7 @@ export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLib
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/34" />
             <input
               type="text"
-              placeholder="Search agents"
+              placeholder="Search workers"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="h-10 w-full rounded-[12px] border border-white/[0.08] bg-white/[0.035] pl-9 pr-3 text-sm text-white outline-none placeholder:text-white/28 focus:border-[#fb923c]/40"
@@ -86,7 +86,7 @@ export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLib
               type="button"
               onClick={() => setCreateOpen(true)}
               className="absolute right-1.5 top-1/2 inline-flex h-7 -translate-y-1/2 items-center gap-1.5 rounded-[9px] border border-[#fb923c]/24 bg-[#f97316]/18 px-2.5 text-[11px] font-medium text-[#fed7aa] transition-colors hover:bg-[#f97316]/28 hover:text-white"
-              title="Create a new agent from scratch"
+              title="Create a new worker from scratch"
             >
               <Plus className="h-3.5 w-3.5" />
               New
@@ -96,7 +96,7 @@ export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLib
           <div className="max-h-[54vh] min-w-0 space-y-2 overflow-y-auto overflow-x-hidden pr-1">
             {filteredAgents.length === 0 && (
               <div className="rounded-[14px] border border-dashed border-white/[0.10] px-4 py-8 text-center text-xs text-white/38">
-                No agents match your search.
+                No workers match your search.
               </div>
             )}
             {filteredAgents.map((agent) => (

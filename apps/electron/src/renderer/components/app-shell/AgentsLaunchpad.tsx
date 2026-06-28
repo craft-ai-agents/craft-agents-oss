@@ -68,7 +68,7 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
         contextDocs,
       })
     } catch (err) {
-      toast.error('Failed to start agent chat', {
+      toast.error('Failed to start worker chat', {
         description: err instanceof Error ? err.message : String(err),
       })
     }
@@ -116,7 +116,7 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
       <div className="mx-auto w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-[28px] font-semibold leading-tight text-white">Agents</h1>
+            <h1 className="text-[28px] font-semibold leading-tight text-white">Workers</h1>
             <p className="mt-1 max-w-md text-[12px] leading-[18px] text-white/54">
               Music operators for release planning, content, ads, audience intelligence, and creative execution.
             </p>
@@ -128,7 +128,7 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
               className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] font-medium text-white/72 transition-colors hover:bg-white/[0.08] hover:text-white"
             >
               <Plus className="h-3 w-3" />
-              New agent
+              New worker
             </button>
             <button
               type="button"
@@ -141,9 +141,9 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
           </div>
         </div>
 
-        {/* Active agent cards */}
+        {/* Active worker cards */}
         {loading && grouped.length === 0 ? (
-          <div className="text-sm text-white/50">Loading agents...</div>
+          <div className="text-sm text-white/50">Loading workers...</div>
         ) : grouped.length === 0 ? (
           <EmptyState
             allAgentsCount={allAgents.length}
@@ -395,7 +395,7 @@ function AgentDetailDialog({ agent, workspaceId, onAgentUpdated, onOpenChange }:
                 value={promptDraft}
                 onChange={(event) => setPromptDraft(event.target.value)}
                 className="h-[220px] w-full resize-y rounded-[10px] border border-white/[0.08] bg-black/25 p-3 font-mono text-xs leading-5 text-white/74 outline-none transition-colors placeholder:text-white/24 focus:border-[#fb923c]/55"
-                placeholder="Write this agent's system prompt..."
+                placeholder="Write this worker's system prompt..."
               />
             ) : (
               <button
@@ -458,7 +458,7 @@ function AgentDetailDialog({ agent, workspaceId, onAgentUpdated, onOpenChange }:
             systemPrompt: agent.systemPrompt,
           })
           onAgentUpdated(updated)
-          toast.success(type === 'skills' ? 'Agent skills updated' : 'Agent tools updated')
+          toast.success(type === 'skills' ? 'Worker skills updated' : 'Worker tools updated')
           setBundlePicker(null)
         }}
       />
@@ -478,7 +478,7 @@ function AgentDetailDialog({ agent, workspaceId, onAgentUpdated, onOpenChange }:
             systemPrompt: agent.systemPrompt,
           })
           onAgentUpdated(updated)
-          toast.success('Agent runtime updated')
+          toast.success('Worker runtime updated')
           setRuntimePickerOpen(false)
         }}
       />
@@ -565,7 +565,7 @@ function AgentRuntimePickerDialog({
         <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
           <DialogTitle className="text-lg font-semibold text-white">Edit runtime</DialogTitle>
           <DialogDescription className="text-sm text-white/48">
-            Set this agent&apos;s connection and model override.
+            Set this worker&apos;s connection and model override.
           </DialogDescription>
         </DialogHeader>
 
@@ -774,7 +774,7 @@ function AgentBundlePickerDialog({
         <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
           <DialogTitle className="text-lg font-semibold text-white">{title}</DialogTitle>
           <DialogDescription className="text-sm text-white/48">
-            Choose what this agent carries into new sessions.
+            Choose what this worker carries into new sessions.
           </DialogDescription>
         </DialogHeader>
 
@@ -906,7 +906,7 @@ function AgentContextMemoryPanel({
         </div>
         {visibleDocs.length === 0 ? (
           <div className="rounded-[10px] border border-dashed border-white/[0.10] p-2.5 text-xs text-white/38">
-            No context docs routed to this agent.
+            No context docs routed to this worker.
           </div>
         ) : (
           <div className="flex flex-wrap gap-1.5">
@@ -990,7 +990,7 @@ function AgentContextMemoryPanel({
               })]
             })
           await Promise.all(mutations)
-          toast.success('Agent context updated')
+          toast.success('Worker context updated')
           setContextPickerOpen(false)
         }}
       />
@@ -1055,13 +1055,13 @@ function AgentContextPickerDialog({
         <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
           <DialogTitle className="text-lg font-semibold text-white">Edit context</DialogTitle>
           <DialogDescription className="text-sm text-white/48">
-            Broadcast docs are already visible to every agent. Choose targeted docs for this one.
+            Broadcast docs are already visible to every worker. Choose targeted docs for this one.
           </DialogDescription>
         </DialogHeader>
 
         <div className="max-h-[46vh] space-y-4 overflow-y-auto px-5 py-4">
           {broadcastDocs.length > 0 ? (
-            <ContextDocGroup title="All agents" docs={broadcastDocs} locked />
+            <ContextDocGroup title="All workers" docs={broadcastDocs} locked />
           ) : null}
           <ContextDocGroup
             title="Targeted docs"
@@ -1155,12 +1155,12 @@ function EmptyState({ allAgentsCount, onOpenLibrary }: EmptyStateProps) {
   return (
     <div className="rounded-[18px] border border-dashed border-white/[0.15] bg-white/[0.02] p-8 text-center">
       <p className="text-sm text-white/70">
-        No agents are active in this workspace yet.
+        No workers are active in this workspace yet.
       </p>
       <p className="mt-1 mb-4 text-xs text-white/50">
         {allAgentsCount > 0
-          ? 'Activate an agent from the library to use it here.'
-          : 'Create a new agent or open the library.'}
+          ? 'Activate a worker from the library to use it here.'
+          : 'Create a new worker or open the library.'}
       </p>
       {allAgentsCount > 0 && (
         <button
@@ -1285,7 +1285,7 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
   if (matchesAny(joined, ['spotify', 'playlist', 'youtube intelligence', 'youtube research', 'audience', 'research', 'analy', 'insight'])) return 'Research'
   if (matchesAny(joined, ['workflow', 'ops', 'orchestr', 'router', 'guide', 'chat', 'routing'])) return 'Command'
   if (matchesAny(joined, ['code', 'tool', 'diagnostic', 'reporting'])) return 'Operators'
-  return 'Other Agents'
+  return 'Other Workers'
 }
 
 function agentDomainRank(domain: string) {
@@ -1298,7 +1298,7 @@ function agentDomainRank(domain: string) {
     'Research',
     'Command',
     'Operators',
-    'Other Agents',
+    'Other Workers',
   ]
   const index = order.indexOf(domain)
   return index === -1 ? order.length : index

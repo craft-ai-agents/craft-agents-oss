@@ -48,7 +48,7 @@ export function AgentsListPanel({
     // First-load placeholder — keep panel in flow rather than flicker an empty state
     return (
       <div className={className} style={{ padding: 16, opacity: 0.5, fontSize: 13 }}>
-        Loading agents…
+        Loading workers…
       </div>
     )
   }
@@ -64,8 +64,8 @@ export function AgentsListPanel({
       emptyState={
         <EntityListEmptyScreen
           icon={<Bot />}
-          title="No agents yet"
-          description="Agents are saved personas you can summon — LLM, prompt, skills, and tools bundled together. The starter set lives in ~/.agents/agents/."
+          title="No workers yet"
+          description="Workers are saved operators you can summon: prompt, skills, and tools bundled together. The starter set lives in ~/.agents/agents/."
           docKey="skills"
         />
       }

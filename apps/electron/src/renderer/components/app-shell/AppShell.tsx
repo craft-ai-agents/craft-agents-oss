@@ -2187,7 +2187,7 @@ function AppShellContent({
 
     // Agents navigator (saved personas — agent-definitions library)
     if (isAgentsNavigation(navState)) {
-      return 'Agents'
+      return 'Workers'
     }
 
     // Skills navigator
@@ -2361,19 +2361,19 @@ function AppShellContent({
                   getItemProps={getSidebarItemProps}
                   focusedItemId={focusedSidebarItemId}
                   links={[
-                    // --- Chat (Concierge) ---
+                    // --- Campaign (Concierge) ---
                     {
                       id: "nav:chat",
-                      title: "HNIC",
+                      title: "Campaign",
                       icon: MessageSquare,
                       variant: isConciergeSession ? "default" : "ghost",
                       onClick: handleChatClick,
                       label: openingConcierge ? '…' : undefined,
                     },
-                    // --- Agents ---
+                    // --- Workers ---
                     {
                       id: "nav:agents",
-                      title: 'Agents',
+                      title: 'Workers',
                       icon: Bot,
                       variant: isAgentsNavigation(navState) ? "default" : "ghost",
                       onClick: handleAgentsClick,
