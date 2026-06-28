@@ -858,9 +858,15 @@ html[data-font="inter"] {
 
   .runneros-page-wrap {
     width: 100%;
-    max-width: 72rem;
+    max-width: 1600px;
     margin: 0 auto;
-    padding: 1.75rem;
+    padding: 1rem 1.25rem;
+  }
+
+  @media (min-width: 1280px) {
+    .runneros-page-wrap {
+      padding: 1.25rem 2rem;
+    }
   }
 
   .runneros-page-title {

@@ -231,7 +231,7 @@ export function SourcesListPanel({
     <>
       <div className={className ? `flex min-h-0 flex-1 flex-col ${className}` : 'flex min-h-0 flex-1 flex-col'}>
         {className?.includes('runneros-library-grid') ? (
-          <div className="runneros-glass-route min-h-0 flex-1 overflow-y-auto px-8 py-8">
+          <div className="runneros-glass-route mx-auto min-h-0 w-full max-w-[1600px] flex-1 overflow-y-auto px-5 py-4 xl:px-8 xl:py-5">
             <div className="mb-7 flex items-start justify-between gap-4">
               <div>
                 <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-[#fdba74]">

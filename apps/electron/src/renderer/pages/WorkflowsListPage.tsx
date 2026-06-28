@@ -191,7 +191,7 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
-      <div className="mx-auto max-w-6xl px-7 py-7">
+      <div className="mx-auto w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-[28px] font-semibold leading-tight text-white">{t('sidebar.workflows')}</h1>
