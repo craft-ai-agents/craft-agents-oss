@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env bun
 /**
  * Spotify Playlist Curator — apply gate.
  *
@@ -44,7 +44,7 @@ type CliOptions = {
 
 function usage() {
   return `Usage:
-  npx tsx skills/spotify-playlist-curator/scripts/apply-plan.ts --plan <path> [--apply --confirm] [options]
+	  bun packages/shared/src/skills/bundled/spotify-playlist-curator/scripts/apply-plan.ts --plan <path> [--apply --confirm] [options]
 
 Required:
   --plan <path>          Path to a plan JSON file produced by build-plan.ts.

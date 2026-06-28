@@ -1317,9 +1317,8 @@ function dedupeLaunchpadAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO
 }
 
 function canonicalAgentKey(agent: AgentDefinitionDTO): string {
-  const name = cleanDisplayText(agent.metadata.name).toLowerCase()
-  if (name === 'ads agent') return 'ads-agent'
-  return name || agent.slug
+  if (agent.slug === 'ads-agent' || agent.slug === 'meta-ads-agent') return 'ads-agent'
+  return agent.slug
 }
 
 function launchpadAgentRank(slug: string): number {

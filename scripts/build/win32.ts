@@ -123,6 +123,7 @@ function buildMainProcess(config: BuildConfig): void {
     '--format=cjs',
     '--outfile=apps/electron/dist/main.cjs',
     '--external:electron',
+    '--external:@anthropic-ai/claude-agent-sdk',
     // Replace grammY's bundled polyfills (node-fetch@2 + abort-controller@3)
     // with native Node globals. Keeps parity with electron-dev.ts,
     // electron-build-main.ts, and apps/electron/package.json build:main.

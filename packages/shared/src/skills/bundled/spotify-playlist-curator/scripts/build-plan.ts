@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env bun
 /**
  * Spotify Playlist Curator — build a sandwich-pattern playlist plan.
  *
@@ -69,7 +69,7 @@ type CliOptions = {
 
 function usage() {
   return `Usage:
-  npx tsx skills/spotify-playlist-curator/scripts/build-plan.ts --comparable-tracks <path> --our-tracks <path> --theme "<theme>" [options]
+	  bun packages/shared/src/skills/bundled/spotify-playlist-curator/scripts/build-plan.ts --comparable-tracks <path> --our-tracks <path> --theme "<theme>" [options]
 
 Options:
   --comparable-tracks <path>    JSON file with comparable artists' top tracks.
@@ -203,7 +203,7 @@ function buildPlan(
   const warnings: string[] = [];
 
   if (comparable.length < 3) {
-    warnings.push(`Only ${comparable.length} comparable artist(s) provided — sandwich will feel monotone. Recommend at least 3.`);
+    throw new Error(`At least 3 comparable artists with tracks are required. Received ${comparable.length}.`);
   }
   if (our.length === 0) {
     throw new Error("No our-tracks provided. Cannot build playlist plan with zero of the artist's tracks.");
@@ -232,6 +232,9 @@ function buildPlan(
     for (const track of artist.tracks) {
       comparablePool.push({ track, artistName: artist.artistName });
     }
+  }
+  if (comparablePool.length === 0) {
+    throw new Error("No comparable tracks provided. Cannot build playlist plan with zero comparable tracks.");
   }
   if (comparablePool.length < comparableCount) {
     warnings.push(`Only ${comparablePool.length} comparable tracks available but ${comparableCount} slots needed — some will repeat.`);
@@ -343,7 +346,7 @@ function buildMarkdown(plan: Plan): string {
   lines.push("Review the order above. If approved, run:");
   lines.push("");
   lines.push("```sh");
-  lines.push(`node ... skills/spotify-playlist-curator/scripts/apply-plan.ts --plan <plan.json> --apply --confirm`);
+  lines.push(`bun packages/shared/src/skills/bundled/spotify-playlist-curator/scripts/apply-plan.ts --plan <plan.json> --apply --confirm`);
   lines.push("```");
   lines.push("");
 

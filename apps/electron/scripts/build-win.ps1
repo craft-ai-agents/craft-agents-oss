@@ -228,7 +228,8 @@ $MainArgs = @(
     "--platform=node",
     "--format=cjs",
     "--outfile=apps/electron/dist/main.cjs",
-    "--external:electron"
+    "--external:electron",
+    "--external:@anthropic-ai/claude-agent-sdk"
 )
 # Add OAuth defines if env vars are set
 if ($env:GOOGLE_OAUTH_CLIENT_ID) {
