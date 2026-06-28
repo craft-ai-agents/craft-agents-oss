@@ -2,7 +2,7 @@
  * MainContentPanel - Right panel component for displaying content
  *
  * Renders content based on the unified NavigationState:
- * - Chats navigator: ChatPage for selected session, or empty state
+ * - Chats navigator: creator command center home surface
  * - Sources navigator: SourceInfoPage for selected source, or empty state
  * - Settings navigator: Settings, Preferences, or Shortcuts page
  *
@@ -42,7 +42,7 @@ import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelecti
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
 import { extractLabelId } from '@craft-agent/shared/labels'
 import type { SessionStatusId } from '@/config/session-status-config'
-import { ChatPage, SourceInfoPage } from '@/pages'
+import { SourceInfoPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import AgentInfoPage from '@/pages/AgentInfoPage'
 import WorkspaceContextPage from '@/pages/WorkspaceContextPage'
@@ -55,6 +55,7 @@ import RecentRunsPage from '@/pages/RecentRunsPage'
 import OutputDetailPage from '@/pages/OutputDetailPage'
 import VideoStudioPage from '@/pages/VideoStudioPage'
 import { AgentsLaunchpad } from './AgentsLaunchpad'
+import { ArtistCommandCenterHome } from './ArtistCommandCenterHome'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { SettingsPageSwitcher } from '@/pages/settings/SettingsPageSwitcher'
 import {
@@ -516,19 +517,11 @@ export function MainContentPanel({
       )
     }
 
-    if (navState.details) {
-      return wrapWithStoplight(
-        <Panel variant="grow" className={className}>
-          <ChatPage sessionId={navState.details.sessionId} />
-        </Panel>
-      )
-    }
-    // No session selected - empty state
+    // Creator Command Center replaces the chat-first sessions main surface.
+    // Existing session/sidebar navigation stays intact for now.
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <div className="flex items-center justify-center h-full text-muted-foreground">
-          <p className="text-sm">{t("session.noSessionSelected")}</p>
-        </div>
+        <ArtistCommandCenterHome />
       </Panel>
     )
   }

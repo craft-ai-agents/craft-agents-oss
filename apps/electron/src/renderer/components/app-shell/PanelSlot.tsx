@@ -59,6 +59,7 @@ export function PanelSlot({
   const setFocusedPanel = useSetAtom(focusedPanelIdAtom)
   const parentContext = useAppShellContext()
   const navState = parseRouteToNavigationState(entry.route)
+  const isCreatorCommandCenter = navState?.navigator === 'sessions'
 
   const handleClose = useCallback(() => {
     closePanel(entry.id)
@@ -131,7 +132,15 @@ export function PanelSlot({
           borderBottomLeftRadius: isAtLeftEdge ? RADIUS_EDGE : RADIUS_INNER,
           borderTopRightRadius: RADIUS_INNER,
           borderBottomRightRadius: isAtRightEdge ? RADIUS_EDGE : RADIUS_INNER,
-          ...(isOnly && !isCompact
+          ...(isOnly && !isCompact && isCreatorCommandCenter
+            ? {
+                flexGrow: 1,
+                flexShrink: 1,
+                flexBasis: 0,
+                width: 'auto',
+                minWidth: 0,
+              }
+            : isOnly && !isCompact
             ? {
                 flexGrow: 0,
                 flexShrink: 1,
