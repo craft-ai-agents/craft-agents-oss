@@ -84,13 +84,19 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
     const groups = new Map<string, typeof sorted>()
 
     for (const agent of sorted) {
-      const domain = getAgentDomain(agent.metadata.tags, agent.slug)
+      const domain = getAgentDomain(
+        agent.metadata.tags,
+        agent.slug,
+        getDisplayName(agent),
+        agent.metadata.description,
+      )
       const bucket = groups.get(domain) ?? []
       bucket.push(agent)
       groups.set(domain, bucket)
     }
 
     return Array.from(groups.entries())
+      .sort(([a], [b]) => agentDomainRank(a) - agentDomainRank(b) || a.localeCompare(b))
   }, [activeAgents, getDisplayName])
 
   const toggleDomain = React.useCallback((domain: string) => {
@@ -112,7 +118,7 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
           <div>
             <h1 className="text-[28px] font-semibold leading-tight text-white">Agents</h1>
             <p className="mt-1 max-w-md text-[12px] leading-[18px] text-white/54">
-              Domain-specific operators for creative work, ops, research, tooling, and execution.
+              Music operators for release planning, content, ads, audience intelligence, and creative execution.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -1256,13 +1262,29 @@ function isContextDocVisibleToAgent(doc: ContextDocDTO, agentSlug: string) {
   return doc.metadata.routing.agents.includes(agentSlug)
 }
 
-function getAgentDomain(tags: string[] | undefined, slug: string) {
-  const joined = `${slug} ${(tags ?? []).join(' ')}`.toLowerCase()
-  if (joined.includes('ads') || joined.includes('marketing') || joined.includes('campaign')) return 'Growth'
-  if (joined.includes('creative') || joined.includes('brand') || joined.includes('copy') || joined.includes('3d')) return 'Creative'
-  if (joined.includes('code') || joined.includes('tool') || joined.includes('diagnostic') || joined.includes('reporting')) return 'Systems'
-  if (joined.includes('chat') || joined.includes('guide') || joined.includes('routing')) return 'Command'
-  return 'Operators'
+function getAgentDomain(tags: string[] | undefined, slug: string, name: string, description?: string) {
+  const joined = `${slug} ${name} ${description ?? ''} ${(tags ?? []).join(' ')}`.toLowerCase()
+  if (matchesAny(joined, ['spotify', 'playlist', 'youtube intelligence', 'audience', 'research', 'analy', 'insight'])) return 'Audience Intelligence'
+  if (matchesAny(joined, ['content', 'tiktok', 'social', 'publisher', 'clip', 'video director', 'video editor', 'hypermotion', 'motion', 'caption'])) return 'Content Studio'
+  if (matchesAny(joined, ['ads', 'marketing', 'campaign', 'growth', 'meta ads', 'google ads'])) return 'Growth'
+  if (matchesAny(joined, ['brand', 'copy', 'creative', 'visual', 'legendary', 'gaygent', 'lottie', '3d'])) return 'Creative Direction'
+  if (matchesAny(joined, ['workflow', 'ops', 'orchestr', 'router', 'guide', 'chat', 'routing'])) return 'Command'
+  if (matchesAny(joined, ['code', 'tool', 'diagnostic', 'reporting', 'shopify'])) return 'Operators'
+  return 'Other Agents'
+}
+
+function agentDomainRank(domain: string) {
+  const order = [
+    'Content Studio',
+    'Growth',
+    'Audience Intelligence',
+    'Creative Direction',
+    'Command',
+    'Operators',
+    'Other Agents',
+  ]
+  const index = order.indexOf(domain)
+  return index === -1 ? order.length : index
 }
 
 function isSystemAgent(slug: string) {
