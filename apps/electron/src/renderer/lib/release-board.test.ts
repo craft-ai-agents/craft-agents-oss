@@ -17,8 +17,8 @@ describe('release board utilities', () => {
     expect(board.categories.map((category) => category.id)).toEqual([
       'music',
       'visuals',
-      'setup',
       'content',
+      'setup',
       'promotion',
       'team',
     ])

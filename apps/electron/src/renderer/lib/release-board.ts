@@ -32,8 +32,8 @@ export interface ReleaseBoard {
 const DEFAULT_CATEGORIES: Omit<ReleaseBoardCategory, 'items'>[] = [
   { id: 'music', label: 'Music', detail: 'Audio and song context' },
   { id: 'visuals', label: 'Visuals', detail: 'Artwork, photos, and motion' },
-  { id: 'setup', label: 'Release Setup', detail: 'Links, metadata, and delivery' },
   { id: 'content', label: 'Content', detail: 'Short-form pieces and copy' },
+  { id: 'setup', label: 'Release Setup', detail: 'Links, metadata, and delivery' },
   { id: 'promotion', label: 'Promotion', detail: 'Audience push and spend' },
   { id: 'team', label: 'Team', detail: 'People, approvals, and owners' },
 ]
