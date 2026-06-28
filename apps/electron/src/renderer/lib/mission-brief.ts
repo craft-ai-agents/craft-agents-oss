@@ -182,6 +182,7 @@ export function extractMissionBrief(text: string, existing: Partial<MissionBrief
 export function buildMissionBrief(workspaceId: string, input: Partial<MissionBrief>): MissionBrief {
   const now = new Date().toISOString()
   const completeness = calculateMissionCompleteness(input)
+  const releaseDate = clean(input.releaseDate) ?? normalizeDeadline(input.timeline)
   return {
     id: input.id || MISSION_BRIEF_CONTEXT_SLUG,
     workspaceId,
@@ -191,7 +192,7 @@ export function buildMissionBrief(workspaceId: string, input: Partial<MissionBri
     title: clean(input.title),
     goal: clean(input.goal),
     timeline: clean(input.timeline),
-    releaseDate: clean(input.releaseDate),
+    releaseDate,
     mood: clean(input.mood),
     visualWorld: clean(input.visualWorld),
     references: input.references?.filter((ref) => clean(ref.value)),
@@ -212,7 +213,7 @@ export function missionBriefMetadata(brief: MissionBrief): ContextDocMetadata {
     enabled: true,
     status: brief.status === 'empty' ? undefined : 'active',
     priority: brief.status === 'full' ? 'high' : 'normal',
-    deadline: normalizeDeadline(brief.releaseDate),
+    deadline: normalizeDeadline(brief.releaseDate) ?? normalizeDeadline(brief.timeline),
   }
 }
 

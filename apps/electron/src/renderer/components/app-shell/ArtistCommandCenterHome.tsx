@@ -131,6 +131,10 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
         const result = await window.electronAPI.importMissionAssets(workspaceId, filePaths, { kindHint })
         setAssetManifest(result.manifest)
         const skipped = result.skipped.length ? ` ${result.skipped.length} skipped.` : ''
+        if (result.imported.length === 0) {
+          toast.warning(`No mission assets added.${skipped}`)
+          return
+        }
         toast.success(`Added ${result.imported.length} mission asset${result.imported.length === 1 ? '' : 's'}.${skipped}`)
       } catch (err) {
         toast.error(err instanceof Error ? err.message : String(err))

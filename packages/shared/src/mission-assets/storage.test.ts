@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, truncateSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
@@ -6,6 +6,7 @@ import {
   classifyMissionAsset,
   getMissionAssetManifestPath,
   importMissionAssets,
+  importMissionAssetsAsync,
   loadMissionAssetManifest,
   missionAssetContextMetadata,
   planMissionAssetImports,
@@ -71,5 +72,31 @@ describe('mission assets', () => {
     expect(result.imported).toHaveLength(1);
     expect(result.imported[0].sizeBytes).toBe(257 * 1024 * 1024);
     expect(result.imported[0].sha256).toBeUndefined();
+  });
+
+  test('async import copies media and writes manifest', async () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'cover-art.png');
+    writeFileSync(source, 'fake image');
+
+    const result = await importMissionAssetsAsync(workspace, 'workspace-1', [source], { kindHint: 'cover-art' });
+
+    expect(result.imported).toHaveLength(1);
+    expect(result.imported[0].relativePath).toBe('assets/images/cover-art/cover-art.png');
+    expect(existsSync(join(workspace, 'assets/images/cover-art/cover-art.png'))).toBe(true);
+  });
+
+  test('refuses to import over an invalid manifest and preserves a backup', () => {
+    const workspace = tempWorkspace();
+    const assetsDir = join(workspace, 'assets');
+    mkdirSync(assetsDir, { recursive: true });
+    writeFileSync(join(assetsDir, 'manifest.json'), '{broken');
+    const source = join(workspace, 'night-drive.wav');
+    writeFileSync(source, 'audio');
+
+    expect(() => importMissionAssets(workspace, 'workspace-1', [source], { kindHint: 'master' })).toThrow(/manifest is invalid/i);
+    expect(existsSync(join(assetsDir, 'manifest.json'))).toBe(true);
+    expect(readdirSync(assetsDir).some((file) => file.startsWith('manifest.json.invalid-'))).toBe(true);
+    expect(existsSync(join(workspace, 'assets/audio/masters/night-drive.wav'))).toBe(false);
   });
 });

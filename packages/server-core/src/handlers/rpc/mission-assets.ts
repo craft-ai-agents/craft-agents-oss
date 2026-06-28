@@ -3,7 +3,7 @@ import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import {
   getMissionAssetsRoot,
   ensureMissionAssetsFolders,
-  importMissionAssets,
+  importMissionAssetsAsync,
   loadMissionAssetManifest,
   missionAssetContextMetadata,
   missionAssetContextSlug,
@@ -99,7 +99,7 @@ export function registerMissionAssetsHandlers(server: RpcServer, deps: HandlerDe
     async (_ctx, workspaceId: string, filePaths: string[], options?: MissionAssetImportOptions): Promise<MissionAssetImportResult> => {
       const rootPath = resolveRootPath(workspaceId)
       return withWorkspaceMutex(rootPath, async () => {
-        const result = importMissionAssets(rootPath, workspaceId, filePaths, options ?? {})
+        const result = await importMissionAssetsAsync(rootPath, workspaceId, filePaths, options ?? {})
         mirrorManifestToContext(rootPath, workspaceId, result.manifest, deps)
         return result
       })

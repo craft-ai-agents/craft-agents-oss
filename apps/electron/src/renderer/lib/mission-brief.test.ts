@@ -3,6 +3,7 @@ import {
   buildMissionBrief,
   extractMissionBrief,
   hasSaveableMissionBrief,
+  missionBriefMetadata,
   parseMissionBriefDoc,
   serializeMissionBriefBody,
 } from './mission-brief'
@@ -62,5 +63,15 @@ describe('mission brief utilities', () => {
     expect(hasSaveableMissionBrief({ missionType: 'single' })).toBe(false)
     expect(hasSaveableMissionBrief({ title: 'Night Drive' })).toBe(true)
     expect(hasSaveableMissionBrief({ goal: 'Plan the release week.' })).toBe(true)
+  })
+
+  test('uses ISO release target as context deadline', () => {
+    const brief = buildMissionBrief('workspace-1', {
+      title: 'Night Drive',
+      timeline: '2026-06-30',
+    })
+
+    expect(brief.releaseDate).toBe('2026-06-30')
+    expect(missionBriefMetadata(brief).deadline).toBe('2026-06-30')
   })
 })
