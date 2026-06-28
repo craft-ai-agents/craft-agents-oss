@@ -15,7 +15,7 @@ export function missionAssetContextMetadata(): ContextDocMetadata {
 
 export function serializeMissionAssetContext(manifest: MissionAssetManifest): string {
   return [
-    'This context lists local files attached to the current mission. Do not assume every file has been analyzed. Use tools to inspect files when needed.',
+    'This context lists local files attached to the current mission. These are mission vault copies unless a record says otherwise. Do not assume every file has been analyzed. Use tools to inspect files when needed.',
     '',
     '```json',
     JSON.stringify(manifest, null, 2),
@@ -24,6 +24,10 @@ export function serializeMissionAssetContext(manifest: MissionAssetManifest): st
     '## Key Assets',
     '',
     ...keyAssetLines(manifest.files),
+    '',
+    '## Asset Buckets',
+    '',
+    ...bucketLines(manifest.files),
   ].join('\n');
 }
 
@@ -40,6 +44,22 @@ function keyAssetLines(files: MissionAssetRecord[]): string[] {
     `- Cover art: ${cover ?? 'missing'}`,
     `- Lyrics: ${lyrics ?? 'missing'}`,
   ];
+}
+
+function bucketLines(files: MissionAssetRecord[]): string[] {
+  const available = files.filter((file) => file.status === 'available');
+  return [
+    `- Audio files: ${countKinds(available, ['master', 'demo', 'stem', 'audio-reference'])}`,
+    `- Raw video: ${countKinds(available, ['raw-video'])}`,
+    `- Finished video: ${countKinds(available, ['edited-video', 'final-video'])}`,
+    `- Photos: ${countKinds(available, ['press-photo'])}`,
+    `- Visual references: ${countKinds(available, ['moodboard-image'])}`,
+    `- Documents: ${countKinds(available, ['lyrics', 'press-doc', 'note'])}`,
+  ];
+}
+
+function countKinds(files: MissionAssetRecord[], kinds: MissionAssetRecord['kind'][]): number {
+  return files.filter((file) => kinds.includes(file.kind)).length;
 }
 
 function firstPath(files: MissionAssetRecord[], kind: MissionAssetRecord['kind']): string | null {

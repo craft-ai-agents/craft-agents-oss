@@ -58,6 +58,8 @@ describe('mission assets', () => {
     expect(loaded.files[0].kind).toBe('master');
     expect(body).toContain('"kind": "master"');
     expect(body).toContain('Master: assets/audio/masters/night-drive-final.wav');
+    expect(body).toContain('Audio files: 1');
+    expect(body).toContain('Raw video: 0');
     expect(missionAssetContextMetadata().routing).toEqual({ mode: 'broadcast' });
   });
 

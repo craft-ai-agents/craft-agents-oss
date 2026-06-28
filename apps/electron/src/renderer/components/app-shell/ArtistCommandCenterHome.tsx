@@ -11,12 +11,7 @@ import {
   ClipboardCheck,
   Disc3,
   Eye,
-  FileText,
-  FileUp,
-  FolderOpen,
-  ImageIcon,
   Megaphone,
-  Music2,
   Settings2,
   ShieldCheck,
   Users,
@@ -31,7 +26,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
-import type { MissionAssetKindHint, MissionAssetManifest, MissionAssetRecord } from '../../../shared/types'
+import type { MissionAssetKindHint, MissionAssetManifest } from '../../../shared/types'
 import {
   MISSION_BRIEF_CONTEXT_SLUG,
   emptyMissionBrief,
@@ -157,6 +152,10 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
     : 'Start with a goal, files, or an agent.'
   const focus = mission.timeline || mission.releaseDate || (hasMission ? mission.missionType || 'Mission active' : 'No brief yet')
   const completenessLabel = `${mission.completeness}% context`
+  const nextMove = React.useMemo(
+    () => hasMission ? missionNextMove(assetManifest) : 'Create the mission brief.',
+    [assetManifest, hasMission],
+  )
 
   React.useEffect(() => {
     let cancelled = false
@@ -260,30 +259,8 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
     [hasMission, importAssetPaths, workspaceId],
   )
 
-  const handleDrop = React.useCallback(
-    (event: React.DragEvent<HTMLDivElement>) => {
-      if (!event.dataTransfer.files.length) return
-      event.preventDefault()
-      const filePaths = Array.from(event.dataTransfer.files)
-        .map((file) => window.electronAPI.getFilePath(file))
-        .filter((path): path is string => Boolean(path))
-      if (filePaths.length === 0) {
-        toast.error('Could not read dropped files.')
-        return
-      }
-      void importAssetPaths(filePaths, 'any')
-    },
-    [importAssetPaths],
-  )
-
   return (
-    <div
-      className="h-full overflow-y-auto bg-[#050505] text-foreground"
-      onDragOver={(event) => {
-        if (event.dataTransfer.types.includes('Files')) event.preventDefault()
-      }}
-      onDrop={handleDrop}
-    >
+    <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-5 py-6 xl:px-8 xl:py-8">
         <section className="relative min-h-[320px] overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A]">
           <div className="absolute -left-[20%] -top-[40%] h-[600px] w-[600px] rounded-full bg-orange-600/10 blur-[120px]" />
@@ -346,7 +323,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
                 <div className="hidden md:block">
                   <p className="mb-1.5 text-[9px] font-medium uppercase tracking-[0.2em] text-white/40">Next Move</p>
                   <p className="text-xs font-medium text-white/80">
-                    {hasMission ? 'Keep shaping the brief or launch an agent.' : 'Create the mission brief.'}
+                    {nextMove}
                   </p>
                 </div>
               </div>
@@ -360,17 +337,6 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
                   {hasMission ? 'Edit Mission' : 'Create Mission'}
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void chooseAndImport('any')}
-                  disabled={assetBusy}
-                  aria-busy={assetBusy}
-                  title={hasMission ? 'Add mission files' : 'Create the mission first'}
-                  className="inline-flex h-9 items-center gap-2 rounded-full bg-white/[0.02] px-5 text-xs font-medium text-white/70 ring-1 ring-inset ring-white/[0.08] transition-all hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FileUp className="h-3.5 w-3.5" />
-                  {assetBusy ? 'Adding...' : 'Add Files'}
-                </button>
               </div>
             </div>
           </div>
@@ -380,22 +346,6 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
           board={releaseBoard}
           onSelectCategory={setSelectedReleaseCategoryId}
         />
-
-        {hasMission ? (
-          <MissionAssetsCard
-            manifest={assetManifest}
-            busy={assetBusy}
-            onAdd={chooseAndImport}
-            onOpenFolder={async () => {
-              try {
-                const opened = await window.electronAPI.openMissionAssetsFolder(workspaceId)
-                if (!opened) toast.error('Could not open mission assets folder.')
-              } catch (err) {
-                toast.error(err instanceof Error ? err.message : String(err))
-              }
-            }}
-          />
-        ) : null}
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <CommandCard>
@@ -471,6 +421,19 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
         onOpenChange={setDrawerOpen}
         onSaved={setOptimisticMission}
         saveMissionBrief={upsert}
+        assetManifest={assetManifest}
+        assetBusy={assetBusy}
+        releaseBoard={releaseBoard}
+        onAddAsset={chooseAndImport}
+        onImportAssetPaths={importAssetPaths}
+        onOpenAssetsFolder={async () => {
+          try {
+            const opened = await window.electronAPI.openMissionAssetsFolder(workspaceId)
+            if (!opened) toast.error('Could not open mission assets folder.')
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : String(err))
+          }
+        }}
       />
 
       <ReleaseBoardDialog
@@ -491,6 +454,14 @@ const releaseCategoryIcons: Record<ReleaseBoardCategory['id'], React.ComponentTy
   content: ClipboardCheck,
   promotion: Megaphone,
   team: Users,
+}
+
+function missionNextMove(manifest: MissionAssetManifest | null): string {
+  const files = manifest?.files.filter((file) => file.status === 'available') ?? []
+  if (!files.some((file) => file.kind === 'master' || file.kind === 'demo')) return 'Add the master in Mission Assets.'
+  if (!files.some((file) => file.kind === 'lyrics')) return 'Add lyrics in Mission Assets.'
+  if (!files.some((file) => file.kind === 'cover-art')) return 'Add cover art in Mission Assets.'
+  return 'Use the release board or launch an agent.'
 }
 
 function ReleaseBoardRow({
@@ -651,108 +622,6 @@ function ReleaseBoardDialog({
         ) : null}
       </DialogContent>
     </Dialog>
-  )
-}
-
-function MissionAssetsCard({
-  manifest,
-  busy,
-  onAdd,
-  onOpenFolder,
-}: {
-  manifest: MissionAssetManifest | null
-  busy: boolean
-  onAdd: (kindHint: MissionAssetKindHint) => Promise<void>
-  onOpenFolder: () => Promise<void>
-}) {
-  const files = manifest?.files ?? []
-  const master = firstAsset(files, ['master', 'demo'])
-  const lyrics = firstAsset(files, ['lyrics'])
-  const cover = firstAsset(files, ['cover-art'])
-
-  return (
-    <CommandCard className="p-3.5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.035] ring-1 ring-white/[0.05]">
-            <FolderOpen className="h-4 w-4 text-white/55" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-white/82">Mission Assets</p>
-            <p className="mt-0.5 truncate text-xs text-white/38">
-              {files.length ? `${files.length} file${files.length === 1 ? '' : 's'} copied into this workspace` : 'Add the master, lyrics, cover, references, or raw material.'}
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-2 lg:w-[420px]">
-          <AssetSlot icon={Music2} label="Master" value={master?.label ?? 'Missing'} active={Boolean(master)} />
-          <AssetSlot icon={FileText} label="Lyrics" value={lyrics?.label ?? 'Missing'} active={Boolean(lyrics)} />
-          <AssetSlot icon={ImageIcon} label="Cover" value={cover?.label ?? 'Missing'} active={Boolean(cover)} />
-        </div>
-
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <AssetButton disabled={busy} onClick={() => onAdd('master')}>Master</AssetButton>
-          <AssetButton disabled={busy} onClick={() => onAdd('lyrics')}>Lyrics</AssetButton>
-          <AssetButton disabled={busy} onClick={() => onAdd('cover-art')}>Cover</AssetButton>
-          <button
-            type="button"
-            onClick={() => void onOpenFolder()}
-            className="inline-flex h-8 items-center gap-2 rounded-full border border-white/[0.07] bg-white/[0.015] px-3 text-[11px] font-medium text-white/55 transition-colors hover:bg-white/[0.05] hover:text-white/80"
-          >
-            <FolderOpen className="h-3.5 w-3.5" />
-            Folder
-          </button>
-        </div>
-      </div>
-    </CommandCard>
-  )
-}
-
-function firstAsset(files: MissionAssetRecord[], kinds: MissionAssetRecord['kind'][]): MissionAssetRecord | null {
-  return files.find((file) => file.status === 'available' && kinds.includes(file.kind)) ?? null
-}
-
-function AssetSlot({
-  icon: Icon,
-  label,
-  value,
-  active,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  value: string
-  active: boolean
-}) {
-  return (
-    <div className="min-w-0 rounded-xl border border-white/[0.04] bg-white/[0.012] px-3 py-2">
-      <div className="mb-1 flex items-center gap-1.5">
-        <Icon className={cn('h-3 w-3', active ? 'text-orange-300/80' : 'text-white/25')} />
-        <span className="text-[8px] font-medium uppercase tracking-[0.18em] text-white/30">{label}</span>
-      </div>
-      <p className={cn('truncate text-[11px] font-medium', active ? 'text-white/75' : 'text-white/25')}>{value}</p>
-    </div>
-  )
-}
-
-function AssetButton({
-  children,
-  disabled,
-  onClick,
-}: {
-  children: React.ReactNode
-  disabled: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className="inline-flex h-8 items-center rounded-full border border-white/[0.07] bg-white/[0.025] px-3 text-[11px] font-medium text-white/65 transition-colors hover:bg-white/[0.07] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {children}
-    </button>
   )
 }
 
