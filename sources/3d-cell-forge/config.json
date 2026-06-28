@@ -8,7 +8,7 @@
   "icon": "🧊",
   "tagline": "Local Bash-operated CLI tool for image-to-3D generation workflows",
   "local": {
-    "path": "/Users/michaelb.williams/Creative Gen/3DCellForge",
+    "path": "3d-cell-forge",
     "format": "cli-tool"
   },
   "connectionStatus": "untested",

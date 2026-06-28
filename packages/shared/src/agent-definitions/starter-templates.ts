@@ -246,7 +246,7 @@ Never use this agent for YouTube Studio posting, uploads, comments, or browser p
       inputs: 'A motion/video brief, assets, target platform, duration, format, brand direction, or existing artifact to animate or render.',
       outputs: 'Canvas-ready HTML previews, MP4 renders, poster frames, asset folders, render receipts, and clear next actions.',
       tags: ['creative', 'video', 'motion', 'hyperframes', 'remotion'],
-      skills: ['hyperframes', 'remotion-production'],
+      skills: ['hyperframes'],
       sources: ['hypermotion'],
     },
     systemPrompt: `You are Hypermotion Agent, the RunnerOS specialist for motion design and code-owned video production.

@@ -1,6 +1,8 @@
 /**
  * Cross-platform main process build script
- * Loads .env and passes OAuth defines to esbuild
+ * Loads .env and passes public build-time defines to esbuild.
+ * Confidential OAuth client secrets must stay runtime env only; never bake
+ * them into distributable bundles.
  */
 
 import { spawn } from "bun";
@@ -45,17 +47,15 @@ function loadEnvFile(): void {
   }
 }
 
-// Get build-time defines for esbuild (OAuth, Sentry DSN, etc.)
+// Get build-time defines for esbuild (public OAuth client IDs, Sentry DSN, etc.)
 // NOTE: Sentry source map upload is intentionally disabled for the main process.
 // To enable in the future, add @sentry/esbuild-plugin. See apps/electron/CLAUDE.md.
-// NOTE: Google OAuth credentials are NOT baked into the build - users provide their own
-// via source config. See README_FOR_OSS.md for setup instructions.
+// NOTE: OAuth client secrets are NOT baked into the build. Code reads them
+// from runtime process.env when needed.
 function getBuildDefines(): string[] {
   const definedVars = [
     "SLACK_OAUTH_CLIENT_ID",
-    "SLACK_OAUTH_CLIENT_SECRET",
     "MICROSOFT_OAUTH_CLIENT_ID",
-    "MICROSOFT_OAUTH_CLIENT_SECRET",
     "SENTRY_ELECTRON_INGEST_URL",
     "CRAFT_DEV_RUNTIME",
   ];
@@ -120,6 +120,22 @@ async function verifyJsFile(filePath: string): Promise<{ valid: boolean; error?:
   }
 
   return { valid: true };
+}
+
+function assertNoBundledSecretValues(filePath: string): void {
+  const secretEnvNames = [
+    "GOOGLE_OAUTH_CLIENT_SECRET",
+    "SLACK_OAUTH_CLIENT_SECRET",
+    "MICROSOFT_OAUTH_CLIENT_SECRET",
+  ];
+  const content = readFileSync(filePath, "utf-8");
+  for (const name of secretEnvNames) {
+    const value = process.env[name]?.trim();
+    if (!value || value.length < 8 || value.includes("YOUR_") || value.includes("your-")) continue;
+    if (content.includes(value)) {
+      throw new Error(`${name} value was bundled into ${filePath}`);
+    }
+  }
 }
 
 // Verify Session Tools Core package exists (raw TypeScript, bundled by consumers)
@@ -389,6 +405,13 @@ async function main(): Promise<void> {
 
   if (!verification.valid) {
     console.error("❌ Build verification failed:", verification.error);
+    process.exit(1);
+  }
+
+  try {
+    assertNoBundledSecretValues(OUTPUT_FILE);
+  } catch (error) {
+    console.error("❌ Secret bundle check failed:", error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 

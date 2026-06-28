@@ -23,7 +23,7 @@ describe('classifyExternalUrl — safe external (standard web schemes)', () => {
   })
 })
 
-describe('classifyExternalUrl — safe external (custom app schemes)', () => {
+describe('classifyExternalUrl — unsafe external (custom app schemes)', () => {
   it.each([
     ['obsidian://open?vault=mine&file=note'],
     ['vscode://file/Users/me/repo/src/index.ts'],
@@ -34,8 +34,12 @@ describe('classifyExternalUrl — safe external (custom app schemes)', () => {
     ['jetbrains://idea/navigate/reference?project=foo'],
     ['cursor://open?path=/tmp/x'],
     ['craftdocs://open?docId=123'],
-  ])('classifies %s as safe-external', (url) => {
-    expect(classifyExternalUrl(url).kind).toBe('safe-external')
+  ])('classifies %s as dangerous', (url) => {
+    const result = classifyExternalUrl(url)
+    expect(result.kind).toBe('dangerous')
+    if (result.kind === 'dangerous') {
+      expect(result.reason).toContain('unsupported scheme')
+    }
   })
 })
 
@@ -95,9 +99,9 @@ describe('isSafeExternalUrl', () => {
     expect(isSafeExternalUrl('http://example.com')).toBe(true)
   })
 
-  it('returns true for custom app schemes', () => {
-    expect(isSafeExternalUrl('obsidian://open?vault=mine')).toBe(true)
-    expect(isSafeExternalUrl('vscode://file/x')).toBe(true)
+  it('returns false for custom app schemes', () => {
+    expect(isSafeExternalUrl('obsidian://open?vault=mine')).toBe(false)
+    expect(isSafeExternalUrl('vscode://file/x')).toBe(false)
   })
 
   it('returns false for internal deep links', () => {
