@@ -53,8 +53,17 @@ describe('release board utilities', () => {
     expect(itemStatus(merged, 'music', 'master')).toBe('done')
     expect(itemStatus(merged, 'music', 'lyrics')).toBe('done')
     expect(itemStatus(merged, 'visuals', 'cover-art')).toBe('done')
-    expect(itemStatus(merged, 'promotion', 'ad-creatives')).toBe('done')
-    expect(getBoardTotals(merged).done).toBe(4)
+    expect(itemStatus(merged, 'promotion', 'ad-creatives')).toBe('needed')
+    expect(getBoardTotals(merged).done).toBe(3)
+  })
+
+  test('does not mark generated deliverables done from generic media files', () => {
+    const board = buildDefaultReleaseBoard('workspace-1')
+    const merged = mergeReleaseBoardWithAssets(board, manifestWith('raw-video', 'final-video'))
+
+    expect(itemStatus(merged, 'visuals', 'canvas')).toBe('needed')
+    expect(itemStatus(merged, 'content', 'viral-clips')).toBe('needed')
+    expect(itemStatus(merged, 'content', 'lyric-video')).toBe('needed')
   })
 
   test('does not override skipped items from asset auto-fill', () => {

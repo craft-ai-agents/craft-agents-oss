@@ -47,7 +47,7 @@ const DEFAULT_ITEMS: Record<ReleaseBoardCategory['id'], ReleaseBoardItem[]> = {
   ],
   visuals: [
     { id: 'cover-art', label: 'Single art', status: 'needed', assetKinds: ['cover-art'] },
-    { id: 'canvas', label: 'Spotify Canvas', status: 'needed', assetKinds: ['final-video', 'edited-video'] },
+    { id: 'canvas', label: 'Spotify Canvas', status: 'needed' },
     { id: 'press-photos', label: 'Press photos', status: 'needed', assetKinds: ['press-photo'] },
     { id: 'visual-references', label: 'Visual references', status: 'needed', assetKinds: ['moodboard-image'] },
   ],
@@ -58,15 +58,15 @@ const DEFAULT_ITEMS: Record<ReleaseBoardCategory['id'], ReleaseBoardItem[]> = {
     { id: 'metadata', label: 'Credits and metadata', status: 'needed' },
   ],
   content: [
-    { id: 'idea-generation', label: 'Idea generation', status: 'needed', assetKinds: ['note', 'press-doc'] },
-    { id: 'lyric-clips', label: 'Lyric clips', status: 'needed', assetKinds: ['edited-video', 'final-video'] },
-    { id: 'viral-clips', label: 'Viral clips', status: 'needed', assetKinds: ['raw-video', 'edited-video', 'final-video'] },
-    { id: 'ugc-clips', label: 'UGC clips', status: 'needed', assetKinds: ['raw-video', 'edited-video', 'final-video'] },
-    { id: 'lyric-video', label: 'Lyric video', status: 'needed', assetKinds: ['final-video'] },
+    { id: 'idea-generation', label: 'Idea generation', status: 'needed' },
+    { id: 'lyric-clips', label: 'Lyric clips', status: 'needed' },
+    { id: 'viral-clips', label: 'Viral clips', status: 'needed' },
+    { id: 'ugc-clips', label: 'UGC clips', status: 'needed' },
+    { id: 'lyric-video', label: 'Lyric video', status: 'needed' },
   ],
   promotion: [
     { id: 'budget', label: 'Budget set', status: 'needed' },
-    { id: 'ad-creatives', label: 'Ad creatives', status: 'needed', assetKinds: ['final-video', 'cover-art'] },
+    { id: 'ad-creatives', label: 'Ad creatives', status: 'needed' },
     { id: 'playlist-targets', label: 'Playlist targets', status: 'needed' },
     { id: 'press-list', label: 'Press list', status: 'needed', assetKinds: ['press-doc'] },
   ],
@@ -74,7 +74,7 @@ const DEFAULT_ITEMS: Record<ReleaseBoardCategory['id'], ReleaseBoardItem[]> = {
     { id: 'owners', label: 'Owners named', status: 'needed' },
     { id: 'collaborators', label: 'Collaborators noted', status: 'needed' },
     { id: 'approvals', label: 'Approval path', status: 'needed' },
-    { id: 'handoff-notes', label: 'Handoff notes', status: 'needed', assetKinds: ['note'] },
+    { id: 'handoff-notes', label: 'Handoff notes', status: 'needed' },
   ],
 }
 
