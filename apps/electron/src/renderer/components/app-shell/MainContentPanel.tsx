@@ -75,6 +75,7 @@ import { navigate, routes } from '@/lib/navigate'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
 import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 
 export interface MainContentPanelProps {
   /** Whether both sidebar and navigator are hidden (focus mode / CMD+.) */
@@ -518,7 +519,15 @@ export function MainContentPanel({
       )
     }
 
-    if (navState.details?.type === 'session') {
+    const selectedSessionMeta = navState.details?.type === 'session'
+      ? sessionMetaMap.get(navState.details.sessionId)
+      : undefined
+    const isConciergeSession =
+      selectedSessionMeta?.launchReceipt?.origin === 'concierge' ||
+      selectedSessionMeta?.launchReceipt?.agent?.slug === CONCIERGE_SLUG ||
+      selectedSessionMeta?.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
+
+    if (navState.details?.type === 'session' && !isConciergeSession) {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
           <ChatPage sessionId={navState.details.sessionId} />
@@ -526,8 +535,8 @@ export function MainContentPanel({
       )
     }
 
-    // Creator Command Center replaces only the empty sessions landing surface.
-    // Selecting a session still opens the actual chat view.
+    // Creator Command Center replaces the empty/HNIC sessions landing surface.
+    // Specialist agent sessions still open the actual chat view.
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <ArtistCommandCenterHome workspaceId={activeWorkspaceId || ''} />
