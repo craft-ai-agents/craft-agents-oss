@@ -5,7 +5,6 @@ import {
   CalendarClock,
   Check,
   CheckCircle2,
-  ChevronDown,
   Circle,
   ClipboardCheck,
   Disc3,
@@ -101,7 +100,6 @@ function CommandCard({
 
 export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHomeProps) {
   const [drawerOpen, setDrawerOpen] = React.useState(false)
-  const [showAgents, setShowAgents] = React.useState(false)
   const [assetManifest, setAssetManifest] = React.useState<MissionAssetManifest | null>(null)
   const [assetBusy, setAssetBusy] = React.useState(false)
   const [selectedReleaseCategoryId, setSelectedReleaseCategoryId] = React.useState<ReleaseBoardCategory['id'] | null>(null)
@@ -375,34 +373,22 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
           </CommandCard>
 
           <CommandCard>
-            <button
-              type="button"
-              onClick={() => setShowAgents((value) => !value)}
-              className="group flex w-full items-center justify-between text-left"
-              aria-expanded={showAgents}
-            >
+            <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Bot className="h-3 w-3 text-white/40 group-hover:text-white/60" />
+                <Bot className="h-3 w-3 text-white/40" />
                 <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">Active Agents</h3>
-                <span className="ml-2 rounded bg-white/[0.03] px-2 py-0.5 text-[8px] font-medium tracking-widest text-white/40">
-                  Quiet
-                </span>
               </div>
-              <ChevronDown className={cn('h-4 w-4 text-white/20 transition-transform duration-300 group-hover:text-white/50', showAgents && 'rotate-180')} />
-            </button>
+              <span className="text-[8px] font-medium uppercase tracking-widest text-white/30">Quiet</span>
+            </div>
 
-            <div className={cn('grid transition-all duration-300 ease-in-out', showAgents ? 'mt-3 grid-rows-[1fr] opacity-100' : 'mt-2 grid-rows-[0fr] opacity-0')}>
-              <div className="overflow-hidden">
-                <div className="rounded-xl border border-white/[0.03] bg-white/[0.012] p-4">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-white/32" />
-                    <div>
-                      <p className="text-sm font-medium text-white/75">No background agents running</p>
-                      <p className="mt-1 text-xs leading-5 text-white/38">
-                        Once a mission workflow starts, agent runs and handoffs can appear here.
-                      </p>
-                    </div>
-                  </div>
+            <div className="rounded-xl border border-white/[0.03] bg-white/[0.012] p-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-white/32" />
+                <div>
+                  <p className="text-sm font-medium text-white/75">No background agents running</p>
+                  <p className="mt-1 text-xs leading-5 text-white/38">
+                    Once a mission workflow starts, agent runs and handoffs can appear here.
+                  </p>
                 </div>
               </div>
             </div>
