@@ -4,17 +4,32 @@ import {
   ArrowRight,
   Bot,
   CalendarClock,
+  Check,
   CheckCircle2,
   ChevronDown,
+  Circle,
+  ClipboardCheck,
+  Disc3,
+  Eye,
   FileText,
   FileUp,
   FolderOpen,
   ImageIcon,
+  Megaphone,
   Music2,
+  Settings2,
   ShieldCheck,
+  Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import type { MissionAssetKindHint, MissionAssetManifest, MissionAssetRecord } from '../../../shared/types'
 import {
@@ -23,6 +38,19 @@ import {
   parseMissionBriefDoc,
   type MissionBrief,
 } from '@/lib/mission-brief'
+import {
+  RELEASE_BOARD_CONTEXT_SLUG,
+  buildDefaultReleaseBoard,
+  getBoardTotals,
+  getCategoryProgress,
+  mergeReleaseBoardWithAssets,
+  parseReleaseBoardDoc,
+  releaseBoardMetadata,
+  serializeReleaseBoardBody,
+  toggleReleaseBoardItem,
+  type ReleaseBoard,
+  type ReleaseBoardCategory,
+} from '@/lib/release-board'
 import { MissionBriefDrawer } from './MissionBriefDrawer'
 
 interface ArtistCommandCenterHomeProps {
@@ -77,6 +105,8 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
   const [showAgents, setShowAgents] = React.useState(false)
   const [assetManifest, setAssetManifest] = React.useState<MissionAssetManifest | null>(null)
   const [assetBusy, setAssetBusy] = React.useState(false)
+  const [selectedReleaseCategoryId, setSelectedReleaseCategoryId] = React.useState<ReleaseBoardCategory['id'] | null>(null)
+  const lastAutoSavedReleaseBoardBody = React.useRef<string | null>(null)
   const { docs, loading, upsert } = useWorkspaceContext(workspaceId)
 
   const savedMission = React.useMemo(() => {
@@ -85,16 +115,41 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
   }, [docs])
 
   const [optimisticMission, setOptimisticMission] = React.useState<MissionBrief | null>(null)
+  const savedReleaseBoard = React.useMemo(() => {
+    const doc = docs.find((item) => item.slug === RELEASE_BOARD_CONTEXT_SLUG)
+    return parseReleaseBoardDoc(doc)
+  }, [docs])
+  const [optimisticReleaseBoard, setOptimisticReleaseBoard] = React.useState<ReleaseBoard | null>(null)
 
   React.useEffect(() => {
     if (savedMission) setOptimisticMission(null)
   }, [savedMission])
+
+  React.useEffect(() => {
+    if (savedReleaseBoard) setOptimisticReleaseBoard(null)
+  }, [savedReleaseBoard])
 
   const emptyMission = React.useMemo(
     () => emptyMissionBrief(workspaceId || 'workspace'),
     [workspaceId],
   )
   const mission = optimisticMission ?? savedMission ?? emptyMission
+  const releaseBoardBase = React.useMemo(
+    () => optimisticReleaseBoard ?? savedReleaseBoard ?? buildDefaultReleaseBoard(workspaceId || 'workspace'),
+    [optimisticReleaseBoard, savedReleaseBoard, workspaceId],
+  )
+  const releaseBoard = React.useMemo(
+    () => mergeReleaseBoardWithAssets(releaseBoardBase, assetManifest),
+    [assetManifest, releaseBoardBase],
+  )
+  const releaseBoardBody = React.useMemo(
+    () => serializeReleaseBoardBody(releaseBoard),
+    [releaseBoard],
+  )
+  const selectedReleaseCategory = React.useMemo(
+    () => releaseBoard.categories.find((category) => category.id === selectedReleaseCategoryId) ?? null,
+    [releaseBoard.categories, selectedReleaseCategoryId],
+  )
   const hasMission = mission.status !== 'empty'
   const title = mission.title || 'Untitled Mission'
   const subtitle = hasMission
@@ -143,6 +198,46 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
       }
     },
     [hasMission, workspaceId],
+  )
+
+  const saveReleaseBoard = React.useCallback(
+    async (nextBoard: ReleaseBoard) => {
+      setOptimisticReleaseBoard(nextBoard)
+      try {
+        await upsert({
+          slug: RELEASE_BOARD_CONTEXT_SLUG,
+          metadata: releaseBoardMetadata(nextBoard),
+          body: serializeReleaseBoardBody(nextBoard),
+        })
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : String(err))
+      }
+    },
+    [upsert],
+  )
+
+  React.useEffect(() => {
+    if (!workspaceId || loading) return
+    const shouldSeedBoard = !savedReleaseBoard
+    const shouldSyncAssetMatches = savedReleaseBoard && releaseBoardBody !== serializeReleaseBoardBody(savedReleaseBoard)
+    if (!shouldSeedBoard && !shouldSyncAssetMatches) return
+    if (lastAutoSavedReleaseBoardBody.current === releaseBoardBody) return
+
+    lastAutoSavedReleaseBoardBody.current = releaseBoardBody
+    void upsert({
+      slug: RELEASE_BOARD_CONTEXT_SLUG,
+      metadata: releaseBoardMetadata(releaseBoard),
+      body: releaseBoardBody,
+    }).catch((err) => {
+      toast.error(err instanceof Error ? err.message : String(err))
+    })
+  }, [loading, releaseBoard, releaseBoardBody, savedReleaseBoard, upsert, workspaceId])
+
+  const toggleReleaseItem = React.useCallback(
+    (categoryId: ReleaseBoardCategory['id'], itemId: string) => {
+      void saveReleaseBoard(toggleReleaseBoardItem(releaseBoard, categoryId, itemId))
+    },
+    [releaseBoard, saveReleaseBoard],
   )
 
   const chooseAndImport = React.useCallback(
@@ -281,6 +376,11 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
           </div>
         </section>
 
+        <ReleaseBoardRow
+          board={releaseBoard}
+          onSelectCategory={setSelectedReleaseCategoryId}
+        />
+
         {hasMission ? (
           <MissionAssetsCard
             manifest={assetManifest}
@@ -372,7 +472,189 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
         onSaved={setOptimisticMission}
         saveMissionBrief={upsert}
       />
+
+      <ReleaseBoardDialog
+        category={selectedReleaseCategory}
+        onOpenChange={(open) => {
+          if (!open) setSelectedReleaseCategoryId(null)
+        }}
+        onToggleItem={toggleReleaseItem}
+      />
     </div>
+  )
+}
+
+const releaseCategoryIcons: Record<ReleaseBoardCategory['id'], React.ComponentType<{ className?: string }>> = {
+  music: Disc3,
+  visuals: Eye,
+  setup: Settings2,
+  content: ClipboardCheck,
+  promotion: Megaphone,
+  team: Users,
+}
+
+function ReleaseBoardRow({
+  board,
+  onSelectCategory,
+}: {
+  board: ReleaseBoard
+  onSelectCategory: (categoryId: ReleaseBoardCategory['id']) => void
+}) {
+  const totals = getBoardTotals(board)
+
+  return (
+    <CommandCard className="p-3.5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <CheckCircle2 className="h-3.5 w-3.5 text-white/45" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-white/82">Release Board</p>
+            <p className="truncate text-xs text-white/35">
+              {totals.done}/{totals.total} pieces handled for this mission
+            </p>
+          </div>
+        </div>
+        <span className="hidden text-[9px] font-medium uppercase tracking-[0.18em] text-white/28 sm:inline">
+          Workspace Context
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+        {board.categories.map((category) => (
+          <ReleaseBoardTile
+            key={category.id}
+            category={category}
+            onClick={() => onSelectCategory(category.id)}
+          />
+        ))}
+      </div>
+    </CommandCard>
+  )
+}
+
+function ReleaseBoardTile({
+  category,
+  onClick,
+}: {
+  category: ReleaseBoardCategory
+  onClick: () => void
+}) {
+  const Icon = releaseCategoryIcons[category.id]
+  const progress = getCategoryProgress(category)
+  const allDone = progress.total > 0 && progress.done === progress.total
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group min-w-0 rounded-xl border border-white/[0.045] bg-white/[0.012] p-3 text-left transition-colors hover:border-white/[0.09] hover:bg-white/[0.035]"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={cn(
+            'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border',
+            allDone ? 'border-emerald-400/20 bg-emerald-400/10' : 'border-white/[0.05] bg-white/[0.02]',
+          )}>
+            <Icon className={cn('h-3.5 w-3.5', allDone ? 'text-emerald-300/80' : 'text-white/45')} />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-medium text-white/78">{category.label}</p>
+            <p className="mt-0.5 truncate text-[10px] text-white/32">{category.detail}</p>
+          </div>
+        </div>
+        <span className="shrink-0 text-[10px] font-medium text-white/38">
+          {progress.done}/{progress.total}
+        </span>
+      </div>
+      <div className="mt-3 flex gap-1">
+        {category.items.map((item) => (
+          <span
+            key={item.id}
+            className={cn(
+              'h-1 flex-1 rounded-full',
+              item.status === 'done' ? 'bg-emerald-400/70' : 'bg-white/[0.07]',
+            )}
+          />
+        ))}
+      </div>
+    </button>
+  )
+}
+
+function ReleaseBoardDialog({
+  category,
+  onOpenChange,
+  onToggleItem,
+}: {
+  category: ReleaseBoardCategory | null
+  onOpenChange: (open: boolean) => void
+  onToggleItem: (categoryId: ReleaseBoardCategory['id'], itemId: string) => void
+}) {
+  const Icon = category ? releaseCategoryIcons[category.id] : CheckCircle2
+  const progress = category ? getCategoryProgress(category) : { done: 0, total: 0 }
+
+  return (
+    <Dialog open={Boolean(category)} onOpenChange={onOpenChange}>
+      <DialogContent className="border-white/[0.08] bg-[#070707] text-white shadow-modal-small sm:max-w-[560px]">
+        {category ? (
+          <>
+            <DialogHeader className="pr-8">
+              <div className="mb-1 flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025]">
+                  <Icon className="h-4 w-4 text-white/58" />
+                </span>
+                <div>
+                  <DialogTitle className="text-base font-medium text-white/88">{category.label}</DialogTitle>
+                  <DialogDescription className="mt-1 text-xs text-white/38">
+                    {progress.done}/{progress.total} handled
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="space-y-2">
+              {category.items.map((item) => {
+                const done = item.status === 'done'
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 rounded-xl border border-white/[0.045] bg-white/[0.012] px-3 py-3"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onToggleItem(category.id, item.id)}
+                      aria-label={done ? `Mark ${item.label} as needed` : `Mark ${item.label} as done`}
+                      className={cn(
+                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors',
+                        done
+                          ? 'border-emerald-400/30 bg-emerald-400/14 text-emerald-300'
+                          : 'border-white/[0.10] bg-white/[0.018] text-white/28 hover:border-white/20 hover:text-white/60',
+                      )}
+                    >
+                      {done ? <Check className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />}
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <p className={cn('truncate text-sm font-medium', done ? 'text-white/78' : 'text-white/84')}>
+                        {item.label}
+                      </p>
+                      {item.linkedAssetId ? (
+                        <p className="mt-0.5 truncate text-[10px] text-emerald-300/48">Matched from mission assets</p>
+                      ) : null}
+                    </div>
+                    <span className={cn(
+                      'shrink-0 rounded-full px-2 py-1 text-[9px] font-medium uppercase tracking-[0.14em]',
+                      done ? 'bg-emerald-400/10 text-emerald-300/75' : 'bg-white/[0.035] text-white/32',
+                    )}>
+                      {done ? 'Done' : 'Needed'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   )
 }
 
