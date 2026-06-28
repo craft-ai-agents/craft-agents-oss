@@ -43,6 +43,7 @@ import { sourceSelection, skillSelection, automationSelection } from '@/hooks/us
 import { extractLabelId } from '@craft-agent/shared/labels'
 import type { SessionStatusId } from '@/config/session-status-config'
 import { SourceInfoPage } from '@/pages'
+import ChatPage from '@/pages/ChatPage'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import AgentInfoPage from '@/pages/AgentInfoPage'
 import WorkspaceContextPage from '@/pages/WorkspaceContextPage'
@@ -517,8 +518,16 @@ export function MainContentPanel({
       )
     }
 
-    // Creator Command Center replaces the chat-first sessions main surface.
-    // Existing session/sidebar navigation stays intact for now.
+    if (navState.details?.type === 'session') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ChatPage sessionId={navState.details.sessionId} />
+        </Panel>
+      )
+    }
+
+    // Creator Command Center replaces only the empty sessions landing surface.
+    // Selecting a session still opens the actual chat view.
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <ArtistCommandCenterHome workspaceId={activeWorkspaceId || ''} />
