@@ -502,8 +502,9 @@ body
     expect(adsAgent?.metadata.skills).toContain('google-ads')
     expect(adsAgent?.metadata.skills).toContain('ad-creative')
     expect(adsAgent?.metadata.sources).toContain('google-ads')
-    expect(adsAgent?.metadata.sources).toContain('meta-ads')
+    expect(adsAgent?.metadata.sources).not.toContain('meta-ads')
     expect(adsAgent?.systemPrompt).toContain('node bin/google-ads.mjs')
+    expect(adsAgent?.systemPrompt).toContain('Meta OAuth must be connected first')
     expect(adsAgent?.systemPrompt).toContain('explicit user approval')
   })
 

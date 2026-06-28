@@ -115,6 +115,7 @@ export class SecureStorageBackend implements CredentialBackend {
   private cachedStore: CredentialStore | null = null;
   private encryptionKey: Buffer | null = null;
   private salt: Buffer | null = null;
+  private storeLocked = false;
 
   async isAvailable(): Promise<boolean> {
     // File backend is always available - we can always write to filesystem
@@ -131,6 +132,10 @@ export class SecureStorageBackend implements CredentialBackend {
 
   async set(id: CredentialId, credential: StoredCredential): Promise<void> {
     let store = await this.loadStore();
+
+    if (!store && this.storeLocked) {
+      throw new Error('Secure credential store exists but cannot be unlocked; refusing to overwrite stored credentials');
+    }
 
     if (!store) {
       // Initialize new store
@@ -227,6 +232,7 @@ export class SecureStorageBackend implements CredentialBackend {
 
     if (store) {
       this.cachedStore = store;
+      this.storeLocked = false;
       return store;
     }
 
@@ -236,6 +242,7 @@ export class SecureStorageBackend implements CredentialBackend {
 
     if (store) {
       this.cachedStore = store;
+      this.storeLocked = false;
       await this.saveStore(store);
       return store;
     }
@@ -248,6 +255,7 @@ export class SecureStorageBackend implements CredentialBackend {
     if (store) {
       // Migration: re-save with new stable key so future loads use hardware UUID
       this.cachedStore = store;
+      this.storeLocked = false;
       await this.saveStore(store);
       return store;
     }
@@ -255,7 +263,10 @@ export class SecureStorageBackend implements CredentialBackend {
     // A safeStorage-backed file may be unreadable in a headless/non-Electron
     // runtime. Do not delete it as "corrupted" just because this process cannot
     // unlock the OS-protected sidecar key.
-    if (existsSync(CREDENTIALS_KEY_FILE)) return null;
+    if (existsSync(CREDENTIALS_KEY_FILE)) {
+      this.storeLocked = true;
+      return null;
+    }
 
     // All known keys failed - file is truly corrupted
     this.handleCorruptedFile();
@@ -317,6 +328,7 @@ export class SecureStorageBackend implements CredentialBackend {
     // Write with restrictive permissions (owner read/write only)
     writeFileSync(CREDENTIALS_FILE, fileData, { mode: 0o600 });
     this.cachedStore = store;
+    this.storeLocked = false;
   }
 
   private async getEncryptionKey(salt: Buffer): Promise<Buffer> {
@@ -362,6 +374,7 @@ export class SecureStorageBackend implements CredentialBackend {
     this.cachedStore = null;
     this.encryptionKey = null;
     this.salt = null;
+    this.storeLocked = false;
   }
 
   /** Clear cached data (for testing or forced refresh) */
@@ -369,6 +382,7 @@ export class SecureStorageBackend implements CredentialBackend {
     this.cachedStore = null;
     this.encryptionKey = null;
     this.salt = null;
+    this.storeLocked = false;
   }
 }
 
