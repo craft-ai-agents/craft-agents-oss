@@ -68,4 +68,11 @@ describe('channel routing behavior', () => {
       }
     }
   })
+
+  test('mission asset channels stay local for native file picking', () => {
+    for (const ch of Object.values(RPC_CHANNELS.missionAssets)) {
+      expect(LOCAL_ONLY_CHANNELS.has(ch)).toBe(true)
+      expect(REMOTE_ELIGIBLE_CHANNELS.has(ch)).toBe(false)
+    }
+  })
 })
