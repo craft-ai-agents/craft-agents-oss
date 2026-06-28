@@ -22,7 +22,14 @@ describe('release board utilities', () => {
       'promotion',
       'team',
     ])
-    expect(getBoardTotals(board)).toEqual({ done: 0, total: 24 })
+    expect(getBoardTotals(board)).toEqual({ done: 0, total: 25 })
+    expect(board.categories.find((category) => category.id === 'content')?.items.map((item) => item.label)).toEqual([
+      'Idea generation',
+      'Lyric clips',
+      'Viral clips',
+      'UGC clips',
+      'Lyric video',
+    ])
   })
 
   test('round-trips through a workspace context doc body', () => {

@@ -58,10 +58,11 @@ const DEFAULT_ITEMS: Record<ReleaseBoardCategory['id'], ReleaseBoardItem[]> = {
     { id: 'metadata', label: 'Credits and metadata', status: 'needed' },
   ],
   content: [
-    { id: 'hook-bank', label: 'Hook ideas', status: 'needed' },
-    { id: 'tiktok-drafts', label: 'TikTok drafts', status: 'needed', assetKinds: ['raw-video', 'edited-video', 'final-video'] },
-    { id: 'reels-drafts', label: 'Reels drafts', status: 'needed', assetKinds: ['raw-video', 'edited-video', 'final-video'] },
-    { id: 'caption-bank', label: 'Caption bank', status: 'needed', assetKinds: ['press-doc', 'note'] },
+    { id: 'idea-generation', label: 'Idea generation', status: 'needed', assetKinds: ['note', 'press-doc'] },
+    { id: 'lyric-clips', label: 'Lyric clips', status: 'needed', assetKinds: ['edited-video', 'final-video'] },
+    { id: 'viral-clips', label: 'Viral clips', status: 'needed', assetKinds: ['raw-video', 'edited-video', 'final-video'] },
+    { id: 'ugc-clips', label: 'UGC clips', status: 'needed', assetKinds: ['raw-video', 'edited-video', 'final-video'] },
+    { id: 'lyric-video', label: 'Lyric video', status: 'needed', assetKinds: ['final-video'] },
   ],
   promotion: [
     { id: 'budget', label: 'Budget set', status: 'needed' },
