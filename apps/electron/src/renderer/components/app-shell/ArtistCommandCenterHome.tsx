@@ -1,6 +1,5 @@
 import * as React from 'react'
 import {
-  Activity,
   ArrowRight,
   Bot,
   CalendarClock,
@@ -356,16 +355,6 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <CommandCard>
-            <SectionTitle icon={Activity} title="State of Play" meta={loading ? 'Loading' : 'Live'} />
-            <div className="grid grid-cols-2 gap-x-4 gap-y-4 pt-1">
-              <Metric label="Context" value={hasMission ? `${mission.completeness}%` : 'Empty'} detail={hasMission ? 'Brief saved' : 'No mission brief'} />
-              <Metric label="Mission" value={hasMission ? 'Active' : 'Open'} detail={mission.missionType || 'Any creative work'} />
-              <Metric label="Release Target" value={mission.timeline || mission.releaseDate || 'Unknown'} detail={hasMission ? 'User-provided' : 'Not set'} />
-              <Metric label="Sources" value="Quiet" detail="No connected stats yet" />
-            </div>
-          </CommandCard>
-
-          <CommandCard>
             <SectionTitle icon={ShieldCheck} title="Approvals" meta="None" />
             <EmptyCardLine
               title="No pending approvals"
@@ -384,41 +373,41 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
               <EmptyCardLine title="No timeline yet" detail="Add a release date or rough window in the mission brief." />
             )}
           </CommandCard>
-        </div>
 
-        <CommandCard>
-          <button
-            type="button"
-            onClick={() => setShowAgents((value) => !value)}
-            className="group flex w-full items-center justify-between text-left"
-            aria-expanded={showAgents}
-          >
-            <div className="flex items-center gap-2">
-              <Bot className="h-3 w-3 text-white/40 group-hover:text-white/60" />
-              <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">Active Agents</h3>
-              <span className="ml-2 rounded bg-white/[0.03] px-2 py-0.5 text-[8px] font-medium tracking-widest text-white/40">
-                Quiet
-              </span>
-            </div>
-            <ChevronDown className={cn('h-4 w-4 text-white/20 transition-transform duration-300 group-hover:text-white/50', showAgents && 'rotate-180')} />
-          </button>
+          <CommandCard>
+            <button
+              type="button"
+              onClick={() => setShowAgents((value) => !value)}
+              className="group flex w-full items-center justify-between text-left"
+              aria-expanded={showAgents}
+            >
+              <div className="flex items-center gap-2">
+                <Bot className="h-3 w-3 text-white/40 group-hover:text-white/60" />
+                <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">Active Agents</h3>
+                <span className="ml-2 rounded bg-white/[0.03] px-2 py-0.5 text-[8px] font-medium tracking-widest text-white/40">
+                  Quiet
+                </span>
+              </div>
+              <ChevronDown className={cn('h-4 w-4 text-white/20 transition-transform duration-300 group-hover:text-white/50', showAgents && 'rotate-180')} />
+            </button>
 
-          <div className={cn('grid transition-all duration-300 ease-in-out', showAgents ? 'mt-3 grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0')}>
-            <div className="overflow-hidden">
-              <div className="rounded-xl border border-white/[0.03] bg-white/[0.012] p-4">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-white/32" />
-                  <div>
-                    <p className="text-sm font-medium text-white/75">No background agents running</p>
-                    <p className="mt-1 text-xs leading-5 text-white/38">
-                      Once a mission workflow starts, agent runs and handoffs can appear here.
-                    </p>
+            <div className={cn('grid transition-all duration-300 ease-in-out', showAgents ? 'mt-3 grid-rows-[1fr] opacity-100' : 'mt-2 grid-rows-[0fr] opacity-0')}>
+              <div className="overflow-hidden">
+                <div className="rounded-xl border border-white/[0.03] bg-white/[0.012] p-4">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-white/32" />
+                    <div>
+                      <p className="text-sm font-medium text-white/75">No background agents running</p>
+                      <p className="mt-1 text-xs leading-5 text-white/38">
+                        Once a mission workflow starts, agent runs and handoffs can appear here.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </CommandCard>
+          </CommandCard>
+        </div>
       </div>
 
       <MissionBriefDrawer
@@ -628,16 +617,6 @@ function ReleaseBoardDialog({
         ) : null}
       </DialogContent>
     </Dialog>
-  )
-}
-
-function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <div className="group flex min-w-0 flex-col">
-      <p className="text-[8px] font-medium uppercase tracking-[0.2em] text-white/30">{label}</p>
-      <p className="mt-1 truncate text-base font-medium tracking-tight text-white/90">{value}</p>
-      <p className="mt-0.5 truncate text-[9px] font-light text-white/40">{detail}</p>
-    </div>
   )
 }
 
