@@ -156,7 +156,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
     ? mission.goal || mission.mood || 'Mission brief started. Add more context when ready.'
     : 'Start with a goal, files, or an agent.'
   const focus = mission.timeline || mission.releaseDate || (hasMission ? mission.missionType || 'Mission active' : 'No brief yet')
-  const completenessLabel = `${mission.completeness}% context`
+  const readinessLabel = hasMission ? `${mission.completeness}% ready` : 'Not started'
   const nextMove = React.useMemo(
     () => hasMission ? missionNextMove(assetManifest) : 'Create the mission brief.',
     [assetManifest, hasMission],
@@ -271,12 +271,12 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
 
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
-      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-5 py-6 xl:px-8 xl:py-8">
-        <section className="relative min-h-[320px] overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A]">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
+        <section className="relative min-h-[230px] overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A]">
           <div className="absolute -left-[20%] -top-[40%] h-[600px] w-[600px] rounded-full bg-orange-600/10 blur-[120px]" />
           <div className="absolute -bottom-[40%] -right-[10%] h-[600px] w-[600px] rounded-full bg-indigo-600/5 blur-[120px]" />
 
-          <div className="absolute bottom-10 right-10 hidden w-[32%] rounded-[28px] border border-white/[0.04] bg-white/[0.015] p-5 2xl:block">
+          <div className="absolute bottom-7 right-8 hidden w-[28%] rounded-[24px] border border-white/[0.04] bg-white/[0.015] p-4 2xl:block">
             <p className="mb-2 text-[9px] font-medium uppercase tracking-[0.18em] text-white/35">Mission Context</p>
             <div className="h-1 overflow-hidden rounded-full bg-white/[0.05]">
               <div className="h-full rounded-full bg-orange-400" style={{ width: `${mission.completeness}%` }} />
@@ -288,7 +288,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
             </p>
           </div>
 
-          <div className="relative z-10 flex min-h-[320px] flex-col justify-between p-8 lg:p-10">
+          <div className="relative z-10 flex min-h-[230px] flex-col justify-between p-6 lg:p-8">
             <div className="flex items-start justify-between gap-4">
               <div className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 pr-4 backdrop-blur-md">
                 <span className={cn('flex h-2 w-2 items-center justify-center rounded-full', hasMission ? 'bg-emerald-500/20' : 'bg-white/10')}>
@@ -304,34 +304,31 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
               </div>
             </div>
 
-            <div className="my-9 max-w-[760px]">
-              <h1 className="text-5xl font-medium tracking-tighter text-white/90 sm:text-6xl md:text-7xl lg:text-[76px] lg:leading-[0.95]">
+            <div className="my-5 max-w-[760px]">
+              <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl md:text-6xl lg:text-[56px] lg:leading-[0.94]">
                 {title}
               </h1>
-              <p className="mt-5 max-w-2xl text-sm font-light leading-relaxed text-white/50">
+              <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
                 {subtitle}
               </p>
             </div>
 
-            <div className="flex flex-col gap-6 border-t border-white/[0.05] pt-6 md:flex-row md:items-end md:justify-between">
-              <div className="flex w-full max-w-2xl flex-col gap-6 md:flex-row md:items-end md:gap-10">
-                <div>
-                  <p className="mb-1.5 text-[9px] font-medium uppercase tracking-[0.2em] text-white/40">Status</p>
-                  <p className="text-3xl font-light capitalize tracking-tight text-white/90">
-                    {mission.status}
-                  </p>
-                </div>
-                <div className="w-full max-w-[220px]">
-                  <div className="mb-2 flex justify-between text-[9px] font-medium uppercase tracking-[0.2em] text-white/40">
+            <div className="flex flex-col gap-4 border-t border-white/[0.05] pt-4 md:flex-row md:items-end md:justify-between">
+              <div className="flex w-full max-w-2xl flex-col gap-4 md:flex-row md:items-end md:gap-8">
+                <div className="w-full max-w-[250px]">
+                  <div className="mb-2 flex justify-between text-[9px] font-medium uppercase tracking-[0.18em] text-white/40">
                     <span>Brief</span>
-                    <span className="text-white/60">{completenessLabel}</span>
+                    <span className="text-white/60">{readinessLabel}</span>
                   </div>
                   <div className="h-1 overflow-hidden rounded-full bg-white/[0.04]">
                     <div className="h-full rounded-full bg-orange-500/80" style={{ width: `${mission.completeness}%` }} />
                   </div>
+                  <p className="mt-2 text-xs font-medium text-white/72">
+                    {hasMission ? 'Mission context saved' : 'No mission brief yet'}
+                  </p>
                 </div>
                 <div className="hidden md:block">
-                  <p className="mb-1.5 text-[9px] font-medium uppercase tracking-[0.2em] text-white/40">Next Move</p>
+                  <p className="mb-1 text-[9px] font-medium uppercase tracking-[0.18em] text-white/40">Next Move</p>
                   <p className="text-xs font-medium text-white/80">
                     {nextMove}
                   </p>
@@ -489,20 +486,14 @@ function ReleaseBoardRow({
   const totals = getBoardTotals(board)
 
   return (
-    <CommandCard className="p-3.5">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <CommandCard className="p-3">
+      <div className="mb-2.5 flex items-center gap-2.5">
         <div className="flex min-w-0 items-center gap-2.5">
           <CheckCircle2 className="h-3.5 w-3.5 text-white/45" />
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-white/82">Release Board</p>
-            <p className="truncate text-xs text-white/35">
-              {totals.done}/{totals.total} pieces handled for this mission
-            </p>
-          </div>
+          <p className="min-w-0 truncate text-sm font-medium text-white/82">
+            Release Board <span className="text-xs font-normal text-white/32">({totals.done}/{totals.total})</span>
+          </p>
         </div>
-        <span className="hidden text-[9px] font-medium uppercase tracking-[0.18em] text-white/28 sm:inline">
-          Workspace Context
-        </span>
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
@@ -533,7 +524,7 @@ function ReleaseBoardTile({
     <button
       type="button"
       onClick={onClick}
-      className="group min-w-0 rounded-xl border border-white/[0.045] bg-white/[0.012] p-3 text-left transition-colors hover:border-white/[0.09] hover:bg-white/[0.035]"
+      className="group min-w-0 rounded-xl border border-white/[0.045] bg-white/[0.012] p-2.5 text-left transition-colors hover:border-white/[0.09] hover:bg-white/[0.035]"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -548,7 +539,7 @@ function ReleaseBoardTile({
           </div>
         </div>
       </div>
-      <div className="mt-3 flex gap-1">
+      <div className="mt-2.5 flex gap-1">
         {category.items.map((item) => (
           <span
             key={item.id}
