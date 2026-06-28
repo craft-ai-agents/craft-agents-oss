@@ -9,7 +9,6 @@ import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { LoadedSource, UserSecretSummary, ZeroStatus } from '../../../shared/types'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { navigate, routes } from '@/lib/navigate'
-import { isSourceUsable } from '@craft-agent/shared/sources/storage'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -1011,5 +1010,12 @@ function presetIsSaved(
   if (preset.storage === 'env') return savedByName.has(preset.name)
   if (!preset.sourceSlug) return false
   const source = sourceBySlug.get(preset.sourceSlug)
-  return Boolean(source && (isSourceUsable(source) || source.config.connectionStatus === 'untested'))
+  return Boolean(source && (sourceIsUsable(source) || source.config.connectionStatus === 'untested'))
+}
+
+function sourceIsUsable(source: LoadedSource): boolean {
+  if (!source.config.enabled) return false
+  const authType = source.config.mcp?.authType || source.config.api?.authType
+  if (authType === 'none' || authType === undefined) return true
+  return source.config.connectionStatus === 'connected'
 }
