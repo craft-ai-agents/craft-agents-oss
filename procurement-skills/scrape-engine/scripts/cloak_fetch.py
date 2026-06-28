@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-四家之外的其它分销商（立创/LCSC、其它平台或代理）按需采集：用 CloakBrowser 渲染
-任意 URL 返回可见文本。这些站多半也有反爬，别用普通 curl/WebFetch。
+外部分销商、平台页或代理页按需采集：用 CloakBrowser 渲染任意 URL
+返回可见文本。这些站多半也有反爬，别用普通 curl/WebFetch。
 
-仅用于 procurement-platform-search 的“四家之外、用户还想要更多货源”那一步；
-四家（Digikey/Mouser/云汉/master）用 api_search.py + cloak_search.py，不要用这个。
+仅用于平台引擎拿不到、但仍需要渲染某个具体页面做补充核对的场景；
+标准型号货源查询优先走 scrape-engine。
 
 必须用 cloakbrowser-python 跑，务必加 2>/dev/null（否则日志污染 JSON）：
-  cloakbrowser-python .agents/skills/procurement-platform-search-more/scripts/cloak_fetch.py "<分销商搜索页URL>" 2>/dev/null
+  cloakbrowser-python procurement-skills/scrape-engine/scripts/cloak_fetch.py "<分销商搜索页URL>" 2>/dev/null
 
   --proxy           走住宅代理（海外站，如美国分销商）；境内站（立创等）不加
   --selector ".x"   只抽匹配元素文本（找到商品行选择器时用，输出更干净）

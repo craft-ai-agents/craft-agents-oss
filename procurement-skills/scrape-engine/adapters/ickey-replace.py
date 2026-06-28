@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """ICKey / 云汉芯城 替代料 adapter — mode=xhr, match_xhr='ajax-get-replace-product'.
-Ported from procurement-platform-search/scripts/cloak_search.py (scrape_ickey_replace
+Ported from legacy core platform scripts/cloak_search.py (scrape_ickey_replace
 + _ickey_replace_line).
 
 云汉原生替代料接口 ajax-get-replace-product —— 给一个型号返回替代/相似料候选.

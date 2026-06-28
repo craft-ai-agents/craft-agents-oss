@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """MISUMI Japan (米思米日本) adapter — mode=xhr, match_xhr='/api/v1/series/search'.
-Ported from procurement-platform-search-more/scripts/cloak_search.py
+Ported from legacy extended-source cloak_search.py
 (scrape_misumi_jp).
 
 FA 机械件搜索：关键词/系列号→可配置系列。旧脚本拦 /api/v1/series/search XHR，

@@ -39,11 +39,24 @@ export interface EvalEvidenceExpected {
   missingFieldTerms?: string[]
 }
 
+export interface EvalPlatformExpected {
+  sourceIds?: string[]
+  requireAllSources?: boolean
+  allowImplicitAllSources?: boolean
+  minCoverageRatio?: number
+  requireAvailabilityReport?: boolean
+  requiredStatusTerms?: string[]
+  requiredReportFields?: string[]
+  requiredStructuredFields?: string[]
+  precisionSampleSize?: number
+}
+
 export interface EvalExpected {
   trace?: EvalTraceExpected
   toolCalls?: EvalToolCallsExpected
   answer?: EvalAnswerExpected
   evidence?: EvalEvidenceExpected
+  platform?: EvalPlatformExpected
   /** 替代料 labeled 参考答案(closed 集);存进 Phoenix example 的 expected。 */
   substitutes?: SubstitutesExpected
 

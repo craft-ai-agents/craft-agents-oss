@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mouser adapter — mode=api. Ported from procurement-platform-search/scripts/
+"""Mouser adapter — mode=api. Ported from legacy core platform scripts/
 api_search.py (search_mouser), faithfully:
 
   - single MOUSER_API_KEY in the query string.

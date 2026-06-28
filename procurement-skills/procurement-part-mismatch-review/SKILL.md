@@ -14,21 +14,30 @@ metadata:
 
 **先看是不是「同一颗芯片」**：把两个 MPN 拆成 基础料号 + 封装/后缀代码。若**基础料号相同、只后缀/封装不同**（如 `TPS92550TZ` vs `TPS92550TZX`，`/NOPB`=无铅），那是**同一颗芯片的不同封装/包装/无铅版本**，电气规格一致——只需核对**封装是否兼容（footprint/引脚）**和包装/无铅是否可接受，别因"封装代码不同"就一律判不能用。这通常是最容易接受的差异。
 
-## 第一步：拿两个型号的关键规格（优先结构化源，比挨个开网页快准）
+## 第一步：拿两个型号的关键规格（优先结构化证据，比挨个开网页快准）
 
-1. **Octopart 对比表（最省事，原型号 vs 替代并排列规格）**：
+1. **结构化替代/对比证据**：
 
-       cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<采购型号>" --source octopart-alt 2>/dev/null
+   调用 `scrape-engine` 取得替代或对比类结构化证据。
 
-   若报价型号正好在它的 Alternate Parts 里，直接读两边封装/引脚/电参数/温度等对比。
+   若报价型号正好在返回的候选/对比证据里，直接读两边封装/引脚/电参数/温度等对比。
 
-2. **引擎 API 源（Digikey/Mouser，拿厂牌/描述/封装/datasheet）**，对两个型号各跑一次：
+2. **结构化平台基础证据**：
 
-       cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --source digikey,mouser
+   对两个型号各查一次结构化平台证据，拿厂牌、描述、封装、datasheet、产品页等字段。
 
-3. **datasheet / 原厂页**：上面给了 datasheet 链接，需要细规格（精度/温度/pin 定义）就用 WebFetch 打开核对；原厂页反爬抓不到时用 `scrape-engine` 引擎 `--source master` 或 `cloak_fetch.py`。需要系统化搜原厂资料时读 [references/search-workflow.md](references/search-workflow.md)。
+3. **datasheet / 原厂页**：上面给了 datasheet 链接，需要细规格（精度/温度/pin 定义）就打开核对。页面打不开/资料缺就记录为阻碍或需补料；平台采集细节仍交给 `scrape-engine`。需要系统化搜原厂资料时读 [references/search-workflow.md](references/search-workflow.md)。
 
 按品类锁定**关键规格项**：封装/引脚、核心电参数（电压/电流/精度/容值/阻值/功率/频率/速度）、Memory/接口/协议、温度等级、认证、生命周期。
+
+## 反合理化表
+
+| 常见借口 | 反驳 |
+|---|---|
+| “只是后缀不同，直接说能用。” | 先判断是否同基础料号；即使电气一致，也要核对封装、footprint、包装和无铅要求。 |
+| “型号很像/供应商说可以，就不用查规格。” | 结论必须来自关键规格逐项对比或明确替代证据。 |
+| “资料打不开，就当没有差异。” | 资料缺口要写成需补料，不能把未知当兼容。 |
+| “让采购自己判断吧。” | 本 skill 的职责就是把差异、结论和缺口收敛成业务可读判断。 |
 
 ## 第二步：逐项对比下结论
 
@@ -43,6 +52,6 @@ metadata:
 ## 输出 + 边界
 
 - 只用业务语言输出，格式见 [references/output-format.md](references/output-format.md)。
-- 单型号对约 2 分钟：先看结构化对比，缺的关键项再开 datasheet 补；超时就用现有资料收口并说明缺口。
+- 准确率优先于速度：先看结构化对比，缺的关键项再开 datasheet/原厂页补；不要因为耗时就把未知当兼容或提前收口。
 - 页面打不开/资料缺，如实写成阻碍/需补料，不能当差异不存在。
 - 只处理两个型号能否互用。

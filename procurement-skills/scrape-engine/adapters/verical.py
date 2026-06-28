@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Verical (Arrow marketplace) adapter — mode=xhr, match_xhr='rest/search/parametric'.
-Ported from procurement-platform-search-more/scripts/cloak_search.py (scrape_verical).
+Ported from legacy extended-source cloak_search.py (scrape_verical).
 
 The old script opened https://www.verical.com/s/{part}/ and intercepted the
 `rest/search/parametric` POST XHR, reading d["records"][*]. The engine now does

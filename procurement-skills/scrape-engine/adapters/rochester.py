@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Rochester Electronics (rocelec.com) adapter — mode=script, direct (no proxy).
 
-Ported from procurement-platform-search-more/scripts/cloak_search.py
+Ported from legacy extended-source cloak_search.py
 (scrape_rochester). Rochester is an EOL/停产 半导体官方授权源 fronted by a
 Salesforce Commerce (webruntime) backend. The old scraper drove a 4-hop flow by
 hand inside a single warmed page:

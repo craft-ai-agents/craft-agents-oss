@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """OC Pneumatics (Orange Coast Pneumatics, 美国 SMC 气动元件经销) — mode=script.
-Ported from procurement-platform-search-more/scripts/cloak_search.py
+Ported from legacy extended-source cloak_search.py
 (scrape_ocpneumatics), lifted byte-faithfully.
 
 OLD strategy (preserved as-is):

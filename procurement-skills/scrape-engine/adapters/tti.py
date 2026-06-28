@@ -8,7 +8,7 @@ Incapsula profile,下面沿用 perimeterx 只为做首页 warmup 拿到主 HTML;
 Incapsula(reese84/JS 挑战)求解器,成本高、ROI 低;被动/连接器品类优先用 sager(同集团、
 直连无反爬、已 script 结构化)。下面是当年照搬旧 PerimeterX 假设的实现,保留备用。
 
-Ported from procurement-platform-search-more/scripts/cloak_search.py
+Ported from legacy extended-source cloak_search.py
 (scrape_tti) byte-faithfully.
 
   Old scrape_tti did, by hand:

@@ -315,6 +315,14 @@ async def run_batch(
             async with gate_obj.slot(permits_for(a)):
                 rows, err = await _run_one(
                     pool, a, part, wait_ms=wait_ms, api_limit=api_limit)
+                if not rows and not err:
+                    rows = [Row(
+                        part=part,
+                        platform=a.id,
+                        product_url=a.url(part),
+                        availability_status="no_result",
+                        note="no_result: adapter returned no rows",
+                    )]
                 for r in rows:
                     rows_out.append(r.to_dict())
                 if err:

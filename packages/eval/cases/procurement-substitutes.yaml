@@ -11,16 +11,26 @@
   category: procurement_substitute
   input: 查找 G6E134P-US DC24V 的替代料
   context: &ctx >-
+    这是无交互 headless eval；不要调用 ask_user / mcp__session__ask_user / mcp__session__call_llm / call_llm / 任何向用户提问或二次询问模型的工具。
+    这是严格 substitutes JSON eval：任何代码块前后的说明文字、结论、证据清单、Markdown 表格都会被视为输出纪律错误；最终只交一个 ```substitutes 块。
+    目标是找到业务确认级可替代型号，不是查库存/报价、做全平台覆盖，或列出所有“看起来合理”的兼容候选；优先使用原厂页、datasheet、cross-reference、停产替代通知和同基础料号变体。
+    scrape-engine 只用于少量定向结构化佐证：查原型号规格基线、候选型号规格，或读取明确的替代候选证据；不要全平台/全 source 搜索，不要为了库存价格继续扩展平台。
+    准确率优先于速度；不要因为耗时、只找到弱候选或没有库存报价就提前输出空 substitutes 数组。
+    先找到候选，再用原厂页/datasheet/cross-reference/停产替代通知/同基础料号变体等证据验证；候选证据弱时继续查证，证据足够后收口输出。
+    提交前自检：是否查过 official replacement / successor / cross-reference / orderable part number / version suffix / same-vendor migration；不要只输出泛竞品、库存同系列、包装/渠道/容量/速度变体。找到同基础料号或同系列候选后，仍要继续找跨系列、跨品牌、继任型号、当前产品层级或业务常见等效料，并把这些候选放入 substitutes。
+    软件/SKU 找到同厂当前产品线或迁移层级候选后即可输出；mpn 优先写公开产品层级/产品名，不要只写不可读的订货 SKU；不要为了隐藏 SKU 继续穷搜网页。
+    短名/描述型输入不能轻易输出空数组：判准品类后继续找具体品牌/型号候选，除非多来源确认没有具体 MPN。
+    不要等待用户确认，不要输出过程分析。
+    输出纪律：本用例的用户/上层要求是 substitutes JSON，必须覆盖 skill/AGENTS.md 的通用表格模板；禁止套用表格清单、```text、```json 或 Markdown 表格。
     完成查找后,只输出一个 ```substitutes 代码块,块内为合法 JSON,块后不得有任何文字。格式:
     {"original": "<原型号>", "substitutes": [{"mpn": "<OPN>", "type": "drop_in|param_compatible|downgrade", "reason": "<替代依据>"}]}
-    规范:mpn 一律用厂商 datasheet 上的完整订货型号(OPN)原样书写,不加空格、品牌或备注;
+    规范:mpn 一律用厂商 datasheet/orderable part number 上的完整订货型号(OPN)原样书写,不加空格、品牌或备注；网页标题/分销商展示名和厂商订货号写法不一致时，以厂商订货号字段为准;
     type 三选一(drop_in=pin对pin / param_compatible=参数兼容 / downgrade=降级可用);
     若无可替代,substitutes 给空数组。
   skillSlugs: &skills
     - procurement-alternative-search
     - procurement-model-info-search
-    - procurement-platform-search
-    - procurement-platform-search-more
+    - scrape-engine
     - procurement-part-mismatch-review
   expected:
     substitutes: { acceptable: ["G6S-2 DC24"], mustFind: ["G6S-2 DC24"], forbidden: [], minPrecision: 0 }

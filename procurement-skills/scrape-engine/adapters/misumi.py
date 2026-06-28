@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """MISUMI 米思米中国 FA 机械件搜索 adapter — mode=xhr, match_xhr='appsearch/app_search'.
-Ported from procurement-platform-search-more/scripts/cloak_search.py
+Ported from legacy extended-source cloak_search.py
 (scrape_misumi + _misumi_line).
 
 The old script intercepted the `appsearch/app_search` XHR (only when the URL also

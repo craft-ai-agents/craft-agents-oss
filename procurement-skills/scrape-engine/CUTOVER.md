@@ -1,11 +1,11 @@
-# CUTOVER — old per-skill scrape scripts → 3-layer scrape-engine
+# CUTOVER — old scrape scripts → 3-layer scrape-engine
 
 **Non-destructive migration. The old scripts STAY as a working fallback.**
 
 The engine's anti-bot / residential-proxy path is **not yet validated on the
 4C4G prod box**. Until a prod smoke test of that path passes (see
-[Cutover gate](#cutover-gate)), every skill keeps calling the old scripts for
-the proxy/anti-bot sources, and the old scripts are **NOT deleted**. The engine
+[Cutover gate](#cutover-gate)), platform lookup keeps the old script fallbacks
+for proxy/anti-bot sources, and the old scripts are **NOT deleted**. The engine
 is wired in *additively*: direct-path sources can move first, proxy/anti-bot
 sources move only after the gate clears.
 
@@ -24,7 +24,7 @@ default). `--source` = csv of adapter ids; omit to fan out over all 34.
 
 ## 1. Invocation map — old script → new engine
 
-### procurement-platform-search (core four)
+### scrape-engine/SKILL.md (unified platform lookup)
 
 | Old invocation | New engine equivalent | Path class |
 |---|---|---|
@@ -35,7 +35,7 @@ default). `--source` = csv of adapter ids; omit to fan out over all 34.
 | — (master only) | `engine.py --part P --source master` | dom + Akamai + proxy — **PROD-GATED** |
 | — (ickey only) | `engine.py --part P --source ickey` | xhr, 境内直连 — direct |
 
-### procurement-platform-search-more (extended sources)
+### Extended source scripts
 
 | Old invocation | New engine equivalent | Path class |
 |---|---|---|
@@ -114,9 +114,8 @@ per-adapter table in `README.md` as a *port manifest*, not a pass certification.
 > **Retire the old scripts ONLY after a prod smoke test of the proxy / anti-bot
 > path passes on the 4C4G box.**
 
-Concretely, before deleting `api_search.py` / `cloak_search.py` from either
-skill, ALL of the following must pass **on prod (real network, real mihomo
-proxy)**:
+Concretely, before deleting old `api_search.py` / `cloak_search.py` fallbacks,
+ALL of the following must pass **on prod (real network, real mihomo proxy)**:
 
 1. **API path:** `engine.py --part LM358 --source digikey,mouser` returns real
    rows with the `/etc/craft-agent.env` creds + proxy egress.
@@ -131,7 +130,7 @@ proxy)**:
 Until then:
 
 - The engine is used **additively** for the LIVE-VERIFIED direct-path sources.
-- The skills keep calling the **old scripts** for the PROD-GATED sources.
+- Platform lookup keeps calling the **old scripts** for the PROD-GATED sources.
 - **No old script is deleted.** They remain the fallback for the entire
   proxy/anti-bot/API path and are the rollback target if the engine regresses.
 

@@ -56,10 +56,19 @@ def main() -> None:
         return
 
     ids = _parse_csv(args.source)
-    adapters = get_adapters(ids) if ids else get_adapters(all_ids())
+    adapter_ids = all_ids()
+    known_ids = set(adapter_ids)
+    unknown_ids = [source_id for source_id in ids if source_id not in known_ids]
+    adapters = get_adapters(ids) if ids else get_adapters(adapter_ids)
     if not adapters:
         print(json.dumps({"rows": [], "errors": [
-            {"error": "no known adapters; available: " + ",".join(all_ids())}]},
+            {"error": "no known adapters; available: " + ",".join(sorted(known_ids))},
+            *[
+                {"platform": source_id, "part": part, "error": "unknown source id"}
+                for source_id in unknown_ids
+                for part in parts
+            ],
+        ]},
             ensure_ascii=False, indent=2))
         return
 
@@ -67,6 +76,13 @@ def main() -> None:
         parts, adapters,
         gate=args.gate, wait_ms=args.wait * 1000, api_limit=args.limit,
     ))
+    for source_id in unknown_ids:
+        for part in parts:
+            out.setdefault("errors", []).append({
+                "platform": source_id,
+                "part": part,
+                "error": "unknown source id",
+            })
     print(json.dumps(out, ensure_ascii=False, indent=2))
 
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """GENERIC SSR-dump adapter 'xonelec' — mode=dom, body-text -> Row.note.
-Ported from procurement-platform-search-more/scripts/cloak_search.py
+Ported from legacy extended-source cloak_search.py
 (scrape_generic + GENERIC table row 'xonelec'). url_tpl + needs_proxy lifted as-is;
 see adapters/_generic.py for the full faithful-relocation note. Raw SSR text dump,
 NOT structured — extraction correctness intentionally NOT verified this round."""
@@ -11,5 +11,5 @@ from adapters._generic import make_generic  # noqa: E402
 ADAPTER = make_generic(
     'xonelec',
     'https://www.xonelec.com/keywordsearching?kword={q}',
-    True,
+    False,
 )

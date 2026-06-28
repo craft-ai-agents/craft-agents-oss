@@ -1,0 +1,319 @@
+# Static source catalog for scrape-engine.
+# This file is the home for platform capability and known website availability.
+# Runtime truth still comes from engine rows/errors/blocked/availability_status for each run.
+
+schema_version: 1
+
+status_values:
+  enabled: adapter is registered and should be attempted when selected
+  limited: adapter/source exists, but the site is known to be access-sensitive
+  reference_only: useful for original/manufacturer reference, not stock/price
+  deprecated: not an effective stock source; use replacement channels instead
+
+sources:
+  digikey:
+    display_name: DigiKey
+    tier: core
+    channel_type: global_distributor
+    categories: [semiconductor, passive, connector, electromechanical]
+    status: enabled
+
+  mouser:
+    display_name: Mouser
+    tier: core
+    channel_type: global_distributor
+    categories: [semiconductor, passive, connector, electromechanical]
+    status: enabled
+
+  ickey:
+    display_name: 云汉芯城
+    tier: core
+    channel_type: china_spot
+    categories: [semiconductor, passive, connector]
+    status: enabled
+
+  master:
+    display_name: Master Electronics
+    tier: core
+    channel_type: western_distributor
+    categories: [passive, protection, relay, electromechanical]
+    status: limited
+    user_status: 访问受限/未取到不能写成无货
+
+  octopart:
+    display_name: Octopart
+    tier: more
+    channel_type: aggregator
+    categories: [semiconductor, passive, connector, electromechanical]
+    covers: [avnet, future, arrow, digikey, mouser, rs, element14, tme]
+    status: enabled
+
+  szlcsc-overseas:
+    display_name: 立创海外比价
+    tier: more
+    channel_type: aggregator
+    categories: [semiconductor, passive, connector]
+    covers: [mouser, digikey, rs, element14, verical, tme]
+    status: enabled
+
+  future:
+    display_name: Future Electronics
+    tier: more
+    channel_type: western_distributor
+    categories: [semiconductor, passive, connector]
+    status: enabled
+    user_status: 搜索路径可能返回 Temporarily Offline/Error500；运行时应标记 maintenance，不按反爬或无货处理
+
+  newark:
+    display_name: Newark
+    tier: more
+    channel_type: western_distributor
+    categories: [semiconductor, passive, connector]
+    status: enabled
+    user_status: 直连可见 scheduled maintenance；不要强制依赖本机代理，不按反爬或无货处理
+
+  rs-uk:
+    display_name: RS UK
+    tier: more
+    channel_type: regional_distributor
+    categories: [industrial, mro, passive, electromechanical]
+    status: enabled
+
+  rs-jp:
+    display_name: RS Japan
+    tier: more
+    channel_type: regional_distributor
+    categories: [industrial, mro, passive, electromechanical]
+    status: enabled
+
+  rs-hk:
+    display_name: RS Hong Kong
+    tier: more
+    channel_type: regional_distributor
+    categories: [industrial, mro, passive, electromechanical]
+    status: enabled
+
+  rs-us:
+    display_name: RS US / Allied
+    tier: more
+    channel_type: regional_distributor
+    categories: [industrial, mro, passive, electromechanical]
+    status: enabled
+
+  avnet:
+    display_name: Avnet
+    tier: more
+    channel_type: western_distributor
+    categories: [semiconductor, passive, connector]
+    status: limited
+    covered_by: [octopart]
+    user_status: 本次未取到/访问受限不能写成 Avnet 无货
+
+  arrow:
+    display_name: Arrow
+    tier: more
+    channel_type: western_distributor
+    categories: [semiconductor, passive, connector]
+    status: limited
+    replacements: [verical, octopart, szlcsc-overseas]
+    user_status: 访问受限/未取到不能写成无货
+
+  verical:
+    display_name: Verical
+    tier: more
+    channel_type: western_distributor
+    categories: [semiconductor, passive, connector]
+    status: enabled
+    related_to: [arrow]
+
+  element14-cn:
+    display_name: e络盟中国
+    tier: more
+    channel_type: china_authorized
+    categories: [semiconductor, passive, connector, electromechanical]
+    status: enabled
+    related_to: [element14, farnell]
+
+  tme:
+    display_name: TME
+    tier: more
+    channel_type: european_distributor
+    categories: [semiconductor, passive, connector, electromechanical]
+    status: enabled
+
+  xonelec:
+    display_name: X-ON
+    tier: more
+    channel_type: long_tail_distributor
+    categories: [semiconductor, passive, connector]
+    status: enabled
+    user_status: 直连可见 maintenance/back soon 页面；不要强制依赖本机代理，不按反爬或无货处理
+
+  componentonline:
+    display_name: Component Online
+    tier: more
+    channel_type: long_tail_distributor
+    categories: [semiconductor, passive, connector]
+    status: enabled
+
+  lcsc:
+    display_name: LCSC
+    tier: more
+    channel_type: china_spot
+    categories: [semiconductor, passive, connector]
+    status: enabled
+
+  szlcsc:
+    display_name: 立创商城
+    tier: more
+    channel_type: china_spot
+    categories: [semiconductor, passive, connector]
+    status: enabled
+
+  jbchip:
+    display_name: 京北通宇
+    tier: more
+    channel_type: china_spot
+    categories: [semiconductor, passive, connector]
+    status: enabled
+
+  vanlinkon:
+    display_name: 连可连
+    tier: more
+    channel_type: connector_spot
+    categories: [connector, cable, electromechanical]
+    status: enabled
+
+  peigenesis:
+    display_name: PEI-Genesis
+    tier: more
+    channel_type: connector_specialist
+    categories: [connector, electromechanical]
+    status: enabled
+
+  darisus:
+    display_name: Darisus
+    tier: more
+    channel_type: connector_specialist
+    categories: [connector, passive, electromechanical]
+    status: enabled
+
+  heilind:
+    display_name: Heilind
+    tier: more
+    channel_type: connector_specialist
+    categories: [connector, electromechanical]
+    status: enabled
+
+  sager:
+    display_name: Sager Electronics
+    tier: more
+    channel_type: electromechanical_power
+    categories: [power, connector, electromechanical]
+    status: enabled
+
+  tti:
+    display_name: TTI
+    tier: more
+    channel_type: passive_connector_specialist
+    categories: [passive, connector, electromechanical]
+    status: enabled
+
+  rochester:
+    display_name: Rochester Electronics
+    tier: more
+    channel_type: eol_authorized
+    categories: [semiconductor, eol, long_tail]
+    status: enabled
+
+  misumi:
+    display_name: 米思米中国
+    tier: more
+    channel_type: fa_mechanical
+    categories: [industrial, fa, mechanical]
+    status: enabled
+    note: 系列级线索，通常不是直接 MPN 报价
+
+  misumi-jp:
+    display_name: Misumi Japan
+    tier: more
+    channel_type: fa_mechanical
+    categories: [industrial, fa, mechanical]
+    status: enabled
+    note: 系列级线索，通常不是直接 MPN 报价
+
+  monotaro:
+    display_name: MonotaRO
+    tier: more
+    channel_type: mro
+    categories: [industrial, mro, mechanical]
+    status: enabled
+
+  corestaff:
+    display_name: CoreStaff / ZaikoStore
+    tier: more
+    channel_type: japan_long_tail
+    categories: [semiconductor, mro, long_tail]
+    status: enabled
+
+  ocpneumatics:
+    display_name: OCP Pneumatics
+    tier: more
+    channel_type: pneumatic_distributor
+    categories: [industrial, pneumatic]
+    status: enabled
+
+  ickey-replace:
+    display_name: 云汉替代料
+    tier: more
+    channel_type: alternative_candidates
+    categories: [alternative]
+    status: enabled
+    note: 替代候选来源，不是普通库存平台
+
+  octopart-alt:
+    display_name: Octopart alternatives
+    tier: more
+    channel_type: alternative_candidates
+    categories: [alternative]
+    status: enabled
+    note: 替代候选来源，不是普通库存平台
+
+  ti:
+    display_name: Texas Instruments
+    tier: reference
+    channel_type: manufacturer_reference
+    categories: [semiconductor, reference]
+    status: reference_only
+    user_status: 只作原厂资料/可订变体参考，不作为库存价格源
+
+  chip1stop:
+    display_name: chip1stop
+    tier: deprecated
+    channel_type: migrated_site
+    categories: [semiconductor, passive]
+    status: deprecated
+    replacements: [arrow, verical]
+
+  rs-cn:
+    display_name: RS China
+    tier: deprecated
+    channel_type: regional_distributor
+    categories: [industrial, mro]
+    status: deprecated
+    replacements: [rs-uk, rs-jp, rs-hk, rs-us]
+
+  distrelec:
+    display_name: Distrelec
+    tier: deprecated
+    channel_type: duplicate_site
+    categories: [industrial, mro]
+    status: deprecated
+    replacements: [rs-uk, rs-jp, rs-hk, rs-us]
+
+  kirikaeki:
+    display_name: Kirikaeki
+    tier: deprecated
+    channel_type: dead_site
+    categories: [industrial]
+    status: deprecated

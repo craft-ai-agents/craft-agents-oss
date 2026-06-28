@@ -84,6 +84,28 @@ bun run eval:procurement:generate-cases
 
 每条 case 都带 `metadata.source`,用于在 Phoenix 中回溯到真实 Base 表和记录。
 
+## 平台查找专项集
+
+只测平台查找/采集这一段时,使用人工维护的 20 条平台 case,不要从 100 条综合采购集里截取:
+
+```bash
+bun run eval:phoenix \
+  --scenario platform \
+  --cases packages/eval/cases/procurement-platform-search.yaml \
+  --dataset craft-procurement-platform-search \
+  --timeout-ms 600000 \
+  --concurrency 1
+```
+
+这组 case 的输入都会声明"内部库存已确认无记录",用于隔离平台查找能力。contract 会要求触发 `procurement-platform-search` / `scrape-engine`,同时禁止本地库存、供应商档案、WebSearch/WebFetch 顶替平台采集。
+
+平台专项集的 code evaluator 关注四个指标:
+
+- 查询全部平台:`platform_coverage` 检查是否覆盖 `source_catalog.yaml` 里 enabled/limited 的普通采购平台。替代料候选源、reference_only 和 deprecated 不计入报价平台覆盖率。
+- 平台可用性:`platform_availability_report` 检查最终回答是否汇报覆盖率、可用性、访问受限/未取到、状态、库存、报价、交期。
+- 完全覆盖率:默认要求 34/34 覆盖；`engine.py` 未传 `--source` 且执行 `--part/--parts` 时按全 registry 查询处理。
+- 数据汇报精度:`platform_data_precision` 从 `engine.py` JSON 的 rows 中抽样核对 `mpn` / `brand` / `stock` / `price_breaks` / `lead_time` 是否被最终回答原样保留。
+
 ## Phoenix 环境变量
 
 Phoenix client 读取:

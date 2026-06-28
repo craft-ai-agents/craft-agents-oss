@@ -1,0 +1,522 @@
+# 平台查找 eval。只测外部采购平台采集/报价这一段。
+# 方向: 查询全部平台、平台可用性、完全覆盖率、数据汇报精度。
+
+- id: platform-search-001-mt53e512m32d1zw-046-aat-b
+  name: 全平台查找 - MT53E512M32D1ZW-046 AAT:B
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 MT53E512M32D1ZW-046 AAT:B 的报价、库存和交期线索。"
+  context: &platform_context >-
+    本 case 只评估平台采集，不查本地库存、供应商档案、WebSearch 或 WebFetch。
+    必须查询全部已接入的普通采购平台；若某平台访问受限、登录限制、连接失败或本次未取到，要按平台写成可用性/阻碍状态，不能写成无货。
+    最终回答必须包含平台覆盖率、平台可用性汇总，以及命中数据的字段：平台、型号、品牌、库存、报价、交期。字段缺失时写未知/未提供，不要编造。
+    这是无交互 headless eval；不要调用 ask_user / mcp__session__ask_user / 任何向用户提问或等待确认的工具。采集完成后直接输出最终报告。
+    必须显式使用 engine.py --source "<source-id 逗号列表>" 列出要查的平台；不要省略 --source 触发隐式 all_ids，也不要把 --wait 提高到 30 这类全局长等待。
+  skillSlugs: &platform_skill
+    - scrape-engine
+  metadata:
+    focus: all_platform_search
+    productType: memory
+  expected:
+    trace: &platform_trace
+      requiresPlatformSearch: true
+      maxToolCalls: 24
+    toolCalls:
+      requiredSkills:
+        - scrape-engine
+      requiredSearchTerms:
+        - MT53E512M32D1ZW-046 AAT:B
+      forbiddenTools: &platform_forbidden_tools
+        - procurement-local-inventory-lookup
+        - procurement-supplier-shortlist
+        - WebSearch
+        - WebFetch
+    answer:
+      requiredTerms:
+        - MT53E512M32D1ZW-046 AAT:B
+        - 覆盖率
+        - 可用性
+        - 平台
+        - 报价
+        - 交期
+      forbiddenTerms: &platform_forbidden_terms
+        - lark-cli
+        - baseToken
+        - tableId
+        - API
+        - command
+        - 命令
+        - scrape-engine
+        - engine.py
+        - cloakbrowser
+        - WebFetch
+        - WebSearch
+        - source id
+        - 爬虫
+        - 脚本
+    platform: &platform_contract
+      sourceIds: &platform_sources
+        - digikey
+        - mouser
+        - ickey
+        - master
+        - octopart
+        - szlcsc-overseas
+        - future
+        - newark
+        - rs-uk
+        - rs-jp
+        - rs-hk
+        - rs-us
+        - avnet
+        - arrow
+        - verical
+        - element14-cn
+        - tme
+        - xonelec
+        - componentonline
+        - lcsc
+        - szlcsc
+        - jbchip
+        - vanlinkon
+        - peigenesis
+        - darisus
+        - heilind
+        - sager
+        - tti
+        - rochester
+        - misumi
+        - misumi-jp
+        - monotaro
+        - corestaff
+        - ocpneumatics
+      requireAllSources: true
+      allowImplicitAllSources: false
+      minCoverageRatio: 1
+      requireAvailabilityReport: true
+      requiredStatusTerms:
+        - 覆盖率
+        - 可用性
+        - 访问受限
+        - 未取到
+        - 维护
+      requiredReportFields:
+        - 平台
+        - 状态
+        - 库存
+        - 报价
+        - 交期
+      requiredStructuredFields:
+        - mpn
+        - brand
+        - stock
+        - price_breaks
+        - lead_time
+      precisionSampleSize: 8
+  assertions: &platform_assertions
+    - type: code
+      criterion: 必须查询全部普通采购平台，并计算实际覆盖率
+    - type: code
+      criterion: 必须区分平台可用、未命中、访问受限/未取到，不能把采集阻碍写成无货
+    - type: code
+      criterion: 必须保留 engine 结构化字段里的型号、品牌、库存、报价或交期值
+    - type: manual
+      criterion: 回答面向采购人员，只写平台结果和业务阻碍，不暴露采集实现
+
+- id: platform-search-002-cm-c032b
+  name: 全平台查找 - CM-C032B
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 CM-C032B 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: industrial
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [CM-C032B]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [CM-C032B, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-003-d-a72
+  name: 全平台查找 - D-A72
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 D-A72 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: sensor
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [D-A72]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [D-A72, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-004-mb-b05
+  name: 全平台查找 - MB-B05
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 MB-B05 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: industrial
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [MB-B05]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [MB-B05, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-005-zs-38-3l
+  name: 全平台查找 - ZS-38-3L
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 ZS-38-3L 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: industrial
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [ZS-38-3L]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [ZS-38-3L, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-006-e3z-t61-2m-by-omc
+  name: 全平台查找 - E3Z-T61 2M BY OMC
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 E3Z-T61 2M BY OMC 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: sensor
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [E3Z-T61 2M BY OMC]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [E3Z-T61 2M BY OMC, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-007-e2e-x3d1-n-2m
+  name: 全平台查找 - E2E-X3D1-N 2M
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 E2E-X3D1-N 2M 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: sensor
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [E2E-X3D1-N 2M]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [E2E-X3D1-N 2M, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-008-stm32f103c8t6
+  name: 全平台查找 - STM32F103C8T6
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 STM32F103C8T6 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: mcu
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [STM32F103C8T6]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [STM32F103C8T6, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-009-tps5430ddar
+  name: 全平台查找 - TPS5430DDAR
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 TPS5430DDAR 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: power_ic
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [TPS5430DDAR]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [TPS5430DDAR, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-010-lmr16030sddar
+  name: 全平台查找 - LMR16030SDDAR
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 LMR16030SDDAR 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: power_ic
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [LMR16030SDDAR]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [LMR16030SDDAR, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-011-534260490
+  name: 平台查找 - 534260490
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 534260490 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: connector
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: ["534260490"]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: ["534260490", 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-012-g6e134p-us-dc24v
+  name: 全平台查找 - G6E134P-US DC24V
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 G6E134P-US DC24V 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: relay
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [G6E134P-US DC24V]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [G6E134P-US DC24V, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-013-erzv10d621
+  name: 全平台查找 - ERZV10D621
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 ERZV10D621 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: varistor
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [ERZV10D621]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [ERZV10D621, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-014-af8gud4a-ebaxm
+  name: 全平台查找 - AF8GUD4A-EBAXM
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 AF8GUD4A-EBAXM 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: memory
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [AF8GUD4A-EBAXM]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [AF8GUD4A-EBAXM, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-015-emmc08g-mv36-ge02
+  name: 全平台查找 - EMMC08G-MV36-GE02
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 EMMC08G-MV36-GE02 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: memory
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [EMMC08G-MV36-GE02]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [EMMC08G-MV36-GE02, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-016-mt62f1536m64d8ek-023-aat-b
+  name: 全平台查找 - MT62F1536M64D8EK-023 AAT:B
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 MT62F1536M64D8EK-023 AAT:B 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: memory
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [MT62F1536M64D8EK-023 AAT:B]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [MT62F1536M64D8EK-023 AAT:B, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-017-tlp184-v4gbtl-e-t
+  name: 全平台查找 - TLP184(V4GBTL,E(T
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 TLP184(V4GBTL,E(T 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: optocoupler
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: ["TLP184(V4GBTL,E(T"]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: ["TLP184(V4GBTL,E(T", 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-018-hdmcsdhc8gpsljp3
+  name: 全平台查找 - HDMCSDHC8GPSLJP3
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 HDMCSDHC8GPSLJP3 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: memory_card
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [HDMCSDHC8GPSLJP3]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [HDMCSDHC8GPSLJP3, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-019-ecquaaf225k
+  name: 全平台查找 - ECQUAAF225K
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 ECQUAAF225K 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: capacitor
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [ECQUAAF225K]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [ECQUAAF225K, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions
+
+- id: platform-search-020-fx5-eip
+  name: 全平台查找 - FX5-EIP
+  category: procurement_platform_search
+  input: "内部库存已确认无记录。请查询全部已接入采购平台，找 FX5-EIP 的报价、库存和交期线索。"
+  context: *platform_context
+  skillSlugs: *platform_skill
+  metadata:
+    focus: all_platform_search
+    productType: industrial
+  expected:
+    trace: *platform_trace
+    toolCalls:
+      requiredSkills: [scrape-engine]
+      requiredSearchTerms: [FX5-EIP]
+      forbiddenTools: *platform_forbidden_tools
+    answer:
+      requiredTerms: [FX5-EIP, 覆盖率, 可用性, 平台, 报价, 交期]
+      forbiddenTerms: *platform_forbidden_terms
+    platform: *platform_contract
+  assertions: *platform_assertions

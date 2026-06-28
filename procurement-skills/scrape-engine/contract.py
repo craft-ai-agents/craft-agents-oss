@@ -66,6 +66,7 @@ class Row:
     description: Optional[str] = None            # short description / spec blurb
     category: Optional[str] = None               # category / part class
     blocked: bool = False                        # True if anti-bot blocked the fetch
+    availability_status: Optional[str] = None     # e.g. "maintenance", "no_result"
     note: Optional[str] = None                   # free-form: relevance flags, RAW dumped text, etc.
 
     def to_dict(self) -> dict:

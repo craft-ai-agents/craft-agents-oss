@@ -35,6 +35,158 @@ function allToolText(tools: ToolEventSummary[]): string {
   return tools.map(toolText).join('\n')
 }
 
+function engineToolStartTexts(tools: ToolEventSummary[]): string[] {
+  return tools
+    .filter(isEngineToolStart)
+    .map(toolText)
+}
+
+function hasExplicitSourceArg(text: string): boolean {
+  return /--source(?:=|\s+)/.test(text)
+}
+
+function hasPartArg(text: string): boolean {
+  return /--parts?(?:=|\s+)/.test(text)
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function recordArray(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.map(asRecord).filter((record): record is Record<string, unknown> => Boolean(record))
+    : []
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  const candidates = [text.trim()]
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start >= 0 && end > start) candidates.push(text.slice(start, end + 1))
+
+  for (const candidate of candidates) {
+    try {
+      return asRecord(JSON.parse(candidate))
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  return null
+}
+
+function isEngineToolStart(tool: ToolEventSummary): boolean {
+  if (tool.type !== 'tool_start') return false
+  const text = toolText(tool)
+  if (toolNameMatches(tool, 'procurement-platform-search') || toolNameMatches(tool, 'scrape-engine')) {
+    return true
+  }
+  return toolNameMatches(tool, 'Bash')
+    && (text.includes('engine.py') || text.includes('procurement-platform-search'))
+}
+
+function isEngineOutputLogRead(tool: ToolEventSummary): boolean {
+  if (tool.type !== 'tool_start' || !toolNameMatches(tool, 'Read')) return false
+  const filePath = tool.input?.file_path
+  return typeof filePath === 'string' && /\/tmp\/pi-bash-[a-z0-9_-]+\.log$/i.test(filePath)
+}
+
+interface EnginePayload {
+  rows: Array<Record<string, unknown>>
+  errors: Array<Record<string, unknown>>
+}
+
+function enginePayloads(tools: ToolEventSummary[]): EnginePayload[] {
+  const payloads: EnginePayload[] = []
+  const engineResultIds = new Set(
+    tools
+      .filter((tool) => isEngineToolStart(tool) || isEngineOutputLogRead(tool))
+      .map((tool) => tool.toolUseId),
+  )
+
+  for (const tool of tools) {
+    if (tool.type !== 'tool_result' || !tool.result) continue
+    if (!engineResultIds.has(tool.toolUseId)) continue
+    const parsed = parseJsonObject(tool.result)
+    if (!parsed) continue
+    const rows = recordArray(parsed.rows)
+    const errors = recordArray(parsed.errors)
+    if (rows.length > 0 || errors.length > 0) {
+      payloads.push({ rows, errors })
+    }
+  }
+  return payloads
+}
+
+function platformIdFrom(record: Record<string, unknown>): string | undefined {
+  const value = record.platform
+  return typeof value === 'string' && value.trim().length > 0 ? value.toLowerCase() : undefined
+}
+
+function platformCoverage(
+  tools: ToolEventSummary[],
+  sourceIds: string[],
+  allowImplicitAllSources: boolean,
+): { covered: string[], implicitAll: boolean, engineCallCount: number } {
+  const expected = sourceIds.map((source) => source.toLowerCase())
+  const covered = new Set<string>()
+  let implicitAll = false
+  const startTexts = engineToolStartTexts(tools)
+
+  for (const text of startTexts) {
+    if (!hasExplicitSourceArg(text) && hasPartArg(text) && allowImplicitAllSources) {
+      implicitAll = true
+    }
+    for (const source of expected) {
+      if (includesTerm(text, source)) covered.add(source)
+    }
+  }
+
+  for (const payload of enginePayloads(tools)) {
+    for (const row of payload.rows) {
+      const platform = platformIdFrom(row)
+      if (platform && expected.includes(platform)) covered.add(platform)
+    }
+    for (const error of payload.errors) {
+      const platform = platformIdFrom(error)
+      if (platform && expected.includes(platform)) covered.add(platform)
+    }
+  }
+
+  return {
+    covered: implicitAll ? expected : [...covered],
+    implicitAll,
+    engineCallCount: startTexts.length,
+  }
+}
+
+function fieldValues(row: Record<string, unknown>, fields: string[]): string[] {
+  const values: string[] = []
+  for (const field of fields) {
+    const value = row[field]
+    if (value === undefined || value === null || value === '') continue
+    if (field === 'price_breaks' && Array.isArray(value)) {
+      for (const item of value) {
+        const record = asRecord(item)
+        if (!record) continue
+        for (const key of ['qty', 'rmb', 'usd']) {
+          const priceValue = record[key]
+          if (typeof priceValue === 'string' || typeof priceValue === 'number') {
+            values.push(String(priceValue))
+          }
+        }
+      }
+      continue
+    }
+    if (typeof value === 'string' || typeof value === 'number') {
+      values.push(String(value))
+    }
+  }
+  return [...new Set(values)].filter((value) => value.trim().length > 0)
+}
+
 function isInventoryLookupTool(tool: ToolEventSummary): boolean {
   const text = toolText(tool)
   return toolNameMatches(tool, 'procurement-local-inventory-lookup')
@@ -45,12 +197,21 @@ function isInventoryLookupTool(tool: ToolEventSummary): boolean {
       && text.includes('base')
       && (text.includes('+record-search') || text.includes('+record-list') || text.includes('+record-get'))
     )
+    || (
+      tool.type === 'tool_start'
+      && toolNameMatches(tool, 'Bash')
+      && text.includes('feishu-db')
+      && text.includes('query')
+      && text.includes('--part')
+    )
 }
 
 function isPlatformSearchTool(tool: ToolEventSummary): boolean {
   const text = toolText(tool)
   return toolNameMatches(tool, 'procurement-platform-search')
     || text.includes('procurement-platform-search')
+    || text.includes('scrape-engine')
+    || text.includes('engine.py')
     || toolNameMatches(tool, 'WebSearch')
     || toolNameMatches(tool, 'WebFetch')
 }
@@ -83,8 +244,9 @@ function expectedToolPredicate(expected: string): (tool: ToolEventSummary) => bo
   return (tool) => {
     const normalized = expected.toLowerCase()
     const text = toolText(tool)
+    if (normalized === 'websearch' || normalized === 'webfetch') return toolNameMatches(tool, expected)
     if (normalized === 'procurement-local-inventory-lookup') return isInventoryLookupTool(tool)
-    if (normalized === 'procurement-platform-search') return isPlatformSearchTool(tool)
+    if (normalized === 'procurement-platform-search' || normalized === 'scrape-engine') return isPlatformSearchTool(tool)
     if (normalized === 'procurement-supplier-shortlist') return isSupplierShortlistTool(tool)
     return toolNameMatches(tool, expected) || text.includes(normalized)
   }
@@ -304,6 +466,126 @@ export const evidenceContractEvaluator = asExperimentEvaluator({
   },
 })
 
+export const platformCoverageEvaluator = asExperimentEvaluator({
+  name: 'platform_coverage',
+  kind: 'CODE',
+  evaluate: (params: EvaluatorParams) => {
+    const expected = expectedFrom(params)
+    const platform = expected.platform
+    if (!platform) {
+      return result(true, 'case does not define a platform contract')
+    }
+
+    const sourceIds = platform.sourceIds ?? []
+    if (sourceIds.length === 0) {
+      return result(true, 'platform contract does not define source ids')
+    }
+
+    const coverage = platformCoverage(
+      outputFrom(params).toolEvents,
+      sourceIds,
+      platform.allowImplicitAllSources ?? true,
+    )
+    const ratio = coverage.covered.length / sourceIds.length
+    const missing = sourceIds
+      .map((source) => source.toLowerCase())
+      .filter((source) => !coverage.covered.includes(source))
+    const minCoverageRatio = platform.minCoverageRatio ?? (platform.requireAllSources ? 1 : 0)
+    const passed = coverage.engineCallCount > 0
+      && ratio >= minCoverageRatio
+      && (!platform.requireAllSources || missing.length === 0)
+
+    return result(
+      passed,
+      passed
+        ? `platform coverage satisfied: ${coverage.covered.length}/${sourceIds.length}`
+        : `platform coverage ${coverage.covered.length}/${sourceIds.length}; missing: ${missing.join(', ') || 'none'}`,
+      {
+        covered: coverage.covered,
+        missing,
+        ratio,
+        implicitAll: coverage.implicitAll,
+        engineCallCount: coverage.engineCallCount,
+      },
+    )
+  },
+})
+
+export const platformAvailabilityReportEvaluator = asExperimentEvaluator({
+  name: 'platform_availability_report',
+  kind: 'CODE',
+  evaluate: (params: EvaluatorParams) => {
+    const expected = expectedFrom(params)
+    const platform = expected.platform
+    if (!platform?.requireAvailabilityReport) {
+      return result(true, 'case does not require a platform availability report')
+    }
+
+    const answer = finalAnswerText(params)
+    const sourceIds = platform.sourceIds ?? []
+    const coverage = sourceIds.length > 0
+      ? platformCoverage(outputFrom(params).toolEvents, sourceIds, platform.allowImplicitAllSources ?? true)
+      : { covered: [], implicitAll: false, engineCallCount: 0 }
+    const coverageTerms = sourceIds.length > 0
+      ? [`${coverage.covered.length}/${sourceIds.length}`, `${Math.round((coverage.covered.length / sourceIds.length) * 100)}%`]
+      : []
+    const requiredTerms = [
+      ...(platform.requiredStatusTerms ?? []),
+      ...(platform.requiredReportFields ?? []),
+    ]
+    const missing = requiredTerms.filter((term) => !answer.includes(term))
+    const mentionsCoverage = coverageTerms.length === 0
+      || coverageTerms.some((term) => answer.includes(term))
+      || answer.includes('全平台')
+      || answer.includes('全部平台')
+      || answer.includes('覆盖率')
+    const failures: string[] = []
+
+    if (missing.length > 0) failures.push(`missing availability/report terms: ${missing.join(', ')}`)
+    if (!mentionsCoverage) failures.push(`missing coverage wording: expected one of ${coverageTerms.join(', ')}`)
+
+    return result(
+      failures.length === 0,
+      failures.length === 0 ? 'platform availability report satisfied' : failures.join('; '),
+      { missing, coverageTerms, coveredCount: coverage.covered.length, sourceCount: sourceIds.length },
+    )
+  },
+})
+
+export const platformDataPrecisionEvaluator = asExperimentEvaluator({
+  name: 'platform_data_precision',
+  kind: 'CODE',
+  evaluate: (params: EvaluatorParams) => {
+    const expected = expectedFrom(params)
+    const platform = expected.platform
+    const fields = platform?.requiredStructuredFields ?? []
+    if (!platform || fields.length === 0) {
+      return result(true, 'case does not define platform structured fields')
+    }
+
+    const answer = finalAnswerText(params)
+    const sampleSize = platform.precisionSampleSize ?? 5
+    const rows = enginePayloads(outputFrom(params).toolEvents).flatMap((payload) => payload.rows)
+    const terms = rows
+      .flatMap((row) => fieldValues(row, fields))
+      .filter((term) => term.length >= 2)
+      .slice(0, sampleSize)
+
+    if (terms.length === 0) {
+      return result(true, 'no structured platform values were available to precision-check', { checkedTerms: [] })
+    }
+
+    const missing = terms.filter((term) => !answer.includes(term))
+    return result(
+      missing.length === 0,
+      missing.length === 0
+        ? 'platform structured values preserved'
+        : `missing structured platform values: ${missing.join(', ')}`,
+      { checkedTerms: terms, missing },
+    )
+  },
+})
+
 export const substitutesContractEvaluator = asExperimentEvaluator({
   name: 'substitutes_contract',
   kind: 'CODE',
@@ -330,6 +612,15 @@ export const substitutesContractEvaluator = asExperimentEvaluator({
 export const EVALUATOR_SETS: Record<string, ReturnType<typeof asExperimentEvaluator>[]> = {
   substitutes: [outcomeEvaluator, substitutesContractEvaluator],
   inventory: [outcomeEvaluator, traceContractEvaluator, toolCallContractEvaluator, answerContractEvaluator, evidenceContractEvaluator],
+  platform: [
+    outcomeEvaluator,
+    traceContractEvaluator,
+    toolCallContractEvaluator,
+    answerContractEvaluator,
+    platformCoverageEvaluator,
+    platformAvailabilityReportEvaluator,
+    platformDataPrecisionEvaluator,
+  ],
 }
 
 export function getEvaluators(scenario: string): ReturnType<typeof asExperimentEvaluator>[] {

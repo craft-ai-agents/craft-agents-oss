@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Shared factory for the GENERIC SSR-dump adapters — mode=dom, body-text -> note.
 
-Ported byte-faithfully from procurement-platform-search-more/scripts/cloak_search.py
+Ported byte-faithfully from legacy extended-source cloak_search.py
 (scrape_generic + the GENERIC config table). The OLD scrape_generic did, by hand,
 per site (url_tpl, needs_proxy):
     1. url = url_tpl.format(q=_q(part))
@@ -37,12 +37,28 @@ improve extraction — this is a raw SSR text dump for the Agent to read.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from typing import Any, Callable
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from contract import Adapter, Defense, Row  # noqa: E402
 from engine import q  # noqa: E402
+
+MAINTENANCE_PAT = re.compile(
+    r"(temporarily offline|scheduled maintenance|planned system upgrade|"
+    r"site enhancements in progress|currently unavailable|we[’']ll be back soon|"
+    r"performing (?:some )?maintenance|back online shortly)",
+    re.I,
+)
+
+
+def _availability_status(site: str, final_url: str, text: str) -> str | None:
+    if MAINTENANCE_PAT.search(text[:4000]):
+        return "maintenance"
+    if site == "future" and "error500" in final_url.lower():
+        return "maintenance"
+    return None
 
 
 def make_generic(site: str, url_tpl: str, needs_proxy: bool) -> Adapter:
@@ -68,12 +84,14 @@ def make_generic(site: str, url_tpl: str, needs_proxy: bool) -> Adapter:
         # Old: hit = (not blocked) and (part.lower() in text.lower()). blocked is
         # owned by the engine here; we port the part-in-text test faithfully.
         hit = part.lower() in text.lower()
+        availability_status = _availability_status(_site, final_url, text)
         return [Row(
             part=part,
             platform=_site,
             product_url=final_url,
             note=(text[:4000] or "（空白页/未渲染——可能 SPA 未加载或需代理）"),
             in_stock=True if hit else None,
+            availability_status=availability_status,
         )]
 
     return Adapter(

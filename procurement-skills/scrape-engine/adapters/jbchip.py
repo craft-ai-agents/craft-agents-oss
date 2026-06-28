@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """京北通宇电子元器件商城 (jbchip.com) adapter — mode=script, direct (no proxy).
-Ported from procurement-platform-search-more/scripts/cloak_search.py
+Ported from legacy extended-source cloak_search.py
 (scrape_jbchip), lifted byte-faithfully.
 
   Old scrape_jbchip did, by hand:

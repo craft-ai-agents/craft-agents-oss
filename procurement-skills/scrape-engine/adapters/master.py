@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Master Electronics (masterelectronics.com) adapter — mode=dom, needs_proxy.
-Ported from procurement-platform-search/scripts/cloak_search.py (scrape_master).
+Ported from legacy core platform scripts/cloak_search.py (scrape_master).
 
   Old scrape_master did, by hand:
     1. launch(headless=True, humanize=True, proxy=MIHOMO)  — 走住宅代理;

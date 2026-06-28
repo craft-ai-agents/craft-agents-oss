@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """RS 美区（=原 Allied）adapter — mode=xhr, match_xhr='groupby/search/endpoint'.
-Ported from procurement-platform-search-more/scripts/cloak_search.py
+Ported from legacy extended-source cloak_search.py
 (scrape_rs_us + _rsus_line).
 
 Magento + GroupBy 搜索 API + DataDome 反爬。旧脚本拦 `groupby/search/endpoint`

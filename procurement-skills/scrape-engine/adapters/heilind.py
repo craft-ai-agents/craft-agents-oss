@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Heilind Electronics (赫联，连接器/机电互连专家) adapter — mode=script, direct.
-Ported from procurement-platform-search-more/scripts/cloak_search.py
+Ported from legacy extended-source cloak_search.py
 (scrape_heilind), byte-faithfully.
 
   Old scrape_heilind did, by hand:

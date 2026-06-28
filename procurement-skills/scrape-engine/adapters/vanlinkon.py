@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """连可连 vanlinkon adapter — mode=api, 境内直连(无代理/无浏览器/无 key).
 
-从删掉的 procurement-platform-search-more/scripts/api_search.py(search_vanlinkon)
+从删掉的 legacy extended-source api_search.py(search_vanlinkon)
 港回引擎。连可连是中国连接器商城,api.vanlinkon.com 子域无境外 WAF、纯 HTTP JSON,
 多仓报盘(自营/代销/RS)含库存/¥价/交期。
 

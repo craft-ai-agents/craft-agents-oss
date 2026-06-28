@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Sager Electronics (电源/连接器/机电) adapter — mode=script, direct (no proxy).
-Ported from procurement-platform-search-more/scripts/cloak_search.py
+Ported from legacy extended-source cloak_search.py
 (scrape_sager). Byte-faithful relocation of the OLD extraction logic; NOT
 re-selected or "improved" this round.
 

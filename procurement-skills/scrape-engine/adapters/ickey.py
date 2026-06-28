@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """ICKey / 云汉芯城 adapter — mode=xhr, match_xhr='ajax-get-res-v002'.
-Ported from procurement-platform-search/scripts/cloak_search.py (scrape_ickey +
+Ported from legacy core platform scripts/cloak_search.py (scrape_ickey +
 _ickey_line).
 
 The site renders results via an AJAX call; the old script intercepted the

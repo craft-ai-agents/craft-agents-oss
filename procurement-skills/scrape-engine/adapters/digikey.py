@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Digikey adapter — mode=api. Ported from procurement-platform-search/scripts/
+"""Digikey adapter — mode=api. Ported from legacy core platform scripts/
 api_search.py (search_digikey + digikey_token), faithfully:
 
   - OAuth2 client_credentials token from DIGIKEY_CLIENT_ID / _SECRET.

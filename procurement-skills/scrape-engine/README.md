@@ -48,6 +48,11 @@ site in one mode. An adapter owns NO browser, NO proxy, NO retry loop, NO
 warmup — it only declares the URL, how to turn a payload into `Row`s, which
 defense profile to use, and (script mode) how to drive the live page.
 
+`source_catalog.yaml` is the static platform catalog: business display names,
+channel types, category fit, aggregator coverage, and known access limitations.
+It is not a live pass/fail report; live availability still comes from each
+engine run's `rows` / `errors` / `blocked` output.
+
 `registry.py` collects every `adapters/*.py` exposing a top-level `ADAPTER`
 into a flat `id → Adapter` dict. `engine.py` is the CLI front door + a couple of
 re-exports; it owns no mechanics.
