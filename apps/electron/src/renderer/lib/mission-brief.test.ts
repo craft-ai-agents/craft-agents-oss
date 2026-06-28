@@ -3,6 +3,7 @@ import {
   buildMissionBrief,
   extractMissionBrief,
   hasSaveableMissionBrief,
+  missionBriefContentKey,
   missionBriefMetadata,
   parseMissionBriefDoc,
   serializeMissionBriefBody,
@@ -31,6 +32,7 @@ describe('mission brief utilities', () => {
       title: 'Night Drive',
       goal: 'Build release-week momentum.',
       timeline: 'June 30',
+      promoBudget: '$2k',
       mood: 'dark pop tension',
     })
     const body = serializeMissionBriefBody(brief)
@@ -48,7 +50,26 @@ describe('mission brief utilities', () => {
 
     expect(parsed?.title).toBe('Night Drive')
     expect(parsed?.workspaceId).toBe('workspace-1')
+    expect(parsed?.promoBudget).toBe('$2k')
     expect(parsed?.status).toBe('full')
+    expect(body).toContain('Promo budget: $2k')
+  })
+
+  test('content key ignores volatile timestamps', () => {
+    const first = buildMissionBrief('workspace-1', {
+      missionType: 'single',
+      title: 'Night Drive',
+      goal: 'Build release-week momentum.',
+      timeline: 'June 30',
+      promoBudget: '$500',
+    })
+    const second = {
+      ...first,
+      updatedAt: '2026-06-02T00:00:00.000Z',
+    }
+
+    expect(first.updatedAt).not.toBe(second.updatedAt)
+    expect(missionBriefContentKey(first)).toBe(missionBriefContentKey(second))
   })
 
   test('keeps mission type focused on release format', () => {

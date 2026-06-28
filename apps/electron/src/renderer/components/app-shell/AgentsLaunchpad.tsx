@@ -75,7 +75,7 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
   }, [onCreateSession, onInputChange, skills, sources, workspaceId])
 
   const grouped = React.useMemo(() => {
-    const visibleAgents = activeAgents.filter((a) => !isSystemAgent(a.slug))
+    const visibleAgents = dedupeLaunchpadAgents(activeAgents.filter((a) => !isSystemAgent(a.slug)))
     const orch = visibleAgents.find((a) => a.slug === ORCHESTRATOR_SLUG)
     const rest = visibleAgents
       .filter((a) => a.slug !== ORCHESTRATOR_SLUG)
@@ -1263,12 +1263,22 @@ function isContextDocVisibleToAgent(doc: ContextDocDTO, agentSlug: string) {
 }
 
 function getAgentDomain(tags: string[] | undefined, slug: string, name: string, description?: string) {
+  if (
+    slug === 'ig-trending-power-up'
+    || slug === 'influencer-campaign-power-up'
+    || slug === 'playlisting-power-up'
+    || slug === 'spotify-playlist-creator'
+  ) {
+    return 'Promotion'
+  }
+
   const joined = `${slug} ${name} ${description ?? ''} ${(tags ?? []).join(' ')}`.toLowerCase()
-  if (matchesAny(joined, ['spotify', 'playlist', 'youtube intelligence', 'audience', 'research', 'analy', 'insight'])) return 'Audience Intelligence'
-  if (matchesAny(joined, ['content', 'tiktok', 'social', 'publisher', 'clip', 'video director', 'video editor', 'hypermotion', 'motion', 'caption'])) return 'Content Studio'
-  if (matchesAny(joined, ['ads', 'marketing', 'campaign', 'growth', 'meta ads', 'google ads'])) return 'Growth'
-  if (matchesAny(joined, ['shopify', 'printify', 'merch', 'storefront', 'commerce'])) return 'Merch'
-  if (matchesAny(joined, ['brand', 'copy', 'creative', 'visual', 'legendary', 'gaygent', 'lottie', '3d'])) return 'Creative Direction'
+  if (matchesAny(joined, ['social publisher', 'trypost', 'socials', 'social posting', 'posting', 'publisher'])) return 'Socials'
+  if (matchesAny(joined, ['content genius', 'hypermotion', 'lottie', 'video director', 'video editor', '3d agent', '3dcellforge', 'motion', 'caption', 'clip'])) return 'Content Creation'
+  if (matchesAny(joined, ['ads', 'marketing', 'campaign', 'growth', 'meta ads', 'google ads', 'power-up', 'power up', 'service-handoff', 'ig trending', 'influencer campaign', 'playlisting power'])) return 'Promotion'
+  if (matchesAny(joined, ['shopify', 'printify', 'print agent', 'merch', 'storefront', 'commerce', 'pod', 'apparel'])) return 'Merch'
+  if (matchesAny(joined, ['legendary', 'gaygent', 'brand', 'copy', 'creative direction', 'positioning', 'persona'])) return 'Creative'
+  if (matchesAny(joined, ['spotify', 'playlist', 'youtube intelligence', 'youtube research', 'audience', 'research', 'analy', 'insight'])) return 'Research'
   if (matchesAny(joined, ['workflow', 'ops', 'orchestr', 'router', 'guide', 'chat', 'routing'])) return 'Command'
   if (matchesAny(joined, ['code', 'tool', 'diagnostic', 'reporting'])) return 'Operators'
   return 'Other Agents'
@@ -1276,11 +1286,12 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
 
 function agentDomainRank(domain: string) {
   const order = [
-    'Content Studio',
-    'Growth',
-    'Audience Intelligence',
-    'Creative Direction',
+    'Content Creation',
+    'Socials',
+    'Promotion',
     'Merch',
+    'Creative',
+    'Research',
     'Command',
     'Operators',
     'Other Agents',
@@ -1290,7 +1301,51 @@ function agentDomainRank(domain: string) {
 }
 
 function isSystemAgent(slug: string) {
-  return slug === CONCIERGE_SLUG || slug === ORCHESTRATOR_SLUG
+  return slug === CONCIERGE_SLUG || slug === ORCHESTRATOR_SLUG || slug === 'update-system-agent'
+}
+
+function dedupeLaunchpadAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {
+  const bestByKey = new Map<string, AgentDefinitionDTO>()
+  for (const agent of agents) {
+    const key = canonicalAgentKey(agent)
+    const current = bestByKey.get(key)
+    if (!current || launchpadAgentRank(agent.slug) < launchpadAgentRank(current.slug)) {
+      bestByKey.set(key, agent)
+    }
+  }
+  return Array.from(bestByKey.values())
+}
+
+function canonicalAgentKey(agent: AgentDefinitionDTO): string {
+  const name = cleanDisplayText(agent.metadata.name).toLowerCase()
+  if (name === 'ads agent') return 'ads-agent'
+  return name || agent.slug
+}
+
+function launchpadAgentRank(slug: string): number {
+  const preferred = [
+    'ads-agent',
+    'ig-trending-power-up',
+    'influencer-campaign-power-up',
+    'playlisting-power-up',
+    'spotify-playlist-creator',
+    'content-genius',
+    'hypermotion-agent',
+    'lottie-animation-agent',
+    'video-director',
+    'video-editor-agent',
+    '3d-agent',
+    'social-publisher',
+    'trypost-agent',
+    'shopify-agent',
+    'print-agent',
+    'gaygent-master',
+    'persona-agent',
+    'youtube-intelligence-agent',
+    'youtube-research-agent',
+  ]
+  const index = preferred.indexOf(slug)
+  return index === -1 ? preferred.length : index
 }
 
 function cleanDisplayText(value: string) {

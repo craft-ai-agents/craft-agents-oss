@@ -625,7 +625,13 @@ export function replaceBuiltInAgentMetadata(
   replacements: Partial<Record<keyof AgentMetadata, { from: unknown; to: unknown }>>,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator']);
+  const builtIns = new Set([
+    'concierge',
+    'orchestrator',
+    'ig-trending-power-up',
+    'influencer-campaign-power-up',
+    'playlisting-power-up',
+  ]);
   if (!builtIns.has(slug)) return { updated: false };
 
   const loaded = loadGlobalAgent(slug, options);

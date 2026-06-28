@@ -484,6 +484,18 @@ body
     expect(socialPublisher?.systemPrompt).toContain('not Playwright')
   })
 
+  test('starter library includes the TryPost social publisher as approval-gated', () => {
+    const tryPost = STARTER_AGENTS.find((agent) => agent.slug === 'trypost-agent')
+
+    expect(tryPost).toBeDefined()
+    expect(tryPost?.metadata.name).toBe('TryPost')
+    expect(tryPost?.metadata.tags).toContain('socials')
+    expect(tryPost?.metadata.tags).toContain('trypost')
+    expect(tryPost?.metadata.permissionMode).toBe('ask')
+    expect(tryPost?.systemPrompt).toContain('TryPost API/MCP')
+    expect(tryPost?.systemPrompt).toContain('explicit approval')
+  })
+
   test('starter library includes the Ads Agent with bundled Google Ads source', () => {
     const adsAgent = STARTER_AGENTS.find((agent) => agent.slug === 'ads-agent')
 
@@ -493,6 +505,44 @@ body
     expect(adsAgent?.metadata.sources).toContain('meta-ads')
     expect(adsAgent?.systemPrompt).toContain('node bin/google-ads.mjs')
     expect(adsAgent?.systemPrompt).toContain('explicit user approval')
+  })
+
+  test('starter library includes draft-only Power Up handoff agents', () => {
+    const igTrending = STARTER_AGENTS.find((agent) => agent.slug === 'ig-trending-power-up')
+    const influencer = STARTER_AGENTS.find((agent) => agent.slug === 'influencer-campaign-power-up')
+    const playlisting = STARTER_AGENTS.find((agent) => agent.slug === 'playlisting-power-up')
+
+    expect(igTrending?.metadata.name).toBe('IG Music Trending')
+    expect(igTrending?.metadata.description).toBe('Contacts and negotiates IG music trending service with a vetted and great provider.')
+    expect(influencer?.metadata.name).toBe('Influencer Campaign')
+    expect(influencer?.metadata.description).toBe('Contacts and negotiates influencer campaign service with a vetted and great provider.')
+    expect(playlisting?.metadata.name).toBe('Playlisting')
+    expect(playlisting?.metadata.description).toBe('Contacts and negotiates playlisting service with a vetted and great provider.')
+
+    for (const agent of [igTrending, influencer, playlisting]) {
+      expect(agent).toBeDefined()
+      expect(agent?.metadata.permissionMode).toBe('ask')
+      expect(agent?.metadata.tags).toContain('power-up')
+      expect(agent?.metadata.tags).toContain('service-handoff')
+      expect(agent?.systemPrompt).toContain('Do not send email yet')
+      expect(agent?.systemPrompt).toContain('Approve this draft before sending')
+    }
+    expect(igTrending?.systemPrompt).toContain('Instagram Trending Campaign')
+    expect(influencer?.systemPrompt).toContain('Influencer Campaign')
+    expect(playlisting?.systemPrompt).toContain('Playlisting Campaign')
+  })
+
+  test('starter library includes the Spotify Playlist Creator with the curator skill', () => {
+    const spotifyPlaylistCreator = STARTER_AGENTS.find((agent) => agent.slug === 'spotify-playlist-creator')
+
+    expect(spotifyPlaylistCreator).toBeDefined()
+    expect(spotifyPlaylistCreator?.metadata.name).toBe('Spotify Playlist Creator')
+    expect(spotifyPlaylistCreator?.metadata.skills).toContain('spotify-playlist-curator')
+    expect(spotifyPlaylistCreator?.metadata.tags).toContain('promotion')
+    expect(spotifyPlaylistCreator?.metadata.permissionMode).toBe('ask')
+    expect(spotifyPlaylistCreator?.systemPrompt).toContain('sandwich-pattern plan')
+    expect(spotifyPlaylistCreator?.systemPrompt).toContain('Spotify MCP/API/OAuth')
+    expect(spotifyPlaylistCreator?.systemPrompt).toContain('explicit approval')
   })
 
   test('starter library includes the YouTube Research Agent as read-only', () => {

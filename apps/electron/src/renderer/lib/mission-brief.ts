@@ -20,6 +20,7 @@ export interface MissionBrief {
   goal?: string
   timeline?: string
   releaseDate?: string
+  promoBudget?: string
   mood?: string
   visualWorld?: string
   references?: MissionReference[]
@@ -38,7 +39,7 @@ export interface MissionExtraction {
 }
 
 const REQUIRED_FIELDS: Array<keyof MissionBrief> = ['missionType', 'title', 'goal', 'timeline']
-const RECOMMENDED_FIELDS: Array<keyof MissionBrief> = ['mood', 'visualWorld', 'references', 'targetListener', 'channels']
+const RECOMMENDED_FIELDS: Array<keyof MissionBrief> = ['promoBudget', 'mood', 'visualWorld', 'references', 'targetListener', 'channels']
 
 function clean(value: string | undefined): string | undefined {
   const trimmed = value?.replace(/\s+/g, ' ').trim()
@@ -193,6 +194,7 @@ export function buildMissionBrief(workspaceId: string, input: Partial<MissionBri
     goal: clean(input.goal),
     timeline: clean(input.timeline),
     releaseDate,
+    promoBudget: clean(input.promoBudget),
     mood: clean(input.mood),
     visualWorld: clean(input.visualWorld),
     references: input.references?.filter((ref) => clean(ref.value)),
@@ -231,6 +233,24 @@ export function serializeMissionBriefBody(brief: MissionBrief): string {
   ].join('\n')
 }
 
+export function missionBriefContentKey(brief: MissionBrief): string {
+  return JSON.stringify({
+    missionType: brief.missionType ?? null,
+    title: brief.title ?? null,
+    goal: brief.goal ?? null,
+    timeline: brief.timeline ?? null,
+    releaseDate: brief.releaseDate ?? null,
+    promoBudget: brief.promoBudget ?? null,
+    mood: brief.mood ?? null,
+    visualWorld: brief.visualWorld ?? null,
+    references: brief.references ?? [],
+    targetListener: brief.targetListener ?? null,
+    channels: brief.channels ?? [],
+    openQuestions: brief.openQuestions ?? [],
+    rawNotes: brief.rawNotes ?? null,
+  })
+}
+
 export function parseMissionBriefDoc(doc: ContextDocDTO | undefined | null): MissionBrief | null {
   if (!doc) return null
   const fenced = doc.body.match(/```json\s*([\s\S]*?)\s*```/i)
@@ -266,6 +286,7 @@ function buildEnhancedSummary(brief: Partial<MissionBrief>, missing: string[]): 
     brief.missionType ? `Type: ${brief.missionType}` : null,
     brief.goal ? `Goal: ${brief.goal}` : null,
     brief.timeline ? `Release target: ${brief.timeline}` : null,
+    brief.promoBudget ? `Promo budget: ${brief.promoBudget}` : null,
     brief.mood ? `Mood: ${brief.mood}` : null,
     brief.visualWorld ? `Visual world: ${brief.visualWorld}` : null,
     brief.targetListener ? `Target listener: ${brief.targetListener}` : null,

@@ -28,6 +28,11 @@ import {
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import type { MissionAssetKindHint, MissionAssetManifest } from '../../../shared/types'
 import {
+  MISSION_ASSET_CONTEXT_SLUG,
+  missionAssetContextMetadata,
+  serializeMissionAssetContext,
+} from '@/lib/mission-asset-context'
+import {
   MISSION_BRIEF_CONTEXT_SLUG,
   emptyMissionBrief,
   parseMissionBriefDoc,
@@ -184,6 +189,11 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
       try {
         const result = await window.electronAPI.importMissionAssets(workspaceId, filePaths, { kindHint })
         setAssetManifest(result.manifest)
+        await upsert({
+          slug: MISSION_ASSET_CONTEXT_SLUG,
+          metadata: missionAssetContextMetadata(),
+          body: serializeMissionAssetContext(result.manifest),
+        })
         const skipped = result.skipped.length ? ` ${result.skipped.length} skipped.` : ''
         if (result.imported.length === 0) {
           toast.warning(`No mission assets added.${skipped}`)
@@ -196,7 +206,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
         setAssetBusy(false)
       }
     },
-    [hasMission, workspaceId],
+    [hasMission, upsert, workspaceId],
   )
 
   const saveReleaseBoard = React.useCallback(
@@ -427,6 +437,11 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
         onAddAsset={chooseAndImport}
         onImportAssetPaths={importAssetPaths}
         onOpenAssetsFolder={async () => {
+          if (!hasMission) {
+            setDrawerOpen(true)
+            toast.info('Create the mission first, then open the assets folder.')
+            return
+          }
           try {
             const opened = await window.electronAPI.openMissionAssetsFolder(workspaceId)
             if (!opened) toast.error('Could not open mission assets folder.')

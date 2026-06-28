@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils'
 import {
   buildMissionBrief,
   hasSaveableMissionBrief,
+  missionBriefContentKey,
   missionBriefMetadata,
   serializeMissionBriefBody,
   type MissionBrief,
@@ -91,7 +92,7 @@ export function MissionBriefDrawer({
   const savedBrief = React.useMemo(() => buildMissionBrief(workspaceId, mission), [mission, workspaceId])
   const canSave = hasSaveableMissionBrief(editableBrief)
   const briefDirty = React.useMemo(
-    () => serializeMissionBriefBody(editableBrief) !== serializeMissionBriefBody(savedBrief),
+    () => missionBriefContentKey(editableBrief) !== missionBriefContentKey(savedBrief),
     [editableBrief, savedBrief],
   )
 
@@ -229,6 +230,14 @@ export function MissionBriefDrawer({
                     onChange={(event) => setDraft((value) => ({ ...value, timeline: event.target.value }))}
                     className={missionFieldClass}
                     placeholder="June 30, next month, this summer..."
+                  />
+                </Field>
+                <Field label="Promo Budget">
+                  <input
+                    value={draft.promoBudget ?? ''}
+                    onChange={(event) => setDraft((value) => ({ ...value, promoBudget: event.target.value }))}
+                    className={missionFieldClass}
+                    placeholder="$0, $500, $2k, not sure yet"
                   />
                 </Field>
               </div>

@@ -2405,15 +2405,20 @@ export class SessionManager implements ISessionManager {
         }
         // Load-bearing agents must exist on every startup: Orchestrator
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
-        // Chat nav entry), Social Publisher, Hypermotion, Lottie Animation,
-        // Video Editor, Shopify, Print Agent, and Update System Agent.
+        // Chat nav entry), Social Publisher, TryPost, Hypermotion, Lottie Animation,
+        // Video Editor, promotion helpers, Shopify, Print Agent, and Update System Agent.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
             || a.slug === SOCIAL_PUBLISHER_SLUG
+            || a.slug === 'trypost-agent'
             || a.slug === 'hypermotion-agent'
             || a.slug === 'lottie-animation-agent'
             || a.slug === 'video-editor-agent'
+            || a.slug === 'ig-trending-power-up'
+            || a.slug === 'influencer-campaign-power-up'
+            || a.slug === 'playlisting-power-up'
+            || a.slug === 'spotify-playlist-creator'
             || a.slug === 'shopify-agent'
             || a.slug === 'print-agent'
             || a.slug === 'update-system-agent',
@@ -2514,6 +2519,32 @@ export class SessionManager implements ISessionManager {
             },
           }).updated) {
             sessionLog.info('[agent-definitions] Renamed Concierge to HNIC')
+          }
+          const powerUpMetadataUpdated = [
+            replaceBuiltInAgentMetadata('ig-trending-power-up', {
+              name: { from: 'IG Trending Power Up', to: 'IG Music Trending' },
+              description: {
+                from: 'Prepares an approval-ready inquiry for an Instagram trending campaign partner using the current release context.',
+                to: 'Contacts and negotiates IG music trending service with a vetted and great provider.',
+              },
+            }).updated,
+            replaceBuiltInAgentMetadata('influencer-campaign-power-up', {
+              name: { from: 'Influencer Campaign Power Up', to: 'Influencer Campaign' },
+              description: {
+                from: 'Prepares an approval-ready inquiry for an influencer campaign partner using the current release context.',
+                to: 'Contacts and negotiates influencer campaign service with a vetted and great provider.',
+              },
+            }).updated,
+            replaceBuiltInAgentMetadata('playlisting-power-up', {
+              name: { from: 'Playlisting Power Up', to: 'Playlisting' },
+              description: {
+                from: 'Prepares an approval-ready inquiry for a playlisting partner or service using the current release context.',
+                to: 'Contacts and negotiates playlisting service with a vetted and great provider.',
+              },
+            }).updated,
+          ].some(Boolean)
+          if (powerUpMetadataUpdated) {
+            sessionLog.info('[agent-definitions] Updated Power Up agent metadata')
           }
           const oldConciergeCreatorText = `When the user's intent is to **create** something — a new agent persona,
 a new automation that fires on some trigger, a new workspace context doc
