@@ -25,7 +25,7 @@ export const STARTER_AGENTS: CreateAgentInput[] = [
     slug: CONCIERGE_SLUG,
     metadata: {
       name: 'HNIC',
-      description: 'Head Nerd in Charge. Knows every agent, skill, and tool — points you at the right one.',
+      description: 'Ask what to use next. It routes you to the right agent or tool.',
       avatar: '💬',
       permissionMode: 'safe',
       thinkingLevel: 'medium',
@@ -90,7 +90,7 @@ not facts about the user.`,
     slug: ORCHESTRATOR_SLUG,
     metadata: {
       name: 'Orchestrator',
-      description: 'Plans goals, decomposes them into steps, and coordinates other agents.',
+      description: 'Break a goal into steps and coordinate the right agents.',
       avatar: '🎯',
       permissionMode: 'ask',
       thinkingLevel: 'high',
@@ -124,7 +124,7 @@ sequence work.`,
     slug: SOCIAL_PUBLISHER_SLUG,
     metadata: {
       name: 'Social Publisher',
-      description: 'Runs Instagram, TikTok, X, and YouTube posting through Runner’s native browser.',
+      description: 'Post or schedule content on Instagram, TikTok, X, and YouTube.',
       avatar: '📣',
       permissionMode: 'ask',
       thinkingLevel: 'high',
@@ -169,7 +169,7 @@ Browser engine policy:
     slug: 'trypost-agent',
     metadata: {
       name: 'TryPost',
-      description: 'Runs social posting through TryPost for users who prefer its API/MCP workflow.',
+      description: 'Post or schedule social content through TryPost.',
       avatar: 'TP',
       permissionMode: 'ask',
       thinkingLevel: 'high',
@@ -202,7 +202,7 @@ Safety:
     slug: 'youtube-research-agent',
     metadata: {
       name: 'YouTube Research Agent',
-      description: 'Researches YouTube topics, transcripts, comments, channels, and campaign-adjacent culture without posting or mutating accounts.',
+      description: 'Find YouTube videos, comments, transcripts, and ideas for a campaign.',
       avatar: 'Y',
       permissionMode: 'safe',
       thinkingLevel: 'high',
@@ -237,7 +237,7 @@ Never use this agent for YouTube Studio posting, uploads, comments, or browser p
     slug: 'hypermotion-agent',
     metadata: {
       name: 'Hypermotion Agent',
-      description: 'Produces motion graphics, HTML/GSAP video, Remotion/React video, captioned clips, 3D/R3F motion, and Canvas-ready video artifacts.',
+      description: 'Create polished motion graphic videos, captions, and social promos.',
       avatar: '🎬',
       permissionMode: 'ask',
       thinkingLevel: 'high',
@@ -276,7 +276,7 @@ Memory rule: save durable collaboration preferences about this agent with \`scop
     slug: 'lottie-animation-agent',
     metadata: {
       name: 'Lottie Animation Agent',
-      description: 'Creates, edits, previews, and verifies production-ready Lottie JSON animations using the official diffusionstudio/lottie Skia player harness.',
+      description: 'Create lightweight web and app animations.',
       avatar: 'L',
       permissionMode: 'ask',
       thinkingLevel: 'high',
@@ -343,7 +343,7 @@ Memory rule: save durable motion preferences for this agent with \`scope: agent\
     slug: 'video-editor-agent',
     metadata: {
       name: 'Video Editor Agent',
-      description: 'Creates and edits RunnerOS Video Studio projects through structured timeline tools instead of UI clicking.',
+      description: 'Assemble footage, captions, images, and audio into edited videos.',
       avatar: 'V',
       permissionMode: 'ask',
       thinkingLevel: 'high',
@@ -383,7 +383,7 @@ Memory rule: save durable video editing preferences for this agent with \`scope:
     slug: 'persona-agent',
     metadata: {
       name: 'Legendary Minds',
-      description: 'Applies sharp real-life persona lenses like Steve Jobs, MrBeast, and Tom Ford to ideas, brands, products, content, and launches.',
+      description: 'Pressure-test ideas through Jobs, MrBeast, and Tom Ford lenses.',
       avatar: 'P',
       permissionMode: 'ask',
       thinkingLevel: 'high',
@@ -421,7 +421,7 @@ Default report shape:
     slug: OPEN_SLIDE_AGENT_SLUG,
     metadata: {
       name: 'Open Slide',
-      description: 'Scaffolds, authors, builds, and previews React-based slide decks with the open-slide framework. Exports HTML/PDF directly into the Visual sidecar.',
+      description: 'Create clean slide decks and export them to HTML or PDF.',
       avatar: '🎞️',
       permissionMode: 'ask',
       thinkingLevel: 'high',
@@ -487,7 +487,7 @@ Memory rule: save deck-specific style notes and recurring layout patterns with \
     slug: 'ads-agent',
     metadata: {
       name: 'Ads Agent',
-      description: 'Runs Meta Ads and Google Ads reporting, diagnostics, planning, and approval-gated account operations.',
+      description: 'Plan, review, and improve Meta and Google ad campaigns.',
       avatar: 'G',
       permissionMode: 'ask',
       thinkingLevel: 'high',
@@ -533,7 +533,7 @@ Never apply a campaign, budget, catalog, creative, keyword, audience, placement,
     slug: 'ig-trending-power-up',
     metadata: {
       name: 'IG Music Trending',
-      description: 'Contacts and negotiates IG music trending service with a vetted and great provider.',
+      description: 'Draft an inquiry to a vetted IG music trending provider.',
       avatar: 'IG',
       permissionMode: 'ask',
       thinkingLevel: 'medium',
@@ -567,7 +567,7 @@ Safety:
     slug: 'influencer-campaign-power-up',
     metadata: {
       name: 'Influencer Campaign',
-      description: 'Contacts and negotiates influencer campaign service with a vetted and great provider.',
+      description: 'Draft an inquiry to a vetted influencer campaign provider.',
       avatar: 'IN',
       permissionMode: 'ask',
       thinkingLevel: 'medium',
@@ -601,7 +601,7 @@ Safety:
     slug: 'playlisting-power-up',
     metadata: {
       name: 'Playlisting',
-      description: 'Contacts and negotiates playlisting service with a vetted and great provider.',
+      description: 'Draft an inquiry to a vetted playlisting provider.',
       avatar: 'PL',
       permissionMode: 'ask',
       thinkingLevel: 'medium',
@@ -635,7 +635,7 @@ Safety:
     slug: 'spotify-playlist-creator',
     metadata: {
       name: 'Spotify Playlist Creator',
-      description: 'Builds Spotify adjacency playlists that place the artist between bigger comparable artists in the same lane.',
+      description: 'Create Spotify playlists that place your songs beside bigger artists.',
       avatar: 'SP',
       permissionMode: 'ask',
       thinkingLevel: 'high',
@@ -672,7 +672,7 @@ Safety:
     slug: 'shopify-agent',
     metadata: {
       name: 'Shopify Agent',
-      description: 'Operates Shopify stores with read-first diagnostics, product/listing work, and approval-gated Admin GraphQL writes.',
+      description: 'Manage Shopify products, listings, inventory, and store updates.',
       avatar: 'S',
       permissionMode: 'ask',
       thinkingLevel: 'high',
@@ -714,7 +714,7 @@ Default report shape:
     slug: 'print-agent',
     metadata: {
       name: 'Print Agent',
-      description: 'Helps users run a print store by turning image folders into apparel/product plans, upload-ready artwork, Printify drafts, QA reports, and approval-gated store actions.',
+      description: 'Turn artwork into print-on-demand merch plans and product drafts.',
       avatar: 'P',
       permissionMode: 'ask',
       thinkingLevel: 'high',
@@ -758,7 +758,7 @@ Default report shape:
     slug: 'update-system-agent',
     metadata: {
       name: 'Update System Agent',
-      description: 'Audits RunnerOS tools, sources, agents, skills, bundled CLIs, provenance, and update risks before changes are made.',
+      description: 'Check installed tools, agents, and skills before updates.',
       avatar: 'U',
       permissionMode: 'safe',
       thinkingLevel: 'high',
@@ -803,7 +803,7 @@ Be conservative. Your value is preventing messy updates, not moving fast blindly
     slug: 'researcher',
     metadata: {
       name: 'Researcher',
-      description: 'Investigates a topic deeply and returns a cited summary.',
+      description: 'Research a topic and return clear findings with sources.',
       avatar: '🔬',
       permissionMode: 'safe',
       thinkingLevel: 'high',

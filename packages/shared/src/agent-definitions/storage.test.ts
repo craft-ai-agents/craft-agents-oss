@@ -513,11 +513,11 @@ body
     const playlisting = STARTER_AGENTS.find((agent) => agent.slug === 'playlisting-power-up')
 
     expect(igTrending?.metadata.name).toBe('IG Music Trending')
-    expect(igTrending?.metadata.description).toBe('Contacts and negotiates IG music trending service with a vetted and great provider.')
+    expect(igTrending?.metadata.description).toBe('Draft an inquiry to a vetted IG music trending provider.')
     expect(influencer?.metadata.name).toBe('Influencer Campaign')
-    expect(influencer?.metadata.description).toBe('Contacts and negotiates influencer campaign service with a vetted and great provider.')
+    expect(influencer?.metadata.description).toBe('Draft an inquiry to a vetted influencer campaign provider.')
     expect(playlisting?.metadata.name).toBe('Playlisting')
-    expect(playlisting?.metadata.description).toBe('Contacts and negotiates playlisting service with a vetted and great provider.')
+    expect(playlisting?.metadata.description).toBe('Draft an inquiry to a vetted playlisting provider.')
 
     for (const agent of [igTrending, influencer, playlisting]) {
       expect(agent).toBeDefined()
