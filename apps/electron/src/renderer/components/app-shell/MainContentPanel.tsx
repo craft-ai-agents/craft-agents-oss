@@ -521,7 +521,7 @@ export function MainContentPanel({
     // Existing session/sidebar navigation stays intact for now.
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <ArtistCommandCenterHome />
+        <ArtistCommandCenterHome workspaceId={activeWorkspaceId || ''} />
       </Panel>
     )
   }
