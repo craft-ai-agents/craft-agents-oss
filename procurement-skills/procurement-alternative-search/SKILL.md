@@ -89,7 +89,7 @@ WebSearch `"<型号>" cross reference / replacement / equivalent / 替代型号`
 
 把候选去重，每个记：替代型号、品牌、规格、来源、库存/价（有就带）。
 
-## 反合理化表
+## 反合理化表格
 
 | 常见借口 | 反驳 |
 |---|---|
