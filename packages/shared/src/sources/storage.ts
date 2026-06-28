@@ -21,7 +21,7 @@ import type {
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync } from '../utils/files.ts';
-import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getGoogleAdsSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
+import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getGoogleAdsSource, getMetaAdsSource, getNotebookLmSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 import {
@@ -513,6 +513,10 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
         sources.push({ ...getVideoStudioSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'google-ads') {
         sources.push({ ...getGoogleAdsSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'meta-ads') {
+        sources.push({ ...getMetaAdsSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'notebooklm') {
+        sources.push({ ...getNotebookLmSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'youtube-research') {
         sources.push({ ...getYouTubeResearchSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'open-slide') {

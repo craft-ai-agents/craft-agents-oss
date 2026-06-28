@@ -357,7 +357,11 @@ if (triggerServer) {
 
 const serverProto = instance.protocol === 'wss' ? 'https' : 'http'
 console.log(`CRAFT_SERVER_URL=${instance.protocol}://${instance.host}:${instance.port}`)
-console.log(`CRAFT_SERVER_TOKEN=${instance.token}`)
+if (process.env.CRAFT_PRINT_SERVER_TOKEN === '1') {
+  console.log(`CRAFT_SERVER_TOKEN=${instance.token}`)
+} else {
+  console.log('CRAFT_SERVER_TOKEN=<hidden; set CRAFT_PRINT_SERVER_TOKEN=1 to print>')
+}
 if (webuiHandler) {
   console.log(`CRAFT_WEBUI_URL=${serverProto}://0.0.0.0:${instance.port}`)
 }

@@ -593,6 +593,32 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.guide?.raw).toContain('products list');
   });
 
+  test('resolves meta-ads by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['meta-ads']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('meta-ads');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.type).toBe('mcp');
+    expect(sources[0]!.config.mcp?.transport).toBe('http');
+    expect(sources[0]!.config.connectionStatus).toBe('needs_auth');
+  });
+
+  test('resolves notebooklm by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['notebooklm']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('notebooklm');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.type).toBe('mcp');
+    expect(sources[0]!.config.mcp?.transport).toBe('stdio');
+    expect(sources[0]!.config.mcp?.command).toBe('npx');
+  });
+
   test('resolves printify by slug without workspace activation', () => {
     const ws = makeWorkspace();
     const sources = getSourcesBySlugs(ws, ['printify']);

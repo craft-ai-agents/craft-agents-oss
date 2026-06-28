@@ -412,22 +412,6 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
-    group: 'MCP / Apps',
-    name: 'CANVA_CLIENT_ID',
-    label: 'Canva client ID',
-    description: 'Optional Canva integration credential when not using ~/.config/runneros/canva/integration.json.',
-    placeholder: 'Canva client ID',
-    storage: 'env',
-  },
-  {
-    group: 'MCP / Apps',
-    name: 'CANVA_CLIENT_SECRET',
-    label: 'Canva client secret',
-    description: 'Optional Canva integration credential when not using ~/.config/runneros/canva/integration.json.',
-    placeholder: 'Canva client secret',
-    storage: 'env',
-  },
-  {
     group: 'Automation',
     name: 'CRAFT_WH_SIGNED_HOOK_SECRET',
     label: 'Webhook signing secret',
@@ -584,8 +568,8 @@ const SERVICES: SecretService[] = [
     group: 'Developer + Cloud',
     title: 'MCP + Apps',
     description: 'Credentials for optional external app integrations.',
-    presetNames: ['BRAVE_API_KEY', 'CANVA_CLIENT_ID', 'CANVA_CLIENT_SECRET'],
-    optionalPresetNames: ['BRAVE_API_KEY', 'CANVA_CLIENT_ID', 'CANVA_CLIENT_SECRET'],
+    presetNames: ['BRAVE_API_KEY'],
+    optionalPresetNames: ['BRAVE_API_KEY'],
   },
   {
     id: 'automation',

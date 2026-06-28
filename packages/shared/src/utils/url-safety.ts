@@ -1,11 +1,9 @@
 /**
  * Classification of external URLs for `shell.openExternal`-style handlers.
  *
- * We use a blocklist instead of an allowlist: the OS only dispatches URL
- * schemes that have a registered handler, so passing through
- * `obsidian://`, `vscode://`, etc. is safe in practice. Known-dangerous
- * schemes (XSS primitives and `file:` as an RCE vector on Windows) stay
- * explicitly blocked.
+ * Only explicitly allowed schemes may be opened externally. Unknown custom
+ * schemes can trigger arbitrary app handlers on the host OS, so keep this
+ * surface narrow and route product deep links separately.
  */
 
 export type UrlClassification =
@@ -13,12 +11,12 @@ export type UrlClassification =
   | { kind: 'internal-deeplink' }
   | { kind: 'safe-external' }
 
-const DANGEROUS_SCHEMES: ReadonlySet<string> = new Set([
-  'javascript:',
-  'data:',
-  'vbscript:',
-  'blob:',
-  'file:',
+const SAFE_EXTERNAL_SCHEMES: ReadonlySet<string> = new Set([
+  'http:',
+  'https:',
+  'mailto:',
+  'tel:',
+  'sms:',
 ])
 
 const INTERNAL_DEEPLINK_SCHEME = 'craftagents:'
@@ -37,15 +35,15 @@ export function classifyExternalUrl(rawUrl: string): UrlClassification {
 
   const protocol = parsed.protocol.toLowerCase()
 
-  if (DANGEROUS_SCHEMES.has(protocol)) {
-    return { kind: 'dangerous', reason: `blocked scheme "${protocol}"` }
-  }
-
   if (protocol === INTERNAL_DEEPLINK_SCHEME) {
     return { kind: 'internal-deeplink' }
   }
 
-  return { kind: 'safe-external' }
+  if (SAFE_EXTERNAL_SCHEMES.has(protocol)) {
+    return { kind: 'safe-external' }
+  }
+
+  return { kind: 'dangerous', reason: `unsupported scheme "${protocol}"` }
 }
 
 export function isSafeExternalUrl(rawUrl: string): boolean {

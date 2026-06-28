@@ -161,7 +161,13 @@ if (isClientOnly) {
 // Register client-side capability handlers (server can invoke these)
 // ---------------------------------------------------------------------------
 
-client.handleCapability(CLIENT_OPEN_EXTERNAL, (url: string) => shell.openExternal(url))
+client.handleCapability(CLIENT_OPEN_EXTERNAL, async (url: string) => {
+  const { isSafeExternalUrl } = await import('@craft-agent/shared/utils/url-safety')
+  if (!isSafeExternalUrl(url)) {
+    throw new Error('Blocked unsafe external URL')
+  }
+  return shell.openExternal(url)
+})
 
 client.handleCapability(CLIENT_OPEN_PATH, async (path: string) => {
   const error = await shell.openPath(path)

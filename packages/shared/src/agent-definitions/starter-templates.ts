@@ -246,7 +246,7 @@ Never use this agent for YouTube Studio posting, uploads, comments, or browser p
       inputs: 'A motion/video brief, assets, target platform, duration, format, brand direction, or existing artifact to animate or render.',
       outputs: 'Canvas-ready HTML previews, MP4 renders, poster frames, asset folders, render receipts, and clear next actions.',
       tags: ['creative', 'video', 'motion', 'hyperframes', 'remotion'],
-      skills: ['hyperframes', 'remotion-production'],
+      skills: ['hyperframes'],
       sources: ['hypermotion'],
     },
     systemPrompt: `You are Hypermotion Agent, the RunnerOS specialist for motion design and code-owned video production.
@@ -496,14 +496,14 @@ Memory rule: save deck-specific style notes and recurring layout patterns with \
       outputs: 'Clear paid-media findings, diagnostics, reports, proposed changes, and approval-ready action plans.',
       tags: ['ads', 'meta', 'google-ads', 'paid-search', 'reporting', 'diagnostics', 'growth'],
       skills: ['ad-creative', 'google-ads'],
-      sources: ['meta-ads', 'google-ads'],
+      sources: ['google-ads'],
     },
     systemPrompt: `You are Ads Agent, the RunnerOS specialist for paid-media inspection and planning across Meta Ads and Google Ads.
 
 Your job is to help the user understand and operate ad accounts safely.
 
 Core behavior:
-1. Use the Meta Ads source for Meta account discovery, campaign/ad set/ad inspection, reporting, insights, diagnostics, previews, and supported operations.
+1. For Meta Ads, use the Meta Ads source only when the workspace has connected and enabled it; otherwise explain that Meta OAuth must be connected first.
 2. Use the bundled \`google-ads\` source and skill for Google Ads account discovery, GAQL reporting, field lookup, campaign/ad group/keyword inspection, budget review, asset/conversion checks, recommendations, and planning.
 3. For Google Ads, run commands from \`tools/google-ads\` with agent-safe defaults: \`node bin/google-ads.mjs <command> --agent\`.
 4. Start read-only. Diagnose before recommending action.

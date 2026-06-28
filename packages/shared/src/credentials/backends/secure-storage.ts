@@ -4,13 +4,12 @@
  * Stores credentials in an encrypted file at ~/.craft-agent/credentials.enc
  * Uses AES-256-GCM for authenticated encryption.
  *
- * Encryption key is derived from OS-native hardware UUID using PBKDF2:
- * - macOS: IOPlatformUUID (tied to logic board, never changes)
- * - Windows: MachineGuid from registry (set at OS install)
- * - Linux: /var/lib/dbus/machine-id (set at OS install)
+ * Encryption key is derived from an OS-protected random key when Electron
+ * safeStorage is available (Keychain / DPAPI / libsecret), then PBKDF2.
  *
- * This is more stable than the previous hostname-based derivation, which could
- * change with network/DHCP. Legacy credentials are auto-migrated on first load.
+ * Legacy hardware-UUID and hostname-derived credentials are auto-migrated on
+ * first load. The hardware-UUID fallback is retained for headless/non-Electron
+ * runtimes where safeStorage is not available.
  *
  * File format:
  *   [Header - 64 bytes]
@@ -43,6 +42,7 @@ import { credentialIdToAccount, accountToCredentialId } from '../types.ts';
 // File location
 const CREDENTIALS_DIR = join(homedir(), '.craft-agent');
 const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.enc');
+const CREDENTIALS_KEY_FILE = join(CREDENTIALS_DIR, 'credentials.key');
 
 // File format constants
 const MAGIC_BYTES = Buffer.from('CRAFT01\0');
@@ -115,6 +115,7 @@ export class SecureStorageBackend implements CredentialBackend {
   private cachedStore: CredentialStore | null = null;
   private encryptionKey: Buffer | null = null;
   private salt: Buffer | null = null;
+  private storeLocked = false;
 
   async isAvailable(): Promise<boolean> {
     // File backend is always available - we can always write to filesystem
@@ -131,6 +132,10 @@ export class SecureStorageBackend implements CredentialBackend {
 
   async set(id: CredentialId, credential: StoredCredential): Promise<void> {
     let store = await this.loadStore();
+
+    if (!store && this.storeLocked) {
+      throw new Error('Secure credential store exists but cannot be unlocked; refusing to overwrite stored credentials');
+    }
 
     if (!store) {
       // Initialize new store
@@ -221,12 +226,24 @@ export class SecureStorageBackend implements CredentialBackend {
     // Extract encrypted data
     const encryptedData = fileData.subarray(HEADER_SIZE);
 
-    // Try new stable key first (v2 - hardware UUID based)
-    const newKey = this.getEncryptionKey(salt);
+    // Try primary key first: OS safeStorage when available, hardware fallback otherwise.
+    const newKey = await this.getEncryptionKey(salt);
     let store = this.tryDecrypt(encryptedData, newKey);
 
     if (store) {
       this.cachedStore = store;
+      this.storeLocked = false;
+      return store;
+    }
+
+    // Try hardware UUID key for migration from pre-safeStorage versions.
+    const hardwareKey = this.getHardwareFallbackEncryptionKey(salt);
+    store = this.tryDecrypt(encryptedData, hardwareKey);
+
+    if (store) {
+      this.cachedStore = store;
+      this.storeLocked = false;
+      await this.saveStore(store);
       return store;
     }
 
@@ -238,11 +255,20 @@ export class SecureStorageBackend implements CredentialBackend {
     if (store) {
       // Migration: re-save with new stable key so future loads use hardware UUID
       this.cachedStore = store;
+      this.storeLocked = false;
       await this.saveStore(store);
       return store;
     }
 
-    // Both keys failed - file is truly corrupted
+    // A safeStorage-backed file may be unreadable in a headless/non-Electron
+    // runtime. Do not delete it as "corrupted" just because this process cannot
+    // unlock the OS-protected sidecar key.
+    if (existsSync(CREDENTIALS_KEY_FILE)) {
+      this.storeLocked = true;
+      return null;
+    }
+
+    // All known keys failed - file is truly corrupted
     this.handleCorruptedFile();
     return null;
   }
@@ -277,7 +303,7 @@ export class SecureStorageBackend implements CredentialBackend {
     this.salt = salt;
 
     // Get encryption key
-    const key = this.getEncryptionKey(salt);
+    const key = await this.getEncryptionKey(salt);
 
     // Serialize payload
     const plaintext = Buffer.from(JSON.stringify(store), 'utf8');
@@ -302,22 +328,23 @@ export class SecureStorageBackend implements CredentialBackend {
     // Write with restrictive permissions (owner read/write only)
     writeFileSync(CREDENTIALS_FILE, fileData, { mode: 0o600 });
     this.cachedStore = store;
+    this.storeLocked = false;
   }
 
-  private getEncryptionKey(salt: Buffer): Buffer {
+  private async getEncryptionKey(salt: Buffer): Promise<Buffer> {
     if (this.encryptionKey) return this.encryptionKey;
 
-    // New stable machine ID using hardware UUID (v2)
-    // This is far more stable than hostname which can change with network/DHCP
-    const stableMachineId = createHash('sha256')
-      .update(getStableMachineId())
-      .update('craft-agent-v2') // Bumped version for new key derivation
-      .digest();
+    const safeStorageKeyMaterial = await getSafeStorageKeyMaterial();
+    const keyMaterial = safeStorageKeyMaterial ?? getHardwareFallbackKeyMaterial();
 
     // Derive key using PBKDF2
-    this.encryptionKey = pbkdf2Sync(stableMachineId, salt, PBKDF2_ITERATIONS, KEY_SIZE, 'sha256');
+    this.encryptionKey = pbkdf2Sync(keyMaterial, salt, PBKDF2_ITERATIONS, KEY_SIZE, 'sha256');
 
     return this.encryptionKey;
+  }
+
+  private getHardwareFallbackEncryptionKey(salt: Buffer): Buffer {
+    return pbkdf2Sync(getHardwareFallbackKeyMaterial(), salt, PBKDF2_ITERATIONS, KEY_SIZE, 'sha256');
   }
 
   /**
@@ -347,6 +374,7 @@ export class SecureStorageBackend implements CredentialBackend {
     this.cachedStore = null;
     this.encryptionKey = null;
     this.salt = null;
+    this.storeLocked = false;
   }
 
   /** Clear cached data (for testing or forced refresh) */
@@ -354,5 +382,38 @@ export class SecureStorageBackend implements CredentialBackend {
     this.cachedStore = null;
     this.encryptionKey = null;
     this.salt = null;
+    this.storeLocked = false;
+  }
+}
+
+function getHardwareFallbackKeyMaterial(): Buffer {
+  return createHash('sha256')
+    .update(getStableMachineId())
+    .update('craft-agent-v2')
+    .digest();
+}
+
+async function getSafeStorageKeyMaterial(): Promise<Buffer | null> {
+  try {
+    const electron = await import('electron');
+    const safeStorage = electron.safeStorage;
+    if (!safeStorage?.isEncryptionAvailable()) return null;
+
+    if (existsSync(CREDENTIALS_KEY_FILE)) {
+      const encryptedKey = readFileSync(CREDENTIALS_KEY_FILE);
+      const decrypted = safeStorage.decryptString(encryptedKey);
+      return Buffer.from(decrypted, 'base64');
+    }
+
+    if (!existsSync(CREDENTIALS_DIR)) {
+      mkdirSync(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
+    }
+
+    const keyMaterial = randomBytes(KEY_SIZE);
+    const encryptedKey = safeStorage.encryptString(keyMaterial.toString('base64'));
+    writeFileSync(CREDENTIALS_KEY_FILE, encryptedKey, { mode: 0o600 });
+    return keyMaterial;
+  } catch {
+    return null;
   }
 }
