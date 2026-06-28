@@ -349,6 +349,10 @@ async function main(): Promise<void> {
       "--format=cjs",
       "--outfile=apps/electron/dist/main.cjs",
       "--external:electron",
+      // Claude Agent SDK is ESM and uses import.meta.url internally.
+      // Bundling it into the CJS Electron main process turns that into
+      // undefined at runtime, so keep it external.
+      "--external:@anthropic-ai/claude-agent-sdk",
       // Replace grammY's bundled polyfills (node-fetch@2 + abort-controller@3)
       // with native Node globals. esbuild otherwise renames the polyfill's
       // `class AbortSignal` to `_AbortSignal` to dodge collision with the

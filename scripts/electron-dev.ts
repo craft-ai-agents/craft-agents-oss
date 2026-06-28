@@ -23,6 +23,12 @@ const MAIN_PROCESS_ALIAS: Record<string, string> = {
   "node-fetch": join(ROOT_DIR, "apps/electron/src/main/shims/node-fetch.cjs"),
   "abort-controller": join(ROOT_DIR, "apps/electron/src/main/shims/abort-controller.cjs"),
 };
+const MAIN_PROCESS_EXTERNAL = [
+  "electron",
+  // Claude Agent SDK is ESM and uses import.meta.url internally. Bundling it
+  // into the CJS Electron main process turns that into undefined at runtime.
+  "@anthropic-ai/claude-agent-sdk",
+];
 
 // MCP server paths
 const SESSION_SERVER_DIR = join(ROOT_DIR, "packages/session-mcp-server");
@@ -313,7 +319,7 @@ async function runEsbuild(
       platform: "node",
       format: "cjs",
       outfile: join(ROOT_DIR, outfile),
-      external: ["electron"],
+      external: MAIN_PROCESS_EXTERNAL,
       ...(options.packagesExternal ? { packages: "external" as const } : {}),
       ...(options.alias ? { alias: options.alias } : {}),
       define: defines,
@@ -550,7 +556,7 @@ async function main(): Promise<void> {
     platform: "node",
     format: "cjs",
     outfile: join(ROOT_DIR, "apps/electron/dist/main.cjs"),
-    external: ["electron"],
+    external: MAIN_PROCESS_EXTERNAL,
     alias: MAIN_PROCESS_ALIAS,
     define: oauthDefines,
     logLevel: "info",
