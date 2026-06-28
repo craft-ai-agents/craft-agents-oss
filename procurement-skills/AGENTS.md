@@ -76,8 +76,8 @@
 
 ## 工具与环境
 
-- 联网查资料：用你自己的 WebSearch / WebFetch（必要时 searxng）。**硬边界**：库存、价格、货源、可得性只认飞书本地库存和 scrape-engine 覆盖的采购平台；WebSearch/WebFetch 只能补型号信息和品类判断，不能据此报“哪里有货/多少钱/能供”。
-- 平台采购报价：统一调用 `procurement-platform-search` / `scrape-engine` 取得结构化证据。
+- 联网查资料：用你自己的 WebSearch / WebFetch。**硬边界**：库存、价格、货源、可得性只认飞书本地库存和 scrape-engine 覆盖的采购平台；WebSearch/WebFetch 只能补型号信息和品类判断，不能据此报“哪里有货/多少钱/能供”。
+- 平台采购报价：业务入口用 `procurement-platform-search`；平台采集技术层由 `scrape-engine` 提供结构化证据。
 - 飞书多维表（库存、供应商、写表）：用 lark-cli / lark-base。
 - 业务数据在飞书 Base《供应商管理（正式版）》。
 - 读取业务 Base《供应商管理（正式版）》时使用 `--as user`。有些 Base/表用 `--as bot` 会返回 `91403 you don't have permission`，遇到这类权限差异时可以切到 `--as user`。
