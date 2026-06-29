@@ -6986,7 +6986,6 @@ user a clickable link to where the thing now lives.`
     // Pre-enable sources required by invoked skills (Issue #249)
     // This eliminates the two-turn penalty where the agent discovers missing sources at runtime.
     // Uses targeted loadSkillBySlug() instead of loadAllSkills() to avoid O(N) filesystem scans.
-    const preEnabledSourceSlugs: string[] = []
     if (options?.skillSlugs?.length) {
       try {
         const workspaceRoot = managed.workspace.rootPath
@@ -7028,7 +7027,6 @@ user a clickable link to where the thing now lives.`
 
           if (toEnable.length > 0) {
             managed.enabledSourceSlugs = [...(managed.enabledSourceSlugs || []), ...toEnable]
-            preEnabledSourceSlugs.push(...toEnable)
             sessionLog.info(`Pre-enabled sources for skill invocation: ${toEnable.join(', ')}`)
             this.persistSession(managed)
             this.sendEvent({
@@ -7068,9 +7066,14 @@ user a clickable link to where the thing now lives.`
         const message = `Failed to build enabled source tools: ${formatSourceBuildErrors(errors)}`
         sessionLog.warn(message, errors)
 
-        if (preEnabledSourceSlugs.length > 0) {
-          const rollback = new Set(preEnabledSourceSlugs)
-          managed.enabledSourceSlugs = (managed.enabledSourceSlugs || []).filter(slug => !rollback.has(slug))
+        const failedSlugs = new Set(errors.map(error => error.sourceSlug))
+        if (failedSlugs.size > 0) {
+          managed.enabledSourceSlugs = (managed.enabledSourceSlugs || []).filter(slug => !failedSlugs.has(slug))
+          try {
+            await cleanupSourceRuntimeArtifacts(workspaceRootPath, Array.from(failedSlugs))
+          } catch (err) {
+            sessionLog.warn(`Failed to clean up failed source runtime artifacts: ${err}`)
+          }
           this.persistSession(managed)
           this.sendEvent({
             type: 'sources_changed',

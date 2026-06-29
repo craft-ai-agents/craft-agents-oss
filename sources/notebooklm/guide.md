@@ -4,7 +4,7 @@ This source runs the [`notebooklm-mcp`](https://github.com/PleasePrompto/noteboo
 
 ## Scope
 
-- Local stdio MCP server launched with `npx -y notebooklm-mcp@latest`.
+- Local stdio MCP server launched with `npx -y notebooklm-mcp@2.0.0`.
 - Uses local Chrome/browser automation to access NotebookLM.
 - Supports querying notebooks, selecting notebooks, listing/searching saved notebook links, and health/session management depending on the server's configured tool profile.
 - Authentication is handled by the MCP server's own browser flow; the Craft source itself uses `authType: none`.
@@ -40,7 +40,7 @@ This source runs the [`notebooklm-mcp`](https://github.com/PleasePrompto/noteboo
   "mcpServers": {
     "notebooklm": {
       "command": "npx",
-      "args": ["-y", "notebooklm-mcp@latest"]
+      "args": ["-y", "notebooklm-mcp@2.0.0"]
     }
   }
 }

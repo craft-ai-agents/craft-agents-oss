@@ -240,6 +240,55 @@ function isPathWithinDirectory(targetPath: string, baseDir: string): boolean {
   }
 }
 
+const SENSITIVE_READ_TOOL_NAMES = new Set(['Read', 'Grep', 'Glob']);
+const SENSITIVE_PATH_PATTERNS = [
+  /(^|\/|~\/)\.ssh(\/|$)/i,
+  /(^|\/)id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/i,
+  /(^|\/|~\/)\.aws(\/|$)/i,
+  /(^|\/|~\/)\.gnupg(\/|$)/i,
+  /(^|\/|~\/)\.kube(\/|$)/i,
+  /(^|\/|~\/)\.docker\/config\.json$/i,
+  /(^|\/|~\/)\.config\/gh(\/|$)/i,
+  /(^|\/|~\/)\.npmrc$/i,
+  /(^|\/|~\/)\.pypirc$/i,
+  /(^|\/|~\/)\.netrc$/i,
+  /(^|\/)\.env($|\.(?!example$|sample$|template$|defaults?$)[^/]+$)/i,
+  /(^|\/)(credentials|secrets?)\.(json|ya?ml|toml|ini|env)$/i,
+];
+
+function getCanonicalToolName(toolName: string): string {
+  const parts = toolName.split('__');
+  return parts[parts.length - 1] || toolName;
+}
+
+function getSensitiveReadToolPath(toolName: string, toolInput: unknown): string | null {
+  const canonicalToolName = getCanonicalToolName(toolName);
+  if (!SENSITIVE_READ_TOOL_NAMES.has(canonicalToolName)) return null;
+
+  const input = toolInput as Record<string, unknown> | null;
+  if (!input) return null;
+
+  const path =
+    input.file_path ??
+    input.path ??
+    input.directory ??
+    input.folder;
+
+  return typeof path === 'string' ? path : null;
+}
+
+function getSensitiveReadToolReason(toolName: string, toolInput: unknown): string | null {
+  const targetPath = getSensitiveReadToolPath(toolName, toolInput);
+  if (!targetPath) return null;
+
+  const normalized = targetPath.replace(/\\/g, '/');
+  if (SENSITIVE_PATH_PATTERNS.some(pattern => pattern.test(normalized))) {
+    return `Reading sensitive credential path "${targetPath}" requires explicit approval`;
+  }
+
+  return null;
+}
+
 // ============================================================
 // Mode Manager Class
 // ============================================================
@@ -1853,6 +1902,14 @@ export function shouldAllowToolInMode(
   }
 
   // Safe mode: check against read-only allowlist
+
+  const sensitiveReadReason = getSensitiveReadToolReason(toolName, toolInput);
+  if (sensitiveReadReason) {
+    return {
+      allowed: false,
+      reason: sensitiveReadReason,
+    };
+  }
 
   // Always-allowed tools (read-only by nature)
   if (ALWAYS_ALLOWED_TOOLS.has(toolName)) {

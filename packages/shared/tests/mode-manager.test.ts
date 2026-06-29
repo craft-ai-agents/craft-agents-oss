@@ -633,6 +633,7 @@ describe('isReadOnlyBashCommand (full integration)', () => {
       'cat /Users/test/.docker/config.json',
       'less /Users/test/.npmrc',
       'cat .env',
+      'cat .env.production.local',
       'cat ./secrets.json',
     ];
 
@@ -690,6 +691,35 @@ describe('SAFE_MODE_CONFIG', () => {
   it('should have display properties', () => {
     expect(SAFE_MODE_CONFIG.displayName).toBe('Explore');
     expect(SAFE_MODE_CONFIG.shortcutHint).toBe('SHIFT+TAB');
+  });
+});
+
+describe('native read tools sensitive credential paths', () => {
+  const sensitiveReadToolCalls = [
+    ['Read', { file_path: '~/.ssh/id_rsa' }],
+    ['Read', { file_path: '/Users/test/.aws/credentials' }],
+    ['Grep', { pattern: 'token', path: '~/.config/gh' }],
+    ['Glob', { pattern: '*', path: '/Users/test/.kube' }],
+    ['Read', { file_path: '/Users/test/project/.env.production.local' }],
+    ['mcp__files__Read', { file_path: '/Users/test/.docker/config.json' }],
+  ] as const;
+
+  for (const [toolName, input] of sensitiveReadToolCalls) {
+    it(`blocks ${toolName} from sensitive path`, () => {
+      const result = shouldAllowToolInMode(toolName, input, 'safe');
+      expect(result.allowed).toBe(false);
+      expect('reason' in result ? result.reason : '').toContain('sensitive credential path');
+    });
+  }
+
+  it('still allows normal read paths in safe mode', () => {
+    expect(shouldAllowToolInMode('Read', { file_path: '/Users/test/project/README.md' }, 'safe').allowed).toBe(true);
+    expect(shouldAllowToolInMode('Grep', { pattern: 'TODO', path: '/Users/test/project/src' }, 'safe').allowed).toBe(true);
+  });
+
+  it('keeps ask and allow-all semantics unchanged', () => {
+    expect(shouldAllowToolInMode('Read', { file_path: '~/.ssh/id_rsa' }, 'ask').allowed).toBe(true);
+    expect(shouldAllowToolInMode('Read', { file_path: '~/.ssh/id_rsa' }, 'allow-all').allowed).toBe(true);
   });
 });
 

@@ -9,6 +9,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { debug } from '../utils/debug.ts';
 
 const MCP_CONNECT_TIMEOUT_MS = 30_000;
 const MCP_LIST_TOOLS_TIMEOUT_MS = 30_000;
@@ -150,15 +151,19 @@ export class CraftMcpClient {
   async connect(): Promise<void> {
     if (this.connected) return;
 
-    await withTimeout(this.client.connect(this.transport), MCP_CONNECT_TIMEOUT_MS, 'MCP connect');
-
-    // Verify connection works by listing tools
     try {
+      await withTimeout(this.client.connect(this.transport), MCP_CONNECT_TIMEOUT_MS, 'MCP connect');
+      // Verify connection works by listing tools before marking this client usable.
       await withTimeout(this.client.listTools(), MCP_LIST_TOOLS_TIMEOUT_MS, 'MCP listTools health check');
     } catch (error) {
-      await this.client.close();
+      this.connected = false;
+      try {
+        await this.client.close();
+      } catch (closeError) {
+        debug('[CraftMcpClient] Failed to close MCP client after connection failure:', closeError);
+      }
       throw new Error(
-        `MCP connection failed health check: ${error instanceof Error ? error.message : String(error)}`
+        `MCP connection failed: ${error instanceof Error ? error.message : String(error)}`
       );
     }
 
@@ -188,8 +193,9 @@ export class CraftMcpClient {
   }
 
   async close(): Promise<void> {
-    if (this.connected) {
+    try {
       await this.client.close();
+    } finally {
       this.connected = false;
     }
   }

@@ -171,7 +171,7 @@ const SENSITIVE_PATH_PATTERNS = [
   /(^|\/|~\/)\.npmrc$/i,
   /(^|\/|~\/)\.pypirc$/i,
   /(^|\/|~\/)\.netrc$/i,
-  /(^|\/)\.env($|\.local$|\.production$|\.development$|\.test$)/i,
+  /(^|\/)\.env($|\.(?!example$|sample$|template$|defaults?$)[^/]+$)/i,
   /(^|\/)(credentials|secrets?)\.(json|ya?ml|toml|ini|env)$/i,
 ];
 
