@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
-import { CircleMinus, History, Pencil, Play, Plus, Search, Trash2, X, Workflow as WorkflowIcon } from 'lucide-react'
+import { ChevronRight, CircleMinus, Folder, History, Pencil, Play, Plus, Search, Trash2, X, Workflow as WorkflowIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -65,6 +65,7 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   const [deepResearchDepth, setDeepResearchDepth] = React.useState<'quick' | 'standard' | 'deep'>('standard')
   const [deepResearchSourceSlugs, setDeepResearchSourceSlugs] = React.useState<string[]>([])
   const [deepResearchStarting, setDeepResearchStarting] = React.useState(false)
+  const [selectedFolderId, setSelectedFolderId] = React.useState<string>('print')
   const rankedDeepResearchSources = React.useMemo(
     () => rankDeepResearchSources(usableSources, deepResearchTopic),
     [deepResearchTopic, usableSources],
@@ -73,6 +74,14 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   const inactiveWorkflows = React.useMemo(
     () => allWorkflows.filter((wf) => !activeSlugSet.has(wf.slug)),
     [activeSlugSet, allWorkflows],
+  )
+  const workflowFolders = React.useMemo(
+    () => groupWorkflowsIntoFolders(inactiveWorkflows),
+    [inactiveWorkflows],
+  )
+  const selectedFolder = React.useMemo(
+    () => workflowFolders.find((folder) => folder.id === selectedFolderId) ?? workflowFolders[0],
+    [selectedFolderId, workflowFolders],
   )
   const selectedDeepResearchSources = React.useMemo(
     () => rankedDeepResearchSources.filter((source) => deepResearchSourceSlugs.includes(source.config.slug)),
@@ -262,20 +271,45 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
               )}
             </WorkflowSection>
 
-            {inactiveWorkflows.length > 0 && (
-              <WorkflowSection title="Library" count={inactiveWorkflows.length} suffix="inactive">
-                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                  {inactiveWorkflows.map((wf) => (
-                    <WorkflowCard
-                      key={wf.slug}
-                      workflow={wf}
-                      active={false}
-                      lastRun={lastRunBySlug.get(wf.slug)}
-                      onOpen={() => setDetailWorkflow(wf)}
-                      onRun={() => setRunDialogWorkflow(wf)}
-                      onActivate={() => void handleActivate(wf)}
+            {workflowFolders.length > 0 && selectedFolder && (
+              <WorkflowSection title="Library folders" count={inactiveWorkflows.length} suffix="inactive">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {workflowFolders.map((folder) => (
+                    <WorkflowFolderCard
+                      key={folder.id}
+                      folder={folder}
+                      selected={folder.id === selectedFolder.id}
+                      onSelect={() => setSelectedFolderId(folder.id)}
                     />
                   ))}
+                </div>
+
+                <div className="mt-4 rounded-[16px] border border-white/[0.07] bg-black/15 p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Folder className="h-4 w-4 text-[#fed7aa]/80" />
+                        <h3 className="truncate text-sm font-semibold text-white">{selectedFolder.title}</h3>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-white/45">{selectedFolder.description}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-white/[0.08] bg-white/[0.035] px-2 py-0.5 text-[11px] text-white/42">
+                      {selectedFolder.workflows.length}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                    {selectedFolder.workflows.map((wf) => (
+                      <WorkflowCard
+                        key={wf.slug}
+                        workflow={wf}
+                        active={false}
+                        lastRun={lastRunBySlug.get(wf.slug)}
+                        onOpen={() => setDetailWorkflow(wf)}
+                        onRun={() => setRunDialogWorkflow(wf)}
+                        onActivate={() => void handleActivate(wf)}
+                      />
+                    ))}
+                  </div>
                 </div>
               </WorkflowSection>
             )}
@@ -505,6 +539,81 @@ function deepResearchToolScopeLabel(source: LoadedSource): string {
   return source.tier ?? 'tool'
 }
 
+type WorkflowFolderId = 'print' | 'content' | 'research' | 'operations' | 'inbox' | 'other'
+
+interface WorkflowFolder {
+  id: WorkflowFolderId
+  title: string
+  description: string
+  workflows: WorkflowDTO[]
+}
+
+const WORKFLOW_FOLDER_DEFS: Array<Omit<WorkflowFolder, 'workflows'>> = [
+  {
+    id: 'print',
+    title: 'Print + Merch',
+    description: 'Printify, Shopify, apparel, product launch, and merch workflows.',
+  },
+  {
+    id: 'content',
+    title: 'Content',
+    description: 'Posts, clips, publishing prep, calendars, and creative batches.',
+  },
+  {
+    id: 'research',
+    title: 'Research + Intelligence',
+    description: 'Market, competitor, YouTube, audience, and discovery workflows.',
+  },
+  {
+    id: 'operations',
+    title: 'Operations',
+    description: 'Reviews, planning, business health, growth, and recurring ops.',
+  },
+  {
+    id: 'inbox',
+    title: 'Inbox + Support',
+    description: 'Email, support triage, and incoming-work handling.',
+  },
+  {
+    id: 'other',
+    title: 'Other',
+    description: 'Useful workflows that do not fit a sharper folder yet.',
+  },
+]
+
+function groupWorkflowsIntoFolders(workflows: WorkflowDTO[]): WorkflowFolder[] {
+  const buckets = new Map<WorkflowFolderId, WorkflowDTO[]>()
+  for (const def of WORKFLOW_FOLDER_DEFS) buckets.set(def.id, [])
+
+  for (const workflow of workflows) {
+    buckets.get(getWorkflowFolderId(workflow))?.push(workflow)
+  }
+
+  return WORKFLOW_FOLDER_DEFS
+    .map((def) => ({
+      ...def,
+      workflows: [...(buckets.get(def.id) ?? [])].sort((a, b) => a.metadata.name.localeCompare(b.metadata.name)),
+    }))
+    .filter((folder) => folder.workflows.length > 0)
+}
+
+function getWorkflowFolderId(workflow: WorkflowDTO): WorkflowFolderId {
+  const haystack = [
+    workflow.slug,
+    workflow.metadata.name,
+    workflow.metadata.description,
+    workflow.body,
+    ...workflow.metadata.steps.map((step) => `${step.id} ${step.agent} ${step.description ?? ''}`),
+  ].join(' ').toLowerCase()
+
+  if (/\b(pod|printify|print|shopify|merch|apparel|shirt|product launch|catalog)\b/.test(haystack)) return 'print'
+  if (/\b(content|caption|clip|video|social|publishing|post|carousel|calendar|creative batch)\b/.test(haystack)) return 'content'
+  if (/\b(research|intelligence|youtube|competitor|market|audience|discovery|playlist)\b/.test(haystack)) return 'research'
+  if (/\b(review|growth|business|ops|operations|planning|health|brief|weekly|daily)\b/.test(haystack)) return 'operations'
+  if (/\b(email|inbox|support|triage|newsletter)\b/.test(haystack)) return 'inbox'
+  return 'other'
+}
+
 function WorkflowSection({ title, count, suffix, children }: { title: string; count: number; suffix?: string; children: React.ReactNode }) {
   return (
     <section>
@@ -515,6 +624,42 @@ function WorkflowSection({ title, count, suffix, children }: { title: string; co
       </div>
       {children}
     </section>
+  )
+}
+
+function WorkflowFolderCard({
+  folder,
+  selected,
+  onSelect,
+}: {
+  folder: WorkflowFolder
+  selected: boolean
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`group flex min-h-[86px] items-start gap-3 rounded-[14px] border p-3 text-left transition-colors ${
+        selected
+          ? 'border-[#fb923c]/28 bg-[#f97316]/12'
+          : 'border-white/[0.07] bg-white/[0.03] hover:border-white/[0.13] hover:bg-white/[0.055]'
+      }`}
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.08] bg-black/20 text-white/58">
+        <Folder className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center justify-between gap-2">
+          <span className="truncate text-sm font-semibold text-white">{folder.title}</span>
+          <span className="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 text-[11px] text-white/42">
+            {folder.workflows.length}
+          </span>
+        </span>
+        <span className="mt-1 line-clamp-2 block text-[11.5px] leading-[17px] text-white/48">{folder.description}</span>
+      </span>
+      <ChevronRight className={`mt-2 h-4 w-4 shrink-0 text-white/30 transition-transform ${selected ? 'translate-x-0.5 text-[#fed7aa]/70' : 'group-hover:translate-x-0.5'}`} />
+    </button>
   )
 }
 
