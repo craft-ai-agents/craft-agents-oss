@@ -56,6 +56,7 @@ import RecentRunsPage from '@/pages/RecentRunsPage'
 import OutputDetailPage from '@/pages/OutputDetailPage'
 import VideoStudioPage from '@/pages/VideoStudioPage'
 import { AgentsLaunchpad } from './AgentsLaunchpad'
+import { ArtistHQHome } from './ArtistHQHome'
 import { ArtistCommandCenterHome } from './ArtistCommandCenterHome'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { SettingsPageSwitcher } from '@/pages/settings/SettingsPageSwitcher'
@@ -72,6 +73,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import { navigate, routes } from '@/lib/navigate'
+import { isArtistHQWorkspace } from '@/lib/artist-workspace'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
 import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -535,8 +537,16 @@ export function MainContentPanel({
       )
     }
 
-    // Creator Command Center replaces the empty/HNIC sessions landing surface.
-    // Specialist agent sessions still open the actual chat view.
+    // Artist HQ is the global/master workspace. Other workspaces remain
+    // campaign-specific command centers. Specialist sessions still open chat.
+    if (isArtistHQWorkspace(activeWorkspace, workspaces)) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ArtistHQHome workspaceId={activeWorkspaceId || ''} workspaceName={activeWorkspace?.name} />
+        </Panel>
+      )
+    }
+
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <ArtistCommandCenterHome workspaceId={activeWorkspaceId || ''} />

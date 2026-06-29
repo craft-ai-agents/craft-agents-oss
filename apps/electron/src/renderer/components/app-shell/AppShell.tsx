@@ -142,6 +142,7 @@ import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 import { useOutputs } from "@/hooks/useOutputs"
+import { isArtistHQWorkspace as getIsArtistHQWorkspace } from "@/lib/artist-workspace"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -840,6 +841,10 @@ function AppShellContent({
     handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, confirmDeleteAutomation,
     getAutomationHistory, handleReplayAutomation,
   } = useAutomations(activeWorkspaceId)
+  const isArtistHQWorkspace = React.useMemo(
+    () => getIsArtistHQWorkspace(activeWorkspace, workspaces),
+    [activeWorkspace, workspaces],
+  )
 
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
@@ -2364,7 +2369,7 @@ function AppShellContent({
                     // --- Campaign (Concierge) ---
                     {
                       id: "nav:chat",
-                      title: "Campaign",
+                      title: isArtistHQWorkspace ? "HQ" : "Campaign",
                       icon: MessageSquare,
                       variant: isConciergeSession ? "default" : "ghost",
                       onClick: handleChatClick,
