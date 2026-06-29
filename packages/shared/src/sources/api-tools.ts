@@ -17,6 +17,8 @@ import { isMultiHeaderCredential } from './credential-manager.ts';
 // Re-export for convenience
 export type { ApiCredential, BasicAuthCredential } from './credential-manager.ts';
 
+const API_FETCH_TIMEOUT_MS = 120_000;
+
 /**
  * Build an Authorization header value for bearer-style authentication.
  *
@@ -225,9 +227,13 @@ export function createApiTool(
 
         debug(`[api-tools] ${config.name}: ${method} ${url}`);
 
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), API_FETCH_TIMEOUT_MS);
+
         const fetchOptions: RequestInit = {
           method,
           headers,
+          signal: controller.signal,
         };
 
         // Add body for non-GET requests
@@ -245,25 +251,31 @@ export function createApiTool(
 
         debug(`[api-tools] ${config.name}: headers=${JSON.stringify(fetchOptions.headers)}, bodyLength=${fetchOptions.body ? String(fetchOptions.body).length : 0}`);
 
-        const response = await fetch(url, fetchOptions);
+        let response: Response;
+        let buffer: Buffer;
+        try {
+          response = await fetch(url, fetchOptions);
 
-        // OOM safety: reject before loading into memory
-        const contentLength = response.headers.get('content-length');
-        if (contentLength) {
-          const size = parseInt(contentLength, 10);
-          if (!isNaN(size) && size > MAX_DOWNLOAD_SIZE) {
-            return {
-              content: [{
-                type: 'text' as const,
-                text: `Response too large: ${formatBytes(size)} exceeds ${formatBytes(MAX_DOWNLOAD_SIZE)} limit. Use a streaming download tool for large files.`,
-              }],
-              isError: true,
-            };
+          // OOM safety: reject before loading into memory
+          const contentLength = response.headers.get('content-length');
+          if (contentLength) {
+            const size = parseInt(contentLength, 10);
+            if (!isNaN(size) && size > MAX_DOWNLOAD_SIZE) {
+              return {
+                content: [{
+                  type: 'text' as const,
+                  text: `Response too large: ${formatBytes(size)} exceeds ${formatBytes(MAX_DOWNLOAD_SIZE)} limit. Use a streaming download tool for large files.`,
+                }],
+                isError: true,
+              };
+            }
           }
-        }
 
-        // Load response as raw buffer — guardLargeResult handles binary detection
-        const buffer = Buffer.from(await response.arrayBuffer());
+          // Load response as raw buffer — guardLargeResult handles binary detection
+          buffer = Buffer.from(await response.arrayBuffer());
+        } finally {
+          clearTimeout(timeout);
+        }
 
         // Check for error responses first (errors are always text)
         if (!response.ok) {

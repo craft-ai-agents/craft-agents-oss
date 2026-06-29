@@ -722,7 +722,7 @@ export function getNotebookLmSource(workspaceId: string, workspaceRootPath: stri
     mcp: {
       transport: 'stdio',
       command: 'npx',
-      args: ['-y', 'notebooklm-mcp@latest'],
+      args: ['-y', 'notebooklm-mcp@2.0.0'],
       authType: 'none',
     },
     tagline: 'Query and manage Google NotebookLM notebooks through a local MCP browser automation server.',
@@ -740,7 +740,7 @@ export function getNotebookLmSource(workspaceId: string, workspaceRootPath: stri
       raw: [
         '# NotebookLM',
         '',
-        'Runs the local `notebooklm-mcp` server with `npx -y notebooklm-mcp@latest`.',
+        'Runs the local `notebooklm-mcp` server with `npx -y notebooklm-mcp@2.0.0`.',
         '',
         'Use this source for grounded NotebookLM queries against notebooks and uploaded sources.',
         '',

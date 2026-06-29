@@ -787,6 +787,10 @@ async function buildServersFromSources(
   return result
 }
 
+function formatSourceBuildErrors(errors: Array<{ sourceSlug: string; error: string }>): string {
+  return errors.map(error => `${error.sourceSlug}: ${error.error}`).join('; ')
+}
+
 /**
  * Result of OAuth token refresh operation.
  */
@@ -5950,7 +5954,16 @@ user a clickable link to where the thing now lives.`
       const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
       const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, managed.agent.getSummarizeCallback())
       if (errors.length > 0) {
-        sessionLog.warn(`Source build errors:`, errors)
+        const message = `Failed to build enabled source tools: ${formatSourceBuildErrors(errors)}`
+        sessionLog.warn(message, errors)
+        managed.enabledSourceSlugs = Array.from(previousSlugs)
+        this.persistSession(managed)
+        this.sendEvent({
+          type: 'sources_changed',
+          sessionId,
+          enabledSourceSlugs: managed.enabledSourceSlugs,
+        }, managed.workspace.id)
+        throw new Error(message)
       }
 
       // Set all sources for context (agent sees full list with descriptions, including built-ins)
@@ -6973,6 +6986,7 @@ user a clickable link to where the thing now lives.`
     // Pre-enable sources required by invoked skills (Issue #249)
     // This eliminates the two-turn penalty where the agent discovers missing sources at runtime.
     // Uses targeted loadSkillBySlug() instead of loadAllSkills() to avoid O(N) filesystem scans.
+    const preEnabledSourceSlugs: string[] = []
     if (options?.skillSlugs?.length) {
       try {
         const workspaceRoot = managed.workspace.rootPath
@@ -7014,6 +7028,7 @@ user a clickable link to where the thing now lives.`
 
           if (toEnable.length > 0) {
             managed.enabledSourceSlugs = [...(managed.enabledSourceSlugs || []), ...toEnable]
+            preEnabledSourceSlugs.push(...toEnable)
             sessionLog.info(`Pre-enabled sources for skill invocation: ${toEnable.join(', ')}`)
             this.persistSession(managed)
             this.sendEvent({
@@ -7050,7 +7065,26 @@ user a clickable link to where the thing now lives.`
       const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
       const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, agent.getSummarizeCallback())
       if (errors.length > 0) {
-        sessionLog.warn(`Source build errors:`, errors)
+        const message = `Failed to build enabled source tools: ${formatSourceBuildErrors(errors)}`
+        sessionLog.warn(message, errors)
+
+        if (preEnabledSourceSlugs.length > 0) {
+          const rollback = new Set(preEnabledSourceSlugs)
+          managed.enabledSourceSlugs = (managed.enabledSourceSlugs || []).filter(slug => !rollback.has(slug))
+          this.persistSession(managed)
+          this.sendEvent({
+            type: 'sources_changed',
+            sessionId,
+            enabledSourceSlugs: managed.enabledSourceSlugs,
+          }, managed.workspace.id)
+        }
+
+        this.sendEvent({ type: 'error', sessionId, error: message }, managed.workspace.id)
+        sendSpan.mark('sources.build_failed')
+        sendSpan.setMetadata('error', message)
+        sendSpan.end()
+        this.onProcessingStopped(sessionId, 'error')
+        return
       }
 
       // Proactive OAuth token refresh before applying servers to agent.
@@ -9322,9 +9356,32 @@ user a clickable link to where the thing now lives.`
     this.pendingPermissionRequests.clear()
     this.adminRememberApprovals.clear()
 
-    // Clean up session-scoped tool callbacks for all sessions
-    for (const sessionId of this.sessions.keys()) {
+    // Clean up live session resources. This mirrors the non-destructive parts of
+    // deleteSession() so app shutdown does not orphan MCP subprocesses.
+    for (const [sessionId, managed] of this.sessions) {
       unregisterSessionScopedToolCallbacks(sessionId)
+
+      if (this.browserPaneManager) {
+        this.browserPaneManager.destroyForSession(sessionId)
+      }
+
+      if (managed.agent) {
+        try {
+          managed.agent.dispose()
+        } catch (error) {
+          sessionLog.warn(`Failed to dispose agent for ${sessionId}:`, error)
+        }
+      } else if (managed.mcpPool) {
+        managed.mcpPool.disconnectAll().catch(error => {
+          sessionLog.warn(`Failed to disconnect MCP pool for ${sessionId}:`, error)
+        })
+      }
+
+      if (managed.poolServer) {
+        managed.poolServer.stop().catch(error => {
+          sessionLog.warn(`Failed to stop pool server for ${sessionId}:`, error)
+        })
+      }
     }
 
     sessionLog.info('Cleanup complete')

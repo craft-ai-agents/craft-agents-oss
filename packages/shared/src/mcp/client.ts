@@ -10,6 +10,10 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
+const MCP_CONNECT_TIMEOUT_MS = 30_000;
+const MCP_LIST_TOOLS_TIMEOUT_MS = 30_000;
+const MCP_CALL_TOOL_TIMEOUT_MS = 120_000;
+
 /**
  * HTTP transport config for remote MCP servers
  */
@@ -59,6 +63,22 @@ const BLOCKED_ENV_VARS = [
   'STRIPE_SECRET_KEY',
   'NPM_TOKEN',
 ];
+
+function timeoutError(label: string, ms: number): Error {
+  return new Error(`${label} timed out after ${ms}ms`);
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(timeoutError(label, ms)), ms);
+    });
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 /**
  * Interface for clients managed by McpClientPool.
@@ -130,11 +150,11 @@ export class CraftMcpClient {
   async connect(): Promise<void> {
     if (this.connected) return;
 
-    await this.client.connect(this.transport);
+    await withTimeout(this.client.connect(this.transport), MCP_CONNECT_TIMEOUT_MS, 'MCP connect');
 
     // Verify connection works by listing tools
     try {
-      await this.client.listTools();
+      await withTimeout(this.client.listTools(), MCP_LIST_TOOLS_TIMEOUT_MS, 'MCP listTools health check');
     } catch (error) {
       await this.client.close();
       throw new Error(
@@ -150,7 +170,7 @@ export class CraftMcpClient {
       await this.connect();
     }
 
-    const result = await this.client.listTools();
+    const result = await withTimeout(this.client.listTools(), MCP_LIST_TOOLS_TIMEOUT_MS, 'MCP listTools');
     return result.tools;
   }
 
@@ -159,7 +179,11 @@ export class CraftMcpClient {
       await this.connect();
     }
 
-    const result = await this.client.callTool({ name, arguments: args });
+    const result = await withTimeout(
+      this.client.callTool({ name, arguments: args }),
+      MCP_CALL_TOOL_TIMEOUT_MS,
+      `MCP callTool(${name})`
+    );
     return result;
   }
 

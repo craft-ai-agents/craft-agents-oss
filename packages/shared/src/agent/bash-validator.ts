@@ -133,9 +133,96 @@ interface ScriptNode extends ASTNode {
  */
 const DANGEROUS_COMMAND_ARGS: Record<string, Set<string>> = {
   find: new Set(['-exec', '-execdir', '-ok', '-okdir', '-delete']),
+  git: new Set([
+    '-c',
+    '--config',
+    '--exec-path',
+    '--upload-pack',
+    '--receive-pack',
+    '--output',
+  ]),
 };
 
 const AWK_COMMANDS = new Set(['awk', 'gawk', 'mawk', 'nawk']);
+const SENSITIVE_READ_COMMANDS = new Set([
+  'cat',
+  'bat',
+  'less',
+  'more',
+  'head',
+  'tail',
+  'nl',
+  'grep',
+  'rg',
+  'ag',
+  'ack',
+  'find',
+  'fd',
+]);
+
+const SENSITIVE_PATH_PATTERNS = [
+  /(^|\/|~\/)\.ssh(\/|$)/i,
+  /(^|\/)id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/i,
+  /(^|\/|~\/)\.aws(\/|$)/i,
+  /(^|\/|~\/)\.gnupg(\/|$)/i,
+  /(^|\/|~\/)\.kube(\/|$)/i,
+  /(^|\/|~\/)\.docker\/config\.json$/i,
+  /(^|\/|~\/)\.config\/gh(\/|$)/i,
+  /(^|\/|~\/)\.npmrc$/i,
+  /(^|\/|~\/)\.pypirc$/i,
+  /(^|\/|~\/)\.netrc$/i,
+  /(^|\/)\.env($|\.local$|\.production$|\.development$|\.test$)/i,
+  /(^|\/)(credentials|secrets?)\.(json|ya?ml|toml|ini|env)$/i,
+];
+
+function getDangerousGitReason(commandParts: string[]): string | null {
+  for (let i = 1; i < commandParts.length; i += 1) {
+    const part = commandParts[i] ?? '';
+    const next = commandParts[i + 1] ?? '';
+
+    if (part === '-c' || part === '--config') {
+      const value = next.includes('=') ? next : '<missing>';
+      return `git ${part} can override runtime config (${value}) and execute commands via pager, sshCommand, hooks, fsmonitor, or external diff drivers`;
+    }
+
+    if (part.startsWith('-c') && part.length > 2) {
+      return `git -c can override runtime config (${part.slice(2)}) and execute commands`;
+    }
+
+    if (part.startsWith('--config=')) {
+      return `git --config can override runtime config (${part.slice('--config='.length)}) and execute commands`;
+    }
+
+    if (part === '--exec-path' || part.startsWith('--exec-path=')) {
+      return 'git --exec-path can redirect git helper execution to attacker-controlled programs';
+    }
+
+    if (part === '--upload-pack' || part.startsWith('--upload-pack=')) {
+      return 'git --upload-pack can execute an alternate remote helper command';
+    }
+
+    if (part === '--receive-pack' || part.startsWith('--receive-pack=')) {
+      return 'git --receive-pack can execute an alternate remote helper command';
+    }
+
+    if (part === '--output' || part.startsWith('--output=')) {
+      return 'git --output writes command output to disk and is not read-only';
+    }
+  }
+
+  return null;
+}
+
+function getSensitivePathReason(commandParts: string[]): string | null {
+  for (const part of commandParts.slice(1)) {
+    const normalized = part.replace(/\\/g, '/');
+    if (SENSITIVE_PATH_PATTERNS.some(pattern => pattern.test(normalized))) {
+      return `Reading sensitive credential path "${part}" requires explicit approval`;
+    }
+  }
+
+  return null;
+}
 
 function getDangerousAwkReason(commandParts: string[]): string | null {
   // commandParts[0] is awk/gawk/mawk/nawk - inspect script/args only
@@ -383,6 +470,38 @@ function validateCommand(
             type: 'unsafe_command',
             command: commandParts.join(' '),
             explanation: awkReason,
+          },
+        };
+      }
+    }
+
+    if (normalizedCmd === 'git') {
+      const gitReason = getDangerousGitReason(commandParts);
+      if (gitReason) {
+        const command = commandParts.join(' ');
+        results.push({ command, allowed: false, reason: gitReason });
+        return {
+          allowed: false,
+          reason: {
+            type: 'unsafe_command',
+            command,
+            explanation: gitReason,
+          },
+        };
+      }
+    }
+
+    if (SENSITIVE_READ_COMMANDS.has(normalizedCmd)) {
+      const sensitiveReason = getSensitivePathReason(commandParts);
+      if (sensitiveReason) {
+        const command = commandParts.join(' ');
+        results.push({ command, allowed: false, reason: sensitiveReason });
+        return {
+          allowed: false,
+          reason: {
+            type: 'unsafe_command',
+            command,
+            explanation: sensitiveReason,
           },
         };
       }

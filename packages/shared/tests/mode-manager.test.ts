@@ -606,6 +606,14 @@ describe('isReadOnlyBashCommand (full integration)', () => {
       'find . -name "*.log" -delete',
       'find /tmp -name "*.log" -exec cat {} \\; -exec rm {} \\;',
       'find . -type f -exec chmod 777 {} +',
+      'git -c core.pager=id log',
+      'git -c core.sshCommand=id ls-remote',
+      'git -c diff.external=id diff',
+      'git --config core.pager=id log',
+      'git --exec-path /tmp status',
+      'git --upload-pack id ls-remote origin',
+      'git --receive-pack id ls-remote origin',
+      'git status --output /tmp/status.txt',
     ];
 
     for (const cmd of dangerousArgCommands) {
@@ -613,6 +621,30 @@ describe('isReadOnlyBashCommand (full integration)', () => {
         expect(isReadOnlyBashCommandWithConfig(cmd, TEST_MODE_CONFIG)).toBe(false);
       });
     }
+  });
+
+  describe('sensitive credential paths (should require approval)', () => {
+    const sensitiveReadCommands = [
+      'cat ~/.ssh/id_rsa',
+      'cat /Users/test/.ssh/id_ed25519',
+      'head /Users/test/.aws/credentials',
+      'grep -r AWS_SECRET /Users/test/.aws',
+      'rg token ~/.config/gh',
+      'cat /Users/test/.docker/config.json',
+      'less /Users/test/.npmrc',
+      'cat .env',
+      'cat ./secrets.json',
+    ];
+
+    for (const cmd of sensitiveReadCommands) {
+      it(`should block sensitive read: ${cmd}`, () => {
+        expect(isReadOnlyBashCommandWithConfig(cmd, TEST_MODE_CONFIG)).toBe(false);
+      });
+    }
+
+    it('should still allow documentation env examples', () => {
+      expect(isReadOnlyBashCommandWithConfig('cat .env.example', TEST_MODE_CONFIG)).toBe(true);
+    });
   });
 
   describe('find with safe arguments (should be allowed)', () => {
