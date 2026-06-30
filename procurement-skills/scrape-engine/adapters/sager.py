@@ -132,9 +132,13 @@ async def extract(ctx: Any, part: str) -> list[Row]:
     relevant = [l for l in uniq if norm and norm in re.sub(r"[^a-z0-9]", "", l.lower())]
     if uniq and not relevant:
         return [Row(part=part, platform="sager", product_url=search_url,
+                    availability_status="no_result",
                     note="（Sager 无精确匹配，返回的是默认推荐，判无此料）")]
+    if not relevant:
+        return [Row(part=part, platform="sager", product_url=search_url,
+                    availability_status="no_result", note="（无命中）")]
     return [Row(part=part, platform="sager", product_url=search_url,
-                note="\n".join(relevant) or "（无命中）")]
+                note="\n".join(relevant))]
 
 
 ADAPTER = Adapter(

@@ -18,10 +18,9 @@ and there are multiple concurrent hops. defense=None (the old code did a plain
 launch with no anti-bot warmup/retry); needs_proxy=False (old code: direct,
 机房 IP 实测可达 — no proxy was used).
 
-This is a body/text-dump style port: the joined pipe-lines go into Row.note,
-exactly mirroring the old {"text": "\\n".join(lines)} return. Per the contract,
-extraction correctness is NOT re-verified this round — the JS is lifted
-byte-faithfully from the old p.evaluate blocks.
+The same-origin JSON endpoints are mapped into Row fields instead of flattened
+into note text: mpn, brand, stock/in_stock, first price break, datasheet,
+product URL, and description.
 """
 from __future__ import annotations
 
@@ -31,7 +30,7 @@ import sys
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from contract import Adapter, Row  # noqa: E402
+from contract import Adapter, Row, make_break  # noqa: E402
 from engine import q  # noqa: E402
 
 # --- Rochester / Salesforce Commerce endpoints (lifted verbatim) ---
@@ -50,6 +49,37 @@ _ROC_PRICE_EP = (f"/webruntime/api/services/data/v67.0/commerce/webstores/{_ROC_
 _LIMIT = int(os.environ.get("ROCHESTER_LIMIT", "5"))
 
 
+def _num(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+    m = re.search(r"[\d,.]+", value)
+    if not m:
+        return None
+    try:
+        return float(m.group(0).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _stock(value: Any) -> tuple[int | None, bool | None]:
+    if isinstance(value, int):
+        return value, value > 0
+    if not isinstance(value, str):
+        return None, None
+    if re.search(r"out\s+of\s+stock|no\s+stock|unavailable", value, re.I):
+        return 0, False
+    m = re.search(r"[\d,]+", value)
+    if not m:
+        return None, None
+    try:
+        qty = int(m.group(0).replace(",", ""))
+    except ValueError:
+        return None, None
+    return qty, qty > 0
+
+
 def url(part: str) -> str:
     return f"{_ROC_BASE}/search?q={q(part)}"
 
@@ -58,7 +88,6 @@ async def extract(ctx: Any, part: str) -> list[Row]:
     page = ctx.page
     result_url = url(part)
     limit = _LIMIT
-    lines: list[str] = []
 
     # hop 1: homepage goto to seed the Salesforce guest session, then 2s dwell.
     # ctx.goto swallows nav timeouts (old code wrapped goto in try/except + 2s wait).
@@ -89,7 +118,7 @@ async def extract(ctx: Any, part: str) -> list[Row]:
     )
     if not search_result.get("ok") or not search_result.get("products"):
         return [Row(part=part, platform="rochester", product_url=result_url,
-                    note="（无命中）")]
+                    availability_status="no_result", note="（无命中）")]
 
     products = search_result["products"][:limit]
     total = search_result.get("total", 0)
@@ -115,22 +144,33 @@ async def extract(ctx: Any, part: str) -> list[Row]:
         }))""", detail_ids)
     prices = {pr["id"]: pr for pr in (prices_raw or [])}
 
+    rows: list[Row] = []
     for prod in products:
         pid = prod["id"]
         det = details.get(pid, {})
-        price_val = prices.get(pid, {}).get("price")
+        price_val = _num(prices.get(pid, {}).get("price"))
         desc = re.sub(r"<[^>]+>", "", prod.get("desc", "")).strip()
-        prod_link = det.get("datasheet") or f"{_ROC_BASE}/product/{prod.get('urlName') or pid}"
-        row = " | ".join(x for x in [
-            prod["sku"] or prod["name"], det.get("mfr") or "",
-            desc[:60] if desc else None, det.get("stock") or "Unknown",
-            f"${price_val} USD" if price_val else "询价", prod_link] if x)
-        lines.append(row)
+        stock_text = det.get("stock")
+        stock, in_stock = _stock(stock_text)
+        rows.append(Row(
+            part=part,
+            platform="rochester",
+            mpn=prod.get("sku") or prod.get("name"),
+            brand=det.get("mfr") or None,
+            stock=stock,
+            in_stock=in_stock,
+            price_breaks=[make_break(1, usd=price_val)] if price_val is not None else [],
+            datasheet=det.get("datasheet") or None,
+            product_url=f"{_ROC_BASE}/product/{prod.get('urlName') or pid}",
+            description=desc[:240] if desc else None,
+            note=stock_text if isinstance(stock_text, str) else None,
+        ))
     if total > limit:
-        lines.append(f"（共 {total} 个型号，显示前 {len(products)} 条）")
+        for row in rows:
+            row.note = "; ".join(x for x in [row.note, f"共 {total} 个型号，显示前 {len(products)} 条"] if x)
 
-    return [Row(part=part, platform="rochester", product_url=result_url,
-                note="\n".join(lines) if lines else "（无命中）")]
+    return rows or [Row(part=part, platform="rochester", product_url=result_url,
+                        availability_status="no_result", note="（无命中）")]
 
 
 ADAPTER = Adapter(

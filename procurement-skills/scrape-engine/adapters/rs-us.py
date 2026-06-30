@@ -14,12 +14,17 @@ Magento + GroupBy 搜索 API + DataDome 反爬。旧脚本拦 `groupby/search/en
 from __future__ import annotations
 
 import os
+import re
 import sys
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from contract import Adapter, Defense, Row, make_break  # noqa: E402
 from engine import q  # noqa: E402
+
+
+def _norm(value: str | None) -> str:
+    return re.sub(r"[^A-Z0-9]", "", value or "")
 
 
 def _row(rec: dict, part: str) -> Row:
@@ -60,7 +65,15 @@ def extract(payload: Any, part: str) -> list[Row]:
     if not isinstance(payload, dict):
         return []
     # old: (r.json() or {}).get("records") or []
-    return [_row(rec, part) for rec in (payload.get("records") or [])]
+    rows = [_row(rec, part) for rec in (payload.get("records") or [])]
+    part_key = _norm(part)
+    return [
+        row for row in rows
+        if part_key and (
+            part_key in _norm(row.mpn)
+            or (_norm(row.mpn) and _norm(row.mpn) in part_key)
+        )
+    ]
 
 
 ADAPTER = Adapter(
@@ -75,4 +88,5 @@ ADAPTER = Adapter(
     defense=Defense(profile="datadome", warmup_url=None, retries=3,
                     settle_wait_ms=5000),
     host_key="us.rs-online.com",
+    exclusive=True,
 )

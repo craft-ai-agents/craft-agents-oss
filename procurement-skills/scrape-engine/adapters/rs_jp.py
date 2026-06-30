@@ -12,4 +12,5 @@ ADAPTER = make_generic(
     'rs-jp',
     'https://jp.rs-online.com/web/c/?searchTerm={q}',
     True,
+    exclusive=True,
 )

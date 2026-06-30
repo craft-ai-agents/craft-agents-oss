@@ -89,8 +89,11 @@ async def extract(ctx: Any, part: str) -> list[Row]:
             pass
 
     uniq = list(dict.fromkeys(l for l in lines if l))  # limit not threaded in script mode
+    if not uniq:
+        return [Row(part=part, platform="ocpneumatics", product_url=result_url,
+                    availability_status="no_result", note="（OCP 无命中）")]
     return [Row(part=part, platform="ocpneumatics", product_url=result_url,
-                note="\n".join(uniq) or "（OCP 无命中）")]
+                note="\n".join(uniq))]
 
 
 ADAPTER = Adapter(

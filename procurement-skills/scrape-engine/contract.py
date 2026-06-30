@@ -175,6 +175,9 @@ class Adapter:
     # which host to serialize on (站内串行). Defaults to url()'s host; set when
     # warmup/script hops a DIFFERENT host than the search URL.
     host_key: Optional[str] = None
+    # Runtime isolation hint for fragile anti-bot sites. When True, L1 gives the
+    # task the whole gate so no other platform shares the browser/proxy pressure.
+    exclusive: bool = False
 
 
 __all__ = [

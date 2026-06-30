@@ -30,16 +30,80 @@ Ported from legacy core platform scripts/cloak_search.py (scrape_master).
 from __future__ import annotations
 
 import os
+import re
 import sys
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from contract import Adapter, Defense, Row  # noqa: E402
+from contract import Adapter, Defense, Row, make_break  # noqa: E402
 from engine import q  # noqa: E402
 
 
 def url(part: str) -> str:
     return f"https://www.masterelectronics.com/en/keywordsearch?text={q(part)}"
+
+
+def _norm(value: str | None) -> str:
+    return re.sub(r"[^A-Z0-9]", "", (value or "").upper())
+
+
+def _related(part: str, mpn: str | None) -> bool:
+    p = _norm(part)
+    m = _norm(mpn)
+    if not p or not m:
+        return False
+    return p in m or m in p or p.lstrip("0") in m.lstrip("0") or m.lstrip("0") in p.lstrip("0")
+
+
+def _stock(value: str | None) -> int | None:
+    if not value:
+        return None
+    digits = re.sub(r"\D", "", value)
+    return int(digits) if digits else None
+
+
+def _price_breaks(segment: str) -> list[dict]:
+    breaks: list[dict] = []
+    for qty, price in re.findall(r"(\d[\d,]*)\s+\$([\d,.]+)", segment):
+        qn = _stock(qty)
+        if qn is None:
+            continue
+        try:
+            breaks.append(make_break(qn, usd=float(price.replace(",", ""))))
+        except ValueError:
+            continue
+    return breaks
+
+
+def _parse_hit(text: str, part: str, final_url: str) -> list[Row]:
+    parsed: list[Row] = []
+    for line in [x for x in text.splitlines() if x.strip()]:
+        m = re.search(
+            r"(?:DATA SHEET\s+)?(?P<mpn>\S+)\s+(?P<brand>.*?)\s+"
+            r"(?P<category>Wire & PCB Connectors|Connectors|Semiconductors|Passive Components)\s+"
+            r"(?P<desc>.*?)\s+VIEW PRODUCT\s+"
+            r"(?:(?:IN STOCK:\s*(?P<stock>[\d,]+)\s+(?P<lead>Can Ship immediately))|(?P<lead2>\d+\s+Weeks))\s+"
+            r"(?P<prices>(?:\d[\d,]*\s+\$[\d,.]+\s*)+)",
+            line,
+            re.I,
+        )
+        if not m or not _related(part, m.group("mpn")):
+            continue
+        stock = _stock(m.group("stock"))
+        parsed.append(Row(
+            part=part,
+            platform="master",
+            mpn=m.group("mpn"),
+            brand=m.group("brand").strip() or None,
+            category=m.group("category"),
+            description=m.group("desc").strip() or None,
+            stock=stock,
+            in_stock=(stock > 0) if stock is not None else None,
+            price_breaks=_price_breaks(m.group("prices")),
+            lead_time=m.group("lead") or m.group("lead2"),
+            product_url=final_url,
+        ))
+    return parsed
 
 
 async def extract(page: Any, part: str) -> list[Row]:
@@ -62,8 +126,12 @@ async def extract(page: Any, part: str) -> list[Row]:
         final_url = page.url
     except Exception:
         final_url = url(part)
+    parsed = _parse_hit(text, part, final_url)
+    if parsed:
+        return parsed
+    status = "no_result" if not hits else None
     return [Row(part=part, platform="master", product_url=final_url,
-                note=text[:4000], in_stock=bool(hits) or None)]
+                availability_status=status, note=text[:4000])]
 
 
 ADAPTER = Adapter(

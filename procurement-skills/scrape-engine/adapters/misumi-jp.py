@@ -80,4 +80,5 @@ ADAPTER = Adapter(
     url=url,
     extract=extract,
     host_key="jp.misumi-ec.com",
+    exclusive=True,
 )

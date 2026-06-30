@@ -61,7 +61,7 @@ async def extract(ctx: Any, part: str) -> list[Row]:
         or "heilindelectronicsincproductiono0ya35k8"
     if not token:
         return [Row(part=part, platform="heilind", product_url=search_url,
-                    note="（无 token，无法搜索）")]
+                    blocked=True, note="（无 token，无法搜索）")]
 
     endpoint = f"https://{org_id}.org.coveo.com/rest/search/v2?organizationId={org_id}"
     payload = {
@@ -81,7 +81,7 @@ async def extract(ctx: Any, part: str) -> list[Row]:
         }""", [endpoint, payload, token])
     if not data or "_fetch_error" in data:
         return [Row(part=part, platform="heilind", product_url=search_url,
-                    note="（API 错误/无命中）")]
+                    availability_status="no_result", note="（API 错误/无命中）")]
 
     rows: list[Row] = []
     seen: set[str] = set()
@@ -108,7 +108,7 @@ async def extract(ctx: Any, part: str) -> list[Row]:
             break
     if not rows:
         return [Row(part=part, platform="heilind", product_url=search_url,
-                    note="（无命中）")]
+                    availability_status="no_result", note="（无命中）")]
     return rows
 
 

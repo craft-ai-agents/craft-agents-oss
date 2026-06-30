@@ -7,18 +7,15 @@ api_search.py (search_mouser), faithfully:
   -海外 API 出口走代理: the old script relied on urllib honoring *_PROXY env;
     here we pass MIHOMO explicitly to httpx (same as the digikey adapter).
 
-Field mapping into the structured Row (NO string flattening): the old code took
-PriceBreaks[0].Price as a single `price` — lifted as one price_break at qty 1.
-NOTE: old `stock` was p.get("Availability"), a free-text string (e.g. "1234 In
-Stock"), assigned to a dict field with no int coercion. Row.stock is Optional[int];
-to stay byte-faithful we keep the raw value out of the int field and pass it
-through only when it is an int, else leave stock None (the old extractor did no
-coercion — this is the closest typed-Row mapping; raw string would violate the
-int contract).
+Field mapping into the structured Row (NO string flattening): PriceBreaks[0].Price
+is parsed into one price break at qty 1. Availability is often free text such as
+"1,234 In Stock"; keep the original text in note and coerce the leading quantity
+into Row.stock when present.
 """
 from __future__ import annotations
 
 import os
+import re
 import urllib.parse
 from typing import Any
 
@@ -30,6 +27,34 @@ from contract import Adapter, Row, make_break  # noqa: E402
 
 TIMEOUT = 12
 MIHOMO = os.environ.get("MIHOMO_PROXY", "http://127.0.0.1:7899")
+
+
+def _num(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+    m = re.search(r"[\d,.]+", value)
+    if not m:
+        return None
+    try:
+        return float(m.group(0).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _stock(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if not isinstance(value, str):
+        return None
+    m = re.search(r"([\d,]+)\s*(?:In\s+Stock|Stock|Available)", value, re.I)
+    if not m:
+        return None
+    try:
+        return int(m.group(1).replace(",", ""))
+    except ValueError:
+        return None
 
 
 async def fetch(part: str, limit: int) -> Any:
@@ -58,10 +83,9 @@ def extract(payload: Any, part: str) -> list[Row]:
     limit = len((payload.get("SearchResults") or {}).get("Parts") or [])
     for p in ((payload.get("SearchResults") or {}).get("Parts") or [])[:limit]:
         breaks_raw = p.get("PriceBreaks") or []
-        price = breaks_raw[0].get("Price") if breaks_raw else None
-        # NOTE: old `stock` = p.get("Availability") is free-text; keep only if int.
+        price = _num(breaks_raw[0].get("Price")) if breaks_raw else None
         avail = p.get("Availability")
-        stock = avail if isinstance(avail, int) else None
+        stock = _stock(avail)
         rows.append(Row(
             part=part,
             platform="mouser",
@@ -72,6 +96,8 @@ def extract(payload: Any, part: str) -> list[Row]:
             price_breaks=[make_break(1, usd=price)] if price is not None else [],
             datasheet=p.get("DataSheetUrl"),
             product_url=p.get("ProductDetailUrl"),
+            in_stock=(stock > 0) if stock is not None else None,
+            note=avail if isinstance(avail, str) else None,
         ))
     return rows
 

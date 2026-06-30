@@ -21,25 +21,52 @@ Ported from legacy extended-source cloak_search.py
   a single goto(search) and would miss it. script mode lets the adapter wire
   ctx.on_response BEFORE its own gotos and drive the two-hop nav itself.
 
-  Structure: this is a BODY-DUMP-style port — the old code produced ' | '-joined
-  text lines, not structured fields. We preserve that exactly and put the joined
-  text in Row.note (NOT structured per-row fields), per the contract's HONEST
-  structure note. The per-record line-formatting (goodsName / brandName / 库存 /
-  ¥price / 封装|pack / link, and the price/pluid fallbacks) is lifted verbatim.
+  Structure: the captured JSON records are now mapped into Row fields
+  (mpn/brand/package/stock/price/product_url) instead of being flattened into
+  note text.
 """
 from __future__ import annotations
 
 import os
+import re
 import sys
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from contract import Adapter, Row  # noqa: E402
+from contract import Adapter, Row, make_break  # noqa: E402
 from engine import q  # noqa: E402
 
 
 def url(part: str) -> str:
     return f"https://www.jbchip.com/ProductDetailSearch?keywords={q(part)}&searchFieldType=0"
+
+
+def _num(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+    m = re.search(r"[\d,.]+", value)
+    if not m:
+        return None
+    try:
+        return float(m.group(0).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _stock(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if not isinstance(value, str):
+        return None
+    m = re.search(r"[\d,]+", value)
+    if not m:
+        return None
+    try:
+        return int(m.group(0).replace(",", ""))
+    except ValueError:
+        return None
 
 
 async def extract(ctx: Any, part: str) -> list[Row]:
@@ -49,7 +76,7 @@ async def extract(ctx: Any, part: str) -> list[Row]:
     each captured response with the lifted line-formatting logic."""
     page = ctx.page
     result_url = url(part)
-    lines: list[str] = []
+    rows: list[Row] = []
     get_captured = ctx.on_response("/api/item/goods/v1/")
 
     # hop 1: boot Vue Router (old: goto root, 3s dwell)
@@ -64,26 +91,40 @@ async def extract(ctx: Any, part: str) -> list[Row]:
         try:
             d = await r.json()
             for rec in (d.get("data") or {}).get("records") or []:
-                stock = str(rec.get("goodsNumber") or rec.get("ty_mall_goods_number") or 0)
+                stock = _stock(rec.get("goodsNumber") or rec.get("ty_mall_goods_number"))
                 price = rec.get("stepMinPrices") or ""
                 if not price:
                     dp = rec.get("discountPrice") or {}
                     if dp:
                         price = str(min(dp.values(), key=lambda x: float(x) if x else 9999))
+                price_num = _num(price)
                 pluid = rec.get("pluid") or rec.get("ty_mall_goods_id") or ""
                 link = f"https://www.jbchip.com/ProductDetail/{pluid}" if pluid else result_url
-                row = " | ".join(x for x in [
-                    rec.get("goodsName") or "", rec.get("brandName") or "",
-                    f"库存{stock}", f"¥{price}" if price else "",
-                    rec.get("封装") or rec.get("pack") or "", link] if x)
-                if row:
-                    lines.append(row)
+                model = rec.get("goodsName") or rec.get("pro_name") or rec.get("model")
+                brand = rec.get("brandName") or rec.get("brand_name")
+                package = rec.get("封装") or rec.get("pack")
+                if model or brand or stock is not None or price_num is not None:
+                    rows.append(Row(
+                        part=part,
+                        platform="jbchip",
+                        mpn=model or None,
+                        brand=brand or None,
+                        package=package or None,
+                        stock=stock,
+                        in_stock=(stock > 0) if stock is not None else None,
+                        price_breaks=[make_break(1, rmb=price_num)] if price_num is not None else [],
+                        product_url=link,
+                    ))
         except Exception:
             pass
 
-    uniq = list(dict.fromkeys(l for l in lines if l))
-    return [Row(part=part, platform="jbchip", product_url=result_url,
-                note="\n".join(uniq) or "（无命中）")]
+    uniq: dict[tuple, Row] = {}
+    for row in rows:
+        uniq.setdefault((row.mpn, row.brand, row.package, row.stock, row.product_url), row)
+    return list(uniq.values()) or [
+        Row(part=part, platform="jbchip", product_url=result_url,
+            availability_status="no_result", note="（无命中）")
+    ]
 
 
 ADAPTER = Adapter(

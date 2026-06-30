@@ -295,6 +295,8 @@ async def run_batch(
         process) charges FRESH_BROWSER_PERMITS so the gate bounds RSS, not just
         count; capped at gate so a single such task can never deadlock when
         FRESH_BROWSER_PERMITS > gate."""
+        if a.exclusive:
+            return gate
         if uses_fresh_browser(a):
             return min(FRESH_BROWSER_PERMITS, gate)
         return 1

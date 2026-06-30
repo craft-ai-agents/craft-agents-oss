@@ -18,12 +18,27 @@ pipe string (lead_time/stock/etc), per the L3 rewrite goal.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from contract import Adapter, Row  # noqa: E402
 from engine import q  # noqa: E402
+
+
+def _norm(value: str | None) -> str:
+    return re.sub(r"[^A-Z0-9]", "", (value or "").upper())
+
+
+def _related(part: str, value: str | None) -> bool:
+    p = _norm(part)
+    v = _norm(value)
+    if not p or not v:
+        return False
+    if len(p) < 4 or len(v) < 4:
+        return p == v
+    return p in v or v in p or p.lstrip("0") in v.lstrip("0") or v.lstrip("0") in p.lstrip("0")
 
 
 def _row(s: dict, part: str) -> Row:
@@ -69,6 +84,13 @@ def extract(payload: Any, part: str) -> list[Row]:
     seen: set = set()
     for s in (payload.get("data") or {}).get("seriesList") or []:
         r = _row(s, part)
+        if not (
+            _related(part, r.mpn)
+            or _related(part, s.get("seriesCode"))
+            or _related(part, s.get("partNumber"))
+            or _related(part, s.get("brandName"))
+        ):
+            continue
         key = (r.mpn, r.brand, r.product_url)
         if key in seen:                 # de-dup like old dict.fromkeys
             continue
@@ -86,4 +108,5 @@ ADAPTER = Adapter(
     url=lambda part: f"https://www.misumi.com.cn/vona2/result/?Keyword={q(part)}&field=@search",
     extract=extract,
     host_key="www.misumi.com.cn",
+    exclusive=True,
 )

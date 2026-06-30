@@ -142,4 +142,5 @@ ADAPTER = Adapter(
         warmup_url="https://www.avnet.com/americas/",
     ),
     host_key="www.avnet.com",
+    exclusive=True,
 )

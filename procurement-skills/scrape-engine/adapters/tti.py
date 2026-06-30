@@ -38,16 +38,80 @@ Ported from legacy extended-source cloak_search.py
 from __future__ import annotations
 
 import os
+import re
 import sys
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from contract import Adapter, Defense, Row  # noqa: E402
+from contract import Adapter, Defense, Row, make_break  # noqa: E402
 from engine import q  # noqa: E402
 
 
 def url(part: str) -> str:
     return f"https://www.tti.com/content/ttiinc/en/apps/part-search.html?q={q(part)}"
+
+
+def _norm(value: str | None) -> str:
+    return re.sub(r"[^A-Z0-9]", "", (value or "").upper())
+
+
+def _related(part: str, value: str | None) -> bool:
+    p = _norm(part)
+    v = _norm(value)
+    if not p or not v:
+        return False
+    return p in v or v in p or p.lstrip("0") in v.lstrip("0") or v.lstrip("0") in p.lstrip("0")
+
+
+def _int(value: str | None) -> int | None:
+    if not value:
+        return None
+    digits = re.sub(r"\D", "", value)
+    return int(digits) if digits else None
+
+
+def _float(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return float(value.replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _parse_rows(text: str, part: str, final_url: str) -> list[Row]:
+    rows: list[Row] = []
+    for block in re.split(r"\bCompare\s+Datasheet\s+", text, flags=re.I)[1:]:
+        head = re.search(
+            r"Mfr:(?P<mfr>\S+)\s+TTI:(?P<tti>.*?)\s+(?P<brand>Molex|TE Connectivity|Amphenol|"
+            r"Hirose|JST|Phoenix Contact|Samtec|Cinch|CUI Devices|Bel|Littelfuse|Vishay)\s+"
+            r"(?P<body>.*?)\s+(?P<stock>\d[\d,]*)In Stock\s+Tariff May Apply\s+"
+            r"(?P<qty>\d[\d,]*)\s+\$(?P<price>[\d,.]+)",
+            block,
+            re.I,
+        )
+        if not head:
+            continue
+        mpn = head.group("tti").strip()
+        mfr = head.group("mfr").strip()
+        if not (_related(part, mpn) or _related(part, mfr)):
+            continue
+        stock = _int(head.group("stock"))
+        qty = _int(head.group("qty"))
+        price = _float(head.group("price"))
+        rows.append(Row(
+            part=part,
+            platform="tti",
+            mpn=mpn or mfr,
+            brand=head.group("brand"),
+            description=head.group("body").strip() or None,
+            stock=stock,
+            in_stock=(stock > 0) if stock is not None else None,
+            price_breaks=[make_break(qty or 1, usd=price)] if price is not None else [],
+            product_url=final_url,
+            note=f"Mfr:{mfr}" if mfr and mfr != mpn else None,
+        ))
+    return rows
 
 
 async def extract(page: Any, part: str) -> list[Row]:
@@ -63,8 +127,17 @@ async def extract(page: Any, part: str) -> list[Row]:
         final_url = page.url
     except Exception:
         final_url = url(part)
+    rows = _parse_rows(text, part, final_url)
+    if rows:
+        return rows
+    status = "no_result" if re.search(r"(sorry,\s+we couldn['’]t find any parts|0\s*Results)", text, re.I) else None
+    blocked = False
+    if not text or final_url.rstrip("/") == "https://www.tti.com":
+        blocked = True
     return [Row(part=part, platform="tti", product_url=final_url,
-                note=text[:4000] or "(空白/无结果——TTI 在 Incapsula 后、后端被 403，常取不到，不代表无货)")]
+                availability_status=status,
+                blocked=blocked,
+                note=text[:4000] or "(空白/未到搜索结果页——TTI 在 Incapsula 后、后端被 403，常取不到，不代表无货)")]
 
 
 ADAPTER = Adapter(
@@ -81,4 +154,5 @@ ADAPTER = Adapter(
         settle_wait_ms=3000,                # old: 3s after search goto
     ),
     host_key="www.tti.com",
+    exclusive=True,
 )

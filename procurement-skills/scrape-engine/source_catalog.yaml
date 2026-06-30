@@ -17,6 +17,7 @@ sources:
     channel_type: global_distributor
     categories: [semiconductor, passive, connector, electromechanical]
     status: enabled
+    user_status: API 源；运行环境必须提供 DIGIKEY_CLIENT_ID / DIGIKEY_CLIENT_SECRET
 
   mouser:
     display_name: Mouser
@@ -24,6 +25,7 @@ sources:
     channel_type: global_distributor
     categories: [semiconductor, passive, connector, electromechanical]
     status: enabled
+    user_status: API 源；运行环境必须提供 MOUSER_API_KEY
 
   ickey:
     display_name: 云汉芯城
@@ -70,35 +72,39 @@ sources:
     channel_type: western_distributor
     categories: [semiconductor, passive, connector]
     status: enabled
-    user_status: 直连可见 scheduled maintenance；不要强制依赖本机代理，不按反爬或无货处理
+    user_status: 官方 Product Search API 源；运行环境必须提供 NEWARK_API_KEY / ELEMENT14_API_KEY / FARNELL_API_KEY
 
   rs-uk:
     display_name: RS UK
     tier: more
     channel_type: regional_distributor
     categories: [industrial, mro, passive, electromechanical]
-    status: enabled
+    status: limited
+    user_status: DataDome/地区访问敏感；blocked 不能写成无货
 
   rs-jp:
     display_name: RS Japan
     tier: more
     channel_type: regional_distributor
     categories: [industrial, mro, passive, electromechanical]
-    status: enabled
+    status: limited
+    user_status: DataDome/地区访问敏感；blocked 不能写成无货
 
   rs-hk:
     display_name: RS Hong Kong
     tier: more
     channel_type: regional_distributor
     categories: [industrial, mro, passive, electromechanical]
-    status: enabled
+    status: limited
+    user_status: DataDome/地区访问敏感；blocked 不能写成无货
 
   rs-us:
     display_name: RS US / Allied
     tier: more
     channel_type: regional_distributor
     categories: [industrial, mro, passive, electromechanical]
-    status: enabled
+    status: limited
+    user_status: DataDome/地区访问敏感；曾取到结构化行，但当前本地代理全量/低并发仍可能 blocked
 
   avnet:
     display_name: Avnet
@@ -107,16 +113,16 @@ sources:
     categories: [semiconductor, passive, connector]
     status: limited
     covered_by: [octopart]
-    user_status: 本次未取到/访问受限不能写成 Avnet 无货
+    user_status: PerimeterX 访问敏感；运行时独占浏览器/代理可取结构化 XHR，blocked 不能写成无货
 
   arrow:
     display_name: Arrow
     tier: more
     channel_type: western_distributor
     categories: [semiconductor, passive, connector]
-    status: limited
+    status: enabled
     replacements: [verical, octopart, szlcsc-overseas]
-    user_status: 访问受限/未取到不能写成无货
+    user_status: 官方 Pricing & Availability API 源；运行环境必须提供 ARROW_API_LOGIN / ARROW_API_KEY
 
   verical:
     display_name: Verical
@@ -217,7 +223,8 @@ sources:
     tier: more
     channel_type: passive_connector_specialist
     categories: [passive, connector, electromechanical]
-    status: enabled
+    status: limited
+    user_status: Incapsula/Imperva 页面访问敏感；官方 Search API 存在但需 TTI token/登录开发者门户，blocked 不能写成无货
 
   rochester:
     display_name: Rochester Electronics
@@ -231,16 +238,18 @@ sources:
     tier: more
     channel_type: fa_mechanical
     categories: [industrial, fa, mechanical]
-    status: enabled
+    status: limited
     note: 系列级线索，通常不是直接 MPN 报价
+    user_status: XHR 访问不稳定且会返回宽泛系列结果；adapter 已做型号相关性过滤，blocked 不能写成无货
 
   misumi-jp:
     display_name: Misumi Japan
     tier: more
     channel_type: fa_mechanical
     categories: [industrial, fa, mechanical]
-    status: enabled
+    status: limited
     note: 系列级线索，通常不是直接 MPN 报价
+    user_status: 访问敏感；低并发通常可返回 no_result，全量时可能 blocked
 
   monotaro:
     display_name: MonotaRO
