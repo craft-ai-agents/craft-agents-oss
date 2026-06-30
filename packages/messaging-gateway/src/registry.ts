@@ -989,6 +989,8 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         'whatsapp',
         msg.channelId,
         msg.senderName,
+        undefined,
+        msg.senderId,
       )
       this.emitBindingChanged(homeWorkspaceId)
 

@@ -251,7 +251,9 @@ async function main() {
   await fs.mkdir(options.outDir, { recursive: true });
 
   if (files.length === 1) {
-    const snapshot = await readSnapshot(path.join(options.snapshotsDir, files[0]));
+    const firstFile = files[0];
+    if (!firstFile) throw new Error(`No snapshots found in ${options.snapshotsDir}.`);
+    const snapshot = await readSnapshot(path.join(options.snapshotsDir, firstFile));
     const brief = `# Spotify Delta Brief — ${snapshot.snapshotDate}\n\nNo prior snapshot. Baseline captured.\n\n- Streams: ${snapshot.metrics.streams}\n- Listeners: ${snapshot.metrics.listeners}\n- Followers: ${snapshot.metrics.followers}\n- Save rate: ${(snapshot.metrics.saveRate * 100).toFixed(2)}%\n- Skip rate: ${(snapshot.metrics.skipRate * 100).toFixed(2)}%\n`;
     const briefPath = path.join(options.outDir, `${snapshot.snapshotDate}.md`);
     await fs.writeFile(briefPath, brief);
@@ -261,6 +263,9 @@ async function main() {
 
   const latest = files[files.length - 1];
   const previous = files[files.length - 2];
+  if (!latest || !previous) {
+    throw new Error(`At least two snapshots are required in ${options.snapshotsDir}.`);
+  }
   const prevSnapshot = await readSnapshot(path.join(options.snapshotsDir, previous));
   const currSnapshot = await readSnapshot(path.join(options.snapshotsDir, latest));
 

@@ -268,7 +268,7 @@ export class MessagingGateway {
 
   private wireAdapter(adapter: PlatformAdapter): void {
     adapter.onMessage(async (msg: IncomingMessage) => {
-      const wasBound = !!this.bindingStore.findByChannel(msg.platform, msg.channelId)
+      const wasBound = !!this.bindingStore.findByChannel(msg.platform, msg.channelId, msg.senderId)
       const isCommand = msg.text.trim().startsWith('/')
       if (await this.handleBeforeRoute(adapter, msg, wasBound, isCommand)) {
         await this.emitIncomingMessageHook(msg, wasBound, true)
@@ -329,7 +329,7 @@ export class MessagingGateway {
     if (!this.onIncomingMessage) return
 
     try {
-      const boundAfterRoute = !!this.bindingStore.findByChannel(msg.platform, msg.channelId)
+      const boundAfterRoute = !!this.bindingStore.findByChannel(msg.platform, msg.channelId, msg.senderId)
       await this.onIncomingMessage({
         platform: msg.platform,
         channelId: msg.channelId,
@@ -415,6 +415,8 @@ export class MessagingGateway {
         platform,
         press.channelId,
         undefined,
+        undefined,
+        press.senderId,
       )
 
       await adapter.sendText(

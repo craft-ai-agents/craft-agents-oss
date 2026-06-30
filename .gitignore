@@ -98,9 +98,6 @@ scratch.md
 /automations-history.jsonl
 /activated-agents.json
 
-# Auto-generated bundle of bundled-skills markdown — regenerated on every dev/build
-packages/shared/src/skills/bundled.generated.ts
-
 # Vendored Swift tools — keep source, exclude build artifacts
 tools/**/.build/
 tools/**/.swiftpm/

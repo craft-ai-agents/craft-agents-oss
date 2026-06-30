@@ -174,7 +174,11 @@ function makeRng(seed: number) {
 function shuffleInPlace<T>(arr: T[], rng: () => number): T[] {
   for (let i = arr.length - 1; i > 0; i -= 1) {
     const j = Math.floor(rng() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    const current = arr[i];
+    const swap = arr[j];
+    if (current === undefined || swap === undefined) continue;
+    arr[i] = swap;
+    arr[j] = current;
   }
   return arr;
 }
@@ -218,7 +222,9 @@ function buildPlan(
   );
   const ourPicks: OurTrack[] = [];
   for (let i = 0; i < ourCount; i += 1) {
-    ourPicks.push(ourSorted[i % ourSorted.length]);
+    const pick = ourSorted[i % ourSorted.length];
+    if (!pick) throw new Error("No our-tracks provided. Cannot build playlist plan with zero of the artist's tracks.");
+    ourPicks.push(pick);
   }
   if (ourCount > our.length) {
     warnings.push(`Requested ${ourCount} our-track slots but only ${our.length} unique tracks supplied — some will repeat.`);
@@ -251,6 +257,7 @@ function buildPlan(
     if (attempts > comparablePool.length * 3) {
       // Fallback: relax the no-repeat-artist constraint
       const next = comparablePool[cursor % comparablePool.length];
+      if (!next) throw new Error("No comparable tracks provided. Cannot build playlist plan with zero comparable tracks.");
       comparableSequence.push(next);
       cursor += 1;
       lastArtist = next.artistName;
@@ -258,6 +265,7 @@ function buildPlan(
       continue;
     }
     const candidate = comparablePool[cursor % comparablePool.length];
+    if (!candidate) throw new Error("No comparable tracks provided. Cannot build playlist plan with zero comparable tracks.");
     cursor += 1;
     attempts += 1;
     if (candidate.artistName === lastArtist) continue;
@@ -279,6 +287,7 @@ function buildPlan(
   for (let pos = 0; pos < options.targetLength; pos += 1) {
     if (ourPositionSet.has(pos) && ourIdx < ourPicks.length) {
       const track = ourPicks[ourIdx];
+      if (!track) throw new Error("Unable to place our-track slot because no selected track exists.");
       ourIdx += 1;
       slots.push({
         position: pos + 1,
@@ -290,6 +299,7 @@ function buildPlan(
       });
     } else {
       const entry = comparableSequence[comparableIdx % comparableSequence.length];
+      if (!entry) throw new Error("Unable to place comparable slot because no selected track exists.");
       comparableIdx += 1;
       slots.push({
         position: pos + 1,

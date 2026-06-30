@@ -19,6 +19,7 @@ import {
   hasDangerousControlChars,
   isReadOnlyBashCommand,
   isReadOnlyBashCommandWithConfig,
+  isReadOnlyMcpToolWithConfig,
   getBashRejectionReason,
   formatBashRejectionMessage,
   shouldAllowToolInMode,
@@ -217,6 +218,17 @@ const TEST_MODE_CONFIG = {
   displayName: 'Test Safe Mode',
   shortcutHint: 'SHIFT+TAB',
 };
+
+describe('isReadOnlyMcpToolWithConfig', () => {
+  it('matches read-only action tokens without allowing mutating substring tricks', () => {
+    expect(isReadOnlyMcpToolWithConfig('mcp__craft__search_spaces', TEST_MODE_CONFIG)).toBe(true);
+    expect(isReadOnlyMcpToolWithConfig('mcp__craft__folders_list', TEST_MODE_CONFIG)).toBe(true);
+    expect(isReadOnlyMcpToolWithConfig('mcp__craft__blocks_read', TEST_MODE_CONFIG)).toBe(true);
+
+    expect(isReadOnlyMcpToolWithConfig('mcp__shop__purge_listings', TEST_MODE_CONFIG)).toBe(false);
+    expect(isReadOnlyMcpToolWithConfig('mcp__memory__forget_user', TEST_MODE_CONFIG)).toBe(false);
+  });
+});
 
 describe('hasDangerousSubstitution', () => {
   describe('command substitution $() (should be blocked)', () => {

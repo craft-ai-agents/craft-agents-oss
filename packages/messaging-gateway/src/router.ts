@@ -31,7 +31,7 @@ export class Router {
   ) {}
 
   async route(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
-    const binding = this.bindingStore.findByChannel(msg.platform, msg.channelId)
+    const binding = this.bindingStore.findByChannel(msg.platform, msg.channelId, msg.senderId)
 
     if (binding) {
       try {

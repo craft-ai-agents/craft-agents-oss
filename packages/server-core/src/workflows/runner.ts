@@ -111,6 +111,8 @@ export interface WorkflowRunnerDeps {
    * the hard-abort vs. handoff-interrupt distinction).
    */
   abortSession: (sessionId: string) => Promise<void>;
+  /** Delete a hidden step session after the run snapshot has captured its output. */
+  deleteSession?: (sessionId: string) => Promise<void>;
   /** Resolve a workspace ID to its root path on disk. */
   getWorkspaceRootPath: (workspaceId: string) => string;
   /** Optional override for tests/hosts; default uses OutputService. */
@@ -149,6 +151,13 @@ function concurrencyKey(workspaceId: string, workflowSlug: string): string {
 }
 
 const MAX_RECEIPT_CONTEXT_DOCS = 20;
+const MAX_WORKFLOW_STEPS = 50;
+const MAX_WORKFLOW_RETRIES = 3;
+const DEFAULT_STEP_TIMEOUT_SECONDS = 20 * 60;
+const MAX_STEP_TIMEOUT_SECONDS = 60 * 60;
+const MAX_WORKFLOW_RUN_SECONDS = 2 * 60 * 60;
+const RETRY_BACKOFF_BASE_MS = 1000;
+const MAX_RETRY_BACKOFF_MS = 10_000;
 
 function normalizeWorkflowPermissionMode(options: Partial<CreateSessionOptions>): Partial<CreateSessionOptions> {
   if (options.permissionMode !== 'ask') return options;
@@ -165,6 +174,18 @@ function normalizeWorkflowPermissionMode(options: Partial<CreateSessionOptions>)
         }
       : options.launchReceipt,
   };
+}
+
+function effectiveRetryCount(retries: number | undefined): number {
+  return Math.min(Math.max(retries ?? 0, 0), MAX_WORKFLOW_RETRIES);
+}
+
+function effectiveStepTimeoutSeconds(timeoutSeconds: number | undefined): number {
+  return Math.min(timeoutSeconds ?? DEFAULT_STEP_TIMEOUT_SECONDS, MAX_STEP_TIMEOUT_SECONDS);
+}
+
+function retryDelayMs(attempt: number): number {
+  return Math.min(RETRY_BACKOFF_BASE_MS * (2 ** Math.max(attempt - 1, 0)), MAX_RETRY_BACKOFF_MS);
 }
 
 export class WorkflowRunner {
@@ -193,6 +214,7 @@ export class WorkflowRunner {
         `Workflow "${workflow.slug}" already has an active run in workspace "${workspaceId}".`,
       );
     }
+    this.assertStepBudget(workflow.metadata.steps);
     await this.preflightStepAgents(workspaceId, workflow.metadata.steps);
 
     const now = new Date().toISOString();
@@ -287,6 +309,7 @@ export class WorkflowRunner {
         `Workflow "${original.workflowSlug}" already has an active run in workspace "${input.workspaceId}".`,
       );
     }
+    this.assertStepBudget(workflowSnapshot.metadata.steps);
     await this.preflightStepAgents(input.workspaceId, workflowSnapshot.metadata.steps.slice(startIndex));
 
     const now = new Date().toISOString();
@@ -360,6 +383,12 @@ export class WorkflowRunner {
         const message = err instanceof Error ? err.message : String(err);
         throw new Error(`Workflow step "${step.id}" references unavailable agent "${step.agent}": ${message}`);
       }
+    }
+  }
+
+  private assertStepBudget(steps: WorkflowStep[]): void {
+    if (steps.length > MAX_WORKFLOW_STEPS) {
+      throw new Error(`Workflow has ${steps.length} steps; maximum supported is ${MAX_WORKFLOW_STEPS}.`);
     }
   }
 
@@ -448,6 +477,21 @@ export class WorkflowRunner {
 
       const stepDef = workflow.metadata.steps[i]!;
       const stepRecord = active.snapshot.steps[i]!;
+      if (this.hasRunTimedOut(active)) {
+        const error = this.workflowRunTimeoutError();
+        stepRecord.state = 'failed';
+        stepRecord.completedAt = new Date().toISOString();
+        stepRecord.error = error;
+        this.touch(active, {
+          kind: 'step.failed',
+          stepId: stepDef.id,
+          attempts: stepRecord.attempts,
+          onFailure: stepDef.onFailure ?? 'stop',
+          error,
+        });
+        failed = true;
+        break;
+      }
 
       // 1. Mark step `running`.
       stepRecord.state = 'running';
@@ -479,7 +523,9 @@ export class WorkflowRunner {
         }
       }
 
-      const maxAttempts = (stepDef.retries ?? 0) + 1;
+      const retryCount = effectiveRetryCount(stepDef.retries);
+      const maxAttempts = retryCount + 1;
+      const timeoutSeconds = effectiveStepTimeoutSeconds(stepDef.timeout);
       let lastError: unknown;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -495,7 +541,7 @@ export class WorkflowRunner {
         this.touch(active);
 
         try {
-          await this.executeStepAttempt(active, stepDef, resolved.output);
+          await this.executeStepAttempt(active, stepDef, resolved.output, timeoutSeconds);
           if (active.abort.signal.aborted) break;
 
           stepRecord.state = 'succeeded';
@@ -517,8 +563,9 @@ export class WorkflowRunner {
               attempt,
               maxAttempts,
               error,
-              timeoutSeconds: error.code === 'timeout' ? stepDef.timeout : undefined,
+              timeoutSeconds: error.code === 'timeout' ? timeoutSeconds : undefined,
             });
+            await this.waitBeforeRetry(active, attempt);
             continue;
           }
         }
@@ -528,16 +575,22 @@ export class WorkflowRunner {
       if (lastError !== undefined) {
         const onFailure = stepDef.onFailure ?? 'stop';
         const error = this.stepError(lastError);
+        const failureError = onFailure === 'ask'
+          ? {
+              code: 'on-failure-ask-unsupported',
+              message: '`onFailure: ask` requires a checkpoint UI and is not supported by this runner yet.',
+            }
+          : error;
         stepRecord.state = 'failed';
         stepRecord.completedAt = new Date().toISOString();
-        stepRecord.error = error;
+        stepRecord.error = failureError;
         this.touch(active, {
           kind: 'step.failed',
           stepId: stepDef.id,
           attempts: stepRecord.attempts,
           onFailure,
-          error,
-          timeoutSeconds: error.code === 'timeout' ? stepDef.timeout : undefined,
+          error: failureError,
+          timeoutSeconds: error.code === 'timeout' ? timeoutSeconds : undefined,
         });
         if (onFailure === 'continue') {
           continue;
@@ -576,6 +629,7 @@ export class WorkflowRunner {
     active: ActiveRun,
     stepDef: WorkflowStep,
     prompt: string,
+    timeoutSeconds: number,
   ): Promise<void> {
     const workflow = active.snapshot.workflowSnapshot;
     const stepRecord = active.snapshot.steps.find((s) => s.id === stepDef.id);
@@ -622,24 +676,29 @@ export class WorkflowRunner {
     active.currentSessionId = session.id;
     this.touch(active);
 
-    if (active.abort.signal.aborted) return;
+    try {
+      if (active.abort.signal.aborted) return;
 
-    await this.sendMessageWithOptionalTimeout(active, session.id, stepPrompt, stepDef.timeout);
+      await this.sendMessageWithOptionalTimeout(active, session.id, stepPrompt, timeoutSeconds);
 
-    if (active.abort.signal.aborted) return;
+      if (active.abort.signal.aborted) return;
 
-    const rawOutput = this.deps.getLastAssistantText(session.id);
-    this.validateCompletion(stepRecord, stepDef, session.id, rawOutput);
-    if (!stepDef.outputSchema) {
-      stepRecord.output = rawOutput;
-      return;
+      const rawOutput = this.deps.getLastAssistantText(session.id);
+      this.validateCompletion(stepRecord, stepDef, session.id, rawOutput);
+      if (!stepDef.outputSchema) {
+        stepRecord.output = rawOutput;
+        return;
+      }
+
+      const parsed = parseStructuredStepOutput(rawOutput, stepDef.outputSchema);
+      if (!parsed.ok) {
+        throw new StepAttemptError('invalid-structured-output', parsed.message);
+      }
+      stepRecord.output = parsed.value;
+    } finally {
+      active.currentSessionId = undefined;
+      await this.deleteHiddenStepSession(session.id);
     }
-
-    const parsed = parseStructuredStepOutput(rawOutput, stepDef.outputSchema);
-    if (!parsed.ok) {
-      throw new StepAttemptError('invalid-structured-output', parsed.message);
-    }
-    stepRecord.output = parsed.value;
   }
 
   private buildExecutionReceipt(
@@ -741,13 +800,8 @@ export class WorkflowRunner {
     active: ActiveRun,
     sessionId: string,
     prompt: string,
-    timeoutSeconds: number | undefined,
+    timeoutSeconds: number,
   ): Promise<void> {
-    if (timeoutSeconds === undefined) {
-      await this.deps.sendMessage(sessionId, prompt);
-      return;
-    }
-
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
@@ -770,6 +824,39 @@ export class WorkflowRunner {
       throw err;
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
+    }
+  }
+
+  private async waitBeforeRetry(active: ActiveRun, attempt: number): Promise<void> {
+    const delayMs = retryDelayMs(attempt);
+    if (delayMs <= 0 || active.abort.signal.aborted) return;
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(resolve, delayMs);
+      active.abort.signal.addEventListener('abort', () => {
+        clearTimeout(timeout);
+        resolve();
+      }, { once: true });
+    });
+  }
+
+  private hasRunTimedOut(active: ActiveRun): boolean {
+    return Date.now() - Date.parse(active.snapshot.createdAt) > MAX_WORKFLOW_RUN_SECONDS * 1000;
+  }
+
+  private workflowRunTimeoutError(): { code: string; message: string } {
+    return {
+      code: 'workflow-timeout',
+      message: `Workflow exceeded the ${MAX_WORKFLOW_RUN_SECONDS} second run limit.`,
+    };
+  }
+
+  private async deleteHiddenStepSession(sessionId: string): Promise<void> {
+    if (!this.deps.deleteSession) return;
+    try {
+      await this.deps.deleteSession(sessionId);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[WorkflowRunner] deleteSession failed for hidden step session ${sessionId}:`, err);
     }
   }
 

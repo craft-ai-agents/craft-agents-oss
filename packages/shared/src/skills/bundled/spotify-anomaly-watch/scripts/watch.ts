@@ -149,24 +149,34 @@ function pctChange(prev: number, curr: number): number | null {
  */
 function sustainedDrop(snaps: Snapshot[], pick: (s: Snapshot) => number, dropPct: number): boolean {
   if (snaps.length < 2) return false;
-  const latest = pick(snaps[snaps.length - 1]);
-  const prev = pick(snaps[snaps.length - 2]);
+  const latestSnap = snaps[snaps.length - 1];
+  const prevSnap = snaps[snaps.length - 2];
+  if (!latestSnap || !prevSnap) return false;
+  const latest = pick(latestSnap);
+  const prev = pick(prevSnap);
   const change1 = pctChange(prev, latest);
   if (change1 === null || change1 > -dropPct) return false;
   if (snaps.length < 3) return true; // only two snapshots — accept the single drop
-  const prior = pick(snaps[snaps.length - 3]);
+  const priorSnap = snaps[snaps.length - 3];
+  if (!priorSnap) return false;
+  const prior = pick(priorSnap);
   const change2 = pctChange(prior, prev);
   return change2 !== null && change2 < 0; // prior step also moved down
 }
 
 function sustainedSpike(snaps: Snapshot[], pick: (s: Snapshot) => number, spikePct: number): boolean {
   if (snaps.length < 2) return false;
-  const latest = pick(snaps[snaps.length - 1]);
-  const prev = pick(snaps[snaps.length - 2]);
+  const latestSnap = snaps[snaps.length - 1];
+  const prevSnap = snaps[snaps.length - 2];
+  if (!latestSnap || !prevSnap) return false;
+  const latest = pick(latestSnap);
+  const prev = pick(prevSnap);
   const change1 = pctChange(prev, latest);
   if (change1 === null || change1 < spikePct) return false;
   if (snaps.length < 3) return true;
-  const prior = pick(snaps[snaps.length - 3]);
+  const priorSnap = snaps[snaps.length - 3];
+  if (!priorSnap) return false;
+  const prior = pick(priorSnap);
   const change2 = pctChange(prior, prev);
   return change2 !== null && change2 > 0;
 }
@@ -175,6 +185,7 @@ function detectAnomalies(snaps: Snapshot[], options: CliOptions): Anomaly[] {
   const anomalies: Anomaly[] = [];
   if (snaps.length === 0) return anomalies;
   const latest = snaps[snaps.length - 1];
+  if (!latest) return anomalies;
 
   if (latest.partial) {
     anomalies.push({
@@ -194,6 +205,7 @@ function detectAnomalies(snaps: Snapshot[], options: CliOptions): Anomaly[] {
   }
 
   const previous = snaps[snaps.length - 2];
+  if (!previous) return anomalies;
 
   // Sustained metric drops (need to look back further if available)
   if (sustainedDrop(snaps, (s) => s.metrics.streams, options.streamDropPct)) {
@@ -351,6 +363,9 @@ async function main() {
   }
 
   const latest = snapshots[snapshots.length - 1];
+  if (!latest) {
+    throw new Error(`Could not parse any snapshot files. Errors: ${parseErrors.map((e) => `${e.file}: ${e.error}`).join("; ")}`);
+  }
   const anomalies = detectAnomalies(snapshots, options);
 
   await fs.mkdir(options.alertsDir, { recursive: true });

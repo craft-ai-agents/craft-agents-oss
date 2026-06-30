@@ -51,11 +51,13 @@ describe('mission assets', () => {
     const result = importMissionAssets(workspace, 'workspace-1', [source], { kindHint: 'master' });
     const loaded = loadMissionAssetManifest(workspace, 'workspace-1');
     const body = serializeMissionAssetContext(loaded);
+    const imported = result.imported[0];
+    const loadedFile = loaded.files[0];
 
     expect(result.imported).toHaveLength(1);
-    expect(result.imported[0].relativePath).toBe('assets/audio/masters/night-drive-final.wav');
+    expect(imported?.relativePath).toBe('assets/audio/masters/night-drive-final.wav');
     expect(getMissionAssetManifestPath(workspace)).toContain('assets/manifest.json');
-    expect(loaded.files[0].kind).toBe('master');
+    expect(loadedFile?.kind).toBe('master');
     expect(body).toContain('"kind": "master"');
     expect(body).toContain('Master: assets/audio/masters/night-drive-final.wav');
     expect(body).toContain('Audio files: 1');
@@ -70,10 +72,11 @@ describe('mission assets', () => {
     truncateSync(source, 257 * 1024 * 1024);
 
     const result = importMissionAssets(workspace, 'workspace-1', [source]);
+    const imported = result.imported[0];
 
     expect(result.imported).toHaveLength(1);
-    expect(result.imported[0].sizeBytes).toBe(257 * 1024 * 1024);
-    expect(result.imported[0].sha256).toBeUndefined();
+    expect(imported?.sizeBytes).toBe(257 * 1024 * 1024);
+    expect(imported?.sha256).toBeUndefined();
   });
 
   test('async import copies media and writes manifest', async () => {
@@ -82,9 +85,10 @@ describe('mission assets', () => {
     writeFileSync(source, 'fake image');
 
     const result = await importMissionAssetsAsync(workspace, 'workspace-1', [source], { kindHint: 'cover-art' });
+    const imported = result.imported[0];
 
     expect(result.imported).toHaveLength(1);
-    expect(result.imported[0].relativePath).toBe('assets/images/cover-art/cover-art.png');
+    expect(imported?.relativePath).toBe('assets/images/cover-art/cover-art.png');
     expect(existsSync(join(workspace, 'assets/images/cover-art/cover-art.png'))).toBe(true);
   });
 

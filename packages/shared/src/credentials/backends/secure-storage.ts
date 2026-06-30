@@ -31,7 +31,7 @@ import {
   createHash,
 } from 'crypto';
 import { execSync } from 'child_process';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, renameSync, rmSync } from 'fs';
 import { hostname, userInfo, homedir } from 'os';
 import { join, dirname } from 'path';
 
@@ -56,6 +56,21 @@ const KEY_SIZE = 32;
 
 // PBKDF2 iterations (balance security vs startup time)
 const PBKDF2_ITERATIONS = 100000;
+let credentialStoreWriteLock: Promise<void> = Promise.resolve();
+
+async function withCredentialStoreWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const previous = credentialStoreWriteLock;
+  let release!: () => void;
+  credentialStoreWriteLock = previous.catch(() => undefined).then(() => new Promise<void>((resolve) => {
+    release = resolve;
+  }));
+  await previous.catch(() => undefined);
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
 
 /**
  * Get stable machine identifier using OS-native hardware UUID.
@@ -131,43 +146,49 @@ export class SecureStorageBackend implements CredentialBackend {
   }
 
   async set(id: CredentialId, credential: StoredCredential): Promise<void> {
-    let store = await this.loadStore();
+    await withCredentialStoreWriteLock(async () => {
+      this.cachedStore = null;
+      let store = await this.loadStore();
 
-    if (!store && this.storeLocked) {
-      throw new Error('Secure credential store exists but cannot be unlocked; refusing to overwrite stored credentials');
-    }
+      if (!store && this.storeLocked) {
+        throw new Error('Secure credential store exists but cannot be unlocked; refusing to overwrite stored credentials');
+      }
 
-    if (!store) {
-      // Initialize new store
-      store = {
-        version: 1,
-        credentials: {},
-        metadata: {
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-      };
-    }
+      if (!store) {
+        // Initialize new store
+        store = {
+          version: 1,
+          credentials: {},
+          metadata: {
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+        };
+      }
 
-    const key = credentialIdToAccount(id);
-    store.credentials[key] = credential;
-    store.metadata.updatedAt = Date.now();
+      const key = credentialIdToAccount(id);
+      store.credentials[key] = credential;
+      store.metadata.updatedAt = Date.now();
 
-    await this.saveStore(store);
+      await this.saveStore(store);
+    });
   }
 
   async delete(id: CredentialId): Promise<boolean> {
-    const store = await this.loadStore();
-    if (!store) return false;
+    return await withCredentialStoreWriteLock(async () => {
+      this.cachedStore = null;
+      const store = await this.loadStore();
+      if (!store) return false;
 
-    const key = credentialIdToAccount(id);
-    if (!(key in store.credentials)) return false;
+      const key = credentialIdToAccount(id);
+      if (!(key in store.credentials)) return false;
 
-    delete store.credentials[key];
-    store.metadata.updatedAt = Date.now();
+      delete store.credentials[key];
+      store.metadata.updatedAt = Date.now();
 
-    await this.saveStore(store);
-    return true;
+      await this.saveStore(store);
+      return true;
+    });
   }
 
   async list(filter?: Partial<CredentialId>): Promise<CredentialId[]> {
@@ -325,8 +346,15 @@ export class SecureStorageBackend implements CredentialBackend {
     // Combine all parts
     const fileData = Buffer.concat([header, iv, authTag, ciphertext]);
 
-    // Write with restrictive permissions (owner read/write only)
-    writeFileSync(CREDENTIALS_FILE, fileData, { mode: 0o600 });
+    // Atomic replace with restrictive permissions (owner read/write only).
+    const tempFile = join(CREDENTIALS_DIR, `.credentials.enc.${process.pid}.${Date.now()}.${randomBytes(4).toString('hex')}.tmp`);
+    try {
+      writeFileSync(tempFile, fileData, { mode: 0o600 });
+      renameSync(tempFile, CREDENTIALS_FILE);
+    } catch (err) {
+      rmSync(tempFile, { force: true });
+      throw err;
+    }
     this.cachedStore = store;
     this.storeLocked = false;
   }

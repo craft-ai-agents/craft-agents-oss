@@ -111,4 +111,38 @@ describe('sendMessage durability', () => {
     expect(ackedMessageId).not.toBeNull()
     expect(onDiskAtAck).toBe(true)
   })
+
+  it('serializes concurrent same-session sends through the processing gate', async () => {
+    const sessionId = 'durability-concurrent'
+    const managed = buildSession(sessionId)
+    const acked: string[] = []
+
+    await Promise.allSettled([
+      sm.sendMessage(
+        sessionId,
+        'first',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        (messageId) => { acked.push(messageId) },
+      ),
+      sm.sendMessage(
+        sessionId,
+        'second',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        (messageId) => { acked.push(messageId) },
+      ),
+    ])
+
+    expect(acked).toHaveLength(2)
+    expect(managed.messages.filter((message) => message.role === 'user')).toHaveLength(2)
+    expect(managed.messageQueue).toHaveLength(1)
+    expect(managed.messageQueue[0]!.message).toBe('second')
+  })
 })

@@ -138,6 +138,8 @@ export class Commands {
         adapter.platform,
         msg.channelId,
         msg.senderName,
+        undefined,
+        msg.senderId,
       )
 
       const displayName = session.name || session.id
@@ -182,6 +184,8 @@ export class Commands {
         adapter.platform,
         msg.channelId,
         msg.senderName,
+        undefined,
+        msg.senderId,
       )
 
       this.log.info('chat bound to existing session', {
@@ -284,6 +288,8 @@ export class Commands {
       adapter.platform,
       msg.channelId,
       msg.senderName,
+      undefined,
+      msg.senderId,
     )
 
     this.log.info('pairing code redeemed', {
@@ -301,6 +307,10 @@ export class Commands {
   }
 
   private async handleUnbind(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
+    if (!this.bindingStore.findByChannel(adapter.platform, msg.channelId, msg.senderId)) {
+      await adapter.sendText(msg.channelId, 'No session is bound to this chat for your sender.')
+      return
+    }
     const removed = this.bindingStore.unbind(adapter.platform, msg.channelId)
     if (removed) {
       await adapter.sendText(msg.channelId, 'Disconnected from session.')
@@ -310,7 +320,7 @@ export class Commands {
   }
 
   private async handleStatus(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
-    const binding = this.bindingStore.findByChannel(adapter.platform, msg.channelId)
+    const binding = this.bindingStore.findByChannel(adapter.platform, msg.channelId, msg.senderId)
     if (!binding) {
       await adapter.sendText(msg.channelId, 'No session bound. Use /bind, /new, or /pair.')
       return
@@ -328,7 +338,7 @@ export class Commands {
   }
 
   private async handleStop(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
-    const binding = this.bindingStore.findByChannel(adapter.platform, msg.channelId)
+    const binding = this.bindingStore.findByChannel(adapter.platform, msg.channelId, msg.senderId)
     if (!binding) {
       await adapter.sendText(msg.channelId, 'No session bound.')
       return

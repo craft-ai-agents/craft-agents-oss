@@ -1437,6 +1437,7 @@ interface PendingDelta {
 
 export class SessionManager implements ISessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
+  private sendMessageAdmissionLocks: Map<string, Promise<void>> = new Map()
   private automationMessagingBinder?: (input: {
     workspaceId: string
     sessionId: string
@@ -1479,6 +1480,27 @@ export class SessionManager implements ISessionManager {
   private initGate = new InitGate()
   // O(1) index: taskId → sessionId for background task output lookup (avoids O(n) session scan)
   private taskOutputIndex: Map<string, string> = new Map()
+
+  private async acquireSendMessageAdmissionLock(sessionId: string): Promise<() => void> {
+    const previous = this.sendMessageAdmissionLocks.get(sessionId) ?? Promise.resolve()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const current = previous.catch(() => undefined).then(() => gate)
+    this.sendMessageAdmissionLocks.set(sessionId, current)
+    await previous.catch(() => undefined)
+
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      release()
+      if (this.sendMessageAdmissionLocks.get(sessionId) === current) {
+        this.sendMessageAdmissionLocks.delete(sessionId)
+      }
+    }
+  }
 
   setAutomationMessagingBinder(
     binder: (input: {
@@ -2422,6 +2444,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'ig-trending-power-up'
             || a.slug === 'influencer-campaign-power-up'
             || a.slug === 'playlisting-power-up'
+            || a.slug === 'spotify-analyst'
             || a.slug === 'spotify-playlist-creator'
             || a.slug === 'shopify-agent'
             || a.slug === 'print-agent'
@@ -2638,6 +2661,7 @@ user a clickable link to where the thing now lives.`
           if (!managed) return
           managed.agent?.forceAbort(AbortReason.UserStop)
         },
+        deleteSession: (sessionId) => this.deleteSession(sessionId),
         getWorkspaceRootPath: (wsId) => {
           const ws = getWorkspaceByNameOrId(wsId)
           if (!ws) throw new Error(`Workspace not found: ${wsId}`)
@@ -2676,6 +2700,7 @@ user a clickable link to where the thing now lives.`
           if (!managed) return
           managed.agent?.forceAbort(AbortReason.UserStop)
         },
+        deleteSession: (sessionId) => this.deleteSession(sessionId),
         getWorkspaceRootPath: (wsId) => {
           const ws = getWorkspaceByNameOrId(wsId)
           if (!ws) throw new Error(`Workspace not found: ${wsId}`)
@@ -6791,174 +6816,189 @@ user a clickable link to where the thing now lives.`
      */
     onAck?: (messageId: string) => void,
   ): Promise<void> {
+    const releaseAdmissionLock = await this.acquireSendMessageAdmissionLock(sessionId)
+    let admissionLockReleased = false
+    const releaseAdmissionLockOnce = () => {
+      if (admissionLockReleased) return
+      admissionLockReleased = true
+      releaseAdmissionLock()
+    }
     const managed = this.sessions.get(sessionId)
     if (!managed) {
+      releaseAdmissionLockOnce()
       throw new Error(`Session ${sessionId} not found`)
     }
 
-    // Clear any pending plan execution state when a new user message is sent.
-    // This acts as a safety valve - if the user moves on, we don't want to
-    // auto-execute an old plan later.
-    await clearStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)
+    try {
+      // Clear any pending plan execution state when a new user message is sent.
+      // This acts as a safety valve - if the user moves on, we don't want to
+      // auto-execute an old plan later.
+      await clearStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)
 
-    // Ensure messages are loaded before we try to add new ones
-    await this.ensureMessagesLoaded(managed)
+      // Ensure messages are loaded before we try to add new ones
+      await this.ensureMessagesLoaded(managed)
 
-    // If currently processing, redirect mid-stream. Each backend decides its strategy:
-    // - Pi: steers (injects message, events continue through existing stream)
-    // - Claude: aborts internally, session layer queues for re-send
-    if (managed.isProcessing) {
-      const agent = managed.agent
-      const steered = agent?.redirect(message) ?? false
+      // If currently processing, redirect mid-stream. Each backend decides its strategy:
+      // - Pi: steers (injects message, events continue through existing stream)
+      // - Claude: aborts internally, session layer queues for re-send
+      if (managed.isProcessing) {
+        releaseAdmissionLockOnce()
+        const agent = managed.agent
+        const steered = agent?.redirect(message) ?? false
 
-      sessionLog.info('mid-stream send', {
-        sessionId,
-        steered,
-        queueLengthBefore: managed.messageQueue.length,
-        backend: agent ? agent.constructor.name : 'none',
-      })
-
-      // Create user message for UI
-      const userMessage: Message = {
-        id: generateMessageId(),
-        role: 'user',
-        content: message,
-        timestamp: this.monotonic(),
-        attachments: storedAttachments,
-        badges: options?.badges,
-        displayIntent: options?.displayIntent,
-      }
-      managed.messages.push(userMessage)
-
-      // Emit to UI — 'accepted' if steered (processing now), 'queued' if aborted (will re-send)
-      this.sendEvent({
-        type: 'user_message',
-        sessionId,
-        message: userMessage,
-        status: steered ? 'accepted' : 'queued',
-        optimisticMessageId: options?.optimisticMessageId
-      }, managed.workspace.id)
-
-      if (!steered) {
-        // Backend aborted — queue message for re-send after processing stops.
-        // forceAbort(Redirect) was already called by redirect().
-        managed.messageQueue.push({ message, attachments, storedAttachments, options, messageId: userMessage.id, optimisticMessageId: options?.optimisticMessageId })
-        managed.wasInterrupted = true
-      }
-
-      this.persistSession(managed)
-      // Force a synchronous flush so the user message is genuinely on disk
-      // before we tell the renderer "accepted" — `persistSession` only
-      // enqueues with a 500ms debounce. (#616 reliability fix.)
-      await this.flushSession(managed.id)
-      onAck?.(userMessage.id)
-      return
-    }
-
-    // Add user message with stored attachments for persistence
-    // Skip if existingMessageId is provided (message was already created when queued)
-    let userMessage: Message
-    if (existingMessageId) {
-      // Find existing message (already added when queued)
-      userMessage = managed.messages.find(m => m.id === existingMessageId)!
-      if (!userMessage) {
-        throw new Error(`Existing message ${existingMessageId} not found`)
-      }
-    } else {
-      // Create new message
-      userMessage = {
-        id: generateMessageId(),
-        role: 'user',
-        content: message,
-        timestamp: this.monotonic(),
-        attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
-        badges: options?.badges,  // Include content badges (sources, skills with embedded icons)
-        displayIntent: options?.displayIntent,
-      }
-      managed.messages.push(userMessage)
-
-      // Update lastMessageRole for badge display
-      managed.lastMessageRole = 'user'
-
-      // Persist + flush before announcing — the user message must be
-      // genuinely on disk before we tell the renderer "accepted", and
-      // `persistSession` is debounced (500ms). #616.
-      this.persistSession(managed)
-      await this.flushSession(managed.id)
-      onAck?.(userMessage.id)
-
-      // Emit user_message event so UI can confirm the optimistic message
-      this.sendEvent({
-        type: 'user_message',
-        sessionId,
-        message: userMessage,
-        status: 'accepted',
-        optimisticMessageId: options?.optimisticMessageId
-      }, managed.workspace.id)
-
-      // If this is the first user message and no title exists, set one immediately
-      // AI generation will enhance it later, but we always have a title from the start
-      // Automation sessions (triggeredBy set) already have a title and skip AI generation entirely
-      const isFirstUserMessage = managed.messages.filter(m => m.role === 'user').length === 1
-      if (isFirstUserMessage && !managed.name && !managed.triggeredBy) {
-        // Replace bracket mentions with their display labels (e.g. [skill:ws:commit] -> "Commit")
-        // so titles show human-readable names instead of raw IDs
-        let titleSource = message
-        if (options?.badges) {
-          for (const badge of options.badges) {
-            if (badge.rawText && badge.label) {
-              titleSource = titleSource.replace(badge.rawText, badge.label)
-            }
-          }
-        }
-        // Sanitize: strip any remaining bracket mentions, XML blocks, tags
-        const sanitized = sanitizeForTitle(titleSource)
-        const initialTitle = sanitized.slice(0, 50) + (sanitized.length > 50 ? '…' : '')
-        managed.name = initialTitle
-        this.persistSession(managed)
-        // Flush immediately so disk is authoritative before notifying renderer
-        await this.flushSession(managed.id)
-        this.sendEvent({
-          type: 'title_generated',
+        sessionLog.info('mid-stream send', {
           sessionId,
-          title: initialTitle,
+          steered,
+          queueLengthBefore: managed.messageQueue.length,
+          backend: agent ? agent.constructor.name : 'none',
+        })
+
+        // Create user message for UI
+        const userMessage: Message = {
+          id: generateMessageId(),
+          role: 'user',
+          content: message,
+          timestamp: this.monotonic(),
+          attachments: storedAttachments,
+          badges: options?.badges,
+          displayIntent: options?.displayIntent,
+        }
+        managed.messages.push(userMessage)
+
+        // Emit to UI — 'accepted' if steered (processing now), 'queued' if aborted (will re-send)
+        this.sendEvent({
+          type: 'user_message',
+          sessionId,
+          message: userMessage,
+          status: steered ? 'accepted' : 'queued',
+          optimisticMessageId: options?.optimisticMessageId
         }, managed.workspace.id)
 
-        // Generate AI title asynchronously using agent's SDK
-        // (waits briefly for agent creation if needed)
-        this.generateTitle(managed, message)
+        if (!steered) {
+          // Backend aborted — queue message for re-send after processing stops.
+          // forceAbort(Redirect) was already called by redirect().
+          managed.messageQueue.push({ message, attachments, storedAttachments, options, messageId: userMessage.id, optimisticMessageId: options?.optimisticMessageId })
+          managed.wasInterrupted = true
+        }
+
+        this.persistSession(managed)
+        // Force a synchronous flush so the user message is genuinely on disk
+        // before we tell the renderer "accepted" — `persistSession` only
+        // enqueues with a 500ms debounce. (#616 reliability fix.)
+        await this.flushSession(managed.id)
+        onAck?.(userMessage.id)
+        return
       }
-    }
 
-    // Evaluate auto-label rules against the user message (common path for both
-    // fresh and queued messages). Scans regex patterns configured on labels,
-    // then merges any new matches into the session's label array.
-    try {
-      const labelTree = listLabels(managed.workspace.rootPath)
-      const autoMatches = evaluateAutoLabels(message, labelTree)
+      // Add user message with stored attachments for persistence
+      // Skip if existingMessageId is provided (message was already created when queued)
+      let userMessage: Message
+      if (existingMessageId) {
+        // Find existing message (already added when queued)
+        userMessage = managed.messages.find(m => m.id === existingMessageId)!
+        if (!userMessage) {
+          throw new Error(`Existing message ${existingMessageId} not found`)
+        }
+      } else {
+        // Create new message
+        userMessage = {
+          id: generateMessageId(),
+          role: 'user',
+          content: message,
+          timestamp: this.monotonic(),
+          attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
+          badges: options?.badges,  // Include content badges (sources, skills with embedded icons)
+          displayIntent: options?.displayIntent,
+        }
+        managed.messages.push(userMessage)
 
-      if (autoMatches.length > 0) {
-        const existingLabels = managed.labels ?? []
-        const newEntries = autoMatches
-          .map(m => `${m.labelId}::${m.value}`)
-          .filter(entry => !existingLabels.includes(entry))
+        // Update lastMessageRole for badge display
+        managed.lastMessageRole = 'user'
 
-        if (newEntries.length > 0) {
-          managed.labels = [...existingLabels, ...newEntries]
+        // Persist + flush before announcing — the user message must be
+        // genuinely on disk before we tell the renderer "accepted", and
+        // `persistSession` is debounced (500ms). #616.
+        this.persistSession(managed)
+        await this.flushSession(managed.id)
+        onAck?.(userMessage.id)
+
+        // Emit user_message event so UI can confirm the optimistic message
+        this.sendEvent({
+          type: 'user_message',
+          sessionId,
+          message: userMessage,
+          status: 'accepted',
+          optimisticMessageId: options?.optimisticMessageId
+        }, managed.workspace.id)
+
+        // If this is the first user message and no title exists, set one immediately
+        // AI generation will enhance it later, but we always have a title from the start
+        // Automation sessions (triggeredBy set) already have a title and skip AI generation entirely
+        const isFirstUserMessage = managed.messages.filter(m => m.role === 'user').length === 1
+        if (isFirstUserMessage && !managed.name && !managed.triggeredBy) {
+          // Replace bracket mentions with their display labels (e.g. [skill:ws:commit] -> "Commit")
+          // so titles show human-readable names instead of raw IDs
+          let titleSource = message
+          if (options?.badges) {
+            for (const badge of options.badges) {
+              if (badge.rawText && badge.label) {
+                titleSource = titleSource.replace(badge.rawText, badge.label)
+              }
+            }
+          }
+          // Sanitize: strip any remaining bracket mentions, XML blocks, tags
+          const sanitized = sanitizeForTitle(titleSource)
+          const initialTitle = sanitized.slice(0, 50) + (sanitized.length > 50 ? '…' : '')
+          managed.name = initialTitle
           this.persistSession(managed)
+          // Flush immediately so disk is authoritative before notifying renderer
+          await this.flushSession(managed.id)
           this.sendEvent({
-            type: 'labels_changed',
+            type: 'title_generated',
             sessionId,
-            labels: managed.labels,
+            title: initialTitle,
           }, managed.workspace.id)
+
+          // Generate AI title asynchronously using agent's SDK
+          // (waits briefly for agent creation if needed)
+          this.generateTitle(managed, message)
         }
       }
-    } catch (e) {
-      sessionLog.warn(`Auto-label evaluation failed for session ${sessionId}:`, e)
-    }
 
-    managed.lastMessageAt = Date.now()
-    this.setProcessing(managed, true)
+      // Evaluate auto-label rules against the user message (common path for both
+      // fresh and queued messages). Scans regex patterns configured on labels,
+      // then merges any new matches into the session's label array.
+      try {
+        const labelTree = listLabels(managed.workspace.rootPath)
+        const autoMatches = evaluateAutoLabels(message, labelTree)
+
+        if (autoMatches.length > 0) {
+          const existingLabels = managed.labels ?? []
+          const newEntries = autoMatches
+            .map(m => `${m.labelId}::${m.value}`)
+            .filter(entry => !existingLabels.includes(entry))
+
+          if (newEntries.length > 0) {
+            managed.labels = [...existingLabels, ...newEntries]
+            this.persistSession(managed)
+            this.sendEvent({
+              type: 'labels_changed',
+              sessionId,
+              labels: managed.labels,
+            }, managed.workspace.id)
+          }
+        }
+      } catch (e) {
+        sessionLog.warn(`Auto-label evaluation failed for session ${sessionId}:`, e)
+      }
+
+      managed.lastMessageAt = Date.now()
+      this.setProcessing(managed, true)
+      releaseAdmissionLockOnce()
+    } catch (err) {
+      releaseAdmissionLockOnce()
+      throw err
+    }
     managed.streamingText = ''
     managed.processingGeneration++
     managed.turnStartFinalMessageId = this.getLastFinalAssistantMessageId(managed.messages)

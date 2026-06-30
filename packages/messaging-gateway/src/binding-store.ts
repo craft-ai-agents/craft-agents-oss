@@ -57,9 +57,14 @@ export class BindingStore {
   // Query
   // -------------------------------------------------------------------------
 
-  findByChannel(platform: PlatformType, channelId: string): ChannelBinding | undefined {
+  findByChannel(platform: PlatformType, channelId: string, senderId?: string): ChannelBinding | undefined {
     return this.bindings.find(
-      (b) => b.platform === platform && b.channelId === channelId && b.enabled,
+      (b) => (
+        b.platform === platform &&
+        b.channelId === channelId &&
+        b.enabled &&
+        this.senderIsAuthorized(b, senderId)
+      ),
     )
   }
 
@@ -82,6 +87,7 @@ export class BindingStore {
     channelId: string,
     channelName?: string,
     config?: Partial<ChannelBinding['config']>,
+    authorizedSenderId?: string,
   ): ChannelBinding {
     // One channel → one session: evict any existing binding for the channel.
     this.bindings = this.bindings.filter(
@@ -95,6 +101,7 @@ export class BindingStore {
       platform,
       channelId,
       channelName,
+      authorizedSenderIds: authorizedSenderId ? [authorizedSenderId] : undefined,
       enabled: true,
       createdAt: Date.now(),
       config: normalizeBindingConfig(platform, config),
@@ -112,6 +119,12 @@ export class BindingStore {
       channelName,
     })
     return binding
+  }
+
+  private senderIsAuthorized(binding: ChannelBinding, senderId: string | undefined): boolean {
+    if (!binding.authorizedSenderIds?.length) return true;
+    if (!senderId) return false;
+    return binding.authorizedSenderIds.includes(senderId);
   }
 
   unbind(platform: PlatformType, channelId: string): boolean {
@@ -242,6 +255,9 @@ export class BindingStore {
 function normalizeBinding(raw: ChannelBinding): ChannelBinding {
   return {
     ...raw,
+    authorizedSenderIds: Array.isArray(raw.authorizedSenderIds)
+      ? raw.authorizedSenderIds.filter((senderId) => typeof senderId === 'string' && senderId.length > 0)
+      : undefined,
     config: normalizeBindingConfig(raw.platform, raw.config ?? {}),
   }
 }

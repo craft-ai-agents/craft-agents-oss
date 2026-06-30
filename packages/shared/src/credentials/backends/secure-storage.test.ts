@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, mock, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import * as os from 'os';
 import { tmpdir } from 'os';
@@ -16,6 +16,10 @@ const { SecureStorageBackend } = await import(`./secure-storage.ts?secure-storag
 
 afterAll(() => {
   rmSync(sandboxHome, { recursive: true, force: true });
+});
+
+beforeEach(() => {
+  rmSync(join(sandboxHome, '.craft-agent'), { recursive: true, force: true });
 });
 
 function writeUnreadableSafeStorageStore(): { credentialsFile: string; original: Buffer } {
@@ -49,6 +53,26 @@ describe('SecureStorageBackend', () => {
       { type: 'user_secret', name: 'NEW_SECRET' },
       { value: 'new-secret-value', source: 'user' }
     )).rejects.toThrow('cannot be unlocked');
-    expect(readFileSync(credentialsFile)).toEqual(original);
+    expect(readFileSync(credentialsFile).toString('base64')).toBe(original.toString('base64'));
+  });
+
+  test('serializes concurrent writes without dropping credentials', async () => {
+    const backendA = new SecureStorageBackend();
+    const backendB = new SecureStorageBackend();
+
+    await Promise.all([
+      backendA.set(
+        { type: 'source_apikey', workspaceId: 'ws-test', sourceId: 'source-a' },
+        { value: 'secret-a', source: 'native' }
+      ),
+      backendB.set(
+        { type: 'source_apikey', workspaceId: 'ws-test', sourceId: 'source-b' },
+        { value: 'secret-b', source: 'native' }
+      ),
+    ]);
+
+    const reader = new SecureStorageBackend();
+    await expect(reader.get({ type: 'source_apikey', workspaceId: 'ws-test', sourceId: 'source-a' })).resolves.toMatchObject({ value: 'secret-a' });
+    await expect(reader.get({ type: 'source_apikey', workspaceId: 'ws-test', sourceId: 'source-b' })).resolves.toMatchObject({ value: 'secret-b' });
   });
 });

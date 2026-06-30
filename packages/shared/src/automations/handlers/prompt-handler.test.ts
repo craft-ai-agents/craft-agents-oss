@@ -364,6 +364,48 @@ describe('PromptHandler', () => {
         else process.env.CRAFT_INTERNAL_COMPAT = oldInternal;
       }
     });
+
+    it('downgrades allow-all permission mode for external prompt triggers only', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        WebhookReceive: [{
+          slug: 'github-push',
+          permissionMode: 'allow-all',
+          actions: [{ type: 'prompt', prompt: 'external' }],
+        }],
+        LabelAdd: [{
+          permissionMode: 'allow-all',
+          actions: [{ type: 'prompt', prompt: 'internal' }],
+        }],
+      });
+
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+
+      await bus.emit('WebhookReceive', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        slug: 'github-push',
+        method: 'POST',
+        headers: {},
+        query: {},
+        body: { ok: true },
+        bodyRaw: '{"ok":true}',
+        remoteIp: '127.0.0.1',
+      });
+      await bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'bug',
+      });
+
+      const externalPrompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      const internalPrompts: PendingPrompt[] = onPromptsReady.mock.calls[1]![0];
+      expect(externalPrompts[0]!.permissionMode).toBe('ask');
+      expect(internalPrompts[0]!.permissionMode).toBe('allow-all');
+
+      handler.dispose();
+    });
   });
 
   describe('@mention parsing and deduplication', () => {

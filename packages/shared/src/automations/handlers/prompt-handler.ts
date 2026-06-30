@@ -14,6 +14,12 @@ import { matcherMatches, buildPromptEnvFromPayload, expandEnvVars, parsePromptRe
 import { deriveAutomationName } from '../name-utils.ts';
 
 const log = createLogger('prompt-handler');
+const EXTERNAL_INPUT_EVENTS = new Set<AutomationEvent>([
+  'FileWatch',
+  'PollUrl',
+  'WebhookReceive',
+  'MessageReceive',
+]);
 
 function getMessagingChannelFromPayload(payload: BaseEventPayload): PendingPrompt['messagingChannel'] | undefined {
   const record = payload as unknown as Record<string, unknown>;
@@ -26,6 +32,11 @@ function getMessagingChannelFromPayload(payload: BaseEventPayload): PendingPromp
     channelId,
     channelName: typeof senderName === 'string' ? senderName : null,
   };
+}
+
+function normalizePromptPermissionMode(event: AutomationEvent, mode: PermissionMode | undefined): PermissionMode | undefined {
+  if (mode === 'allow-all' && EXTERNAL_INPUT_EVENTS.has(event)) return 'ask';
+  return mode;
 }
 
 // ============================================================================
@@ -125,7 +136,7 @@ export class PromptHandler implements AutomationHandler {
           messagingChannel: prompt.bindMessagingChannel
             ? getMessagingChannelFromPayload(payload)
             : undefined,
-          permissionMode,
+          permissionMode: normalizePromptPermissionMode(event, permissionMode),
           llmConnection: prompt.llmConnection,
           model: prompt.model,
           thinkingLevel: prompt.thinkingLevel,

@@ -37,7 +37,12 @@ function walkFiles(root: string): string[] {
 }
 
 function escapeForTemplateLiteral(content: string): string {
-  return content.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+  return content
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\\/g, '\\\\')
+    .replace(/`/g, '\\`')
+    .replace(/\$\{/g, '\\${');
 }
 
 function toPosix(p: string): string {

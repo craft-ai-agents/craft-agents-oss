@@ -85,6 +85,7 @@ interface SessionRecord {
 interface MockHarness {
   deps: WorkflowRunnerDeps;
   sessions: Map<string, SessionRecord>;
+  deletedSessions: string[];
   promptsSent: Array<{ sessionId: string; prompt: string }>;
   events: WorkflowRunEvent[];
   /** Override what `sendMessage` does for a given step index. */
@@ -97,6 +98,7 @@ function makeHarness(opts: {
   unavailableAgentSlugs?: string[];
 } = {}): MockHarness {
   const sessions = new Map<string, SessionRecord>();
+  const deletedSessions: string[] = [];
   const promptsSent: Array<{ sessionId: string; prompt: string }> = [];
   const events: WorkflowRunEvent[] = [];
   const stepBehaviors = new Map<number, (record: SessionRecord) => Promise<void>>();
@@ -164,6 +166,9 @@ function makeHarness(opts: {
       const rec = sessions.get(sessionId);
       if (rec) rec.aborted = true;
     },
+    deleteSession: async (sessionId) => {
+      deletedSessions.push(sessionId);
+    },
     getWorkspaceRootPath: (_workspaceId) => workspaceRoot,
     emit: (event) => {
       events.push(event);
@@ -173,6 +178,7 @@ function makeHarness(opts: {
   return {
     deps,
     sessions,
+    deletedSessions,
     promptsSent,
     events,
     setStepBehavior: (index, fn) => stepBehaviors.set(index, fn),
@@ -244,6 +250,7 @@ describe('WorkflowRunner', () => {
     // received step 1's output substituted into its prompt.
     expect(h.promptsSent[0]!.prompt).toStartWith('Research cats');
     expect(h.promptsSent[1]!.prompt).toStartWith('Write about: STEP_ONE_OUT');
+    expect(h.deletedSessions).toEqual(['sess-1', 'sess-2']);
 
     // Persisted to disk.
     const onDisk = readRun(workspaceRoot, completed.id);
@@ -804,7 +811,7 @@ describe('WorkflowRunner', () => {
     expect(onDisk?.steps[1]!.state).toBe('succeeded');
   });
 
-  test('onFailure ask is parsed by the runner but stops without checkpoint support', async () => {
+  test('onFailure ask fails explicitly until checkpoint support exists', async () => {
     const h = makeHarness();
     const runner = new WorkflowRunner(h.deps);
 
@@ -835,7 +842,12 @@ describe('WorkflowRunner', () => {
     expect(completed.steps[0]!.state).toBe('failed');
     expect(completed.steps[1]!.state).toBe('queued');
     expect(h.sessions.size).toBe(1);
-    expect(findUpdatedDetail(h.events, 'step.failed')).toMatchObject({ onFailure: 'ask' });
+    expect(completed.steps[0]!.error).toMatchObject({ code: 'on-failure-ask-unsupported' });
+    expect(findUpdatedDetail(h.events, 'step.failed')).toMatchObject({
+      onFailure: 'ask',
+      error: { code: 'on-failure-ask-unsupported' },
+    });
+    expect(h.deletedSessions).toEqual(['sess-1']);
   });
 
   test('structured output: parses JSON and exposes dot-paths to later steps', async () => {
@@ -911,6 +923,7 @@ describe('WorkflowRunner', () => {
     expect(completed.steps[0]!.attempts).toBe(2);
     expect(completed.steps[0]!.output).toEqual({ title: 'Recovered' });
     expect(h.sessions.size).toBe(2);
+    expect(h.deletedSessions).toEqual(['sess-1', 'sess-2']);
     expect(findUpdatedDetail(h.events, 'step.retrying')).toMatchObject({
       kind: 'step.retrying',
       stepId: 'first',
@@ -985,6 +998,7 @@ describe('WorkflowRunner', () => {
     expect(completed.steps[0]!.state).toBe('failed');
     expect(completed.steps[0]!.error?.code).toBe('timeout');
     expect(h.sessions.get('sess-1')!.aborted).toBe(true);
+    expect(h.deletedSessions).toEqual(['sess-1']);
     expect(findUpdatedDetail(h.events, 'step.failed')).toMatchObject({
       kind: 'step.failed',
       stepId: 'first',

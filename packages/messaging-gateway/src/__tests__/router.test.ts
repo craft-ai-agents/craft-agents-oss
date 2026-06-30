@@ -121,6 +121,20 @@ describe('Router', () => {
     expect(args[2]).toBeUndefined() // fileAttachments
   })
 
+  it('does not route a bound channel for an unauthorized sender', async () => {
+    const store = new BindingStore(storeDir)
+    store.bind('ws1', 'sess-A', 'telegram', 'chat-1', undefined, undefined, 'user-1')
+    const sessionManager = makeFakeSessionManager()
+    const commands = makeFakeCommands()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const router = new Router(sessionManager as any, store, commands as unknown as Commands)
+
+    await router.route(makeFakeAdapter(), baseMsg({ senderId: 'user-2', text: 'hi there' }))
+
+    expect(sessionManager.sendMessage).not.toHaveBeenCalled()
+    expect(commands.handle).toHaveBeenCalledTimes(1)
+  })
+
   it('materializes a localPath attachment into FileAttachment[]', async () => {
     const { router, sessionManager } = makeRouter()
     const pngPath = writeTinyPng()

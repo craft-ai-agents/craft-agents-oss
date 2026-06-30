@@ -44,6 +44,16 @@ describe('BindingStore', () => {
     expect(store.findByChannel('telegram', 'unknown')).toBeUndefined()
   })
 
+  it('restricts a binding to authorized senders when present', () => {
+    const store = new BindingStore(dir)
+    const binding = store.bind('ws1', 'session-A', 'telegram', 'chat-1', 'Alice', undefined, 'sender-1')
+
+    expect(binding.authorizedSenderIds).toEqual(['sender-1'])
+    expect(store.findByChannel('telegram', 'chat-1', 'sender-1')?.sessionId).toBe('session-A')
+    expect(store.findByChannel('telegram', 'chat-1', 'sender-2')).toBeUndefined()
+    expect(store.findByChannel('telegram', 'chat-1')).toBeUndefined()
+  })
+
   it('evicts prior binding when same channel binds again', () => {
     const store = new BindingStore(dir)
     store.bind('ws1', 'sess-1', 'telegram', 'chat-1')
@@ -99,10 +109,12 @@ describe('BindingStore', () => {
     expect(store.unbindById(a.id)).toBe(false)
   })
 
-  it('forces WhatsApp bindings to use desktop-only approvals', () => {
+  it('forces remote chat bindings to use desktop-only approvals', () => {
     const store = new BindingStore(dir)
-    const binding = store.bind('ws1', 'sess', 'whatsapp', 'c2')
-    expect(binding.config.approvalChannel).toBe('app')
+    const whatsapp = store.bind('ws1', 'sess', 'whatsapp', 'c2')
+    const telegram = store.bind('ws1', 'sess', 'telegram', 'c3', undefined, { approvalChannel: 'chat' })
+    expect(whatsapp.config.approvalChannel).toBe('app')
+    expect(telegram.config.approvalChannel).toBe('app')
   })
 
   it('fires change listener after mutation', () => {

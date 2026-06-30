@@ -31,6 +31,7 @@ export interface DeepResearchRunnerDeps {
   getLastAssistantText: (sessionId: string) => string
   getSessionToolUseSummary: (sessionId: string) => { count: number; names: string[] }
   abortSession: (sessionId: string) => Promise<void>
+  deleteSession?: (sessionId: string) => Promise<void>
   getWorkspaceRootPath: (workspaceId: string) => string
   resolveSourceReadiness: (workspaceId: string, requestedSlugs: string[]) => DeepResearchSourceReadiness
   resolveSourceProfiles: (workspaceId: string, sourceSlugs: string[]) => DeepResearchSourceProfile[]
@@ -48,10 +49,16 @@ const DEEP_RESEARCH_SYSTEM_PROMPT = [
   'You run a real research loop, not a single lookup.',
   'Use selected MCP/API/local/browser/search tools when they are available.',
   'When a search tool such as Exa is selected, use it for discovery before synthesis.',
-  'When a browser/computer-use tool is selected, open and inspect promising pages/items instead of relying only on snippets.',
+  'When a browser/search tool is selected, open and inspect promising pages/items instead of relying only on snippets.',
   'After initial findings, identify gaps or contradictions and run follow-up searches when budget allows.',
   'If evidence is missing, say exactly what is missing.',
 ].join('\n')
+
+const DEEP_RESEARCH_STEP_TIMEOUT_MS_BY_DEPTH: Record<DeepResearchDepth, number> = {
+  quick: 5 * 60 * 1000,
+  standard: 10 * 60 * 1000,
+  deep: 20 * 60 * 1000,
+}
 
 function nowIso(): string {
   return new Date().toISOString()
@@ -187,7 +194,14 @@ function requiresResearchToolUse(run: DeepResearchRunSnapshot, step: DeepResearc
 
 function isRelevantResearchToolName(toolName: string, sourceProfiles: DeepResearchSourceProfile[]): boolean {
   const normalized = toolName.toLowerCase()
-  if (normalized.startsWith('browser') || normalized.includes('computer-use') || normalized.includes('chrome')) {
+  if (
+    normalized === 'web_search' ||
+    normalized === 'web_fetch' ||
+    normalized.startsWith('web_search') ||
+    normalized.startsWith('web_fetch') ||
+    normalized.startsWith('browser') ||
+    normalized.includes('chrome')
+  ) {
     return true
   }
   return sourceProfiles.some((source) => (
@@ -356,7 +370,7 @@ export class DeepResearchRunner {
       const session = await this.deps.createSession(active.snapshot.workspaceId, {
         name: `${active.snapshot.title} · ${planStep.title}`,
         hidden: true,
-        permissionMode: active.snapshot.planPolicy === 'auto' ? 'allow-all' : 'ask',
+        permissionMode: active.snapshot.planPolicy === 'auto' ? 'safe' : 'ask',
         enabledSourceSlugs: active.snapshot.sourceReadiness.usable,
         sessionStatus: 'in-progress',
         customSystemPrompt: DEEP_RESEARCH_SYSTEM_PROMPT,
@@ -379,40 +393,45 @@ export class DeepResearchRunner {
       })
       stepRun.sessionId = session.id
       active.currentSessionId = session.id
-      if (this.shouldStop(active)) {
-        try {
-          await this.deps.abortSession(session.id)
-        } catch {
-          // Best effort: the run has already been cancelled or otherwise stopped.
+      try {
+        if (this.shouldStop(active)) {
+          try {
+            await this.deps.abortSession(session.id)
+          } catch {
+            // Best effort: the run has already been cancelled or otherwise stopped.
+          }
+          return
         }
-        return
-      }
-      this.persistAndEmit(active.snapshot)
+        this.persistAndEmit(active.snapshot)
 
-      await this.deps.sendMessage(session.id, this.buildStepPrompt(active.snapshot, planStep))
-      if (this.shouldStop(active)) return
-      const output = this.deps.getLastAssistantText(session.id).trim()
-      if (!output) throw new Error(`Step "${planStep.id}" produced no output.`)
-      if (requiresResearchToolUse(active.snapshot, planStep)) {
-        const toolUseSummary = this.deps.getSessionToolUseSummary(session.id)
-        const relevantToolNames = toolUseSummary.names.filter((name) => (
-          isRelevantResearchToolName(name, active.snapshot.plan.sourceProfiles ?? [])
-        ))
-        if (relevantToolNames.length === 0) {
-          throw new Error(
-            `Step "${planStep.id}" did not use any selected search/browser tool. ` +
-            `Completed tools: ${toolUseSummary.names.join(', ') || 'none'}.`,
-          )
+        await this.sendMessageWithTimeout(active, session.id, this.buildStepPrompt(active.snapshot, planStep))
+        if (this.shouldStop(active)) return
+        const output = this.deps.getLastAssistantText(session.id).trim()
+        if (!output) throw new Error(`Step "${planStep.id}" produced no output.`)
+        if (requiresResearchToolUse(active.snapshot, planStep)) {
+          const toolUseSummary = this.deps.getSessionToolUseSummary(session.id)
+          const relevantToolNames = toolUseSummary.names.filter((name) => (
+            isRelevantResearchToolName(name, active.snapshot.plan.sourceProfiles ?? [])
+          ))
+          if (relevantToolNames.length === 0) {
+            throw new Error(
+              `Step "${planStep.id}" did not use any selected search/browser tool. ` +
+              `Completed tools: ${toolUseSummary.names.join(', ') || 'none'}.`,
+            )
+          }
         }
-      }
 
-      const completedAt = nowIso()
-      stepRun.state = 'succeeded'
-      stepRun.output = output
-      stepRun.completedAt = completedAt
-      active.snapshot.updatedAt = completedAt
-      active.snapshot.events.push({ ts: completedAt, type: 'step.completed', message: `${planStep.title} completed.` })
-      this.persistAndEmit(active.snapshot)
+        const completedAt = nowIso()
+        stepRun.state = 'succeeded'
+        stepRun.output = output
+        stepRun.completedAt = completedAt
+        active.snapshot.updatedAt = completedAt
+        active.snapshot.events.push({ ts: completedAt, type: 'step.completed', message: `${planStep.title} completed.` })
+        this.persistAndEmit(active.snapshot)
+      } finally {
+        active.currentSessionId = undefined
+        await this.deleteHiddenStepSession(session.id)
+      }
     }
 
     if (this.shouldStop(active)) return
@@ -448,6 +467,42 @@ export class DeepResearchRunner {
       '',
       'Return only the completed work for this step.',
     ].join('\n')
+  }
+
+  private async sendMessageWithTimeout(active: ActiveDeepResearchRun, sessionId: string, prompt: string): Promise<void> {
+    const depth = active.snapshot.plan.depth ?? 'standard'
+    const timeoutMs = DEEP_RESEARCH_STEP_TIMEOUT_MS_BY_DEPTH[depth] ?? DEEP_RESEARCH_STEP_TIMEOUT_MS_BY_DEPTH.standard
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    try {
+      await Promise.race([
+        this.deps.sendMessage(sessionId, prompt),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error(`Deep research step timed out after ${Math.round(timeoutMs / 1000)} seconds.`))
+          }, timeoutMs)
+        }),
+      ])
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('Deep research step timed out')) {
+        try {
+          await this.deps.abortSession(sessionId)
+        } catch {
+          // The timeout failure is the meaningful error; abort cleanup is best-effort.
+        }
+      }
+      throw err
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }
+
+  private async deleteHiddenStepSession(sessionId: string): Promise<void> {
+    if (!this.deps.deleteSession) return
+    try {
+      await this.deps.deleteSession(sessionId)
+    } catch {
+      // Hidden deep-research sessions are transient; run snapshots retain the useful output.
+    }
   }
 
   private finalizeReport(run: DeepResearchRunSnapshot): void {

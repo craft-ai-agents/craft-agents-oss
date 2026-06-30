@@ -214,10 +214,14 @@ export const DEFAULT_BINDING_CONFIG: BindingConfig = {
   editIntervalMs: 3500,
 }
 
+function requiresAppApproval(platform: PlatformType): boolean {
+  return platform === 'whatsapp' || platform === 'telegram'
+}
+
 export function getDefaultBindingConfig(platform: PlatformType): BindingConfig {
   return {
     ...DEFAULT_BINDING_CONFIG,
-    approvalChannel: platform === 'whatsapp' ? 'app' : DEFAULT_BINDING_CONFIG.approvalChannel,
+    approvalChannel: requiresAppApproval(platform) ? 'app' : DEFAULT_BINDING_CONFIG.approvalChannel,
   }
 }
 
@@ -234,7 +238,7 @@ export function normalizeBindingConfig(
     ...base,
     ...config,
     responseMode: resolvedResponseMode,
-    approvalChannel: platform === 'whatsapp' ? 'app' : (config?.approvalChannel ?? base.approvalChannel),
+    approvalChannel: requiresAppApproval(platform) ? 'app' : (config?.approvalChannel ?? base.approvalChannel),
   }
 }
 
@@ -245,6 +249,7 @@ export interface ChannelBinding {
   platform: PlatformType
   channelId: string
   channelName?: string
+  authorizedSenderIds?: string[]
   enabled: boolean
   createdAt: number
   config: BindingConfig

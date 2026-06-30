@@ -1786,8 +1786,33 @@ export function getPathHint(targetPath: string, plansFolderPath: string, dataFol
 /**
  * Check if an MCP tool is read-only using the given config
  */
-function isReadOnlyMcpToolWithConfig(toolName: string, config: ToolCheckConfig): boolean {
-  return config.readOnlyMcpPatterns.some(pattern => pattern.test(toolName));
+export function isReadOnlyMcpToolWithConfig(toolName: string, config: ToolCheckConfig): boolean {
+  const actionSegment = getMcpToolActionSegment(toolName);
+  return config.readOnlyMcpPatterns.some(pattern => patternMatchesMcpAction(pattern, actionSegment));
+}
+
+function getMcpToolActionSegment(toolName: string): string {
+  const parts = toolName.split('__').filter(Boolean);
+  return parts.at(-1) ?? toolName;
+}
+
+function patternMatchesMcpAction(pattern: RegExp, actionSegment: string): boolean {
+  pattern.lastIndex = 0;
+  if (!pattern.test(actionSegment)) return false;
+
+  const source = pattern.source;
+  if (source.startsWith('^') || source.endsWith('$') || /[()[\]{}|+?*\\]/.test(source)) {
+    return true;
+  }
+
+  const normalizedSource = source.toLowerCase();
+  const normalizedAction = actionSegment.toLowerCase();
+  if (normalizedAction === normalizedSource) return true;
+
+  return normalizedAction
+    .split(/[^a-z0-9]+/i)
+    .filter(Boolean)
+    .includes(normalizedSource);
 }
 
 /**

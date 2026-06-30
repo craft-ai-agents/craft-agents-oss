@@ -104,7 +104,10 @@ describe('Commands', () => {
 
     await commands.handleCommand(adapter, makeMessage('/bind 1'))
 
-    expect(store.findByChannel('whatsapp', 'chan-1')?.sessionId).toBe('sess-2')
+    expect(store.findByChannel('whatsapp', 'chan-1', 'u1')?.sessionId).toBe('sess-2')
+    expect(store.findByChannel('whatsapp', 'chan-1', 'u1')?.authorizedSenderIds).toEqual(['u1'])
+    expect(store.findByChannel('whatsapp', 'chan-1')).toBeUndefined()
+    expect(store.findByChannel('whatsapp', 'chan-1', 'other')).toBeUndefined()
     expect(adapter.sent.at(-1)).toContain('Newest')
   })
 
