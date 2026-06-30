@@ -68,6 +68,30 @@ const SECRET_PRESETS: SecretPreset[] = [
     sourceType: 'local',
   },
   {
+    group: 'Workspace',
+    name: 'GOOGLE_OAUTH_CLIENT_ID',
+    label: 'Google OAuth client ID',
+    description: 'Desktop OAuth client ID used for Google Calendar, Gmail, Drive, People, and Google MCP source sign-in.',
+    placeholder: 'Google OAuth client ID',
+    storage: 'env',
+  },
+  {
+    group: 'Workspace',
+    name: 'GOOGLE_OAUTH_CLIENT_SECRET',
+    label: 'Google OAuth client secret',
+    description: 'Desktop OAuth client secret stored with Google tokens so Calendar/Gmail/Drive access can refresh safely.',
+    placeholder: 'Google OAuth client secret',
+    storage: 'env',
+  },
+  {
+    group: 'Workspace',
+    name: 'GOOGLE_WORKSPACE_PRIMARY_CALENDAR_ID',
+    label: 'Primary calendar ID',
+    description: 'Optional. Defaults to primary. Use this when Artist HQ should sync to a dedicated Google Calendar.',
+    placeholder: 'primary',
+    storage: 'env',
+  },
+  {
     group: 'Promotion',
     name: 'SPOTIFY_CLIENT_ID',
     label: 'Spotify client ID',
@@ -500,6 +524,14 @@ const SERVICES: SecretService[] = [
     presetNames: ['YOUTUBE_API_KEY'],
   },
   {
+    id: 'google-workspace',
+    group: 'Workspace',
+    title: 'Google Workspace',
+    description: 'Foundation credentials for Calendar sync, Gmail actions, Drive file context, People contacts, and future Google MCP tools. OAuth tokens are stored encrypted after sign-in.',
+    presetNames: ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_WORKSPACE_PRIMARY_CALENDAR_ID'],
+    optionalPresetNames: ['GOOGLE_WORKSPACE_PRIMARY_CALENDAR_ID'],
+  },
+  {
     id: 'spotify',
     group: 'Promotion',
     title: 'Spotify',
@@ -823,7 +855,7 @@ export default function SecretsSettingsPage() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <h3 className="text-base font-semibold text-white/90">{service.title}</h3>
-                              <StatusPill status={status} />
+                              <StatusPill status={status} serviceId={service.id} />
                             </div>
                             <p className="mt-1 max-w-2xl text-xs leading-5 text-white/45">{service.description}</p>
                           </div>
@@ -914,9 +946,10 @@ export default function SecretsSettingsPage() {
   )
 }
 
-function StatusPill({ status }: { status: ServiceStatus }) {
+function StatusPill({ status, serviceId }: { status: ServiceStatus; serviceId: string }) {
   const ready = status === 'ready'
   const optional = status === 'optional'
+  const label = serviceId === 'google-workspace' && ready ? 'Keys saved' : ready ? 'Ready' : optional ? 'Optional' : 'Needs key'
   return (
     <span className={[
       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em]',
@@ -924,7 +957,7 @@ function StatusPill({ status }: { status: ServiceStatus }) {
     ].join(' ')}
     >
       {ready ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-      {ready ? 'Ready' : optional ? 'Optional' : 'Needs key'}
+      {label}
     </span>
   )
 }

@@ -26,8 +26,13 @@ export type { GoogleService };
 // Users can provide their own credentials via source config (preferred for OSS)
 // These env vars are only used if credentials are not provided explicitly
 // Note: Google requires client_secret for Desktop apps despite PKCE support
-const GOOGLE_CLIENT_ID_ENV = process.env.GOOGLE_OAUTH_CLIENT_ID || '';
-const GOOGLE_CLIENT_SECRET_ENV = process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
+function getGoogleClientIdEnv(): string {
+  return process.env.GOOGLE_OAUTH_CLIENT_ID || '';
+}
+
+function getGoogleClientSecretEnv(): string {
+  return process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
+}
 
 // Google OAuth endpoints
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -194,8 +199,8 @@ export async function refreshGoogleToken(
   accessToken: string;
   expiresAt?: number;
 }> {
-  const id = clientId || GOOGLE_CLIENT_ID_ENV;
-  const secret = clientSecret || GOOGLE_CLIENT_SECRET_ENV;
+  const id = clientId || getGoogleClientIdEnv();
+  const secret = clientSecret || getGoogleClientSecretEnv();
 
   if (!id || !secret) {
     throw new Error(
@@ -240,8 +245,8 @@ export async function refreshGoogleToken(
  * @returns true if credentials are available (either provided or from env vars)
  */
 export function isGoogleOAuthConfigured(clientId?: string, clientSecret?: string): boolean {
-  const id = clientId || GOOGLE_CLIENT_ID_ENV;
-  const secret = clientSecret || GOOGLE_CLIENT_SECRET_ENV;
+  const id = clientId || getGoogleClientIdEnv();
+  const secret = clientSecret || getGoogleClientSecretEnv();
   return Boolean(id && secret);
 }
 
@@ -287,8 +292,8 @@ export interface PrepareGoogleOAuthOptions {
  * Returns everything needed to construct the auth URL and later exchange the code.
  */
 export function prepareGoogleOAuth(options: PrepareGoogleOAuthOptions): PreparedOAuthFlow {
-  const clientId = options.clientId || GOOGLE_CLIENT_ID_ENV;
-  const clientSecret = options.clientSecret || GOOGLE_CLIENT_SECRET_ENV;
+  const clientId = options.clientId || getGoogleClientIdEnv();
+  const clientSecret = options.clientSecret || getGoogleClientSecretEnv();
 
   if (!isGoogleOAuthConfigured(clientId, clientSecret)) {
     throw new Error(
@@ -384,8 +389,8 @@ export async function startGoogleOAuth(
 ): Promise<GoogleOAuthResult> {
   try {
     // Resolve credentials: use provided values or fall back to env vars
-    const clientId = options.clientId || GOOGLE_CLIENT_ID_ENV;
-    const clientSecret = options.clientSecret || GOOGLE_CLIENT_SECRET_ENV;
+    const clientId = options.clientId || getGoogleClientIdEnv();
+    const clientSecret = options.clientSecret || getGoogleClientSecretEnv();
 
     // Verify OAuth credentials are configured
     if (!isGoogleOAuthConfigured(clientId, clientSecret)) {

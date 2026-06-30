@@ -9,6 +9,22 @@ export interface ArtistNetworkCategoryDefinition {
   label: string
 }
 
+export interface ArtistWorkspaceLink {
+  workspaceId: string
+  workspaceName?: string
+  role?: string
+  notes?: string
+  linkedAt: string
+}
+
+export interface GooglePeopleSyncState {
+  resourceName?: string
+  etag?: string
+  syncStatus?: 'not-synced' | 'synced' | 'local-change' | 'remote-change' | 'conflict' | 'error'
+  lastSyncedAt?: string
+  error?: string
+}
+
 export interface ArtistNetworkPerson {
   id: string
   name: string
@@ -22,6 +38,8 @@ export interface ArtistNetworkPerson {
   canHelpWith?: string
   tags: string[]
   notes?: string
+  workspaceLinks: ArtistWorkspaceLink[]
+  google?: GooglePeopleSyncState
   createdAt: string
   updatedAt: string
 }
@@ -100,7 +118,7 @@ export function parseArtistNetworkDocResult(doc: ContextDocDTO | undefined): Art
       network: {
         version: 1,
         categories: normalizeCategories(parsed.categories),
-        people: parsed.people.filter(isPerson),
+        people: parsed.people.filter(isPerson).map(normalizePerson),
         updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
       },
     }
@@ -123,8 +141,12 @@ export function updateNetworkPerson(
     notes?: string
     canHelpWith?: string
     tags?: string
+    workspaceLink?: Omit<ArtistWorkspaceLink, 'linkedAt'>
   },
 ): ArtistNetworkPerson {
+  const workspaceLinks = input.workspaceLink
+    ? upsertWorkspaceLink(person.workspaceLinks, input.workspaceLink)
+    : person.workspaceLinks
   return {
     ...person,
     name: input.name.trim(),
@@ -134,6 +156,7 @@ export function updateNetworkPerson(
     notes: clean(input.notes),
     canHelpWith: clean(input.canHelpWith),
     tags: parseTags(input.tags),
+    workspaceLinks,
     updatedAt: new Date().toISOString(),
   }
 }
@@ -162,6 +185,7 @@ export function createNetworkPerson(input: {
   notes?: string
   canHelpWith?: string
   tags?: string
+  workspaceLink?: Omit<ArtistWorkspaceLink, 'linkedAt'>
 }): ArtistNetworkPerson {
   const now = new Date().toISOString()
   return {
@@ -174,9 +198,36 @@ export function createNetworkPerson(input: {
     canHelpWith: clean(input.canHelpWith),
     relationship: 'new',
     tags: parseTags(input.tags),
+    workspaceLinks: input.workspaceLink ? normalizeWorkspaceLinks([{ ...input.workspaceLink, linkedAt: now }]) : [],
     createdAt: now,
     updatedAt: now,
   }
+}
+
+export function linkNetworkPersonToWorkspace(
+  person: ArtistNetworkPerson,
+  link: Omit<ArtistWorkspaceLink, 'linkedAt'>,
+): ArtistNetworkPerson {
+  return {
+    ...person,
+    workspaceLinks: upsertWorkspaceLink(person.workspaceLinks, link),
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+export function unlinkNetworkPersonFromWorkspace(
+  person: ArtistNetworkPerson,
+  workspaceId: string,
+): ArtistNetworkPerson {
+  return {
+    ...person,
+    workspaceLinks: person.workspaceLinks.filter((link) => link.workspaceId !== workspaceId),
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+export function networkPeopleForWorkspace(people: ArtistNetworkPerson[], workspaceId: string): ArtistNetworkPerson[] {
+  return people.filter((person) => person.workspaceLinks.some((link) => link.workspaceId === workspaceId))
 }
 
 function normalizeNetwork(network: ArtistNetwork): ArtistNetwork {
@@ -221,6 +272,75 @@ function parseTags(value: string | undefined): string[] {
     .split(',')
     .map((tag) => tag.trim())
     .filter(Boolean)
+}
+
+function normalizePerson(person: ArtistNetworkPerson): ArtistNetworkPerson {
+  return {
+    ...person,
+    name: person.name.trim(),
+    role: clean(person.role),
+    contact: clean(person.contact),
+    socials: clean(person.socials),
+    location: clean(person.location),
+    relationship: normalizeRelationship(person.relationship),
+    lastTouch: clean(person.lastTouch),
+    canHelpWith: clean(person.canHelpWith),
+    tags: Array.isArray(person.tags) ? person.tags.map(String).map((tag) => tag.trim()).filter(Boolean) : [],
+    notes: clean(person.notes),
+    workspaceLinks: normalizeWorkspaceLinks(person.workspaceLinks),
+    google: normalizeGoogleSync(person.google),
+    createdAt: typeof person.createdAt === 'string' ? person.createdAt : new Date().toISOString(),
+    updatedAt: typeof person.updatedAt === 'string' ? person.updatedAt : new Date().toISOString(),
+  }
+}
+
+function upsertWorkspaceLink(
+  links: ArtistWorkspaceLink[],
+  link: Omit<ArtistWorkspaceLink, 'linkedAt'>,
+): ArtistWorkspaceLink[] {
+  const cleanLink = normalizeWorkspaceLinks([{ ...link, linkedAt: new Date().toISOString() }])[0]
+  if (!cleanLink) return links
+  return [...links.filter((existing) => existing.workspaceId !== cleanLink.workspaceId), cleanLink]
+}
+
+function normalizeWorkspaceLinks(value: unknown): ArtistWorkspaceLink[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((link): link is ArtistWorkspaceLink => typeof link?.workspaceId === 'string' && Boolean(link.workspaceId.trim()))
+    .map((link) => ({
+      workspaceId: link.workspaceId.trim(),
+      workspaceName: clean(link.workspaceName),
+      role: clean(link.role),
+      notes: clean(link.notes),
+      linkedAt: typeof link.linkedAt === 'string' ? link.linkedAt : new Date().toISOString(),
+    }))
+}
+
+function normalizeGoogleSync(value: unknown): GooglePeopleSyncState | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const candidate = value as GooglePeopleSyncState
+  return {
+    resourceName: clean(candidate.resourceName),
+    etag: clean(candidate.etag),
+    syncStatus: normalizeSyncStatus(candidate.syncStatus),
+    lastSyncedAt: clean(candidate.lastSyncedAt),
+    error: clean(candidate.error),
+  }
+}
+
+function normalizeSyncStatus(value: unknown): GooglePeopleSyncState['syncStatus'] {
+  return value === 'not-synced'
+    || value === 'synced'
+    || value === 'local-change'
+    || value === 'remote-change'
+    || value === 'conflict'
+    || value === 'error'
+    ? value
+    : undefined
+}
+
+function normalizeRelationship(value: unknown): ArtistNetworkPerson['relationship'] {
+  return value === 'new' || value === 'warm' || value === 'strong' || value === 'vip' ? value : 'new'
 }
 
 function normalizeCategories(categories: unknown): ArtistNetworkCategoryDefinition[] {

@@ -1037,6 +1037,11 @@ function ArtistCalendarView({
                   <div className="text-sm font-semibold text-white/76">{event.title}</div>
                   {event.time ? <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-orange-200/65">{event.time}</div> : null}
                   {event.notes ? <div className="mt-2 text-xs leading-5 text-white/38">{event.notes}</div> : null}
+                  <ContextBadges
+                    workspaceLinks={event.workspaceLinks}
+                    googleStatus={event.google?.syncStatus}
+                    relatedCount={event.relatedPersonIds.length}
+                  />
                 </div>
                 <button
                   type="button"
@@ -1200,6 +1205,8 @@ function PersonDetailPanel({
         />
       </div>
 
+      <ContextBadges workspaceLinks={person.workspaceLinks} googleStatus={person.google?.syncStatus} />
+
       <div className="mt-auto flex items-center justify-between gap-3 pt-4">
         <button type="button" onClick={onDelete} disabled={disabled} className="inline-flex h-9 items-center gap-2 rounded-full border border-red-300/15 px-4 text-xs font-medium text-red-100/70 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40">
           <Trash2 className="h-3.5 w-3.5" />
@@ -1209,6 +1216,37 @@ function PersonDetailPanel({
           Save Changes
         </button>
       </div>
+    </div>
+  )
+}
+
+function ContextBadges({
+  workspaceLinks,
+  googleStatus,
+  relatedCount,
+}: {
+  workspaceLinks: { workspaceId: string; workspaceName?: string; role?: string }[]
+  googleStatus?: string
+  relatedCount?: number
+}) {
+  const badges = [
+    ...workspaceLinks.map((link) => link.workspaceName || link.role || 'Campaign linked'),
+    googleStatus && googleStatus !== 'not-synced' ? `Google ${googleStatus}` : null,
+    relatedCount ? `${relatedCount} people` : null,
+  ].filter((badge): badge is string => Boolean(badge))
+
+  if (badges.length === 0) return null
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {badges.map((badge, index) => (
+        <span
+          key={`${badge}-${index}`}
+          className="rounded-full border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[10px] font-medium text-white/38"
+        >
+          {badge}
+        </span>
+      ))}
     </div>
   )
 }
