@@ -32,16 +32,36 @@ def _parse_csv(s: str) -> list[str]:
 
 def main() -> None:
     from registry import get_adapters, all_ids  # local: registry imports adapters
+    from source_sets import source_csv, source_ids_for_set, source_set_names
 
     ap = argparse.ArgumentParser(description="Async scrape engine")
     ap.add_argument("--part", help="single part (back-compat)")
     ap.add_argument("--parts", help="csv list of parts")
     ap.add_argument("--source", default="", help="csv adapter ids (back-compat)")
+    ap.add_argument("--source-set", choices=source_set_names(),
+                    help="named source set from source_catalog.yaml")
+    ap.add_argument("--list-source-set", choices=source_set_names(),
+                    help="print the named source set and exit")
     ap.add_argument("--gate", type=int, default=DEFAULT_GATE,
                     help="global concurrency (4C4G: keep small)")
     ap.add_argument("--wait", type=int, default=10, help="per-nav timeout seconds")
     ap.add_argument("--limit", type=int, default=5, help="api mode: max records")
     args = ap.parse_args()
+
+    if args.list_source_set:
+        ids = source_ids_for_set(args.list_source_set)
+        print(json.dumps({
+            "source_set": args.list_source_set,
+            "sources": ids,
+            "source_csv": source_csv(ids),
+        }, ensure_ascii=False, indent=2))
+        return
+
+    if args.source and args.source_set:
+        print(json.dumps({"rows": [], "errors": [
+            {"error": "use either --source or --source-set, not both"},
+        ]}, ensure_ascii=False, indent=2))
+        return
 
     parts: list[str] = []
     if args.parts:
@@ -55,7 +75,7 @@ def main() -> None:
                          ensure_ascii=False, indent=2))
         return
 
-    ids = _parse_csv(args.source)
+    ids = source_ids_for_set(args.source_set) if args.source_set else _parse_csv(args.source)
     adapter_ids = all_ids()
     known_ids = set(adapter_ids)
     unknown_ids = [source_id for source_id in ids if source_id not in known_ids]

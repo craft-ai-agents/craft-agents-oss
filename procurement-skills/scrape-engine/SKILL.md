@@ -59,13 +59,35 @@ metadata:
 cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --source "<source-id[,source-id...]>" 2>/dev/null
 ```
 
+首轮直接平台全量查询：
+
+```bash
+cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --source-set direct --gate 4 --wait 15 2>/dev/null
+```
+
+聚合平台查询：
+
+```bash
+cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --source-set aggregator --gate 4 --wait 15 2>/dev/null
+```
+
 多型号查询：
 
 ```bash
 cloakbrowser-python .agents/skills/scrape-engine/engine.py --parts "<型号1>,<型号2>" --source "<source-id[,source-id...]>" 2>/dev/null
 ```
 
-没有明确 source 时，先读 `source_catalog.yaml` 和 `registry.py`，按数据需求选择 source。
+查看 source 集合：
+
+```bash
+cloakbrowser-python .agents/skills/scrape-engine/engine.py --list-source-set direct
+cloakbrowser-python .agents/skills/scrape-engine/engine.py --list-source-set aggregator
+```
+
+`--source-set direct` 从 `source_catalog.yaml` 选取当前 `status=enabled/limited` 的直接库存/报价平台，不包含聚合平台、替代候选源、reference-only 或 deprecated 源。
+`--source-set aggregator` 只包含 `channel_type=aggregator` 的聚合平台。
+全量首轮查询使用 `--source-set direct`；不要用 `head`、手抄清单或凭印象挑平台。
+没有明确 source 时，先读 `source_catalog.yaml` 和 `registry.py`，按数据需求选择 source；若需求是全量直接平台，用 `--source-set direct`。
 `--source` 必须使用 `source_catalog.yaml` / `registry.py` 中的 source id 原文；不要把连字符改成下划线，例如 `rs-uk`、`rs-jp`、`element14-cn`、`misumi-jp` 不能写成 `rs_uk`、`element14_cn`、`misumi_jp`。
 全平台或多平台查询也要显式传入 `--source "<source-id[,source-id...]>"`；不要省略 `--source` 触发 registry 的隐式 all_ids，因为 registry 可能包含替代、迁移或诊断 adapter，既会拉长运行时间，也会污染平台覆盖口径。
 
