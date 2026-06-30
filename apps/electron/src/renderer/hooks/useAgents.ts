@@ -56,6 +56,7 @@ const BUILTIN_VISIBLE_AGENT_SLUGS = [
   'ig-trending-power-up',
   'influencer-campaign-power-up',
   'playlisting-power-up',
+  'spotify-analyst',
   'spotify-playlist-creator',
   'shopify-agent',
   'print-agent',

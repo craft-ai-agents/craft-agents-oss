@@ -1263,7 +1263,7 @@ function isContextDocVisibleToAgent(doc: ContextDocDTO, agentSlug: string) {
 }
 
 function getAgentDomain(tags: string[] | undefined, slug: string, name: string, description?: string) {
-  if (slug === 'youtube-research-agent' || slug === 'youtube-intelligence-agent') {
+  if (slug === 'youtube-research-agent' || slug === 'youtube-intelligence-agent' || slug === 'spotify-analyst') {
     return 'Research'
   }
 
@@ -1331,6 +1331,7 @@ function launchpadAgentRank(slug: string): number {
     'ig-trending-power-up',
     'influencer-campaign-power-up',
     'playlisting-power-up',
+    'spotify-analyst',
     'spotify-playlist-creator',
     'content-genius',
     'hypermotion-agent',

@@ -2,21 +2,12 @@ import type { ContextDocDTO, ContextDocMetadata } from '../../shared/types'
 
 export const ARTIST_NETWORK_CONTEXT_SLUG = 'artist-network'
 
-export type ArtistNetworkCategory =
-  | 'key'
-  | 'music'
-  | 'collaborators'
-  | 'djs'
-  | 'producers'
-  | 'press'
-  | 'playlist-curators'
-  | 'influencers'
-  | 'design'
-  | 'video'
-  | 'venues'
-  | 'brands'
-  | 'fans-vips'
-  | 'other'
+export type ArtistNetworkCategory = string
+
+export interface ArtistNetworkCategoryDefinition {
+  id: ArtistNetworkCategory
+  label: string
+}
 
 export interface ArtistNetworkPerson {
   id: string
@@ -37,11 +28,16 @@ export interface ArtistNetworkPerson {
 
 export interface ArtistNetwork {
   version: 1
+  categories: ArtistNetworkCategoryDefinition[]
   people: ArtistNetworkPerson[]
   updatedAt: string
 }
 
-export const NETWORK_CATEGORIES: Array<{ id: ArtistNetworkCategory; label: string }> = [
+export type ArtistNetworkParseResult =
+  | { ok: true; network: ArtistNetwork }
+  | { ok: false; network: ArtistNetwork; error: string }
+
+export const NETWORK_CATEGORIES: ArtistNetworkCategoryDefinition[] = [
   { id: 'key', label: 'Key' },
   { id: 'music', label: 'Music' },
   { id: 'collaborators', label: 'Collaborators' },
@@ -70,41 +66,92 @@ export function artistNetworkMetadata(): ContextDocMetadata {
 export function emptyArtistNetwork(): ArtistNetwork {
   return {
     version: 1,
+    categories: NETWORK_CATEGORIES,
     people: [],
     updatedAt: new Date().toISOString(),
   }
 }
 
 export function parseArtistNetworkDoc(doc: ContextDocDTO | undefined): ArtistNetwork {
-  if (!doc?.body.trim()) return emptyArtistNetwork()
+  return parseArtistNetworkDocResult(doc).network
+}
+
+export function parseArtistNetworkDocResult(doc: ContextDocDTO | undefined): ArtistNetworkParseResult {
+  if (!doc?.body.trim()) return { ok: true, network: emptyArtistNetwork() }
   const json = extractJson(doc.body)
-  if (!json) return emptyArtistNetwork()
+  if (!json) {
+    return {
+      ok: false,
+      network: emptyArtistNetwork(),
+      error: 'Artist Network exists, but no JSON block could be read.',
+    }
+  }
   try {
     const parsed = JSON.parse(json) as Partial<ArtistNetwork>
-    if (parsed.version !== 1 || !Array.isArray(parsed.people)) return emptyArtistNetwork()
+    if (parsed.version !== 1 || !Array.isArray(parsed.people)) {
+      return {
+        ok: false,
+        network: emptyArtistNetwork(),
+        error: 'Artist Network JSON has an unsupported shape.',
+      }
+    }
     return {
-      version: 1,
-      people: parsed.people.filter(isPerson),
-      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
+      ok: true,
+      network: {
+        version: 1,
+        categories: normalizeCategories(parsed.categories),
+        people: parsed.people.filter(isPerson),
+        updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
+      },
     }
   } catch {
-    return emptyArtistNetwork()
+    return {
+      ok: false,
+      network: emptyArtistNetwork(),
+      error: 'Artist Network JSON is malformed.',
+    }
   }
 }
 
-export function serializeArtistNetworkBody(network: ArtistNetwork): string {
-  const sorted = {
-    ...network,
-    people: [...network.people].sort((a, b) => a.name.localeCompare(b.name)),
+export function updateNetworkPerson(
+  person: ArtistNetworkPerson,
+  input: {
+    name: string
+    category: ArtistNetworkCategory
+    role?: string
+    contact?: string
+    notes?: string
+    canHelpWith?: string
+    tags?: string
+  },
+): ArtistNetworkPerson {
+  return {
+    ...person,
+    name: input.name.trim(),
+    category: input.category,
+    role: clean(input.role),
+    contact: clean(input.contact),
+    notes: clean(input.notes),
+    canHelpWith: clean(input.canHelpWith),
+    tags: parseTags(input.tags),
     updatedAt: new Date().toISOString(),
   }
-  return [
-    'This is global artist relationship context. Treat it as long-term creator context, not one-campaign context.',
-    '',
-    '```json',
-    JSON.stringify(sorted, null, 2),
-    '```',
-  ].join('\n')
+}
+
+export function createNetworkCategory(label: string, existingCategories: ArtistNetworkCategoryDefinition[]): ArtistNetworkCategoryDefinition {
+  const cleanLabel = label.replace(/\s+/g, ' ').trim()
+  const base = slugify(cleanLabel || 'category')
+  const existingIds = new Set(existingCategories.map((category) => category.id))
+  let id = base
+  let count = 2
+  while (existingIds.has(id)) {
+    id = `${base}-${count}`
+    count += 1
+  }
+  return {
+    id,
+    label: cleanLabel || 'Category',
+  }
 }
 
 export function createNetworkPerson(input: {
@@ -113,6 +160,8 @@ export function createNetworkPerson(input: {
   role?: string
   contact?: string
   notes?: string
+  canHelpWith?: string
+  tags?: string
 }): ArtistNetworkPerson {
   const now = new Date().toISOString()
   return {
@@ -122,11 +171,35 @@ export function createNetworkPerson(input: {
     role: clean(input.role),
     contact: clean(input.contact),
     notes: clean(input.notes),
+    canHelpWith: clean(input.canHelpWith),
     relationship: 'new',
-    tags: [],
+    tags: parseTags(input.tags),
     createdAt: now,
     updatedAt: now,
   }
+}
+
+function normalizeNetwork(network: ArtistNetwork): ArtistNetwork {
+  return {
+    version: 1,
+    categories: normalizeCategories(network.categories),
+    people: network.people,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+export function serializeArtistNetworkBody(network: ArtistNetwork): string {
+  const sorted = {
+    ...normalizeNetwork(network),
+    people: [...network.people].sort((a, b) => a.name.localeCompare(b.name)),
+  }
+  return [
+    'This is global artist relationship context. Treat it as long-term creator context, not one-campaign context.',
+    '',
+    '```json',
+    JSON.stringify(sorted, null, 2),
+    '```',
+  ].join('\n')
 }
 
 function extractJson(body: string): string | null {
@@ -143,12 +216,49 @@ function clean(value: string | undefined): string | undefined {
   return trimmed || undefined
 }
 
+function parseTags(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+}
+
+function normalizeCategories(categories: unknown): ArtistNetworkCategoryDefinition[] {
+  const customCategories = Array.isArray(categories)
+    ? categories.filter(isCategory).map((category) => ({
+      id: slugify(category.id),
+      label: category.label.replace(/\s+/g, ' ').trim(),
+    }))
+    : []
+
+  const merged = new Map<string, ArtistNetworkCategoryDefinition>()
+  for (const category of [...NETWORK_CATEGORIES, ...customCategories]) {
+    if (!category.id || !category.label) continue
+    merged.set(category.id, category)
+  }
+  return [...merged.values()]
+}
+
+function isCategory(value: unknown): value is ArtistNetworkCategoryDefinition {
+  const candidate = value as Partial<ArtistNetworkCategoryDefinition>
+  return typeof candidate.id === 'string' && typeof candidate.label === 'string'
+}
+
 function isPerson(value: unknown): value is ArtistNetworkPerson {
   const candidate = value as Partial<ArtistNetworkPerson>
   return (
     typeof candidate.id === 'string' &&
     typeof candidate.name === 'string' &&
-    NETWORK_CATEGORIES.some((category) => category.id === candidate.category) &&
+    typeof candidate.category === 'string' &&
     Array.isArray(candidate.tags)
   )
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    || 'category'
 }

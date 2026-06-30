@@ -546,6 +546,17 @@ body
     expect(spotifyPlaylistCreator?.systemPrompt).toContain('explicit approval')
   })
 
+  test('starter library includes the Spotify Analyst with analytics skills', () => {
+    const spotifyAnalyst = STARTER_AGENTS.find((agent) => agent.slug === 'spotify-analyst')
+
+    expect(spotifyAnalyst).toBeDefined()
+    expect(spotifyAnalyst?.metadata.name).toBe('Spotify Analyst')
+    expect(spotifyAnalyst?.metadata.skills).toContain('spotify-analytics-snapshot')
+    expect(spotifyAnalyst?.metadata.skills).toContain('spotify-anomaly-watch')
+    expect(spotifyAnalyst?.metadata.tags).toContain('analytics')
+    expect(spotifyAnalyst?.systemPrompt).toContain('artist-spotify-snapshot')
+  })
+
   test('starter library includes the YouTube Research Agent as read-only', () => {
     const youtubeAgent = STARTER_AGENTS.find((agent) => agent.slug === 'youtube-research-agent')
 

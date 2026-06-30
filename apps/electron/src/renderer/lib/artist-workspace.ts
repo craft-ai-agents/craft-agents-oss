@@ -6,10 +6,9 @@ export interface ArtistWorkspaceLike {
 
 export function isArtistHQWorkspace(
   workspace: ArtistWorkspaceLike | undefined,
-  workspaces: ArtistWorkspaceLike[],
+  _workspaces: ArtistWorkspaceLike[],
 ): boolean {
   if (!workspace) return false
   const text = `${workspace.name} ${workspace.slug ?? ''}`.toLowerCase()
-  if (/\b(master|artist hq|global|hq|home)\b/.test(text)) return true
-  return workspaces[0]?.id === workspace.id
+  return /\b(master|artist hq|global|hq|my workspace|my-workspace)\b/.test(text)
 }
