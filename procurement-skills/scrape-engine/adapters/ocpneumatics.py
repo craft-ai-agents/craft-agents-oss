@@ -14,18 +14,18 @@ Script-mode relocation: the engine hands a WARMED page but does NOT navigate. We
 wire a response sniffer for "engine.codicloud.dev/multi-search" BEFORE the first
 goto (the xhr can fire on render), goto the search shell, then fill+Enter to
 trigger the meilisearch multi-search, wait, and parse every captured response the
-old way. This is a body-scrape style port: the rendered " | "-joined lines are
-dumped into Row.note (NOT structured), faithful to the old {"text": ...} return.
+old way. The Meilisearch hits are mapped into structured Row fields.
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from contract import Adapter, Defense, Row  # noqa: E402
+from contract import Adapter, Defense, Row, make_break  # noqa: E402
 from url_utils import q  # noqa: E402
 
 _OCP_BASE = "https://ocpneumatics.com"
@@ -36,10 +36,49 @@ def url(part: str) -> str:
     return f"{_OCP_BASE}/smc-elite-search/?q={q(part)}"
 
 
+def _num(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+    m = re.search(r"[\d,.]+", value)
+    if not m:
+        return None
+    try:
+        return float(m.group(0).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _int(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if not isinstance(value, str):
+        return None
+    digits = re.sub(r"\D", "", value)
+    return int(digits) if digits else None
+
+
+def _norm(value: str | None) -> str:
+    return re.sub(r"[^A-Z0-9]", "", (value or "").upper())
+
+
+def _related(part: str, sku: str | None, name: str | None) -> bool:
+    query = _norm(part)
+    if not query:
+        return False
+    haystack = _norm(" ".join(x for x in [sku, name] if x))
+    if not haystack:
+        return False
+    return query in haystack or haystack in query
+
+
 async def extract(ctx: Any, part: str) -> list[Row]:
     page = ctx.page
     result_url = url(part)
-    lines: list[str] = []
+    rows: list[Row] = []
 
     # Wire the /multi-search sniffer BEFORE the first goto (xhr may fire early).
     get_responses = ctx.on_response("engine.codicloud.dev/multi-search")
@@ -73,27 +112,36 @@ async def extract(ctx: Any, part: str) -> list[Row]:
                 for hit in result.get("hits", []):
                     sku = hit.get("product_sku", "")
                     name = hit.get("product_name", "")
-                    price = hit.get("calculated_price") or hit.get("price") or 0
+                    if not _related(part, sku, name):
+                        continue
+                    price = _num(hit.get("calculated_price") or hit.get("price"))
                     avail = hit.get("availability", "")
-                    inv = hit.get("inventory_level", 0)
-                    stock = avail if avail else ("in stock" if inv > 0 else "check availability")
+                    inv = _int(hit.get("inventory_level"))
                     rel_url = hit.get("url", "")
                     full_url = _OCP_BASE + rel_url if rel_url.startswith("/") else rel_url
-                    row = " | ".join(x for x in [
-                        sku, name,
-                        f"${price:.2f}" if price else "",
-                        stock, full_url,
-                    ] if x)
-                    lines.append(row)
+                    rows.append(Row(
+                        part=part,
+                        platform="ocpneumatics",
+                        mpn=sku or None,
+                        description=name or None,
+                        stock=inv,
+                        in_stock=(inv > 0) if inv is not None else None,
+                        price_breaks=[make_break(1, usd=price)] if price is not None else [],
+                        product_url=full_url or result_url,
+                        note=avail or None,
+                    ))
         except Exception:
             pass
 
-    uniq = list(dict.fromkeys(l for l in lines if l))  # limit not threaded in script mode
+    uniq = list({
+        (row.mpn, row.description, row.stock, row.product_url): row
+        for row in rows
+        if row.mpn or row.description or row.stock is not None or row.price_breaks
+    }.values())
     if not uniq:
         return [Row(part=part, platform="ocpneumatics", product_url=result_url,
                     availability_status="no_result", note="（OCP 无命中）")]
-    return [Row(part=part, platform="ocpneumatics", product_url=result_url,
-                note="\n".join(uniq))]
+    return uniq
 
 
 ADAPTER = Adapter(

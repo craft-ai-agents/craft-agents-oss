@@ -15,17 +15,15 @@ Old scrape_sager did, by hand:
      ctx.on_response BEFORE the first goto);
   4. p.evaluate window.state.searchRepository → first page's results.records;
   5. for each record (up to limit): pull attrs via ga(); join price_items /
-     inv_items by sku.repositoryId; build a pipe-joined display line;
+     inv_items by sku.repositoryId; emit structured Row fields;
   6. dedup, then a RELEVANCE CHECK: normalize part to [a-z0-9] and require it to
      appear in a line — Sager returns default recommendations on no match, so
      lines that don't contain the query are treated as "no此料" (hit=False).
 
 The script-mode engine warms the page (none profile here = no warmup) but does
 NOT navigate; this adapter owns the goto so the response sniffers are installed
-first. Because this is a body/line scrape joined from in-page XHR JSON, the
-result is emitted as RAW lines in Row.note (NOT per-row structured fields) —
-faithful to the old {"text": ...} blob. The old hit/relevance verdict is
-preserved verbatim in the note text.
+first. The old hit/relevance verdict is preserved, but the captured in-page JSON
+is now mapped into typed Row fields instead of a pipe-joined note blob.
 """
 from __future__ import annotations
 
@@ -36,7 +34,7 @@ import sys
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from contract import Adapter, Row  # noqa: E402
+from contract import Adapter, Row, make_break  # noqa: E402
 from url_utils import q  # noqa: E402
 
 
@@ -44,10 +42,57 @@ def url(part: str) -> str:
     return f"https://www.sager.com/search?keyword={q(part)}"
 
 
+def _num(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+    m = re.search(r"[\d,.]+", value)
+    if not m:
+        return None
+    try:
+        return float(m.group(0).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _int(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if not isinstance(value, str):
+        return None
+    digits = re.sub(r"\D", "", value)
+    return int(digits) if digits else None
+
+
+def _price_breaks(pdata: dict, list_price: Any) -> list[dict]:
+    tiers = (((pdata.get("listVolumePrice") or {}).get("bulkPrice") or {}).get("levels") or [])
+    breaks: list[dict] = []
+    for idx, tier in enumerate(tiers):
+        if not isinstance(tier, dict):
+            continue
+        qty = (
+            _int(tier.get("levelMinimum"))
+            or _int(tier.get("minimumQuantity"))
+            or _int(tier.get("quantity"))
+            or (1 if idx == 0 else None)
+        )
+        price = _num(tier.get("price"))
+        if qty is None or price is None:
+            continue
+        breaks.append(make_break(qty, usd=price))
+    if breaks:
+        return breaks
+    price = _num(list_price)
+    return [make_break(1, usd=price)] if price is not None else []
+
+
 async def extract(ctx: Any, part: str) -> list[Row]:
     page = ctx.page
     search_url = url(part)
-    lines: list[str] = []
+    rows: list[Row] = []
     inv_items: dict = {}
     price_items: dict = {}
     limit = 8  # old `limit` arg; engine script-mode passes no limit, keep a sane cap
@@ -105,40 +150,56 @@ async def extract(ctx: Any, part: str) -> list[Row]:
         route = ga("product.route")
         pdata = price_items.get(sku_id, {})
         list_price = pdata.get("listPrice") or ga("sku.minActivePrice")
-        tiers = pdata.get("listVolumePrice", {}).get("bulkPrice", {}).get("levels", [])
 
         inv_loc = inv_items.get(sku_id, {})
-        stock_parts = []
-        for loc_id, label in [("inStock", "现货"), ("onOrder", "在途"), ("factoryStock", "工厂库存")]:
-            qty = inv_loc.get(loc_id, {}).get("stockLevel", 0) or 0
+        in_stock_qty = _int((inv_loc.get("inStock") or {}).get("stockLevel"))
+        note_bits: list[str] = []
+        for loc_id in ("onOrder", "factoryStock"):
+            qty = _int((inv_loc.get(loc_id) or {}).get("stockLevel"))
             if qty:
-                stock_parts.append(f"{label}{qty}")
-        if not stock_parts:
+                note_bits.append(f"{loc_id}={qty}")
+        if in_stock_qty is None:
             mapped_inv = ga("mappedInventory")
-            stock_parts = [mapped_inv] if mapped_inv else [ga("product.stock_status") or "缺货"]
-
-        price_str = f"${list_price}" if list_price else "价格登录可见"
-        if tiers:
-            price_str = f"${tiers[0].get('price')} (1-{tiers[0].get('levelMaximum')}件起)"
-
+            stock_status = ga("product.stock_status")
+            if mapped_inv:
+                note_bits.append(f"mappedInventory={mapped_inv}")
+            if stock_status:
+                note_bits.append(f"stock_status={stock_status}")
         prod_url = f"https://www.sager.com{route}" if route else search_url
-        line_parts = [x for x in [ga("product.displayName"), ga("product.manufacturer_name"),
-                                  price_str, " | ".join(stock_parts),
-                                  ga("product.lead_time_message"), prod_url] if x]
-        lines.append(" | ".join(line_parts))
+        rows.append(Row(
+            part=part,
+            platform="sager",
+            mpn=ga("product.displayName") or None,
+            brand=ga("product.manufacturer_name") or None,
+            stock=in_stock_qty,
+            in_stock=(in_stock_qty > 0) if in_stock_qty is not None else None,
+            price_breaks=_price_breaks(pdata, list_price),
+            lead_time=ga("product.lead_time_message") or None,
+            product_url=prod_url,
+            note="; ".join(note_bits) or None,
+        ))
 
-    uniq = list(dict.fromkeys(l for l in lines if l))[:limit]
+    deduped = list({
+        (row.mpn, row.brand, row.stock, row.product_url): row
+        for row in rows
+        if row.mpn or row.brand or row.stock is not None or row.price_breaks
+    }.values())[:limit]
     norm = re.sub(r"[^a-z0-9]", "", part.lower())
-    relevant = [l for l in uniq if norm and norm in re.sub(r"[^a-z0-9]", "", l.lower())]
-    if uniq and not relevant:
+    relevant = [
+        row for row in deduped
+        if norm and norm in re.sub(
+            r"[^a-z0-9]", "",
+            " ".join(x for x in [row.mpn, row.brand, row.product_url] if x).lower(),
+        )
+    ]
+    if deduped and not relevant:
         return [Row(part=part, platform="sager", product_url=search_url,
                     availability_status="no_result",
                     note="（Sager 无精确匹配，返回的是默认推荐，判无此料）")]
     if not relevant:
         return [Row(part=part, platform="sager", product_url=search_url,
                     availability_status="no_result", note="（无命中）")]
-    return [Row(part=part, platform="sager", product_url=search_url,
-                note="\n".join(relevant))]
+    return relevant
 
 
 ADAPTER = Adapter(

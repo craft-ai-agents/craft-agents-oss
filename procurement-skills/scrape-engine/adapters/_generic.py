@@ -52,7 +52,8 @@ MAINTENANCE_PAT = re.compile(
 NO_RESULT_PAT = re.compile(
     r"(no\s+(?:matching\s+)?(?:products?|parts?|results?)|0\s+results|"
     r"unable to find items based on your criteria|there are no products|"
-    r"sorry,\s+we couldn['’]t find any parts|検索に一致する商品はありません|无命中|無命中)",
+    r"sorry,\s+we couldn['’]t find any parts|検索に一致する商品はありません|"
+    r"keine\s+suchergebnisse\s+gefunden|无命中|無命中)",
     re.I,
 )
 
@@ -196,7 +197,19 @@ def _structured_rows(site: str, text: str, part: str, final_url: str) -> list[Ro
             re.I,
         )
         if not m:
-            return []
+            obsolete = re.search(
+                rf"(?P<mpn>{part_pat}[A-Z0-9:+/_-]*)\s+(?P<body>.*?)\s+N/A\s+N/A\s+(?P<status>Obsolete)",
+                search_text,
+                re.I,
+            )
+            if not obsolete:
+                return []
+            brand, desc = _brand_tail(obsolete.group("body"))
+            return [Row(
+                part=part, platform=site, mpn=obsolete.group("mpn"), brand=brand,
+                description=desc or None, in_stock=False, product_url=final_url,
+                note=obsolete.group("status"),
+            )]
         brand, desc = _brand_tail(m.group("body"))
         lead = None
         lm = re.search(r"Ship\s+by\s+(.*)", m.group("tail"), re.I)
@@ -384,19 +397,37 @@ def _structured_rows(site: str, text: str, part: str, final_url: str) -> list[Ro
             text,
             re.I,
         )
-        if not m:
+        if m:
+            lead = None
+            lm = re.search(r"(\d{4}/\d{2}/\d{2})\s*当社出荷予定", text)
+            if lm:
+                lead = lm.group(1) + " 当社出荷予定"
+            stock = _stock(m.group("stock"))
+            price = _num(m.group("price"))
+            return [Row(
+                part=part, platform=site, mpn=m.group("mpn"), brand=m.group("brand"),
+                stock=stock, in_stock=(stock > 0) if stock is not None else None,
+                lead_time=lead, product_url=final_url,
+                note=f"JPY 1+: {price}" if price is not None else None,
+            )]
+        m2 = re.search(
+            rf"(?P<status>取り寄せ|在庫あり|即納)\s+(?P<brand_jp>.*?)\s+"
+            rf"(?P<desc>.*?)\s+(?P<mpn>{part_pat}[A-Z0-9:+/_-]*)\s+"
+            r"(?P<brand>[A-Z0-9._-]+)\s+(?P<stock>[\d,]+)\s+"
+            r"(?P<lead>納期見積依頼|即日|当日|翌日|\d+日.*?)\s+"
+            r"(?P<category>.*?)\s+コアスタッフ",
+            text,
+            re.I,
+        )
+        if not m2:
             return []
-        lead = None
-        lm = re.search(r"(\d{4}/\d{2}/\d{2})\s*当社出荷予定", text)
-        if lm:
-            lead = lm.group(1) + " 当社出荷予定"
-        stock = _stock(m.group("stock"))
-        price = _num(m.group("price"))
+        stock = _stock(m2.group("stock"))
         return [Row(
-            part=part, platform=site, mpn=m.group("mpn"), brand=m.group("brand"),
+            part=part, platform=site, mpn=m2.group("mpn"), brand=m2.group("brand"),
+            description=m2.group("desc").strip() or None,
             stock=stock, in_stock=(stock > 0) if stock is not None else None,
-            lead_time=lead, product_url=final_url,
-            note=f"JPY 1+: {price}" if price is not None else None,
+            lead_time=m2.group("lead"), category=m2.group("category").strip() or None,
+            product_url=final_url, note=m2.group("status"),
         )]
 
     return []
@@ -445,11 +476,17 @@ def make_generic(site: str, url_tpl: str, needs_proxy: bool, exclusive: bool = F
         structured = _structured_rows(_site, text, part, final_url)
         if structured:
             return structured
+        if availability_status == "no_result":
+            note = "（无匹配）"
+        elif availability_status == "maintenance":
+            note = "（平台维护/暂不可用）"
+        else:
+            note = text[:4000] or "（空白页/未渲染——可能 SPA 未加载或需代理）"
         return [Row(
             part=part,
             platform=_site,
             product_url=final_url,
-            note=(text[:4000] or "（空白页/未渲染——可能 SPA 未加载或需代理）"),
+            note=note,
             in_stock=None,
             availability_status=availability_status,
         )]
