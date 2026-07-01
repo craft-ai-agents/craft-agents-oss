@@ -96,6 +96,7 @@ import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } fr
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
 import { AgentMessageService } from '../agent-messaging/AgentMessageService'
+import { DEFAULT_MAX_DEPTH, isPermissionEscalation } from '@craft-agent/shared/agent-messaging'
 import { agentMatchesSearch } from './agent-search'
 import {
   createAgentMemorySidecarApplyMemory,
@@ -2613,15 +2614,25 @@ user a clickable link to where the thing now lives.`
         sessionLog.warn('[workflows] Starter seed skipped:', err as Error)
       }
 
-      // Backfill missing `models` arrays on existing LLM connections
-      migrateLegacyLlmConnectionsConfig()
+      // Config migrations are best-effort repairs and MUST NOT brick startup.
+      // A throw here would propagate to the outer catch → initGate.markFailed(),
+      // which rejects the init promise permanently and once, so every IPC that
+      // awaits waitForInit() would reject on every subsequent launch (the same
+      // on-disk data reproduces the throw deterministically). Degrade instead:
+      // log and continue with the existing/default config.
+      try {
+        // Backfill missing `models` arrays on existing LLM connections
+        migrateLegacyLlmConnectionsConfig()
 
-      // Fix defaultLlmConnection if it points to a non-existent connection
-      migrateOrphanedDefaultConnections()
+        // Fix defaultLlmConnection if it points to a non-existent connection
+        migrateOrphanedDefaultConnections()
 
-      // Migrate legacy credentials to LLM connection format (one-time migration)
-      // This ensures credentials saved before LLM connections are available via the new system
-      await migrateLegacyCredentials()
+        // Migrate legacy credentials to LLM connection format (one-time migration)
+        // This ensures credentials saved before LLM connections are available via the new system
+        await migrateLegacyCredentials()
+      } catch (err) {
+        sessionLog.warn('[config] Startup config migration skipped after error:', err as Error)
+      }
 
       // Set up authentication environment variables (critical for SDK to work)
       await this.reinitializeAuth()
@@ -4640,14 +4651,35 @@ user a clickable link to where the thing now lives.`
       managed.agent.onSpawnSession = async (request) => {
         sessionLog.info(`Spawn session request from session ${managed.id}:`, request.name || '(unnamed)')
 
+        // Fan-out safety (mirrors message_agent): bound spawn depth, block
+        // permission escalation, and stamp the child with an incremented,
+        // non-forgeable depth label. Reusing the agent-message depth label
+        // unifies the budget across spawn_session AND message_agent so a run
+        // cannot evade the limit by alternating the two spawn tools.
+        const parentDepth = getAgentMessageDepth(managed.labels)
+        if (parentDepth >= DEFAULT_MAX_DEPTH) {
+          throw new Error(`spawn_session maximum spawn depth reached (${DEFAULT_MAX_DEPTH}).`)
+        }
+        // Default an unset mode to 'ask' (the app default) so the child can
+        // never exceed the parent's effective permission mode.
+        const parentPermissionMode = managed.permissionMode ?? 'ask'
+        const requestedPermissionMode = request.permissionMode ?? parentPermissionMode
+        if (isPermissionEscalation(requestedPermissionMode, parentPermissionMode)) {
+          throw new Error(`spawn_session cannot escalate permissionMode from ${parentPermissionMode} to ${requestedPermissionMode}.`)
+        }
+        const spawnBaseLabels = (request.labels ?? managed.labels ?? []).filter(
+          (label) => !label.startsWith(AGENT_MESSAGE_DEPTH_LABEL_PREFIX),
+        )
+        const spawnChildLabels = [...spawnBaseLabels, `${AGENT_MESSAGE_DEPTH_LABEL_PREFIX}${parentDepth + 1}`]
+
         const session = await this.createSession(managed.workspace.id, {
           name: request.name,
           llmConnection: request.llmConnection ?? managed.llmConnection,
           model: request.model ?? managed.model,
           enabledSourceSlugs: request.enabledSourceSlugs ?? managed.enabledSourceSlugs,
-          permissionMode: request.permissionMode ?? managed.permissionMode,
+          permissionMode: requestedPermissionMode,
           thinkingLevel: request.thinkingLevel ?? managed.thinkingLevel,
-          labels: request.labels ?? managed.labels,
+          labels: spawnChildLabels,
           workingDirectory: request.workingDirectory,
           launchReceipt: {
             createdAt: Date.now(),

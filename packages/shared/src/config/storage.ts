@@ -14,7 +14,7 @@ import { extractWorkspaceSlugFromPath } from '../utils/workspace-slug.ts';
 import { initializeDocs } from '../docs/index.ts';
 import { expandPath, toPortablePath, getBundledAssetsDir } from '../utils/paths.ts';
 import { debug } from '../utils/debug.ts';
-import { readJsonFileSync } from '../utils/files.ts';
+import { readJsonFileSync, atomicWriteFileSync } from '../utils/files.ts';
 import { CONFIG_DIR } from './paths.ts';
 import type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
 import type { Plan } from '../agent/plan-types.ts';
@@ -283,7 +283,10 @@ export function saveConfig(config: StoredConfig): void {
     })),
   };
 
-  writeFileSync(CONFIG_FILE, JSON.stringify(storageConfig, null, 2), 'utf-8');
+  // Atomic write (temp + rename): a crash mid-write must not corrupt the
+  // primary config, which on a failed parse is discarded and takes every
+  // workspace/connection with it (silent total data loss).
+  atomicWriteFileSync(CONFIG_FILE, JSON.stringify(storageConfig, null, 2));
 }
 
 // Legacy updateApiKey() removed - use setupLlmConnection IPC handler instead.
