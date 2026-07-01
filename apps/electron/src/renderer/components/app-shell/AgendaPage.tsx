@@ -277,23 +277,28 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
       <div className="mx-auto min-h-full w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
-        <header className="relative mb-6 overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#160c07] p-8">
-          <div className="absolute inset-0 bg-gradient-to-br from-[#f97316]/10 to-transparent" />
-          <div className="relative flex items-start justify-between gap-4">
-            <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-orange-400">
-                <CalendarDays className="h-3.5 w-3.5" />
-                Work Board
+        <header className="relative mb-6 overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
+          <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-orange-600/10 blur-[110px]" />
+          <div className="absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full bg-orange-500/5 blur-[120px]" />
+          <div className="relative z-10 flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5">
+                <CalendarDays className="h-3.5 w-3.5 text-orange-300/80" />
+                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/65">Work Board</span>
               </div>
-              <h1 className="text-4xl font-medium tracking-tight text-white/95">Agenda</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">
-                Track jobs, follow-ups, and active work without opening chat. Campaign command centers stay inside their own workspaces.
-              </p>
+              <div className="max-w-3xl">
+                <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
+                  Agenda
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
+                  Track jobs, follow-ups, and active work without opening chat. Campaign command centers stay inside their own workspaces.
+                </p>
+              </div>
             </div>
             <button
               type="button"
               onClick={onNewTask}
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65 hover:bg-white/[0.06] transition-colors"
+              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-white/90 px-4 text-xs font-medium text-black hover:bg-white transition-colors"
             >
               <Plus className="h-3.5 w-3.5" />
               New Task

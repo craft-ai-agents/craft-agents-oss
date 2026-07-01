@@ -463,17 +463,61 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   const artistName = workspaceName || 'Artist HQ'
   const nextDate = 'This week'
 
+  // Dynamic header properties based on active tab
+  const getHeaderProps = () => {
+    switch (tab) {
+      case 'calendar':
+        return {
+          title: 'Calendar',
+          description: 'Schedule, events, and important dates for the artist.',
+          orb1: 'bg-indigo-600/10',
+          orb2: 'bg-purple-500/5',
+          icon: <CalendarDays className="h-3.5 w-3.5 text-indigo-300/80" />,
+          label: 'Schedule',
+        }
+      case 'network':
+        return {
+          title: 'Network',
+          description: 'Relationships, roles, contact info, and context on everyone who matters to the artist.',
+          orb1: 'bg-emerald-600/10',
+          orb2: 'bg-teal-500/5',
+          icon: <Users className="h-3.5 w-3.5 text-emerald-300/80" />,
+          label: 'Contacts',
+        }
+      case 'profile':
+        return {
+          title: 'Artist Profile',
+          description: 'Global context every worker should know before touching campaigns, content, research, ads, or outreach.',
+          orb1: 'bg-blue-600/10',
+          orb2: 'bg-indigo-500/5',
+          icon: <UserRound className="h-3.5 w-3.5 text-blue-300/80" />,
+          label: 'Context',
+        }
+      default:
+        return {
+          title: artistName,
+          description: 'Global career context, signals, calendar, network, and research. Campaign workspaces pull from here.',
+          orb1: 'bg-orange-600/10',
+          orb2: 'bg-cyan-500/5',
+          icon: <Sparkles className="h-3.5 w-3.5 text-orange-300/80" />,
+          label: 'Artist HQ',
+        }
+    }
+  }
+
+  const headerProps = getHeaderProps()
+
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
         <section className="relative overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
-          <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-orange-600/10 blur-[110px]" />
-          <div className="absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full bg-cyan-500/5 blur-[120px]" />
+          <div className={cn("absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full blur-[110px]", headerProps.orb1)} />
+          <div className={cn("absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full blur-[120px]", headerProps.orb2)} />
           <div className="relative z-10">
             <div className="flex items-start justify-between gap-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-orange-300/80" />
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/65">Artist HQ</span>
+                {headerProps.icon}
+                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/65">{headerProps.label}</span>
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/35">Next</p>
@@ -483,10 +527,10 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
 
             <div className="mt-8 max-w-3xl">
               <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
-                {artistName}
+                {headerProps.title}
               </h1>
               <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
-                Global career context, signals, calendar, network, and research. Campaign workspaces pull from here.
+                {headerProps.description}
               </p>
             </div>
 
@@ -607,7 +651,6 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
 
         {tab === 'calendar' && (
           <HQCard>
-            <SectionTitle icon={CalendarDays} title="Calendar" meta={`${calendar.events.length} events`} />
             {!calendarResult.ok ? (
               <div className="mb-4 rounded-[14px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
                 {calendarResult.error} Saving is paused so existing calendar context is not overwritten.
@@ -632,7 +675,6 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
         {tab === 'network' && (
           <HQCard>
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <SectionTitle icon={Users} title="Network" meta={`${network.people.length} people`} compact />
               <div className="flex items-center gap-2">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/28" />
