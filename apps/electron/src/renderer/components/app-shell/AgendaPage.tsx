@@ -275,7 +275,7 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
   }, [visibleSessions])
 
   return (
-    <div className="runneros-glass-route h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="mx-auto min-h-full w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
         <header className="relative mb-6 overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
           <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-orange-600/10 blur-[110px]" />
