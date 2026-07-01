@@ -1,52 +1,151 @@
 import * as React from 'react'
-import { CalendarDays, CheckCircle2, Circle, Clock3, MessageSquare, Plus } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Circle, Clock3, MessageSquare, Plus, Users } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { getSessionTitle } from '@/utils/session'
 import type { SessionMeta } from '@/atoms/sessions'
-import type { SessionStatus } from '@/config/session-status-config'
+import {
+  ARTIST_NETWORK_CONTEXT_SLUG,
+  parseArtistNetworkDocResult,
+  type ArtistNetworkPerson,
+} from '@/lib/artist-network'
 
 interface AgendaPageProps {
   sessions: SessionMeta[]
-  statuses?: SessionStatus[]
   onOpenSession: (sessionId: string) => void
   onNewTask: () => void
+  networkWorkspaceId?: string
 }
 
-const FALLBACK_COLUMNS = [
+type AgendaColumnId = 'todo' | 'in-progress' | 'done'
+
+const AGENDA_COLUMNS: Array<{ id: AgendaColumnId; label: string }> = [
   { id: 'todo', label: 'To Do' },
   { id: 'in-progress', label: 'Doing' },
-  { id: 'waiting', label: 'Waiting' },
   { id: 'done', label: 'Done' },
 ]
 
-export function AgendaPage({ sessions, statuses, onOpenSession, onNewTask }: AgendaPageProps) {
-  const columns = React.useMemo(() => {
-    const configured = (statuses ?? []).map((status) => ({ id: status.id, label: status.label }))
-    return configured.length ? configured : FALLBACK_COLUMNS
-  }, [statuses])
+const PERSON_LABEL_PREFIX = 'person::'
+const NO_PERSON_VALUE = '__none__'
+
+type SessionOverride = Partial<Pick<SessionMeta, 'name' | 'sessionStatus' | 'labels' | 'preview'>>
+
+export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspaceId }: AgendaPageProps) {
+  const [networkPeople, setNetworkPeople] = React.useState<ArtistNetworkPerson[]>([])
+  const [sessionOverrides, setSessionOverrides] = React.useState<Record<string, SessionOverride>>({})
+  const [selectedSessionId, setSelectedSessionId] = React.useState<string | null>(null)
+  const [draftTitle, setDraftTitle] = React.useState('')
+  const [draftDetails, setDraftDetails] = React.useState('')
+  const [draftStatus, setDraftStatus] = React.useState<AgendaColumnId>('todo')
+  const [draftPersonId, setDraftPersonId] = React.useState(NO_PERSON_VALUE)
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => {
+    let cancelled = false
+    if (!networkWorkspaceId) {
+      setNetworkPeople([])
+      return
+    }
+    void window.electronAPI.listWorkspaceContextDocs(networkWorkspaceId).then((docs) => {
+      if (cancelled) return
+      const result = parseArtistNetworkDocResult(docs.find((doc) => doc.slug === ARTIST_NETWORK_CONTEXT_SLUG))
+      setNetworkPeople(result.network.people)
+    }).catch(() => {
+      if (!cancelled) setNetworkPeople([])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [networkWorkspaceId])
+
   const visibleSessions = React.useMemo(
-    () => sessions.filter((session) => !session.hidden && !session.isArchived),
-    [sessions],
+    () => sessions
+      .filter((session) => !session.hidden && !session.isArchived)
+      .map((session) => ({ ...session, ...(sessionOverrides[session.id] ?? {}) })),
+    [sessionOverrides, sessions],
   )
   const byColumn = React.useMemo(() => {
     const map = new Map<string, SessionMeta[]>()
-    for (const column of columns) map.set(column.id, [])
-    const fallback = columns[0]?.id
+    for (const column of AGENDA_COLUMNS) map.set(column.id, [])
     for (const session of visibleSessions) {
-      const key = session.sessionStatus && map.has(session.sessionStatus) ? session.sessionStatus : fallback
-      if (!key) continue
+      const key = normalizeAgendaStatus(session.sessionStatus)
       map.get(key)?.push(session)
     }
     for (const items of map.values()) {
       items.sort((a, b) => (b.lastMessageAt ?? b.createdAt ?? 0) - (a.lastMessageAt ?? a.createdAt ?? 0))
     }
     return map
-  }, [columns, visibleSessions])
+  }, [visibleSessions])
+
+  const selectedSession = React.useMemo(
+    () => visibleSessions.find((session) => session.id === selectedSessionId) ?? null,
+    [selectedSessionId, visibleSessions],
+  )
+
+  const openEditor = React.useCallback((session: SessionMeta) => {
+    setSelectedSessionId(session.id)
+    setDraftTitle(getSessionTitle(session))
+    setDraftDetails('')
+    setDraftStatus(normalizeAgendaStatus(session.sessionStatus))
+    setDraftPersonId(getPersonIdFromLabels(session.labels) ?? NO_PERSON_VALUE)
+    void window.electronAPI.getSessionNotes(session.id).then((notes) => {
+      setDraftDetails(notes)
+    }).catch(() => {
+      setDraftDetails(session.preview ?? '')
+    })
+  }, [])
+
+  const saveEditor = React.useCallback(async () => {
+    if (!selectedSession) return
+    const title = draftTitle.trim() || getSessionTitle(selectedSession)
+    const labels = setPersonLabel(selectedSession.labels ?? [], draftPersonId === NO_PERSON_VALUE ? null : draftPersonId)
+    setSaving(true)
+    try {
+      await Promise.all([
+        title !== getSessionTitle(selectedSession)
+          ? window.electronAPI.sessionCommand(selectedSession.id, { type: 'rename', name: title })
+          : Promise.resolve(),
+        draftStatus !== normalizeAgendaStatus(selectedSession.sessionStatus)
+          ? window.electronAPI.sessionCommand(selectedSession.id, { type: 'setSessionStatus', state: draftStatus })
+          : Promise.resolve(),
+        window.electronAPI.sessionCommand(selectedSession.id, { type: 'setLabels', labels }),
+        window.electronAPI.setSessionNotes(selectedSession.id, draftDetails),
+      ])
+      setSessionOverrides((current) => ({
+        ...current,
+        [selectedSession.id]: {
+          ...(current[selectedSession.id] ?? {}),
+          name: title,
+          sessionStatus: draftStatus,
+          labels,
+          preview: draftDetails.trim() ? draftDetails.trim().split('\n')[0] : selectedSession.preview,
+        },
+      }))
+      setSelectedSessionId(null)
+    } finally {
+      setSaving(false)
+    }
+  }, [draftDetails, draftPersonId, draftStatus, draftTitle, selectedSession])
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
-      <div className="mx-auto min-h-full max-w-[1320px] px-8 py-9">
-        <header className="mb-7 flex items-start justify-between gap-4">
+      <div className="mx-auto min-h-full w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
+        <header className="mb-5 flex items-start justify-between gap-4">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/46">
               <CalendarDays className="h-3.5 w-3.5 text-orange-300/75" />
@@ -67,8 +166,8 @@ export function AgendaPage({ sessions, statuses, onOpenSession, onNewTask }: Age
           </button>
         </header>
 
-        <div className="grid min-h-[520px] grid-cols-1 gap-3 lg:grid-cols-4">
-          {columns.slice(0, 4).map((column, index) => {
+        <div className="grid min-h-[520px] grid-cols-1 gap-3 lg:grid-cols-3">
+          {AGENDA_COLUMNS.map((column, index) => {
             const items = byColumn.get(column.id) ?? []
             return (
               <section key={column.id} className="rounded-[18px] border border-white/[0.055] bg-[#0A0A0A]/82 p-3">
@@ -85,19 +184,22 @@ export function AgendaPage({ sessions, statuses, onOpenSession, onNewTask }: Age
                     <button
                       key={session.id}
                       type="button"
-                      onClick={() => onOpenSession(session.id)}
-                      className="w-full rounded-[14px] border border-white/[0.055] bg-white/[0.025] p-3 text-left transition-colors hover:bg-white/[0.05]"
+                      onClick={() => openEditor(session)}
+                      className="w-full rounded-[13px] border border-white/[0.055] bg-white/[0.025] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="line-clamp-2 text-sm font-medium leading-5 text-white/78">{getSessionTitle(session)}</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="line-clamp-1 text-sm font-medium leading-5 text-white/80">{getSessionTitle(session)}</p>
                         <Circle className={cn('mt-1 h-3 w-3 shrink-0', session.isProcessing ? 'text-orange-300' : 'text-white/24')} />
                       </div>
-                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/38">
+                      <p className="mt-1 line-clamp-1 text-xs leading-5 text-white/38">
                         {session.preview || session.spawnedFromAgent?.agentName || 'Workspace task'}
                       </p>
-                      <div className="mt-3 flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-white/25">
-                        <MessageSquare className="h-3 w-3" />
-                        {session.messageCount ?? 0} notes
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-white/25">
+                          <MessageSquare className="h-3 w-3" />
+                          {session.messageCount ?? 0}
+                        </div>
+                        <PersonBadge labels={session.labels} people={networkPeople} />
                       </div>
                     </button>
                   )) : (
@@ -111,11 +213,115 @@ export function AgendaPage({ sessions, statuses, onOpenSession, onNewTask }: Age
           })}
         </div>
       </div>
+
+      <Dialog open={Boolean(selectedSession)} onOpenChange={(open) => !open && setSelectedSessionId(null)}>
+        <DialogContent className="max-w-[620px] border-white/[0.08] bg-[#080808] text-white shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-medium">Edit task</DialogTitle>
+            <DialogDescription className="sr-only">
+              Edit the task title, notes, board status, and assigned Network person.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <label className="block space-y-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">Title</span>
+              <input
+                value={draftTitle}
+                onChange={(event) => setDraftTitle(event.target.value)}
+                className="h-10 w-full rounded-[10px] border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white/80 outline-none focus:border-orange-400/45"
+              />
+            </label>
+            <label className="block space-y-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">Info</span>
+              <Textarea
+                value={draftDetails}
+                onChange={(event) => setDraftDetails(event.target.value)}
+                placeholder="Add notes, context, links, or next steps..."
+                className="min-h-28 rounded-[12px] border-white/[0.08] bg-white/[0.025] text-sm text-white/74 placeholder:text-white/22 focus-visible:border-orange-400/45"
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block space-y-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">Status</span>
+                <Select value={draftStatus} onValueChange={(value) => setDraftStatus(value as AgendaColumnId)}>
+                  <SelectTrigger className="rounded-[10px] border-white/[0.08] bg-white/[0.025] text-white/74">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AGENDA_COLUMNS.map((column) => (
+                      <SelectItem key={column.id} value={column.id}>{column.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="block space-y-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">Person</span>
+                <Select value={draftPersonId} onValueChange={setDraftPersonId}>
+                  <SelectTrigger className="rounded-[10px] border-white/[0.08] bg-white/[0.025] text-white/74">
+                    <SelectValue placeholder="Tag from Network" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_PERSON_VALUE}>No person</SelectItem>
+                    {networkPeople.map((person) => (
+                      <SelectItem key={person.id} value={person.id}>{person.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+            </div>
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => selectedSession && onOpenSession(selectedSession.id)}
+              className="h-10 rounded-full border border-white/[0.08] px-4 text-sm font-medium text-white/62 hover:bg-white/[0.04]"
+            >
+              Open Chat
+            </button>
+            <button
+              type="button"
+              onClick={saveEditor}
+              disabled={saving}
+              className="h-10 rounded-full bg-white px-5 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
 function ColumnIcon({ index }: { index: number }) {
-  const Icon = index === 0 ? Circle : index === 1 ? Clock3 : index === 2 ? CalendarDays : CheckCircle2
+  const Icon = index === 0 ? Circle : index === 1 ? Clock3 : CheckCircle2
   return <Icon className="h-3.5 w-3.5 text-white/35" />
+}
+
+function normalizeAgendaStatus(status: string | undefined): AgendaColumnId {
+  if (status === 'done' || status === 'complete' || status === 'completed') return 'done'
+  if (status === 'in-progress' || status === 'doing' || status === 'active') return 'in-progress'
+  return 'todo'
+}
+
+function getPersonIdFromLabels(labels: string[] | undefined): string | null {
+  return labels?.find((label) => label.startsWith(PERSON_LABEL_PREFIX))?.slice(PERSON_LABEL_PREFIX.length) ?? null
+}
+
+function setPersonLabel(labels: string[], personId: string | null): string[] {
+  const next = labels.filter((label) => !label.startsWith(PERSON_LABEL_PREFIX))
+  if (personId) next.push(`${PERSON_LABEL_PREFIX}${personId}`)
+  return next
+}
+
+function PersonBadge({ labels, people }: { labels: string[] | undefined; people: ArtistNetworkPerson[] }) {
+  const personId = getPersonIdFromLabels(labels)
+  if (!personId) return null
+  const person = people.find((item) => item.id === personId)
+  return (
+    <span className="inline-flex max-w-[160px] items-center gap-1 rounded-full border border-white/[0.06] bg-white/[0.035] px-2 py-1 text-[10px] font-medium text-white/46">
+      <Users className="h-3 w-3 shrink-0" />
+      <span className="truncate">{person?.name ?? 'Network'}</span>
+    </span>
+  )
 }

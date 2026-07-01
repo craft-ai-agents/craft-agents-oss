@@ -78,3 +78,9 @@ export interface MissionAssetImportResult {
   imported: MissionAssetRecord[];
   skipped: Array<{ path: string; reason: string }>;
 }
+
+export interface MissionAssetScanResult {
+  manifest: MissionAssetManifest;
+  added: MissionAssetRecord[];
+  skipped: Array<{ path: string; reason: string }>;
+}

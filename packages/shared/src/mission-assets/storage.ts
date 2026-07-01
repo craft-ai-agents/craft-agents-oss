@@ -3,6 +3,7 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -13,13 +14,14 @@ import {
   access as accessAsync,
   copyFile as copyFileAsync,
   mkdir as mkdirAsync,
+  readdir as readdirAsync,
   readFile as readFileAsync,
   rename as renameAsync,
   rm as rmAsync,
   stat as statAsync,
   writeFile as writeFileAsync,
 } from 'node:fs/promises';
-import { basename, dirname, extname, join, resolve } from 'node:path';
+import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import {
   assetRelativePath,
   classifyMissionAsset,
@@ -34,6 +36,7 @@ import {
   type MissionAssetImportResult,
   type MissionAssetManifest,
   type MissionAssetRecord,
+  type MissionAssetScanResult,
 } from './types.ts';
 
 const DEFAULT_DIRECTORIES = [
@@ -332,6 +335,110 @@ export async function importMissionAssetsAsync(
   return { manifest, imported, skipped };
 }
 
+export function scanMissionAssets(
+  workspaceRootPath: string,
+  workspaceId: string,
+): MissionAssetScanResult {
+  ensureMissionAssetsFolders(workspaceRootPath);
+  const manifest = loadMissionAssetManifestForImport(workspaceRootPath, workspaceId);
+  const assetsRoot = getMissionAssetsRoot(workspaceRootPath);
+  const trackedPaths = trackedManifestPaths(manifest);
+  const added: MissionAssetRecord[] = [];
+  const skipped: Array<{ path: string; reason: string }> = [];
+  const now = new Date().toISOString();
+
+  for (const absolutePath of listAssetFiles(assetsRoot)) {
+    const relativePath = toWorkspaceRelativePath(workspaceRootPath, absolutePath);
+    if (shouldSkipAssetFile(relativePath)) continue;
+    if (trackedPaths.has(relativePath)) continue;
+
+    try {
+      const classification = classifyMissionAsset(absolutePath);
+      const { sizeBytes, sha256 } = sizeAndHash(absolutePath);
+      const record: MissionAssetRecord = {
+        id: `asset_${randomUUID()}`,
+        kind: kindFromRelativePath(relativePath) ?? classification.kind,
+        label: displayKind(kindFromRelativePath(relativePath) ?? classification.kind),
+        relativePath,
+        mimeType: inferMimeType(absolutePath),
+        sizeBytes,
+        sha256,
+        source: 'manual',
+        status: 'available',
+        usableByAgents: true,
+        notes: 'Indexed from Vault folder scan',
+        createdAt: now,
+        updatedAt: now,
+      };
+      added.push(record);
+      manifest.files.push(record);
+      trackedPaths.add(relativePath);
+    } catch (err) {
+      skipped.push({ path: relativePath, reason: err instanceof Error ? err.message : 'Unable to index file' });
+    }
+  }
+
+  manifest.workspaceId = workspaceId;
+  manifest.assetsRoot = MISSION_ASSETS_DIR;
+  manifest.storageMode = manifest.storageMode === 'linked' ? 'mixed' : manifest.storageMode;
+  manifest.updatedAt = new Date().toISOString();
+  saveMissionAssetManifest(workspaceRootPath, manifest);
+  return { manifest, added, skipped };
+}
+
+export async function scanMissionAssetsAsync(
+  workspaceRootPath: string,
+  workspaceId: string,
+): Promise<MissionAssetScanResult> {
+  await ensureMissionAssetsFoldersAsync(workspaceRootPath);
+  const manifest = await loadMissionAssetManifestForImportAsync(workspaceRootPath, workspaceId);
+  const assetsRoot = getMissionAssetsRoot(workspaceRootPath);
+  const trackedPaths = trackedManifestPaths(manifest);
+  const added: MissionAssetRecord[] = [];
+  const skipped: Array<{ path: string; reason: string }> = [];
+  const now = new Date().toISOString();
+
+  for (const absolutePath of await listAssetFilesAsync(assetsRoot)) {
+    const relativePath = toWorkspaceRelativePath(workspaceRootPath, absolutePath);
+    if (shouldSkipAssetFile(relativePath)) continue;
+    if (trackedPaths.has(relativePath)) continue;
+
+    try {
+      const classification = classifyMissionAsset(absolutePath);
+      const folderKind = kindFromRelativePath(relativePath);
+      const kind = folderKind ?? classification.kind;
+      const { sizeBytes, sha256 } = await sizeAndHashAsync(absolutePath);
+      const record: MissionAssetRecord = {
+        id: `asset_${randomUUID()}`,
+        kind,
+        label: displayKind(kind),
+        relativePath,
+        mimeType: inferMimeType(absolutePath),
+        sizeBytes,
+        sha256,
+        source: 'manual',
+        status: 'available',
+        usableByAgents: true,
+        notes: 'Indexed from Vault folder scan',
+        createdAt: now,
+        updatedAt: now,
+      };
+      added.push(record);
+      manifest.files.push(record);
+      trackedPaths.add(relativePath);
+    } catch (err) {
+      skipped.push({ path: relativePath, reason: err instanceof Error ? err.message : 'Unable to index file' });
+    }
+  }
+
+  manifest.workspaceId = workspaceId;
+  manifest.assetsRoot = MISSION_ASSETS_DIR;
+  manifest.storageMode = manifest.storageMode === 'linked' ? 'mixed' : manifest.storageMode;
+  manifest.updatedAt = new Date().toISOString();
+  await saveMissionAssetManifestAsync(workspaceRootPath, manifest);
+  return { manifest, added, skipped };
+}
+
 export function emptyMissionAssetManifest(workspaceId: string): MissionAssetManifest {
   return {
     version: 1,
@@ -341,6 +448,73 @@ export function emptyMissionAssetManifest(workspaceId: string): MissionAssetMani
     files: [],
     updatedAt: new Date().toISOString(),
   };
+}
+
+function trackedManifestPaths(manifest: MissionAssetManifest): Set<string> {
+  return new Set(manifest.files
+    .map((file) => file.relativePath)
+    .filter((path): path is string => Boolean(path)));
+}
+
+function listAssetFiles(root: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const absolutePath = join(root, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...listAssetFiles(absolutePath));
+    } else if (entry.isFile()) {
+      files.push(absolutePath);
+    }
+  }
+  return files;
+}
+
+async function listAssetFilesAsync(root: string): Promise<string[]> {
+  const files: string[] = [];
+  for (const entry of await readdirAsync(root, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const absolutePath = join(root, entry.name);
+    if (entry.isDirectory()) {
+      const nestedFiles = await listAssetFilesAsync(absolutePath);
+      files.push(...nestedFiles);
+    } else if (entry.isFile()) {
+      files.push(absolutePath);
+    }
+  }
+  return files;
+}
+
+function toWorkspaceRelativePath(workspaceRootPath: string, absolutePath: string): string {
+  return relative(workspaceRootPath, absolutePath).replace(/\\/g, '/');
+}
+
+function shouldSkipAssetFile(relativePath: string): boolean {
+  const normalized = relativePath.replace(/\\/g, '/');
+  if (!normalized.startsWith(`${MISSION_ASSETS_DIR}/`)) return true;
+  const fileName = basename(normalized);
+  return fileName === MISSION_ASSET_MANIFEST_FILE
+    || fileName.startsWith(`${MISSION_ASSET_MANIFEST_FILE}.`)
+    || fileName.endsWith('.tmp');
+}
+
+function kindFromRelativePath(relativePath: string): MissionAssetRecord['kind'] | null {
+  const normalized = relativePath.replace(/\\/g, '/');
+  if (normalized.startsWith('assets/audio/masters/')) return 'master';
+  if (normalized.startsWith('assets/audio/demos/')) return 'demo';
+  if (normalized.startsWith('assets/audio/stems/')) return 'stem';
+  if (normalized.startsWith('assets/audio/references/')) return 'audio-reference';
+  if (normalized.startsWith('assets/video/raw/')) return 'raw-video';
+  if (normalized.startsWith('assets/video/edits/')) return 'edited-video';
+  if (normalized.startsWith('assets/video/finals/')) return 'final-video';
+  if (normalized.startsWith('assets/images/cover-art/')) return 'cover-art';
+  if (normalized.startsWith('assets/images/press-photos/')) return 'press-photo';
+  if (normalized.startsWith('assets/images/moodboard/')) return 'moodboard-image';
+  if (normalized.startsWith('assets/docs/lyrics/')) return 'lyrics';
+  if (normalized.startsWith('assets/docs/press/')) return 'press-doc';
+  if (normalized.startsWith('assets/docs/notes/')) return 'note';
+  if (normalized.startsWith('assets/exports/')) return 'export';
+  return null;
 }
 
 async function uniqueDestinationRelativePathAsync(

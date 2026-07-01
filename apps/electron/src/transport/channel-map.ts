@@ -419,6 +419,7 @@ export const CHANNEL_MAP = {
   planMissionAssetImports: invoke(RPC_CHANNELS.missionAssets.PLAN_IMPORT),
   chooseMissionAssetFiles: invoke(RPC_CHANNELS.missionAssets.CHOOSE_FILES),
   importMissionAssets: invoke(RPC_CHANNELS.missionAssets.IMPORT),
+  scanMissionAssets: invoke(RPC_CHANNELS.missionAssets.SCAN),
   openMissionAssetsFolder: invoke(RPC_CHANNELS.missionAssets.OPEN_FOLDER),
 
   // Memory (global USER.md + per-agent MEMORY.md)

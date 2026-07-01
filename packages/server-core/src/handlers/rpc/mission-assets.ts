@@ -8,12 +8,14 @@ import {
   missionAssetContextMetadata,
   missionAssetContextSlug,
   planMissionAssetImports,
+  scanMissionAssetsAsync,
   serializeMissionAssetContext,
   type MissionAssetImportCandidate,
   type MissionAssetImportOptions,
   type MissionAssetImportResult,
   type MissionAssetKindHint,
   type MissionAssetManifest,
+  type MissionAssetScanResult,
 } from '@craft-agent/shared/mission-assets'
 import {
   loadAllContextDocs,
@@ -32,6 +34,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.missionAssets.PLAN_IMPORT,
   RPC_CHANNELS.missionAssets.CHOOSE_FILES,
   RPC_CHANNELS.missionAssets.IMPORT,
+  RPC_CHANNELS.missionAssets.SCAN,
   RPC_CHANNELS.missionAssets.OPEN_FOLDER,
 ] as const
 
@@ -105,6 +108,15 @@ export function registerMissionAssetsHandlers(server: RpcServer, deps: HandlerDe
       })
     },
   )
+
+  server.handle(RPC_CHANNELS.missionAssets.SCAN, async (_ctx, workspaceId: string): Promise<MissionAssetScanResult> => {
+    const rootPath = resolveRootPath(workspaceId)
+    return withWorkspaceMutex(rootPath, async () => {
+      const result = await scanMissionAssetsAsync(rootPath, workspaceId)
+      mirrorManifestToContext(rootPath, workspaceId, result.manifest, deps)
+      return result
+    })
+  })
 
   server.handle(RPC_CHANNELS.missionAssets.OPEN_FOLDER, async (ctx, workspaceId: string): Promise<boolean> => {
     const rootPath = resolveRootPath(workspaceId)

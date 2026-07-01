@@ -416,6 +416,7 @@ export const RPC_CHANNELS = {
     PLAN_IMPORT: 'missionAssets:planImport',
     CHOOSE_FILES: 'missionAssets:chooseFiles',
     IMPORT: 'missionAssets:import',
+    SCAN: 'missionAssets:scan',
     OPEN_FOLDER: 'missionAssets:openFolder',
   },
   memory: {

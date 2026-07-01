@@ -54,6 +54,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.missionAssets.PLAN_IMPORT,
   RPC_CHANNELS.missionAssets.CHOOSE_FILES,
   RPC_CHANNELS.missionAssets.IMPORT,
+  RPC_CHANNELS.missionAssets.SCAN,
   RPC_CHANNELS.missionAssets.OPEN_FOLDER,
 
   // auth — local auth state + native dialogs

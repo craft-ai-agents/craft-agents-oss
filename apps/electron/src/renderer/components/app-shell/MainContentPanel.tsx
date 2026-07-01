@@ -407,9 +407,9 @@ export function MainContentPanel({
       <Panel variant="grow" className={className}>
         <AgendaPage
           sessions={workspaceSessions}
-          statuses={sessionStatuses}
           onOpenSession={(sessionId) => navigate(routes.view.allSessions(sessionId))}
           onNewTask={() => navigate(routes.action.newSession({ name: 'New task' }))}
+          networkWorkspaceId={artistHQWorkspace?.id || activeWorkspaceId || ''}
         />
       </Panel>
     )

@@ -10,6 +10,7 @@ import {
   loadMissionAssetManifest,
   missionAssetContextMetadata,
   planMissionAssetImports,
+  scanMissionAssets,
   serializeMissionAssetContext,
 } from './index.ts';
 
@@ -90,6 +91,25 @@ describe('mission assets', () => {
     expect(result.imported).toHaveLength(1);
     expect(imported?.relativePath).toBe('assets/images/cover-art/cover-art.png');
     expect(existsSync(join(workspace, 'assets/images/cover-art/cover-art.png'))).toBe(true);
+  });
+
+  test('scans manually dropped vault files into the manifest once', () => {
+    const workspace = tempWorkspace();
+    const masterPath = join(workspace, 'assets/audio/masters/live-master.wav');
+    const rawVideoPath = join(workspace, 'assets/video/raw/studio-bts.mov');
+    mkdirSync(join(workspace, 'assets/audio/masters'), { recursive: true });
+    mkdirSync(join(workspace, 'assets/video/raw'), { recursive: true });
+    writeFileSync(masterPath, 'manual audio');
+    writeFileSync(rawVideoPath, 'manual video');
+
+    const first = scanMissionAssets(workspace, 'workspace-1');
+    const second = scanMissionAssets(workspace, 'workspace-1');
+    const loaded = loadMissionAssetManifest(workspace, 'workspace-1');
+
+    expect(first.added.map((file) => file.kind).sort()).toEqual(['master', 'raw-video']);
+    expect(first.added.every((file) => file.source === 'manual')).toBe(true);
+    expect(second.added).toHaveLength(0);
+    expect(loaded.files).toHaveLength(2);
   });
 
   test('refuses to import over an invalid manifest and preserves a backup', () => {

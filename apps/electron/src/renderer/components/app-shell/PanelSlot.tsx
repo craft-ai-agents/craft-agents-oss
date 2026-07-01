@@ -60,6 +60,9 @@ export function PanelSlot({
   const parentContext = useAppShellContext()
   const navState = parseRouteToNavigationState(entry.route)
   const isCreatorCommandCenter = navState?.navigator === 'sessions'
+  const isFullWidthRoute = isCreatorCommandCenter
+    || navState?.navigator === 'agenda'
+    || navState?.navigator === 'vault'
 
   const handleClose = useCallback(() => {
     closePanel(entry.id)
@@ -132,7 +135,7 @@ export function PanelSlot({
           borderBottomLeftRadius: isAtLeftEdge ? RADIUS_EDGE : RADIUS_INNER,
           borderTopRightRadius: RADIUS_INNER,
           borderBottomRightRadius: isAtRightEdge ? RADIUS_EDGE : RADIUS_INNER,
-          ...(isOnly && !isCompact && isCreatorCommandCenter
+          ...(isOnly && !isCompact && isFullWidthRoute
             ? {
                 flexGrow: 1,
                 flexShrink: 1,

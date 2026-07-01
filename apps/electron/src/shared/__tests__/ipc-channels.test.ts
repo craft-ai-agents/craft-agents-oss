@@ -188,6 +188,7 @@ const EXPECTED_CHANNELS: string[] = [
   "missionAssets:import",
   "missionAssets:openFolder",
   "missionAssets:planImport",
+  "missionAssets:scan",
   "notification:getEnabled",
   "notification:navigate",
   "notification:setEnabled",

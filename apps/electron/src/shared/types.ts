@@ -127,6 +127,7 @@ import type {
   MissionAssetKindHint,
   MissionAssetManifest,
   MissionAssetRecord,
+  MissionAssetScanResult,
 } from '@craft-agent/shared/mission-assets';
 export type {
   MissionAssetImportCandidate,
@@ -135,6 +136,7 @@ export type {
   MissionAssetKindHint,
   MissionAssetManifest,
   MissionAssetRecord,
+  MissionAssetScanResult,
 };
 
 // Memory — DTOs are plain JSON entries. Import from the browser-safe type
@@ -857,6 +859,7 @@ export interface ElectronAPI {
   }>
   chooseMissionAssetFiles(workspaceId: string, kindHint?: MissionAssetKindHint): Promise<string[]>
   importMissionAssets(workspaceId: string, filePaths: string[], options?: MissionAssetImportOptions): Promise<MissionAssetImportResult>
+  scanMissionAssets(workspaceId: string): Promise<MissionAssetScanResult>
   openMissionAssetsFolder(workspaceId: string): Promise<boolean>
 
   // Memory (global USER.md + per-agent MEMORY.md)

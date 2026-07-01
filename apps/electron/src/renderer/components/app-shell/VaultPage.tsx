@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { FileArchive, FileText, FolderOpen, Image, Loader2, Music2, Upload, Video } from 'lucide-react'
+import { FileArchive, FileText, FolderOpen, Image, Loader2, Music2, RefreshCw, Upload, Video } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { MissionAssetKind, MissionAssetKindHint, MissionAssetManifest, MissionAssetRecord } from '@craft-agent/shared/mission-assets'
@@ -67,6 +67,22 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
     if (!opened) toast.error('Could not open Vault folder')
   }, [workspaceId])
 
+  const scanFolder = React.useCallback(async () => {
+    if (!workspaceId) return
+    setBusy('scan')
+    try {
+      const result = await window.electronAPI.scanMissionAssets(workspaceId)
+      setManifest(result.manifest)
+      toast.success(result.added.length
+        ? `Indexed ${result.added.length} vault file${result.added.length === 1 ? '' : 's'}`
+        : 'Vault is already indexed')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(null)
+    }
+  }, [workspaceId])
+
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
       <div className="mx-auto min-h-full max-w-[1180px] px-8 py-9">
@@ -81,14 +97,25 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
               Files workers can use: audio, artwork, photos, video, docs, references, and exports for {workspaceName || 'this workspace'}.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={openFolder}
-            className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65 hover:bg-white/[0.06]"
-          >
-            <FolderOpen className="h-3.5 w-3.5" />
-            Open Folder
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void scanFolder()}
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65 hover:bg-white/[0.06] disabled:cursor-wait disabled:opacity-50"
+            >
+              {busy === 'scan' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              Scan Folder
+            </button>
+            <button
+              type="button"
+              onClick={openFolder}
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65 hover:bg-white/[0.06]"
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+              Open Folder
+            </button>
+          </div>
         </header>
 
         {loading ? (
