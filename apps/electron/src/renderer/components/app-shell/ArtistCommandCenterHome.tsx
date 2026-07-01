@@ -26,6 +26,16 @@ import {
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import type { MissionAssetKindHint, MissionAssetManifest } from '../../../shared/types'
 import {
+  ARTIST_PROFILE_CONTEXT_SLUG,
+  parseArtistProfileDocResult,
+} from '@/lib/artist-profile'
+import {
+  CAMPAIGN_WORKER_CONTEXT_SLUG,
+  campaignWorkerContextMetadata,
+  getCampaignWorkerReadiness,
+  serializeCampaignWorkerContext,
+} from '@/lib/campaign-worker-context'
+import {
   MISSION_ASSET_CONTEXT_SLUG,
   missionAssetContextMetadata,
   serializeMissionAssetContext,
@@ -104,12 +114,17 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
   const [assetBusy, setAssetBusy] = React.useState(false)
   const [selectedReleaseCategoryId, setSelectedReleaseCategoryId] = React.useState<ReleaseBoardCategory['id'] | null>(null)
   const lastAutoSavedReleaseBoardBody = React.useRef<string | null>(null)
+  const lastAutoSavedWorkerContextBody = React.useRef<string | null>(null)
   const { docs, loading, upsert } = useWorkspaceContext(workspaceId)
 
   const savedMission = React.useMemo(() => {
     const doc = docs.find((item) => item.slug === MISSION_BRIEF_CONTEXT_SLUG)
     return parseMissionBriefDoc(doc)
   }, [docs])
+  const artistProfile = React.useMemo(
+    () => parseArtistProfileDocResult(docs.find((item) => item.slug === ARTIST_PROFILE_CONTEXT_SLUG)).profile,
+    [docs],
+  )
 
   const [optimisticMission, setOptimisticMission] = React.useState<MissionBrief | null>(null)
   const savedReleaseBoard = React.useMemo(() => {
@@ -148,16 +163,21 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
     [releaseBoard.categories, selectedReleaseCategoryId],
   )
   const hasMission = mission.status !== 'empty'
+  const workerReadiness = React.useMemo(
+    () => getCampaignWorkerReadiness({ mission, artistProfile, assetManifest }),
+    [artistProfile, assetManifest, mission],
+  )
+  const workerContextBody = React.useMemo(
+    () => serializeCampaignWorkerContext({ mission, artistProfile, assetManifest }),
+    [artistProfile, assetManifest, mission],
+  )
   const title = mission.title || 'Untitled Campaign'
   const subtitle = hasMission
     ? mission.goal || mission.mood || 'Campaign brief started. Add more context when ready.'
     : 'Start with a goal, files, or a worker.'
   const focus = mission.timeline || mission.releaseDate || (hasMission ? mission.missionType || 'Campaign active' : 'No brief yet')
   const readinessLabel = hasMission ? `${mission.completeness}% ready` : 'Not started'
-  const nextMove = React.useMemo(
-    () => hasMission ? missionNextMove(assetManifest) : 'Create the campaign brief.',
-    [assetManifest, hasMission],
-  )
+  const nextMove = workerReadiness.nextMove
 
   React.useEffect(() => {
     let cancelled = false
@@ -238,6 +258,20 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
       toast.error(err instanceof Error ? err.message : String(err))
     })
   }, [loading, releaseBoard, releaseBoardBody, savedReleaseBoard, upsert, workspaceId])
+
+  React.useEffect(() => {
+    if (!workspaceId || loading || !hasMission) return
+    if (lastAutoSavedWorkerContextBody.current === workerContextBody) return
+
+    lastAutoSavedWorkerContextBody.current = workerContextBody
+    void upsert({
+      slug: CAMPAIGN_WORKER_CONTEXT_SLUG,
+      metadata: campaignWorkerContextMetadata(workerReadiness),
+      body: workerContextBody,
+    }).catch((err) => {
+      toast.error(err instanceof Error ? err.message : String(err))
+    })
+  }, [hasMission, loading, upsert, workerContextBody, workerReadiness, workspaceId])
 
   const toggleReleaseItem = React.useCallback(
     (categoryId: ReleaseBoardCategory['id'], itemId: string) => {
@@ -441,14 +475,6 @@ const releaseCategoryIcons: Record<ReleaseBoardCategory['id'], React.ComponentTy
   content: ClipboardCheck,
   promotion: Megaphone,
   team: Users,
-}
-
-function missionNextMove(manifest: MissionAssetManifest | null): string {
-  const files = manifest?.files.filter((file) => file.status === 'available') ?? []
-  if (!files.some((file) => file.kind === 'master' || file.kind === 'demo')) return 'Add the master in Campaign Assets.'
-  if (!files.some((file) => file.kind === 'lyrics')) return 'Add lyrics in Campaign Assets.'
-  if (!files.some((file) => file.kind === 'cover-art')) return 'Add cover art in Campaign Assets.'
-  return 'Use the release board or launch a worker.'
 }
 
 function ReleaseBoardRow({
