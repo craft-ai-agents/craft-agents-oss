@@ -1684,7 +1684,7 @@ function AppShellContent({
     }
     setSessionsNavExpanded(false)
     window.location.hash = `#artist-hq/${tab}`
-    navigate(routes.view.allSessions())
+    navigate(routes.view.allSessions(), { skipAutoSelect: true })
   }, [activeWorkspaceId, onSelectWorkspace, workspaces])
 
   const handleNewProjectClick = useCallback(() => {
