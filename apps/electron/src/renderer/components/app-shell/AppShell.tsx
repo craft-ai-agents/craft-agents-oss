@@ -104,6 +104,8 @@ import {
   isAgentsNavigation,
   isAutomationsNavigation,
   isWorkspaceContextNavigation,
+  isAgendaNavigation,
+  isVaultNavigation,
   isOutputsNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
@@ -1660,18 +1662,10 @@ function AppShellContent({
     setSessionsNavExpanded(!isArtistHQWorkspace)
   }, [isArtistHQWorkspace, navState])
 
-  const handleCampaignsNavClick = useCallback(() => {
-    if (isArtistHQWorkspace) {
-      const campaignWorkspace = workspaces.find((workspace) => !getIsArtistHQWorkspace(workspace, workspaces))
-      if (campaignWorkspace) {
-        void onSelectWorkspace(campaignWorkspace.id)
-      }
-      setSessionsNavExpanded(true)
-    } else {
-      setSessionsNavExpanded(prev => !prev)
-    }
-    navigate(routes.view.allSessions())
-  }, [isArtistHQWorkspace, onSelectWorkspace, workspaces])
+  const handleAgendaNavClick = useCallback(() => {
+    setSessionsNavExpanded(false)
+    navigate(routes.view.agenda())
+  }, [])
 
   const handleArtistHQNavClick = useCallback((tab: 'home' | 'calendar' | 'network') => {
     const hqWorkspace = findArtistHQWorkspace(workspaces)
@@ -1985,20 +1979,20 @@ function AppShellContent({
     // 1. HQ
     result.push({ id: 'nav:hq', type: 'nav', action: () => handleArtistHQNavClick('home') })
 
-    // 2. Campaigns and Workers
-    result.push({ id: 'nav:campaigns', type: 'nav', action: handleCampaignsNavClick })
+    // 2. Agenda and Workers
+    result.push({ id: 'nav:agenda', type: 'nav', action: handleAgendaNavClick })
     result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
 
     // 3. HQ sections
     result.push({ id: 'nav:calendar', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
     result.push({ id: 'nav:network', type: 'nav', action: () => handleArtistHQNavClick('network') })
-    result.push({ id: 'nav:vault', type: 'nav', action: handleOutputsClick })
+    result.push({ id: 'nav:vault', type: 'nav', action: () => navigate(routes.view.vault()) })
 
     // 4. Settings
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAgentsClick, handleArtistHQNavClick, handleCampaignsNavClick, handleOutputsClick, handleSettingsClick])
+  }, [handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleSettingsClick])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2144,6 +2138,14 @@ function AppShellContent({
       return t("sidebar.workspaceContext")
     }
 
+    if (isAgendaNavigation(navState)) {
+      return 'Agenda'
+    }
+
+    if (isVaultNavigation(navState)) {
+      return 'Vault'
+    }
+
     if (isOutputsNavigation(navState)) {
       return 'Outputs'
     }
@@ -2238,6 +2240,8 @@ function AppShellContent({
     if (isSkillsNavigation(navState)) return false
     if (isAutomationsNavigation(navState)) return false
     if (isWorkspaceContextNavigation(navState)) return false
+    if (isAgendaNavigation(navState)) return false
+    if (isVaultNavigation(navState)) return false
     if (isOutputsNavigation(navState)) return false
     if (isSettingsNavigation(navState)) return false
     return true
@@ -2314,14 +2318,13 @@ function AppShellContent({
                       variant: isArtistHQWorkspace && isSessionsNavigation(navState) && !['#artist-hq/calendar', '#artist-hq/network'].includes(artistHqHash) ? "default" : "ghost",
                       onClick: () => handleArtistHQNavClick('home'),
                     },
-                    // --- Campaigns ---
+                    // --- Agenda ---
                     {
-                      id: "nav:campaigns",
-                      title: "Campaigns",
-                      label: String(workspaceSessionMetas.length),
+                      id: "nav:agenda",
+                      title: "Agenda",
                       icon: MessageSquare,
-                      variant: sessionsNavExpanded && !isArtistHQWorkspace ? "default" : "ghost",
-                      onClick: handleCampaignsNavClick,
+                      variant: isAgendaNavigation(navState) ? "default" : "ghost",
+                      onClick: handleAgendaNavClick,
                     },
                     {
                       id: "nav:calendar",
@@ -2341,8 +2344,8 @@ function AppShellContent({
                       id: "nav:vault",
                       title: "Vault",
                       icon: FolderOpen,
-                      variant: isWorkspaceContextNavigation(navState) || isOutputsNavigation(navState) ? "default" : "ghost",
-                      onClick: handleOutputsClick,
+                      variant: isVaultNavigation(navState) ? "default" : "ghost",
+                      onClick: () => navigate(routes.view.vault()),
                     },
                     // --- Workers ---
                     {

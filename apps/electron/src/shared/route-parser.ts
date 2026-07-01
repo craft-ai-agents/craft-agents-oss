@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'videoStudio' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'agenda' | 'vault' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'videoStudio' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -69,7 +69,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 export const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'workflows', 'runs', 'deep-research', 'outputs', 'video-studio', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'agenda', 'vault', 'workflows', 'runs', 'deep-research', 'outputs', 'video-studio', 'settings'
 ] as const
 
 /**
@@ -220,6 +220,14 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 
   if (first === 'workspace-context') {
     return { navigator: 'workspaceContext', details: null }
+  }
+
+  if (first === 'agenda') {
+    return { navigator: 'agenda', details: null }
+  }
+
+  if (first === 'vault') {
+    return { navigator: 'vault', details: null }
   }
 
   // Workflows navigator
@@ -382,6 +390,14 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
 
   if (parsed.navigator === 'workspaceContext') {
     return 'workspace-context'
+  }
+
+  if (parsed.navigator === 'agenda') {
+    return 'agenda'
+  }
+
+  if (parsed.navigator === 'vault') {
+    return 'vault'
   }
 
   if (parsed.navigator === 'workflows') {
@@ -548,6 +564,12 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
 
   if (compound.navigator === 'workspaceContext') {
     return { type: 'view', name: 'workspace-context', params: {} }
+  }
+  if (compound.navigator === 'agenda') {
+    return { type: 'view', name: 'agenda', params: {} }
+  }
+  if (compound.navigator === 'vault') {
+    return { type: 'view', name: 'vault', params: {} }
   }
 
   if (compound.navigator === 'workflows') {
@@ -730,6 +752,14 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     return { navigator: 'workspaceContext' }
   }
 
+  if (compound.navigator === 'agenda') {
+    return { navigator: 'agenda' }
+  }
+
+  if (compound.navigator === 'vault') {
+    return { navigator: 'vault' }
+  }
+
   if (compound.navigator === 'workflows') {
     if (compound.workflowsKind === 'recent-runs') {
       return { navigator: 'workflows', details: { type: 'recent-runs' } }
@@ -855,6 +885,10 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'automations', details: null }
     case 'workspace-context':
       return { navigator: 'workspaceContext' }
+    case 'agenda':
+      return { navigator: 'agenda' }
+    case 'vault':
+      return { navigator: 'vault' }
     case 'workflows':
       return { navigator: 'workflows', details: { type: 'list' } }
     case 'workflows-recent-runs':
@@ -1031,6 +1065,18 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
       navigator: 'videoStudio',
       videoStudioOutputId: state.outputId,
       details: { type: 'video-studio-output', id: state.outputId },
+    }
+  }
+  if (state.navigator === 'agenda') {
+    return {
+      navigator: 'agenda',
+      details: null,
+    }
+  }
+  if (state.navigator === 'vault') {
+    return {
+      navigator: 'vault',
+      details: null,
     }
   }
 

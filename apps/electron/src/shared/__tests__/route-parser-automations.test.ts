@@ -106,6 +106,13 @@ describe('route-parser: library routes', () => {
     expect(parseRouteToNavigationState('workspace-context')).toEqual({ navigator: 'workspaceContext' })
   })
 
+  it('parses creator HQ utility routes', () => {
+    expect(parseRouteToNavigationState('agenda')).toEqual({ navigator: 'agenda' })
+    expect(parseRouteToNavigationState('vault')).toEqual({ navigator: 'vault' })
+    expect(buildCompoundRoute(parseCompoundRoute('agenda')!)).toBe('agenda')
+    expect(buildCompoundRoute(parseCompoundRoute('vault')!)).toBe('vault')
+  })
+
   it('parses video studio output routes', () => {
     const parsed = parseCompoundRoute('video-studio/output-1')
     expect(parsed).toEqual({

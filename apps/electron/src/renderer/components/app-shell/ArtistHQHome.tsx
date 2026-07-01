@@ -1,6 +1,5 @@
 import * as React from 'react'
 import {
-  BarChart3,
   Bot,
   CalendarDays,
   CheckCircle2,
@@ -491,30 +490,6 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
               </p>
             </div>
 
-            <div className="mt-7 flex flex-wrap gap-2">
-              {([
-                ['home', 'HQ', BarChart3],
-                ['profile', 'Profile', UserRound],
-                ['calendar', 'Calendar', CalendarDays],
-                ['network', 'Network', Users],
-                ['research', 'Research', FileText],
-              ] as const).map(([id, label, Icon]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setTabHash(id)}
-                  className={cn(
-                    'inline-flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-medium transition-colors',
-                    tab === id
-                      ? 'border-[#fb923c]/28 bg-[#f97316]/14 text-white'
-                      : 'border-white/[0.06] bg-white/[0.025] text-white/48 hover:bg-white/[0.05] hover:text-white/72',
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {label}
-                </button>
-              ))}
-            </div>
           </div>
         </section>
 
@@ -1360,12 +1335,6 @@ function readTabFromHash(): ArtistHQTab {
     ? window.location.hash.slice(HQ_HASH_PREFIX.length)
     : ''
   return isArtistHQTab(raw) ? raw : 'home'
-}
-
-function setTabHash(tab: ArtistHQTab): void {
-  const nextHash = `${HQ_HASH_PREFIX}${tab}`
-  if (window.location.hash === nextHash) return
-  window.location.hash = nextHash
 }
 
 function isArtistHQTab(value: string): value is ArtistHQTab {

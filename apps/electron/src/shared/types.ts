@@ -1176,6 +1176,16 @@ export interface WorkspaceContextNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export interface AgendaNavigationState {
+  navigator: 'agenda'
+  rightSidebar?: RightSidebarPanel
+}
+
+export interface VaultNavigationState {
+  navigator: 'vault'
+  rightSidebar?: RightSidebarPanel
+}
+
 /**
  * Workflows navigator. Hosts the list, detail, editor, and recent-runs
  * pages. The Run page (per-run pipeline view) is its own navigator below
@@ -1228,6 +1238,8 @@ export type NavigationState =
   | AgentsNavigationState
   | AutomationsNavigationState
   | WorkspaceContextNavigationState
+  | AgendaNavigationState
+  | VaultNavigationState
   | WorkflowsNavigationState
   | WorkflowRunNavigationState
   | DeepResearchRunNavigationState
@@ -1261,6 +1273,14 @@ export const isAutomationsNavigation = (
 export const isWorkspaceContextNavigation = (
   state: NavigationState
 ): state is WorkspaceContextNavigationState => state.navigator === 'workspaceContext'
+
+export const isAgendaNavigation = (
+  state: NavigationState
+): state is AgendaNavigationState => state.navigator === 'agenda'
+
+export const isVaultNavigation = (
+  state: NavigationState
+): state is VaultNavigationState => state.navigator === 'vault'
 
 export const isWorkflowsNavigation = (
   state: NavigationState
@@ -1315,6 +1335,12 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'workspaceContext') {
     return 'workspace-context'
+  }
+  if (state.navigator === 'agenda') {
+    return 'agenda'
+  }
+  if (state.navigator === 'vault') {
+    return 'vault'
   }
   if (state.navigator === 'workflows') {
     switch (state.details.type) {
@@ -1395,6 +1421,8 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
 
   // Handle settings
   if (key === 'workspace-context') return { navigator: 'workspaceContext' }
+  if (key === 'agenda') return { navigator: 'agenda' }
+  if (key === 'vault') return { navigator: 'vault' }
 
   // Handle workflows
   if (key === 'workflows') return { navigator: 'workflows', details: { type: 'list' } }

@@ -34,6 +34,8 @@ import {
   isAgentsNavigation,
   isAutomationsNavigation,
   isWorkspaceContextNavigation,
+  isAgendaNavigation,
+  isVaultNavigation,
   isOutputsNavigation,
 } from '@/contexts/NavigationContext'
 import { isDeepResearchRunNavigation, isVideoStudioNavigation, isWorkflowsNavigation, isWorkflowRunNavigation } from '../../../shared/types'
@@ -58,6 +60,8 @@ import VideoStudioPage from '@/pages/VideoStudioPage'
 import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { ArtistHQHome } from './ArtistHQHome'
 import { ArtistCommandCenterHome } from './ArtistCommandCenterHome'
+import { AgendaPage } from './AgendaPage'
+import { VaultPage } from './VaultPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { SettingsPageSwitcher } from '@/pages/settings/SettingsPageSwitcher'
 import {
@@ -131,6 +135,10 @@ export function MainContentPanel({
   const selectionCount = useSelectionCount()
   const { clearMultiSelect } = useSessionSelection()
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
+  const workspaceSessions = useMemo(
+    () => Array.from(sessionMetaMap.values()).filter((session) => session.workspaceId === activeWorkspaceId),
+    [activeWorkspaceId, sessionMetaMap],
+  )
   const automations = useAtomValue(automationsAtom)
   const {
     outputs,
@@ -390,6 +398,27 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <WorkspaceContextPage workspaceId={activeWorkspaceId || ''} />
+      </Panel>
+    )
+  }
+
+  if (isAgendaNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <AgendaPage
+          sessions={workspaceSessions}
+          statuses={sessionStatuses}
+          onOpenSession={(sessionId) => navigate(routes.view.allSessions(sessionId))}
+          onNewTask={() => navigate(routes.action.newSession({ name: 'New task' }))}
+        />
+      </Panel>
+    )
+  }
+
+  if (isVaultNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <VaultPage workspaceId={activeWorkspaceId || ''} workspaceName={activeWorkspace?.name} />
       </Panel>
     )
   }

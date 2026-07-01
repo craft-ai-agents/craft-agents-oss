@@ -190,6 +190,12 @@ export const routes = {
     /** Workspace Context placeholder route (full page implemented in a later phase) */
     workspaceContext: () => 'workspace-context' as const,
 
+    /** Agenda board for tasks, jobs, and follow-ups */
+    agenda: () => 'agenda' as const,
+
+    /** Creator asset vault */
+    vault: () => 'vault' as const,
+
     /** Workflows list (Phase 1: manual triggers only) */
     workflows: () => 'workflows' as const,
 
