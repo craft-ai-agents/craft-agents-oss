@@ -19,6 +19,13 @@ class PlatformSearchSkillOutputContractTests(unittest.TestCase):
         self.assertIn("| 平台 | 状态 | 返回型号 | 库存 | 最低价/MOQ | 交期 | 证据 | 备注 |", text)
         self.assertLess(text.index("平台总览表"), text.index("详细结果"))
 
+    def test_inventory_lookup_status_is_fixed_before_platform_overview(self) -> None:
+        text = self.text
+        self.assertIn("库存查找情况", text)
+        self.assertIn("本地库存：已查询 / 未查询", text)
+        self.assertIn("结果：无记录 / 有记录 / 用户直接要求外部平台", text)
+        self.assertLess(text.index("库存查找情况"), text.index("平台总览表"))
+
     def test_overview_table_has_one_row_per_direct_platform(self) -> None:
         text = self.text
         self.assertIn("每个 `--source-set direct` 平台必须一行", text)
