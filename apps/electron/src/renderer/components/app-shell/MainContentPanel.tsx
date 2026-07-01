@@ -525,6 +525,16 @@ export function MainContentPanel({
       )
     }
 
+    // Artist HQ is the global/master workspace. Other workspaces remain
+    // campaign-specific command centers. HQ must win over stale selected chats.
+    if (isArtistHQWorkspace(activeWorkspace, workspaces)) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ArtistHQHome workspaceId={activeWorkspaceId || ''} workspaceName={activeWorkspace?.name} />
+        </Panel>
+      )
+    }
+
     const selectedSessionMeta = navState.details?.type === 'session'
       ? sessionMetaMap.get(navState.details.sessionId)
       : undefined
@@ -537,16 +547,6 @@ export function MainContentPanel({
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
           <ChatPage sessionId={navState.details.sessionId} />
-        </Panel>
-      )
-    }
-
-    // Artist HQ is the global/master workspace. Other workspaces remain
-    // campaign-specific command centers. Specialist sessions still open chat.
-    if (isArtistHQWorkspace(activeWorkspace, workspaces)) {
-      return wrapWithStoplight(
-        <Panel variant="grow" className={className}>
-          <ArtistHQHome workspaceId={activeWorkspaceId || ''} workspaceName={activeWorkspace?.name} />
         </Panel>
       )
     }
