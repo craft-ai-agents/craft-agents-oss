@@ -86,7 +86,7 @@ import { messageToStored, storedToMessage, type Message, type StoredAttachment, 
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
 import { loadAllSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
-import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
+import { getToolIconsDir, getMiniModel, getGitBashPath } from '@craft-agent/shared/config'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -3194,11 +3194,15 @@ export class SessionManager implements ISessionManager {
 
       // Per-session env overrides
       const miniModel = connection ? (getMiniModel(connection) ?? connection.defaultModel) : undefined
+      const persistedGitBashPath = getGitBashPath()
       const envOverrides: Record<string, string> = {
         CRAFT_WORKSPACE_PATH: managed.workspace.rootPath,
         // Pass mini model to SDK subprocess so built-in tools like WebFetch
         // use the correct model for summarization (instead of hardcoded Haiku)
         ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
+        // Pass persisted Git Bash path to SDK subprocess so bash tool
+        // resolves custom gitBashPath from config.json (fixes #935)
+        ...(persistedGitBashPath ? { CLAUDE_CODE_GIT_BASH_PATH: persistedGitBashPath } : {}),
       }
       managed.envOverrides = envOverrides
 
@@ -7696,9 +7700,11 @@ export class SessionManager implements ISessionManager {
       ? (getMiniModel(backendContext.connection) ?? backendContext.connection.defaultModel ?? getDefaultSummarizationModel())
       : getDefaultSummarizationModel()
 
+    const persistedGitBashPath = getGitBashPath()
     const envOverrides: Record<string, string> = {
       CRAFT_WORKSPACE_PATH: workspaceRootPath,
       ...(miniModel ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: miniModel } : {}),
+      ...(persistedGitBashPath ? { CLAUDE_CODE_GIT_BASH_PATH: persistedGitBashPath } : {}),
     }
 
     const agent = createBackendFromResolvedContext({
