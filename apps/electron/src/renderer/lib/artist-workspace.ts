@@ -10,5 +10,9 @@ export function isArtistHQWorkspace(
 ): boolean {
   if (!workspace) return false
   const text = `${workspace.name} ${workspace.slug ?? ''}`.toLowerCase()
-  return /\b(master|artist hq|global|hq|my workspace|my-workspace)\b/.test(text)
+  return /\b(m|master|artist hq|global|hq|my workspace|my-workspace)\b/.test(text)
+}
+
+export function findArtistHQWorkspace(workspaces: ArtistWorkspaceLike[]): ArtistWorkspaceLike | undefined {
+  return workspaces.find((workspace) => isArtistHQWorkspace(workspace, workspaces))
 }

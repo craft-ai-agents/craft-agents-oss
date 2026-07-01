@@ -63,6 +63,7 @@ import { MissionBriefDrawer } from './MissionBriefDrawer'
 
 interface ArtistCommandCenterHomeProps {
   workspaceId: string
+  artistProfileWorkspaceId?: string
 }
 
 function SectionTitle({
@@ -108,7 +109,7 @@ function CommandCard({
   )
 }
 
-export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHomeProps) {
+export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId }: ArtistCommandCenterHomeProps) {
   const [drawerOpen, setDrawerOpen] = React.useState(false)
   const [assetManifest, setAssetManifest] = React.useState<MissionAssetManifest | null>(null)
   const [assetBusy, setAssetBusy] = React.useState(false)
@@ -116,14 +117,19 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
   const lastAutoSavedReleaseBoardBody = React.useRef<string | null>(null)
   const lastAutoSavedWorkerContextBody = React.useRef<string | null>(null)
   const { docs, loading, upsert } = useWorkspaceContext(workspaceId)
+  const inheritedArtistProfileWorkspaceId = artistProfileWorkspaceId && artistProfileWorkspaceId !== workspaceId
+    ? artistProfileWorkspaceId
+    : null
+  const { docs: inheritedArtistProfileDocs, loading: inheritedArtistProfileLoading } = useWorkspaceContext(inheritedArtistProfileWorkspaceId)
 
   const savedMission = React.useMemo(() => {
     const doc = docs.find((item) => item.slug === MISSION_BRIEF_CONTEXT_SLUG)
     return parseMissionBriefDoc(doc)
   }, [docs])
+  const artistProfileDocs = inheritedArtistProfileWorkspaceId ? inheritedArtistProfileDocs : docs
   const artistProfile = React.useMemo(
-    () => parseArtistProfileDocResult(docs.find((item) => item.slug === ARTIST_PROFILE_CONTEXT_SLUG)).profile,
-    [docs],
+    () => parseArtistProfileDocResult(artistProfileDocs.find((item) => item.slug === ARTIST_PROFILE_CONTEXT_SLUG)).profile,
+    [artistProfileDocs],
   )
 
   const [optimisticMission, setOptimisticMission] = React.useState<MissionBrief | null>(null)
@@ -260,7 +266,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
   }, [loading, releaseBoard, releaseBoardBody, savedReleaseBoard, upsert, workspaceId])
 
   React.useEffect(() => {
-    if (!workspaceId || loading || !hasMission) return
+    if (!workspaceId || loading || inheritedArtistProfileLoading || !hasMission) return
     if (lastAutoSavedWorkerContextBody.current === workerContextBody) return
 
     lastAutoSavedWorkerContextBody.current = workerContextBody
@@ -271,7 +277,7 @@ export function ArtistCommandCenterHome({ workspaceId }: ArtistCommandCenterHome
     }).catch((err) => {
       toast.error(err instanceof Error ? err.message : String(err))
     })
-  }, [hasMission, loading, upsert, workerContextBody, workerReadiness, workspaceId])
+  }, [hasMission, inheritedArtistProfileLoading, loading, upsert, workerContextBody, workerReadiness, workspaceId])
 
   const toggleReleaseItem = React.useCallback(
     (categoryId: ReleaseBoardCategory['id'], itemId: string) => {

@@ -73,7 +73,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import { navigate, routes } from '@/lib/navigate'
-import { isArtistHQWorkspace } from '@/lib/artist-workspace'
+import { findArtistHQWorkspace, isArtistHQWorkspace } from '@/lib/artist-workspace'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
 import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -119,6 +119,10 @@ export function MainContentPanel({
   const activeWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === activeWorkspaceId),
     [activeWorkspaceId, workspaces],
+  )
+  const artistHQWorkspace = useMemo(
+    () => findArtistHQWorkspace(workspaces),
+    [workspaces],
   )
 
   // Session multi-select state
@@ -549,7 +553,10 @@ export function MainContentPanel({
 
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <ArtistCommandCenterHome workspaceId={activeWorkspaceId || ''} />
+        <ArtistCommandCenterHome
+          workspaceId={activeWorkspaceId || ''}
+          artistProfileWorkspaceId={artistHQWorkspace?.id}
+        />
       </Panel>
     )
   }
