@@ -11,6 +11,14 @@ sys.path.insert(0, str(ROOT))
 
 
 class SourceSetTests(unittest.TestCase):
+    def test_registry_metadata_import_does_not_require_cloakbrowser(self) -> None:
+        import registry
+
+        ids = registry.all_ids()
+
+        self.assertIn("digikey", ids)
+        self.assertIn("xonelec", ids)
+
     def test_direct_set_uses_current_direct_platforms_only(self) -> None:
         from source_sets import source_ids_for_set
 
@@ -35,6 +43,16 @@ class SourceSetTests(unittest.TestCase):
             source_ids_for_set("aggregator"),
             ["octopart", "szlcsc-overseas"],
         )
+
+    def test_source_sets_reference_registered_adapters(self) -> None:
+        import registry
+        from source_sets import source_ids_for_set
+
+        known = set(registry.all_ids())
+
+        for source_set in ("direct", "aggregator"):
+            missing = sorted(set(source_ids_for_set(source_set)) - known)
+            self.assertEqual(missing, [], source_set)
 
 
 if __name__ == "__main__":

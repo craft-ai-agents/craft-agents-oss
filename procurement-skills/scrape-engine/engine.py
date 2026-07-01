@@ -6,8 +6,7 @@
   antibot.py  (L2) — navigate() + per-defense PROFILES + the script escape-hatch.
   contract.py (L3) — Row / Defense / Adapter types.
 
-This file is just the CLI front door + a couple of re-exports so existing
-adapters that do `from engine import q` keep working. It owns NO mechanics.
+This file is the CLI front door plus runtime re-exports. It owns NO mechanics.
 """
 from __future__ import annotations
 
@@ -15,13 +14,12 @@ import argparse
 import asyncio
 import json
 
-# Re-export the small pure helpers + the scheduler so callers/adapters have a
-# stable entry point. q() is imported by several adapters as `from engine import q`.
+# Re-export runtime helpers for callers that treat engine.py as the entry point.
+from url_utils import q  # noqa: F401
 from resource import (  # noqa: F401
     DEFAULT_GATE,
     MIHOMO,
     host_of,
-    q,
     run_batch,
 )
 

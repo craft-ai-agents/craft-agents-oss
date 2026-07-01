@@ -22,7 +22,7 @@ import httpx
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from contract import Adapter, Row, make_break  # noqa: E402
-from engine import q  # noqa: E402
+from url_utils import q  # noqa: E402
 
 TIMEOUT = 12
 _HEADERS = {

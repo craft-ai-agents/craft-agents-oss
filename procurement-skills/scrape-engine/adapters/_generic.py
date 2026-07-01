@@ -41,7 +41,7 @@ from typing import Any, Callable
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from contract import Adapter, Defense, Row, make_break  # noqa: E402
-from engine import q  # noqa: E402
+from url_utils import q  # noqa: E402
 
 MAINTENANCE_PAT = re.compile(
     r"(temporarily offline|scheduled maintenance|planned system upgrade|"

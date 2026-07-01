@@ -34,7 +34,7 @@ from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from contract import Adapter, Row  # noqa: E402
-from engine import q  # noqa: E402
+from url_utils import q  # noqa: E402
 
 # NOTE: limit is not threaded through the script-mode extract signature; the old
 # code used `limit` for numberOfResults + the result cap. Preserve the old

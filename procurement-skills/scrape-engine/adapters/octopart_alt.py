@@ -37,7 +37,7 @@ from typing import Any, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from contract import Adapter, Row  # noqa: E402
-from engine import q  # noqa: E402
+from url_utils import q  # noqa: E402
 
 # RSC flight chunk: self.__next_f.push([1,"<js-string>"])
 _FLIGHT = re.compile(r'self\.__next_f\.push\(\[1,\s*"((?:[^"\\]|\\.)*)"\]\)')

@@ -63,7 +63,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-import urllib.parse
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -72,6 +71,7 @@ os.environ.setdefault("CLOAKBROWSER_AUTO_UPDATE", "false")
 from cloakbrowser import launch_async  # noqa: E402
 
 from contract import Adapter, Row  # noqa: E402
+from url_utils import q  # noqa: E402
 
 MIHOMO = os.environ.get("MIHOMO_PROXY", "http://127.0.0.1:7899")
 
@@ -90,11 +90,6 @@ DEFAULT_GATE = 2
 # pooled browsers = 3 heavy Chromiums, which fits 4G. See the module docstring
 # OOM inequality before raising either constant.
 FRESH_BROWSER_PERMITS = 2
-
-
-def q(part: str) -> str:
-    """Percent-encode a part number for URL embedding (old _q)."""
-    return urllib.parse.quote(part, safe="")
 
 
 def host_of(url: str) -> str:
