@@ -44,16 +44,17 @@ const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo';
  */
 export const GOOGLE_SERVICE_SCOPES: Record<GoogleService, string[]> = {
   gmail: [
-    'https://www.googleapis.com/auth/gmail.modify', // Read, trash, labels, mark read/unread
-    'https://www.googleapis.com/auth/gmail.compose', // Create and send drafts
+    'https://www.googleapis.com/auth/gmail.readonly', // Read messages and threads
+    'https://www.googleapis.com/auth/gmail.compose', // Create drafts
     'https://www.googleapis.com/auth/userinfo.email',
   ],
   calendar: [
-    'https://www.googleapis.com/auth/calendar', // Full calendar access
+    'https://www.googleapis.com/auth/calendar.events', // Manage events without full calendar access
     'https://www.googleapis.com/auth/userinfo.email',
   ],
   drive: [
-    'https://www.googleapis.com/auth/drive', // Full Drive access
+    'https://www.googleapis.com/auth/drive.file', // Files created or opened by the app
+    'https://www.googleapis.com/auth/drive.metadata.readonly', // File picker and metadata lookup
     'https://www.googleapis.com/auth/userinfo.email',
   ],
   docs: [

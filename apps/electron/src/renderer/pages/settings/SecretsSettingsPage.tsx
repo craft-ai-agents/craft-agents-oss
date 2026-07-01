@@ -763,6 +763,10 @@ export default function SecretsSettingsPage() {
       toast.info(`${service.title} is optional. Add a key when a workflow needs it.`)
       return
     }
+    if (service.id === 'google-workspace') {
+      toast.info('Google Workspace keys are saved. Google account connection is not built yet.')
+      return
+    }
     toast.success(`${service.title} setup looks ready`)
   }
 
