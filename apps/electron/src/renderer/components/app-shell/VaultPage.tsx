@@ -86,35 +86,38 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
       <div className="mx-auto min-h-full max-w-[1400px] px-5 py-4 xl:px-8 xl:py-5">
-        <header className="mb-6 flex items-start justify-between gap-4">
-          <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/46">
-              <FolderOpen className="h-3.5 w-3.5 text-orange-300/75" />
-              Asset Library
+        <header className="relative mb-6 overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#0c0c0c] p-8">
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent" />
+          <div className="relative flex items-start justify-between gap-4">
+            <div>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-indigo-400">
+                <FolderOpen className="h-3.5 w-3.5" />
+                Asset Library
+              </div>
+              <h1 className="text-4xl font-medium tracking-tight text-white/95">Vault</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">
+                Files workers can use: audio, artwork, photos, video, docs, references, and exports.
+              </p>
             </div>
-            <h1 className="text-3xl font-medium tracking-tight text-white/90">Vault</h1>
-            <p className="mt-1.5 max-w-2xl text-sm text-white/40">
-              Files workers can use: audio, artwork, photos, video, docs, references, and exports.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => void scanFolder()}
-              className="inline-flex h-8 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65 hover:bg-white/[0.06] disabled:cursor-wait disabled:opacity-50 transition-colors"
-            >
-              {busy === 'scan' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Scan Folder
-            </button>
-            <button
-              type="button"
-              onClick={openFolder}
-              className="inline-flex h-8 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65 hover:bg-white/[0.06] transition-colors"
-            >
-              <FolderOpen className="h-3.5 w-3.5" />
-              Open Folder
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void scanFolder()}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65 hover:bg-white/[0.06] disabled:cursor-wait disabled:opacity-50 transition-colors"
+              >
+                {busy === 'scan' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Scan Folder
+              </button>
+              <button
+                type="button"
+                onClick={openFolder}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65 hover:bg-white/[0.06] transition-colors"
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+                Open Folder
+              </button>
+            </div>
           </div>
         </header>
 

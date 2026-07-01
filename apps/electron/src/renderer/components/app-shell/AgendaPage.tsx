@@ -283,25 +283,28 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
       <div className="mx-auto min-h-full w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
-        <header className="mb-5 flex items-start justify-between gap-4">
-          <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/46">
-              <CalendarDays className="h-3.5 w-3.5 text-orange-300/75" />
-              Work Board
+        <header className="relative mb-6 overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#160c07] p-8">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#f97316]/10 to-transparent" />
+          <div className="relative flex items-start justify-between gap-4">
+            <div>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-orange-400">
+                <CalendarDays className="h-3.5 w-3.5" />
+                Work Board
+              </div>
+              <h1 className="text-4xl font-medium tracking-tight text-white/95">Agenda</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">
+                Track jobs, follow-ups, and active work without opening chat. Campaign command centers stay inside their own workspaces.
+              </p>
             </div>
-            <h1 className="text-4xl font-medium tracking-tight text-white/90">Agenda</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/45">
-              Track jobs, follow-ups, and active work without opening chat. Campaign command centers stay inside their own workspaces.
-            </p>
+            <button
+              type="button"
+              onClick={onNewTask}
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65 hover:bg-white/[0.06] transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New Task
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onNewTask}
-            className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New Task
-          </button>
         </header>
 
         <DndContext
