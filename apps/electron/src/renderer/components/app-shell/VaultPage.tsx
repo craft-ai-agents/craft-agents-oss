@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { FileArchive, FileText, FolderOpen, Image, Loader2, Music2, RefreshCw, Upload, Video } from 'lucide-react'
+import { FileArchive, FileText, FolderOpen, Image, Loader2, Music2, RefreshCw, Upload, Video, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { MissionAssetKind, MissionAssetKindHint, MissionAssetManifest, MissionAssetRecord } from '@craft-agent/shared/mission-assets'
@@ -154,15 +154,17 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                       ) : null}
                     </div>
 
-                    <button
-                      type="button"
-                      disabled={busy !== null}
-                      onClick={() => void addFiles(category.hint, category.id)}
-                      className="mt-3 inline-flex h-8 w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.03] text-xs font-medium text-white/60 hover:bg-white/[0.06] hover:text-white/90 disabled:cursor-wait disabled:opacity-50 transition-all"
-                    >
-                      {busy === category.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                      Add {category.label}
-                    </button>
+                    <div className="mt-3 flex justify-center">
+                      <button
+                        type="button"
+                        disabled={busy !== null}
+                        onClick={() => void addFiles(category.hint, category.id)}
+                        title={`Add ${category.label}`}
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.02] text-white/50 hover:bg-white/[0.06] hover:text-white/90 disabled:cursor-wait disabled:opacity-50 transition-all"
+                      >
+                        {busy === category.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
                   </div>
                 </section>
               )
