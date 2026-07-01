@@ -2330,14 +2330,14 @@ function AppShellContent({
                       id: "nav:calendar",
                       title: "Calendar",
                       icon: Calendar,
-                      variant: isArtistHQWorkspace && artistHqHash === '#artist-hq/calendar' ? "default" : "ghost",
+                      variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/calendar' ? "default" : "ghost",
                       onClick: () => handleArtistHQNavClick('calendar'),
                     },
                     {
                       id: "nav:network",
                       title: "Network",
                       icon: Users,
-                      variant: isArtistHQWorkspace && artistHqHash === '#artist-hq/network' ? "default" : "ghost",
+                      variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/network' ? "default" : "ghost",
                       onClick: () => handleArtistHQNavClick('network'),
                     },
                     {
