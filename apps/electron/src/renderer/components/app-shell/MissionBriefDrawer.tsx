@@ -177,7 +177,7 @@ export function MissionBriefDrawer({
 
         <div className="flex gap-1 border-b border-white/[0.06] px-5 py-3">
           <TabButton active={activeTab === 'brief'} onClick={() => setActiveTab('brief')}>Brief</TabButton>
-          <TabButton active={activeTab === 'assets'} onClick={() => setActiveTab('assets')}>Assets</TabButton>
+          <TabButton active={activeTab === 'assets'} onClick={() => setActiveTab('assets')}>Vault</TabButton>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4">
@@ -448,7 +448,7 @@ function AssetsSetup({
           className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.10] bg-white/[0.012] text-sm font-medium text-white/52 hover:bg-white/[0.04] hover:text-white/78 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          Drop files here or add to Inbox
+          Drop files here or add to Vault
         </button>
       </section>
 

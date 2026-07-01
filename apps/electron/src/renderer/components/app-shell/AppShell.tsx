@@ -24,10 +24,10 @@ import {
   FolderOpen,
   Calendar,
   Layers,
-  ListTodo,
   Bot,
   MessageSquare,
-  Workflow as WorkflowIcon,
+  Settings,
+  Users,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -107,7 +107,7 @@ import {
   isOutputsNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
-import { isWorkflowsNavigation, isWorkflowRunNavigation } from "../../../shared/types"
+import { isWorkflowsNavigation } from "../../../shared/types"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
@@ -116,8 +116,6 @@ import { SkillsListPanel } from "./SkillsListPanel"
 // admin view in a later round.
 import { AgentSessionsPanel } from "./AgentSessionsPanel"
 import { useAgents } from "@/hooks/useAgents"
-import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
-import { openAgentSessionComposer } from "@/lib/run-agent"
 import { OutputsListPanel } from "../outputs/OutputsListPanel"
 import { useAutomations } from "@/hooks/useAutomations"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
@@ -142,7 +140,7 @@ import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 import { useOutputs } from "@/hooks/useOutputs"
-import { isArtistHQWorkspace as getIsArtistHQWorkspace } from "@/lib/artist-workspace"
+import { findArtistHQWorkspace, isArtistHQWorkspace as getIsArtistHQWorkspace } from "@/lib/artist-workspace"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -1290,11 +1288,6 @@ function AppShellContent({
   // This prevents closures from retaining full message arrays
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const setSessionMetaMap = useSetAtom(sessionMetaMapAtom)
-  const selectedSessionMeta = effectiveSessionId ? sessionMetaMap.get(effectiveSessionId) : undefined
-  const isConciergeSession =
-    selectedSessionMeta?.launchReceipt?.origin === 'concierge' ||
-    selectedSessionMeta?.launchReceipt?.agent?.slug === CONCIERGE_SLUG ||
-    selectedSessionMeta?.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
 
   const hasPendingPrompt = React.useCallback((sessionId: string) => {
     return (pendingPermissions.get(sessionId)?.length ?? 0) > 0
@@ -1439,13 +1432,7 @@ function AppShellContent({
   // Agents library powers chat routing and the main Agents screen.
   const {
     activeAgents,
-    allAgents: allAgentsForChat,
-    loading: agentsLoadingForChat,
-    refresh: refreshAgentsForChat,
-    setActive: setAgentActiveForChat,
   } = useAgents(activeWorkspaceId)
-  const [openingConcierge, setOpeningConcierge] = useState(false)
-  const openingConciergeRef = useRef(false)
   const {
     outputs,
     loading: outputsLoading,
@@ -1661,19 +1648,44 @@ function AppShellContent({
     storage.set(storage.KEYS.collapsedSidebarItems, [...collapsedItems], activeWorkspaceId)
   }, [collapsedItems, activeWorkspaceId])
 
-  const handleAllSessionsClick = useCallback(() => {
-    navigate(routes.view.allSessions())
-  }, [])
   const [sessionsNavExpanded, setSessionsNavExpanded] = React.useState(() => isSessionsNavigation(navState))
+  const [artistHqHash, setArtistHqHash] = React.useState(() => window.location.hash)
   React.useEffect(() => {
-    if (isSessionsNavigation(navState)) setSessionsNavExpanded(true)
-  }, [navState])
-  const handleSessionsNavClick = useCallback(() => {
-    setSessionsNavExpanded(prev => !prev)
-    if (!isSessionsNavigation(navState)) {
-      navigate(routes.view.allSessions())
+    const updateHash = () => setArtistHqHash(window.location.hash)
+    window.addEventListener('hashchange', updateHash)
+    return () => window.removeEventListener('hashchange', updateHash)
+  }, [])
+  React.useEffect(() => {
+    if (!isSessionsNavigation(navState)) return
+    setSessionsNavExpanded(!isArtistHQWorkspace)
+  }, [isArtistHQWorkspace, navState])
+
+  const handleCampaignsNavClick = useCallback(() => {
+    if (isArtistHQWorkspace) {
+      const campaignWorkspace = workspaces.find((workspace) => !getIsArtistHQWorkspace(workspace, workspaces))
+      if (campaignWorkspace) {
+        void onSelectWorkspace(campaignWorkspace.id)
+      }
+      setSessionsNavExpanded(true)
+    } else {
+      setSessionsNavExpanded(prev => !prev)
     }
-  }, [navState])
+    navigate(routes.view.allSessions())
+  }, [isArtistHQWorkspace, onSelectWorkspace, workspaces])
+
+  const handleArtistHQNavClick = useCallback((tab: 'home' | 'calendar' | 'network') => {
+    const hqWorkspace = findArtistHQWorkspace(workspaces)
+    if (!hqWorkspace) {
+      toast.error('No HQ workspace found')
+      return
+    }
+    if (hqWorkspace.id !== activeWorkspaceId) {
+      void onSelectWorkspace(hqWorkspace.id)
+    }
+    setSessionsNavExpanded(false)
+    window.location.hash = `#artist-hq/${tab}`
+    navigate(routes.view.allSessions())
+  }, [activeWorkspaceId, onSelectWorkspace, workspaces])
 
   const handleNewProjectClick = useCallback(() => {
     const targetSessionId = focusedSessionId ?? (isSessionsNavigation(navState) ? session.selected : undefined)
@@ -1741,11 +1753,6 @@ function AppShellContent({
   // Handler for agents view (saved agent personas)
   const handleAgentsClick = useCallback(() => {
     navigate(routes.view.agents())
-  }, [])
-
-  // Handlers for automations view
-  const handleAutomationsClick = useCallback(() => {
-    navigate(routes.view.automations())
   }, [])
 
   const handleOutputsClick = useCallback(() => {
@@ -1918,74 +1925,6 @@ function AppShellContent({
     setTimeout(() => focusZone('chat', { intent: 'programmatic' }), 50)
   }, [activeWorkspace, focusZone])
 
-  // Open or create a Concierge session ("Chat" sidebar entry).
-  // Always creates a new session for now; the Concierge agent is auto-activated
-  // in this workspace if it isn't already.
-  const handleChatClick = useCallback(async () => {
-    if (!activeWorkspace || openingConciergeRef.current) return
-    setSessionsNavExpanded(false)
-    openingConciergeRef.current = true
-    setOpeningConcierge(true)
-    try {
-      let libraryAgents = allAgentsForChat
-      let activeCatalogAgents = activeAgents
-
-      if (agentsLoadingForChat || libraryAgents.length === 0) {
-        const [libraryRaw, activeSlugsRaw] = await Promise.all([
-          window.electronAPI.listAllAgentDefinitions(),
-          window.electronAPI.listActiveAgentDefinitions(activeWorkspace.id).catch(() => [] as string[]),
-        ])
-        libraryAgents = libraryRaw
-        const activeSet = new Set(activeSlugsRaw)
-        activeCatalogAgents = libraryRaw.filter((agent) => activeSet.has(agent.slug))
-      }
-
-      let concierge = libraryAgents.find((a) => a.slug === CONCIERGE_SLUG)
-        ?? activeCatalogAgents.find((a) => a.slug === CONCIERGE_SLUG)
-      if (!concierge) {
-        concierge = await window.electronAPI.getAgentDefinition(CONCIERGE_SLUG) ?? undefined
-      }
-      if (!concierge) {
-        toast.error('Concierge agent is not available yet', {
-          description: 'Agent definitions are still loading or the built-in Concierge is missing.',
-        })
-        await refreshAgentsForChat().catch(() => undefined)
-        return
-      }
-
-      if (!activeCatalogAgents.some((a) => a.slug === CONCIERGE_SLUG)) {
-        try {
-          await setAgentActiveForChat(CONCIERGE_SLUG, true)
-        } catch {
-          // Opening still works with the fetched definition; the broadcast
-          // refresh below repairs stale active-agent state when activation wins.
-        }
-      }
-
-      // Concierge always receives every enabled context doc (server-side override).
-      const contextDocs = await window.electronAPI
-        .listWorkspaceContextDocsForAgent(activeWorkspace.id, CONCIERGE_SLUG)
-        .catch(() => [])
-      await openAgentSessionComposer({
-        agent: concierge,
-        workspaceId: activeWorkspace.id,
-        onCreateSession: contextValue.onCreateSession,
-        onInputChange: contextValue.onInputChange,
-        skills,
-        sources,
-        contextDocs,
-        agentCatalog: activeCatalogAgents.filter((a) => a.slug !== CONCIERGE_SLUG),
-      })
-    } catch (err) {
-      toast.error('Failed to open Chat', {
-        description: err instanceof Error ? err.message : String(err),
-      })
-    } finally {
-      openingConciergeRef.current = false
-      setOpeningConcierge(false)
-    }
-  }, [activeWorkspace, allAgentsForChat, activeAgents, agentsLoadingForChat, refreshAgentsForChat, setAgentActiveForChat, contextValue.onCreateSession, contextValue.onInputChange, skills, sources])
-
   // Create a brand new dedicated browser window and focus it.
   // Intentionally unbound: this action should always create a NEW window.
   const handleNewBrowserWindow = useCallback(async () => {
@@ -2043,22 +1982,23 @@ function AppShellContent({
   const unifiedSidebarItems = React.useMemo((): SidebarItem[] => {
     const result: SidebarItem[] = []
 
-    // 1. Chat (Concierge entry point)
-    result.push({ id: 'nav:chat', type: 'nav', action: handleChatClick })
+    // 1. HQ
+    result.push({ id: 'nav:hq', type: 'nav', action: () => handleArtistHQNavClick('home') })
 
-    // 2. Agents
+    // 2. Campaigns and Workers
+    result.push({ id: 'nav:campaigns', type: 'nav', action: handleCampaignsNavClick })
     result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
 
-    // 3. Workflows
-    result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
+    // 3. HQ sections
+    result.push({ id: 'nav:calendar', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
+    result.push({ id: 'nav:network', type: 'nav', action: () => handleArtistHQNavClick('network') })
+    result.push({ id: 'nav:vault', type: 'nav', action: handleOutputsClick })
 
-    // 4. Automations and Sessions
-    result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
-    result.push({ id: 'nav:sessions', type: 'nav', action: handleSessionsNavClick })
+    // 4. Settings
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleChatClick, handleAgentsClick, handleAutomationsClick, handleSessionsNavClick, handleSettingsClick])
+  }, [handleAgentsClick, handleArtistHQNavClick, handleCampaignsNavClick, handleOutputsClick, handleSettingsClick])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2366,14 +2306,43 @@ function AppShellContent({
                   getItemProps={getSidebarItemProps}
                   focusedItemId={focusedSidebarItemId}
                   links={[
-                    // --- Campaign (Concierge) ---
+                    // --- Artist HQ ---
                     {
-                      id: "nav:chat",
-                      title: isArtistHQWorkspace ? "HQ" : "Campaign",
+                      id: "nav:hq",
+                      title: "HQ",
+                      icon: Globe,
+                      variant: isArtistHQWorkspace && isSessionsNavigation(navState) && !['#artist-hq/calendar', '#artist-hq/network'].includes(artistHqHash) ? "default" : "ghost",
+                      onClick: () => handleArtistHQNavClick('home'),
+                    },
+                    // --- Campaigns ---
+                    {
+                      id: "nav:campaigns",
+                      title: "Campaigns",
+                      label: String(workspaceSessionMetas.length),
                       icon: MessageSquare,
-                      variant: isConciergeSession ? "default" : "ghost",
-                      onClick: handleChatClick,
-                      label: openingConcierge ? '…' : undefined,
+                      variant: sessionsNavExpanded && !isArtistHQWorkspace ? "default" : "ghost",
+                      onClick: handleCampaignsNavClick,
+                    },
+                    {
+                      id: "nav:calendar",
+                      title: "Calendar",
+                      icon: Calendar,
+                      variant: isArtistHQWorkspace && artistHqHash === '#artist-hq/calendar' ? "default" : "ghost",
+                      onClick: () => handleArtistHQNavClick('calendar'),
+                    },
+                    {
+                      id: "nav:network",
+                      title: "Network",
+                      icon: Users,
+                      variant: isArtistHQWorkspace && artistHqHash === '#artist-hq/network' ? "default" : "ghost",
+                      onClick: () => handleArtistHQNavClick('network'),
+                    },
+                    {
+                      id: "nav:vault",
+                      title: "Vault",
+                      icon: FolderOpen,
+                      variant: isWorkspaceContextNavigation(navState) || isOutputsNavigation(navState) ? "default" : "ghost",
+                      onClick: handleOutputsClick,
                     },
                     // --- Workers ---
                     {
@@ -2383,34 +2352,12 @@ function AppShellContent({
                       variant: isAgentsNavigation(navState) ? "default" : "ghost",
                       onClick: handleAgentsClick,
                     },
-                    // --- Workflows (top-level — see docs/workflows/03-ux.md) ---
                     {
-                      id: "nav:workflows",
-                      title: t("sidebar.workflows"),
-                      icon: WorkflowIcon,
-                      variant: (isWorkflowsNavigation(navState) || isWorkflowRunNavigation(navState)) ? "default" : "ghost",
-                      onClick: () => navigate(routes.view.workflows()),
-                    },
-                    {
-                      id: "nav:automations",
-                      title: t("sidebar.automations"),
-                      label: String(automations.length),
-                      icon: ListTodo,
-                      variant: isAutomationsNavigation(navState) ? "default" : "ghost",
-                      onClick: handleAutomationsClick,
-                      contextMenu: {
-                        type: 'automations' as const,
-                        onAddAutomation: openAddAutomation,
-                      },
-                    },
-                    { id: "separator:sessions", type: "separator" },
-                    {
-                      id: "nav:sessions",
-                      title: "Sessions",
-                      label: String(workspaceSessionMetas.length),
-                      icon: MessageSquare,
-                      variant: sessionsNavExpanded ? "default" : "ghost",
-                      onClick: handleSessionsNavClick,
+                      id: "nav:settings",
+                      title: "Settings",
+                      icon: Settings,
+                      variant: isSettingsNavigation(navState) ? "default" : "ghost",
+                      onClick: () => handleSettingsClick('app'),
                     },
                   ]}
                 />

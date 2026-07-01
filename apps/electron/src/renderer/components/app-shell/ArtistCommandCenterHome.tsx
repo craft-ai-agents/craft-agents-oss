@@ -219,10 +219,10 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
         })
         const skipped = result.skipped.length ? ` ${result.skipped.length} skipped.` : ''
         if (result.imported.length === 0) {
-          toast.warning(`No campaign assets added.${skipped}`)
+          toast.warning(`No campaign vault files added.${skipped}`)
           return
         }
-        toast.success(`Added ${result.imported.length} campaign asset${result.imported.length === 1 ? '' : 's'}.${skipped}`)
+        toast.success(`Added ${result.imported.length} campaign vault file${result.imported.length === 1 ? '' : 's'}.${skipped}`)
       } catch (err) {
         toast.error(err instanceof Error ? err.message : String(err))
       } finally {
@@ -451,12 +451,12 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
         onOpenAssetsFolder={async () => {
           if (!hasMission) {
             setDrawerOpen(true)
-            toast.info('Create the campaign first, then open the assets folder.')
+            toast.info('Create the campaign first, then open the vault folder.')
             return
           }
           try {
             const opened = await window.electronAPI.openMissionAssetsFolder(workspaceId)
-            if (!opened) toast.error('Could not open campaign assets folder.')
+            if (!opened) toast.error('Could not open campaign vault folder.')
           } catch (err) {
             toast.error(err instanceof Error ? err.message : String(err))
           }
@@ -618,7 +618,7 @@ function ReleaseBoardDialog({
                         {item.label}
                       </p>
                       {item.linkedAssetId ? (
-                        <p className="mt-0.5 truncate text-[10px] text-emerald-300/48">Matched from campaign assets</p>
+                        <p className="mt-0.5 truncate text-[10px] text-emerald-300/48">Matched from campaign vault</p>
                       ) : null}
                     </div>
                     <span className={cn(
