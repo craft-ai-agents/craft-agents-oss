@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CalendarDays, CheckCircle2, Circle, Clock3, MessageSquare, Plus, Users, GripVertical } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Circle, Clock3, Plus, Users, GripVertical } from 'lucide-react'
 import {
   DndContext,
   DragOverlay,
@@ -112,10 +112,7 @@ function DraggableCard({ session, networkPeople, onClick }: { session: SessionMe
           {session.preview || session.spawnedFromAgent?.agentName || 'Workspace task'}
         </p>
         <div className="mt-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-white/25">
-            <MessageSquare className="h-3 w-3" />
-            {session.messageCount ?? 0}
-          </div>
+          <div />
           <PersonBadge labels={session.labels} people={networkPeople} />
         </div>
       </button>
@@ -134,10 +131,7 @@ function CardOverlay({ session, networkPeople }: { session: SessionMeta, network
         {session.preview || session.spawnedFromAgent?.agentName || 'Workspace task'}
       </p>
       <div className="mt-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-white/25">
-          <MessageSquare className="h-3 w-3" />
-          {session.messageCount ?? 0}
-        </div>
+        <div />
         <PersonBadge labels={session.labels} people={networkPeople} />
       </div>
     </div>
@@ -414,7 +408,7 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
               onClick={() => selectedSession && onOpenSession(selectedSession.id)}
               className="h-10 rounded-full border border-white/[0.08] px-4 text-sm font-medium text-white/62 hover:bg-white/[0.04]"
             >
-              Open Chat
+              Open Thread
             </button>
             <button
               type="button"

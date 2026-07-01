@@ -407,7 +407,12 @@ export function MainContentPanel({
       <Panel variant="grow" className={className}>
         <AgendaPage
           sessions={workspaceSessions}
-          onOpenSession={(sessionId) => navigate(routes.view.allSessions(sessionId))}
+          onOpenSession={(sessionId) => {
+            if (window.location.hash.startsWith('#artist-hq/')) {
+              window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+            }
+            navigate(routes.view.allSessions(sessionId))
+          }}
           onNewTask={() => navigate(routes.action.newSession({ name: 'New task' }))}
           networkWorkspaceId={artistHQWorkspace?.id || activeWorkspaceId || ''}
         />
@@ -554,16 +559,6 @@ export function MainContentPanel({
       )
     }
 
-    // Artist HQ is the global/master workspace. Other workspaces remain
-    // campaign-specific command centers. HQ must win over stale selected chats.
-    if (isArtistHQWorkspace(activeWorkspace, workspaces)) {
-      return wrapWithStoplight(
-        <Panel variant="grow" className={className}>
-          <ArtistHQHome workspaceId={activeWorkspaceId || ''} workspaceName={activeWorkspace?.name} />
-        </Panel>
-      )
-    }
-
     const selectedSessionMeta = navState.details?.type === 'session'
       ? sessionMetaMap.get(navState.details.sessionId)
       : undefined
@@ -572,10 +567,29 @@ export function MainContentPanel({
       selectedSessionMeta?.launchReceipt?.agent?.slug === CONCIERGE_SLUG ||
       selectedSessionMeta?.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
 
+    // Artist HQ tabs are real app pages. They must win over stale selected sessions.
+    if (isArtistHQWorkspace(activeWorkspace, workspaces) && window.location.hash.startsWith('#artist-hq/')) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ArtistHQHome workspaceId={activeWorkspaceId || ''} workspaceName={activeWorkspace?.name} />
+        </Panel>
+      )
+    }
+
     if (navState.details?.type === 'session' && !isConciergeSession) {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
           <ChatPage sessionId={navState.details.sessionId} />
+        </Panel>
+      )
+    }
+
+    // Artist HQ is the global/master workspace. Other workspaces remain
+    // campaign-specific command centers.
+    if (isArtistHQWorkspace(activeWorkspace, workspaces)) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ArtistHQHome workspaceId={activeWorkspaceId || ''} workspaceName={activeWorkspace?.name} />
         </Panel>
       )
     }
