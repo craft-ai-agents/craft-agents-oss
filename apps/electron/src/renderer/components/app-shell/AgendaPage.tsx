@@ -1,5 +1,18 @@
 import * as React from 'react'
-import { CalendarDays, CheckCircle2, Circle, Clock3, MessageSquare, Plus, Users } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Circle, Clock3, MessageSquare, Plus, Users, GripVertical } from 'lucide-react'
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragStartEvent,
+  DragEndEvent,
+  useDroppable,
+  useDraggable,
+} from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
 import {
   Dialog,
   DialogContent,
@@ -44,6 +57,93 @@ const PERSON_LABEL_PREFIX = 'person::'
 const NO_PERSON_VALUE = '__none__'
 
 type SessionOverride = Partial<Pick<SessionMeta, 'name' | 'sessionStatus' | 'labels' | 'preview'>>
+
+function DroppableLane({ id, children, className }: { id: string, children: React.ReactNode, className?: string }) {
+  const { isOver, setNodeRef } = useDroppable({ id })
+  return (
+    <section ref={setNodeRef} className={cn(className, isOver && 'ring-2 ring-orange-500/50 bg-[#0A0A0A]')}>
+      {children}
+    </section>
+  )
+}
+
+function DraggableCard({ session, networkPeople, onClick }: { session: SessionMeta, networkPeople: ArtistNetworkPerson[], onClick: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: session.id,
+    data: { session }
+  })
+  
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "group relative flex w-full flex-col gap-2 rounded-[13px] border border-white/[0.055] bg-white/[0.025] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05]",
+        isDragging && "shadow-2xl border-white/[0.15]"
+      )}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={onClick}
+          className="flex-1 text-left line-clamp-1 text-sm font-medium leading-5 text-white/80 hover:text-white"
+        >
+          {getSessionTitle(session)}
+        </button>
+        <div className="flex items-center gap-2">
+          <Circle className={cn('h-3 w-3 shrink-0', session.isProcessing ? 'text-orange-300' : 'text-white/24')} />
+          <button
+            type="button"
+            className="cursor-grab p-1 text-white/20 opacity-0 transition-opacity hover:text-white/50 group-hover:opacity-100"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+      <button type="button" onClick={onClick} className="text-left w-full cursor-pointer">
+        <p className="line-clamp-1 text-xs leading-5 text-white/38">
+          {session.preview || session.spawnedFromAgent?.agentName || 'Workspace task'}
+        </p>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-white/25">
+            <MessageSquare className="h-3 w-3" />
+            {session.messageCount ?? 0}
+          </div>
+          <PersonBadge labels={session.labels} people={networkPeople} />
+        </div>
+      </button>
+    </div>
+  )
+}
+
+function CardOverlay({ session, networkPeople }: { session: SessionMeta, networkPeople: ArtistNetworkPerson[] }) {
+  return (
+    <div className="w-full rounded-[13px] border border-white/[0.15] bg-[#1a1a1a] px-3 py-2.5 shadow-2xl rotate-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className="line-clamp-1 text-sm font-medium leading-5 text-white/80">{getSessionTitle(session)}</p>
+        <Circle className={cn('h-3 w-3 shrink-0', session.isProcessing ? 'text-orange-300' : 'text-white/24')} />
+      </div>
+      <p className="mt-1 line-clamp-1 text-xs leading-5 text-white/38">
+        {session.preview || session.spawnedFromAgent?.agentName || 'Workspace task'}
+      </p>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-white/25">
+          <MessageSquare className="h-3 w-3" />
+          {session.messageCount ?? 0}
+        </div>
+        <PersonBadge labels={session.labels} people={networkPeople} />
+      </div>
+    </div>
+  )
+}
 
 export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspaceId }: AgendaPageProps) {
   const [networkPeople, setNetworkPeople] = React.useState<ArtistNetworkPerson[]>([])
@@ -142,6 +242,45 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
     }
   }, [draftDetails, draftPersonId, draftStatus, draftTitle, selectedSession])
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    })
+  )
+
+  const [activeDragId, setActiveDragId] = React.useState<string | null>(null)
+  
+  const activeDragSession = React.useMemo(
+    () => activeDragId ? visibleSessions.find(s => s.id === activeDragId) : null,
+    [activeDragId, visibleSessions]
+  )
+
+  const handleDragStart = React.useCallback((event: DragStartEvent) => {
+    setActiveDragId(event.active.id as string)
+  }, [])
+
+  const handleDragEnd = React.useCallback((event: DragEndEvent) => {
+    const { active, over } = event
+    setActiveDragId(null)
+    
+    if (over && over.id !== normalizeAgendaStatus(visibleSessions.find(s => s.id === active.id)?.sessionStatus)) {
+      const sessionId = active.id as string
+      const newStatus = over.id as AgendaColumnId
+      
+      setSessionOverrides((current) => ({
+        ...current,
+        [sessionId]: {
+          ...(current[sessionId] ?? {}),
+          sessionStatus: newStatus,
+        },
+      }))
+      
+      window.electronAPI.sessionCommand(sessionId, { type: 'setSessionStatus', state: newStatus }).catch(console.error)
+    }
+  }, [visibleSessions])
+
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
       <div className="mx-auto min-h-full w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
@@ -166,52 +305,49 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
           </button>
         </header>
 
-        <div className="grid min-h-[520px] grid-cols-1 gap-3 lg:grid-cols-3">
-          {AGENDA_COLUMNS.map((column, index) => {
-            const items = byColumn.get(column.id) ?? []
-            return (
-              <section key={column.id} className="rounded-[18px] border border-white/[0.055] bg-[#0A0A0A]/82 p-3">
-                <div className="mb-3 flex items-center justify-between border-b border-white/[0.045] pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <ColumnIcon index={index} />
-                    <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">{column.label}</h2>
-                  </div>
-                  <span className="text-[10px] tabular-nums text-white/28">{items.length}</span>
-                </div>
-
-                <div className="space-y-2">
-                  {items.length ? items.map((session) => (
-                    <button
-                      key={session.id}
-                      type="button"
-                      onClick={() => openEditor(session)}
-                      className="w-full rounded-[13px] border border-white/[0.055] bg-white/[0.025] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="line-clamp-1 text-sm font-medium leading-5 text-white/80">{getSessionTitle(session)}</p>
-                        <Circle className={cn('mt-1 h-3 w-3 shrink-0', session.isProcessing ? 'text-orange-300' : 'text-white/24')} />
-                      </div>
-                      <p className="mt-1 line-clamp-1 text-xs leading-5 text-white/38">
-                        {session.preview || session.spawnedFromAgent?.agentName || 'Workspace task'}
-                      </p>
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-white/25">
-                          <MessageSquare className="h-3 w-3" />
-                          {session.messageCount ?? 0}
-                        </div>
-                        <PersonBadge labels={session.labels} people={networkPeople} />
-                      </div>
-                    </button>
-                  )) : (
-                    <div className="rounded-[14px] border border-dashed border-white/[0.06] bg-white/[0.012] px-3 py-6 text-center text-xs text-white/30">
-                      Nothing here.
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="grid min-h-[520px] grid-cols-1 gap-3 lg:grid-cols-3">
+            {AGENDA_COLUMNS.map((column, index) => {
+              const items = byColumn.get(column.id) ?? []
+              return (
+                <DroppableLane key={column.id} id={column.id} className="rounded-[18px] border border-white/[0.055] bg-[#0A0A0A]/82 p-3 transition-colors">
+                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.045] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <ColumnIcon index={index} />
+                      <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">{column.label}</h2>
                     </div>
-                  )}
-                </div>
-              </section>
-            )
-          })}
-        </div>
+                    <span className="text-[10px] tabular-nums text-white/28">{items.length}</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {items.length ? items.map((session) => (
+                      <DraggableCard
+                        key={session.id}
+                        session={session}
+                        networkPeople={networkPeople}
+                        onClick={() => openEditor(session)}
+                      />
+                    )) : (
+                      <div className="rounded-[14px] border border-dashed border-white/[0.06] bg-white/[0.012] px-3 py-6 text-center text-xs text-white/30 pointer-events-none">
+                        Nothing here.
+                      </div>
+                    )}
+                  </div>
+                </DroppableLane>
+              )
+            })}
+          </div>
+          <DragOverlay>
+            {activeDragSession ? (
+              <CardOverlay session={activeDragSession} networkPeople={networkPeople} />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </div>
 
       <Dialog open={Boolean(selectedSession)} onOpenChange={(open) => !open && setSelectedSessionId(null)}>

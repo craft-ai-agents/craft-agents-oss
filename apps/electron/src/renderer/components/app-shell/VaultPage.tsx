@@ -85,16 +85,16 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
-      <div className="mx-auto min-h-full max-w-[1180px] px-8 py-9">
-        <header className="mb-7 flex items-start justify-between gap-4">
+      <div className="mx-auto min-h-full max-w-[1400px] px-5 py-4 xl:px-8 xl:py-5">
+        <header className="mb-6 flex items-start justify-between gap-4">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/46">
               <FolderOpen className="h-3.5 w-3.5 text-orange-300/75" />
               Asset Library
             </div>
-            <h1 className="text-4xl font-medium tracking-tight text-white/90">Vault</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/45">
-              Files workers can use: audio, artwork, photos, video, docs, references, and exports for {workspaceName || 'this workspace'}.
+            <h1 className="text-3xl font-medium tracking-tight text-white/90">Vault</h1>
+            <p className="mt-1.5 max-w-2xl text-sm text-white/40">
+              Files workers can use: audio, artwork, photos, video, docs, references, and exports.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -102,7 +102,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
               type="button"
               disabled={busy !== null}
               onClick={() => void scanFolder()}
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65 hover:bg-white/[0.06] disabled:cursor-wait disabled:opacity-50"
+              className="inline-flex h-8 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65 hover:bg-white/[0.06] disabled:cursor-wait disabled:opacity-50 transition-colors"
             >
               {busy === 'scan' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               Scan Folder
@@ -110,7 +110,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
             <button
               type="button"
               onClick={openFolder}
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65 hover:bg-white/[0.06]"
+              className="inline-flex h-8 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/65 hover:bg-white/[0.06] transition-colors"
             >
               <FolderOpen className="h-3.5 w-3.5" />
               Open Folder
@@ -124,40 +124,43 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
             Loading Vault...
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {CATEGORIES.map((category) => {
               const categoryFiles = files.filter((file) => category.kinds.includes(file.kind))
               const Icon = category.icon
               return (
-                <section key={category.id} className="rounded-[18px] border border-white/[0.055] bg-[#0A0A0A]/82 p-3">
-                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.045] pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025]">
-                        <Icon className="h-3.5 w-3.5 text-white/42" />
-                      </span>
-                      <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">{category.label}</h2>
-                    </div>
-                    <span className="text-[10px] tabular-nums text-white/28">{categoryFiles.length}</span>
-                  </div>
-
-                  <div className="space-y-2">
-                    {categoryFiles.slice(0, 8).map((file) => <VaultFile key={file.id} file={file} />)}
-                    {categoryFiles.length === 0 ? (
-                      <div className="rounded-[14px] border border-dashed border-white/[0.06] bg-white/[0.012] px-3 py-6 text-center text-xs text-white/30">
-                        Empty
+                <section key={category.id} className="group relative flex flex-col rounded-[16px] border border-white/[0.05] bg-[#0c0c0c]/80 overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                  
+                  <div className="relative z-10 flex flex-col flex-1 p-3">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-white/40" />
+                        <h2 className="text-[11px] font-medium uppercase tracking-[0.15em] text-white/50">{category.label}</h2>
                       </div>
-                    ) : null}
-                  </div>
+                      <span className="rounded-full bg-white/[0.03] px-2 py-0.5 text-[10px] tabular-nums text-white/30">{categoryFiles.length}</span>
+                    </div>
 
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => void addFiles(category.hint, category.id)}
-                    className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-[12px] border border-white/[0.07] bg-white/[0.025] text-xs font-medium text-white/55 hover:bg-white/[0.055] disabled:cursor-wait disabled:opacity-50"
-                  >
-                    {busy === category.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                    Add
-                  </button>
+                    <div className="flex-1 space-y-1.5 overflow-y-auto">
+                      {categoryFiles.slice(0, 10).map((file) => <VaultFile key={file.id} file={file} />)}
+                      {categoryFiles.length === 0 ? (
+                        <div className="flex h-24 flex-col items-center justify-center rounded-[10px] border border-dashed border-white/[0.05] bg-white/[0.01] text-center">
+                          <Icon className="mb-2 h-5 w-5 text-white/10" />
+                          <span className="text-[11px] font-medium text-white/20">Empty</span>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => void addFiles(category.hint, category.id)}
+                      className="mt-3 inline-flex h-8 w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.03] text-xs font-medium text-white/60 hover:bg-white/[0.06] hover:text-white/90 disabled:cursor-wait disabled:opacity-50 transition-all"
+                    >
+                      {busy === category.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                      Add {category.label}
+                    </button>
+                  </div>
                 </section>
               )
             })}
@@ -169,13 +172,23 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
 }
 
 function VaultFile({ file }: { file: MissionAssetRecord }) {
+  const Icon = file.kind.includes('audio') || file.kind === 'stem' || file.kind === 'demo' ? Music2 :
+               file.kind.includes('video') ? Video :
+               file.kind.includes('image') || file.kind === 'cover-art' || file.kind === 'press-photo' ? Image :
+               file.kind === 'export' ? FileArchive : FileText;
+
   return (
     <div className={cn(
-      'rounded-[12px] border border-white/[0.045] bg-white/[0.018] px-3 py-2.5',
+      'group/file flex items-start gap-2.5 rounded-[10px] border border-white/[0.03] bg-white/[0.015] p-2 transition-colors hover:bg-white/[0.03] hover:border-white/[0.06]',
       file.status !== 'available' && 'opacity-55',
     )}>
-      <p className="truncate text-xs font-medium text-white/74">{file.label}</p>
-      <p className="mt-1 truncate text-[10px] uppercase tracking-[0.12em] text-white/28">{file.kind}</p>
+      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/[0.04]">
+        <Icon className="h-3 w-3 text-white/40 group-hover/file:text-white/60 transition-colors" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[11px] font-medium text-white/70 group-hover/file:text-white/90 transition-colors">{file.label}</p>
+        <p className="mt-0.5 truncate text-[9px] uppercase tracking-[0.1em] text-white/30">{file.kind}</p>
+      </div>
     </div>
   )
 }

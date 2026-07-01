@@ -1091,20 +1091,20 @@ function NetworkBoard({
   onSelectPerson: (person: ArtistNetworkPerson) => void
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {categories.map((category) => {
         const categoryPeople = people.filter((person) => person.category === category.id)
         if (categoryPeople.length === 0) return null
         return (
           <section key={category.id}>
-            <div className="mb-3 flex items-center gap-3">
-              <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/52">{category.label}</h3>
-              <div className="h-px flex-1 bg-white/[0.06]" />
-              <span className="text-[10px] text-white/28">{categoryPeople.length}</span>
+            <div className="mb-4 flex items-center gap-3">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">{category.label}</h3>
+              <div className="h-px flex-1 bg-gradient-to-r from-white/[0.08] to-transparent" />
+              <span className="rounded-full bg-white/[0.03] px-2 py-0.5 text-[10px] tabular-nums text-white/30">{categoryPeople.length}</span>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {categoryPeople.map((person) => (
-                <PersonPill key={person.id} person={person} onClick={() => onSelectPerson(person)} />
+                <PersonCard key={person.id} person={person} onClick={() => onSelectPerson(person)} />
               ))}
             </div>
           </section>
@@ -1117,13 +1117,50 @@ function NetworkBoard({
   )
 }
 
-function PersonPill({ person, onClick }: { person: ArtistNetworkPerson; onClick: () => void }) {
+function PersonCard({ person, onClick }: { person: ArtistNetworkPerson; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="group min-w-[150px] rounded-[11px] border border-white/[0.07] bg-white/[0.025] px-3 py-2 text-left transition-colors hover:bg-white/[0.045]">
-      <div className="truncate text-xs font-semibold text-white/78">{person.name}</div>
-      {person.role || person.contact ? (
-        <div className="mt-1 truncate text-[10.5px] text-white/36">{person.role || person.contact}</div>
-      ) : null}
+    <button 
+      type="button" 
+      onClick={onClick} 
+      className="group flex flex-col justify-between rounded-[14px] border border-white/[0.04] bg-white/[0.015] p-3 text-left transition-all hover:bg-white/[0.03] hover:border-white/[0.08] hover:shadow-lg hover:-translate-y-0.5"
+    >
+      <div className="flex items-start justify-between gap-2 w-full">
+        <div className="flex items-center justify-center h-8 w-8 rounded-full bg-gradient-to-br from-white/10 to-white/5 border border-white/10 shrink-0">
+          <UserRound className="h-4 w-4 text-white/60" />
+        </div>
+        {person.relationship && person.relationship !== 'new' ? (
+          <span className={cn(
+            "rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em]",
+            person.relationship === 'vip' ? "bg-purple-500/10 text-purple-300" :
+            person.relationship === 'strong' ? "bg-orange-500/10 text-orange-300" :
+            "bg-blue-500/10 text-blue-300"
+          )}>
+            {person.relationship}
+          </span>
+        ) : null}
+      </div>
+      
+      <div className="mt-3 w-full">
+        <div className="truncate text-sm font-semibold text-white/80 group-hover:text-white transition-colors">{person.name}</div>
+        <div className="mt-0.5 truncate text-[11px] text-white/40">{person.role || person.contact || 'No role added'}</div>
+      </div>
+      
+      {person.tags.length > 0 ? (
+        <div className="mt-3 flex w-full flex-wrap gap-1.5 overflow-hidden h-[20px]">
+          {person.tags.slice(0, 3).map(tag => (
+            <span key={tag} className="inline-flex items-center rounded-[6px] bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-medium text-white/40">
+              {tag}
+            </span>
+          ))}
+          {person.tags.length > 3 && (
+            <span className="inline-flex items-center rounded-[6px] bg-white/[0.02] px-1.5 py-0.5 text-[9px] font-medium text-white/30">
+              +{person.tags.length - 3}
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="mt-3 h-[20px]" />
+      )}
     </button>
   )
 }
