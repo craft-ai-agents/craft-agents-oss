@@ -90,7 +90,28 @@ interface ArtistHQHomeProps {
   workspaceName?: string
 }
 
-type ArtistHQTab = 'home' | 'profile' | 'calendar' | 'network' | 'research'
+type ArtistHQTab =
+  | 'home'
+  | 'agenda'
+  | 'calendar'
+  | 'network'
+  | 'community'
+  | 'vault'
+  | 'workers'
+  | 'agents'
+  | 'automations'
+  | 'workflows'
+  | 'profile'
+  | 'research'
+  | 'branding'
+type ArtistHQNavGroup = {
+  id: string
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  primary: ArtistHQTab
+  items?: Array<{ id: ArtistHQTab; label: string }>
+  separated?: boolean
+}
 type NetworkDraft = {
   name: string
   category: ArtistNetworkCategory
@@ -113,6 +134,58 @@ const SPOTIFY_SYNC_AUTOMATION_NAME = 'Weekly Spotify Snapshot'
 const SPOTIFY_SYNC_CRON = '0 9 * * 1'
 const INTEL_SYNC_AUTOMATION_NAME = 'Weekly YouTube Intel Pulse'
 const INTEL_SYNC_CRON = '0 10 * * 1'
+const HQ_NAV_GROUPS: ArtistHQNavGroup[] = [
+  { id: 'hq', label: 'HQ', icon: Sparkles, primary: 'home' },
+  {
+    id: 'plan',
+    label: 'Plan',
+    icon: CalendarDays,
+    primary: 'agenda',
+    items: [
+      { id: 'agenda', label: 'Agenda' },
+      { id: 'calendar', label: 'Calendar' },
+    ],
+  },
+  {
+    id: 'people',
+    label: 'People',
+    icon: Users,
+    primary: 'network',
+    items: [
+      { id: 'network', label: 'Network' },
+      { id: 'community', label: 'Community/Fans' },
+    ],
+  },
+  { id: 'vault', label: 'Vault', icon: FolderKanban, primary: 'vault' },
+  {
+    id: 'work',
+    label: 'Work',
+    icon: Bot,
+    primary: 'workers',
+    items: [
+      { id: 'workers', label: 'Workers' },
+      { id: 'agents', label: 'Agents' },
+      { id: 'automations', label: 'Automations' },
+      { id: 'workflows', label: 'Workflows' },
+    ],
+  },
+  {
+    id: 'brain',
+    label: 'Brain',
+    icon: FileText,
+    primary: 'profile',
+    separated: true,
+    items: [
+      { id: 'profile', label: 'Artist Profile' },
+      { id: 'research', label: 'Intel Docs' },
+      { id: 'branding', label: 'Branding' },
+    ],
+  },
+]
+const ARTIST_HQ_TABS = new Set<ArtistHQTab>(HQ_NAV_GROUPS.flatMap((group) => [
+  group.primary,
+  ...(group.items?.map((item) => item.id) ?? []),
+]))
 const YOUTUBE_RESEARCH_AGENT_SLUG = 'youtube-research-agent'
 const emptyNetworkDraft: NetworkDraft = {
   name: '',
@@ -647,6 +720,15 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
           icon: <CalendarDays className="h-3.5 w-3.5 text-indigo-300/80" />,
           label: 'Schedule',
         }
+      case 'agenda':
+        return {
+          title: 'Agenda',
+          description: 'Near-term priorities, follow-ups, and decisions for the artist team.',
+          orb1: 'bg-indigo-600/10',
+          orb2: 'bg-cyan-500/5',
+          icon: <CalendarDays className="h-3.5 w-3.5 text-indigo-300/80" />,
+          label: 'Plan',
+        }
       case 'network':
         return {
           title: 'Network',
@@ -656,6 +738,36 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
           icon: <Users className="h-3.5 w-3.5 text-emerald-300/80" />,
           label: 'Contacts',
         }
+      case 'community':
+        return {
+          title: 'Community/Fans',
+          description: 'Fan lists, segments, and audience relationship context.',
+          orb1: 'bg-emerald-600/10',
+          orb2: 'bg-cyan-500/5',
+          icon: <Users className="h-3.5 w-3.5 text-emerald-300/80" />,
+          label: 'People',
+        }
+      case 'vault':
+        return {
+          title: 'Vault',
+          description: 'Reusable assets, files, links, and artist source material.',
+          orb1: 'bg-zinc-600/10',
+          orb2: 'bg-blue-500/5',
+          icon: <FolderKanban className="h-3.5 w-3.5 text-zinc-200/75" />,
+          label: 'Assets',
+        }
+      case 'workers':
+      case 'agents':
+      case 'automations':
+      case 'workflows':
+        return {
+          title: 'Work',
+          description: 'The prebuilt workers, agents, automations, and workflows that operate across HQ.',
+          orb1: 'bg-orange-600/10',
+          orb2: 'bg-emerald-500/5',
+          icon: <Bot className="h-3.5 w-3.5 text-orange-300/80" />,
+          label: 'Operations',
+        }
       case 'profile':
         return {
           title: 'Artist Profile',
@@ -664,6 +776,24 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
           orb2: 'bg-indigo-500/5',
           icon: <UserRound className="h-3.5 w-3.5 text-blue-300/80" />,
           label: 'Context',
+        }
+      case 'research':
+        return {
+          title: 'Intel Docs',
+          description: 'Artist intelligence, research reports, YouTube pulse, and trend analysis.',
+          orb1: 'bg-blue-600/10',
+          orb2: 'bg-orange-500/5',
+          icon: <FileText className="h-3.5 w-3.5 text-blue-300/80" />,
+          label: 'Brain',
+        }
+      case 'branding':
+        return {
+          title: 'Branding',
+          description: 'Artist positioning, narrative, references, voice, and creative direction.',
+          orb1: 'bg-blue-600/10',
+          orb2: 'bg-emerald-500/5',
+          icon: <Sparkles className="h-3.5 w-3.5 text-blue-300/80" />,
+          label: 'Brain',
         }
       default:
         return {
@@ -678,6 +808,10 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   }
 
   const headerProps = getHeaderProps()
+  const setHQTab = React.useCallback((nextTab: ArtistHQTab) => {
+    window.location.hash = `${HQ_HASH_PREFIX}${nextTab}`
+    setTab(nextTab)
+  }, [])
 
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
@@ -708,6 +842,8 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
 
           </div>
         </section>
+
+        <ArtistHQNav activeTab={tab} onSelect={setHQTab} />
 
         {tab === 'home' && (
           <>
@@ -933,11 +1069,43 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
           </HQCard>
         )}
 
+        {tab === 'agenda' && (
+          <HQPlaceholder icon={CalendarDays} title="Agenda" meta="plan" titleText="No agenda lane yet" detail="Priority tasks, decisions, and follow-ups will live here." />
+        )}
+
+        {tab === 'community' && (
+          <HQPlaceholder icon={Users} title="Community/Fans" meta="people" titleText="No community records yet" detail="Fan lists, segments, and outreach context will live here." />
+        )}
+
+        {tab === 'vault' && (
+          <HQPlaceholder icon={FolderKanban} title="Vault" meta="assets" titleText="No vault items yet" detail="Files, links, references, and reusable source material will live here." />
+        )}
+
+        {tab === 'workers' && (
+          <HQPlaceholder icon={Bot} title="Workers" meta="work" titleText="No active global workers" detail="Spotify sync, YouTube intel, website, SEO, and comms workers will appear here." />
+        )}
+
+        {tab === 'agents' && (
+          <HQPlaceholder icon={Bot} title="Agents" meta="work" titleText="No pinned HQ agents yet" detail="Reusable artist-management specialists will live here." />
+        )}
+
+        {tab === 'automations' && (
+          <HQPlaceholder icon={RefreshCw} title="Automations" meta="work" titleText="No automation list yet" detail="Recurring HQ jobs and schedules will live here." />
+        )}
+
+        {tab === 'workflows' && (
+          <HQPlaceholder icon={FolderKanban} title="Workflows" meta="work" titleText="No HQ workflows yet" detail="Repeatable multi-step operating flows will live here." />
+        )}
+
+        {tab === 'branding' && (
+          <HQPlaceholder icon={Sparkles} title="Branding" meta="brain" titleText="No brand system yet" detail="Narrative, positioning, references, and creative direction will live here." />
+        )}
+
         {tab === 'research' && (
           <HQCard>
-            <SectionTitle icon={FileText} title="Research Reports" meta={loading || outputsLoading ? 'loading' : `${researchDocs.length + researchOutputs.length}`} />
+            <SectionTitle icon={FileText} title="Intel Docs" meta={loading || outputsLoading ? 'loading' : `${researchDocs.length + researchOutputs.length}`} />
             {researchDocs.length === 0 && researchOutputs.length === 0 ? (
-              <EmptyLine title="No research reports yet" detail="Research, Spotify analysis, YouTube intel, and trend reports will live here." />
+              <EmptyLine title="No intel docs yet" detail="Research, Spotify analysis, YouTube intel, and trend reports will live here." />
             ) : (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {researchOutputs.map((output) => (
@@ -1007,6 +1175,80 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
         }}
       />
     </div>
+  )
+}
+
+function ArtistHQNav({ activeTab, onSelect }: { activeTab: ArtistHQTab; onSelect: (tab: ArtistHQTab) => void }) {
+  const activeGroup = getActiveNavGroup(activeTab)
+  const activeItems = activeGroup.items ?? []
+
+  return (
+    <nav className="rounded-2xl border border-white/[0.04] bg-[#0A0A0A] p-2 shadow-minimal">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {HQ_NAV_GROUPS.map((group) => {
+          const Icon = group.icon
+          const active = group.id === activeGroup.id
+          return (
+            <React.Fragment key={group.id}>
+              {group.separated ? <div className="mx-1 h-5 w-px bg-white/[0.08]" /> : null}
+              <button
+                type="button"
+                onClick={() => onSelect(group.primary)}
+                className={cn(
+                  'inline-flex h-9 items-center gap-2 rounded-full px-3 text-xs font-medium transition-colors',
+                  active
+                    ? 'bg-white/90 text-black'
+                    : 'border border-white/[0.05] bg-white/[0.02] text-white/48 hover:bg-white/[0.045] hover:text-white/72',
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {group.label}
+              </button>
+            </React.Fragment>
+          )
+        })}
+      </div>
+      {activeItems.length > 0 ? (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-white/[0.04] pt-2">
+          {activeItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSelect(item.id)}
+              className={cn(
+                'h-8 rounded-full px-3 text-[11px] font-medium transition-colors',
+                activeTab === item.id
+                  ? 'bg-white/[0.09] text-white/82'
+                  : 'text-white/38 hover:bg-white/[0.04] hover:text-white/68',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </nav>
+  )
+}
+
+function HQPlaceholder({
+  icon,
+  title,
+  meta,
+  titleText,
+  detail,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  meta: string
+  titleText: string
+  detail: string
+}) {
+  return (
+    <HQCard>
+      <SectionTitle icon={icon} title={title} meta={meta} />
+      <EmptyLine title={titleText} detail={detail} />
+    </HQCard>
   )
 }
 
@@ -1956,7 +2198,11 @@ function readTabFromHash(): ArtistHQTab {
 }
 
 function isArtistHQTab(value: string): value is ArtistHQTab {
-  return value === 'home' || value === 'profile' || value === 'calendar' || value === 'network' || value === 'research'
+  return ARTIST_HQ_TABS.has(value as ArtistHQTab)
+}
+
+function getActiveNavGroup(tab: ArtistHQTab): ArtistHQNavGroup {
+  return HQ_NAV_GROUPS.find((group) => group.primary === tab || group.items?.some((item) => item.id === tab)) ?? HQ_NAV_GROUPS[0]
 }
 
 function startOfMonth(date: Date): Date {
