@@ -1,16 +1,18 @@
 ---
-name: feishu-db
-description: 飞书多维表格本地货站 larkdepot——查库存/供应商走本地 SQLite 缓存(抗限流)，批量结果本地落行后 push 回飞书。查询用 query sql(agent 直写 SQL，norm() 做型号变体归一)。当需要查本地库存/供应商缓存、或把批量任务结果落库回传飞书时使用。
+name: larkdepot
+description: 飞书多维表格本地货站——查库存/供应商等飞书表数据走本地 SQLite 缓存(抗限流)，批量结果本地落行后 push 回飞书。查询用 query sql(agent 直写 SQL，norm() 做型号变体归一)。当需要查本地飞书表缓存、注册新表进缓存、或把批量任务结果落库回传飞书时使用。
 metadata:
   short-description: 飞书本地缓存/写回 CLI
   lang: zh
 ---
 
-# feishu-db（larkdepot）
+# larkdepot（原 feishu-db）
 
-源码与发版：独立私有 repo `cunninghamcard-bit/larkdepot`，GitHub Release 分发 musl 静态 binary。这个目录（`procurement-skills/feishu-db/`）不再存放源码或编译产物，只是本 SKILL 的说明文档。
+源码与发版：独立私有 repo `cunninghamcard-bit/larkdepot`，GitHub Release 分发 musl 静态 binary。这个目录不存放源码或编译产物，只有本操作手册。
 
-binary 名：`larkdepot`。prod 上已装进 PATH（`/usr/local/bin/larkdepot`），本地开发从 release 拉取或在 larkdepot repo 里自行编译。
+binary 名：`larkdepot`。prod 上已装进 PATH，本地开发从 release 拉取或在 larkdepot repo 里自行编译。
+
+**本 skill 是 larkdepot 的唯一操作手册**：命令细节、输出语义、故障判定、降级机制都只写在这里。业务 skill 只引用本 skill + 声明自己的业务口径，不内嵌任何工具细节。
 
 ## 查（唯一入口：只读 SQL）
 
@@ -41,7 +43,7 @@ binary 名：`larkdepot`。prod 上已装进 PATH（`/usr/local/bin/larkdepot`�
     larkdepot register "<飞书表URL(地址栏带 table= 参数)>" --name 表名
     larkdepot sync
 
-## 查不到 = 没有（对所有消费 skill 生效的工具级事实）
+## 查不到 = 没有（对所有业务 skill 生效的工具级事实）
 
 缓存是飞书各表的**完整镜像**（每张整表同步，不是抽样）。所以：
 
@@ -49,12 +51,24 @@ binary 名：`larkdepot`。prod 上已装进 PATH（`/usr/local/bin/larkdepot`�
 - 空结果是常态、也是有用的答案。不要因为"没查到"就怀疑工具、反复换写法重试。
 - `freshness.age_s` 过大（缓存偏旧）是提醒用户的信号，不是降级实时查询的理由。
 
-## 缓存不可用的判定（唯一标准，消费 skill 不要自己发明）
+## 缓存不可用的判定（唯一标准，业务 skill 不要自己发明）
 
-仅当以下任一成立，才算缓存不可用，此时按各消费 skill 自己定义的降级流程直接查 lark-cli（**串行，绝不并发**；遇限流 `800004135` 等几秒重试）：
+仅当以下任一成立，才算缓存不可用：
 
 1. `larkdepot` 命令**本身失败**：二进制缺失 / 报错退出 / 输出非 JSON；
 2. `freshness.synced_at` 为 **null**（从未成功同步过）。
+
+## 缓存不可用时的降级直查（机制也在这里，业务 skill 只给业务口径）
+
+降级 = 用 lark-cli 直查飞书源表。**串行、一张一张查，绝不并发**；遇限流 `800004135` 等几秒重试，静默处理：
+
+    # 目标表的 app_token/table_id 从 schema 输出的 registry 里拿,不要手抄硬编码
+    larkdepot schema
+    lark-cli base +record-search --as user --base-token <app_token> --table-id <table_id> --json '{"keyword":"<关键词>","search_fields":["<字段>","..."]}'
+
+- 子命令必须带 `+` 前缀。`search_fields` 按业务 skill 声明的检索口径填。
+- 若返回 `91403 permission`/登录失效，如实告诉用户需要开 base 读权限 / 重登 lark-cli，不要编造数据，不要反复切身份重试。
+- 极端情况（binary 整个缺失连 `schema` 都跑不了）：让用户提供表链接，不要凭记忆猜 token。
 
 ## 故障
 
