@@ -1693,14 +1693,16 @@ function AppShellContent({
     })
   }, [])
 
-  const openMainNavGroup = React.useCallback((group: string, action: () => void) => {
+  const handleMainNavGroupClick = React.useCallback((group: string, action: () => void) => {
+    const wasExpanded = expandedMainNavGroups.has(group)
     setExpandedMainNavGroups((current) => {
       const next = new Set(current)
-      next.add(group)
+      if (next.has(group)) next.delete(group)
+      else next.add(group)
       return next
     })
-    action()
-  }, [])
+    if (!wasExpanded) action()
+  }, [expandedMainNavGroups])
 
   const handleNewProjectClick = useCallback(() => {
     const targetSessionId = focusedSessionId ?? (isSessionsNavigation(navState) ? session.selected : undefined)
@@ -1995,39 +1997,35 @@ function AppShellContent({
   }
 
   const hqHomeActive = isArtistHQWorkspace && isSessionsNavigation(navState) && !['#artist-hq/calendar', '#artist-hq/network', '#artist-hq/profile', '#artist-hq/research', '#artist-hq/workers', '#artist-hq/branding'].includes(artistHqHash)
-  const planActive = isAgendaNavigation(navState) || (isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/calendar')
-  const peopleActive = isCommunityNavigation(navState) || (isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/network')
   const vaultActive = isVaultNavigation(navState)
-  const workActive = isAgentsNavigation(navState) || isAutomationsNavigation(navState) || isWorkflowsNavigation(navState) || (isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/workers')
-  const brainActive = isArtistHQWorkspace && isSessionsNavigation(navState) && ['#artist-hq/profile', '#artist-hq/research', '#artist-hq/branding'].includes(artistHqHash)
-  const planExpanded = expandedMainNavGroups.has('plan') || planActive
-  const peopleExpanded = expandedMainNavGroups.has('people') || peopleActive
-  const workExpanded = expandedMainNavGroups.has('work') || workActive
-  const brainExpanded = expandedMainNavGroups.has('brain') || brainActive
+  const planExpanded = expandedMainNavGroups.has('plan')
+  const peopleExpanded = expandedMainNavGroups.has('people')
+  const workExpanded = expandedMainNavGroups.has('work')
+  const brainExpanded = expandedMainNavGroups.has('brain')
 
   const unifiedSidebarItems = React.useMemo((): SidebarItem[] => {
     const result: SidebarItem[] = []
 
     result.push({ id: 'nav:hq', type: 'nav', action: () => handleArtistHQNavClick('home') })
-    result.push({ id: 'nav:plan', type: 'nav', action: () => openMainNavGroup('plan', handleAgendaNavClick) })
+    result.push({ id: 'nav:plan', type: 'nav', action: () => handleMainNavGroupClick('plan', handleAgendaNavClick) })
     if (planExpanded) {
       result.push({ id: 'nav:agenda', type: 'nav', action: handleAgendaNavClick })
       result.push({ id: 'nav:calendar', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
     }
-    result.push({ id: 'nav:people', type: 'nav', action: () => openMainNavGroup('people', () => handleArtistHQNavClick('network')) })
+    result.push({ id: 'nav:people', type: 'nav', action: () => handleMainNavGroupClick('people', () => handleArtistHQNavClick('network')) })
     if (peopleExpanded) {
       result.push({ id: 'nav:network', type: 'nav', action: () => handleArtistHQNavClick('network') })
       result.push({ id: 'nav:community', type: 'nav', action: () => navigate(routes.view.community()) })
     }
     result.push({ id: 'nav:vault', type: 'nav', action: () => navigate(routes.view.vault()) })
-    result.push({ id: 'nav:work', type: 'nav', action: () => openMainNavGroup('work', () => handleArtistHQNavClick('workers')) })
+    result.push({ id: 'nav:work', type: 'nav', action: () => handleMainNavGroupClick('work', () => handleArtistHQNavClick('workers')) })
     if (workExpanded) {
       result.push({ id: 'nav:workers', type: 'nav', action: () => handleArtistHQNavClick('workers') })
       result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
       result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
       result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
     }
-    result.push({ id: 'nav:brain', type: 'nav', action: () => openMainNavGroup('brain', () => handleArtistHQNavClick('profile')) })
+    result.push({ id: 'nav:brain', type: 'nav', action: () => handleMainNavGroupClick('brain', () => handleArtistHQNavClick('profile')) })
     if (brainExpanded) {
       result.push({ id: 'nav:profile', type: 'nav', action: () => handleArtistHQNavClick('profile') })
       result.push({ id: 'nav:research', type: 'nav', action: () => handleArtistHQNavClick('research') })
@@ -2035,7 +2033,7 @@ function AppShellContent({
     }
 
     return result
-  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, openMainNavGroup, peopleExpanded, planExpanded, workExpanded])
+  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleMainNavGroupClick, peopleExpanded, planExpanded, workExpanded])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2369,11 +2367,11 @@ function AppShellContent({
                       id: "nav:plan",
                       title: "Plan",
                       icon: Calendar,
-                      variant: planActive ? "default" : "ghost",
+                      variant: "ghost",
                       expandable: true,
                       expanded: planExpanded,
                       onToggle: () => toggleMainNavGroup('plan'),
-                      onClick: () => openMainNavGroup('plan', handleAgendaNavClick),
+                      onClick: () => handleMainNavGroupClick('plan', handleAgendaNavClick),
                       items: [
                         {
                           id: "nav:agenda",
@@ -2395,11 +2393,11 @@ function AppShellContent({
                       id: "nav:people",
                       title: "People",
                       icon: Users,
-                      variant: peopleActive ? "default" : "ghost",
+                      variant: "ghost",
                       expandable: true,
                       expanded: peopleExpanded,
                       onToggle: () => toggleMainNavGroup('people'),
-                      onClick: () => openMainNavGroup('people', () => handleArtistHQNavClick('network')),
+                      onClick: () => handleMainNavGroupClick('people', () => handleArtistHQNavClick('network')),
                       items: [
                         {
                           id: "nav:network",
@@ -2428,11 +2426,11 @@ function AppShellContent({
                       id: "nav:work",
                       title: "Work",
                       icon: Bot,
-                      variant: workActive ? "default" : "ghost",
+                      variant: "ghost",
                       expandable: true,
                       expanded: workExpanded,
                       onToggle: () => toggleMainNavGroup('work'),
-                      onClick: () => openMainNavGroup('work', () => handleArtistHQNavClick('workers')),
+                      onClick: () => handleMainNavGroupClick('work', () => handleArtistHQNavClick('workers')),
                       items: [
                         {
                           id: "nav:workers",
@@ -2469,11 +2467,11 @@ function AppShellContent({
                       id: "nav:brain",
                       title: "Brain",
                       icon: Layers,
-                      variant: brainActive ? "default" : "ghost",
+                      variant: "ghost",
                       expandable: true,
                       expanded: brainExpanded,
                       onToggle: () => toggleMainNavGroup('brain'),
-                      onClick: () => openMainNavGroup('brain', () => handleArtistHQNavClick('profile')),
+                      onClick: () => handleMainNavGroupClick('brain', () => handleArtistHQNavClick('profile')),
                       items: [
                         {
                           id: "nav:profile",
