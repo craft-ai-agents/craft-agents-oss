@@ -2408,7 +2408,7 @@ function AppShellContent({
                         },
                         {
                           id: "nav:community",
-                          title: "Community/Fans",
+                          title: "Community",
                           icon: Mail,
                           variant: isCommunityNavigation(navState) ? "default" : "ghost",
                           onClick: () => navigate(routes.view.community()),
