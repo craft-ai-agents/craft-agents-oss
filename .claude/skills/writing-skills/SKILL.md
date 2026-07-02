@@ -58,6 +58,19 @@ The entire skill creation process follows RED-GREEN-REFACTOR.
 - Project-specific conventions (put in CLAUDE.md)
 - Mechanical constraints (if it's enforceable with regex/validation, automate it—save documentation for judgment calls)
 
+## Deployment Boundary Test
+
+The "When to Create a Skill" guidance above assumes skills are a personal, reusable technique library. That assumption doesn't hold when a whole directory of skills gets mirrored or deployed as-is into a product surface that end users interact with — in that case, apply this test instead:
+
+**Split into separate skills when any one of these differs:**
+- **Triggering semantics** — different situations, phrasings, or symptoms should load this skill.
+- **Toolchain** — it calls different underlying tools, scripts, or data sources.
+- **Output artifact** — it produces a materially different kind of result.
+
+**Keep it as one skill** (using `references/` to split detail) when it's only a variant of the same task with the same trigger, toolchain, and output shape.
+
+**Cross-references between deployed skills go in the body as boundary descriptions, not as execution orders.** State how this skill differs from a neighboring one so the boundary is clear ("unlike X, this skill covers Y"). Don't write "run skill X first, then use this one" inside a skill body — that couples the two skills' execution order together and makes each harder to use independently. Sequencing and routing decisions belong one layer up, in whatever entry point or top-level instructions dispatch to skills in the first place.
+
 ## Skill Types
 
 ### Technique
@@ -68,6 +81,19 @@ Way of thinking about problems (flatten-with-flags, test-invariants)
 
 ### Reference
 API docs, syntax guides, tool documentation (office docs)
+
+## Designing Output Shape
+
+Some skills don't just guide the agent's own actions — they specify what the agent should produce when it finishes (a report, a comparison, a summary). When a skill includes an output specification, choose the shape by what the underlying data actually looks like, not by copying the shape of some other skill's output:
+
+| Data shape | Output shape |
+|---|---|
+| Multiple independent items, each with its own status | Enumeration table — one row per item |
+| One subject with many attributes | Attribute table — one row per field |
+| Two things compared dimension by dimension | Comparison table — one row per dimension, one column per side |
+| A single verdict with supporting evidence and gaps | Conclusion-first sections — verdict, then evidence, then gaps — not a table |
+
+Don't force a table onto a single verdict just for cross-skill visual consistency, and don't leave a naturally tabular output as prose just because an earlier skill in the same family used prose. Pick the shape the data actually has; consistency comes from applying the same *test* everywhere, not from mandating the same *shape* everywhere.
 
 ## Directory Structure
 
@@ -391,6 +417,14 @@ Edit skill without testing? Same violation.
 - Delete means delete
 
 **REQUIRED BACKGROUND:** The superpowers:test-driven-development skill explains why this matters. Same principles apply to documentation.
+
+### Corollary: Generalize Before It Enters the Skill
+
+A rule earning its place in a skill (because a real failure motivated it) is not the same as that rule being ready to write down. Before it goes into SKILL.md, strip out everything specific to the one incident that produced it — exact inputs, exact expected outputs, names of the particular case that failed. What remains should be a method that stands on its own, understandable and applicable without knowing what originally went wrong.
+
+**Why this matters more than it looks:** a rule that still contains the specific case that motivated it doesn't read as "apply this method" — it reads as "here is the answer," and a future agent (or a future you) will pattern-match on the leftover specifics instead of applying the underlying judgment. It also quietly turns the skill into a patch for one incident instead of a generalizable technique, which defeats the purpose of writing it as a skill at all.
+
+Keep the specific incident in whatever record led you to write the rule (a debugging note, a test log, a postmortem) — not in the skill itself.
 
 ## Testing All Skill Types
 
