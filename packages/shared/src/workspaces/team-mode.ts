@@ -178,6 +178,46 @@ export function readOrCreateMachineIdentity(workspaceId: string, displayName?: s
   return identity;
 }
 
+function readExistingMachineIdentity(workspaceId: string): TeamMachineIdentity | null {
+  const existing = readJson<TeamMachineIdentity>(getPrivateMachineFile(workspaceId));
+  return existing?.version === 1 && existing.machineId ? existing : null;
+}
+
+function createReadOnlyMachineIdentity(workspaceId: string): TeamMachineIdentity {
+  const timestamp = nowIso();
+  return {
+    version: 1,
+    workspaceId,
+    machineId: 'not_joined',
+    displayName: hostname(),
+    createdAt: timestamp,
+    lastOpenedAt: timestamp,
+  };
+}
+
+function createReadOnlyHeartbeat(
+  workspaceRootPath: string,
+  machine: TeamMachineIdentity,
+  team: WorkspaceTeamConfig,
+  options: { appVersion?: string } = {},
+): TeamMachineHeartbeat {
+  const existing = machine.machineId === 'not_joined'
+    ? null
+    : readJson<TeamMachineHeartbeat>(getTeamHeartbeatFile(workspaceRootPath, machine.machineId));
+  return existing?.version === 1
+    ? existing
+    : {
+        version: 1,
+        machineId: machine.machineId,
+        displayName: machine.displayName,
+        appVersion: options.appVersion,
+        canRunAutomations: false,
+        isRunner: team.runnerMachineId === machine.machineId,
+        observedTeamRevision: team.revision,
+        lastSeenAt: nowIso(),
+      };
+}
+
 export function writeMachineHeartbeat(
   workspaceRootPath: string,
   config: WorkspaceConfig,
@@ -207,17 +247,11 @@ export function getTeamModeStatus(workspaceRootPath: string, options: { appVersi
   const loaded = loadWorkspaceConfig(workspaceRootPath);
   if (!loaded) throw new Error(`Failed to load workspace config at ${workspaceRootPath}`);
   const formatVersion = loaded.formatVersion ?? WORKSPACE_FORMAT_VERSION;
+  const team = loaded.team ?? createDisabledTeamConfig({ teamId: 'team_uninitialized' });
+  const machine = readExistingMachineIdentity(loaded.id) ?? createReadOnlyMachineIdentity(loaded.id);
+  const heartbeat = createReadOnlyHeartbeat(workspaceRootPath, machine, team, options);
+
   if (formatVersion > WORKSPACE_FORMAT_VERSION) {
-    const timestamp = nowIso();
-    const machine: TeamMachineIdentity = {
-      version: 1,
-      workspaceId: loaded.id,
-      machineId: 'read_only',
-      displayName: hostname(),
-      createdAt: timestamp,
-      lastOpenedAt: timestamp,
-    };
-    const team = loaded.team ?? createDisabledTeamConfig();
     return {
       supported: false,
       supportedFormatVersion: WORKSPACE_FORMAT_VERSION,
@@ -228,30 +262,18 @@ export function getTeamModeStatus(workspaceRootPath: string, options: { appVersi
       privateMachinePath: getPrivateMachineFile(loaded.id),
       heartbeatPath: getTeamHeartbeatFile(workspaceRootPath, machine.machineId),
       machine,
-      heartbeat: {
-        version: 1,
-        machineId: machine.machineId,
-        displayName: machine.displayName,
-        appVersion: options.appVersion,
-        canRunAutomations: false,
-        isRunner: false,
-        observedTeamRevision: team.revision,
-        lastSeenAt: timestamp,
-      },
+      heartbeat,
     };
   }
 
-  const config = ensureWorkspaceTeamMetadata(workspaceRootPath);
-  const machine = readOrCreateMachineIdentity(config.id);
-  const heartbeat = writeMachineHeartbeat(workspaceRootPath, config, machine, options);
   return {
     supported: formatVersion <= WORKSPACE_FORMAT_VERSION,
     supportedFormatVersion: WORKSPACE_FORMAT_VERSION,
     formatVersion,
-    storage: config.storage ?? defaultSoloStorage(),
-    team: config.team ?? createDisabledTeamConfig(),
+    storage: loaded.storage ?? defaultSoloStorage(),
+    team,
     teamConfigPath: getTeamConfigFile(workspaceRootPath),
-    privateMachinePath: getPrivateMachineFile(config.id),
+    privateMachinePath: getPrivateMachineFile(loaded.id),
     heartbeatPath: getTeamHeartbeatFile(workspaceRootPath, machine.machineId),
     machine,
     heartbeat,
@@ -307,7 +329,12 @@ export function markWorkspaceAsSharedFolder(
 }
 
 export function setRunnerMachine(workspaceRootPath: string, machineId?: string): TeamModeStatus {
-  const loaded = ensureWorkspaceTeamMetadata(workspaceRootPath);
+  const loaded = loadWorkspaceConfig(workspaceRootPath);
+  if (!loaded) throw new Error(`Failed to load workspace config at ${workspaceRootPath}`);
+  assertSupportedFormat(loaded);
+  if (loaded.storage?.mode !== 'shared-folder' || !loaded.team?.enabled) {
+    throw new Error('Team runner requires an enabled shared-folder team workspace.');
+  }
   const machine = readOrCreateMachineIdentity(loaded.id);
   const timestamp = nowIso();
   const previousTeam = loaded.team ?? createDisabledTeamConfig();

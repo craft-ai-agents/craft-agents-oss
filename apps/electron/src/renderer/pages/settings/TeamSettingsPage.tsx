@@ -92,6 +92,7 @@ export default function TeamSettingsPage() {
   }
 
   const unsupported = Boolean(status && !status.supported)
+  const canMakeRunner = Boolean(status?.team.enabled && status.storage.mode === 'shared-folder')
 
   return (
     <>
@@ -148,7 +149,12 @@ export default function TeamSettingsPage() {
                             Initialize
                           </Button>
                         )}
-                        <Button variant="secondary" size="sm" onClick={() => void setThisMachineAsRunner()} disabled={busy || unsupported}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => void setThisMachineAsRunner()}
+                          disabled={busy || unsupported || !canMakeRunner}
+                        >
                           Make runner
                         </Button>
                       </div>

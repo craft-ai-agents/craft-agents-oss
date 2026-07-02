@@ -52,7 +52,7 @@ describe('team mode metadata', () => {
     expect(loaded?.team).toBeUndefined();
   });
 
-  it('creates solo storage metadata and a generated team config mirror on status read', () => {
+  it('returns solo status without mutating legacy workspace config', () => {
     const root = makeWorkspaceRoot();
     writeWorkspace(root);
 
@@ -61,8 +61,10 @@ describe('team mode metadata', () => {
 
     expect(status.storage.mode).toBe('solo');
     expect(status.team.enabled).toBe(false);
-    expect(saved?.storage?.mode).toBe('solo');
-    expect(existsSync(join(root, TEAM_CONFIG_FILE))).toBe(true);
+    expect(status.machine.machineId).toBe('not_joined');
+    expect(saved?.storage).toBeUndefined();
+    expect(saved?.team).toBeUndefined();
+    expect(existsSync(join(root, TEAM_CONFIG_FILE))).toBe(false);
   });
 
   it('enabling team mode writes shared-folder storage, team config, and machine heartbeat', () => {
@@ -83,7 +85,7 @@ describe('team mode metadata', () => {
     expect(existsSync(status.heartbeatPath)).toBe(true);
   });
 
-  it('joining an existing team workspace creates private identity and heartbeat files', () => {
+  it('reports an existing team workspace without creating private identity or heartbeat files', () => {
     const root = makeWorkspaceRoot();
     writeWorkspace(root, {
       storage: {
@@ -109,9 +111,19 @@ describe('team mode metadata', () => {
     const status = getTeamModeStatus(root);
 
     expect(status.team.teamId).toBe('team_existing');
-    expect(existsSync(status.privateMachinePath)).toBe(true);
-    expect(existsSync(status.heartbeatPath)).toBe(true);
+    expect(status.machine.machineId).toBe('not_joined');
+    expect(existsSync(status.privateMachinePath)).toBe(false);
+    expect(existsSync(status.heartbeatPath)).toBe(false);
     expect(status.heartbeat.observedTeamRevision).toBe(4);
+  });
+
+  it('rejects runner assignment while the workspace is still solo', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+
+    expect(() => setRunnerMachine(root)).toThrow('Team runner requires an enabled shared-folder team workspace.');
+    expect(loadWorkspaceConfig(root)?.storage).toBeUndefined();
+    expect(existsSync(join(root, TEAM_CONFIG_FILE))).toBe(false);
   });
 
   it('sets the current machine as runner and increments the team revision', () => {
@@ -136,7 +148,7 @@ describe('team mode metadata', () => {
 
     expect(status.supported).toBe(false);
     expect(status.formatVersion).toBe(99);
-    expect(status.machine.machineId).toBe('read_only');
+    expect(status.machine.machineId).toBe('not_joined');
     expect(saved?.storage).toBeUndefined();
     expect(existsSync(join(root, TEAM_CONFIG_FILE))).toBe(false);
   });
