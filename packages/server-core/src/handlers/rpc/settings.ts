@@ -330,6 +330,12 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     })
   })
 
+  server.handle(RPC_CHANNELS.workspace.TEAM_JOIN, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { joinWorkspaceTeam } = await import('@craft-agent/shared/workspaces')
+    return joinWorkspaceTeam(workspace.rootPath)
+  })
+
   server.handle(RPC_CHANNELS.workspace.TEAM_MOVE_TO_SHARED_FOLDER, async (_ctx, workspaceId: string, input: {
     destinationParentPath: string
     provider?: SharedFolderProvider

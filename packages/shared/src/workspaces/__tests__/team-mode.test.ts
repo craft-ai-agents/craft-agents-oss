@@ -3,11 +3,13 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadWorkspaceConfig } from '../storage.ts';
+import { createFakeSyncHarness, writeSharedRecord } from '../../records/index.ts';
 import {
   clearReadyRunnerHandover,
   evaluateTeamRunnerGate,
   getTeamModeStatus,
   isTeamRunnerHeartbeatStale,
+  joinWorkspaceTeam,
   markWorkspaceAsSharedFolder,
   setRunnerMachine,
   TEAM_CONFIG_FILE,
@@ -234,5 +236,51 @@ describe('team mode metadata', () => {
     expect(status.machine.machineId).toBe('not_joined');
     expect(saved?.storage).toBeUndefined();
     expect(existsSync(join(root, TEAM_CONFIG_FILE))).toBe(false);
+  });
+
+  it('fake-sync second machine can join without changing the existing runner', () => {
+    const root = makeWorkspaceRoot();
+    const sync = createFakeSyncHarness(join(root, 'sync'));
+    const privateA = join(root, 'private-a');
+    const privateB = join(root, 'private-b');
+
+    process.env.CRAFT_CONFIG_DIR = privateA;
+    writeWorkspace(sync.machineA);
+    const runner = markWorkspaceAsSharedFolder(sync.machineA, { makeRunner: true });
+    sync.syncAtoB();
+
+    process.env.CRAFT_CONFIG_DIR = privateB;
+    const beforeJoin = getTeamModeStatus(sync.machineB);
+    expect(beforeJoin.joined).toBe(false);
+    expect(beforeJoin.syncHealth.status).toBe('warning');
+    expect(beforeJoin.syncHealth.checks.some((check) => check.id === 'joined' && check.status === 'warning')).toBe(true);
+
+    const joined = joinWorkspaceTeam(sync.machineB);
+
+    expect(joined.joined).toBe(true);
+    expect(joined.team.runnerMachineId).toBe(runner.machine.machineId);
+    expect(joined.team.automationsPolicy).toBe('runner-only');
+    expect(joined.syncHealth.status).toBe('healthy');
+    expect(evaluateTeamRunnerGate(sync.machineB)).toMatchObject({ allowed: false, reason: 'not-runner' });
+  });
+
+  it('sync health surfaces open conflict records', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+    markWorkspaceAsSharedFolder(root);
+    const written = writeSharedRecord(root, 'community/contacts', 'fan_sync_health', {
+      email: 'sync@example.com',
+    }, { machineId: 'machine_a', now: '2026-07-02T12:00:00.000Z' });
+    if (written.status !== 'written') throw new Error('expected write');
+    const conflict = writeSharedRecord(root, 'community/contacts', 'fan_sync_health', {
+      email: 'sync2@example.com',
+    }, { machineId: 'machine_a', baseline: { revision: 0, sha256: 'stale', entity: {} }, now: '2026-07-02T12:01:00.000Z' });
+    expect(conflict.status).toBe('conflict');
+
+    const status = getTeamModeStatus(root);
+
+    expect(status.syncHealth.conflictCount).toBe(1);
+    expect(status.syncHealth.status).toBe('warning');
+    expect(status.syncHealth.checks.some((check) => check.id === 'conflicts' && check.status === 'warning')).toBe(true);
   });
 });

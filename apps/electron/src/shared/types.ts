@@ -617,6 +617,7 @@ export interface ElectronAPI {
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
   getWorkspaceTeamStatus(workspaceId: string): Promise<TeamModeStatus>
   enableWorkspaceTeamMode(workspaceId: string, options?: { provider?: SharedFolderProvider; providerLabel?: string; makeRunner?: boolean }): Promise<TeamModeStatus>
+  joinWorkspaceTeam(workspaceId: string): Promise<TeamModeStatus>
   moveWorkspaceToSharedFolder(workspaceId: string, input: { destinationParentPath: string; provider?: SharedFolderProvider; providerLabel?: string; makeRunner?: boolean }): Promise<TeamSharedFolderMigrationResult>
   setWorkspaceTeamRunner(workspaceId: string, machineId?: string): Promise<TeamModeStatus>
   getWorkspaceTeamPathOverrides(workspaceId: string): Promise<SharedPathOverrides>

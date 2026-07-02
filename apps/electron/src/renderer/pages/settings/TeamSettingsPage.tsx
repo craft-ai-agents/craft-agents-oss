@@ -106,6 +106,22 @@ export default function TeamSettingsPage() {
     }
   }
 
+  const joinThisMachine = async () => {
+    if (!activeWorkspaceId) return
+    setBusy(true)
+    try {
+      const next = await window.electronAPI.joinWorkspaceTeam(activeWorkspaceId)
+      setStatus(next)
+      toast.success('This machine joined the team workspace')
+    } catch (error) {
+      toast.error('Failed to join team workspace', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const savePathOverride = async () => {
     if (!activeWorkspaceId || !overrideRefId.trim() || !overridePath.trim()) return
     setBusy(true)
@@ -172,7 +188,8 @@ export default function TeamSettingsPage() {
   }
 
   const unsupported = Boolean(status && !status.supported)
-  const canMakeRunner = Boolean(status?.team.enabled && status.storage.mode === 'shared-folder')
+  const needsJoin = Boolean(status?.team.enabled && status.storage.mode === 'shared-folder' && !status.joined)
+  const canMakeRunner = Boolean(status?.team.enabled && status.storage.mode === 'shared-folder' && status.joined)
   const runnerIsThisMachine = Boolean(status?.team.runnerMachineId && status.team.runnerMachineId === status.machine.machineId)
   const runnerHandoverPending = Boolean(status?.team.runnerHandover?.to && status.team.runnerHandover.to === status.machine.machineId)
   const runnerStateLabel = !status?.team.runnerMachineId
@@ -273,6 +290,12 @@ export default function TeamSettingsPage() {
                             Initialize
                           </Button>
                         )}
+                        {needsJoin && (
+                          <Button size="sm" onClick={() => void joinThisMachine()} disabled={busy || unsupported}>
+                            {busy ? <Spinner className="mr-1.5" /> : null}
+                            Join
+                          </Button>
+                        )}
                         <Button
                           variant="secondary"
                           size="sm"
@@ -300,6 +323,44 @@ export default function TeamSettingsPage() {
                   </SettingsCardContent>
                 </SettingsCard>
               </SettingsSection>
+
+              {status?.team.enabled && (
+                <SettingsSection
+                  title="Sync health"
+                  description="Readiness checks for shared-folder Team Mode on this machine."
+                >
+                  <SettingsCard>
+                    <SettingsCardContent>
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className={status.syncHealth.status === 'healthy' ? 'text-[13px] font-medium text-emerald-200' : status.syncHealth.status === 'blocked' ? 'text-[13px] font-medium text-red-200' : 'text-[13px] font-medium text-amber-200'}>
+                            {status.syncHealth.summary}
+                          </div>
+                          <div className="mt-1 text-[12px] text-white/38">
+                            {status.syncHealth.machineCount} machine heartbeat{status.syncHealth.machineCount === 1 ? '' : 's'} · {status.syncHealth.conflictCount} open conflict{status.syncHealth.conflictCount === 1 ? '' : 's'}
+                          </div>
+                        </div>
+                        <div className="rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] uppercase tracking-[0.08em] text-white/50">
+                          {status.syncHealth.status}
+                        </div>
+                      </div>
+                      <div className="mt-4 divide-y divide-white/[0.06]">
+                        {status.syncHealth.checks.map((check) => (
+                          <div key={check.id} className="flex items-start justify-between gap-4 py-2.5 text-[12px]">
+                            <div className="min-w-0">
+                              <div className="font-medium text-white/72">{check.label}</div>
+                              {check.detail && <div className="mt-0.5 truncate text-white/36">{check.detail}</div>}
+                            </div>
+                            <div className={check.status === 'ok' ? 'shrink-0 text-emerald-200/80' : check.status === 'blocked' ? 'shrink-0 text-red-200/80' : 'shrink-0 text-amber-200/80'}>
+                              {check.status}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </SettingsCardContent>
+                  </SettingsCard>
+                </SettingsSection>
+              )}
 
               {status?.storage.mode !== 'shared-folder' && (
                 <SettingsSection
@@ -433,6 +494,8 @@ export default function TeamSettingsPage() {
                   <SettingsCard>
                     <ValueRow label="Team revision" value={String(status.team.revision)} />
                     <ValueRow label="Team ID" value={status.team.teamId} />
+                    <ValueRow label="Joined on this machine" value={status.joined ? 'Yes' : 'No'} />
+                    <ValueRow label="Sync health" value={status.syncHealth.status} />
                     <ValueRow label="Runner machine" value={status.team.runnerMachineId || 'None'} />
                     <ValueRow label="Runner state" value={runnerStateLabel} />
                     <ValueRow label="This machine" value={`${status.machine.displayName} (${status.machine.machineId})`} />
