@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FileText,
   FolderKanban,
+  MessageSquareText,
   Music2,
   Plus,
   RefreshCw,
@@ -65,6 +66,14 @@ import {
   type ArtistProfile,
 } from '@/lib/artist-profile'
 import {
+  ARTIST_VOICE_CONTEXT_SLUG,
+  artistVoiceMetadata,
+  parseArtistVoiceDocResult,
+  serializeArtistVoiceBody,
+  voiceCompletion,
+  type ArtistVoice,
+} from '@/lib/artist-voice'
+import {
   ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG,
   parseArtistSpotifySnapshotDocResult,
 } from '@/lib/artist-spotify'
@@ -90,7 +99,7 @@ interface ArtistHQHomeProps {
   workspaceName?: string
 }
 
-type ArtistHQTab = 'home' | 'profile' | 'calendar' | 'network' | 'research' | 'workers' | 'branding'
+type ArtistHQTab = 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'workers' | 'branding'
 type NetworkDraft = {
   name: string
   category: ArtistNetworkCategory
@@ -106,6 +115,7 @@ type CalendarDraft = {
   notes: string
 }
 type ProfileDraft = Omit<ArtistProfile, 'version' | 'updatedAt'>
+type VoiceDraft = Omit<ArtistVoice, 'version' | 'updatedAt'>
 
 const HQ_HASH_PREFIX = '#artist-hq/'
 const todayKey = toDateKey(new Date())
@@ -143,6 +153,15 @@ const emptyProfileDraft: ProfileDraft = {
   team: '',
   promoBudget: '',
   rules: '',
+}
+const emptyVoiceDraft: VoiceDraft = {
+  summary: '',
+  speakingStyle: '',
+  vocabulary: '',
+  avoid: '',
+  captionExamples: '',
+  postExamples: '',
+  writingExcerpts: '',
 }
 
 const projectColumns = [
@@ -201,6 +220,7 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   const [editDraft, setEditDraft] = React.useState<NetworkDraft>(emptyNetworkDraft)
   const [calendarDraft, setCalendarDraft] = React.useState<CalendarDraft>(emptyCalendarDraft)
   const [profileDraft, setProfileDraft] = React.useState<ProfileDraft>(emptyProfileDraft)
+  const [voiceDraft, setVoiceDraft] = React.useState<VoiceDraft>(emptyVoiceDraft)
   const [automations, setAutomations] = React.useState<AutomationListItem[]>([])
   const [spotifySyncBusy, setSpotifySyncBusy] = React.useState(false)
   const { docs, loading, upsert, refresh: refreshContext } = useWorkspaceContext(workspaceId)
@@ -211,6 +231,12 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   )
   const profile = profileResult.profile
   const profilePercent = profileCompletion(profile)
+  const voiceResult = React.useMemo(
+    () => parseArtistVoiceDocResult(docs.find((doc) => doc.slug === ARTIST_VOICE_CONTEXT_SLUG)),
+    [docs],
+  )
+  const voice = voiceResult.voice
+  const voicePercent = voiceCompletion(voice)
   const spotifyResult = React.useMemo(
     () => parseArtistSpotifySnapshotDocResult(docs.find((doc) => doc.slug === ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG)),
     [docs],
@@ -283,6 +309,10 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   React.useEffect(() => {
     setProfileDraft(profileToDraft(profile))
   }, [profile])
+
+  React.useEffect(() => {
+    setVoiceDraft(voiceToDraft(voice))
+  }, [voice])
 
   React.useEffect(() => {
     if (intelReport.status !== 'queued') return
@@ -358,6 +388,28 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
       toast.error(err instanceof Error ? err.message : String(err))
     }
   }, [profileDraft, profileResult, upsert])
+
+  const saveVoice = React.useCallback(async () => {
+    if (!voiceResult.ok) {
+      toast.error(`${voiceResult.error} Open Workspace Context to recover it before saving.`)
+      return
+    }
+    const nextVoice: ArtistVoice = {
+      version: 1,
+      ...voiceDraft,
+      updatedAt: new Date().toISOString(),
+    }
+    try {
+      await upsert({
+        slug: ARTIST_VOICE_CONTEXT_SLUG,
+        metadata: artistVoiceMetadata(),
+        body: serializeArtistVoiceBody(nextVoice),
+      })
+      toast.success('Artist Voice saved')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }, [upsert, voiceDraft, voiceResult])
 
   const saveIntelConfig = React.useCallback(async (nextConfig: ArtistIntelConfig) => {
     const config = {
@@ -665,6 +717,15 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
           icon: <UserRound className="h-3.5 w-3.5 text-blue-300/80" />,
           label: 'Context',
         }
+      case 'voice':
+        return {
+          title: 'Voice',
+          description: 'How the artist talks, writes captions, phrases ideas, and wants public copy to sound.',
+          orb1: 'bg-pink-600/10',
+          orb2: 'bg-orange-500/5',
+          icon: <MessageSquareText className="h-3.5 w-3.5 text-pink-300/80" />,
+          label: 'Style',
+        }
       case 'workers':
         return {
           title: 'Workers',
@@ -849,6 +910,35 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
             ) : null}
 
             <ArtistProfileForm draft={profileDraft} onChange={setProfileDraft} />
+          </HQCard>
+        )}
+
+        {tab === 'voice' && (
+          <HQCard>
+            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <SectionTitle icon={MessageSquareText} title="Voice" meta={`${voicePercent}% complete`} compact />
+                <p className="mt-2 max-w-2xl text-xs leading-5 text-white/42">
+                  This is routed into posting and content workers so captions, hooks, ads, and replies sound like the artist.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={saveVoice}
+                disabled={!voiceResult.ok}
+                className="h-9 rounded-full bg-white/90 px-5 text-xs font-semibold text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Save Voice
+              </button>
+            </div>
+
+            {!voiceResult.ok ? (
+              <div className="mb-4 rounded-[14px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
+                {voiceResult.error} Saving is paused so existing voice context is not overwritten.
+              </div>
+            ) : null}
+
+            <ArtistVoiceForm draft={voiceDraft} onChange={setVoiceDraft} />
           </HQCard>
         )}
 
@@ -1463,6 +1553,40 @@ function ArtistProfileForm({
   )
 }
 
+function ArtistVoiceForm({
+  draft,
+  onChange,
+}: {
+  draft: VoiceDraft
+  onChange: (draft: VoiceDraft) => void
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <ProfileField label="Voice summary" wide>
+        <TextArea value={draft.summary ?? ''} onChange={(summary) => onChange({ ...draft, summary })} placeholder="Short summary of how the artist sounds in public. Dry, sharp, intimate, funny, poetic, chaotic..." />
+      </ProfileField>
+      <ProfileField label="How they talk">
+        <TextArea value={draft.speakingStyle ?? ''} onChange={(speakingStyle) => onChange({ ...draft, speakingStyle })} placeholder="Sentence length, rhythm, humor, slang, punctuation, directness, emotional temperature" />
+      </ProfileField>
+      <ProfileField label="Words / phrases">
+        <TextArea value={draft.vocabulary ?? ''} onChange={(vocabulary) => onChange({ ...draft, vocabulary })} placeholder="Words they use, repeated phrases, spelling quirks, signature expressions" />
+      </ProfileField>
+      <ProfileField label="Avoid">
+        <TextArea value={draft.avoid ?? ''} onChange={(avoid) => onChange({ ...draft, avoid })} placeholder="Words, tones, cliches, emojis, topics, fake hype, or anything that does not sound like them" />
+      </ProfileField>
+      <ProfileField label="Caption examples" wide>
+        <TextArea value={draft.captionExamples ?? ''} onChange={(captionExamples) => onChange({ ...draft, captionExamples })} placeholder="Paste real captions. Include good examples and notes if useful." />
+      </ProfileField>
+      <ProfileField label="Post examples" wide>
+        <TextArea value={draft.postExamples ?? ''} onChange={(postExamples) => onChange({ ...draft, postExamples })} placeholder="Paste posts, tweets, threads, announcements, replies, or email/social copy that sounds right." />
+      </ProfileField>
+      <ProfileField label="Writing excerpts" wide>
+        <TextArea value={draft.writingExcerpts ?? ''} onChange={(writingExcerpts) => onChange({ ...draft, writingExcerpts })} placeholder="Longer samples: notes app drafts, artist statements, scripts, captions, or journal-style writing." />
+      </ProfileField>
+    </div>
+  )
+}
+
 function ProfileField({
   label,
   wide,
@@ -1902,6 +2026,18 @@ function profileToDraft(profile: ArtistProfile): ProfileDraft {
   }
 }
 
+function voiceToDraft(voice: ArtistVoice): VoiceDraft {
+  return {
+    summary: voice.summary ?? '',
+    speakingStyle: voice.speakingStyle ?? '',
+    vocabulary: voice.vocabulary ?? '',
+    avoid: voice.avoid ?? '',
+    captionExamples: voice.captionExamples ?? '',
+    postExamples: voice.postExamples ?? '',
+    writingExcerpts: voice.writingExcerpts ?? '',
+  }
+}
+
 function isResearchOutput(output: OutputSummaryDTO): boolean {
   const text = `${output.title} ${output.summary ?? ''} ${output.kind} ${(output.tags ?? []).join(' ')} ${output.origin?.agentName ?? ''}`.toLowerCase()
   return output.kind === 'report'
@@ -1988,7 +2124,7 @@ function readTabFromHash(): ArtistHQTab {
 }
 
 function isArtistHQTab(value: string): value is ArtistHQTab {
-  return value === 'home' || value === 'profile' || value === 'calendar' || value === 'network' || value === 'research' || value === 'workers' || value === 'branding'
+  return value === 'home' || value === 'profile' || value === 'voice' || value === 'calendar' || value === 'network' || value === 'research' || value === 'workers' || value === 'branding'
 }
 
 function startOfMonth(date: Date): Date {

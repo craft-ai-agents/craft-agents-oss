@@ -1670,7 +1670,7 @@ function AppShellContent({
     navigate(routes.view.agenda())
   }, [])
 
-  const handleArtistHQNavClick = useCallback((tab: 'home' | 'profile' | 'calendar' | 'network' | 'research' | 'workers' | 'branding') => {
+  const handleArtistHQNavClick = useCallback((tab: 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'workers' | 'branding') => {
     const hqWorkspace = findArtistHQWorkspace(workspaces)
     if (!hqWorkspace) {
       toast.error('No HQ workspace found')
@@ -1996,7 +1996,7 @@ function AppShellContent({
     action?: () => void
   }
 
-  const hqHomeActive = isArtistHQWorkspace && isSessionsNavigation(navState) && !['#artist-hq/calendar', '#artist-hq/network', '#artist-hq/profile', '#artist-hq/research', '#artist-hq/workers', '#artist-hq/branding'].includes(artistHqHash)
+  const hqHomeActive = isArtistHQWorkspace && isSessionsNavigation(navState) && !['#artist-hq/calendar', '#artist-hq/network', '#artist-hq/profile', '#artist-hq/voice', '#artist-hq/research', '#artist-hq/workers', '#artist-hq/branding'].includes(artistHqHash)
   const vaultActive = isVaultNavigation(navState)
   const planExpanded = expandedMainNavGroups.has('plan')
   const peopleExpanded = expandedMainNavGroups.has('people')
@@ -2028,6 +2028,7 @@ function AppShellContent({
     result.push({ id: 'nav:brain', type: 'nav', action: () => handleMainNavGroupClick('brain', () => handleArtistHQNavClick('profile')) })
     if (brainExpanded) {
       result.push({ id: 'nav:profile', type: 'nav', action: () => handleArtistHQNavClick('profile') })
+      result.push({ id: 'nav:voice', type: 'nav', action: () => handleArtistHQNavClick('voice') })
       result.push({ id: 'nav:research', type: 'nav', action: () => handleArtistHQNavClick('research') })
       result.push({ id: 'nav:branding', type: 'nav', action: () => handleArtistHQNavClick('branding') })
     }
@@ -2479,6 +2480,13 @@ function AppShellContent({
                           icon: Users,
                           variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/profile' ? "default" : "ghost",
                           onClick: () => handleArtistHQNavClick('profile'),
+                        },
+                        {
+                          id: "nav:voice",
+                          title: "Voice",
+                          icon: MessageSquare,
+                          variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/voice' ? "default" : "ghost",
+                          onClick: () => handleArtistHQNavClick('voice'),
                         },
                         {
                           id: "nav:research",
