@@ -35,6 +35,7 @@ import {
   isAutomationsNavigation,
   isWorkspaceContextNavigation,
   isAgendaNavigation,
+  isCommunityNavigation,
   isVaultNavigation,
   isOutputsNavigation,
 } from '@/contexts/NavigationContext'
@@ -61,6 +62,7 @@ import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { ArtistHQHome } from './ArtistHQHome'
 import { ArtistCommandCenterHome } from './ArtistCommandCenterHome'
 import { AgendaPage } from './AgendaPage'
+import { CommunityPage } from './CommunityPage'
 import { VaultPage } from './VaultPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { SettingsPageSwitcher } from '@/pages/settings/SettingsPageSwitcher'
@@ -416,6 +418,14 @@ export function MainContentPanel({
           onNewTask={() => navigate(routes.action.newSession({ name: 'New task' }))}
           networkWorkspaceId={artistHQWorkspace?.id || activeWorkspaceId || ''}
         />
+      </Panel>
+    )
+  }
+
+  if (isCommunityNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <CommunityPage workspaceId={activeWorkspaceId || ''} />
       </Panel>
     )
   }
