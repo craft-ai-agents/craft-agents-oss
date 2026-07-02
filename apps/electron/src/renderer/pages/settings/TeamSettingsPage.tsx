@@ -9,9 +9,11 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { SettingsCard, SettingsCardContent, SettingsSection } from '@/components/settings'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
 import { routes } from '@/lib/navigate'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { TeamModeStatus } from '../../../shared/types'
+import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -29,10 +31,11 @@ function ValueRow({ label, value }: { label: string; value: string }) {
 
 export default function TeamSettingsPage() {
   const { t } = useTranslation()
-  const { activeWorkspaceId } = useAppShellContext()
+  const { activeWorkspaceId, onRefreshWorkspaces } = useAppShellContext()
   const [status, setStatus] = useState<TeamModeStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [destinationParentPath, setDestinationParentPath] = useState('')
 
   const loadStatus = useCallback(async () => {
     if (!activeWorkspaceId) {
@@ -93,6 +96,39 @@ export default function TeamSettingsPage() {
 
   const unsupported = Boolean(status && !status.supported)
   const canMakeRunner = Boolean(status?.team.enabled && status.storage.mode === 'shared-folder')
+
+  const moveToSharedFolder = async () => {
+    if (!activeWorkspaceId || !destinationParentPath) return
+    setBusy(true)
+    try {
+      const result = await window.electronAPI.moveWorkspaceToSharedFolder(activeWorkspaceId, {
+        destinationParentPath,
+        provider: 'generic-folder',
+        providerLabel: 'Shared folder',
+      })
+      toast.success('Workspace moved to shared folder', {
+        description: result.tombstoneWritten === false
+          ? `Moved to ${result.finalRootPath}. Old-path marker failed: ${result.tombstoneError}`
+          : result.finalRootPath,
+      })
+      await onRefreshWorkspaces?.()
+      await loadStatus()
+    } catch (error) {
+      toast.error('Failed to move workspace', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const {
+    pickDirectory,
+    showServerBrowser,
+    serverBrowserMode,
+    cancelServerBrowser,
+    confirmServerBrowser,
+  } = useDirectoryPicker(setDestinationParentPath)
 
   return (
     <>
@@ -163,6 +199,37 @@ export default function TeamSettingsPage() {
                 </SettingsCard>
               </SettingsSection>
 
+              {status?.storage.mode !== 'shared-folder' && (
+                <SettingsSection
+                  title="Move to shared folder"
+                  description="Copies this workspace into a migration folder, writes config last, then updates this app to open the new shared location."
+                >
+                  <SettingsCard>
+                    <SettingsCardContent>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-mono text-[12px] text-white/68">
+                            {destinationParentPath || 'No destination selected'}
+                          </div>
+                          <div className="mt-1 text-[12px] text-white/38">
+                            Choose the synced parent folder. Runner creates a workspace folder inside it.
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Button variant="secondary" size="sm" onClick={pickDirectory} disabled={busy || unsupported}>
+                            Choose
+                          </Button>
+                          <Button size="sm" onClick={() => void moveToSharedFolder()} disabled={busy || unsupported || !destinationParentPath}>
+                            {busy ? <Spinner className="mr-1.5" /> : null}
+                            Move
+                          </Button>
+                        </div>
+                      </div>
+                    </SettingsCardContent>
+                  </SettingsCard>
+                </SettingsSection>
+              )}
+
               {status && (
                 <SettingsSection title="Status">
                   <SettingsCard>
@@ -188,6 +255,12 @@ export default function TeamSettingsPage() {
           )}
         </div>
       </ScrollArea>
+      <ServerDirectoryBrowser
+        open={showServerBrowser}
+        mode={serverBrowserMode}
+        onSelect={confirmServerBrowser}
+        onCancel={cancelServerBrowser}
+      />
     </>
   )
 }

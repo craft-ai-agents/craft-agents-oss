@@ -46,3 +46,4 @@ export {
 } from './storage.ts';
 
 export * from './team-mode.ts';
+export * from './team-migration.ts';

@@ -28,7 +28,8 @@ export type { PermissionMode };
 export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 
 import type { SharedFolderProvider, TeamModeStatus } from '@craft-agent/shared/workspaces';
-export type { SharedFolderProvider, TeamModeStatus };
+import type { TeamSharedFolderMigrationResult } from '@craft-agent/shared/workspaces';
+export type { SharedFolderProvider, TeamModeStatus, TeamSharedFolderMigrationResult };
 
 // Thinking level types
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
@@ -593,6 +594,7 @@ export interface ElectronAPI {
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
   getWorkspaceTeamStatus(workspaceId: string): Promise<TeamModeStatus>
   enableWorkspaceTeamMode(workspaceId: string, options?: { provider?: SharedFolderProvider; providerLabel?: string; makeRunner?: boolean }): Promise<TeamModeStatus>
+  moveWorkspaceToSharedFolder(workspaceId: string, input: { destinationParentPath: string; provider?: SharedFolderProvider; providerLabel?: string; makeRunner?: boolean }): Promise<TeamSharedFolderMigrationResult>
   setWorkspaceTeamRunner(workspaceId: string, machineId?: string): Promise<TeamModeStatus>
   getSelfEditTarget(workspaceId: string): Promise<SelfEditTargetInfo>
 

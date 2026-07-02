@@ -276,6 +276,7 @@ export const RPC_CHANNELS = {
     SETTINGS_UPDATE: 'workspaceSettings:update',
     TEAM_STATUS_GET: 'workspaceTeam:getStatus',
     TEAM_ENABLE_IN_PLACE: 'workspaceTeam:enableInPlace',
+    TEAM_MOVE_TO_SHARED_FOLDER: 'workspaceTeam:moveToSharedFolder',
     TEAM_SET_RUNNER: 'workspaceTeam:setRunner',
     SELF_EDIT_TARGET_GET: 'workspace:selfEditTarget:get',
   },

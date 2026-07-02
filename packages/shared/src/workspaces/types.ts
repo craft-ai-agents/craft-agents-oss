@@ -82,6 +82,12 @@ export interface WorkspaceTeamConfig {
   updatedAt: string;
 }
 
+export interface WorkspaceMovedToTombstone {
+  path: string;
+  migrationId: string;
+  movedAt: string;
+}
+
 /**
  * Workspace configuration (stored in config.json)
  */
@@ -128,6 +134,11 @@ export interface WorkspaceConfig {
    * Team-mode metadata. Generated mirror lives at team/config.json.
    */
   team?: WorkspaceTeamConfig;
+
+  /**
+   * Tombstone left behind at an old workspace path after moving to shared storage.
+   */
+  movedTo?: WorkspaceMovedToTombstone;
 
   createdAt: number;
   updatedAt: number;

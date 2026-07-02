@@ -1,8 +1,9 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, updateWorkspaceRemoteServer } from '@craft-agent/shared/config'
+import { assertWorkspaceOpenable } from '@craft-agent/shared/workspaces'
 import { perf } from '@craft-agent/shared/utils'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -52,6 +53,9 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     }
 
     const rootExistedBeforeAdd = existsSync(rootPath)
+    if (rootExistedBeforeAdd && readdirSync(rootPath).length > 0) {
+      assertWorkspaceOpenable(rootPath)
+    }
     const workspace = addWorkspace({ name, rootPath, ...(remoteServer && { remoteServer }) })
     // Make it active
     setActiveWorkspace(workspace.id)

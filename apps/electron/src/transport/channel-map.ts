@@ -183,6 +183,7 @@ export const CHANNEL_MAP = {
   updateWorkspaceSetting: invoke(RPC_CHANNELS.workspace.SETTINGS_UPDATE),
   getWorkspaceTeamStatus: invoke(RPC_CHANNELS.workspace.TEAM_STATUS_GET),
   enableWorkspaceTeamMode: invoke(RPC_CHANNELS.workspace.TEAM_ENABLE_IN_PLACE),
+  moveWorkspaceToSharedFolder: invoke(RPC_CHANNELS.workspace.TEAM_MOVE_TO_SHARED_FOLDER),
   setWorkspaceTeamRunner: invoke(RPC_CHANNELS.workspace.TEAM_SET_RUNNER),
   getSelfEditTarget: invoke(RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET),
 

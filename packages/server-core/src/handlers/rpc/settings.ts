@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process'
 import { dirname } from 'path'
 import { promisify } from 'node:util'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel, resolveSelfEditTarget, validateSelfEditRepo } from '@craft-agent/shared/config'
+import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel, resolveSelfEditTarget, validateSelfEditRepo, updateWorkspaceRootPath } from '@craft-agent/shared/config'
 import { loadStoredConfig } from '@craft-agent/shared/config/storage'
 import { isValidThinkingLevel, normalizeThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
 import { getCredentialManager, isValidUserSecretName, normalizeUserSecretName } from '@craft-agent/shared/credentials'
@@ -92,6 +92,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.SETTINGS_UPDATE,
   RPC_CHANNELS.workspace.TEAM_STATUS_GET,
   RPC_CHANNELS.workspace.TEAM_ENABLE_IN_PLACE,
+  RPC_CHANNELS.workspace.TEAM_MOVE_TO_SHARED_FOLDER,
   RPC_CHANNELS.workspace.TEAM_SET_RUNNER,
   RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET,
   RPC_CHANNELS.preferences.READ,
@@ -322,6 +323,40 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       providerLabel: options?.providerLabel,
       makeRunner: options?.makeRunner,
     })
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_MOVE_TO_SHARED_FOLDER, async (_ctx, workspaceId: string, input: {
+    destinationParentPath: string
+    provider?: SharedFolderProvider
+    providerLabel?: string
+    makeRunner?: boolean
+  }) => {
+    if (!input?.destinationParentPath || typeof input.destinationParentPath !== 'string') {
+      throw new Error('Destination folder is required.')
+    }
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const provider = input.provider ?? 'generic-folder'
+    if (!SHARED_FOLDER_PROVIDERS.has(provider)) {
+      throw new Error(`Invalid shared folder provider: ${provider}`)
+    }
+    const { moveWorkspaceToSharedFolder, writeMovedToTombstone } = await import('@craft-agent/shared/workspaces')
+    const result = moveWorkspaceToSharedFolder(workspace.rootPath, input.destinationParentPath.trim(), {
+      provider,
+      providerLabel: input.providerLabel,
+      makeRunner: input.makeRunner,
+    })
+    updateWorkspaceRootPath(workspaceId, result.finalRootPath)
+    try {
+      writeMovedToTombstone(result.originalRootPath, result.finalRootPath, result.migrationId)
+      return { ...result, tombstoneWritten: true }
+    } catch (error) {
+      deps.platform.logger.warn(`Workspace moved but tombstone write failed: ${error instanceof Error ? error.message : String(error)}`)
+      return {
+        ...result,
+        tombstoneWritten: false,
+        tombstoneError: error instanceof Error ? error.message : String(error),
+      }
+    }
   })
 
   server.handle(RPC_CHANNELS.workspace.TEAM_SET_RUNNER, async (_ctx, workspaceId: string, machineId?: string) => {
