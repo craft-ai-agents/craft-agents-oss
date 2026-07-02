@@ -174,9 +174,12 @@ export default function TeamSettingsPage() {
   const unsupported = Boolean(status && !status.supported)
   const canMakeRunner = Boolean(status?.team.enabled && status.storage.mode === 'shared-folder')
   const runnerIsThisMachine = Boolean(status?.team.runnerMachineId && status.team.runnerMachineId === status.machine.machineId)
+  const runnerHandoverPending = Boolean(status?.team.runnerHandover?.to && status.team.runnerHandover.to === status.machine.machineId)
   const runnerStateLabel = !status?.team.runnerMachineId
     ? 'No runner assigned'
-    : runnerIsThisMachine
+    : runnerHandoverPending
+      ? 'Pending handover'
+      : runnerIsThisMachine
       ? 'This machine'
       : status.runnerIsStale
         ? 'Stale on another machine'
@@ -275,9 +278,9 @@ export default function TeamSettingsPage() {
                           size="sm"
                           onClick={() => void setThisMachineAsRunner()}
                           disabled={busy || unsupported || !canMakeRunner}
-                          title={status?.runnerIsStale ? 'Take over runner duties on this machine' : 'Assign runner duties to this machine'}
+                          title={runnerHandoverPending ? 'Waiting for previous runner acknowledgement or grace window' : status?.runnerIsStale ? 'Take over runner duties on this machine' : 'Assign runner duties to this machine'}
                         >
-                          {runnerIsThisMachine ? 'Runner active' : status?.runnerIsStale ? 'Take over' : 'Make runner'}
+                          {runnerHandoverPending ? 'Pending' : runnerIsThisMachine ? 'Runner active' : status?.runnerIsStale ? 'Take over' : 'Make runner'}
                         </Button>
                       </div>
                     </div>
@@ -288,7 +291,9 @@ export default function TeamSettingsPage() {
                           <span className={status.runnerIsStale ? 'font-medium text-amber-200' : 'text-white/72'}>{runnerStateLabel}</span>
                         </div>
                         <div className="mt-1 truncate text-[11px] text-white/36">
-                          Last seen: {status.runnerHeartbeat?.lastAutomationHeartbeatAt ?? status.runnerHeartbeat?.lastSeenAt ?? 'Not observed'}
+                          {runnerHandoverPending
+                            ? `Previous runner: ${status.team.runnerHandover?.from ?? 'unknown'}`
+                            : `Last seen: ${status.runnerHeartbeat?.lastAutomationHeartbeatAt ?? status.runnerHeartbeat?.lastSeenAt ?? 'Not observed'}`}
                         </div>
                       </div>
                     )}

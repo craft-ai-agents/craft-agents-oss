@@ -21,6 +21,7 @@ export type WebhookDeliveryOutcome =
   | 'rate_limited'
   | 'event_bus_rate_limited'
   | 'automation_system_unavailable'
+  | 'skipped_non_runner'
   | 'invalid_signature'
   | 'missing_timestamp'
   | 'invalid_timestamp'

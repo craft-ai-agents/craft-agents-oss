@@ -223,6 +223,24 @@ describe('AutomationSystem', () => {
       rmSync(privateRoot, { recursive: true, force: true });
     });
 
+    it('reports runner-active state on startup before the first event', async () => {
+      const privateRoot = mkdtempSync(join(tmpdir(), 'automation-private-'));
+      process.env.CRAFT_CONFIG_DIR = privateRoot;
+      writeWorkspaceConfig();
+      markWorkspaceAsSharedFolder(tempDir, { makeRunner: true });
+      const runnerStates: boolean[] = [];
+
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+        onRunnerActiveChange: (active) => { runnerStates.push(active); },
+      });
+
+      expect(runnerStates).toContain(true);
+      await system.dispose();
+      rmSync(privateRoot, { recursive: true, force: true });
+    });
+
     it('dedupes repeated runner SchedulerTick keys', async () => {
       const privateRoot = mkdtempSync(join(tmpdir(), 'automation-private-'));
       process.env.CRAFT_CONFIG_DIR = privateRoot;
@@ -297,6 +315,62 @@ describe('AutomationSystem', () => {
       await system.fireMissedSchedulerCatchUpForTest();
 
       expect(catchUpFlags).toEqual([true]);
+      await system.dispose();
+      rmSync(privateRoot, { recursive: true, force: true });
+    });
+
+    it('can defer startup catch-up until subscribers are attached', async () => {
+      const privateRoot = mkdtempSync(join(tmpdir(), 'automation-private-'));
+      process.env.CRAFT_CONFIG_DIR = privateRoot;
+      writeWorkspaceConfig();
+      const status = markWorkspaceAsSharedFolder(tempDir, { makeRunner: true });
+      setMissedTickPolicy('run-once');
+      const staleAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const heartbeat = JSON.parse(readFileSync(status.heartbeatPath, 'utf-8'));
+      writeFileSync(status.heartbeatPath, JSON.stringify({
+        ...heartbeat,
+        lastAutomationHeartbeatAt: staleAt,
+        lastSeenAt: staleAt,
+      }, null, 2), 'utf-8');
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+        enableScheduler: true,
+        runSchedulerCatchUpOnStart: false,
+      });
+      const catchUpFlags: Array<boolean | undefined> = [];
+      system.eventBus.on('SchedulerTick', (payload) => { catchUpFlags.push(payload.catchUp); });
+
+      await system.runMissedSchedulerCatchUp();
+
+      expect(catchUpFlags).toEqual([true]);
+      system.stopScheduler();
+      await system.dispose();
+      rmSync(privateRoot, { recursive: true, force: true });
+    });
+
+    it('returns skipped for non-runner WebhookReceive instead of accepted', async () => {
+      const privateRoot = mkdtempSync(join(tmpdir(), 'automation-private-'));
+      process.env.CRAFT_CONFIG_DIR = privateRoot;
+      writeWorkspaceConfig();
+      markWorkspaceAsSharedFolder(tempDir, { makeRunner: true });
+      setRunnerMachine(tempDir, 'machine_someone_else');
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      const result = await system.fireWebhookReceive({
+        slug: 'hook',
+        method: 'POST',
+        headers: {},
+        query: {},
+        body: {},
+        bodyRaw: '{}',
+        remoteIp: '127.0.0.1',
+      });
+
+      expect(result).toEqual({ status: 'skipped', reason: 'non_runner' });
       await system.dispose();
       rmSync(privateRoot, { recursive: true, force: true });
     });

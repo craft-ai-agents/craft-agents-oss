@@ -1834,6 +1834,7 @@ export class SessionManager implements ISessionManager {
         workspaceRootPath,
         workspaceId,
         enableScheduler: true,
+        runSchedulerCatchUpOnStart: false,
         onPromptsReady: async (prompts) => {
           // Execute prompt automations by creating new sessions
           const settled = await Promise.allSettled(
@@ -1892,6 +1893,9 @@ export class SessionManager implements ISessionManager {
       // AutomationSystem) so SessionManager owns driver-session spawn + workflow
       // dispatch wiring without bloating the shared automations package.
       this.attachPulseDispatch(automationSystem, workspaceId, workspaceRootPath)
+      automationSystem.runMissedSchedulerCatchUp().catch((error) => {
+        sessionLog.warn('[Automations] Failed to run missed scheduler catch-up:', error)
+      })
     }
   }
 

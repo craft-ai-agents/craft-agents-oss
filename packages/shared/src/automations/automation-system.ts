@@ -69,6 +69,8 @@ export interface AutomationSystemOptions {
   activeSourceSlugs?: string[];
   /** Whether to start the scheduler service (default: false) */
   enableScheduler?: boolean;
+  /** Whether scheduler startup should immediately run missed-tick catch-up (default: true) */
+  runSchedulerCatchUpOnStart?: boolean;
   /** Called when prompts are ready to be executed */
   onPromptsReady?: (prompts: PendingPrompt[]) => void;
   /** Called when webhook results are available */
@@ -110,6 +112,8 @@ export class AutomationSystem implements AutomationsConfigProvider {
 
     // Create handlers
     this.createHandlers();
+
+    this.updateRunnerActiveFromGate();
 
     // Start scheduler if enabled
     if (options.enableScheduler) {
@@ -347,6 +351,15 @@ export class AutomationSystem implements AutomationsConfigProvider {
     return false;
   }
 
+  private updateRunnerActiveFromGate(): void {
+    const decision = this.evaluateBackgroundRunnerGate('SchedulerTick');
+    if (!decision || decision.reason === 'solo') {
+      this.options.onRunnerActiveChange?.(false);
+      return;
+    }
+    this.options.onRunnerActiveChange?.(decision.allowed && decision.reason === 'runner');
+  }
+
   /**
    * Fire a MessageReceive event on this workspace's bus.
    * Called by the messaging gateway for every inbound chat message.
@@ -406,7 +419,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
   }): Promise<EventDeliveryResult> {
     if (this.disposed) return { status: 'disposed' };
     if (!this.shouldRunBackgroundAutomation('WebhookReceive')) {
-      return { status: 'accepted', handlerCount: 0, anyHandlerCount: 0 };
+      return { status: 'skipped', reason: 'non_runner' };
     }
     return await this.eventBus.emitWithResult('WebhookReceive', {
       workspaceId: this.options.workspaceId,
@@ -478,7 +491,9 @@ export class AutomationSystem implements AutomationsConfigProvider {
       await this.fireSchedulerTick(payload);
     });
 
-    void this.fireMissedSchedulerCatchUp();
+    if (this.options.runSchedulerCatchUpOnStart !== false) {
+      void this.fireMissedSchedulerCatchUp();
+    }
     this.scheduler.start();
     log.debug(`[AutomationSystem] Scheduler started`);
   }
@@ -499,6 +514,10 @@ export class AutomationSystem implements AutomationsConfigProvider {
   }
 
   async fireMissedSchedulerCatchUpForTest(): Promise<void> {
+    await this.runMissedSchedulerCatchUp();
+  }
+
+  async runMissedSchedulerCatchUp(): Promise<void> {
     await this.fireMissedSchedulerCatchUp();
   }
 

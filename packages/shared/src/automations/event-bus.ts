@@ -228,6 +228,7 @@ export type AnyEventHandler = (
 export type EventDeliveryResult =
   | { status: 'accepted'; handlerCount: number; anyHandlerCount: number }
   | { status: 'rate_limited'; limit: number; count: number; windowStart: number }
+  | { status: 'skipped'; reason: string }
   | { status: 'disposed' };
 
 // ============================================================================
