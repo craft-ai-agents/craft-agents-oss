@@ -11,6 +11,7 @@ export const ARTIST_VOICE_TARGET_AGENT_SLUGS = [
   'ads-agent',
   'gaygent-master',
   'persona-agent',
+  'branding-agent',
 ] as const
 
 export interface ArtistVoice {

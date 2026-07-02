@@ -24,7 +24,7 @@ describe('artist voice context', () => {
     const metadata = artistVoiceMetadata()
     expect(metadata.routing).toEqual({
       mode: 'targeted',
-      agents: expect.arrayContaining(['social-publisher', 'trypost-agent', 'content-genius']),
+      agents: expect.arrayContaining(['social-publisher', 'trypost-agent', 'content-genius', 'branding-agent']),
     })
   })
 

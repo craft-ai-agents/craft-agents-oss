@@ -634,6 +634,21 @@ body
     expect(printAgent?.systemPrompt).toContain('--confirm-runner')
   })
 
+  test('starter library includes the Branding Agent with artist branding skills', () => {
+    const brandingAgent = STARTER_AGENTS.find((agent) => agent.slug === 'branding-agent')
+
+    expect(brandingAgent).toBeDefined()
+    expect(brandingAgent?.metadata.name).toBe('Branding Agent')
+    expect(brandingAgent?.metadata.permissionMode).toBe('ask')
+    expect(brandingAgent?.metadata.skills).toContain('artist-brand-dna-audit')
+    expect(brandingAgent?.metadata.skills).toContain('artist-brand-expression-strategist')
+    expect(brandingAgent?.metadata.tags).toContain('branding')
+    expect(brandingAgent?.systemPrompt).toContain('artist-profile')
+    expect(brandingAgent?.systemPrompt).toContain('artist-voice')
+    expect(brandingAgent?.systemPrompt).toContain('artist-branding')
+    expect(brandingAgent?.systemPrompt).toContain('artist-intel-report')
+  })
+
   test('starter library includes the Update System Agent as read-only maintenance', () => {
     const updateAgent = STARTER_AGENTS.find((agent) => agent.slug === 'update-system-agent')
 

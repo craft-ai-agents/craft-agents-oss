@@ -2449,6 +2449,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'spotify-playlist-creator'
             || a.slug === 'shopify-agent'
             || a.slug === 'print-agent'
+            || a.slug === 'branding-agent'
             || a.slug === 'update-system-agent',
         )
         const { ensured } = ensureRequiredAgents(required)

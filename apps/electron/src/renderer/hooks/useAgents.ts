@@ -55,6 +55,7 @@ const BUILTIN_VISIBLE_AGENT_SLUGS = [
   'print-agent',
   'gaygent-master',
   'persona-agent',
+  'branding-agent',
   'youtube-research-agent',
   'youtube-intelligence-agent',
 ] as const
