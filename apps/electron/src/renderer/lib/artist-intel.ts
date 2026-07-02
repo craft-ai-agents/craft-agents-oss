@@ -21,6 +21,16 @@ export interface ArtistIntelConfig {
   updatedAt: string
 }
 
+export interface ArtistIntelRun {
+  id: string
+  status: 'queued' | 'ready' | 'failed'
+  sessionId?: string
+  title?: string
+  summary?: string
+  generatedAt: string
+  videoCount?: number
+}
+
 export interface ArtistIntelReport {
   version: 1
   status: 'idle' | 'queued' | 'ready' | 'failed'
@@ -30,6 +40,7 @@ export interface ArtistIntelReport {
   generatedAt?: string
   sourceCount: number
   videoCount?: number
+  runs: ArtistIntelRun[]
   updatedAt: string
 }
 
@@ -107,6 +118,7 @@ export function emptyArtistIntelReport(): ArtistIntelReport {
     version: 1,
     status: 'idle',
     sourceCount: 0,
+    runs: [],
     updatedAt: new Date().toISOString(),
   }
 }
@@ -191,7 +203,7 @@ export function serializeArtistIntelReportBody(report: ArtistIntelReport): strin
 
 export function createIntelRunPrompt(config: ArtistIntelConfig, artistName: string): string {
   const sources = config.sources
-    .filter((source) => source.name.trim() && source.url.trim())
+    .filter((source) => source.name.trim() && source.url.trim() && isValidYouTubeChannelUrl(source.url))
     .map((source, index) => `${index + 1}. ${source.name} (${source.url}) - ${source.notes || source.priority}`)
     .join('\n')
 
@@ -213,15 +225,81 @@ export function createIntelRunPrompt(config: ArtistIntelConfig, artistName: stri
     '4. Suggested campaign/content/brand moves',
     '5. Confidence and missing data',
     '',
+    ...reportWritebackInstructions(),
+    '',
+    'If the run fails, still update the report doc with status "failed", a short summary, and missing setup.',
+    '',
     'Reject generic music-business filler. Do not publish, comment, upload, or modify any YouTube account.',
   ].join('\n')
+}
+
+export function createScheduledIntelRunPrompt(artistName: string): string {
+  return [
+    `Run the scheduled HQ YouTube Intel Pulse for ${artistName || 'this artist'}.`,
+    '',
+    `First read the current workspace context doc at context/${ARTIST_INTEL_CONFIG_CONTEXT_SLUG}/CONTEXT.md.`,
+    'Use its JSON config as the source of truth for enabled, cadence, scan window, max videos per channel, and source URLs.',
+    'If enabled is false, stop and update the report doc with status "failed" and summary "Intel Pulse is disabled."',
+    '',
+    'Use the YouTube Research tool in read-only mode.',
+    'For each configured YouTube channel, check recent uploads, pull transcripts where available, and write a concise artist-facing intel report.',
+    '',
+    'Report shape:',
+    '1. What changed or is worth noticing',
+    '2. Source/video links',
+    '3. Why it matters for this artist',
+    '4. Suggested campaign/content/brand moves',
+    '5. Confidence and missing data',
+    '',
+    ...reportWritebackInstructions(),
+    '',
+    'Reject generic music-business filler. Do not publish, comment, upload, or modify any YouTube account.',
+  ].join('\n')
+}
+
+export function createQueuedIntelRun(report: ArtistIntelReport, input: {
+  sessionId: string
+  sourceCount: number
+  generatedAt?: string
+}): ArtistIntelReport {
+  const generatedAt = input.generatedAt ?? new Date().toISOString()
+  const run: ArtistIntelRun = {
+    id: slugify(`run-${generatedAt}-${input.sessionId}`),
+    status: 'queued',
+    sessionId: input.sessionId,
+    title: 'YouTube Intel Pulse queued',
+    summary: `Watching ${input.sourceCount} configured channel${input.sourceCount === 1 ? '' : 's'}.`,
+    generatedAt,
+  }
+  return normalizeIntelReport({
+    ...report,
+    status: 'queued',
+    title: run.title,
+    summary: run.summary,
+    sessionId: input.sessionId,
+    sourceCount: input.sourceCount,
+    generatedAt,
+    updatedAt: generatedAt,
+    runs: [run, ...(report.runs ?? [])].slice(0, 10),
+  })
+}
+
+export function isValidYouTubeChannelUrl(value: string): boolean {
+  try {
+    const url = new URL(value.trim())
+    const host = url.hostname.replace(/^www\./, '').toLowerCase()
+    if (host !== 'youtube.com') return false
+    return /^\/(@[\w.-]+|channel\/[\w-]+|c\/[\w.-]+|user\/[\w.-]+)(\/(videos|shorts|streams|featured|community|about))?\/?$/.test(url.pathname)
+  } catch {
+    return false
+  }
 }
 
 function normalizeIntelConfig(config: Partial<ArtistIntelConfig>): ArtistIntelConfig {
   const maxPerChannel = Number.isInteger(config.maxPerChannel) ? Number(config.maxPerChannel) : 3
   const sinceDays = Number.isInteger(config.sinceDays) ? Number(config.sinceDays) : 7
   const sources = Array.isArray(config.sources)
-    ? config.sources.map(normalizeSource).filter((source) => source.name && source.url)
+    ? config.sources.map(normalizeSource).filter((source) => source.name && source.url && isValidYouTubeChannelUrl(source.url))
     : DEFAULT_ARTIST_INTEL_SOURCES
 
   return {
@@ -248,7 +326,29 @@ function normalizeIntelReport(report: Partial<ArtistIntelReport>): ArtistIntelRe
     generatedAt: clean(report.generatedAt),
     sourceCount: Number.isInteger(report.sourceCount) ? Math.max(0, Number(report.sourceCount)) : 0,
     videoCount: Number.isInteger(report.videoCount) ? Math.max(0, Number(report.videoCount)) : undefined,
+    runs: normalizeRuns(report.runs),
     updatedAt: clean(report.updatedAt) || new Date().toISOString(),
+  }
+}
+
+function normalizeRuns(value: unknown): ArtistIntelRun[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((run, index) => normalizeRun(run as Partial<ArtistIntelRun>, index))
+    .filter((run) => run.generatedAt)
+    .slice(0, 10)
+}
+
+function normalizeRun(run: Partial<ArtistIntelRun>, index: number): ArtistIntelRun {
+  const status = run.status === 'ready' || run.status === 'failed' ? run.status : 'queued'
+  return {
+    id: clean(run.id) || `run-${index + 1}`,
+    status,
+    sessionId: clean(run.sessionId),
+    title: clean(run.title),
+    summary: clean(run.summary),
+    generatedAt: clean(run.generatedAt) || new Date().toISOString(),
+    videoCount: Number.isInteger(run.videoCount) ? Math.max(0, Number(run.videoCount)) : undefined,
   }
 }
 
@@ -288,4 +388,13 @@ function slugify(value: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     || 'source'
+}
+
+function reportWritebackInstructions(): string[] {
+  return [
+    `When finished, update context/${ARTIST_INTEL_REPORT_CONTEXT_SLUG}/CONTEXT.md so HQ can show completion.`,
+    'Keep the markdown frontmatter name "Artist Intel Report", agents "all", and write a fenced JSON block with:',
+    '{ "version": 1, "status": "ready", "title": "...", "summary": "...", "sessionId": "<this session id if known>", "sourceCount": N, "videoCount": N, "generatedAt": "<ISO time>", "updatedAt": "<ISO time>", "runs": [{ "id": "run-<ISO-or-slug>", "status": "ready", "title": "...", "summary": "...", "generatedAt": "<ISO time>", "videoCount": N }] }',
+    'Preserve up to 10 newest runs if an older runs array exists.',
+  ]
 }

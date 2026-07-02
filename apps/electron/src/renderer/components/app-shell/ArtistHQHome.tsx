@@ -73,7 +73,10 @@ import {
   ARTIST_INTEL_REPORT_CONTEXT_SLUG,
   artistIntelConfigMetadata,
   artistIntelReportMetadata,
+  createQueuedIntelRun,
   createIntelRunPrompt,
+  createScheduledIntelRunPrompt,
+  isValidYouTubeChannelUrl,
   parseArtistIntelConfigDocResult,
   parseArtistIntelReportDocResult,
   serializeArtistIntelConfigBody,
@@ -108,6 +111,8 @@ const HQ_HASH_PREFIX = '#artist-hq/'
 const todayKey = toDateKey(new Date())
 const SPOTIFY_SYNC_AUTOMATION_NAME = 'Weekly Spotify Snapshot'
 const SPOTIFY_SYNC_CRON = '0 9 * * 1'
+const INTEL_SYNC_AUTOMATION_NAME = 'Weekly YouTube Intel Pulse'
+const INTEL_SYNC_CRON = '0 10 * * 1'
 const YOUTUBE_RESEARCH_AGENT_SLUG = 'youtube-research-agent'
 const emptyNetworkDraft: NetworkDraft = {
   name: '',
@@ -196,9 +201,9 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   const [editDraft, setEditDraft] = React.useState<NetworkDraft>(emptyNetworkDraft)
   const [calendarDraft, setCalendarDraft] = React.useState<CalendarDraft>(emptyCalendarDraft)
   const [profileDraft, setProfileDraft] = React.useState<ProfileDraft>(emptyProfileDraft)
-  const [spotifyAutomations, setSpotifyAutomations] = React.useState<AutomationListItem[]>([])
+  const [automations, setAutomations] = React.useState<AutomationListItem[]>([])
   const [spotifySyncBusy, setSpotifySyncBusy] = React.useState(false)
-  const { docs, loading, upsert } = useWorkspaceContext(workspaceId)
+  const { docs, loading, upsert, refresh: refreshContext } = useWorkspaceContext(workspaceId)
   const { outputs, loading: outputsLoading } = useOutputs(workspaceId)
   const profileResult = React.useMemo(
     () => parseArtistProfileDocResult(docs.find((doc) => doc.slug === ARTIST_PROFILE_CONTEXT_SLUG)),
@@ -213,10 +218,15 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   const spotifySnapshot = spotifyResult.ok ? spotifyResult.snapshot : null
   const spotifyIsPublicApi = spotifySnapshot?.dataSource === 'spotify-web-api'
   const spotifySyncAutomation = React.useMemo(
-    () => spotifyAutomations.find(isSpotifySyncAutomation) ?? null,
-    [spotifyAutomations],
+    () => automations.find(isSpotifySyncAutomation) ?? null,
+    [automations],
   )
   const spotifySyncActive = Boolean(spotifySyncAutomation?.enabled)
+  const intelSyncAutomation = React.useMemo(
+    () => automations.find(isIntelSyncAutomation) ?? null,
+    [automations],
+  )
+  const intelSyncActive = Boolean(intelSyncAutomation?.enabled)
   const calendarResult = React.useMemo(
     () => parseArtistCalendarDocResult(docs.find((doc) => doc.slug === ARTIST_CALENDAR_CONTEXT_SLUG)),
     [docs],
@@ -274,22 +284,30 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
     setProfileDraft(profileToDraft(profile))
   }, [profile])
 
-  const refreshSpotifyAutomations = React.useCallback(async () => {
+  React.useEffect(() => {
+    if (intelReport.status !== 'queued') return
+    const interval = window.setInterval(() => {
+      refreshContext()
+    }, 10000)
+    return () => window.clearInterval(interval)
+  }, [intelReport.status, refreshContext])
+
+  const refreshAutomations = React.useCallback(async () => {
     try {
       const json = await window.electronAPI.getAutomations(workspaceId)
-      setSpotifyAutomations(json ? parseAutomationsConfig(json).filter(isSpotifySyncAutomation) : [])
+      setAutomations(json ? parseAutomationsConfig(json) : [])
     } catch {
-      setSpotifyAutomations([])
+      setAutomations([])
     }
   }, [workspaceId])
 
   React.useEffect(() => {
-    refreshSpotifyAutomations()
+    refreshAutomations()
     const cleanup = window.electronAPI.onAutomationsChanged(() => {
-      refreshSpotifyAutomations()
+      refreshAutomations()
     })
     return () => cleanup()
-  }, [refreshSpotifyAutomations])
+  }, [refreshAutomations])
 
   const saveNetwork = React.useCallback(
     async (nextNetwork: ArtistNetwork) => {
@@ -360,17 +378,33 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
     }
     setIntelBusy(true)
     try {
+      const nextEnabled = !intelConfig.enabled
       await saveIntelConfig({
         ...intelConfig,
-        enabled: !intelConfig.enabled,
+        enabled: nextEnabled,
       })
-      toast.success(!intelConfig.enabled ? 'Intel Pulse activated' : 'Intel Pulse paused')
+      if (intelSyncAutomation) {
+        await window.electronAPI.setAutomationEnabled(
+          workspaceId,
+          intelSyncAutomation.event,
+          intelSyncAutomation.matcherIndex,
+          nextEnabled && intelConfig.cadence === 'weekly',
+        )
+      } else if (nextEnabled && intelConfig.cadence === 'weekly') {
+        await window.electronAPI.createAutomationFromTemplate(
+          workspaceId,
+          'SchedulerTick',
+          createIntelSyncMatcher(workspaceName || 'Artist HQ'),
+        )
+      }
+      await refreshAutomations()
+      toast.success(nextEnabled ? 'Intel Pulse activated' : 'Intel Pulse paused')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setIntelBusy(false)
     }
-  }, [intelConfig, intelConfigResult, saveIntelConfig])
+  }, [intelConfig, intelConfigResult, intelSyncAutomation, refreshAutomations, saveIntelConfig, workspaceId, workspaceName])
 
   const runIntelPulse = React.useCallback(async () => {
     if (!workspaceId || !intelConfigResult.ok) return
@@ -386,7 +420,7 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
       }
       const contextDocs = await window.electronAPI
         .listWorkspaceContextDocsForAgent(workspaceId, youtubeResearchAgent.slug)
-        .catch(() => docs)
+      const generatedAt = new Date().toISOString()
       const session = await openAgentSessionComposer({
         agent: youtubeResearchAgent,
         workspaceId,
@@ -396,20 +430,15 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
         sources,
         contextDocs,
       })
-      onSendMessage(session.id, createIntelRunPrompt(config, workspaceName || 'Artist HQ'))
+      await Promise.resolve(onSendMessage(session.id, createIntelRunPrompt(config, workspaceName || 'Artist HQ')))
       await upsert({
         slug: ARTIST_INTEL_REPORT_CONTEXT_SLUG,
         metadata: artistIntelReportMetadata(),
-        body: serializeArtistIntelReportBody({
-          version: 1,
-          status: 'queued',
-          title: 'YouTube Intel Pulse queued',
-          summary: `Watching ${config.sources.length} configured channel${config.sources.length === 1 ? '' : 's'}.`,
+        body: serializeArtistIntelReportBody(createQueuedIntelRun(intelReport, {
           sessionId: session.id,
           sourceCount: config.sources.length,
-          generatedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }),
+          generatedAt,
+        })),
       })
       toast.success('Intel Pulse started')
     } catch (error) {
@@ -420,9 +449,9 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
       setIntelBusy(false)
     }
   }, [
-    docs,
     intelConfig,
     intelConfigResult,
+    intelReport,
     onCreateSession,
     onInputChange,
     onSendMessage,
@@ -454,13 +483,13 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
         )
         toast.success('Weekly Spotify sync enabled')
       }
-      await refreshSpotifyAutomations()
+      await refreshAutomations()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     } finally {
       setSpotifySyncBusy(false)
     }
-  }, [refreshSpotifyAutomations, spotifySyncAutomation, workspaceId])
+  }, [refreshAutomations, spotifySyncAutomation, workspaceId])
 
   const addCalendarEvent = React.useCallback(async () => {
     if (!calendarDraft.title.trim()) {
@@ -750,6 +779,7 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
                 reportError={intelReportResult.ok ? null : intelReportResult.error}
                 busy={intelBusy}
                 agentReady={Boolean(youtubeResearchAgent)}
+                scheduled={intelSyncActive}
                 onToggle={toggleIntelPulse}
                 onRun={runIntelPulse}
                 onEdit={() => setIntelConfigOpen(true)}
@@ -954,6 +984,21 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
         onSave={async (nextConfig) => {
           try {
             await saveIntelConfig(nextConfig)
+            if (intelSyncAutomation) {
+              await window.electronAPI.setAutomationEnabled(
+                workspaceId,
+                intelSyncAutomation.event,
+                intelSyncAutomation.matcherIndex,
+                nextConfig.enabled && nextConfig.cadence === 'weekly',
+              )
+            } else if (nextConfig.enabled && nextConfig.cadence === 'weekly') {
+              await window.electronAPI.createAutomationFromTemplate(
+                workspaceId,
+                'SchedulerTick',
+                createIntelSyncMatcher(workspaceName || 'Artist HQ'),
+              )
+            }
+            await refreshAutomations()
             toast.success('Intel channels saved')
             setIntelConfigOpen(false)
           } catch (error) {
@@ -1011,6 +1056,7 @@ function IntelPulseCard({
   reportError,
   busy,
   agentReady,
+  scheduled,
   onToggle,
   onRun,
   onEdit,
@@ -1021,18 +1067,20 @@ function IntelPulseCard({
   reportError: string | null
   busy: boolean
   agentReady: boolean
+  scheduled: boolean
   onToggle: () => void
   onRun: () => void
   onEdit: () => void
 }) {
   const latestLabel = report.generatedAt ? formatShortDate(report.generatedAt) : 'not run'
+  const running = report.status === 'queued'
   const statusLabel = report.status === 'queued'
     ? 'Running'
     : report.status === 'ready'
       ? 'Ready'
       : report.status === 'failed'
         ? 'Needs check'
-        : config.enabled ? 'Active' : 'Off'
+        : config.enabled ? scheduled ? 'Scheduled' : 'Manual' : 'Off'
 
   return (
     <HQCard>
@@ -1086,10 +1134,10 @@ function IntelPulseCard({
         <button
           type="button"
           onClick={onRun}
-          disabled={busy || !agentReady || config.sources.length === 0}
+          disabled={busy || running || !agentReady || config.sources.length === 0}
           className="h-8 rounded-full bg-white/90 px-4 text-xs font-semibold text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
         >
-          {busy ? 'Starting...' : 'Run'}
+          {busy ? 'Starting...' : running ? 'Running' : 'Run'}
         </button>
         {report.sessionId ? (
           <button
@@ -1102,8 +1150,20 @@ function IntelPulseCard({
         ) : null}
       </div>
       <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-white/25">
-        {config.enabled ? `${config.cadence} radar active` : 'Radar off'}
+        {config.enabled
+          ? scheduled ? 'Weekly automation active' : 'Manual radar active'
+          : 'Radar off'}
       </p>
+      {report.runs.length > 0 ? (
+        <div className="mt-3 space-y-1.5 border-t border-white/[0.04] pt-2">
+          {report.runs.slice(0, 3).map((run) => (
+            <div key={run.id} className="flex items-center justify-between gap-3 text-[11px] leading-4">
+              <span className="truncate text-white/38">{run.summary || run.title || run.status}</span>
+              <span className="shrink-0 uppercase tracking-[0.1em] text-white/22">{run.status}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {!agentReady ? (
         <p className="mt-2 text-xs leading-5 text-yellow-100/65">YouTube Research Agent is not active in this workspace.</p>
       ) : null}
@@ -1128,12 +1188,14 @@ function IntelConfigDialog({
   const [sources, setSources] = React.useState<ArtistIntelSource[]>(config.sources)
   const [sinceDays, setSinceDays] = React.useState(config.sinceDays)
   const [maxPerChannel, setMaxPerChannel] = React.useState(config.maxPerChannel)
+  const [cadence, setCadence] = React.useState(config.cadence)
 
   React.useEffect(() => {
     if (!open) return
     setSources(config.sources)
     setSinceDays(config.sinceDays)
     setMaxPerChannel(config.maxPerChannel)
+    setCadence(config.cadence)
   }, [config, open])
 
   const updateSource = React.useCallback((id: string, patch: Partial<ArtistIntelSource>) => {
@@ -1161,14 +1223,22 @@ function IntelConfigDialog({
         notes: source.notes?.trim(),
       }))
       .filter((source) => source.name && source.url)
+    const invalid = nextSources.find((source) => !isValidYouTubeChannelUrl(source.url))
+    if (invalid) {
+      toast.error('Use a YouTube channel URL', {
+        description: invalid.name ? `${invalid.name}: ${invalid.url}` : invalid.url,
+      })
+      return
+    }
     void onSave({
       ...config,
+      cadence,
       sources: nextSources,
       sinceDays,
       maxPerChannel,
       updatedAt: new Date().toISOString(),
     })
-  }, [config, maxPerChannel, onSave, sinceDays, sources])
+  }, [cadence, config, maxPerChannel, onSave, sinceDays, sources])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1180,7 +1250,18 @@ function IntelConfigDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <label className="block space-y-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">Cadence</span>
+              <select
+                value={cadence}
+                onChange={(event) => setCadence(event.target.value as ArtistIntelConfig['cadence'])}
+                className="h-9 w-full rounded-[10px] border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white/80 outline-none focus:border-orange-400/45"
+              >
+                <option value="weekly">Weekly</option>
+                <option value="manual">Manual</option>
+              </select>
+            </label>
             <label className="block space-y-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">Scan days</span>
               <input
@@ -1822,6 +1903,23 @@ Keep the final note short: snapshot date, key movement, any missing setup.`,
   }
 }
 
+function createIntelSyncMatcher(workspaceName: string): Record<string, unknown> {
+  return {
+    name: INTEL_SYNC_AUTOMATION_NAME,
+    cron: INTEL_SYNC_CRON,
+    timezone: getLocalTimezone(),
+    permissionMode: 'ask',
+    labels: ['youtube', 'intel', 'artist-hq', 'scheduled'],
+    actions: [
+      {
+        type: 'prompt',
+        agentSlug: YOUTUBE_RESEARCH_AGENT_SLUG,
+        prompt: createScheduledIntelRunPrompt(workspaceName),
+      },
+    ],
+  }
+}
+
 function isSpotifySyncAutomation(automation: AutomationListItem): boolean {
   if (automation.event !== 'SchedulerTick') return false
   if (automation.name === SPOTIFY_SYNC_AUTOMATION_NAME) return true
@@ -1829,6 +1927,16 @@ function isSpotifySyncAutomation(automation: AutomationListItem): boolean {
     action.type === 'prompt'
     && action.agentSlug === 'spotify-analyst'
     && /artist-spotify-snapshot|weekly spotify/i.test(action.prompt)
+  ))
+}
+
+function isIntelSyncAutomation(automation: AutomationListItem): boolean {
+  if (automation.event !== 'SchedulerTick') return false
+  if (automation.name === INTEL_SYNC_AUTOMATION_NAME) return true
+  return automation.actions.some((action) => (
+    action.type === 'prompt'
+    && action.agentSlug === YOUTUBE_RESEARCH_AGENT_SLUG
+    && /artist-intel-config|youtube intel pulse/i.test(action.prompt)
   ))
 }
 
