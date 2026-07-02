@@ -75,7 +75,7 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
   }, [onCreateSession, onInputChange, skills, sources, workspaceId])
 
   const grouped = React.useMemo(() => {
-    const visibleAgents = dedupeLaunchpadAgents(activeAgents.filter((a) => !isSystemAgent(a.slug)))
+    const visibleAgents = dedupeLaunchpadAgents(activeAgents.filter((a) => !isSystemAgent(a.slug) && !isHiddenFromWorkerHome(a.slug)))
     const orch = visibleAgents.find((a) => a.slug === ORCHESTRATOR_SLUG)
     const rest = visibleAgents
       .filter((a) => a.slug !== ORCHESTRATOR_SLUG)
@@ -1307,6 +1307,22 @@ function agentDomainRank(domain: string) {
 function isSystemAgent(slug: string) {
   return slug === CONCIERGE_SLUG || slug === ORCHESTRATOR_SLUG || slug === 'update-system-agent'
 }
+
+function isHiddenFromWorkerHome(slug: string) {
+  return HIDDEN_WORKER_HOME_AGENT_SLUGS.has(slug)
+}
+
+const HIDDEN_WORKER_HOME_AGENT_SLUGS = new Set([
+  '3d-agent',
+  'hypermotion-agent',
+  'lottie-animation-agent',
+  'open-slide-agent',
+  'researcher',
+  'ig-trending-power-up',
+  'influencer-campaign-power-up',
+  'playlisting-power-up',
+  'spotify-playlist-creator',
+])
 
 function dedupeLaunchpadAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {
   const bestByKey = new Map<string, AgentDefinitionDTO>()
