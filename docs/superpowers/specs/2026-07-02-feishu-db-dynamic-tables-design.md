@@ -14,6 +14,7 @@
 5. **推送时机：显式 `push` 命令**。agent 写完本地自己推，失败行下次 push 自动重试。
 6. **不做兼容**。消费 skill 与 binary 同仓同源、同一人原子部署到同一 prod——旧命令别名、稳定列名 overrides、canned queries 全部不做。cron 的 `sync` 命令与 prod DB 路径保持，那是运维事实不是兼容包袱。
 7. **`query sql` 是一等公民**。agent 会写 SQL，只读任意 SQL 是唯一查询入口。
+8. **独立 git repo + Release 分发**（2026-07-02 追加拍板）：feishu-db 从 monorepo 拆出单独私有 repo（全新历史，旧实现历史留 monorepo 考古）；binary 走 GitHub Release 按版本分发，skills 仓库从此不存任何编译产物。scrape-service 本次不动。
 
 ## 1. 动机
 
@@ -179,8 +180,14 @@ CLI 契约继承 scrape-service spec 第 6 节八条：默认 JSON、永不交�
 - `schema` 输出列清单与 `_sync_meta` 一致；
 - 继承：原子性 kill -9、版本门、envelope 快照、state 迁移逐版本、musl 构建（docker rust:alpine，prod 内核 5.15）、全量 sync 55-92s 性能基线。
 
-## 11. 体量与上线
+## 11. 仓库形态与分发（决策 8）
+
+- **独立私有 repo**（GitHub，`cunninghamcard-bit` 名下），全新历史；实现按本 spec 重写，不搬旧 `src/`。两份 feishu-db spec 随迁至新 repo 的 `docs/`，monorepo 里留指路存根。
+- **分发 = GitHub Release**：docker rust:alpine musl 静态编译（prod 内核 5.15 门槛不变）→ 打 tag 出 release 附 binary；prod 部署脚本按版本号拉取到现路径。skills 仓库（`procurement-skills/feishu-db/`）只留 SKILL.md，**不再 commit 任何编译产物**，2.9MB blob 停止进 git 历史。
+- cron 命令、prod DB 路径、`--as user` 授权前提均不受拆分影响。
+
+## 12. 体量与上线
 
 - 估算 1000~1200 行，8 个源文件。超出前一 spec 的部分全在 push.rs 与 source.rs 写方向——真需求撑起来的行数。
-- 上线 = binary + 两个消费 skill（`procurement-local-inventory-lookup`、`procurement-supplier-shortlist`）同批原子部署；skill 内查询改写为 `query sql`。
+- 上线 = release binary + 两个消费 skill（`procurement-local-inventory-lookup`、`procurement-supplier-shortlist`）同批原子部署；skill 内查询改写为 `query sql`。
 - 搁置 diff（batch_results 进缓存库）照原决定丢弃，其需求由模板 + `state write/list` 收编。
