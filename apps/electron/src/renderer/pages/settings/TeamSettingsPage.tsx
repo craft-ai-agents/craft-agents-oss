@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle2, RefreshCcw, Trash2, Users } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, RefreshCcw, Search, Trash2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { Spinner } from '@craft-agent/ui'
@@ -13,6 +13,7 @@ import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
 import { routes } from '@/lib/navigate'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { TeamModeStatus } from '../../../shared/types'
+import type { SharedRecordConflict } from '@craft-agent/shared/records'
 import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
 
 export const meta: DetailsPageMeta = {
@@ -39,6 +40,7 @@ export default function TeamSettingsPage() {
   const [pathOverrides, setPathOverrides] = useState<Record<string, string>>({})
   const [overrideRefId, setOverrideRefId] = useState('')
   const [overridePath, setOverridePath] = useState('')
+  const [recordConflicts, setRecordConflicts] = useState<SharedRecordConflict[]>([])
 
   const loadStatus = useCallback(async () => {
     if (!activeWorkspaceId) {
@@ -48,12 +50,14 @@ export default function TeamSettingsPage() {
     }
     setLoading(true)
     try {
-      const [nextStatus, nextOverrides] = await Promise.all([
+      const [nextStatus, nextOverrides, nextConflicts] = await Promise.all([
         window.electronAPI.getWorkspaceTeamStatus(activeWorkspaceId),
         window.electronAPI.getWorkspaceTeamPathOverrides(activeWorkspaceId),
+        window.electronAPI.listRecordConflicts(activeWorkspaceId),
       ])
       setStatus(nextStatus)
       setPathOverrides(nextOverrides)
+      setRecordConflicts(nextConflicts)
     } catch (error) {
       toast.error('Failed to load team settings', {
         description: error instanceof Error ? error.message : String(error),
@@ -128,6 +132,38 @@ export default function TeamSettingsPage() {
       toast.success('Path override removed')
     } catch (error) {
       toast.error('Failed to remove path override', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const scanRecordConflicts = async () => {
+    if (!activeWorkspaceId) return
+    setBusy(true)
+    try {
+      const found = await window.electronAPI.scanRecordProviderConflicts(activeWorkspaceId)
+      setRecordConflicts(await window.electronAPI.listRecordConflicts(activeWorkspaceId))
+      toast.success(found.length ? `Found ${found.length} conflicted file${found.length === 1 ? '' : 's'}` : 'No conflicted files found')
+    } catch (error) {
+      toast.error('Failed to scan record conflicts', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const detectRecordClobbers = async () => {
+    if (!activeWorkspaceId) return
+    setBusy(true)
+    try {
+      const issues = await window.electronAPI.detectRecordClobbers(activeWorkspaceId)
+      setRecordConflicts(await window.electronAPI.listRecordConflicts(activeWorkspaceId))
+      toast.success(issues.length ? `Recovered ${issues.length} clobbered write${issues.length === 1 ? '' : 's'}` : 'No clobbered writes found')
+    } catch (error) {
+      toast.error('Failed to detect clobbered writes', {
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
@@ -310,6 +346,58 @@ export default function TeamSettingsPage() {
                           </div>
                         ))}
                       </div>
+                    </SettingsCardContent>
+                  </SettingsCard>
+                </SettingsSection>
+              )}
+
+              {status && (
+                <SettingsSection
+                  title="Conflict Inbox"
+                  description="Record conflicts from stale edits, provider conflicted copies, and recovered clobbered writes."
+                  action={
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => void scanRecordConflicts()} disabled={busy}>
+                        <Search className="mr-1.5 h-3.5 w-3.5" />
+                        Scan files
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => void detectRecordClobbers()} disabled={busy}>
+                        <RefreshCcw className="mr-1.5 h-3.5 w-3.5" />
+                        Check writes
+                      </Button>
+                    </div>
+                  }
+                >
+                  <SettingsCard>
+                    <SettingsCardContent>
+                      {recordConflicts.length === 0 ? (
+                        <div className="py-2 text-[12px] text-white/38">No open record conflicts.</div>
+                      ) : (
+                        <div className="divide-y divide-white/[0.06]">
+                          {recordConflicts.slice(0, 8).map((conflict) => (
+                            <div key={conflict.conflictId} className="flex items-start gap-3 py-3">
+                              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-amber-400/10 text-amber-200">
+                                <AlertTriangle className="h-4 w-4" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="truncate text-[12px] font-medium text-white/78">{conflict.entityPath}</div>
+                                  <span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-white/42">
+                                    {conflict.reason.replaceAll('-', ' ')}
+                                  </span>
+                                </div>
+                                <div className="mt-1 truncate font-mono text-[11px] text-white/36" title={conflict.conflictId}>
+                                  {conflict.conflictId} · {conflict.detectedAt}
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-[11px] text-white/38">{conflict.status}</div>
+                            </div>
+                          ))}
+                          {recordConflicts.length > 8 && (
+                            <div className="pt-3 text-[12px] text-white/38">{recordConflicts.length - 8} more conflicts hidden.</div>
+                          )}
+                        </div>
+                      )}
                     </SettingsCardContent>
                   </SettingsCard>
                 </SettingsSection>

@@ -34,6 +34,7 @@
     "./memory/types": "./src/memory/types.ts",
     "./mission-assets": "./src/mission-assets/index.ts",
     "./outputs": "./src/outputs/index.ts",
+    "./records": "./src/records/index.ts",
     "./outputs/constants": "./src/outputs/constants.ts",
     "./outputs/web-preview": "./src/outputs/web-preview.ts",
     "./notifications/types": "./src/notifications/types.ts",

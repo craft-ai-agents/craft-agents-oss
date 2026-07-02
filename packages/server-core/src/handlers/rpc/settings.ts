@@ -94,6 +94,9 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.TEAM_ENABLE_IN_PLACE,
   RPC_CHANNELS.workspace.TEAM_MOVE_TO_SHARED_FOLDER,
   RPC_CHANNELS.workspace.TEAM_SET_RUNNER,
+  RPC_CHANNELS.records.LIST_CONFLICTS,
+  RPC_CHANNELS.records.SCAN_PROVIDER_CONFLICTS,
+  RPC_CHANNELS.records.DETECT_CLOBBERS,
   RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET,
   RPC_CHANNELS.preferences.READ,
   RPC_CHANNELS.preferences.WRITE,
@@ -386,6 +389,32 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     if (!refId?.trim()) throw new Error('Path override refId is required.')
     const { clearSharedPathOverride } = await import('@craft-agent/shared/workspaces')
     return clearSharedPathOverride(workspaceId, refId.trim())
+  })
+
+  server.handle(RPC_CHANNELS.records.LIST_CONFLICTS, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { listConflictRecords } = await import('@craft-agent/shared/records')
+    return listConflictRecords(workspace.rootPath)
+  })
+
+  server.handle(RPC_CHANNELS.records.SCAN_PROVIDER_CONFLICTS, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const [{ getTeamModeStatus }, { scanProviderConflictedCopies }] = await Promise.all([
+      import('@craft-agent/shared/workspaces'),
+      import('@craft-agent/shared/records'),
+    ])
+    const status = getTeamModeStatus(workspace.rootPath)
+    return scanProviderConflictedCopies(workspace.rootPath, { machineId: status.machine.machineId })
+  })
+
+  server.handle(RPC_CHANNELS.records.DETECT_CLOBBERS, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const [{ getTeamModeStatus }, { detectClobberedWrites }] = await Promise.all([
+      import('@craft-agent/shared/workspaces'),
+      import('@craft-agent/shared/records'),
+    ])
+    const status = getTeamModeStatus(workspace.rootPath)
+    return detectClobberedWrites(workspace.rootPath, status.machine.machineId)
   })
 
   server.handle(RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET, async (_ctx, workspaceId: string) => {

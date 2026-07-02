@@ -188,6 +188,9 @@ export const CHANNEL_MAP = {
   getWorkspaceTeamPathOverrides: invoke(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDES_GET),
   setWorkspaceTeamPathOverride: invoke(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_SET),
   clearWorkspaceTeamPathOverride: invoke(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_CLEAR),
+  listRecordConflicts: invoke(RPC_CHANNELS.records.LIST_CONFLICTS),
+  scanRecordProviderConflicts: invoke(RPC_CHANNELS.records.SCAN_PROVIDER_CONFLICTS),
+  detectRecordClobbers: invoke(RPC_CHANNELS.records.DETECT_CLOBBERS),
   getSelfEditTarget: invoke(RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET),
 
   // Folder dialog

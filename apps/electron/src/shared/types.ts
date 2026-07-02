@@ -29,6 +29,7 @@ export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 
 import type { SharedFolderProvider, SharedPathOverrides, TeamModeStatus } from '@craft-agent/shared/workspaces';
 import type { TeamSharedFolderMigrationResult } from '@craft-agent/shared/workspaces';
+import type { SharedRecordClobberIssue, SharedRecordConflict } from '@craft-agent/shared/records';
 export type { SharedFolderProvider, SharedPathOverrides, TeamModeStatus, TeamSharedFolderMigrationResult };
 
 // Thinking level types
@@ -599,6 +600,9 @@ export interface ElectronAPI {
   getWorkspaceTeamPathOverrides(workspaceId: string): Promise<SharedPathOverrides>
   setWorkspaceTeamPathOverride(workspaceId: string, refId: string, absolutePath: string): Promise<SharedPathOverrides>
   clearWorkspaceTeamPathOverride(workspaceId: string, refId: string): Promise<SharedPathOverrides>
+  listRecordConflicts(workspaceId: string): Promise<SharedRecordConflict[]>
+  scanRecordProviderConflicts(workspaceId: string): Promise<SharedRecordConflict[]>
+  detectRecordClobbers(workspaceId: string): Promise<SharedRecordClobberIssue[]>
   getSelfEditTarget(workspaceId: string): Promise<SelfEditTargetInfo>
 
   // Folder dialog

@@ -283,6 +283,11 @@ export const RPC_CHANNELS = {
     TEAM_PATH_OVERRIDE_CLEAR: 'workspaceTeam:pathOverride:clear',
     SELF_EDIT_TARGET_GET: 'workspace:selfEditTarget:get',
   },
+  records: {
+    LIST_CONFLICTS: 'records:conflicts:list',
+    SCAN_PROVIDER_CONFLICTS: 'records:conflicts:scanProvider',
+    DETECT_CLOBBERS: 'records:clobbers:detect',
+  },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',
     DEFAULTS_CHANGED: 'permissions:defaultsChanged',
