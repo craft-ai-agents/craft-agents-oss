@@ -15,6 +15,7 @@
 6. **不做兼容**。消费 skill 与 binary 同仓同源、同一人原子部署到同一 prod——旧命令别名、稳定列名 overrides、canned queries 全部不做。cron 的 `sync` 命令与 prod DB 路径保持，那是运维事实不是兼容包袱。
 7. **`query sql` 是一等公民**。agent 会写 SQL，只读任意 SQL 是唯一查询入口。
 8. **独立 git repo + Release 分发**（2026-07-02 追加拍板）：feishu-db 从 monorepo 拆出单独私有 repo（全新历史，旧实现历史留 monorepo 考古）；binary 走 GitHub Release 按版本分发，skills 仓库从此不存任何编译产物。scrape-service 本次不动。
+9. **项目更名 `larkdepot`**（2026-07-02 调研后拍板）：GitHub 零撞车；depot（货站）语义覆盖双向——pull 进站、push 发运；binary 同名。同类调研结论：无现成轮子，最近先例是 simonw/airtable-export（仅下行，实现时参考其字段序列化），官方 lark-cli 是底层管道非本地物化，sqlite-sync 是多写端 CRDT 不适用。cron 条目改名随部署原子更新；DB 文件路径不变。
 
 ## 1. 动机
 
@@ -143,15 +144,15 @@ main.rs ─→ serve.rs ─→ (cache.db / state.db 只读)
 ## 7. 命令面
 
 ```
-feishu-db sync [--table n]                     # cron 命令名不变
-feishu-db register <飞书表URL> [--name n]       # 纳管人建的表
-feishu-db query sql --sql "SELECT …" [--db cache|state，默认 cache] [--limit N]
-feishu-db state create --template t --title x  # 建实例：飞书建表 + registry 落行
-feishu-db state write <实例> --json '<行>' [--stdin]   # 本地写，--stdin 批量
-feishu-db state list <实例> [--filter k=v]
-feishu-db push [--table 实例]                   # 出箱推送
-feishu-db status                               # 缓存 freshness + push 积压
-feishu-db schema                               # 模板 + registry + 每表列清单 + 退出码表
+larkdepot sync [--table n]                     # cron 条目随部署更新为新名
+larkdepot register <飞书表URL> [--name n]       # 纳管人建的表
+larkdepot query sql --sql "SELECT …" [--db cache|state，默认 cache] [--limit N]
+larkdepot state create --template t --title x  # 建实例：飞书建表 + registry 落行
+larkdepot state write <实例> --json '<行>' [--stdin]   # 本地写，--stdin 批量
+larkdepot state list <实例> [--filter k=v]
+larkdepot push [--table 实例]                   # 出箱推送
+larkdepot status                               # 缓存 freshness + push 积压
+larkdepot schema                               # 模板 + registry + 每表列清单 + 退出码表
 ```
 
 CLI 契约继承 scrape-service spec 第 6 节八条：默认 JSON、永不交互、结构化错误带 hint、退出码 0=成功/1=用法/2=环境/3=任务失败、`schema` 自描述、有界输出、envelope 带 `schema_version` + freshness、永不静默变更。
@@ -180,9 +181,9 @@ CLI 契约继承 scrape-service spec 第 6 节八条：默认 JSON、永不交�
 - `schema` 输出列清单与 `_sync_meta` 一致；
 - 继承：原子性 kill -9、版本门、envelope 快照、state 迁移逐版本、musl 构建（docker rust:alpine，prod 内核 5.15）、全量 sync 55-92s 性能基线。
 
-## 11. 仓库形态与分发（决策 8）
+## 11. 仓库形态与分发（决策 8/9）
 
-- **独立私有 repo**（GitHub，`cunninghamcard-bit` 名下），全新历史；实现按本 spec 重写，不搬旧 `src/`。两份 feishu-db spec 随迁至新 repo 的 `docs/`，monorepo 里留指路存根。
+- **独立私有 repo `larkdepot`**（GitHub，`cunninghamcard-bit` 名下），全新历史；实现按本 spec 重写，不搬旧 `src/`。两份 feishu-db spec 随迁至新 repo 的 `docs/`，monorepo 里留指路存根。
 - **分发 = GitHub Release**：docker rust:alpine musl 静态编译（prod 内核 5.15 门槛不变）→ 打 tag 出 release 附 binary；prod 部署脚本按版本号拉取到现路径。skills 仓库（`procurement-skills/feishu-db/`）只留 SKILL.md，**不再 commit 任何编译产物**，2.9MB blob 停止进 git 历史。
 - cron 命令、prod DB 路径、`--as user` 授权前提均不受拆分影响。
 
