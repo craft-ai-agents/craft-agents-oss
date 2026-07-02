@@ -17,6 +17,9 @@ mock.module('@craft-agent/shared/config', () => ({
   getWorkspaceByNameOrId: () => null,
   getDefaultThinkingLevel: getDefaultThinkingLevelMock,
   setDefaultThinkingLevel: setDefaultThinkingLevelMock,
+  resolveSelfEditTarget: () => null,
+  validateSelfEditRepo: () => ({ valid: true }),
+  updateWorkspaceRootPath: () => {},
 }))
 
 describe('settings default thinking RPC handlers', () => {
@@ -95,5 +98,21 @@ describe('settings default thinking RPC handlers', () => {
 
     await expect(setHandler!({ clientId: 'client-1' }, 'ultra')).rejects.toThrow('Invalid thinking level')
     expect(setDefaultThinkingLevelMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects secret mutations without workspace context', async () => {
+    const saveHandler = handlers.get(RPC_CHANNELS.secrets.SAVE)
+    const deleteHandler = handlers.get(RPC_CHANNELS.secrets.DELETE)
+    expect(saveHandler).toBeTruthy()
+    expect(deleteHandler).toBeTruthy()
+
+    await expect(saveHandler!({ clientId: 'client-1' }, 'OPENAI_API_KEY', 'secret')).resolves.toEqual({
+      success: false,
+      error: 'Select an active workspace before changing secrets.',
+    })
+    await expect(deleteHandler!({ clientId: 'client-1' }, 'OPENAI_API_KEY')).resolves.toEqual({
+      success: false,
+      error: 'Select an active workspace before changing secrets.',
+    })
   })
 })

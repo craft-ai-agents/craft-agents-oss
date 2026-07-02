@@ -63,7 +63,7 @@ describe('conflict-safe shared records', () => {
     }
   });
 
-  test('fake sync detects a silent last-writer clobber and recovers mine from local cache', () => {
+	  test('fake sync detects a silent last-writer clobber and recovers mine from local cache', () => {
     const root = tempRoot();
     const sync = createFakeSyncHarness(join(root, 'sync'));
 
@@ -96,9 +96,54 @@ describe('conflict-safe shared records', () => {
     expect(issues).toHaveLength(1);
     expect(repeated).toHaveLength(0);
     expect(issues[0]?.conflict.reason).toBe('clobbered-write');
-    expect((issues[0]?.conflict.current as Record<string, unknown> | undefined)?.name).toBe('Theirs');
-    expect((issues[0]?.conflict.mine as Record<string, unknown> | undefined)?.name).toBe('Mine');
-  });
+	    expect((issues[0]?.conflict.current as Record<string, unknown> | undefined)?.name).toBe('Theirs');
+	    expect((issues[0]?.conflict.mine as Record<string, unknown> | undefined)?.name).toBe('Mine');
+	  });
+
+	  test('resolved clobber conflicts are not recreated on later scans', () => {
+	    const root = tempRoot();
+	    const sync = createFakeSyncHarness(join(root, 'sync'));
+	    const base = writeSharedRecord(sync.machineA, 'community/contacts', 'fan_resolved', {
+	      email: 'resolved@example.com',
+	      name: 'Base',
+	    }, { machineId: 'machine_a', now: '2026-07-02T12:00:00.000Z' });
+	    if (base.status !== 'written') throw new Error('expected write');
+	    sync.syncAtoB();
+
+	    const baselineA = readSharedRecordBaseline(sync.machineA, 'community/contacts', 'fan_resolved');
+	    const baselineB = readSharedRecordBaseline(sync.machineB, 'community/contacts', 'fan_resolved');
+	    if (!baselineA || !baselineB) throw new Error('missing baselines');
+	    writeSharedRecord(sync.machineA, 'community/contacts', 'fan_resolved', {
+	      email: 'resolved@example.com',
+	      name: 'Mine',
+	    }, { machineId: 'machine_a', baseline: baselineA, now: '2026-07-02T12:01:00.000Z' });
+	    writeSharedRecord(sync.machineB, 'community/contacts', 'fan_resolved', {
+	      email: 'resolved@example.com',
+	      name: 'Theirs',
+	    }, { machineId: 'machine_b', baseline: baselineB, now: '2026-07-02T12:01:30.000Z' });
+	    sync.syncBtoA();
+
+	    const issues = detectClobberedWrites(sync.machineA, 'machine_a', { now: '2026-07-02T12:05:00.000Z' });
+	    expect(issues).toHaveLength(1);
+	    const conflict = { ...issues[0]!.conflict, status: 'resolved' as const };
+	    writeFileSync(join(sync.machineA, 'team', 'conflicts', `${conflict.conflictId}.json`), JSON.stringify(conflict, null, 2), 'utf-8');
+
+	    expect(detectClobberedWrites(sync.machineA, 'machine_a', { now: '2026-07-02T12:06:00.000Z' })).toHaveLength(0);
+	    expect(listConflictRecords(sync.machineA)).toHaveLength(1);
+	  });
+
+	  test('old clobber oplog entries age out of detection', () => {
+	    const workspace = tempRoot();
+	    const created = writeSharedRecord(workspace, 'community/contacts', 'fan_old', {
+	      email: 'old@example.com',
+	      name: 'Old',
+	    }, { machineId: 'machine_a', now: '2026-06-01T12:00:00.000Z' });
+	    expect(created.status).toBe('written');
+
+	    rmSync(getRecordFile(workspace, 'community/contacts', 'fan_old'), { force: true });
+
+	    expect(detectClobberedWrites(workspace, 'machine_a', { now: '2026-07-02T12:00:00.000Z' })).toHaveLength(0);
+	  });
 
   test('missing record file after a local write creates a clobber conflict', () => {
     const workspace = tempRoot();

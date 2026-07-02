@@ -1,6 +1,6 @@
 # Team Mode Owner, Editor, and Runner Permissions Spec
 
-Status: implemented in the Team Mode worktree.
+Status: implemented in the Team Mode worktree as shared-folder guardrails, not cryptographic or server-backed auth.
 
 ## Goal
 
@@ -17,7 +17,7 @@ The Owner is the person who created or claimed the team workspace.
 Owner can:
 
 - change Team Mode settings
-- invite or remove Editors
+- grant or revoke collaborator access through the shared-folder provider
 - choose the Automation Runner machine
 - connect, rotate, or remove API keys and accounts
 - approve sensitive sends or posts
@@ -29,7 +29,7 @@ Owner-only actions:
 - runner assignment
 - team storage changes
 - secrets and connected account management
-- invite management
+- shared-folder access management outside the app
 - bulk email send approval
 - destructive workspace actions
 
@@ -51,7 +51,7 @@ Editor cannot:
 - change runner machine
 - edit connected accounts or secrets
 - change Team Mode storage/settings
-- invite or remove teammates
+- manage shared-folder access
 - run background automations
 - send bulk/community emails without Owner approval
 
@@ -86,7 +86,7 @@ This matches the real small-team use case:
 
 ## Data Model
 
-Add a team membership record under shared team metadata:
+Add a team membership record under shared team metadata. This drives in-app role checks and UI state. Because the metadata lives in the shared folder, it is a collaboration guardrail, not a hard security boundary against a teammate who can edit workspace files outside the app.
 
 ```json
 {
@@ -122,6 +122,8 @@ Private machine identity should map to a member:
 
 The existing `team.runnerMachineId` remains the runner source of truth.
 
+Shared-folder access is the current invite/remove mechanism. If someone can open the shared folder, they can join the workspace as an Editor from the app. True app-level invites, removals, and tamper-proof membership require a future signed metadata or server-backed auth layer.
+
 ## Permission Checks
 
 Every sensitive action should call one shared guard:
@@ -137,8 +139,8 @@ Initial actions:
 
 - `team.settings.update`: owner
 - `team.runner.assign`: owner
-- `team.members.invite`: owner
-- `team.members.remove`: owner
+- `team.members.invite`: owner, reserved for future app-level invite flow
+- `team.members.remove`: owner, reserved for future app-level removal flow
 - `secrets.update`: owner
 - `storage.migrate`: owner
 - `records.write`: owner, editor
@@ -156,7 +158,7 @@ Team Settings should show:
 - current machine: Runner or Non-runner
 - runner machine name and heartbeat
 - Owner controls for runner assignment
-- Owner controls for invite/remove
+- Current limitation: shared-folder provider controls invite/remove outside the app
 - Editor read-only view of team settings
 
 For Editors:
@@ -182,6 +184,7 @@ For sensitive jobs like bulk email:
 - Editors should not receive secrets through shared records, logs, context docs, or generated summaries.
 - Runner execution must fail closed if the current machine is not selected runner.
 - Owner-only actions must fail closed if member identity is missing or unknown.
+- Role checks are in-app enforcement only. They do not protect against direct edits to shared workspace files by someone with folder write access.
 
 ## Phase Plan
 
@@ -194,8 +197,9 @@ For sensitive jobs like bulk email:
 
 ### Phase B: Settings Enforcement
 
-- Done: runner assignment, storage migration, Team Mode settings, workspace setting updates, and credential mutations are Owner-gated when workspace context is available.
+- Done: runner assignment, storage migration, Team Mode settings, workspace setting updates, and credential mutations are Owner-gated with workspace context.
 - Done: Team Settings shows role and disables runner controls for Editors.
+- Future: app-level invite/remove and tamper-resistant membership.
 
 ### Phase C: Editor Collaboration
 

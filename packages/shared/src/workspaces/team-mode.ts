@@ -6,6 +6,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { hostname } from 'node:os';
@@ -29,6 +30,8 @@ export const TEAM_RUNNER_STATE_FILE = 'team/runner-state.json';
 export const TEAM_RUNNER_PULSE_LOG_FILE = 'team/runner-pulse.jsonl';
 export const TEAM_RUNNER_STALE_AFTER_MS = 15 * 60 * 1000;
 export const TEAM_RUNNER_HANDOVER_GRACE_MS = 10 * 60 * 1000;
+export const TEAM_HEARTBEAT_MIN_WRITE_MS = 5 * 60 * 1000;
+export const TEAM_RUNNER_PULSE_ROTATE_BYTES = 512 * 1024;
 
 export interface TeamMachineIdentity {
   version: 1;
@@ -402,10 +405,11 @@ function isRunnerHandoverReady(workspaceRootPath: string, team: WorkspaceTeamCon
   const handover = team.runnerHandover;
   if (!handover) return true;
   if (!handover.from) return true;
+  const initiatedAt = Date.parse(handover.initiatedAt);
   const fromHeartbeat = getRunnerHeartbeat(workspaceRootPath, handover.from);
+  if (!fromHeartbeat) return Number.isFinite(initiatedAt) && now - initiatedAt > TEAM_RUNNER_HANDOVER_GRACE_MS;
   if (fromHeartbeat && fromHeartbeat.observedTeamRevision >= handover.revision) return true;
   if (isTeamRunnerHeartbeatStale(fromHeartbeat, now, TEAM_RUNNER_STALE_AFTER_MS)) return true;
-  const initiatedAt = Date.parse(handover.initiatedAt);
   return Number.isFinite(initiatedAt) && now - initiatedAt > TEAM_RUNNER_HANDOVER_GRACE_MS;
 }
 
@@ -582,14 +586,43 @@ export function appendRunnerPulse(
   workspaceRootPath: string,
   input: { machineId: string; event: string; allowed: boolean; reason: string; timestamp?: string },
 ): void {
-  mkdirSync(dirname(getTeamRunnerPulseLogFile(workspaceRootPath)), { recursive: true });
-  appendFileSync(getTeamRunnerPulseLogFile(workspaceRootPath), JSON.stringify({
+  const file = getTeamRunnerPulseLogFile(workspaceRootPath);
+  mkdirSync(dirname(file), { recursive: true });
+  try {
+    if (existsSync(file) && statSync(file).size > TEAM_RUNNER_PULSE_ROTATE_BYTES) {
+      renameSync(file, `${file}.1`);
+    }
+  } catch {
+    // Pulse logging should never block automation execution.
+  }
+  const timestamp = input.timestamp ?? nowIso();
+  if (existsSync(file)) {
+    try {
+      const lastLine = readFileSync(file, 'utf-8').trim().split('\n').filter(Boolean).pop();
+      const last = lastLine ? JSON.parse(lastLine) as { machineId?: string; event?: string; allowed?: boolean; reason?: string; timestamp?: string } : null;
+      const lastAt = last?.timestamp ? Date.parse(last.timestamp) : NaN;
+      if (
+        last
+        && last.machineId === input.machineId
+        && last.event === input.event
+        && last.allowed === input.allowed
+        && last.reason === input.reason
+        && Number.isFinite(lastAt)
+        && Date.parse(timestamp) - lastAt < TEAM_HEARTBEAT_MIN_WRITE_MS
+      ) {
+        return;
+      }
+    } catch {
+      // Keep pulse logging best-effort.
+    }
+  }
+  appendFileSync(file, JSON.stringify({
     version: 1,
     machineId: input.machineId,
     event: input.event,
     allowed: input.allowed,
     reason: input.reason,
-    timestamp: input.timestamp ?? nowIso(),
+    timestamp,
   }) + '\n', 'utf-8');
 }
 
@@ -655,6 +688,12 @@ export function refreshTeamRunnerHeartbeat(workspaceRootPath: string, input: { a
   const normalized = ensureWorkspaceTeamFields(loaded);
   if ((normalized.storage?.mode ?? 'solo') === 'solo') return null;
   const machine = readOrCreateMachineIdentity(normalized.id);
+  const existing = getRunnerHeartbeat(workspaceRootPath, machine.machineId);
+  const lastSeen = existing?.lastSeenAt ? Date.parse(existing.lastSeenAt) : NaN;
+  const revisionChanged = existing?.observedTeamRevision !== normalized.team?.revision;
+  if (existing && !revisionChanged && Number.isFinite(lastSeen) && Date.now() - lastSeen < TEAM_HEARTBEAT_MIN_WRITE_MS) {
+    return existing;
+  }
   return writeMachineHeartbeat(workspaceRootPath, normalized, machine, { appVersion: input.appVersion, canRunAutomations: true });
 }
 

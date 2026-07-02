@@ -39,6 +39,7 @@ import {
   refreshTeamRunnerHeartbeat,
   type TeamRunnerGateDecision,
 } from '../workspaces/team-mode.ts';
+import { detectClobberedWrites } from '../records/storage.ts';
 
 const log = createLogger('automation-system');
 const BACKGROUND_AUTOMATION_EVENTS = new Set<AutomationEvent>([
@@ -565,6 +566,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
           return;
         }
         recordRunnerSchedulerTick(this.options.workspaceRootPath, decision.machineId, payload.timestamp);
+        detectClobberedWrites(this.options.workspaceRootPath, decision.machineId);
       }
     } catch {
       // Legacy/no-config tests and workspaces can still run scheduler ticks.

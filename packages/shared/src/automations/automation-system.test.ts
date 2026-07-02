@@ -10,6 +10,7 @@ import { AutomationSystem, type SessionMetadataSnapshot } from './automation-sys
 import { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE } from './constants.ts';
 import { markWorkspaceAsSharedFolder, readTeamRunnerState, setRunnerMachine, TEAM_RUNNER_PULSE_LOG_FILE } from '../workspaces/team-mode.ts';
 import { loadWorkspaceConfig, saveWorkspaceConfig } from '../workspaces/storage.ts';
+import { getRecordFile, listConflictRecords, writeSharedRecord } from '../records/storage.ts';
 import type { WorkspaceConfig } from '../workspaces/types.ts';
 
 describe('AutomationSystem', () => {
@@ -219,6 +220,30 @@ describe('AutomationSystem', () => {
       expect(ticks).toBe(1);
       expect(readTeamRunnerState(tempDir).lastSchedulerTickKey).toBe('2026-07-02T12:00:00.000Z');
       expect(existsSync(join(tempDir, TEAM_RUNNER_PULSE_LOG_FILE))).toBe(true);
+      await system.dispose();
+      rmSync(privateRoot, { recursive: true, force: true });
+    });
+
+    it('runs clobber detection during runner SchedulerTick events', async () => {
+      const privateRoot = mkdtempSync(join(tmpdir(), 'automation-private-'));
+      process.env.CRAFT_CONFIG_DIR = privateRoot;
+      writeWorkspaceConfig();
+      const status = markWorkspaceAsSharedFolder(tempDir, { makeRunner: true });
+      const written = writeSharedRecord(tempDir, 'community/contacts', 'fan_clobber_tick', {
+        email: 'tick@example.com',
+        name: 'Tick Clobber',
+      }, { machineId: status.machine.machineId, now: '2026-07-02T11:55:00.000Z' });
+      expect(written.status).toBe('written');
+      rmSync(getRecordFile(tempDir, 'community/contacts', 'fan_clobber_tick'), { force: true });
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+
+      await system.fireSchedulerTickForTest(schedulerPayload());
+
+      expect(listConflictRecords(tempDir)).toHaveLength(1);
+      expect(listConflictRecords(tempDir)[0]?.reason).toBe('clobbered-write');
       await system.dispose();
       rmSync(privateRoot, { recursive: true, force: true });
     });

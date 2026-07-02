@@ -1535,6 +1535,8 @@ interface CommunityEmailJobRecord extends SharedEntityMeta {
 }
 ```
 
+Current implementation note: Phase 6 stores the cadence fields but does not enforce fatigue yet. `fatigued` remains inert until Phase 7 adds approval/send state and a real `lastBroadcastAt` source; the cadence gate belongs in approval, not draft creation.
+
 ### 15.5 Gmail Boundary
 
 Gmail is useful for:
@@ -1593,7 +1595,7 @@ No send to the fan list without ALL of:
 - audience preview with final counts.
 - **consent gate**: marketing purposes (`announcement`, `newsletter`) may include only `opted-in` contacts by default. `unknown` is excluded; including unknowns requires an explicit per-job override with a written justification recorded on the job. `personal-outreach` may target unknowns — it is individual mail, not bulk.
 - suppression check (recorded via `suppressionCheckedAt`; a suppressed contact can NEVER be included, overrides or not).
-- **cadence check**: if the list was broadcast within `minDaysBetweenBroadcasts`, the job is marked `fatigued` and approval requires an explicit override (the fatigue guard from the 04 spec).
+- **cadence check**: if the list was broadcast within `minDaysBetweenBroadcasts`, the job is marked `fatigued` and approval requires an explicit override (the fatigue guard from the 04 spec). This is intentionally deferred until the email transport approval phase, where `lastBroadcastAt` is authoritative.
 - compliance checklist (15.8).
 - human approval.
 - selected, connected transport (else status `needs-provider`).
@@ -2048,4 +2050,3 @@ Build in this order:
 8. Gmail draft-only email jobs with idempotency keys, the consent gate, and the cadence guard.
 
 That gives the product a real team foundation before attempting advanced ESP, Git automation, or hosted multi-user.
-

@@ -444,17 +444,6 @@ async function handleRequest(
     return sendJson(res, 503, { error: 'automation_system_unavailable' })
   }
   if (delivery.status === 'skipped') {
-    await recordDelivery(config.deliveryRecorder, workspaceRootPath, log, {
-      timestamp: Date.now(),
-      workspaceId,
-      slug,
-      matcherId: matcher.id,
-      method,
-      outcome: 'skipped_non_runner',
-      httpStatus: 409,
-      remoteIp,
-      reason: delivery.reason,
-    })
     return sendJson(res, 409, { error: 'automation_skipped', reason: delivery.reason })
   }
 

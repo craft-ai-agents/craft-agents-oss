@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { loadWorkspaceConfig, saveWorkspaceConfig } from '../storage.ts';
+import { getWorkspaceSessionsPath, loadWorkspaceConfig, saveWorkspaceConfig } from '../storage.ts';
 import {
   assertWorkspaceOpenable,
   moveWorkspaceToSharedFolder,
@@ -92,6 +92,8 @@ describe('team shared-folder migration', () => {
   it('blocks credential caches and keeps sessions private during shared-folder migration', () => {
     const source = makeDir('team-migrate-private-source-');
     const destinationParent = makeDir('team-migrate-private-dest-');
+    const privateRoot = makeDir('team-migrate-private-root-');
+    process.env.CRAFT_CONFIG_DIR = privateRoot;
     writeWorkspace(source);
     mkdirSync(join(source, 'sources', 'google-ads'), { recursive: true });
     writeFileSync(join(source, 'sources', 'google-ads', '.credential-cache.json'), '{"token":"secret"}', 'utf-8');
@@ -104,11 +106,29 @@ describe('team shared-folder migration', () => {
     mkdirSync(join(source, 'sessions', 'session-1'), { recursive: true });
     writeFileSync(join(source, 'sessions', 'session-1', 'session.jsonl'), '{"private":true}\n', 'utf-8');
 
-    const result = moveWorkspaceToSharedFolder(source, destinationParent);
+	    const result = moveWorkspaceToSharedFolder(source, destinationParent);
 
-    expect(existsSync(join(result.finalRootPath, 'sessions'))).toBe(false);
-    expect(existsSync(join(result.finalRootPath, 'sources', 'google-ads'))).toBe(false);
-  });
+	    expect(existsSync(join(result.finalRootPath, 'sessions'))).toBe(false);
+	    expect(existsSync(join(result.finalRootPath, 'sources', 'google-ads'))).toBe(false);
+	    expect(readFileSync(join(getWorkspaceSessionsPath(result.finalRootPath), 'session-1', 'session.jsonl'), 'utf-8')).toBe('{"private":true}\n');
+	  });
+
+	  it('blocks credential-bearing source config files but allows env examples', () => {
+	    const source = makeDir('team-migrate-source-secret-source-');
+	    const destinationParent = makeDir('team-migrate-source-secret-dest-');
+	    writeWorkspace(source);
+	    writeFileSync(join(source, '.env.example'), 'OPENAI_API_KEY=\n', 'utf-8');
+	    mkdirSync(join(source, 'sources', 'google-calendar'), { recursive: true });
+	    writeFileSync(join(source, 'sources', 'google-calendar', 'config.json'), JSON.stringify({
+	      name: 'Google Calendar',
+	      googleOAuthClientSecret: 'shh',
+	    }, null, 2), 'utf-8');
+
+	    const preflight = preflightSharedFolderMigration(source, destinationParent);
+
+	    expect(preflight.ok).toBe(false);
+	    expect(preflight.blockedFiles).toEqual(['sources/google-calendar/config.json']);
+	  });
 
   it('preserves existing runner automation policy when migrating an enabled team workspace', () => {
     const source = makeDir('team-migrate-policy-source-');

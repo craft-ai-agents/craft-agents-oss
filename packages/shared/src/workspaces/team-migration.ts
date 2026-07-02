@@ -21,6 +21,7 @@ import {
   writeTeamConfigMirror,
 } from './team-mode.ts';
 import {
+  CONFIG_DIR,
   loadWorkspaceConfig,
   saveWorkspaceConfig,
 } from './storage.ts';
@@ -73,6 +74,17 @@ const BLOCKED_SECRET_BASENAMES = new Set([
   '.credential-cache.json',
   'credentials.enc',
   'auth.json',
+]);
+
+const SECRET_SOURCE_CONFIG_KEYS = new Set([
+  'clientSecret',
+  'googleOAuthClientSecret',
+  'oauthClientSecret',
+  'refreshToken',
+  'accessToken',
+  'apiKey',
+  'bearerToken',
+  'privateKey',
 ]);
 
 const PRIVATE_WORKSPACE_DIRS = new Set([
@@ -163,10 +175,35 @@ function collectWorkspaceFiles(rootPath: string): string[] {
   return files;
 }
 
+function isEnvExampleFile(name: string): boolean {
+  return /^\.env\.(?:example|sample|template)$/i.test(name);
+}
+
+function hasCredentialBearingSourceConfig(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(hasCredentialBearingSourceConfig);
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (SECRET_SOURCE_CONFIG_KEYS.has(key) && typeof child === 'string' && child.trim()) return true;
+    if (hasCredentialBearingSourceConfig(child)) return true;
+  }
+  return false;
+}
+
+function isCredentialBearingSourceConfig(rootPath: string, relativePath: string): boolean {
+  const parts = relativePath.split(/[\\/]+/).filter(Boolean);
+  if (parts[0] !== 'sources' || basename(relativePath) !== 'config.json') return false;
+  try {
+    return hasCredentialBearingSourceConfig(JSON.parse(readFileSync(join(rootPath, relativePath), 'utf-8')));
+  } catch {
+    return false;
+  }
+}
+
 function findBlockedSecretFiles(rootPath: string): string[] {
   return collectWorkspaceFiles(rootPath).filter(relativePath => {
     const name = basename(relativePath);
-    return BLOCKED_SECRET_BASENAMES.has(name) || name.startsWith('.env.');
+    if (isEnvExampleFile(name)) return false;
+    return BLOCKED_SECRET_BASENAMES.has(name) || name.startsWith('.env.') || isCredentialBearingSourceConfig(rootPath, relativePath);
   });
 }
 
@@ -225,6 +262,28 @@ function copyWorkspaceFilesConfigLast(sourceRootPath: string, tempRootPath: stri
   }
 }
 
+function copyDirectoryContents(sourceDir: string, destinationDir: string): void {
+  if (!existsSync(sourceDir)) return;
+  mkdirSync(destinationDir, { recursive: true });
+  for (const entry of readdirSync(sourceDir)) {
+    const sourcePath = join(sourceDir, entry);
+    const destinationPath = join(destinationDir, entry);
+    const stat = lstatSync(sourcePath);
+    if (stat.isSymbolicLink()) continue;
+    if (stat.isDirectory()) {
+      copyDirectoryContents(sourcePath, destinationPath);
+    } else if (stat.isFile()) {
+      mkdirSync(dirname(destinationPath), { recursive: true });
+      copyFileSync(sourcePath, destinationPath);
+    }
+  }
+}
+
+function copyPrivateWorkspaceDirs(sourceRootPath: string, config: WorkspaceConfig): void {
+  const privateTeamDir = join(process.env.CRAFT_CONFIG_DIR || CONFIG_DIR, 'team', config.id);
+  copyDirectoryContents(join(sourceRootPath, 'sessions'), join(privateTeamDir, 'private-sessions'));
+}
+
 function writeMigratedWorkspaceConfig(
   sourceRootPath: string,
   tempRootPath: string,
@@ -278,6 +337,7 @@ function writeMigratedWorkspaceConfig(
     },
   };
   migratedConfig = ensureMachineTeamMember(tempRootPath, migratedConfig, machine, 'owner').config;
+  copyPrivateWorkspaceDirs(sourceRootPath, migratedConfig);
   saveWorkspaceConfig(tempRootPath, migratedConfig);
   writeTeamConfigMirror(tempRootPath, migratedConfig);
   writeMachineHeartbeat(tempRootPath, migratedConfig, machine);

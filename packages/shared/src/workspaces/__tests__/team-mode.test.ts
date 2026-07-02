@@ -223,7 +223,7 @@ describe('team mode metadata', () => {
     expect(status.runnerIsStale).toBe(true);
   });
 
-  it('keeps a new runner pending until handover is observed or stale', () => {
+	  it('keeps a new runner pending until handover is observed or stale', () => {
     const root = makeWorkspaceRoot();
     writeWorkspace(root);
 
@@ -260,8 +260,29 @@ describe('team mode metadata', () => {
       lastSeenAt: new Date().toISOString(),
     }, null, 2), 'utf-8');
 
-    expect(clearReadyRunnerHandover(root, 'machine_new_runner')?.team?.runnerHandover).toBeUndefined();
-  });
+	    expect(clearReadyRunnerHandover(root, 'machine_new_runner')?.team?.runnerHandover).toBeUndefined();
+	  });
+
+	  it('does not treat a missing old-runner heartbeat as immediate handover readiness', () => {
+	    const root = makeWorkspaceRoot();
+	    writeWorkspace(root);
+
+	    const initialRunner = markWorkspaceAsSharedFolder(root, { makeRunner: true });
+	    const machineB = {
+	      version: 1,
+	      workspaceId: initialRunner.machine.workspaceId,
+	      machineId: 'machine_new_runner',
+	      displayName: 'Machine B',
+	      createdAt: new Date().toISOString(),
+	      lastOpenedAt: new Date().toISOString(),
+	    };
+	    setRunnerMachine(root, machineB.machineId);
+	    writeFileSync(initialRunner.privateMachinePath, JSON.stringify(machineB, null, 2), 'utf-8');
+	    rmSync(initialRunner.heartbeatPath, { force: true });
+
+	    expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: false, reason: 'handover-pending' });
+	    expect(clearReadyRunnerHandover(root, 'machine_new_runner')).toBeNull();
+	  });
 
   it('reports future workspace formats as unsupported', () => {
     const root = makeWorkspaceRoot();

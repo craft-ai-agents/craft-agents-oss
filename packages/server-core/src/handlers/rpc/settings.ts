@@ -49,6 +49,16 @@ async function applyStoredSecretsToProcessEnv(): Promise<void> {
   for (const [key, value] of Object.entries(env)) process.env[key] = value
 }
 
+async function assertSecretWorkspaceOwner(workspaceId?: string): Promise<{ success: false; error: string } | null> {
+  if (!workspaceId) {
+    return { success: false, error: 'Select an active workspace before changing secrets.' }
+  }
+  const workspace = getWorkspaceOrThrow(workspaceId)
+  const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+  assertTeamPermission(workspace.rootPath, 'secrets.update')
+  return null
+}
+
 async function getZeroCliStatus() {
   const zeroPath = await commandExists('zero')
   if (!zeroPath) {
@@ -142,11 +152,8 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   })
 
   server.handle(RPC_CHANNELS.secrets.SAVE, async (_ctx, name: string, value: string, workspaceId?: string) => {
-    if (workspaceId) {
-      const workspace = getWorkspaceOrThrow(workspaceId)
-      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
-      assertTeamPermission(workspace.rootPath, 'secrets.update')
-    }
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) return workspaceError
     const normalized = normalizeUserSecretName(name)
     if (!isValidUserSecretName(normalized)) {
       return { success: false, error: 'Use ENV_VAR format: uppercase letters, numbers, and underscores.' }
@@ -160,11 +167,8 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   })
 
   server.handle(RPC_CHANNELS.secrets.DELETE, async (_ctx, name: string, workspaceId?: string) => {
-    if (workspaceId) {
-      const workspace = getWorkspaceOrThrow(workspaceId)
-      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
-      assertTeamPermission(workspace.rootPath, 'secrets.update')
-    }
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) return workspaceError
     const normalized = normalizeUserSecretName(name)
     const success = await getCredentialManager().deleteUserSecret(normalized)
     delete process.env[normalized]

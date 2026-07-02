@@ -30,6 +30,7 @@ import type {
 export const RECORDS_DIR = 'records';
 export const TEAM_CONFLICTS_DIR = 'team/conflicts';
 export const TEAM_OPLOG_DIR = 'team/oplog';
+export const CLOBBER_DETECTION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 export const RECORD_CONFLICT_SCAN_IGNORE_PATTERNS = [
   /^~\$/,
   /\.tmp$/i,
@@ -40,6 +41,8 @@ export const RECORD_CONFLICT_SCAN_IGNORE_PATTERNS = [
   /^Icon\r$/,
   /\.icloud$/i,
 ];
+
+const oplogNextSeqCache = new Map<string, number>();
 
 export interface SharedRecordWriteOptions {
   machineId: string;
@@ -190,12 +193,21 @@ export function readSharedRecordBaseline<T extends SharedRecord = SharedRecord>(
 
 function nextOplogSeq(workspaceRootPath: string, machineId: string): number {
   const file = getTeamOplogFile(workspaceRootPath, machineId);
-  if (!existsSync(file)) return 1;
+  const cached = oplogNextSeqCache.get(file);
+  if (cached && existsSync(file)) return cached;
+  if (!existsSync(file)) {
+    oplogNextSeqCache.delete(file);
+    return 1;
+  }
   const lines = readFileSync(file, 'utf-8').trim().split('\n').filter(Boolean);
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     try {
       const parsed = JSON.parse(lines[i]!) as Partial<SharedRecordOplogEntry>;
-      if (typeof parsed.seq === 'number') return parsed.seq + 1;
+      if (typeof parsed.seq === 'number') {
+        const next = parsed.seq + 1;
+        oplogNextSeqCache.set(file, next);
+        return next;
+      }
     } catch {
       continue;
     }
@@ -213,6 +225,7 @@ function appendOplog(workspaceRootPath: string, entry: Omit<SharedRecordOplogEnt
   const file = getTeamOplogFile(workspaceRootPath, entry.machineId);
   mkdirSync(dirname(file), { recursive: true });
   appendFileSync(file, JSON.stringify(full) + '\n', 'utf-8');
+  oplogNextSeqCache.set(file, full.seq + 1);
 }
 
 function saveUndo(workspaceRootPath: string, entity: SharedRecord): void {
@@ -251,13 +264,13 @@ function purgeUndo(workspaceRootPath: string, entityId: string): void {
 
 function existingOpenConflict(
   workspaceRootPath: string,
-  input: Pick<SharedRecordConflict, 'entityPath' | 'reason'> & { providerConflictPath?: string },
+  input: Pick<SharedRecordConflict, 'entityPath' | 'reason'> & { baseRevision?: number; providerConflictPath?: string },
 ): SharedRecordConflict | null {
   if (input.reason !== 'clobbered-write' && input.reason !== 'provider-conflicted-copy') return null;
   return listConflictRecords(workspaceRootPath).find((conflict) => (
-    conflict.status === 'open'
-    && conflict.reason === input.reason
+    conflict.reason === input.reason
     && conflict.entityPath === input.entityPath
+    && (input.reason !== 'clobbered-write' || conflict.baseRevision === input.baseRevision)
     && conflict.providerConflictPath === input.providerConflictPath
   )) ?? null;
 }
@@ -495,7 +508,10 @@ export function detectClobberedWrites(
   const local = readMachineOplog(workspaceRootPath, machineId);
   const all = readAllOplogs(workspaceRootPath);
   const issues: SharedRecordClobberIssue[] = [];
+  const cutoff = Date.parse(options.now ?? nowIso()) - CLOBBER_DETECTION_WINDOW_MS;
   for (const entry of local) {
+    const entryAt = Date.parse(entry.at);
+    if (Number.isFinite(entryAt) && entryAt < cutoff) continue;
     const file = resolve(workspaceRootPath, entry.entityPath);
     if (!isContainedPath(workspaceRootPath, file)) continue;
     const fileSha = existsSync(file) ? sha256Text(readFileSync(file, 'utf-8')) : null;

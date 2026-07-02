@@ -680,8 +680,16 @@ export default function SecretsSettingsPage() {
   }, [])
 
   const remove = async (secretName: string) => {
+    if (!activeWorkspaceId) {
+      toast.error('Select an active workspace before deleting secrets')
+      return
+    }
     try {
-      await window.electronAPI.deleteSecret(secretName, activeWorkspaceId ?? undefined)
+      const result = await window.electronAPI.deleteSecret(secretName, activeWorkspaceId)
+      if (!result.success) {
+        toast.error(result.error || 'Could not delete secret')
+        return
+      }
       toast.success('Secret deleted')
       await load()
     } catch (error) {
@@ -739,7 +747,11 @@ export default function SecretsSettingsPage() {
           }
           await window.electronAPI.saveSourceCredentials(activeWorkspaceId, preset.sourceSlug, value)
         } else if (preset.storage === 'env') {
-          const result = await window.electronAPI.saveSecret(preset.name, value, activeWorkspaceId ?? undefined)
+          if (!activeWorkspaceId) {
+            toast.error('Select an active workspace before saving secrets')
+            return
+          }
+          const result = await window.electronAPI.saveSecret(preset.name, value, activeWorkspaceId)
           if (!result.success) {
             toast.error(result.error || `Could not save ${preset.label}`)
             return

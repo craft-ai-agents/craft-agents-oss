@@ -40,10 +40,11 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
 
   server.handle(RPC_CHANNELS.community.ADD_CONTACT, async (_ctx, workspaceId: string, input: UpsertCommunityContactInput) => {
     const workspace = resolveWorkspace(workspaceId)
-    const [{ getTeamModeStatus }, { upsertCommunityContact, loadCommunityState }] = await Promise.all([
+    const [{ assertTeamPermission, getTeamModeStatus }, { upsertCommunityContact, loadCommunityState }] = await Promise.all([
       import('@craft-agent/shared/workspaces'),
       import('@craft-agent/shared/community'),
     ])
+    assertTeamPermission(workspace.rootPath, 'records.write')
     const machineId = normalizeMachineId(getTeamModeStatus(workspace.rootPath).machine.machineId)
     upsertCommunityContact(workspace.rootPath, machineId, input)
     return loadCommunityState(workspace.rootPath, machineId)
@@ -51,10 +52,11 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
 
   server.handle(RPC_CHANNELS.community.IMPORT_CSV, async (_ctx, workspaceId: string, input: Omit<ImportCommunityCsvInput, 'assertedBy'> & { assertedBy?: string }) => {
     const workspace = resolveWorkspace(workspaceId)
-    const [{ getTeamModeStatus }, { importCommunityCsv, loadCommunityState }] = await Promise.all([
+    const [{ assertTeamPermission, getTeamModeStatus }, { importCommunityCsv, loadCommunityState }] = await Promise.all([
       import('@craft-agent/shared/workspaces'),
       import('@craft-agent/shared/community'),
     ])
+    assertTeamPermission(workspace.rootPath, 'records.write')
     const machineId = normalizeMachineId(getTeamModeStatus(workspace.rootPath).machine.machineId)
     importCommunityCsv(workspace.rootPath, machineId, {
       ...input,
@@ -65,10 +67,11 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
 
   server.handle(RPC_CHANNELS.community.CREATE_EMAIL_JOB, async (_ctx, workspaceId: string, input: CreateCommunityEmailJobInput) => {
     const workspace = resolveWorkspace(workspaceId)
-    const [{ getTeamModeStatus }, { createCommunityEmailJob, loadCommunityState }] = await Promise.all([
+    const [{ assertTeamPermission, getTeamModeStatus }, { createCommunityEmailJob, loadCommunityState }] = await Promise.all([
       import('@craft-agent/shared/workspaces'),
       import('@craft-agent/shared/community'),
     ])
+    assertTeamPermission(workspace.rootPath, 'community.email.draft')
     const machineId = normalizeMachineId(getTeamModeStatus(workspace.rootPath).machine.machineId)
     createCommunityEmailJob(workspace.rootPath, machineId, input)
     return loadCommunityState(workspace.rootPath, machineId)
@@ -76,10 +79,11 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
 
   server.handle(RPC_CHANNELS.community.SUPPRESS, async (_ctx, workspaceId: string, email: string, reason?: CommunitySuppressionRecord['reason']) => {
     const workspace = resolveWorkspace(workspaceId)
-    const [{ getTeamModeStatus }, { suppressCommunityContact, loadCommunityState }] = await Promise.all([
+    const [{ assertTeamPermission, getTeamModeStatus }, { suppressCommunityContact, loadCommunityState }] = await Promise.all([
       import('@craft-agent/shared/workspaces'),
       import('@craft-agent/shared/community'),
     ])
+    assertTeamPermission(workspace.rootPath, 'records.write')
     const machineId = normalizeMachineId(getTeamModeStatus(workspace.rootPath).machine.machineId)
     suppressCommunityContact(workspace.rootPath, machineId, email, reason)
     return loadCommunityState(workspace.rootPath, machineId)

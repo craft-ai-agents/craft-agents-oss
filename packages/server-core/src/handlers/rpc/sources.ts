@@ -357,7 +357,9 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
 
   server.handle(RPC_CHANNELS.sources.CLEAR_CREDENTIAL_OVERRIDE, async (_ctx, workspaceId: string, sourceSlug: string) => {
     const { getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
     const { workspace, source } = resolveWorkspaceSource(workspaceId, sourceSlug)
+    assertTeamPermission(workspace.rootPath, 'secrets.update')
     if (source.tier !== 'global') {
       throw new Error('Credential override only applies to active global sources.')
     }

@@ -531,7 +531,7 @@ function emailJobDefaultStatus(workspaceRootPath: string, purpose: CommunityEmai
     const sendPermission = evaluateTeamPermission(workspaceRootPath, 'community.email.send');
     return sendPermission.allowed ? 'draft' : 'needs-owner-approval';
   } catch {
-    return 'draft';
+    return 'needs-owner-approval';
   }
 }
 

@@ -79,6 +79,10 @@ export function getWorkspaceSourcesPath(rootPath: string): string {
  * @param rootPath - Absolute path to workspace root folder
  */
 export function getWorkspaceSessionsPath(rootPath: string): string {
+  const config = loadWorkspaceConfig(rootPath);
+  if (config?.storage?.mode === 'shared-folder') {
+    return join(process.env.CRAFT_CONFIG_DIR || CONFIG_DIR, 'team', config.id, 'private-sessions');
+  }
   return join(rootPath, 'sessions');
 }
 
