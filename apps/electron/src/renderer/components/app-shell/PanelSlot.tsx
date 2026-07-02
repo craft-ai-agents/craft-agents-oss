@@ -63,6 +63,9 @@ export function PanelSlot({
   const isFullWidthRoute = isCreatorCommandCenter
     || navState?.navigator === 'agenda'
     || navState?.navigator === 'vault'
+    || navState?.navigator === 'agents'
+    || navState?.navigator === 'automations'
+    || navState?.navigator === 'workflows'
 
   const handleClose = useCallback(() => {
     closePanel(entry.id)
