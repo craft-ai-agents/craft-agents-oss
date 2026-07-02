@@ -2476,7 +2476,7 @@ function AppShellContent({
                       items: [
                         {
                           id: "nav:profile",
-                          title: "Artist Profile",
+                          title: "Profile",
                           icon: Users,
                           variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/profile' ? "default" : "ghost",
                           onClick: () => handleArtistHQNavClick('profile'),

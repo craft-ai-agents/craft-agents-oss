@@ -384,7 +384,7 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
         metadata: artistProfileMetadata(),
         body: serializeArtistProfileBody(nextProfile),
       })
-      toast.success('Artist Profile saved')
+      toast.success('Profile saved')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
@@ -711,7 +711,7 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
         }
       case 'profile':
         return {
-          title: 'Artist Profile',
+          title: 'Profile',
           description: 'Global context every worker should know before touching campaigns, content, research, ads, or outreach.',
           orb1: 'bg-blue-600/10',
           orb2: 'bg-indigo-500/5',
@@ -889,7 +889,7 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
           <HQCard>
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <SectionTitle icon={UserRound} title="Artist Profile" meta={`${profilePercent}% complete`} compact />
+                <SectionTitle icon={UserRound} title="Profile" meta={`${profilePercent}% complete`} compact />
                 <p className="mt-2 max-w-2xl text-xs leading-5 text-white/42">
                   Global context every worker should know before touching campaigns, content, research, ads, or outreach.
                 </p>
