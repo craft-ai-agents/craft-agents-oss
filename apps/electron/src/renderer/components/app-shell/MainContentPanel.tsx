@@ -783,7 +783,7 @@ function ResourceRows({
 
   if (error) {
     return (
-      <div className="runneros-glass-route h-full overflow-y-auto">
+      <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
         <div className="mx-auto flex min-h-full max-w-4xl items-center justify-center px-8 py-9 text-sm text-red-200/70">
           {error}
         </div>
@@ -793,31 +793,44 @@ function ResourceRows({
 
   return (
     <>
-    <div className="runneros-glass-route h-full overflow-y-auto">
-      <div className="mx-auto flex min-h-full max-w-4xl flex-col px-8 py-9">
-        <header className="mb-7 flex items-start justify-between gap-4">
-          <div>
-            <div className="mb-3 font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-white/35">
-              {label}
+    <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
+      <div className="mx-auto flex min-h-full max-w-[1600px] flex-col px-5 py-4 xl:px-8 xl:py-5">
+        <header className="relative mb-6 overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
+          <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-blue-600/10 blur-[110px]" />
+          <div className="absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full bg-blue-500/5 blur-[120px]" />
+          <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex-1">
+              <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5">
+                <div className="h-3.5 w-3.5 text-blue-300/80 rounded-full border border-current" />
+                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/65">{label}</span>
+              </div>
+              <div className="max-w-3xl">
+                <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
+                  {title}
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
+                  {description}
+                </p>
+              </div>
             </div>
-            <h1 className="text-[30px] font-medium leading-tight text-white">{title}</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/48">{description}</p>
+            {addEditConfig && addLabel ? (
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <EditPopover
+                  align="end"
+                  trigger={
+                    <button
+                      type="button"
+                      className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/68 transition-colors hover:bg-white/[0.06]"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      {addLabel}
+                    </button>
+                  }
+                  {...addEditConfig}
+                />
+              </div>
+            ) : null}
           </div>
-          {addEditConfig && addLabel ? (
-            <EditPopover
-              align="end"
-              trigger={
-                <button
-                  type="button"
-                  className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[10px] border border-white/[0.08] bg-white/[0.045] px-3 text-xs font-medium text-white/76 transition-colors hover:bg-white/[0.08] hover:text-white"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  {addLabel}
-                </button>
-              }
-              {...addEditConfig}
-            />
-          ) : null}
         </header>
 
         {rows.length === 0 ? (

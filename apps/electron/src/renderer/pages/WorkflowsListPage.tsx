@@ -199,40 +199,54 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   }
 
   return (
-    <div className="runneros-glass-route h-full overflow-y-auto">
-      <div className="mx-auto w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
-        <div className="mb-6 flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-[28px] font-semibold leading-tight text-white">{t('sidebar.workflows')}</h1>
-            <p className="mt-1 max-w-md text-[12px] leading-[18px] text-white/54">{t('workflows.list.subtitle')}</p>
+    <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
+      <div className="mx-auto min-h-full w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
+        <header className="relative mb-6 overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
+          <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-violet-600/10 blur-[110px]" />
+          <div className="absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full bg-violet-500/5 blur-[120px]" />
+          <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex-1">
+              <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5">
+                <WorkflowIcon className="h-3.5 w-3.5 text-violet-300/80" />
+                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/65">Routines</span>
+              </div>
+              <div className="max-w-3xl">
+                <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
+                  {t('sidebar.workflows')}
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
+                  {t('workflows.list.subtitle')}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setDeepResearchOpen(true)}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/68 transition-colors hover:bg-white/[0.06]"
+              >
+                <Search className="h-3.5 w-3.5" />
+                Deep Research
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(routes.view.recentRuns())}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/68 transition-colors hover:bg-white/[0.06]"
+              >
+                <History className="h-3.5 w-3.5" />
+                {t('sidebar.workflows.recentRuns')}
+              </button>
+              <button
+                type="button"
+                onClick={handleNew}
+                className="inline-flex h-9 items-center gap-2 rounded-full bg-violet-500/85 px-4 text-xs font-medium text-white transition-colors hover:bg-violet-500"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {t('workflows.list.new')}
+              </button>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setDeepResearchOpen(true)}
-              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] font-medium text-white/72 transition-colors hover:bg-white/[0.08] hover:text-white"
-            >
-              <Search className="h-3 w-3" />
-              Deep Research
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate(routes.view.recentRuns())}
-              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] font-medium text-white/72 transition-colors hover:bg-white/[0.08] hover:text-white"
-            >
-              <History className="h-3 w-3" />
-              {t('sidebar.workflows.recentRuns')}
-            </button>
-            <button
-              type="button"
-              onClick={handleNew}
-              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 shadow-tinted transition-colors hover:bg-[#f97316]/24"
-            >
-              <Plus className="h-3 w-3" />
-              {t('workflows.list.new')}
-            </button>
-          </div>
-        </div>
+        </header>
 
         {loading ? (
           <div className="flex h-full items-center justify-center text-sm text-white/50">{t('common.loading')}</div>

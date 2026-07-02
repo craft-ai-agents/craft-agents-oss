@@ -112,34 +112,46 @@ export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
   }, [])
 
   return (
-    <div className="runneros-glass-route h-full overflow-y-auto">
-      <div className="mx-auto w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
-        <div className="mb-6 flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-[28px] font-semibold leading-tight text-white">Workers</h1>
-            <p className="mt-1 max-w-md text-[12px] leading-[18px] text-white/54">
-              Music operators for release planning, content, ads, audience intelligence, and creative execution.
-            </p>
+    <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
+      <div className="mx-auto min-h-full w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
+        <header className="relative mb-6 overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
+          <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-orange-600/10 blur-[110px]" />
+          <div className="absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full bg-orange-500/5 blur-[120px]" />
+          <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex-1">
+              <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-orange-300/80" />
+                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/65">Team</span>
+              </div>
+              <div className="max-w-3xl">
+                <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
+                  Workers
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
+                  Music operators for release planning, content, ads, audience intelligence, and creative execution.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/68 transition-colors hover:bg-white/[0.06]"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New worker
+              </button>
+              <button
+                type="button"
+                onClick={() => setLibraryOpen(true)}
+                className="inline-flex h-9 items-center gap-2 rounded-full bg-orange-500/85 px-4 text-xs font-medium text-white transition-colors hover:bg-orange-500"
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+                Manage library
+              </button>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setCreateOpen(true)}
-              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] font-medium text-white/72 transition-colors hover:bg-white/[0.08] hover:text-white"
-            >
-              <Plus className="h-3 w-3" />
-              New worker
-            </button>
-            <button
-              type="button"
-              onClick={() => setLibraryOpen(true)}
-              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 shadow-middle transition-colors hover:bg-[#f97316]/24"
-            >
-              <Settings2 className="h-3 w-3" />
-              Manage library
-            </button>
-          </div>
-        </div>
+        </header>
 
         {/* Active worker cards */}
         {loading && grouped.length === 0 ? (
