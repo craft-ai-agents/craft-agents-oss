@@ -41,7 +41,21 @@ binary 名：`larkdepot`。prod 上已装进 PATH（`/usr/local/bin/larkdepot`�
     larkdepot register "<飞书表URL(地址栏带 table= 参数)>" --name 表名
     larkdepot sync
 
+## 查不到 = 没有（对所有消费 skill 生效的工具级事实）
+
+缓存是飞书各表的**完整镜像**（每张整表同步，不是抽样）。所以：
+
+- 命令成功且 envelope 里 `freshness.synced_at` 非空 → 结果即权威。`data` 空 = 源表里确实没有，**不要降级去实时查 lark-cli**——查同一个源只会得到同样的空，还更慢、撞限流。
+- 空结果是常态、也是有用的答案。不要因为"没查到"就怀疑工具、反复换写法重试。
+- `freshness.age_s` 过大（缓存偏旧）是提醒用户的信号，不是降级实时查询的理由。
+
+## 缓存不可用的判定（唯一标准，消费 skill 不要自己发明）
+
+仅当以下任一成立，才算缓存不可用，此时按各消费 skill 自己定义的降级流程直接查 lark-cli（**串行，绝不并发**；遇限流 `800004135` 等几秒重试）：
+
+1. `larkdepot` 命令**本身失败**：二进制缺失 / 报错退出 / 输出非 JSON；
+2. `freshness.synced_at` 为 **null**（从未成功同步过）。
+
 ## 故障
 
-- 退出码：0 成功 / 1 用法错误 / 2 环境错误（未 sync、lark-cli 未授权）/ 3 任务失败。错误 JSON 自带 `hint`，照 hint 办。
-- `larkdepot` 命令本身失败（二进制缺失/报错/输出非 JSON）或 `synced_at` 为空（从未同步过）时，才说明缓存不可用，按各消费 skill 自己的降级流程直接查 lark-cli。
+退出码：0 成功（含查空）/ 1 用法错误 / 2 环境错误（未 sync、lark-cli 未授权）/ 3 任务失败。错误 JSON 自带 `hint`，照 hint 办。
