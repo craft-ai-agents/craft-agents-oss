@@ -25,15 +25,6 @@ metadata:
 - 不决定库存优先级、找料流程、供应商分类或采购下一步。
 - 不输出面向采购人员的最终业务话术。
 
-## 反合理化表格
-
-| 常见借口 | 反驳 |
-|---|---|
-| “我直接用 WebFetch / curl / 临时浏览器脚本抓一下更快。” | 走 `engine.py` 或已有 adapter；反爬、代理、warmup、并发和 host lock 是采集正确性的一部分。 |
-| “静态状态是 enabled，就可以当作这个平台有结果。” | 静态状态只说明 adapter 应尝试；命中、无命中、访问受限和错误必须以当次 JSON 为准。 |
-| “DOM 文本里出现了型号，我就填库存和价格字段。” | body dump 只能进 `note`；没有结构化 API/XHR 解析就不要伪造 `stock` / `price_breaks`。 |
-| “blocked / error 就说明平台没有这个料。” | 采集阻碍不是无货结论；只能返回阻碍状态，让后续语境解释。 |
-
 ## 平台状态维护
 
 `source_catalog.yaml` 维护每个平台/source 的静态状态：
@@ -62,13 +53,13 @@ cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --s
 首轮直接平台全量查询：
 
 ```bash
-cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --source-set direct --gate 4 --wait 15 2>/dev/null
+cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --source-set direct --gate 2 --wait 20 2>/dev/null
 ```
 
 聚合平台查询：
 
 ```bash
-cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --source-set aggregator --gate 4 --wait 15 2>/dev/null
+cloakbrowser-python .agents/skills/scrape-engine/engine.py --part "<型号>" --source-set aggregator --gate 2 --wait 20 2>/dev/null
 ```
 
 多型号查询：
@@ -90,6 +81,18 @@ cloakbrowser-python .agents/skills/scrape-engine/engine.py --list-source-set agg
 没有明确 source 时，先读 `source_catalog.yaml` 和 `registry.py`，按数据需求选择 source；若需求是全量直接平台，用 `--source-set direct`。
 `--source` 必须使用 `source_catalog.yaml` / `registry.py` 中的 source id 原文；不要把连字符改成下划线，例如 `rs-uk`、`rs-jp`、`element14-cn`、`misumi-jp` 不能写成 `rs_uk`、`element14_cn`、`misumi_jp`。
 全平台或多平台查询也要显式传入 `--source "<source-id[,source-id...]>"`；不要省略 `--source` 触发 registry 的隐式 all_ids，因为 registry 可能包含替代、迁移或诊断 adapter，既会拉长运行时间，也会污染平台覆盖口径。
+
+### 全量 direct 超时恢复
+
+整条命令超时通常是外层 shell / agent 工具等待时间不够，不能因为超时改成少量平台。恢复流程：
+
+1. 先运行 `--list-source-set direct` 拿到完整 source 清单。
+2. 按 source 分块运行 `engine.py --part "<型号>" --source "<source-id[,source-id...]>" --gate 2 --wait 20`；每块 4-6 个 source，反爬重的平台可以单独一块。
+3. 合并所有分块的 `rows` / `errors`，按 source id 去重。
+4. 对照 direct 清单检查覆盖；缺平台就继续补跑，直到每个 source 都有 row、error 或明确未取到状态。
+5. 仍然无法完成的 source 写入 `errors` / blocked 状态；不要静默丢平台。
+
+分块只改变执行方式，不改变覆盖口径；最终结果仍按 `--source-set direct` 的完整清单验收。
 
 整页渲染取证只在 `engine.py` 没有合适 adapter、且确实需要打开目标页时使用：
 
@@ -150,3 +153,12 @@ cloakbrowser-python .agents/skills/scrape-engine/scripts/cloak_fetch.py "<URL>" 
 3. 在 `source_catalog.yaml` 更新静态状态、限制、聚合关系和说明。
 4. 运行 `engine.py --part "<已知型号>" --source "<source-id>"` 验证返回 JSON。
 5. 在本 skill / `source_catalog.yaml` 记录爬取状态。
+
+## Rationalization Table
+
+| Excuse | Reality |
+|---|---|
+| “我直接用 WebFetch / curl / 临时浏览器脚本抓一下更快。” | 走 `engine.py` 或已有 adapter；反爬、代理、warmup、并发和 host lock 是采集正确性的一部分。 |
+| “静态状态是 enabled，就可以当作这个平台有结果。” | 静态状态只说明 adapter 应尝试；命中、无命中、访问受限和错误必须以当次 JSON 为准。 |
+| “DOM 文本里出现了型号，我就填库存和价格字段。” | body dump 只能进 `note`；没有结构化 API/XHR 解析就不要伪造 `stock` / `price_breaks`。 |
+| “blocked / error 就说明平台没有这个料。” | 采集阻碍不是无货结论；只能返回阻碍状态，让后续语境解释。 |
