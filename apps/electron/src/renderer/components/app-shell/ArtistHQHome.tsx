@@ -12,19 +12,28 @@ import {
   Music2,
   Plus,
   RefreshCw,
+  Radio,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   UserRound,
   Users,
   X,
 } from 'lucide-react'
+import { useAtomValue } from 'jotai'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
+import { useAppShellContext } from '@/context/AppShellContext'
+import { useAgents } from '@/hooks/useAgents'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
+import { skillsAtom } from '@/atoms/skills'
+import { sourcesAtom } from '@/atoms/sources'
+import { openAgentSessionComposer } from '@/lib/run-agent'
 import { parseAutomationsConfig, type AutomationListItem } from '@/components/automations/types'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   ARTIST_CALENDAR_CONTEXT_SLUG,
   artistCalendarMetadata,
@@ -59,6 +68,19 @@ import {
   ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG,
   parseArtistSpotifySnapshotDocResult,
 } from '@/lib/artist-spotify'
+import {
+  ARTIST_INTEL_CONFIG_CONTEXT_SLUG,
+  ARTIST_INTEL_REPORT_CONTEXT_SLUG,
+  artistIntelConfigMetadata,
+  artistIntelReportMetadata,
+  createIntelRunPrompt,
+  parseArtistIntelConfigDocResult,
+  parseArtistIntelReportDocResult,
+  serializeArtistIntelConfigBody,
+  serializeArtistIntelReportBody,
+  type ArtistIntelConfig,
+  type ArtistIntelSource,
+} from '@/lib/artist-intel'
 
 interface ArtistHQHomeProps {
   workspaceId: string
@@ -86,6 +108,7 @@ const HQ_HASH_PREFIX = '#artist-hq/'
 const todayKey = toDateKey(new Date())
 const SPOTIFY_SYNC_AUTOMATION_NAME = 'Weekly Spotify Snapshot'
 const SPOTIFY_SYNC_CRON = '0 9 * * 1'
+const YOUTUBE_RESEARCH_AGENT_SLUG = 'youtube-research-agent'
 const emptyNetworkDraft: NetworkDraft = {
   name: '',
   category: 'key',
@@ -151,9 +174,20 @@ const projectColumns = [
 ]
 
 export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) {
+  const {
+    activeAgents: shellActiveAgents = [],
+    onCreateSession,
+    onInputChange,
+    onSendMessage,
+  } = useAppShellContext()
+  const { activeAgents: workspaceActiveAgents, allAgents } = useAgents(workspaceId)
+  const skills = useAtomValue(skillsAtom)
+  const sources = useAtomValue(sourcesAtom)
   const [tab, setTab] = React.useState<ArtistHQTab>(() => readTabFromHash())
   const [query, setQuery] = React.useState('')
   const [draftOpen, setDraftOpen] = React.useState(false)
+  const [intelConfigOpen, setIntelConfigOpen] = React.useState(false)
+  const [intelBusy, setIntelBusy] = React.useState(false)
   const [categoryDraft, setCategoryDraft] = React.useState('')
   const [selectedPersonId, setSelectedPersonId] = React.useState<string | null>(null)
   const [selectedDate, setSelectedDate] = React.useState(todayKey)
@@ -193,6 +227,21 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
     [docs],
   )
   const network = networkResult.network
+  const intelConfigResult = React.useMemo(
+    () => parseArtistIntelConfigDocResult(docs.find((doc) => doc.slug === ARTIST_INTEL_CONFIG_CONTEXT_SLUG)),
+    [docs],
+  )
+  const intelConfig = intelConfigResult.config
+  const intelReportResult = React.useMemo(
+    () => parseArtistIntelReportDocResult(docs.find((doc) => doc.slug === ARTIST_INTEL_REPORT_CONTEXT_SLUG)),
+    [docs],
+  )
+  const intelReport = intelReportResult.report
+  const youtubeResearchAgent = React.useMemo(
+    () => [...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]
+      .find((agent) => agent.slug === YOUTUBE_RESEARCH_AGENT_SLUG),
+    [allAgents, shellActiveAgents, workspaceActiveAgents],
+  )
   const researchDocs = React.useMemo(
     () => docs.filter((doc) => /research|report|intel|analysis/i.test(`${doc.slug} ${doc.metadata.name} ${doc.metadata.description ?? ''}`)),
     [docs],
@@ -291,6 +340,100 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
       toast.error(err instanceof Error ? err.message : String(err))
     }
   }, [profileDraft, profileResult, upsert])
+
+  const saveIntelConfig = React.useCallback(async (nextConfig: ArtistIntelConfig) => {
+    const config = {
+      ...nextConfig,
+      updatedAt: new Date().toISOString(),
+    }
+    await upsert({
+      slug: ARTIST_INTEL_CONFIG_CONTEXT_SLUG,
+      metadata: artistIntelConfigMetadata(),
+      body: serializeArtistIntelConfigBody(config),
+    })
+  }, [upsert])
+
+  const toggleIntelPulse = React.useCallback(async () => {
+    if (!intelConfigResult.ok) {
+      toast.error(intelConfigResult.error)
+      return
+    }
+    setIntelBusy(true)
+    try {
+      await saveIntelConfig({
+        ...intelConfig,
+        enabled: !intelConfig.enabled,
+      })
+      toast.success(!intelConfig.enabled ? 'Intel Pulse activated' : 'Intel Pulse paused')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIntelBusy(false)
+    }
+  }, [intelConfig, intelConfigResult, saveIntelConfig])
+
+  const runIntelPulse = React.useCallback(async () => {
+    if (!workspaceId || !intelConfigResult.ok) return
+    if (!youtubeResearchAgent) {
+      toast.error('YouTube Research Agent is not installed in this workspace')
+      return
+    }
+    setIntelBusy(true)
+    try {
+      const config = intelConfig.enabled ? intelConfig : { ...intelConfig, enabled: true }
+      if (!intelConfig.enabled) {
+        await saveIntelConfig(config)
+      }
+      const contextDocs = await window.electronAPI
+        .listWorkspaceContextDocsForAgent(workspaceId, youtubeResearchAgent.slug)
+        .catch(() => docs)
+      const session = await openAgentSessionComposer({
+        agent: youtubeResearchAgent,
+        workspaceId,
+        onCreateSession,
+        onInputChange,
+        skills,
+        sources,
+        contextDocs,
+      })
+      onSendMessage(session.id, createIntelRunPrompt(config, workspaceName || 'Artist HQ'))
+      await upsert({
+        slug: ARTIST_INTEL_REPORT_CONTEXT_SLUG,
+        metadata: artistIntelReportMetadata(),
+        body: serializeArtistIntelReportBody({
+          version: 1,
+          status: 'queued',
+          title: 'YouTube Intel Pulse queued',
+          summary: `Watching ${config.sources.length} configured channel${config.sources.length === 1 ? '' : 's'}.`,
+          sessionId: session.id,
+          sourceCount: config.sources.length,
+          generatedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }),
+      })
+      toast.success('Intel Pulse started')
+    } catch (error) {
+      toast.error('Failed to start Intel Pulse', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setIntelBusy(false)
+    }
+  }, [
+    docs,
+    intelConfig,
+    intelConfigResult,
+    onCreateSession,
+    onInputChange,
+    onSendMessage,
+    saveIntelConfig,
+    skills,
+    sources,
+    upsert,
+    workspaceId,
+    workspaceName,
+    youtubeResearchAgent,
+  ])
 
   const toggleSpotifySync = React.useCallback(async () => {
     setSpotifySyncBusy(true)
@@ -539,7 +682,7 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
 
         {tab === 'home' && (
           <>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
               <HQCard className="lg:col-span-1">
                 <div className="mb-3 flex items-center justify-between gap-3 border-b border-white/[0.04] pb-2.5">
                   <div className="flex min-w-0 items-center gap-2">
@@ -599,6 +742,18 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
                   <p className="mt-2 text-xs leading-5 text-red-100/65">{spotifyResult.error}</p>
                 ) : null}
               </HQCard>
+
+              <IntelPulseCard
+                config={intelConfig}
+                report={intelReport}
+                configError={intelConfigResult.ok ? null : intelConfigResult.error}
+                reportError={intelReportResult.ok ? null : intelReportResult.error}
+                busy={intelBusy}
+                agentReady={Boolean(youtubeResearchAgent)}
+                onToggle={toggleIntelPulse}
+                onRun={runIntelPulse}
+                onEdit={() => setIntelConfigOpen(true)}
+              />
 
               <HQCard>
                 <SectionTitle icon={CalendarDays} title="This Week" meta="calendar" />
@@ -792,6 +947,20 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
           disabled={!networkResult.ok}
         />
       ) : null}
+      <IntelConfigDialog
+        open={intelConfigOpen}
+        config={intelConfig}
+        onOpenChange={setIntelConfigOpen}
+        onSave={async (nextConfig) => {
+          try {
+            await saveIntelConfig(nextConfig)
+            toast.success('Intel channels saved')
+            setIntelConfigOpen(false)
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : String(error))
+          }
+        }}
+      />
     </div>
   )
 }
@@ -835,9 +1004,271 @@ function Metric({ label, value }: { label: string; value: string }) {
   )
 }
 
+function IntelPulseCard({
+  config,
+  report,
+  configError,
+  reportError,
+  busy,
+  agentReady,
+  onToggle,
+  onRun,
+  onEdit,
+}: {
+  config: ArtistIntelConfig
+  report: ReturnType<typeof parseArtistIntelReportDocResult>['report']
+  configError: string | null
+  reportError: string | null
+  busy: boolean
+  agentReady: boolean
+  onToggle: () => void
+  onRun: () => void
+  onEdit: () => void
+}) {
+  const latestLabel = report.generatedAt ? formatShortDate(report.generatedAt) : 'not run'
+  const statusLabel = report.status === 'queued'
+    ? 'Running'
+    : report.status === 'ready'
+      ? 'Ready'
+      : report.status === 'failed'
+        ? 'Needs check'
+        : config.enabled ? 'Active' : 'Off'
+
+  return (
+    <HQCard>
+      <div className="mb-3 flex items-center justify-between gap-3 border-b border-white/[0.04] pb-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <Radio className="h-3 w-3 shrink-0 text-white/40" />
+          <h3 className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-white/48">
+            Intel Pulse
+          </h3>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-white/24">
+            {statusLabel}
+          </span>
+          <button
+            type="button"
+            onClick={onToggle}
+            disabled={busy}
+            title={config.enabled ? 'Pause Intel Pulse' : 'Activate Intel Pulse'}
+            className={cn(
+              'inline-flex h-6 w-6 items-center justify-center rounded-full border transition-colors',
+              config.enabled
+                ? 'border-emerald-400/35 bg-emerald-500/12 text-emerald-300'
+                : 'border-white/[0.07] bg-white/[0.02] text-white/28 hover:text-white/60',
+              busy && 'cursor-wait opacity-60',
+            )}
+            aria-label={config.enabled ? 'Pause Intel Pulse' : 'Activate Intel Pulse'}
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', busy && 'animate-spin')} />
+          </button>
+          <button
+            type="button"
+            onClick={onEdit}
+            title="Edit Intel channels"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/[0.07] bg-white/[0.02] text-white/28 transition-colors hover:text-white/65"
+            aria-label="Edit Intel channels"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Metric label="Channels" value={String(config.sources.length)} />
+        <Metric label="Latest" value={latestLabel} />
+      </div>
+      <p className="mt-3 line-clamp-2 text-xs leading-5 text-white/38">
+        {report.summary || 'Watches selected YouTube channels and turns new videos into artist-facing research.'}
+      </p>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={onRun}
+          disabled={busy || !agentReady || config.sources.length === 0}
+          className="h-8 rounded-full bg-white/90 px-4 text-xs font-semibold text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          {busy ? 'Starting...' : 'Run'}
+        </button>
+        {report.sessionId ? (
+          <button
+            type="button"
+            onClick={() => navigate(routes.view.allSessions(report.sessionId))}
+            className="h-8 rounded-full border border-white/[0.08] px-3 text-xs font-medium text-white/55 hover:bg-white/[0.04]"
+          >
+            Open
+          </button>
+        ) : null}
+      </div>
+      <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-white/25">
+        {config.enabled ? `${config.cadence} radar active` : 'Radar off'}
+      </p>
+      {!agentReady ? (
+        <p className="mt-2 text-xs leading-5 text-yellow-100/65">YouTube Research Agent is not active in this workspace.</p>
+      ) : null}
+      {configError || reportError ? (
+        <p className="mt-2 text-xs leading-5 text-red-100/65">{configError || reportError}</p>
+      ) : null}
+    </HQCard>
+  )
+}
+
+function IntelConfigDialog({
+  open,
+  config,
+  onOpenChange,
+  onSave,
+}: {
+  open: boolean
+  config: ArtistIntelConfig
+  onOpenChange: (open: boolean) => void
+  onSave: (config: ArtistIntelConfig) => void | Promise<void>
+}) {
+  const [sources, setSources] = React.useState<ArtistIntelSource[]>(config.sources)
+  const [sinceDays, setSinceDays] = React.useState(config.sinceDays)
+  const [maxPerChannel, setMaxPerChannel] = React.useState(config.maxPerChannel)
+
+  React.useEffect(() => {
+    if (!open) return
+    setSources(config.sources)
+    setSinceDays(config.sinceDays)
+    setMaxPerChannel(config.maxPerChannel)
+  }, [config, open])
+
+  const updateSource = React.useCallback((id: string, patch: Partial<ArtistIntelSource>) => {
+    setSources((current) => current.map((source) => source.id === id ? { ...source, ...patch } : source))
+  }, [])
+
+  const addSource = React.useCallback(() => {
+    const id = `source-${Date.now()}`
+    setSources((current) => [
+      ...current,
+      { id, name: '', url: '', priority: 'medium', notes: '' },
+    ])
+  }, [])
+
+  const removeSource = React.useCallback((id: string) => {
+    setSources((current) => current.filter((source) => source.id !== id))
+  }, [])
+
+  const save = React.useCallback(() => {
+    const nextSources = sources
+      .map((source) => ({
+        ...source,
+        name: source.name.trim(),
+        url: source.url.trim(),
+        notes: source.notes?.trim(),
+      }))
+      .filter((source) => source.name && source.url)
+    void onSave({
+      ...config,
+      sources: nextSources,
+      sinceDays,
+      maxPerChannel,
+      updatedAt: new Date().toISOString(),
+    })
+  }, [config, maxPerChannel, onSave, sinceDays, sources])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[760px] border-white/[0.08] bg-[#080808] text-white shadow-2xl">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-medium">Intel channels</DialogTitle>
+          <DialogDescription className="text-white/42">
+            Pick the YouTube channels this HQ should watch.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="block space-y-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">Scan days</span>
+              <input
+                type="number"
+                min={1}
+                max={30}
+                value={sinceDays}
+                onChange={(event) => setSinceDays(Number(event.target.value))}
+                className="h-9 w-full rounded-[10px] border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white/80 outline-none focus:border-orange-400/45"
+              />
+            </label>
+            <label className="block space-y-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">Max per channel</span>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={maxPerChannel}
+                onChange={(event) => setMaxPerChannel(Number(event.target.value))}
+                className="h-9 w-full rounded-[10px] border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white/80 outline-none focus:border-orange-400/45"
+              />
+            </label>
+          </div>
+          <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+            {sources.map((source) => (
+              <div key={source.id} className="rounded-[14px] border border-white/[0.055] bg-white/[0.018] p-3">
+                <div className="grid gap-2 md:grid-cols-[1fr_1.35fr_120px_34px]">
+                  <Input value={source.name} onChange={(name) => updateSource(source.id, { name })} placeholder="Channel name" />
+                  <Input value={source.url} onChange={(url) => updateSource(source.id, { url })} placeholder="https://www.youtube.com/@channel" />
+                  <select
+                    value={source.priority}
+                    onChange={(event) => updateSource(source.id, { priority: event.target.value as ArtistIntelSource['priority'] })}
+                    className="h-9 rounded-[10px] border border-white/[0.06] bg-black/30 px-3 text-xs text-white/75 outline-none"
+                  >
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => removeSource(source.id)}
+                    className="inline-flex h-9 items-center justify-center rounded-[10px] border border-white/[0.07] text-white/35 hover:bg-white/[0.04] hover:text-white/70"
+                    aria-label={`Remove ${source.name || 'channel'}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <textarea
+                  value={source.notes ?? ''}
+                  onChange={(event) => updateSource(source.id, { notes: event.target.value })}
+                  placeholder="Why this channel matters..."
+                  className="mt-2 min-h-[58px] w-full rounded-[10px] border border-white/[0.06] bg-black/25 px-3 py-2 text-xs leading-5 text-white/75 outline-none placeholder:text-white/28 focus:border-white/16"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <button
+              type="button"
+              onClick={addSource}
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] px-4 text-xs font-medium text-white/62 hover:bg-white/[0.04]"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add channel
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              className="h-9 rounded-full bg-white px-5 text-xs font-semibold text-black"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function formatMetric(value: number | undefined): string {
   if (typeof value !== 'number') return '--'
   return new Intl.NumberFormat('en-US', { notation: value >= 10000 ? 'compact' : 'standard' }).format(value)
+}
+
+function formatShortDate(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date)
 }
 
 function TimelineItem({ time, title }: { time: string; title: string }) {
