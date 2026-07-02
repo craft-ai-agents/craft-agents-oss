@@ -89,6 +89,52 @@ describe('team shared-folder migration', () => {
     expect(existsSync(join(source, 'config.json'))).toBe(true);
   });
 
+  it('blocks credential caches and keeps sessions private during shared-folder migration', () => {
+    const source = makeDir('team-migrate-private-source-');
+    const destinationParent = makeDir('team-migrate-private-dest-');
+    writeWorkspace(source);
+    mkdirSync(join(source, 'sources', 'google-ads'), { recursive: true });
+    writeFileSync(join(source, 'sources', 'google-ads', '.credential-cache.json'), '{"token":"secret"}', 'utf-8');
+
+    const preflight = preflightSharedFolderMigration(source, destinationParent);
+    expect(preflight.ok).toBe(false);
+    expect(preflight.blockedFiles).toEqual(['sources/google-ads/.credential-cache.json']);
+
+    rmSync(join(source, 'sources', 'google-ads', '.credential-cache.json'));
+    mkdirSync(join(source, 'sessions', 'session-1'), { recursive: true });
+    writeFileSync(join(source, 'sessions', 'session-1', 'session.jsonl'), '{"private":true}\n', 'utf-8');
+
+    const result = moveWorkspaceToSharedFolder(source, destinationParent);
+
+    expect(existsSync(join(result.finalRootPath, 'sessions'))).toBe(false);
+    expect(existsSync(join(result.finalRootPath, 'sources', 'google-ads'))).toBe(false);
+  });
+
+  it('preserves existing runner automation policy when migrating an enabled team workspace', () => {
+    const source = makeDir('team-migrate-policy-source-');
+    const destinationParent = makeDir('team-migrate-policy-dest-');
+    writeWorkspace(source, {
+      team: {
+        enabled: true,
+        teamId: 'team_existing',
+        revision: 4,
+        runnerMachineId: 'machine_existing',
+        automationsPolicy: 'runner-only',
+        backgroundTriggersEnabled: true,
+        runnerMissedTickPolicy: 'run-once',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    });
+
+    const result = moveWorkspaceToSharedFolder(source, destinationParent);
+    const migrated = loadWorkspaceConfig(result.finalRootPath);
+
+    expect(migrated?.team?.runnerMachineId).toBe('machine_existing');
+    expect(migrated?.team?.automationsPolicy).toBe('runner-only');
+    expect(migrated?.team?.backgroundTriggersEnabled).toBe(true);
+  });
+
   it('rejects destinations inside the source workspace', () => {
     const source = makeDir('team-migrate-nested-source-');
     writeWorkspace(source);

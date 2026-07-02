@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadWorkspaceConfig } from '../storage.ts';
@@ -264,6 +264,18 @@ describe('team mode metadata', () => {
     expect(evaluateTeamRunnerGate(sync.machineB)).toMatchObject({ allowed: false, reason: 'not-runner' });
   });
 
+  it('re-enabling team metadata preserves existing runner automation policy', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+    const first = markWorkspaceAsSharedFolder(root, { makeRunner: true });
+
+    const second = markWorkspaceAsSharedFolder(root);
+
+    expect(second.team.runnerMachineId).toBe(first.machine.machineId);
+    expect(second.team.automationsPolicy).toBe('runner-only');
+    expect(second.team.backgroundTriggersEnabled).toBe(true);
+  });
+
   it('sync health surfaces open conflict records', () => {
     const root = makeWorkspaceRoot();
     writeWorkspace(root);
@@ -276,6 +288,24 @@ describe('team mode metadata', () => {
       email: 'sync2@example.com',
     }, { machineId: 'machine_a', baseline: { revision: 0, sha256: 'stale', entity: {} }, now: '2026-07-02T12:01:00.000Z' });
     expect(conflict.status).toBe('conflict');
+
+    const status = getTeamModeStatus(root);
+
+    expect(status.syncHealth.conflictCount).toBe(1);
+    expect(status.syncHealth.status).toBe('warning');
+    expect(status.syncHealth.checks.some((check) => check.id === 'conflicts' && check.status === 'warning')).toBe(true);
+  });
+
+  it('sync health scans provider conflicted-copy files before counting conflicts', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+    markWorkspaceAsSharedFolder(root);
+    const contactsDir = join(root, 'records', 'community', 'contacts');
+    mkdirSync(contactsDir, { recursive: true });
+    writeFileSync(join(contactsDir, 'fan_sync_health (conflicted copy).json'), JSON.stringify({
+      id: 'fan_sync_health',
+      email: 'sync@example.com',
+    }, null, 2), 'utf-8');
 
     const status = getTeamModeStatus(root);
 

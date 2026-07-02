@@ -69,8 +69,13 @@ const BLOCKED_SECRET_BASENAMES = new Set([
   '.env.local',
   '.env.development',
   '.env.production',
+  '.credential-cache.json',
   'credentials.enc',
   'auth.json',
+]);
+
+const PRIVATE_WORKSPACE_DIRS = new Set([
+  'sessions',
 ]);
 
 function nowIso(): string {
@@ -164,6 +169,12 @@ function findBlockedSecretFiles(rootPath: string): string[] {
   });
 }
 
+function shouldCopyWorkspaceFile(relativePath: string): boolean {
+  const parts = relativePath.split(/[\\/]+/).filter(Boolean);
+  if (parts.some((part) => PRIVATE_WORKSPACE_DIRS.has(part))) return false;
+  return !BLOCKED_SECRET_BASENAMES.has(basename(relativePath));
+}
+
 export function preflightSharedFolderMigration(
   sourceRootPath: string,
   destinationParentPath: string,
@@ -206,6 +217,7 @@ export function preflightSharedFolderMigration(
 function copyWorkspaceFilesConfigLast(sourceRootPath: string, tempRootPath: string): void {
   for (const relativePath of collectWorkspaceFiles(sourceRootPath)) {
     if (relativePath === 'config.json') continue;
+    if (!shouldCopyWorkspaceFile(relativePath)) continue;
     const destPath = join(tempRootPath, relativePath);
     mkdirSync(dirname(destPath), { recursive: true });
     copyFileSync(join(sourceRootPath, relativePath), destPath);
@@ -226,6 +238,16 @@ function writeMigratedWorkspaceConfig(
   const timestamp = nowIso();
   const previousTeam = sourceConfig.team ?? createDisabledTeamConfig();
   const machine = readOrCreateMachineIdentity(sourceConfig.id);
+  const automationsPolicy = input.makeRunner
+    ? 'runner-only'
+    : previousTeam.enabled
+      ? previousTeam.automationsPolicy
+      : 'manual-only';
+  const backgroundTriggersEnabled = input.makeRunner
+    ? true
+    : previousTeam.enabled
+      ? previousTeam.backgroundTriggersEnabled
+      : false;
   const migratedConfig: WorkspaceConfig = {
     ...sourceConfig,
     formatVersion: WORKSPACE_FORMAT_VERSION,
@@ -249,8 +271,8 @@ function writeMigratedWorkspaceConfig(
       enabled: true,
       revision: previousTeam.revision + 1,
       runnerMachineId: input.makeRunner ? machine.machineId : previousTeam.runnerMachineId,
-      automationsPolicy: input.makeRunner ? 'runner-only' : 'manual-only',
-      backgroundTriggersEnabled: Boolean(input.makeRunner),
+      automationsPolicy,
+      backgroundTriggersEnabled,
       updatedAt: timestamp,
     },
   };

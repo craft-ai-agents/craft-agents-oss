@@ -12,7 +12,7 @@ import { hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { CONFIG_DIR, loadWorkspaceConfig, saveWorkspaceConfig } from './storage.ts';
-import { listConflictRecords } from '../records/storage.ts';
+import { listConflictRecords, scanProviderConflictedCopies } from '../records/storage.ts';
 import {
   WORKSPACE_FORMAT_VERSION,
   type SharedFolderProvider,
@@ -244,8 +244,11 @@ function getRunnerStatusFields(workspaceRootPath: string, team: WorkspaceTeamCon
   };
 }
 
-function getConflictCount(workspaceRootPath: string): number {
+function getConflictCount(workspaceRootPath: string, machineId: string, scanProviderConflicts: boolean): number {
   try {
+    if (scanProviderConflicts) {
+      scanProviderConflictedCopies(workspaceRootPath, { machineId });
+    }
     return listConflictRecords(workspaceRootPath).filter((conflict) => conflict.status !== 'resolved').length;
   } catch {
     return 0;
@@ -266,7 +269,8 @@ function buildTeamSyncHealth(
 ): TeamSyncHealth {
   const joined = input.machine.machineId !== 'not_joined';
   const machineCount = listTeamMachineHeartbeats(workspaceRootPath).length;
-  const conflictCount = getConflictCount(workspaceRootPath);
+  const shouldScanProviderConflicts = input.storage.mode === 'shared-folder' && input.team.enabled;
+  const conflictCount = getConflictCount(workspaceRootPath, input.machine.machineId, shouldScanProviderConflicts);
   const checks: TeamSyncHealthCheck[] = [];
 
   if (input.storage.mode === 'solo' || !input.team.enabled) {
@@ -682,6 +686,16 @@ export function markWorkspaceAsSharedFolder(
   const machine = readOrCreateMachineIdentity(loaded.id);
   const timestamp = nowIso();
   const previousTeam = loaded.team ?? createDisabledTeamConfig();
+  const automationsPolicy = input.makeRunner
+    ? 'runner-only'
+    : previousTeam.enabled
+      ? previousTeam.automationsPolicy
+      : 'manual-only';
+  const backgroundTriggersEnabled = input.makeRunner
+    ? true
+    : previousTeam.enabled
+      ? previousTeam.backgroundTriggersEnabled
+      : false;
   const config: WorkspaceConfig = {
     ...loaded,
     formatVersion: WORKSPACE_FORMAT_VERSION,
@@ -700,8 +714,8 @@ export function markWorkspaceAsSharedFolder(
       enabled: true,
       revision: previousTeam.revision + 1,
       runnerMachineId: input.makeRunner ? machine.machineId : previousTeam.runnerMachineId,
-      automationsPolicy: input.makeRunner ? 'runner-only' : 'manual-only',
-      backgroundTriggersEnabled: Boolean(input.makeRunner),
+      automationsPolicy,
+      backgroundTriggersEnabled,
       updatedAt: timestamp,
     },
   };
