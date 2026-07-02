@@ -107,7 +107,7 @@ interface ArtistHQHomeProps {
   workspaceName?: string
 }
 
-type ArtistHQTab = 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'workers' | 'branding'
+type ArtistHQTab = 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'branding'
 type NetworkDraft = {
   name: string
   category: ArtistNetworkCategory
@@ -779,15 +779,6 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
           icon: <MessageSquareText className="h-3.5 w-3.5 text-pink-300/80" />,
           label: 'Style',
         }
-      case 'workers':
-        return {
-          title: 'Workers',
-          description: 'Global HQ workers for recurring artist operations.',
-          orb1: 'bg-orange-600/10',
-          orb2: 'bg-emerald-500/5',
-          icon: <Bot className="h-3.5 w-3.5 text-orange-300/80" />,
-          label: 'Work',
-        }
       case 'branding':
         return {
           title: 'Branding',
@@ -1091,13 +1082,6 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
             ) : null}
 
             <NetworkBoard categories={network.categories} people={filteredPeople} onSelectPerson={openPerson} />
-          </HQCard>
-        )}
-
-        {tab === 'workers' && (
-          <HQCard>
-            <SectionTitle icon={Bot} title="Workers" meta="work" />
-            <EmptyLine title="No active global workers" detail="Spotify sync, YouTube intel, website, SEO, and comms workers will appear here." />
           </HQCard>
         )}
 
@@ -2257,7 +2241,7 @@ function readTabFromHash(): ArtistHQTab {
 }
 
 function isArtistHQTab(value: string): value is ArtistHQTab {
-  return value === 'home' || value === 'profile' || value === 'voice' || value === 'calendar' || value === 'network' || value === 'research' || value === 'workers' || value === 'branding'
+  return value === 'home' || value === 'profile' || value === 'voice' || value === 'calendar' || value === 'network' || value === 'research' || value === 'branding'
 }
 
 function startOfMonth(date: Date): Date {

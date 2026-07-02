@@ -1670,7 +1670,7 @@ function AppShellContent({
     navigate(routes.view.agenda())
   }, [])
 
-  const handleArtistHQNavClick = useCallback((tab: 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'workers' | 'branding') => {
+  const handleArtistHQNavClick = useCallback((tab: 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'branding') => {
     const hqWorkspace = findArtistHQWorkspace(workspaces)
     if (!hqWorkspace) {
       toast.error('No HQ workspace found')
@@ -1996,7 +1996,7 @@ function AppShellContent({
     action?: () => void
   }
 
-  const hqHomeActive = isArtistHQWorkspace && isSessionsNavigation(navState) && !['#artist-hq/calendar', '#artist-hq/network', '#artist-hq/profile', '#artist-hq/voice', '#artist-hq/research', '#artist-hq/workers', '#artist-hq/branding'].includes(artistHqHash)
+  const hqHomeActive = isArtistHQWorkspace && isSessionsNavigation(navState) && !['#artist-hq/calendar', '#artist-hq/network', '#artist-hq/profile', '#artist-hq/voice', '#artist-hq/research', '#artist-hq/branding'].includes(artistHqHash)
   const vaultActive = isVaultNavigation(navState)
   const planExpanded = expandedMainNavGroups.has('plan')
   const peopleExpanded = expandedMainNavGroups.has('people')
@@ -2018,9 +2018,8 @@ function AppShellContent({
       result.push({ id: 'nav:community', type: 'nav', action: () => navigate(routes.view.community()) })
     }
     result.push({ id: 'nav:vault', type: 'nav', action: () => navigate(routes.view.vault()) })
-    result.push({ id: 'nav:work', type: 'nav', action: () => handleMainNavGroupClick('work', () => handleArtistHQNavClick('workers')) })
+    result.push({ id: 'nav:work', type: 'nav', action: () => handleMainNavGroupClick('work', handleAgentsClick) })
     if (workExpanded) {
-      result.push({ id: 'nav:workers', type: 'nav', action: () => handleArtistHQNavClick('workers') })
       result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
       result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
       result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
@@ -2431,15 +2430,8 @@ function AppShellContent({
                       expandable: true,
                       expanded: workExpanded,
                       onToggle: () => toggleMainNavGroup('work'),
-                      onClick: () => handleMainNavGroupClick('work', () => handleArtistHQNavClick('workers')),
+                      onClick: () => handleMainNavGroupClick('work', handleAgentsClick),
                       items: [
-                        {
-                          id: "nav:workers",
-                          title: "Workers",
-                          icon: Bot,
-                          variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/workers' ? "default" : "ghost",
-                          onClick: () => handleArtistHQNavClick('workers'),
-                        },
                         {
                           id: "nav:agents",
                           title: "Agents",
