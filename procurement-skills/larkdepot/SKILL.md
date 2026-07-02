@@ -1,6 +1,6 @@
 ---
 name: larkdepot
-description: 飞书多维表格本地货站——查库存/供应商等飞书表数据走本地 SQLite 缓存(抗限流)，批量结果本地落行后 push 回飞书。查询用 query sql(agent 直写 SQL，norm() 做型号变体归一)。当需要查本地飞书表缓存、注册新表进缓存、或把批量任务结果落库回传飞书时使用。
+description: 当需要查飞书表的本地缓存(库存/供应商档案等,抗限流)、注册新飞书表进缓存、或把批量任务结果落库并回传飞书时使用。也用于判断缓存是否可用、以及缓存不可用时怎么降级。
 metadata:
   short-description: 飞书本地缓存/写回 CLI
   lang: zh
@@ -8,68 +8,42 @@ metadata:
 
 # larkdepot（原 feishu-db）
 
-源码与发版：独立私有 repo `cunninghamcard-bit/larkdepot`，GitHub Release 分发 musl 静态 binary。这个目录不存放源码或编译产物，只有本操作手册。
+飞书多维表格本地货站:pull 整表镜像进本地 SQLite(查询零限流),push 把本地写回行推上飞书。**本 skill 是 larkdepot 的唯一操作手册,业务 skill 只引用、不内嵌任何工具细节。**
 
-binary 名：`larkdepot`。prod 上已装进 PATH，本地开发从 release 拉取或在 larkdepot repo 里自行编译。
+源码/发版:私有 repo `cunninghamcard-bit/larkdepot`(GitHub Release 分发 musl 静态 binary)。binary 名 `larkdepot`,prod 已在 PATH。
 
-**本 skill 是 larkdepot 的唯一操作手册**：命令细节、输出语义、故障判定、降级机制都只写在这里。业务 skill 只引用本 skill + 声明自己的业务口径，不内嵌任何工具细节。
+## 查(唯一入口:只读 SQL)
 
-## 查（唯一入口：只读 SQL）
+    larkdepot schema      # 先看有哪些表、每张表的真实列名(列名=飞书字段名,会漂移,别凭记忆硬编码)
+    larkdepot query sql --sql "SELECT ... WHERE norm(型号)=norm('bav-99')" [--limit N] [--db state]
 
-先看有哪些表、每张表的真实列名（列名 = 飞书字段名，逐字直取，没有别名映射）：
+- `norm(列)`:去 `-`/`/`/空格+大写,型号变体匹配必用。
+- `--db cache`(默认)查飞书镜像;`--db state` 查本地写回事实源。
+- 多选/人员/附件列存原始 JSON 文本,`json_extract` 拆。
+- envelope 带 `freshness.age_s`,过大时提醒用户缓存偏旧(cron 定期 sync)。
 
-    larkdepot schema
+## 写回与注册
 
-再直接写 SQL：
+    larkdepot register "<飞书表URL>" --name 表名 && larkdepot sync   # 纳管人建的新表
+    larkdepot state create/write/list + larkdepot push               # 批量结果写回,见配方
 
-    larkdepot query sql --sql "SELECT 型号,数量,单价 FROM 动态库存表 WHERE norm(型号)=norm('BAV99W')"
-    larkdepot query sql --sql "SELECT * FROM 供应商档案 WHERE 主营品牌 LIKE '%TDK%'" --limit 50
-    larkdepot query sql --sql "SELECT * FROM batch_results WHERE _instance='0702找料'" --db state
+## 业务场景配方(references/)
 
-- `norm(列)`：去 `-`/`/`/空格 + 转大写，型号变体匹配必用，比如 `norm('bav-99')` 和 `norm('BAV99')` 相等。
-- `--db cache`（默认）查飞书镜像缓存；`--db state` 查本地写回事实源（批量结果等）。
-- 多选/人员/附件等列存原始 JSON 文本，用 `json_extract` 拆。
-- envelope 带 `freshness.age_s`：缓存超过几小时没刷新时提醒用户数据偏旧（cron 定期 `sync`）。
-- 每张表的真实列名不保证长期不变（飞书那边可能改字段名/加列），**写 SQL 前先跑一次 `schema` 核对**，不要凭记忆硬编码列名。
+| 场景 | 配方 |
+|---|---|
+| 库存跨 7 表查询 | [references/inventory-lookup.md](references/inventory-lookup.md) |
+| 供应商档案三字段检索 | [references/supplier-search.md](references/supplier-search.md) |
+| 批量结果写回飞书 | [references/batch-writeback.md](references/batch-writeback.md) |
+| 缓存不可用降级直查 | [references/degraded-direct-query.md](references/degraded-direct-query.md) |
 
-## 写回（批量任务结果落库 → 推飞书）
+## 查不到 = 没有(工具级事实)
 
-    larkdepot state create --template batch-result --title "0702找料" --app <base_token>
-    larkdepot state write "0702找料" --json '{"批次ID":"B1","型号":"BAV99","结果状态":"found","结果JSON":"{...}"}'
-    larkdepot push                         # 幂等，失败行下次自动重试
+缓存是飞书各表的**完整镜像**(整表同步,非抽样)。命令成功且 `freshness.synced_at` 非空 → 结果即权威,`data` 空 = 源表里确实没有,**不要降级实时查**(同源只会同样空,还更慢、撞限流)。空结果是常态、也是有用的答案。
 
-## 注册人建的新飞书表进缓存
+## 缓存不可用的判定(唯一标准)
 
-    larkdepot register "<飞书表URL(地址栏带 table= 参数)>" --name 表名
-    larkdepot sync
-
-## 查不到 = 没有（对所有业务 skill 生效的工具级事实）
-
-缓存是飞书各表的**完整镜像**（每张整表同步，不是抽样）。所以：
-
-- 命令成功且 envelope 里 `freshness.synced_at` 非空 → 结果即权威。`data` 空 = 源表里确实没有，**不要降级去实时查 lark-cli**——查同一个源只会得到同样的空，还更慢、撞限流。
-- 空结果是常态、也是有用的答案。不要因为"没查到"就怀疑工具、反复换写法重试。
-- `freshness.age_s` 过大（缓存偏旧）是提醒用户的信号，不是降级实时查询的理由。
-
-## 缓存不可用的判定（唯一标准，业务 skill 不要自己发明）
-
-仅当以下任一成立，才算缓存不可用：
-
-1. `larkdepot` 命令**本身失败**：二进制缺失 / 报错退出 / 输出非 JSON；
-2. `freshness.synced_at` 为 **null**（从未成功同步过）。
-
-## 缓存不可用时的降级直查（机制也在这里，业务 skill 只给业务口径）
-
-降级 = 用 lark-cli 直查飞书源表。**串行、一张一张查，绝不并发**；遇限流 `800004135` 等几秒重试，静默处理：
-
-    # 目标表的 app_token/table_id 从 schema 输出的 registry 里拿,不要手抄硬编码
-    larkdepot schema
-    lark-cli base +record-search --as user --base-token <app_token> --table-id <table_id> --json '{"keyword":"<关键词>","search_fields":["<字段>","..."]}'
-
-- 子命令必须带 `+` 前缀。`search_fields` 按业务 skill 声明的检索口径填。
-- 若返回 `91403 permission`/登录失效，如实告诉用户需要开 base 读权限 / 重登 lark-cli，不要编造数据，不要反复切身份重试。
-- 极端情况（binary 整个缺失连 `schema` 都跑不了）：让用户提供表链接，不要凭记忆猜 token。
+仅当任一成立:① `larkdepot` 命令**本身失败**(二进制缺失/报错退出/输出非 JSON);② `freshness.synced_at` 为 **null**(从未同步过)。此时才走降级配方。
 
 ## 故障
 
-退出码：0 成功（含查空）/ 1 用法错误 / 2 环境错误（未 sync、lark-cli 未授权）/ 3 任务失败。错误 JSON 自带 `hint`，照 hint 办。
+退出码:0 成功(含查空)/ 1 用法 / 2 环境(未 sync、lark-cli 未授权)/ 3 任务失败。错误 JSON 自带 `hint`,照 hint 办。
