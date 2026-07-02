@@ -27,7 +27,7 @@ import {
   Layers,
   Bot,
   MessageSquare,
-  Settings,
+  Sparkles,
   Users,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
@@ -1654,6 +1654,7 @@ function AppShellContent({
 
   const [sessionsNavExpanded, setSessionsNavExpanded] = React.useState(() => isSessionsNavigation(navState))
   const [artistHqHash, setArtistHqHash] = React.useState(() => window.location.hash)
+  const [expandedMainNavGroups, setExpandedMainNavGroups] = React.useState<Set<string>>(() => new Set())
   React.useEffect(() => {
     const updateHash = () => setArtistHqHash(window.location.hash)
     window.addEventListener('hashchange', updateHash)
@@ -1669,7 +1670,7 @@ function AppShellContent({
     navigate(routes.view.agenda())
   }, [])
 
-  const handleArtistHQNavClick = useCallback((tab: 'home' | 'calendar' | 'network') => {
+  const handleArtistHQNavClick = useCallback((tab: 'home' | 'profile' | 'calendar' | 'network' | 'research' | 'workers' | 'branding') => {
     const hqWorkspace = findArtistHQWorkspace(workspaces)
     if (!hqWorkspace) {
       toast.error('No HQ workspace found')
@@ -1682,6 +1683,24 @@ function AppShellContent({
     window.location.hash = `#artist-hq/${tab}`
     navigate(routes.view.allSessions(), { skipAutoSelect: true })
   }, [activeWorkspaceId, onSelectWorkspace, workspaces])
+
+  const toggleMainNavGroup = React.useCallback((group: string) => {
+    setExpandedMainNavGroups((current) => {
+      const next = new Set(current)
+      if (next.has(group)) next.delete(group)
+      else next.add(group)
+      return next
+    })
+  }, [])
+
+  const openMainNavGroup = React.useCallback((group: string, action: () => void) => {
+    setExpandedMainNavGroups((current) => {
+      const next = new Set(current)
+      next.add(group)
+      return next
+    })
+    action()
+  }, [])
 
   const handleNewProjectClick = useCallback(() => {
     const targetSessionId = focusedSessionId ?? (isSessionsNavigation(navState) ? session.selected : undefined)
@@ -1975,27 +1994,48 @@ function AppShellContent({
     action?: () => void
   }
 
+  const hqHomeActive = isArtistHQWorkspace && isSessionsNavigation(navState) && !['#artist-hq/calendar', '#artist-hq/network', '#artist-hq/profile', '#artist-hq/research', '#artist-hq/workers', '#artist-hq/branding'].includes(artistHqHash)
+  const planActive = isAgendaNavigation(navState) || (isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/calendar')
+  const peopleActive = isCommunityNavigation(navState) || (isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/network')
+  const vaultActive = isVaultNavigation(navState)
+  const workActive = isAgentsNavigation(navState) || isAutomationsNavigation(navState) || isWorkflowsNavigation(navState) || (isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/workers')
+  const brainActive = isArtistHQWorkspace && isSessionsNavigation(navState) && ['#artist-hq/profile', '#artist-hq/research', '#artist-hq/branding'].includes(artistHqHash)
+  const planExpanded = expandedMainNavGroups.has('plan') || planActive
+  const peopleExpanded = expandedMainNavGroups.has('people') || peopleActive
+  const workExpanded = expandedMainNavGroups.has('work') || workActive
+  const brainExpanded = expandedMainNavGroups.has('brain') || brainActive
+
   const unifiedSidebarItems = React.useMemo((): SidebarItem[] => {
     const result: SidebarItem[] = []
 
-    // 1. HQ
     result.push({ id: 'nav:hq', type: 'nav', action: () => handleArtistHQNavClick('home') })
-
-    // 2. Agenda and Workers
-    result.push({ id: 'nav:agenda', type: 'nav', action: handleAgendaNavClick })
-    result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
-
-    // 3. HQ sections
-    result.push({ id: 'nav:calendar', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
-    result.push({ id: 'nav:network', type: 'nav', action: () => handleArtistHQNavClick('network') })
-    result.push({ id: 'nav:community', type: 'nav', action: () => navigate(routes.view.community()) })
+    result.push({ id: 'nav:plan', type: 'nav', action: () => openMainNavGroup('plan', handleAgendaNavClick) })
+    if (planExpanded) {
+      result.push({ id: 'nav:agenda', type: 'nav', action: handleAgendaNavClick })
+      result.push({ id: 'nav:calendar', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
+    }
+    result.push({ id: 'nav:people', type: 'nav', action: () => openMainNavGroup('people', () => handleArtistHQNavClick('network')) })
+    if (peopleExpanded) {
+      result.push({ id: 'nav:network', type: 'nav', action: () => handleArtistHQNavClick('network') })
+      result.push({ id: 'nav:community', type: 'nav', action: () => navigate(routes.view.community()) })
+    }
     result.push({ id: 'nav:vault', type: 'nav', action: () => navigate(routes.view.vault()) })
-
-    // 4. Settings
-    result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
+    result.push({ id: 'nav:work', type: 'nav', action: () => openMainNavGroup('work', () => handleArtistHQNavClick('workers')) })
+    if (workExpanded) {
+      result.push({ id: 'nav:workers', type: 'nav', action: () => handleArtistHQNavClick('workers') })
+      result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
+      result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
+      result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
+    }
+    result.push({ id: 'nav:brain', type: 'nav', action: () => openMainNavGroup('brain', () => handleArtistHQNavClick('profile')) })
+    if (brainExpanded) {
+      result.push({ id: 'nav:profile', type: 'nav', action: () => handleArtistHQNavClick('profile') })
+      result.push({ id: 'nav:research', type: 'nav', action: () => handleArtistHQNavClick('research') })
+      result.push({ id: 'nav:branding', type: 'nav', action: () => handleArtistHQNavClick('branding') })
+    }
 
     return result
-  }, [handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleSettingsClick])
+  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, openMainNavGroup, peopleExpanded, planExpanded, workExpanded])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2310,7 +2350,7 @@ function AppShellContent({
             <div className="flex h-full flex-col select-none">
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
-                {/* Primary Nav: All Sessions (▸ Statuses, Flagged, Archived), Labels | Sources, Skills | Settings */}
+                {/* Primary Nav */}
                 {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
                 <div className="flex-1 w-full overflow-y-auto min-h-0 mask-fade-bottom pt-[18px] pb-4">
                 <LeftSidebar
@@ -2318,64 +2358,145 @@ function AppShellContent({
                   getItemProps={getSidebarItemProps}
                   focusedItemId={focusedSidebarItemId}
                   links={[
-                    // --- Artist HQ ---
                     {
                       id: "nav:hq",
                       title: "HQ",
                       icon: Globe,
-                      variant: isArtistHQWorkspace && isSessionsNavigation(navState) && !['#artist-hq/calendar', '#artist-hq/network'].includes(artistHqHash) ? "default" : "ghost",
+                      variant: hqHomeActive ? "default" : "ghost",
                       onClick: () => handleArtistHQNavClick('home'),
                     },
-                    // --- Agenda ---
                     {
-                      id: "nav:agenda",
-                      title: "Agenda",
-                      icon: MessageSquare,
-                      variant: isAgendaNavigation(navState) ? "default" : "ghost",
-                      onClick: handleAgendaNavClick,
-                    },
-                    {
-                      id: "nav:calendar",
-                      title: "Calendar",
+                      id: "nav:plan",
+                      title: "Plan",
                       icon: Calendar,
-                      variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/calendar' ? "default" : "ghost",
-                      onClick: () => handleArtistHQNavClick('calendar'),
+                      variant: planActive ? "default" : "ghost",
+                      expandable: true,
+                      expanded: planExpanded,
+                      onToggle: () => toggleMainNavGroup('plan'),
+                      onClick: () => openMainNavGroup('plan', handleAgendaNavClick),
+                      items: [
+                        {
+                          id: "nav:agenda",
+                          title: "Agenda",
+                          icon: MessageSquare,
+                          variant: isAgendaNavigation(navState) ? "default" : "ghost",
+                          onClick: handleAgendaNavClick,
+                        },
+                        {
+                          id: "nav:calendar",
+                          title: "Calendar",
+                          icon: Calendar,
+                          variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/calendar' ? "default" : "ghost",
+                          onClick: () => handleArtistHQNavClick('calendar'),
+                        },
+                      ],
                     },
                     {
-                      id: "nav:network",
-                      title: "Network",
+                      id: "nav:people",
+                      title: "People",
                       icon: Users,
-                      variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/network' ? "default" : "ghost",
-                      onClick: () => handleArtistHQNavClick('network'),
-                    },
-                    {
-                      id: "nav:community",
-                      title: "Community",
-                      icon: Mail,
-                      variant: isCommunityNavigation(navState) ? "default" : "ghost",
-                      onClick: () => navigate(routes.view.community()),
+                      variant: peopleActive ? "default" : "ghost",
+                      expandable: true,
+                      expanded: peopleExpanded,
+                      onToggle: () => toggleMainNavGroup('people'),
+                      onClick: () => openMainNavGroup('people', () => handleArtistHQNavClick('network')),
+                      items: [
+                        {
+                          id: "nav:network",
+                          title: "Network",
+                          icon: Users,
+                          variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/network' ? "default" : "ghost",
+                          onClick: () => handleArtistHQNavClick('network'),
+                        },
+                        {
+                          id: "nav:community",
+                          title: "Community/Fans",
+                          icon: Mail,
+                          variant: isCommunityNavigation(navState) ? "default" : "ghost",
+                          onClick: () => navigate(routes.view.community()),
+                        },
+                      ],
                     },
                     {
                       id: "nav:vault",
                       title: "Vault",
                       icon: FolderOpen,
-                      variant: isVaultNavigation(navState) ? "default" : "ghost",
+                      variant: vaultActive ? "default" : "ghost",
                       onClick: () => navigate(routes.view.vault()),
                     },
-                    // --- Workers ---
                     {
-                      id: "nav:agents",
-                      title: 'Workers',
+                      id: "nav:work",
+                      title: "Work",
                       icon: Bot,
-                      variant: isAgentsNavigation(navState) ? "default" : "ghost",
-                      onClick: handleAgentsClick,
+                      variant: workActive ? "default" : "ghost",
+                      expandable: true,
+                      expanded: workExpanded,
+                      onToggle: () => toggleMainNavGroup('work'),
+                      onClick: () => openMainNavGroup('work', () => handleArtistHQNavClick('workers')),
+                      items: [
+                        {
+                          id: "nav:workers",
+                          title: "Workers",
+                          icon: Bot,
+                          variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/workers' ? "default" : "ghost",
+                          onClick: () => handleArtistHQNavClick('workers'),
+                        },
+                        {
+                          id: "nav:agents",
+                          title: "Agents",
+                          icon: Users,
+                          variant: isAgentsNavigation(navState) ? "default" : "ghost",
+                          onClick: handleAgentsClick,
+                        },
+                        {
+                          id: "nav:automations",
+                          title: "Automations",
+                          icon: Zap,
+                          variant: isAutomationsNavigation(navState) ? "default" : "ghost",
+                          onClick: () => navigate(routes.view.automations()),
+                        },
+                        {
+                          id: "nav:workflows",
+                          title: "Workflows",
+                          icon: Layers,
+                          variant: isWorkflowsNavigation(navState) ? "default" : "ghost",
+                          onClick: () => navigate(routes.view.workflows()),
+                        },
+                      ],
                     },
+                    { id: "nav:brain-separator", type: 'separator' },
                     {
-                      id: "nav:settings",
-                      title: "Settings",
-                      icon: Settings,
-                      variant: isSettingsNavigation(navState) ? "default" : "ghost",
-                      onClick: () => handleSettingsClick('app'),
+                      id: "nav:brain",
+                      title: "Brain",
+                      icon: Layers,
+                      variant: brainActive ? "default" : "ghost",
+                      expandable: true,
+                      expanded: brainExpanded,
+                      onToggle: () => toggleMainNavGroup('brain'),
+                      onClick: () => openMainNavGroup('brain', () => handleArtistHQNavClick('profile')),
+                      items: [
+                        {
+                          id: "nav:profile",
+                          title: "Artist Profile",
+                          icon: Users,
+                          variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/profile' ? "default" : "ghost",
+                          onClick: () => handleArtistHQNavClick('profile'),
+                        },
+                        {
+                          id: "nav:research",
+                          title: "Intel Docs",
+                          icon: Layers,
+                          variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/research' ? "default" : "ghost",
+                          onClick: () => handleArtistHQNavClick('research'),
+                        },
+                        {
+                          id: "nav:branding",
+                          title: "Branding",
+                          icon: Sparkles,
+                          variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/branding' ? "default" : "ghost",
+                          onClick: () => handleArtistHQNavClick('branding'),
+                        },
+                      ],
                     },
                   ]}
                 />
