@@ -846,10 +846,10 @@ html[data-font="inter"] {
       rgba(14, 14, 15, 0.84);
     backdrop-filter: blur(30px) saturate(150%);
     -webkit-backdrop-filter: blur(30px) saturate(150%);
-    border: 1px solid rgba(255, 255, 255, 0.105);
+    border: 1px solid rgba(255, 255, 255, 0.055);
     box-shadow:
       0 32px 90px rgba(0, 0, 0, 0.48),
-      inset 0 1px 0 rgba(255, 255, 255, 0.075);
+      inset 0 1px 0 rgba(255, 255, 255, 0.035);
   }
 
   .runneros-glass-route {
