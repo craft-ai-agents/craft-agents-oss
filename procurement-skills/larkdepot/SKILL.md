@@ -12,25 +12,32 @@ metadata:
 
 源码/发版:私有 repo `cunninghamcard-bit/larkdepot`(GitHub Release 分发 musl 静态 binary)。binary 名 `larkdepot`,prod 已在 PATH。
 
-## 查(唯一入口:只读 SQL)
+## 查
 
     larkdepot schema      # 先看有哪些表、每张表的真实列名(列名=飞书字段名,会漂移,别凭记忆硬编码)
     larkdepot query sql --sql "SELECT ... WHERE norm(型号)=norm('bav-99')" [--limit N] [--db state]
 
-- `norm(列)`:去 `-`/`/`/空格+大写,型号变体匹配必用。
+    # 简单单表浏览也可用 lark-cli 同构语法(flag 语义与 lark-cli 一致,查的是本地缓存、零限流):
+    larkdepot base +record-list --table-id <表名或tbl开头ID> [--limit 1-200] [--offset N]
+    larkdepot base +field-list  --table-id <表名或tbl开头ID>
+
+- 复杂查询(跨表 UNION/聚合/变体匹配)用 `query sql`;`norm(列)`:去 `-`/`/`/空格+大写,型号变体匹配必用。
 - `--db cache`(默认)查飞书镜像;`--db state` 查本地写回事实源。
 - 多选/人员/附件列存原始 JSON 文本,`json_extract` 拆。
-- envelope 带 `freshness.age_s`,过大时提醒用户缓存偏旧(cron 定期 sync)。
+- 输出一律是 larkdepot envelope(行对象数组);`freshness.age_s` 过大时提醒用户缓存偏旧(cron 定期 sync)。
 
 ## 写回与注册
 
     larkdepot register "<飞书表URL>" --name 表名 && larkdepot sync   # 纳管人建的新表
     larkdepot state create/write/list + larkdepot push               # 批量结果写回,见配方
 
+binary 零业务常量:表清单/写回模板都是运行时配置(本目录 `config/`),初始化见 setup 配方。
+
 ## 业务场景配方(references/)
 
 | 场景 | 配方 |
 |---|---|
+| 初始化/部署(seed+模板导入) | [references/setup.md](references/setup.md) |
 | 库存跨 7 表查询 | [references/inventory-lookup.md](references/inventory-lookup.md) |
 | 供应商档案三字段检索 | [references/supplier-search.md](references/supplier-search.md) |
 | 批量结果写回飞书 | [references/batch-writeback.md](references/batch-writeback.md) |

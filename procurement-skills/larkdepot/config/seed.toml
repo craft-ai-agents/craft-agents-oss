@@ -1,0 +1,44 @@
+# larkdepot 业务表清单(采购域)。部署/初始化时导入:
+#   larkdepot register --from config/seed.toml
+# 这是业务数据,归业务仓库;larkdepot binary 本身零业务常量。
+# 加表 = 加一段 [[pull]] 再跑一次导入(重名自动跳过,幂等)。
+
+[[pull]]
+name = "动态库存表"
+app_token = "Mjlkb49B9aoptssVw8Jc0wGwnhh"
+table_id = "tbli1WYTb1Xn2MSa"
+
+[[pull]]
+name = "自家库存"
+app_token = "Mjlkb49B9aoptssVw8Jc0wGwnhh"
+table_id = "tblSUjXdehzkxIbK"
+
+[[pull]]
+name = "A级供应商库存"
+app_token = "Mjlkb49B9aoptssVw8Jc0wGwnhh"
+table_id = "tblzQbSnVNhGszYA"
+
+[[pull]]
+name = "B级供应商库存1"
+app_token = "Mjlkb49B9aoptssVw8Jc0wGwnhh"
+table_id = "tbldOthm6zmFonDM"
+
+[[pull]]
+name = "B级供应商库存2"
+app_token = "Mjlkb49B9aoptssVw8Jc0wGwnhh"
+table_id = "tblqaoi5UuUGybxF"
+
+[[pull]]
+name = "B级供应商库存3"
+app_token = "Mjlkb49B9aoptssVw8Jc0wGwnhh"
+table_id = "tbld53dBj2dvI1R6"
+
+[[pull]]
+name = "C级供应商库存"
+app_token = "Mjlkb49B9aoptssVw8Jc0wGwnhh"
+table_id = "tblBbvvRKB0Ziioz"
+
+[[pull]]
+name = "供应商档案"
+app_token = "Mjlkb49B9aoptssVw8Jc0wGwnhh"
+table_id = "tblbtuMHFIOr6Oss"

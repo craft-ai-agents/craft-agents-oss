@@ -1,0 +1,31 @@
+# 批量找料结果模板(采购域)。部署/初始化时注册:
+#   larkdepot template add config/templates/batch-result.toml
+# 模板是业务契约但不进 binary;改结构 = 起新名字建新模板(工具不做覆盖/ALTER)。
+# row_key 字段必须存在(push 幂等锚点,工具校验)。
+
+name = "batch-result"
+local_table = "batch_results"
+
+[[fields]]
+name = "批次ID"
+feishu_type = "text"
+
+[[fields]]
+name = "型号"
+feishu_type = "text"
+
+[[fields]]
+name = "品牌"
+feishu_type = "text"
+
+[[fields]]
+name = "结果状态"
+feishu_type = "text"
+
+[[fields]]
+name = "结果JSON"
+feishu_type = "text"
+
+[[fields]]
+name = "row_key"
+feishu_type = "text"

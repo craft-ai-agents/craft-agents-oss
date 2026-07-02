@@ -1,5 +1,7 @@
 # 配方:批量任务结果写回(procurement-batch-orchestration 用)
 
+前提:`batch-result` 模板已注册(部署初始化时一次性完成,见 setup 配方;`larkdepot schema` 可核对)。
+
 三步:建批次实例(飞书建表+本地注册)→ 各子任务本地落行 → 收口后推上飞书。
 
     # ① 父任务建实例,--title 用批次 ID;--app 是目标飞书 Base 的 token
