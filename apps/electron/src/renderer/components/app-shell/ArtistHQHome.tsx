@@ -66,6 +66,14 @@ import {
   type ArtistProfile,
 } from '@/lib/artist-profile'
 import {
+  ARTIST_BRANDING_CONTEXT_SLUG,
+  artistBrandingMetadata,
+  brandingCompletion,
+  parseArtistBrandingDocResult,
+  serializeArtistBrandingBody,
+  type ArtistBranding,
+} from '@/lib/artist-branding'
+import {
   ARTIST_VOICE_CONTEXT_SLUG,
   artistVoiceMetadata,
   parseArtistVoiceDocResult,
@@ -115,6 +123,7 @@ type CalendarDraft = {
   notes: string
 }
 type ProfileDraft = Omit<ArtistProfile, 'version' | 'updatedAt'>
+type BrandingDraft = Omit<ArtistBranding, 'version' | 'updatedAt'>
 type VoiceDraft = Omit<ArtistVoice, 'version' | 'updatedAt'>
 
 const HQ_HASH_PREFIX = '#artist-hq/'
@@ -154,6 +163,16 @@ const emptyProfileDraft: ProfileDraft = {
   team: '',
   promoBudget: '',
   rules: '',
+}
+const emptyBrandingDraft: BrandingDraft = {
+  creativeDna: '',
+  tensions: '',
+  fascinations: '',
+  reactionHooks: '',
+  mythology: '',
+  emotionalTerritory: '',
+  audienceGravity: '',
+  notes: '',
 }
 const emptyVoiceDraft: VoiceDraft = {
   summary: '',
@@ -221,6 +240,7 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   const [editDraft, setEditDraft] = React.useState<NetworkDraft>(emptyNetworkDraft)
   const [calendarDraft, setCalendarDraft] = React.useState<CalendarDraft>(emptyCalendarDraft)
   const [profileDraft, setProfileDraft] = React.useState<ProfileDraft>(emptyProfileDraft)
+  const [brandingDraft, setBrandingDraft] = React.useState<BrandingDraft>(emptyBrandingDraft)
   const [voiceDraft, setVoiceDraft] = React.useState<VoiceDraft>(emptyVoiceDraft)
   const [automations, setAutomations] = React.useState<AutomationListItem[]>([])
   const [spotifySyncBusy, setSpotifySyncBusy] = React.useState(false)
@@ -238,6 +258,12 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   )
   const voice = voiceResult.voice
   const voicePercent = voiceCompletion(voice)
+  const brandingResult = React.useMemo(
+    () => parseArtistBrandingDocResult(docs.find((doc) => doc.slug === ARTIST_BRANDING_CONTEXT_SLUG)),
+    [docs],
+  )
+  const branding = brandingResult.branding
+  const brandingPercent = brandingCompletion(branding)
   const spotifyResult = React.useMemo(
     () => parseArtistSpotifySnapshotDocResult(docs.find((doc) => doc.slug === ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG)),
     [docs],
@@ -314,6 +340,10 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   React.useEffect(() => {
     setVoiceDraft(voiceToDraft(voice))
   }, [voice])
+
+  React.useEffect(() => {
+    setBrandingDraft(brandingToDraft(branding))
+  }, [branding])
 
   React.useEffect(() => {
     if (intelReport.status !== 'queued') return
@@ -411,6 +441,28 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
       toast.error(err instanceof Error ? err.message : String(err))
     }
   }, [upsert, voiceDraft, voiceResult])
+
+  const saveBranding = React.useCallback(async () => {
+    if (!brandingResult.ok) {
+      toast.error(`${brandingResult.error} Open Workspace Context to recover it before saving.`)
+      return
+    }
+    const nextBranding: ArtistBranding = {
+      version: 1,
+      ...brandingDraft,
+      updatedAt: new Date().toISOString(),
+    }
+    try {
+      await upsert({
+        slug: ARTIST_BRANDING_CONTEXT_SLUG,
+        metadata: artistBrandingMetadata(),
+        body: serializeArtistBrandingBody(nextBranding),
+      })
+      toast.success('Branding saved')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }, [brandingDraft, brandingResult, upsert])
 
   const saveIntelConfig = React.useCallback(async (nextConfig: ArtistIntelConfig) => {
     const config = {
@@ -1051,8 +1103,30 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
 
         {tab === 'branding' && (
           <HQCard>
-            <SectionTitle icon={Sparkles} title="Branding" meta="brain" />
-            <EmptyLine title="No brand system yet" detail="Narrative, positioning, references, and creative direction will live here." />
+            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <SectionTitle icon={Sparkles} title="Branding" meta={`${brandingPercent}% complete`} compact />
+                <p className="mt-2 max-w-2xl text-xs leading-5 text-white/42">
+                  Brand DNA for positioning, mythology, campaign ideas, creative direction, and future branding workers.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={saveBranding}
+                disabled={!brandingResult.ok}
+                className="h-9 rounded-full bg-white/90 px-5 text-xs font-semibold text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Save Branding
+              </button>
+            </div>
+
+            {!brandingResult.ok ? (
+              <div className="mb-4 rounded-[14px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
+                {brandingResult.error} Saving is paused so existing branding context is not overwritten.
+              </div>
+            ) : null}
+
+            <ArtistBrandingForm draft={brandingDraft} onChange={setBrandingDraft} />
           </HQCard>
         )}
 
@@ -1595,6 +1669,43 @@ function ArtistVoiceForm({
   )
 }
 
+function ArtistBrandingForm({
+  draft,
+  onChange,
+}: {
+  draft: BrandingDraft
+  onChange: (draft: BrandingDraft) => void
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <ProfileField label="Creative DNA" wide>
+        <TextArea value={draft.creativeDna ?? ''} onChange={(creativeDna) => onChange({ ...draft, creativeDna })} placeholder="Musical and non-musical influences, films, fashion, books, places, childhood, internet rabbit holes, visual taste, production style." />
+      </ProfileField>
+      <ProfileField label="Tensions">
+        <TextArea value={draft.tensions ?? ''} onChange={(tensions) => onChange({ ...draft, tensions })} placeholder="Contradictions that make the artist memorable: delicate x aggressive, spiritual x reckless, luxury x gritty." />
+      </ProfileField>
+      <ProfileField label="Fascinations">
+        <TextArea value={draft.fascinations ?? ''} onChange={(fascinations) => onChange({ ...draft, fascinations })} placeholder="Things they could talk about for hours, binge, notice, envy, hate, admire, or keep returning to." />
+      </ProfileField>
+      <ProfileField label="Reaction hooks">
+        <TextArea value={draft.reactionHooks ?? ''} onChange={(reactionHooks) => onChange({ ...draft, reactionHooks })} placeholder="Choices that would make people instantly have an opinion: no face, outdoor recording, chapters, odd samples, strict visual rules." />
+      </ProfileField>
+      <ProfileField label="Mythology">
+        <TextArea value={draft.mythology ?? ''} onChange={(mythology) => onChange({ ...draft, mythology })} placeholder="Recurring symbols, settings, objects, phrases, references, rituals, eras, colors, places, and motifs." />
+      </ProfileField>
+      <ProfileField label="Emotional territory">
+        <TextArea value={draft.emotionalTerritory ?? ''} onChange={(emotionalTerritory) => onChange({ ...draft, emotionalTerritory })} placeholder="The feelings the artist owns: longing, escape, triumph, decay, wonder, seduction, isolation, freedom." />
+      </ProfileField>
+      <ProfileField label="Audience gravity">
+        <TextArea value={draft.audienceGravity ?? ''} onChange={(audienceGravity) => onChange({ ...draft, audienceGravity })} placeholder="Who feels seen psychologically, not demographically: lonely overachievers, small-town dreamers, people leaving bad relationships." />
+      </ProfileField>
+      <ProfileField label="Notes" wide>
+        <TextArea value={draft.notes ?? ''} onChange={(notes) => onChange({ ...draft, notes })} placeholder="Extra brand observations, open questions, ideas for the branding agent, or patterns to investigate later." />
+      </ProfileField>
+    </div>
+  )
+}
+
 function ProfileField({
   label,
   wide,
@@ -2044,6 +2155,19 @@ function voiceToDraft(voice: ArtistVoice): VoiceDraft {
     captionExamples: voice.captionExamples ?? '',
     postExamples: voice.postExamples ?? '',
     writingExcerpts: voice.writingExcerpts ?? '',
+  }
+}
+
+function brandingToDraft(branding: ArtistBranding): BrandingDraft {
+  return {
+    creativeDna: branding.creativeDna ?? '',
+    tensions: branding.tensions ?? '',
+    fascinations: branding.fascinations ?? '',
+    reactionHooks: branding.reactionHooks ?? '',
+    mythology: branding.mythology ?? '',
+    emotionalTerritory: branding.emotionalTerritory ?? '',
+    audienceGravity: branding.audienceGravity ?? '',
+    notes: branding.notes ?? '',
   }
 }
 
