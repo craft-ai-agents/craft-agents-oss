@@ -88,7 +88,20 @@ daemon 在 job 完成（或 --partial 请求时对已完成部分）执行确定
 
 `note`（body-dump）原样透传并标 `structured=false`，供 LLM 复核——不伪造结构化。**LLM 职责收缩为业务叙述**；`procurement-platform-search/SKILL.md` 瘦身为业务口径（何时查、查什么集合、怎么向用户呈现），所有数数逻辑删除。
 
-## 6. 迁移与 cutover（Never break userspace）
+## 6. CLI 契约（agent-friendly）
+
+CLI 的唯一用户是 AI agent。契约（用户 2026-07-02 增补要求）对 scrape CLI 与 feishu-db CLI 同等生效：
+
+1. **默认 JSON、面向解析**：stdout 永远是单个 JSON 文档（流式场景 NDJSON）。无表格美化、无 ANSI、无 pager、无进度条。人类可读交给 `--pretty`。
+2. **永不交互**：不读 stdin、不提问、不要确认。缺参数 = 结构化报错退出，绝不挂起等输入。
+3. **结构化错误**：错误走 stderr，也是 JSON：`{"error": {"code", "message", "hint"}}`。`hint` 必须告诉 agent 下一步能做什么（例：`daemon 未运行 → systemctl start scrape-service`），而不是只描述失败。
+4. **退出码语义固定**：`0`=命令成功（**业务上"查无结果"也是 0**——no_result 是数据不是故障）；`1`=用法错误；`2`=环境/依赖错误（daemon 没跑、DB 缺失）；`3`=任务级失败。数据层面的 blocked/error 属于 JSON 内容，不进退出码。
+5. **自描述**：`scrape schema`（及 `feishu-db schema`）输出机器可读的完整契约——子命令、参数、输出 JSON Schema、退出码表。SKILL.md 引用它，不再手抄命令用法（消灭一处漂移源）。
+6. **有界输出**：查询类命令默认 limit + `--fields` 投影；超限时返回截断标记与"如何取剩余"的指引，绝不把 71k 行灌进 agent 上下文。
+7. **幂等与可恢复**：`submit` 带幂等键（相同 parts+source_set 在 TTL 内重复提交返回同一 job id）；一切状态凭 id 可再查——对话丢了，工作不丢。
+8. **输出带 `schema_version`**：字段语义永不静默变更；改契约 = 升版本号 + 兼容期（Never break userspace 的 CLI 版）。
+
+## 7. 迁移与 cutover（Never break userspace）
 
 1. `scrape-service/` 新建，旧 `scrape-engine/` 与旧脚本（api_search.py/cloak_search.py）原样保留服役。
 2. 36 个 adapter 的 extract 纯函数逐个搬运；catalog v2 一次性改写并加校验测试。
@@ -96,14 +109,14 @@ daemon 在 job 完成（或 --partial 请求时对已完成部分）执行确定
 4. gate 通过后：SKILL.md 切到新 CLI；删除旧引擎、旧脚本、人肉超时恢复段落；catalog 里 adapter-less 死条目（ti/chip1stop/rs-cn/distrelec/kirikaeki）清理或标 reference_only。
 5. systemd unit + 部署走既有 quick-deploy 通道。
 
-## 7. 明确不做
+## 8. 明确不做
 
 - HTTP/gRPC API、多机分布式、消息队列中间件——单机 4C4G，SQLite 队列足够。
 - 聚合器替代直查（业务承诺否决）；wave 2 缺口升级机制（首轮即全量，无缺口概念）。
 - 18 个 body-dump 源本轮**不逐个 xhr/script 化**——那是切换后的独立改进轨道（catalog 的 structured 字段让进度可量化）。
 - 旧分支在途改动（batch_results 等）不合入本设计。
 
-## 8. 测试策略
+## 9. 测试策略
 
 - **契约测试**：每 adapter 一份 fixture payload → 期望 rows（纯函数，离线可测）；
 - **catalog 校验测试**：双向 parity + enum + warmup_url 强制；
@@ -112,7 +125,7 @@ daemon 在 job 完成（或 --partial 请求时对已完成部分）执行确定
 - **崩溃恢复测试**：daemon 杀掉重启，running 复位重跑，rows 无重复；
 - **prod 冒烟**：即 cutover gate 五项。
 
-## 9. 开放问题（进实现规划前需定）
+## 10. 开放问题（进实现规划前需定）
 
 - TTL 默认值 4h 是拍的，上线后按业务节奏调；
 - daemon 与 feishu-db 重设计的 agent-state.db 是否共库（倾向不共：生命周期不同，scrape 结果是可抛弃缓存）——feishu-db 设计文档里定。
