@@ -3,11 +3,14 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { AutomationSystem, type SessionMetadataSnapshot } from './automation-system.ts';
 import { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE } from './constants.ts';
+import { markWorkspaceAsSharedFolder, readTeamRunnerState, setRunnerMachine, TEAM_RUNNER_PULSE_LOG_FILE } from '../workspaces/team-mode.ts';
+import { loadWorkspaceConfig, saveWorkspaceConfig } from '../workspaces/storage.ts';
+import type { WorkspaceConfig } from '../workspaces/types.ts';
 
 describe('AutomationSystem', () => {
   let tempDir: string;
@@ -18,7 +21,44 @@ describe('AutomationSystem', () => {
 
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
+    delete process.env.CRAFT_CONFIG_DIR;
   });
+
+  function writeWorkspaceConfig(partial: Partial<WorkspaceConfig> = {}): WorkspaceConfig {
+    const config: WorkspaceConfig = {
+      id: `ws_${Math.random().toString(36).slice(2)}`,
+      name: 'Automation Workspace',
+      slug: 'automation-workspace',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      ...partial,
+    };
+    writeFileSync(join(tempDir, 'config.json'), JSON.stringify(config, null, 2), 'utf-8');
+    return config;
+  }
+
+  function schedulerPayload(timestamp = '2026-07-02T12:00:00.000Z') {
+    return {
+      timestamp,
+      localTime: '07:00',
+      hour: 7,
+      minute: 0,
+      dayOfWeek: 4,
+      dayName: 'Thu',
+    };
+  }
+
+  function setMissedTickPolicy(policy: 'skip' | 'run-once'): void {
+    const config = loadWorkspaceConfig(tempDir);
+    if (!config?.team) throw new Error('Expected team config');
+    saveWorkspaceConfig(tempDir, {
+      ...config,
+      team: {
+        ...config.team,
+        runnerMissedTickPolicy: policy,
+      },
+    });
+  }
 
   describe('constructor', () => {
     it('should create an AutomationSystem without automations.json', async () => {
@@ -122,6 +162,143 @@ describe('AutomationSystem', () => {
       expect(system.getConfig()).toEqual({ automations: {} });
 
       await system.dispose();
+    });
+  });
+
+  describe('team runner gate', () => {
+    it('allows solo mode SchedulerTick events', async () => {
+      writeWorkspaceConfig();
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+      let ticks = 0;
+      system.eventBus.on('SchedulerTick', () => { ticks++; });
+
+      await system.fireSchedulerTickForTest(schedulerPayload());
+
+      expect(ticks).toBe(1);
+      await system.dispose();
+    });
+
+    it('skips shared-folder SchedulerTick events on non-runner machines', async () => {
+      const privateRoot = mkdtempSync(join(tmpdir(), 'automation-private-'));
+      process.env.CRAFT_CONFIG_DIR = privateRoot;
+      writeWorkspaceConfig();
+      markWorkspaceAsSharedFolder(tempDir, { makeRunner: true });
+      setRunnerMachine(tempDir, 'machine_someone_else');
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+      let ticks = 0;
+      system.eventBus.on('SchedulerTick', () => { ticks++; });
+
+      await system.fireSchedulerTickForTest(schedulerPayload());
+
+      expect(ticks).toBe(0);
+      expect(existsSync(join(tempDir, TEAM_RUNNER_PULSE_LOG_FILE))).toBe(false);
+      await system.dispose();
+      rmSync(privateRoot, { recursive: true, force: true });
+    });
+
+    it('runs shared-folder SchedulerTick events on the runner and records state', async () => {
+      const privateRoot = mkdtempSync(join(tmpdir(), 'automation-private-'));
+      process.env.CRAFT_CONFIG_DIR = privateRoot;
+      writeWorkspaceConfig();
+      markWorkspaceAsSharedFolder(tempDir, { makeRunner: true });
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+      let ticks = 0;
+      system.eventBus.on('SchedulerTick', () => { ticks++; });
+
+      await system.fireSchedulerTickForTest(schedulerPayload());
+
+      expect(ticks).toBe(1);
+      expect(readTeamRunnerState(tempDir).lastSchedulerTickKey).toBe('2026-07-02T12:00:00.000Z');
+      expect(existsSync(join(tempDir, TEAM_RUNNER_PULSE_LOG_FILE))).toBe(true);
+      await system.dispose();
+      rmSync(privateRoot, { recursive: true, force: true });
+    });
+
+    it('dedupes repeated runner SchedulerTick keys', async () => {
+      const privateRoot = mkdtempSync(join(tmpdir(), 'automation-private-'));
+      process.env.CRAFT_CONFIG_DIR = privateRoot;
+      writeWorkspaceConfig({
+        team: {
+          enabled: false,
+          teamId: 'team_existing',
+          revision: 0,
+          automationsPolicy: 'manual-only',
+          backgroundTriggersEnabled: false,
+          runnerMissedTickPolicy: 'run-once',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      });
+      markWorkspaceAsSharedFolder(tempDir, { makeRunner: true });
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+      let ticks = 0;
+      system.eventBus.on('SchedulerTick', () => { ticks++; });
+
+      await system.fireSchedulerTickForTest(schedulerPayload());
+      await system.fireSchedulerTickForTest(schedulerPayload());
+
+      expect(ticks).toBe(1);
+      await system.dispose();
+      rmSync(privateRoot, { recursive: true, force: true });
+    });
+
+    it('does not catch up missed scheduler ticks when policy is skip', async () => {
+      const privateRoot = mkdtempSync(join(tmpdir(), 'automation-private-'));
+      process.env.CRAFT_CONFIG_DIR = privateRoot;
+      writeWorkspaceConfig();
+      markWorkspaceAsSharedFolder(tempDir, { makeRunner: true });
+      setMissedTickPolicy('skip');
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+      let ticks = 0;
+      system.eventBus.on('SchedulerTick', () => { ticks++; });
+
+      await system.fireMissedSchedulerCatchUpForTest();
+
+      expect(ticks).toBe(0);
+      await system.dispose();
+      rmSync(privateRoot, { recursive: true, force: true });
+    });
+
+    it('runs one catch-up scheduler tick when policy is run-once', async () => {
+      const privateRoot = mkdtempSync(join(tmpdir(), 'automation-private-'));
+      process.env.CRAFT_CONFIG_DIR = privateRoot;
+      writeWorkspaceConfig();
+      const status = markWorkspaceAsSharedFolder(tempDir, { makeRunner: true });
+      setMissedTickPolicy('run-once');
+      const staleAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const heartbeat = JSON.parse(readFileSync(status.heartbeatPath, 'utf-8'));
+      writeFileSync(status.heartbeatPath, JSON.stringify({
+        ...heartbeat,
+        lastAutomationHeartbeatAt: staleAt,
+        lastSeenAt: staleAt,
+      }, null, 2), 'utf-8');
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+      const catchUpFlags: Array<boolean | undefined> = [];
+      system.eventBus.on('SchedulerTick', (payload) => { catchUpFlags.push(payload.catchUp); });
+
+      await system.fireMissedSchedulerCatchUpForTest();
+
+      expect(catchUpFlags).toEqual([true]);
+      await system.dispose();
+      rmSync(privateRoot, { recursive: true, force: true });
     });
   });
 

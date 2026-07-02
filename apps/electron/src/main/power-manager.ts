@@ -9,11 +9,15 @@
 import { powerSaveBlocker } from 'electron'
 import { mainLog } from './logger'
 
-// Track the current power blocker ID (null when not blocking)
-let powerBlockerId: number | null = null
+// Track current power blocker IDs (null when not blocking)
+let displayPowerBlockerId: number | null = null
+let runnerPowerBlockerId: number | null = null
 
 // Track the number of active (processing) sessions
 let activeSessionCount = 0
+
+// Track whether this process is currently the team automation runner
+let teamRunnerActive = false
 
 // Cache the setting value to avoid repeated config reads
 let settingEnabled = false
@@ -35,17 +39,27 @@ export async function initPowerManager(): Promise<void> {
  * - The setting is toggled
  */
 function updatePowerState(): void {
-  const shouldBlock = settingEnabled && activeSessionCount > 0
+  const shouldBlockDisplay = settingEnabled && activeSessionCount > 0
+  const shouldBlockRunner = teamRunnerActive
 
-  if (shouldBlock && powerBlockerId === null) {
+  if (shouldBlockDisplay && displayPowerBlockerId === null) {
     // Start blocking display sleep
-    powerBlockerId = powerSaveBlocker.start('prevent-display-sleep')
-    mainLog.info('[power] Started power save blocker', { blockerId: powerBlockerId, activeSessionCount })
-  } else if (!shouldBlock && powerBlockerId !== null) {
+    displayPowerBlockerId = powerSaveBlocker.start('prevent-display-sleep')
+    mainLog.info('[power] Started display power save blocker', { blockerId: displayPowerBlockerId, activeSessionCount })
+  } else if (!shouldBlockDisplay && displayPowerBlockerId !== null) {
     // Stop blocking
-    powerSaveBlocker.stop(powerBlockerId)
-    mainLog.info('[power] Stopped power save blocker', { blockerId: powerBlockerId })
-    powerBlockerId = null
+    powerSaveBlocker.stop(displayPowerBlockerId)
+    mainLog.info('[power] Stopped display power save blocker', { blockerId: displayPowerBlockerId })
+    displayPowerBlockerId = null
+  }
+
+  if (shouldBlockRunner && runnerPowerBlockerId === null) {
+    runnerPowerBlockerId = powerSaveBlocker.start('prevent-app-suspension')
+    mainLog.info('[power] Started team runner power save blocker', { blockerId: runnerPowerBlockerId })
+  } else if (!shouldBlockRunner && runnerPowerBlockerId !== null) {
+    powerSaveBlocker.stop(runnerPowerBlockerId)
+    mainLog.info('[power] Stopped team runner power save blocker', { blockerId: runnerPowerBlockerId })
+    runnerPowerBlockerId = null
   }
 }
 
@@ -80,6 +94,16 @@ export function setKeepAwakeSetting(enabled: boolean): void {
 }
 
 /**
+ * Keep the machine awake while it owns team background automation duties.
+ */
+export function setTeamRunnerActive(active: boolean): void {
+  if (teamRunnerActive === active) return
+  teamRunnerActive = active
+  mainLog.info('[power] Team runner state changed', { active, activeSessionCount })
+  updatePowerState()
+}
+
+/**
  * Get the current keep awake setting value.
  */
 export function getKeepAwakeSetting(): boolean {
@@ -91,7 +115,10 @@ export function getKeepAwakeSetting(): boolean {
  * Useful for debugging.
  */
 export function isPowerBlockerActive(): boolean {
-  return powerBlockerId !== null && powerSaveBlocker.isStarted(powerBlockerId)
+  return Boolean(
+    (displayPowerBlockerId !== null && powerSaveBlocker.isStarted(displayPowerBlockerId)) ||
+    (runnerPowerBlockerId !== null && powerSaveBlocker.isStarted(runnerPowerBlockerId))
+  )
 }
 
 /**
@@ -99,10 +126,18 @@ export function isPowerBlockerActive(): boolean {
  * Note: Electron automatically releases blockers on quit, but this is explicit.
  */
 export function cleanup(): void {
-  if (powerBlockerId !== null) {
-    powerSaveBlocker.stop(powerBlockerId)
-    mainLog.info('[power] Cleaned up power save blocker on shutdown')
-    powerBlockerId = null
+  const hadPowerBlocker = displayPowerBlockerId !== null || runnerPowerBlockerId !== null
+  if (displayPowerBlockerId !== null) {
+    powerSaveBlocker.stop(displayPowerBlockerId)
+    displayPowerBlockerId = null
+  }
+  if (runnerPowerBlockerId !== null) {
+    powerSaveBlocker.stop(runnerPowerBlockerId)
+    runnerPowerBlockerId = null
+  }
+  if (hadPowerBlocker) {
+    mainLog.info('[power] Cleaned up power save blockers on shutdown')
   }
   activeSessionCount = 0
+  teamRunnerActive = false
 }

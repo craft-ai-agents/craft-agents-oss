@@ -1,6 +1,8 @@
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -20,6 +22,10 @@ import {
 
 export const TEAM_CONFIG_FILE = 'team/config.json';
 export const TEAM_MACHINE_DIR = 'team/machines';
+export const TEAM_RUNNER_STATE_FILE = 'team/runner-state.json';
+export const TEAM_RUNNER_PULSE_LOG_FILE = 'team/runner-pulse.jsonl';
+export const TEAM_RUNNER_STALE_AFTER_MS = 15 * 60 * 1000;
+export const TEAM_RUNNER_HANDOVER_GRACE_MS = 10 * 60 * 1000;
 
 export interface TeamMachineIdentity {
   version: 1;
@@ -53,6 +59,40 @@ export interface TeamModeStatus {
   heartbeatPath: string;
   machine: TeamMachineIdentity;
   heartbeat: TeamMachineHeartbeat;
+  runnerHeartbeat?: TeamMachineHeartbeat;
+  runnerIsStale: boolean;
+  runnerStaleAfterMs: number;
+}
+
+export interface TeamRunnerState {
+  version: 1;
+  runnerMachineId?: string;
+  lastSchedulerTickAt?: string;
+  lastSchedulerTickKey?: string;
+  updatedAt: string;
+}
+
+export type TeamRunnerGateReason =
+  | 'solo'
+  | 'runner'
+  | 'unsupported'
+  | 'team-disabled'
+  | 'not-shared-folder'
+  | 'manual-only'
+  | 'background-disabled'
+  | 'no-runner'
+  | 'not-runner'
+  | 'handover-pending'
+  | 'stale-observed-revision';
+
+export interface TeamRunnerGateDecision {
+  allowed: boolean;
+  reason: TeamRunnerGateReason;
+  machineId: string;
+  runnerMachineId?: string;
+  observedTeamRevision: number;
+  teamRevision: number;
+  runnerIsStale: boolean;
 }
 
 function nowIso(): string {
@@ -92,6 +132,14 @@ export function getTeamHeartbeatFile(workspaceRootPath: string, machineId: strin
   return join(getTeamMachinesDir(workspaceRootPath), `${machineId}.json`);
 }
 
+export function getTeamRunnerStateFile(workspaceRootPath: string): string {
+  return join(workspaceRootPath, TEAM_RUNNER_STATE_FILE);
+}
+
+export function getTeamRunnerPulseLogFile(workspaceRootPath: string): string {
+  return join(workspaceRootPath, TEAM_RUNNER_PULSE_LOG_FILE);
+}
+
 export function getPrivateTeamDir(workspaceId: string): string {
   return join(process.env.CRAFT_CONFIG_DIR || CONFIG_DIR, 'team', workspaceId);
 }
@@ -113,6 +161,7 @@ export function createDisabledTeamConfig(existing?: Partial<WorkspaceTeamConfig>
     runnerMachineId: existing?.runnerMachineId,
     automationsPolicy: existing?.automationsPolicy ?? 'manual-only',
     backgroundTriggersEnabled: existing?.backgroundTriggersEnabled ?? false,
+    runnerMissedTickPolicy: existing?.runnerMissedTickPolicy ?? 'skip',
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: existing?.updatedAt ?? timestamp,
   };
@@ -125,6 +174,154 @@ export function ensureWorkspaceTeamFields(config: WorkspaceConfig): WorkspaceCon
     storage: config.storage ?? defaultSoloStorage(),
     team: config.team ?? createDisabledTeamConfig(),
   };
+}
+
+export function listTeamMachineHeartbeats(workspaceRootPath: string): TeamMachineHeartbeat[] {
+  const dir = getTeamMachinesDir(workspaceRootPath);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((file) => file.endsWith('.json'))
+    .map((file) => readJson<TeamMachineHeartbeat>(join(dir, file)))
+    .filter((heartbeat): heartbeat is TeamMachineHeartbeat => heartbeat?.version === 1 && Boolean(heartbeat.machineId));
+}
+
+export function getRunnerHeartbeat(workspaceRootPath: string, runnerMachineId?: string): TeamMachineHeartbeat | undefined {
+  if (!runnerMachineId) return undefined;
+  return listTeamMachineHeartbeats(workspaceRootPath).find((heartbeat) => heartbeat.machineId === runnerMachineId);
+}
+
+export function isTeamRunnerHeartbeatStale(
+  heartbeat: TeamMachineHeartbeat | undefined,
+  now: number = Date.now(),
+  staleAfterMs = TEAM_RUNNER_STALE_AFTER_MS,
+): boolean {
+  if (!heartbeat) return true;
+  const lastSeen = Date.parse(heartbeat.lastAutomationHeartbeatAt ?? heartbeat.lastSeenAt);
+  return !Number.isFinite(lastSeen) || now - lastSeen > staleAfterMs;
+}
+
+function isRunnerHandoverReady(workspaceRootPath: string, team: WorkspaceTeamConfig, now = Date.now()): boolean {
+  const handover = team.runnerHandover;
+  if (!handover) return true;
+  if (!handover.from) return true;
+  const fromHeartbeat = getRunnerHeartbeat(workspaceRootPath, handover.from);
+  if (fromHeartbeat && fromHeartbeat.observedTeamRevision >= handover.revision) return true;
+  if (isTeamRunnerHeartbeatStale(fromHeartbeat, now, TEAM_RUNNER_STALE_AFTER_MS)) return true;
+  const initiatedAt = Date.parse(handover.initiatedAt);
+  return Number.isFinite(initiatedAt) && now - initiatedAt > TEAM_RUNNER_HANDOVER_GRACE_MS;
+}
+
+function getRunnerStatusFields(workspaceRootPath: string, team: WorkspaceTeamConfig): Pick<TeamModeStatus, 'runnerHeartbeat' | 'runnerIsStale' | 'runnerStaleAfterMs'> {
+  const runnerHeartbeat = getRunnerHeartbeat(workspaceRootPath, team.runnerMachineId);
+  return {
+    runnerHeartbeat,
+    runnerIsStale: team.enabled && Boolean(team.runnerMachineId) && isTeamRunnerHeartbeatStale(runnerHeartbeat),
+    runnerStaleAfterMs: TEAM_RUNNER_STALE_AFTER_MS,
+  };
+}
+
+export function readTeamRunnerState(workspaceRootPath: string): TeamRunnerState {
+  return readJson<TeamRunnerState>(getTeamRunnerStateFile(workspaceRootPath)) ?? {
+    version: 1,
+    updatedAt: nowIso(),
+  };
+}
+
+function writeTeamRunnerState(workspaceRootPath: string, state: TeamRunnerState): TeamRunnerState {
+  atomicWriteJson(getTeamRunnerStateFile(workspaceRootPath), state);
+  return state;
+}
+
+export function recordRunnerSchedulerTick(workspaceRootPath: string, machineId: string, tickKey: string, tickAt = nowIso()): TeamRunnerState {
+  const state = readTeamRunnerState(workspaceRootPath);
+  return writeTeamRunnerState(workspaceRootPath, {
+    ...state,
+    version: 1,
+    runnerMachineId: machineId,
+    lastSchedulerTickAt: tickAt,
+    lastSchedulerTickKey: tickKey,
+    updatedAt: tickAt,
+  });
+}
+
+export function appendRunnerPulse(
+  workspaceRootPath: string,
+  input: { machineId: string; event: string; allowed: boolean; reason: string; timestamp?: string },
+): void {
+  mkdirSync(dirname(getTeamRunnerPulseLogFile(workspaceRootPath)), { recursive: true });
+  appendFileSync(getTeamRunnerPulseLogFile(workspaceRootPath), JSON.stringify({
+    version: 1,
+    machineId: input.machineId,
+    event: input.event,
+    allowed: input.allowed,
+    reason: input.reason,
+    timestamp: input.timestamp ?? nowIso(),
+  }) + '\n', 'utf-8');
+}
+
+export function evaluateTeamRunnerGate(workspaceRootPath: string): TeamRunnerGateDecision {
+  const loaded = loadWorkspaceConfig(workspaceRootPath);
+  if (!loaded) throw new Error(`Failed to load workspace config at ${workspaceRootPath}`);
+  assertNotMoved(loaded);
+  const formatVersion = loaded.formatVersion ?? WORKSPACE_FORMAT_VERSION;
+  const team = loaded.team ?? createDisabledTeamConfig({ teamId: 'team_uninitialized' });
+  const machine = readExistingMachineIdentity(loaded.id) ?? createReadOnlyMachineIdentity(loaded.id);
+  const heartbeat = createReadOnlyHeartbeat(workspaceRootPath, machine, team);
+  const runnerHeartbeat = getRunnerHeartbeat(workspaceRootPath, team.runnerMachineId);
+  const runnerIsStale = team.enabled && Boolean(team.runnerMachineId) && isTeamRunnerHeartbeatStale(runnerHeartbeat);
+  const base = {
+    machineId: machine.machineId,
+    runnerMachineId: team.runnerMachineId,
+    observedTeamRevision: heartbeat.observedTeamRevision,
+    teamRevision: team.revision,
+    runnerIsStale,
+  };
+
+  if (formatVersion > WORKSPACE_FORMAT_VERSION) return { ...base, allowed: false, reason: 'unsupported' };
+  if ((loaded.storage?.mode ?? 'solo') === 'solo') return { ...base, allowed: true, reason: 'solo' };
+  if (loaded.storage?.mode !== 'shared-folder') return { ...base, allowed: false, reason: 'not-shared-folder' };
+  if (!team.enabled) return { ...base, allowed: false, reason: 'team-disabled' };
+  if (team.automationsPolicy !== 'runner-only') return { ...base, allowed: false, reason: 'manual-only' };
+  if (!team.backgroundTriggersEnabled) return { ...base, allowed: false, reason: 'background-disabled' };
+  if (!team.runnerMachineId) return { ...base, allowed: false, reason: 'no-runner' };
+  if (team.runnerMachineId !== machine.machineId) return { ...base, allowed: false, reason: 'not-runner' };
+  if (team.runnerHandover?.to === machine.machineId && !isRunnerHandoverReady(workspaceRootPath, team)) {
+    return { ...base, allowed: false, reason: 'handover-pending' };
+  }
+  if (heartbeat.observedTeamRevision < team.revision) return { ...base, allowed: false, reason: 'stale-observed-revision' };
+
+  return { ...base, allowed: true, reason: 'runner' };
+}
+
+export function clearReadyRunnerHandover(workspaceRootPath: string, machineId: string): WorkspaceConfig | null {
+  const loaded = loadWorkspaceConfig(workspaceRootPath);
+  if (!loaded?.team?.runnerHandover || loaded.team.runnerHandover.to !== machineId) return null;
+  if (!isRunnerHandoverReady(workspaceRootPath, loaded.team)) return null;
+  const timestamp = nowIso();
+  const config: WorkspaceConfig = {
+    ...loaded,
+    team: {
+      ...loaded.team,
+      revision: loaded.team.revision + 1,
+      runnerHandover: undefined,
+      updatedAt: timestamp,
+    },
+  };
+  saveWorkspaceConfig(workspaceRootPath, config);
+  writeTeamConfigMirror(workspaceRootPath, config);
+  const machine = readOrCreateMachineIdentity(config.id);
+  writeMachineHeartbeat(workspaceRootPath, config, machine);
+  return config;
+}
+
+export function refreshTeamRunnerHeartbeat(workspaceRootPath: string, input: { appVersion?: string } = {}): TeamMachineHeartbeat | null {
+  const loaded = loadWorkspaceConfig(workspaceRootPath);
+  if (!loaded) throw new Error(`Failed to load workspace config at ${workspaceRootPath}`);
+  assertNotMoved(loaded);
+  const normalized = ensureWorkspaceTeamFields(loaded);
+  if ((normalized.storage?.mode ?? 'solo') === 'solo') return null;
+  const machine = readOrCreateMachineIdentity(normalized.id);
+  return writeMachineHeartbeat(workspaceRootPath, normalized, machine, { appVersion: input.appVersion, canRunAutomations: true });
 }
 
 export function writeTeamConfigMirror(workspaceRootPath: string, config: WorkspaceConfig): void {
@@ -258,6 +455,7 @@ export function getTeamModeStatus(workspaceRootPath: string, options: { appVersi
   const team = loaded.team ?? createDisabledTeamConfig({ teamId: 'team_uninitialized' });
   const machine = readExistingMachineIdentity(loaded.id) ?? createReadOnlyMachineIdentity(loaded.id);
   const heartbeat = createReadOnlyHeartbeat(workspaceRootPath, machine, team, options);
+  const runnerStatus = getRunnerStatusFields(workspaceRootPath, team);
 
   if (formatVersion > WORKSPACE_FORMAT_VERSION) {
     return {
@@ -271,6 +469,7 @@ export function getTeamModeStatus(workspaceRootPath: string, options: { appVersi
       heartbeatPath: getTeamHeartbeatFile(workspaceRootPath, machine.machineId),
       machine,
       heartbeat,
+      ...runnerStatus,
     };
   }
 
@@ -285,6 +484,7 @@ export function getTeamModeStatus(workspaceRootPath: string, options: { appVersi
     heartbeatPath: getTeamHeartbeatFile(workspaceRootPath, machine.machineId),
     machine,
     heartbeat,
+    ...runnerStatus,
   };
 }
 
@@ -322,6 +522,7 @@ export function markWorkspaceAsSharedFolder(
   saveWorkspaceConfig(workspaceRootPath, config);
   writeTeamConfigMirror(workspaceRootPath, config);
   const heartbeat = writeMachineHeartbeat(workspaceRootPath, config, machine, { appVersion: input.appVersion });
+  const runnerStatus = getRunnerStatusFields(workspaceRootPath, config.team!);
   return {
     supported: true,
     supportedFormatVersion: WORKSPACE_FORMAT_VERSION,
@@ -333,6 +534,7 @@ export function markWorkspaceAsSharedFolder(
     heartbeatPath: getTeamHeartbeatFile(workspaceRootPath, machine.machineId),
     machine,
     heartbeat,
+    ...runnerStatus,
   };
 }
 
@@ -348,13 +550,25 @@ export function setRunnerMachine(workspaceRootPath: string, machineId?: string):
   const timestamp = nowIso();
   const previousTeam = loaded.team ?? createDisabledTeamConfig();
   const runnerMachineId = machineId ?? machine.machineId;
+  const handoverFrom = previousTeam.runnerMachineId && previousTeam.runnerMachineId !== runnerMachineId
+    ? previousTeam.runnerMachineId
+    : undefined;
+  const nextRevision = previousTeam.revision + 1;
   const config: WorkspaceConfig = {
     ...loaded,
     team: {
       ...previousTeam,
       enabled: true,
-      revision: previousTeam.revision + 1,
+      revision: nextRevision,
       runnerMachineId,
+      runnerHandover: handoverFrom
+        ? {
+            from: handoverFrom,
+            to: runnerMachineId,
+            initiatedAt: timestamp,
+            revision: nextRevision,
+          }
+        : undefined,
       automationsPolicy: 'runner-only',
       backgroundTriggersEnabled: true,
       updatedAt: timestamp,
@@ -363,6 +577,7 @@ export function setRunnerMachine(workspaceRootPath: string, machineId?: string):
   saveWorkspaceConfig(workspaceRootPath, config);
   writeTeamConfigMirror(workspaceRootPath, config);
   const heartbeat = writeMachineHeartbeat(workspaceRootPath, config, machine);
+  const runnerStatus = getRunnerStatusFields(workspaceRootPath, config.team!);
   return {
     supported: true,
     supportedFormatVersion: WORKSPACE_FORMAT_VERSION,
@@ -374,5 +589,6 @@ export function setRunnerMachine(workspaceRootPath: string, machineId?: string):
     heartbeatPath: getTeamHeartbeatFile(workspaceRootPath, machine.machineId),
     machine,
     heartbeat,
+    ...runnerStatus,
   };
 }

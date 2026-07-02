@@ -14,6 +14,7 @@ export type {
   WorkspaceStorageMode,
   SharedFolderProvider,
   WorkspaceTeamConfig,
+  WorkspaceTeamRunnerHandover,
 } from './types.ts';
 
 // Storage functions

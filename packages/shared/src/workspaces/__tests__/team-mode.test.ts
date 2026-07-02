@@ -4,10 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadWorkspaceConfig } from '../storage.ts';
 import {
+  clearReadyRunnerHandover,
+  evaluateTeamRunnerGate,
   getTeamModeStatus,
+  isTeamRunnerHeartbeatStale,
   markWorkspaceAsSharedFolder,
   setRunnerMachine,
   TEAM_CONFIG_FILE,
+  TEAM_RUNNER_STALE_AFTER_MS,
 } from '../team-mode.ts';
 import type { WorkspaceConfig } from '../types.ts';
 
@@ -151,6 +155,71 @@ describe('team mode metadata', () => {
     expect(runner.team.automationsPolicy).toBe('runner-only');
     expect(runner.team.backgroundTriggersEnabled).toBe(true);
     expect(runner.team.revision).toBe(enabled.team.revision + 1);
+  });
+
+  it('allows solo automation and skips shared-folder non-runners', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+
+    expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: true, reason: 'solo' });
+
+    markWorkspaceAsSharedFolder(root, { makeRunner: true });
+    const runner = setRunnerMachine(root, 'machine_someone_else');
+
+    expect(runner.team.runnerMachineId).toBe('machine_someone_else');
+    expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: false, reason: 'not-runner' });
+  });
+
+  it('reports stale runner heartbeat in status', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+
+    const runner = markWorkspaceAsSharedFolder(root, { makeRunner: true });
+    const staleAt = new Date(Date.now() - TEAM_RUNNER_STALE_AFTER_MS - 1000).toISOString();
+    const heartbeat = JSON.parse(readFileSync(runner.heartbeatPath, 'utf-8'));
+    writeFileSync(runner.heartbeatPath, JSON.stringify({
+      ...heartbeat,
+      lastSeenAt: staleAt,
+      lastAutomationHeartbeatAt: staleAt,
+    }, null, 2), 'utf-8');
+
+    const status = getTeamModeStatus(root);
+    expect(isTeamRunnerHeartbeatStale(status.runnerHeartbeat)).toBe(true);
+    expect(status.runnerIsStale).toBe(true);
+  });
+
+  it('keeps a new runner pending until handover is observed or stale', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+
+    const initialRunner = markWorkspaceAsSharedFolder(root, { makeRunner: true });
+    const machineB = {
+      version: 1,
+      workspaceId: initialRunner.machine.workspaceId,
+      machineId: 'machine_new_runner',
+      displayName: 'Machine B',
+      createdAt: new Date().toISOString(),
+      lastOpenedAt: new Date().toISOString(),
+    };
+    writeFileSync(initialRunner.privateMachinePath, JSON.stringify(machineB, null, 2), 'utf-8');
+    setRunnerMachine(root);
+    const pending = loadWorkspaceConfig(root)!;
+
+    expect(pending.team?.runnerHandover).toMatchObject({
+      from: initialRunner.machine.machineId,
+      to: 'machine_new_runner',
+    });
+    expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: false, reason: 'handover-pending' });
+    expect(clearReadyRunnerHandover(root, 'machine_new_runner')).toBeNull();
+
+    const fromHeartbeat = JSON.parse(readFileSync(initialRunner.heartbeatPath, 'utf-8'));
+    writeFileSync(initialRunner.heartbeatPath, JSON.stringify({
+      ...fromHeartbeat,
+      observedTeamRevision: pending.team!.revision,
+      lastSeenAt: new Date().toISOString(),
+    }, null, 2), 'utf-8');
+
+    expect(clearReadyRunnerHandover(root, 'machine_new_runner')?.team?.runnerHandover).toBeUndefined();
   });
 
   it('reports future workspace formats as unsupported', () => {

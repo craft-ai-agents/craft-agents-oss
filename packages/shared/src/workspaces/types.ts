@@ -71,13 +71,22 @@ export type WorkspaceStorageConfig =
   | SharedFolderWorkspaceStorageConfig
   | GitWorkspaceStorageConfig;
 
+export interface WorkspaceTeamRunnerHandover {
+  from?: string;
+  to: string;
+  initiatedAt: string;
+  revision: number;
+}
+
 export interface WorkspaceTeamConfig {
   enabled: boolean;
   teamId: string;
   revision: number;
   runnerMachineId?: string;
+  runnerHandover?: WorkspaceTeamRunnerHandover;
   automationsPolicy: 'runner-only' | 'manual-only';
   backgroundTriggersEnabled: boolean;
+  runnerMissedTickPolicy?: 'skip' | 'run-once';
   createdAt: string;
   updatedAt: string;
 }

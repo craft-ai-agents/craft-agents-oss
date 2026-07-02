@@ -173,6 +173,14 @@ export default function TeamSettingsPage() {
 
   const unsupported = Boolean(status && !status.supported)
   const canMakeRunner = Boolean(status?.team.enabled && status.storage.mode === 'shared-folder')
+  const runnerIsThisMachine = Boolean(status?.team.runnerMachineId && status.team.runnerMachineId === status.machine.machineId)
+  const runnerStateLabel = !status?.team.runnerMachineId
+    ? 'No runner assigned'
+    : runnerIsThisMachine
+      ? 'This machine'
+      : status.runnerIsStale
+        ? 'Stale on another machine'
+        : 'Another machine'
 
   const moveToSharedFolder = async () => {
     if (!activeWorkspaceId || !destinationParentPath) return
@@ -267,11 +275,23 @@ export default function TeamSettingsPage() {
                           size="sm"
                           onClick={() => void setThisMachineAsRunner()}
                           disabled={busy || unsupported || !canMakeRunner}
+                          title={status?.runnerIsStale ? 'Take over runner duties on this machine' : 'Assign runner duties to this machine'}
                         >
-                          Make runner
+                          {runnerIsThisMachine ? 'Runner active' : status?.runnerIsStale ? 'Take over' : 'Make runner'}
                         </Button>
                       </div>
                     </div>
+                    {status?.team.enabled && (
+                      <div className="mt-4 rounded-[8px] border border-white/[0.06] bg-white/[0.025] px-3 py-2">
+                        <div className="flex items-center justify-between gap-3 text-[12px]">
+                          <span className="text-white/48">Runner status</span>
+                          <span className={status.runnerIsStale ? 'font-medium text-amber-200' : 'text-white/72'}>{runnerStateLabel}</span>
+                        </div>
+                        <div className="mt-1 truncate text-[11px] text-white/36">
+                          Last seen: {status.runnerHeartbeat?.lastAutomationHeartbeatAt ?? status.runnerHeartbeat?.lastSeenAt ?? 'Not observed'}
+                        </div>
+                      </div>
+                    )}
                   </SettingsCardContent>
                 </SettingsCard>
               </SettingsSection>
@@ -409,6 +429,7 @@ export default function TeamSettingsPage() {
                     <ValueRow label="Team revision" value={String(status.team.revision)} />
                     <ValueRow label="Team ID" value={status.team.teamId} />
                     <ValueRow label="Runner machine" value={status.team.runnerMachineId || 'None'} />
+                    <ValueRow label="Runner state" value={runnerStateLabel} />
                     <ValueRow label="This machine" value={`${status.machine.displayName} (${status.machine.machineId})`} />
                     <ValueRow label="Heartbeat observed revision" value={String(status.heartbeat.observedTeamRevision)} />
                   </SettingsCard>

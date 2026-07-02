@@ -18,6 +18,8 @@ export interface SchedulerTickPayload {
   dayOfWeek: number;
   /** Day name abbreviation (Sun, Mon, Tue, etc.) */
   dayName: string;
+  /** True when this tick is a single wake/start catch-up execution. */
+  catchUp?: boolean;
 }
 
 export class SchedulerService {

@@ -56,6 +56,7 @@ export interface SessionStatusChangePayload extends BaseEventPayload {
 export interface SchedulerTickPayload extends BaseEventPayload {
   localTime: string;
   utcTime: string;
+  catchUp?: boolean;
 }
 
 /** Label config change payload */

@@ -582,7 +582,7 @@ app.whenReady().then(async () => {
       }
 
       // Pre-import power manager (async import needed for applyPlatformToSubsystems)
-      const { onSessionStarted, onSessionStopped } = await import('./power-manager')
+      const { onSessionStarted, onSessionStopped, setTeamRunnerActive } = await import('./power-manager')
 
       // Client ID tracking for Electron IPC bridge (webContentsId → clientId)
       const clientMap = new Map<number, string>()
@@ -638,6 +638,7 @@ app.whenReady().then(async () => {
             updateBadgeCount,
             onSessionStarted,
             onSessionStopped,
+            onTeamRunnerActiveChange: setTeamRunnerActive,
             captureException: (error, context) => {
               Sentry.captureException(error instanceof Error ? error : new Error(String(error)), {
                 tags: {

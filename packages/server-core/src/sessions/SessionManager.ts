@@ -174,12 +174,14 @@ interface SessionRuntimeHooks {
   captureException: (error: unknown, context?: { errorSource?: string; sessionId?: string }) => void
   onSessionStarted: () => void
   onSessionStopped: () => void
+  onTeamRunnerActiveChange: (active: boolean) => void
 }
 
 const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
   updateBadgeCount: () => {},
   onSessionStarted: () => {},
   onSessionStopped: () => {},
+  onTeamRunnerActiveChange: () => {},
   captureException: (error, context) => {
     const err = error instanceof Error ? error : new Error(String(error))
     if (_platform?.captureError) {
@@ -1877,6 +1879,9 @@ export class SessionManager implements ISessionManager {
         },
         onError: (event, error) => {
           sessionLog.error(`Automation failed for ${event}:`, error.message)
+        },
+        onRunnerActiveChange: (active) => {
+          sessionRuntimeHooks.onTeamRunnerActiveChange(active)
         },
       })
       this.automationSystems.set(workspaceRootPath, automationSystem)
