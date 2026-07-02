@@ -80,6 +80,14 @@ The "When to Create a Skill" guidance above assumes skills are a personal, reusa
 
 **Cross-references between deployed skills go in the body as boundary descriptions, not as execution orders.** State how this skill differs from a neighboring one so the boundary is clear ("unlike X, this skill covers Y"). Don't write "run skill X first, then use this one" inside a skill body — that couples the two skills' execution order together and makes each harder to use independently. Sequencing and routing decisions belong one layer up, in whatever entry point or top-level instructions dispatch to skills in the first place.
 
+## Don't Fork Rules You Don't Own
+
+Splitting skills correctly (per the test above) doesn't automatically prevent coupling — it can come back through a different door. When one skill needs a downstream skill to do something specific, the temptation is to restate that downstream skill's rule inline (in a prompt template it constructs, or in a "how this scenario uses that skill" reference file) so the instruction reads as complete and self-contained. Don't. A restated rule is a silent fork: the moment the owning skill's actual rule changes, every place that copied it goes stale with nothing to flag the drift, and nobody remembers all the places to check.
+
+This is easy to miss because it doesn't look like duplication while you're writing it — it looks like being thorough. The test: for any sentence that describes what another skill's rule requires, ask whether that rule already exists in the other skill's own file. If it does, delete the restatement and replace it with a pointer to that skill by name. Keep only what's genuinely new at this boundary — a shape or a decision that only exists at the calling skill's level, not a copy of the rule itself.
+
+**A generic instruction ("make sure the downstream skill is followed with no shortcuts") does not need this treatment — only a specific rule (a threshold, a procedure, a required flag, a piece of that skill's own logic) does.** If you find yourself writing out *what* the other skill's rule says rather than just *that* it applies, stop and point at the skill instead.
+
 ## Skill Types
 
 ### Technique
