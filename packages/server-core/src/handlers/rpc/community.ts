@@ -58,7 +58,7 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
     const machineId = normalizeMachineId(getTeamModeStatus(workspace.rootPath).machine.machineId)
     importCommunityCsv(workspace.rootPath, machineId, {
       ...input,
-      assertedBy: input.assertedBy ?? machineId,
+      assertedBy: machineId,
     })
     return loadCommunityState(workspace.rootPath, machineId)
   })

@@ -15,13 +15,21 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
-import type { CommunityContactRecord, CommunitySegment, CommunityState } from '../../../shared/types'
+import type {
+  CommunityContactRecord,
+  CommunitySegment,
+  CommunityState,
+  ConsentStatus,
+  ImportCommunityCsvInput,
+} from '../../../shared/types'
 
 type SegmentFilter = CommunitySegment | 'all'
+type ImportBasis = ImportCommunityCsvInput['basis']
 type FanDraft = {
   name: string
   email: string
   segment: CommunitySegment
+  consentStatus: ConsentStatus
   city: string
   notes: string
   tags: string
@@ -44,10 +52,23 @@ const emptyDraft: FanDraft = {
   name: '',
   email: '',
   segment: 'general',
+  consentStatus: 'unknown',
   city: '',
   notes: '',
   tags: '',
 }
+
+const consentOptions: Array<{ id: ConsentStatus; label: string }> = [
+  { id: 'unknown', label: 'Unknown consent' },
+  { id: 'opted-in', label: 'Opted in' },
+  { id: 'transactional-only', label: 'Transactional only' },
+]
+
+const importBasisOptions: Array<{ id: ImportBasis; label: string }> = [
+  { id: 'unknown', label: 'Unknown consent' },
+  { id: 'existing-list-opt-in', label: 'Existing opt-in list' },
+  { id: 'signup-form', label: 'Signup form export' },
+]
 
 export function CommunityPage({ workspaceId }: CommunityPageProps) {
   const [activeSegment, setActiveSegment] = React.useState<SegmentFilter>('all')
@@ -55,6 +76,8 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
   const [community, setCommunity] = React.useState<CommunityState | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
+  const [draftingEmail, setDraftingEmail] = React.useState(false)
+  const [importBasis, setImportBasis] = React.useState<ImportBasis>('unknown')
 
   const refreshCommunity = React.useCallback(async () => {
     setLoading(true)
@@ -95,7 +118,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
         city: draft.city,
         notes: draft.notes,
         tags: draft.tags.split(/[;,]/).map((tag) => tag.trim()).filter(Boolean),
-        consentStatus: 'unknown',
+        consentStatus: draft.consentStatus,
       })
       )
       setDraft(emptyDraft)
@@ -116,16 +139,18 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
       setCommunity(await window.electronAPI.importCommunityCsv(workspaceId, {
         csv,
         filename: path.split('/').pop(),
-        basis: 'unknown',
+        basis: importBasis,
       })
       )
-      toast.success('CSV imported. Unknown-consent contacts are held out of broadcasts.')
+      toast.success(importBasis === 'unknown'
+        ? 'CSV imported. Unknown-consent contacts are held out of broadcasts.'
+        : 'CSV imported with opt-in attestation.')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     }
-  }, [workspaceId])
+  }, [importBasis, workspaceId])
 
-  const queueEmailJob = React.useCallback(async (audienceLabel: string, segmentIds: string[]) => {
+  const queueEmailJob = React.useCallback(async (audienceLabel: string, segmentIds: string[]): Promise<boolean> => {
     try {
       setCommunity(await window.electronAPI.createCommunityEmailJob(workspaceId, {
         title: `${audienceLabel} email`,
@@ -136,13 +161,23 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
         transportProvider: 'gmail',
       })
       )
+      return true
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
+      return false
     }
   }, [workspaceId])
 
-  const draftEmail = React.useCallback((audience: string, segmentIds: string[]) => {
-    void queueEmailJob(audience, segmentIds)
+  const draftEmail = React.useCallback(async (audience: string, segmentIds: string[], createJob: boolean) => {
+    setDraftingEmail(true)
+    try {
+      if (createJob) {
+        const queued = await queueEmailJob(audience, segmentIds)
+        if (!queued) return
+      }
+    } finally {
+      setDraftingEmail(false)
+    }
     navigate(routes.action.newSession({
       name: 'Community email draft',
       input: `Draft a short fan email for ${audience}. Keep it warm, direct, and ready to send through Gmail.`,
@@ -179,6 +214,15 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
               <Mail className="h-3.5 w-3.5" />
               Connect Gmail
             </button>
+            <select
+              value={importBasis}
+              onChange={(event) => setImportBasis(event.target.value as ImportBasis)}
+              className="h-9 rounded-full border border-white/[0.08] bg-white/[0.035] px-3 text-xs font-medium text-white/68 outline-none"
+            >
+              {importBasisOptions.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
             <button
               type="button"
               onClick={() => void importCsv()}
@@ -189,10 +233,11 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
             </button>
             <button
               type="button"
-              onClick={() => draftEmail(activeAudience, selectedSegmentIds)}
+              disabled={draftingEmail}
+              onClick={() => void draftEmail(activeAudience, selectedSegmentIds, true)}
               className="inline-flex h-9 items-center gap-2 rounded-full bg-[#f97316]/85 px-4 text-xs font-medium text-white transition-colors hover:bg-[#f97316]"
             >
-              <Sparkles className="h-3.5 w-3.5" />
+              {draftingEmail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Draft Email
             </button>
           </div>
@@ -239,7 +284,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
             ) : visibleFans.length ? (
               <div className="space-y-2">
                 {visibleFans.map((fan) => (
-                  <FanRow key={fan.id} fan={fan} onDraft={() => draftEmail(`${fan.name ?? 'this fan'} and similar fans`, fan.segments)} />
+                  <FanRow key={fan.id} fan={fan} onDraft={() => void draftEmail(`${fan.name ?? 'this fan'} and similar fans`, fan.segments, true)} />
                 ))}
               </div>
             ) : (
@@ -267,6 +312,15 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
                 >
                   {segmentFilters.filter((segment) => segment.id !== 'all').map((segment) => (
                     <option key={segment.id} value={segment.id}>{segment.label}</option>
+                  ))}
+                </select>
+                <select
+                  value={draft.consentStatus}
+                  onChange={(event) => setDraft((value) => ({ ...value, consentStatus: event.target.value as ConsentStatus }))}
+                  className="h-9 w-full rounded-[10px] border border-white/[0.06] bg-white/[0.025] px-3 text-xs text-white/70 outline-none"
+                >
+                  {consentOptions.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
                   ))}
                 </select>
                 <Input value={draft.city} placeholder="City" onChange={(city) => setDraft((value) => ({ ...value, city }))} />
@@ -302,7 +356,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
                   <button
                     key={email.id}
                     type="button"
-                    onClick={() => draftEmail(email.title, email.audience.segmentIds)}
+                    onClick={() => void draftEmail(email.title, email.audience.segmentIds, false)}
                     className="group w-full rounded-[13px] border border-white/[0.055] bg-white/[0.025] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
                   >
                     <div className="flex items-center justify-between gap-3">

@@ -40,6 +40,7 @@ const EMAIL_JOBS_COLLECTION = 'community/email-jobs';
 const SUPPRESSION_COLLECTION = 'community/suppression';
 const IMPORTS_COLLECTION = 'community/imports';
 const COMMUNITY_INDEX_FILE = 'records/community/index.json';
+const GENERATED_SUMMARY_MARKER = 'Generated artist community summary for agents.';
 
 interface LegacyCommunityContact {
   id?: string;
@@ -199,7 +200,7 @@ function generateSummaryBody(state: Omit<CommunityState, 'migrated'>): string {
     warnings: [],
   };
   return [
-    'Generated artist community summary for agents. Full fan records stay in records/community and should only be read for approved jobs.',
+    `${GENERATED_SUMMARY_MARKER} Full fan records stay in records/community and should only be read for approved jobs.`,
     '',
     '```json',
     JSON.stringify(payload, null, 2),
@@ -207,7 +208,17 @@ function generateSummaryBody(state: Omit<CommunityState, 'migrated'>): string {
   ].join('\n');
 }
 
-function writeCommunitySummary(workspaceRootPath: string, state: Omit<CommunityState, 'migrated'>): void {
+function isGeneratedCommunitySummary(body: string): boolean {
+  return body.includes(GENERATED_SUMMARY_MARKER);
+}
+
+function writeCommunitySummary(
+  workspaceRootPath: string,
+  state: Omit<CommunityState, 'migrated'>,
+  options: { replaceExisting?: boolean } = {},
+): void {
+  const existing = loadContextDoc(workspaceRootPath, ARTIST_COMMUNITY_CONTEXT_SLUG);
+  if (existing && !options.replaceExisting && !isGeneratedCommunitySummary(existing.body)) return;
   upsertContextDoc(workspaceRootPath, {
     slug: ARTIST_COMMUNITY_CONTEXT_SLUG,
     metadata: {
@@ -249,6 +260,16 @@ function findContactByEmailHash(contacts: CommunityContactRecord[], emailHash: s
   return contacts.find((contact) => contact.emailHash === emailHash && !contact.deletedAt);
 }
 
+function mergeConsentStatus(existing: ConsentStatus | undefined, incoming: ConsentStatus | undefined): ConsentStatus {
+  if (!existing) return incoming ?? 'unknown';
+  if (!incoming) return existing;
+  if (incoming === 'unsubscribed' || incoming === 'bounced') return incoming;
+  if (existing === 'unsubscribed' || existing === 'bounced') return existing;
+  if (incoming === 'unknown') return existing;
+  if (existing === 'opted-in' && incoming === 'transactional-only') return existing;
+  return incoming;
+}
+
 function upsertContactRecord(
   workspaceRootPath: string,
   machineId: string,
@@ -269,7 +290,7 @@ function upsertContactRecord(
     name: clean(input.name) ?? existing?.name,
     city: clean(input.city) ?? existing?.city,
     source: input.source ?? existing?.source ?? 'manual',
-    consentStatus: input.consentStatus ?? existing?.consentStatus ?? 'unknown',
+    consentStatus: mergeConsentStatus(existing?.consentStatus, input.consentStatus),
     consentEvidence: options.consentEvidenceSource
       ? { source: options.consentEvidenceSource, capturedAt: options.now ?? nowIso() }
       : existing?.consentEvidence,
@@ -304,14 +325,20 @@ export function listCommunitySuppressions(workspaceRootPath: string): CommunityS
   return readJsonRecords<CommunitySuppressionRecord>(workspaceRootPath, SUPPRESSION_COLLECTION);
 }
 
-export function loadCommunityState(workspaceRootPath: string, machineId: string): CommunityState {
+export function loadCommunityState(
+  workspaceRootPath: string,
+  machineId: string,
+  options: { replaceExistingSummary?: boolean } = {},
+): CommunityState {
   const migrated = migrateLegacyCommunityIfNeeded(workspaceRootPath, machineId);
   const contacts = listCommunityContacts(workspaceRootPath);
   const emailJobs = listCommunityEmailJobs(workspaceRootPath);
   const suppressions = listCommunitySuppressions(workspaceRootPath);
   const index = buildCommunityIndex(contacts, emailJobs, suppressions);
   writeCommunityIndex(workspaceRootPath, index);
-  writeCommunitySummary(workspaceRootPath, { contacts, emailJobs, suppressions, index });
+  writeCommunitySummary(workspaceRootPath, { contacts, emailJobs, suppressions, index }, {
+    replaceExisting: options.replaceExistingSummary || migrated,
+  });
   return { contacts, emailJobs, suppressions, index, migrated };
 }
 

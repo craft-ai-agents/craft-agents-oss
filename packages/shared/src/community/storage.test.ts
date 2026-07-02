@@ -91,6 +91,21 @@ describe('community record storage', () => {
     expect(loadContextDoc(root, ARTIST_COMMUNITY_CONTEXT_SLUG)?.body).toContain('"totalContacts": 1');
   });
 
+  test('loading community state does not overwrite a non-generated manual context doc', () => {
+    const root = tempRoot();
+    upsertContextDoc(root, {
+      slug: ARTIST_COMMUNITY_CONTEXT_SLUG,
+      metadata: { name: 'Artist Community', routing: { mode: 'broadcast' }, enabled: true },
+      body: 'Manual notes that do not use the legacy v1 JSON shape.',
+    });
+
+    const state = loadCommunityState(root, 'machine_a');
+
+    expect(state.migrated).toBe(false);
+    expect(loadContextDoc(root, ARTIST_COMMUNITY_CONTEXT_SLUG)?.body).toBe('Manual notes that do not use the legacy v1 JSON shape.');
+    expect(JSON.parse(readFileSync(join(root, 'records/community/index.json'), 'utf-8'))).toMatchObject({ totalContacts: 0 });
+  });
+
   test('repeated CSV import upserts by email hash without duplicate contacts', () => {
     const root = tempRoot();
     const csv = 'email,name,segment,tags\nfan@example.com,Fan One,vip,"a;b"\nFan@Example.com,Fan Again,buyers,c\n';
@@ -115,6 +130,27 @@ describe('community record storage', () => {
     expect(second.stats.updated).toBe(2);
     expect(state.contacts).toHaveLength(1);
     expect(jsonFiles(root, 'records/community/contacts')).toHaveLength(1);
+  });
+
+  test('unknown-basis import does not downgrade an existing opted-in contact', () => {
+    const root = tempRoot();
+    upsertCommunityContact(root, 'machine_a', {
+      name: 'Opted Fan',
+      email: 'fan@example.com',
+      segment: 'general',
+      consentStatus: 'opted-in',
+    });
+
+    importCommunityCsv(root, 'machine_a', {
+      csv: 'email,name,segment\nFAN@example.com,Opted Fan,general\n',
+      filename: 'unknown.csv',
+      assertedBy: 'machine_a',
+      basis: 'unknown',
+    });
+
+    const state = loadCommunityState(root, 'machine_a');
+    expect(state.contacts).toHaveLength(1);
+    expect(state.contacts[0]?.consentStatus).toBe('opted-in');
   });
 
   test('suppressed contacts are excluded from email job audiences', () => {
