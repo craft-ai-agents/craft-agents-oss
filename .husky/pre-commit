@@ -1,0 +1,12 @@
+staged_procurement_skill_changes=$(git diff --cached --name-only -- procurement-skills/)
+
+if [ -n "$staged_procurement_skill_changes" ]; then
+  if ! ./scripts/check-business-doc-sync.sh; then
+    echo ""
+    echo "Commit blocked: business doc is out of sync with a procurement skill you're"
+    echo "about to commit. Review the drift above, update the Feishu doc section (see"
+    echo "'怎么更新' in docs/superpowers/specs/2026-07-02-business-doc-communication-design.md),"
+    echo "refresh docs/business-doc-sync-manifest.json, then commit again."
+    exit 1
+  fi
+fi

@@ -16,6 +16,21 @@
 - `scripts/check-business-doc-sync.sh`:对每个 skill,比较其 `SKILL.md` 当前所在的最新 commit 与 manifest 里记的 SHA;不一致就报告"这个 skill 的业务文档可能过期,需要人工核对是否要更新对应章节"。
 - 两者都放在仓库里**不会被部署到生产**的位置(`docs/`、`scripts/`),不进 `procurement-skills/`——那个目录整体会被 rsync 镜像到生产采购 agent,混进去的话会变成对采购人员"可见"的多余内容。
 - 脚本只负责检测和提醒,不负责生成或推送内容——决定要不要更新、怎么翻译成业务语言,仍然是人(或未来某次带着判断力的会话)来做。
+- `.husky/pre-commit` 接了这个检查:提交如果碰到 `procurement-skills/` 下的改动,就跑一遍 `check-business-doc-sync.sh`;有 skill 过期就**硬阻止这次提交**,不出现在 `procurement-skills/` 之外的改动完全不受影响、不触发检查。
+
+### 怎么更新(业务文档过期后)
+
+1. 先判断这次 `SKILL.md` 改动是不是真的影响了业务行为(有些改动只是内部实现调整,不用同步)。
+2. 需要更新时,先定位到那个 skill 对应的章节:
+   ```bash
+   lark-cli docs +fetch --api-version v2 --doc "<doc_id>" --detail with-ids --scope section
+   ```
+3. 精确替换那一节(不用 `overwrite` 整篇重写,会丢评论):
+   ```bash
+   lark-cli docs +update --api-version v2 --doc "<doc_id>" --command block_replace \
+     --block-id "<该章节的 block-id>" --content '<新的业务语言内容>'
+   ```
+4. 更新 `docs/business-doc-sync-manifest.json` 里这个 skill 对应的 commit SHA,再跑一遍 `check-business-doc-sync.sh` 确认回到"全部已同步",然后才能提交刚才卡住的 `procurement-skills/` 改动。
 
 ## 非目标
 
@@ -29,3 +44,6 @@
 - `docs/business-doc-sync-manifest.json` 存在,9 个 skill 各有一条记录(skill 名 → 当前同步的 commit SHA)。
 - `scripts/check-business-doc-sync.sh` 存在且可执行,对着当前仓库跑一遍应该报告"全部已同步"(因为 manifest 是跟着这次创建文档同时写入的)。
 - 手动改一个 skill 的 `SKILL.md` 后再跑脚本,应该报告该 skill 已过期。
+- 提交只涉及 `procurement-skills/` 之外文件的改动,`.husky/pre-commit` 不受影响、正常提交。
+- 提交涉及一个当前"已同步"的 `procurement-skills/*` 文件改动,能正常提交。
+- 提交涉及一个当前"已过期"的 `procurement-skills/*` 文件改动,`.husky/pre-commit` 应阻止提交并打印提示。
