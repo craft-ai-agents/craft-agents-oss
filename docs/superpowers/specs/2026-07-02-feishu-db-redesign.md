@@ -1,7 +1,7 @@
 # feishu-db 重设计文档 — 两库分立 + 原子换库 + 声明式表定义
 
 日期：2026-07-02
-状态：已与用户逐节评审通过，待实现规划
+状态：**部分被取代** —— §4（TableDef 静态常量）、§6（canned queries）、§10 兼容段由 `2026-07-02-feishu-db-dynamic-tables-design.md` 修订取代；两库分立、原子换库、模块化、构建部署、测试基线继续有效
 对象：`procurement-skills/feishu-db/`（Rust CLI，飞书库存/供应商本地 SQLite 缓存，已上 prod）
 
 ## 0. 决策记录（用户拍板）
