@@ -3,6 +3,15 @@ name: writing-skills
 description: Use when creating new skills, editing existing skills, or verifying skills work before deployment
 ---
 
+<!--
+Forked from superpowers:writing-skills (v5.1.0) on 2026-07-02.
+Local additions: Designing Output Shape, Deployment Boundary Test, and the
+"Generalize Before It Enters the Skill" related principle — see
+docs/superpowers/specs/2026-07-02-writing-skills-fork-design.md.
+Not automatically kept in sync with upstream; re-diff manually against the
+plugin source if you want to pull in upstream fixes to unmodified sections.
+-->
+
 # Writing Skills
 
 ## Overview
@@ -418,7 +427,7 @@ Edit skill without testing? Same violation.
 
 **REQUIRED BACKGROUND:** The superpowers:test-driven-development skill explains why this matters. Same principles apply to documentation.
 
-### Corollary: Generalize Before It Enters the Skill
+### Related Principle: Generalize Before It Enters the Skill
 
 A rule earning its place in a skill (because a real failure motivated it) is not the same as that rule being ready to write down. Before it goes into SKILL.md, strip out everything specific to the one incident that produced it — exact inputs, exact expected outputs, names of the particular case that failed. What remains should be a method that stands on its own, understandable and applicable without knowing what originally went wrong.
 
