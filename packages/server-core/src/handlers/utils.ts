@@ -2,7 +2,7 @@ import { normalize, isAbsolute, sep } from 'path'
 import { homedir, tmpdir } from 'os'
 import { realpath } from 'fs/promises'
 import { getWorkspaceByNameOrId, type Workspace } from '@craft-agent/shared/config'
-import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
+import { assertWorkspaceOpenable, loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import type { PlatformServices } from '../runtime/platform'
 
 /**
@@ -14,6 +14,7 @@ export function getWorkspaceOrThrow(workspaceId: string): Workspace {
   if (!workspace) {
     throw new Error(`Workspace not found: ${workspaceId}`)
   }
+  assertWorkspaceOpenable(workspace.rootPath)
   return workspace
 }
 

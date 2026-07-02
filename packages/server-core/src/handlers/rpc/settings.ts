@@ -226,9 +226,11 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
 
   // Get workspace settings (model, permission mode, working directory, credential strategy)
   server.handle(RPC_CHANNELS.workspace.SETTINGS_GET, async (_ctx, workspaceId: string) => {
-    const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (!workspace) {
-      deps.platform.logger.error(`Workspace not found: ${workspaceId}`)
+    let workspace: ReturnType<typeof getWorkspaceOrThrow>
+    try {
+      workspace = getWorkspaceOrThrow(workspaceId)
+    } catch {
+      deps.platform.logger.error(`Workspace unavailable: ${workspaceId}`)
       return null
     }
 

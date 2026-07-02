@@ -10,7 +10,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
   getTeamConfigFile,
@@ -101,6 +101,13 @@ function getMigrationReceiptPath(rootPath: string, migrationId: string): string 
   return join(rootPath, TEAM_MIGRATIONS_DIR, `${migrationId}.json`);
 }
 
+function isSameOrInsidePath(parentPath: string, candidatePath: string): boolean {
+  const parent = resolve(parentPath);
+  const candidate = resolve(candidatePath);
+  const pathBetween = relative(parent, candidate);
+  return pathBetween === '' || (!pathBetween.startsWith('..') && !isAbsolute(pathBetween));
+}
+
 export function listTeamMigrationReceipts(rootPath: string): TeamMigrationReceipt[] {
   const dir = join(rootPath, TEAM_MIGRATIONS_DIR);
   if (!existsSync(dir)) return [];
@@ -169,8 +176,11 @@ export function preflightSharedFolderMigration(
     if (!existsSync(destinationParentPath) || !statSync(destinationParentPath).isDirectory()) {
       return { ok: false, sourceRootPath, destinationParentPath, finalRootPath, blockedFiles: [], warnings, reason: 'Destination folder does not exist.' };
     }
-    if (sourceRootPath === finalRootPath) {
+    if (resolve(sourceRootPath) === resolve(finalRootPath)) {
       return { ok: false, sourceRootPath, destinationParentPath, finalRootPath, blockedFiles: [], warnings, reason: 'Destination is already the current workspace folder.' };
+    }
+    if (isSameOrInsidePath(sourceRootPath, destinationParentPath)) {
+      return { ok: false, sourceRootPath, destinationParentPath, finalRootPath, blockedFiles: [], warnings, reason: 'Destination cannot be inside the workspace being moved.' };
     }
     if (existsSync(finalRootPath)) {
       return { ok: false, sourceRootPath, destinationParentPath, finalRootPath, blockedFiles: [], warnings, reason: 'Destination already contains a workspace folder with this name.' };
@@ -339,7 +349,7 @@ export function writeMovedToTombstone(
       movedAt: nowIso(),
     },
   };
-  saveWorkspaceConfig(originalRootPath, tombstone);
+  saveWorkspaceConfig(originalRootPath, tombstone, { allowMovedTombstoneWrite: true });
   return tombstone;
 }
 

@@ -67,6 +67,20 @@ describe('team mode metadata', () => {
     expect(existsSync(join(root, TEAM_CONFIG_FILE))).toBe(false);
   });
 
+  it('refuses team status for moved workspace tombstones', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root, {
+      movedTo: {
+        path: join(root, '..', 'new-team-workspace'),
+        migrationId: 'mig_done',
+        movedAt: new Date().toISOString(),
+      },
+    });
+
+    expect(() => getTeamModeStatus(root)).toThrow('Workspace moved to');
+    expect(() => markWorkspaceAsSharedFolder(root)).toThrow('Workspace moved to');
+  });
+
   it('enabling team mode writes shared-folder storage, team config, and machine heartbeat', () => {
     const root = makeWorkspaceRoot();
     writeWorkspace(root);

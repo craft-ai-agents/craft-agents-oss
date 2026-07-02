@@ -157,13 +157,22 @@ export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
   }
 }
 
+export interface SaveWorkspaceConfigOptions {
+  allowMovedTombstoneWrite?: boolean;
+}
+
 /**
  * Save workspace config.json to a workspace folder
  * @param rootPath - Absolute path to workspace root folder
  */
-export function saveWorkspaceConfig(rootPath: string, config: WorkspaceConfig): void {
+export function saveWorkspaceConfig(rootPath: string, config: WorkspaceConfig, options: SaveWorkspaceConfigOptions = {}): void {
   if (!existsSync(rootPath)) {
     mkdirSync(rootPath, { recursive: true });
+  }
+
+  const existing = loadWorkspaceConfig(rootPath);
+  if (existing?.movedTo?.path && !options.allowMovedTombstoneWrite) {
+    throw new Error(`Workspace moved to ${existing.movedTo.path}`);
   }
 
   // Convert paths to portable form for cross-machine compatibility

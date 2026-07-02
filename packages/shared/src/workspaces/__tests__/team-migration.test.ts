@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { loadWorkspaceConfig } from '../storage.ts';
+import { loadWorkspaceConfig, saveWorkspaceConfig } from '../storage.ts';
 import {
   assertWorkspaceOpenable,
   moveWorkspaceToSharedFolder,
@@ -89,6 +89,20 @@ describe('team shared-folder migration', () => {
     expect(existsSync(join(source, 'config.json'))).toBe(true);
   });
 
+  it('rejects destinations inside the source workspace', () => {
+    const source = makeDir('team-migrate-nested-source-');
+    writeWorkspace(source);
+    const nestedDestinationParent = join(source, 'shared-parent');
+    mkdirSync(nestedDestinationParent);
+
+    const preflight = preflightSharedFolderMigration(source, nestedDestinationParent);
+
+    expect(preflight.ok).toBe(false);
+    expect(preflight.reason).toBe('Destination cannot be inside the workspace being moved.');
+    expect(() => moveWorkspaceToSharedFolder(source, nestedDestinationParent)).toThrow('Destination cannot be inside the workspace being moved.');
+    expect(existsSync(join(nestedDestinationParent, basename(source)))).toBe(false);
+  });
+
   it('refuses migrating folders, config-less folders, in-progress receipts, and moved tombstones', () => {
     const parent = makeDir('team-open-guard-');
     const migrating = join(parent, '.craft-migrating-test');
@@ -117,8 +131,9 @@ describe('team shared-folder migration', () => {
 
     const moved = join(parent, 'moved-workspace');
     mkdirSync(moved);
-    writeWorkspace(moved);
+    const movedConfig = writeWorkspace(moved);
     writeMovedToTombstone(moved, join(parent, 'new-workspace'), 'mig_done');
     expect(() => assertWorkspaceOpenable(moved)).toThrow('Workspace moved to');
+    expect(() => saveWorkspaceConfig(moved, { ...movedConfig, name: 'Old Workspace Write' })).toThrow('Workspace moved to');
   });
 });

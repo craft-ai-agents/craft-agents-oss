@@ -142,6 +142,7 @@ export function writeTeamConfigMirror(workspaceRootPath: string, config: Workspa
 export function ensureWorkspaceTeamMetadata(workspaceRootPath: string): WorkspaceConfig {
   const loaded = loadWorkspaceConfig(workspaceRootPath);
   if (!loaded) throw new Error(`Failed to load workspace config at ${workspaceRootPath}`);
+  assertNotMoved(loaded);
   assertSupportedFormat(loaded);
   const normalized = ensureWorkspaceTeamFields(loaded);
   saveWorkspaceConfig(workspaceRootPath, normalized);
@@ -153,6 +154,12 @@ function assertSupportedFormat(config: WorkspaceConfig): void {
   const formatVersion = config.formatVersion ?? WORKSPACE_FORMAT_VERSION;
   if (formatVersion > WORKSPACE_FORMAT_VERSION) {
     throw new Error(`Workspace format ${formatVersion} requires a newer app version.`);
+  }
+}
+
+function assertNotMoved(config: WorkspaceConfig): void {
+  if (config.movedTo?.path) {
+    throw new Error(`Workspace moved to ${config.movedTo.path}`);
   }
 }
 
@@ -246,6 +253,7 @@ export function writeMachineHeartbeat(
 export function getTeamModeStatus(workspaceRootPath: string, options: { appVersion?: string } = {}): TeamModeStatus {
   const loaded = loadWorkspaceConfig(workspaceRootPath);
   if (!loaded) throw new Error(`Failed to load workspace config at ${workspaceRootPath}`);
+  assertNotMoved(loaded);
   const formatVersion = loaded.formatVersion ?? WORKSPACE_FORMAT_VERSION;
   const team = loaded.team ?? createDisabledTeamConfig({ teamId: 'team_uninitialized' });
   const machine = readExistingMachineIdentity(loaded.id) ?? createReadOnlyMachineIdentity(loaded.id);
@@ -331,6 +339,7 @@ export function markWorkspaceAsSharedFolder(
 export function setRunnerMachine(workspaceRootPath: string, machineId?: string): TeamModeStatus {
   const loaded = loadWorkspaceConfig(workspaceRootPath);
   if (!loaded) throw new Error(`Failed to load workspace config at ${workspaceRootPath}`);
+  assertNotMoved(loaded);
   assertSupportedFormat(loaded);
   if (loaded.storage?.mode !== 'shared-folder' || !loaded.team?.enabled) {
     throw new Error('Team runner requires an enabled shared-folder team workspace.');
