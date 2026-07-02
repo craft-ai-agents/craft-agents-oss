@@ -39,6 +39,7 @@ export type EmailJobStatus =
   | 'draft'
   | 'needs-provider'
   | 'needs-approval'
+  | 'needs-owner-approval'
   | 'approved'
   | 'queued'
   | 'sending'
@@ -172,4 +173,3 @@ export interface CreateCommunityEmailJobInput {
   bodyMarkdown?: string;
   transportProvider?: CommunityEmailJobRecord['transport']['provider'];
 }
-

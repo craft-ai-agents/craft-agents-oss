@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import {
   getTeamConfigFile,
   createDisabledTeamConfig,
+  ensureMachineTeamMember,
   readOrCreateMachineIdentity,
   writeMachineHeartbeat,
   writeTeamConfigMirror,
@@ -248,7 +249,7 @@ function writeMigratedWorkspaceConfig(
     : previousTeam.enabled
       ? previousTeam.backgroundTriggersEnabled
       : false;
-  const migratedConfig: WorkspaceConfig = {
+  let migratedConfig: WorkspaceConfig = {
     ...sourceConfig,
     formatVersion: WORKSPACE_FORMAT_VERSION,
     storage: {
@@ -276,6 +277,7 @@ function writeMigratedWorkspaceConfig(
       updatedAt: timestamp,
     },
   };
+  migratedConfig = ensureMachineTeamMember(tempRootPath, migratedConfig, machine, 'owner').config;
   saveWorkspaceConfig(tempRootPath, migratedConfig);
   writeTeamConfigMirror(tempRootPath, migratedConfig);
   writeMachineHeartbeat(tempRootPath, migratedConfig, machine);

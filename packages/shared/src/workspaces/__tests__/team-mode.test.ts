@@ -5,12 +5,15 @@ import { join } from 'node:path';
 import { loadWorkspaceConfig } from '../storage.ts';
 import { createFakeSyncHarness, writeSharedRecord } from '../../records/index.ts';
 import {
+  assertTeamPermission,
   clearReadyRunnerHandover,
+  evaluateTeamPermission,
   evaluateTeamRunnerGate,
   getTeamModeStatus,
   isTeamRunnerHeartbeatStale,
   joinWorkspaceTeam,
   markWorkspaceAsSharedFolder,
+  readOrCreateMachineIdentity,
   setRunnerMachine,
   TEAM_CONFIG_FILE,
   TEAM_RUNNER_STALE_AFTER_MS,
@@ -137,6 +140,36 @@ describe('team mode metadata', () => {
     expect(status.heartbeat.observedTeamRevision).toBe(4);
   });
 
+  it('treats a joined memberless legacy team workspace as owner and persists membership on permission check', () => {
+    const root = makeWorkspaceRoot();
+    const config = writeWorkspace(root, {
+      storage: {
+        mode: 'shared-folder',
+        portabilityVersion: 1,
+        provider: 'generic-folder',
+        sharedRootId: 'shared_legacy',
+        enabledAt: new Date().toISOString(),
+        vaultPolicy: 'copy-into-workspace',
+        pathPolicy: 'relative-required',
+      },
+      team: {
+        enabled: true,
+        teamId: 'team_legacy',
+        revision: 1,
+        automationsPolicy: 'runner-only',
+        backgroundTriggersEnabled: true,
+        runnerMissedTickPolicy: 'run-once',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    });
+    readOrCreateMachineIdentity(config.id);
+
+    expect(getTeamModeStatus(root).currentRole).toBe('owner');
+    expect(assertTeamPermission(root, 'team.runner.assign')).toMatchObject({ allowed: true, role: 'owner' });
+    expect(loadWorkspaceConfig(root)?.team?.members?.[0]?.role).toBe('owner');
+  });
+
   it('rejects runner assignment while the workspace is still solo', () => {
     const root = makeWorkspaceRoot();
     writeWorkspace(root);
@@ -203,14 +236,20 @@ describe('team mode metadata', () => {
       createdAt: new Date().toISOString(),
       lastOpenedAt: new Date().toISOString(),
     };
+    setRunnerMachine(root, machineB.machineId);
     writeFileSync(initialRunner.privateMachinePath, JSON.stringify(machineB, null, 2), 'utf-8');
-    setRunnerMachine(root);
     const pending = loadWorkspaceConfig(root)!;
 
     expect(pending.team?.runnerHandover).toMatchObject({
       from: initialRunner.machine.machineId,
       to: 'machine_new_runner',
     });
+    const unobservedFromHeartbeat = JSON.parse(readFileSync(initialRunner.heartbeatPath, 'utf-8'));
+    writeFileSync(initialRunner.heartbeatPath, JSON.stringify({
+      ...unobservedFromHeartbeat,
+      observedTeamRevision: pending.team!.revision - 1,
+      lastSeenAt: new Date().toISOString(),
+    }, null, 2), 'utf-8');
     expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: false, reason: 'handover-pending' });
     expect(clearReadyRunnerHandover(root, 'machine_new_runner')).toBeNull();
 
@@ -258,10 +297,34 @@ describe('team mode metadata', () => {
     const joined = joinWorkspaceTeam(sync.machineB);
 
     expect(joined.joined).toBe(true);
+    expect(joined.currentRole).toBe('editor');
     expect(joined.team.runnerMachineId).toBe(runner.machine.machineId);
     expect(joined.team.automationsPolicy).toBe('runner-only');
     expect(joined.syncHealth.status).toBe('healthy');
     expect(evaluateTeamRunnerGate(sync.machineB)).toMatchObject({ allowed: false, reason: 'not-runner' });
+  });
+
+  it('owners can manage the runner while editors can edit shared work but not manage team settings', () => {
+    const root = makeWorkspaceRoot();
+    const sync = createFakeSyncHarness(join(root, 'sync'));
+    const privateA = join(root, 'private-a');
+    const privateB = join(root, 'private-b');
+
+    process.env.CRAFT_CONFIG_DIR = privateA;
+    writeWorkspace(sync.machineA);
+    const ownerStatus = markWorkspaceAsSharedFolder(sync.machineA, { makeRunner: true });
+    expect(ownerStatus.currentRole).toBe('owner');
+    expect(evaluateTeamPermission(sync.machineA, 'team.runner.assign')).toMatchObject({ allowed: true, role: 'owner' });
+    sync.syncAtoB();
+
+    process.env.CRAFT_CONFIG_DIR = privateB;
+    joinWorkspaceTeam(sync.machineB);
+    expect(evaluateTeamPermission(sync.machineB, 'records.write')).toMatchObject({ allowed: true, role: 'editor' });
+    expect(evaluateTeamPermission(sync.machineB, 'team.runner.assign')).toMatchObject({ allowed: false, role: 'editor', reason: 'owner-required' });
+    expect(() => setRunnerMachine(sync.machineB)).toThrow('owner-required');
+
+    process.env.CRAFT_CONFIG_DIR = privateA;
+    expect(() => setRunnerMachine(sync.machineA)).not.toThrow();
   });
 
   it('re-enabling team metadata preserves existing runner automation policy', () => {

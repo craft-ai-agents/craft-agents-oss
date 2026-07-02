@@ -78,10 +78,21 @@ export interface WorkspaceTeamRunnerHandover {
   revision: number;
 }
 
+export type WorkspaceTeamRole = 'owner' | 'editor';
+
+export interface WorkspaceTeamMember {
+  memberId: string;
+  displayName: string;
+  role: WorkspaceTeamRole;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface WorkspaceTeamConfig {
   enabled: boolean;
   teamId: string;
   revision: number;
+  members?: WorkspaceTeamMember[];
   runnerMachineId?: string;
   runnerHandover?: WorkspaceTeamRunnerHandover;
   automationsPolicy: 'runner-only' | 'manual-only';

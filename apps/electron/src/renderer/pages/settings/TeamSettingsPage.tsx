@@ -189,9 +189,24 @@ export default function TeamSettingsPage() {
 
   const unsupported = Boolean(status && !status.supported)
   const needsJoin = Boolean(status?.team.enabled && status.storage.mode === 'shared-folder' && !status.joined)
-  const canMakeRunner = Boolean(status?.team.enabled && status.storage.mode === 'shared-folder' && status.joined)
+  const canManageTeam = Boolean(status?.canManageTeam)
+  const canMakeRunner = Boolean(status?.team.enabled && status.storage.mode === 'shared-folder' && status.joined && canManageTeam)
   const runnerIsThisMachine = Boolean(status?.team.runnerMachineId && status.team.runnerMachineId === status.machine.machineId)
   const runnerHandoverPending = Boolean(status?.team.runnerHandover?.to && status.team.runnerHandover.to === status.machine.machineId)
+  const roleLabel = status?.currentRole === 'owner'
+    ? 'Owner'
+    : status?.currentRole === 'editor'
+      ? 'Editor'
+      : status?.team.enabled
+        ? 'Not joined'
+        : 'Owner'
+  const roleDetail = status?.currentRole === 'owner'
+    ? 'Can manage team settings and runner'
+    : status?.currentRole === 'editor'
+      ? 'Can create and edit shared work'
+      : status?.team.enabled
+        ? 'Join this workspace to collaborate'
+        : 'Solo workspace'
   const runnerStateLabel = !status?.team.runnerMachineId
     ? 'No runner assigned'
     : runnerHandoverPending
@@ -301,7 +316,7 @@ export default function TeamSettingsPage() {
                           size="sm"
                           onClick={() => void setThisMachineAsRunner()}
                           disabled={busy || unsupported || !canMakeRunner}
-                          title={runnerHandoverPending ? 'Waiting for previous runner acknowledgement or grace window' : status?.runnerIsStale ? 'Take over runner duties on this machine' : 'Assign runner duties to this machine'}
+                          title={!canManageTeam && status?.team.enabled ? 'Only the Owner can change runner' : runnerHandoverPending ? 'Waiting for previous runner acknowledgement or grace window' : status?.runnerIsStale ? 'Take over runner duties on this machine' : 'Assign runner duties to this machine'}
                         >
                           {runnerHandoverPending ? 'Pending' : runnerIsThisMachine ? 'Runner active' : status?.runnerIsStale ? 'Take over' : 'Make runner'}
                         </Button>
@@ -309,6 +324,11 @@ export default function TeamSettingsPage() {
                     </div>
                     {status?.team.enabled && (
                       <div className="mt-4 rounded-[8px] border border-white/[0.06] bg-white/[0.025] px-3 py-2">
+                        <div className="mb-2 flex items-center justify-between gap-3 border-b border-white/[0.06] pb-2 text-[12px]">
+                          <span className="text-white/48">Your role</span>
+                          <span className={status.currentRole === 'owner' ? 'font-medium text-emerald-200' : status.currentRole === 'editor' ? 'font-medium text-white/72' : 'font-medium text-amber-200'}>{roleLabel}</span>
+                        </div>
+                        <div className="mb-2 truncate text-[11px] text-white/36">{roleDetail}</div>
                         <div className="flex items-center justify-between gap-3 text-[12px]">
                           <span className="text-white/48">Runner status</span>
                           <span className={status.runnerIsStale ? 'font-medium text-amber-200' : 'text-white/72'}>{runnerStateLabel}</span>
@@ -495,6 +515,7 @@ export default function TeamSettingsPage() {
                     <ValueRow label="Team revision" value={String(status.team.revision)} />
                     <ValueRow label="Team ID" value={status.team.teamId} />
                     <ValueRow label="Joined on this machine" value={status.joined ? 'Yes' : 'No'} />
+                    <ValueRow label="Role on this machine" value={roleLabel} />
                     <ValueRow label="Sync health" value={status.syncHealth.status} />
                     <ValueRow label="Runner machine" value={status.team.runnerMachineId || 'None'} />
                     <ValueRow label="Runner state" value={runnerStateLabel} />

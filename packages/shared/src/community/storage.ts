@@ -19,6 +19,7 @@ import {
   loadContextDoc,
   upsertContextDoc,
 } from '../workspace-context/index.ts';
+import { evaluateTeamPermission } from '../workspaces/index.ts';
 import type {
   CommunityContactRecord,
   CommunityEmailJobRecord,
@@ -524,6 +525,16 @@ function audienceForSegments(
   };
 }
 
+function emailJobDefaultStatus(workspaceRootPath: string, purpose: CommunityEmailJobRecord['purpose']): CommunityEmailJobRecord['status'] {
+  if (purpose === 'personal-outreach' || purpose === 'transactional') return 'draft';
+  try {
+    const sendPermission = evaluateTeamPermission(workspaceRootPath, 'community.email.send');
+    return sendPermission.allowed ? 'draft' : 'needs-owner-approval';
+  } catch {
+    return 'draft';
+  }
+}
+
 export function createCommunityEmailJob(
   workspaceRootPath: string,
   machineId: string,
@@ -535,6 +546,7 @@ export function createCommunityEmailJob(
   const purpose = input.purpose ?? 'newsletter';
   const audience = audienceForSegments(contacts, suppressions, input.segmentIds, purpose);
   const id = options.id ?? safeId('email', randomUUID().replace(/-/g, '').slice(0, 16));
+  const status = options.status ?? emailJobDefaultStatus(workspaceRootPath, purpose);
   const result = writeSharedRecord(workspaceRootPath, EMAIL_JOBS_COLLECTION, id, {
     title: input.title.trim(),
     purpose,
@@ -555,7 +567,7 @@ export function createCommunityEmailJob(
     },
     idempotencyKey: `community-email-${id}`,
     transport: { provider: input.transportProvider ?? 'gmail' },
-    status: options.status ?? 'draft',
+    status,
   }, { machineId, now: options.now });
   if (result.status === 'conflict') throw new Error(`Community email job conflict: ${result.conflict.conflictId}`);
   loadCommunityState(workspaceRootPath, machineId);

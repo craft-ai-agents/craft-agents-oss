@@ -19,6 +19,8 @@ import {
   type WorkspaceConfig,
   type WorkspaceStorageConfig,
   type WorkspaceTeamConfig,
+  type WorkspaceTeamMember,
+  type WorkspaceTeamRole,
 } from './types.ts';
 
 export const TEAM_CONFIG_FILE = 'team/config.json';
@@ -31,6 +33,7 @@ export const TEAM_RUNNER_HANDOVER_GRACE_MS = 10 * 60 * 1000;
 export interface TeamMachineIdentity {
   version: 1;
   workspaceId: string;
+  memberId?: string;
   machineId: string;
   displayName: string;
   createdAt: string;
@@ -64,6 +67,10 @@ export interface TeamModeStatus {
   runnerIsStale: boolean;
   runnerStaleAfterMs: number;
   joined: boolean;
+  currentMember?: WorkspaceTeamMember;
+  currentRole: WorkspaceTeamRole | 'none';
+  canManageTeam: boolean;
+  canEditSharedWork: boolean;
   syncHealth: TeamSyncHealth;
 }
 
@@ -117,6 +124,30 @@ export interface TeamRunnerGateDecision {
   observedTeamRevision: number;
   teamRevision: number;
   runnerIsStale: boolean;
+}
+
+export type TeamPermissionAction =
+  | 'team.settings.update'
+  | 'team.runner.assign'
+  | 'team.members.invite'
+  | 'team.members.remove'
+  | 'secrets.update'
+  | 'storage.migrate'
+  | 'records.write'
+  | 'files.write'
+  | 'agent.chat'
+  | 'automation.background.run'
+  | 'community.email.draft'
+  | 'community.email.send';
+
+export interface TeamPermissionDecision {
+  allowed: boolean;
+  action: TeamPermissionAction;
+  role: WorkspaceTeamRole | 'none';
+  reason?: string;
+  member?: WorkspaceTeamMember;
+  machineId: string;
+  runnerMachineId?: string;
 }
 
 function nowIso(): string {
@@ -182,6 +213,7 @@ export function createDisabledTeamConfig(existing?: Partial<WorkspaceTeamConfig>
     enabled: false,
     teamId: existing?.teamId ?? `team_${randomUUID().slice(0, 8)}`,
     revision: existing?.revision ?? 0,
+    members: existing?.members,
     runnerMachineId: existing?.runnerMachineId,
     automationsPolicy: existing?.automationsPolicy ?? 'manual-only',
     backgroundTriggersEnabled: existing?.backgroundTriggersEnabled ?? false,
@@ -189,6 +221,148 @@ export function createDisabledTeamConfig(existing?: Partial<WorkspaceTeamConfig>
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: existing?.updatedAt ?? timestamp,
   };
+}
+
+function createTeamMember(machine: TeamMachineIdentity, role: WorkspaceTeamRole, timestamp = nowIso()): WorkspaceTeamMember {
+  return {
+    memberId: machine.memberId ?? `member_${randomUUID().slice(0, 10)}`,
+    displayName: machine.displayName || hostname(),
+    role,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function writeMachineIdentity(workspaceId: string, identity: TeamMachineIdentity): TeamMachineIdentity {
+  atomicWriteJson(getPrivateMachineFile(workspaceId), identity);
+  return identity;
+}
+
+function getTeamMembers(team: WorkspaceTeamConfig): WorkspaceTeamMember[] {
+  return Array.isArray(team.members) ? team.members.filter((member) => Boolean(member.memberId && member.role)) : [];
+}
+
+function getMemberForMachine(team: WorkspaceTeamConfig, machine: TeamMachineIdentity): WorkspaceTeamMember | undefined {
+  if (!machine.memberId) return undefined;
+  return getTeamMembers(team).find((member) => member.memberId === machine.memberId);
+}
+
+function getRoleForMachine(team: WorkspaceTeamConfig, machine: TeamMachineIdentity): WorkspaceTeamRole | 'none' {
+  return getMemberForMachine(team, machine)?.role ?? 'none';
+}
+
+export function ensureMachineTeamMember(
+  workspaceRootPath: string,
+  config: WorkspaceConfig,
+  machine: TeamMachineIdentity,
+  defaultRole: WorkspaceTeamRole,
+): { config: WorkspaceConfig; machine: TeamMachineIdentity; member: WorkspaceTeamMember } {
+  const team = config.team ?? createDisabledTeamConfig();
+  const members = getTeamMembers(team);
+  const existing = getMemberForMachine(team, machine);
+  if (existing) return { config, machine, member: existing };
+
+  const timestamp = nowIso();
+  const member = createTeamMember(machine, members.length === 0 ? 'owner' : defaultRole, timestamp);
+  const nextMachine = machine.memberId === member.memberId ? machine : { ...machine, memberId: member.memberId, lastOpenedAt: timestamp };
+  const nextConfig: WorkspaceConfig = {
+    ...config,
+    team: {
+      ...team,
+      members: [...members, member],
+      updatedAt: timestamp,
+    },
+  };
+  saveWorkspaceConfig(workspaceRootPath, nextConfig);
+  writeMachineIdentity(config.id, nextMachine);
+  return { config: nextConfig, machine: nextMachine, member };
+}
+
+function isOwnerOnlyAction(action: TeamPermissionAction): boolean {
+  return [
+    'team.settings.update',
+    'team.runner.assign',
+    'team.members.invite',
+    'team.members.remove',
+    'secrets.update',
+    'storage.migrate',
+    'community.email.send',
+  ].includes(action);
+}
+
+export function evaluateTeamPermission(
+  workspaceRootPath: string,
+  input: { action: TeamPermissionAction; machineId?: string } | TeamPermissionAction,
+): TeamPermissionDecision {
+  const action = typeof input === 'string' ? input : input.action;
+  if (action === 'automation.background.run') {
+    const gate = evaluateTeamRunnerGate(workspaceRootPath);
+    return {
+      allowed: gate.allowed && gate.reason === 'runner',
+      action,
+      role: 'none',
+      reason: gate.allowed ? undefined : gate.reason,
+      machineId: gate.machineId,
+      runnerMachineId: gate.runnerMachineId,
+    };
+  }
+
+  const loaded = loadWorkspaceConfig(workspaceRootPath);
+  if (!loaded) throw new Error(`Failed to load workspace config at ${workspaceRootPath}`);
+  assertNotMoved(loaded);
+  const team = loaded.team ?? createDisabledTeamConfig({ teamId: 'team_uninitialized' });
+  const machine = readExistingMachineIdentity(loaded.id) ?? createReadOnlyMachineIdentity(loaded.id);
+  if (typeof input !== 'string' && input.machineId && input.machineId !== machine.machineId) {
+    return {
+      allowed: false,
+      action,
+      role: 'none',
+      reason: 'machine-mismatch',
+      machineId: machine.machineId,
+      runnerMachineId: team.runnerMachineId,
+    };
+  }
+  const members = getTeamMembers(team);
+  const role = getRoleForMachine(team, machine);
+  const member = getMemberForMachine(team, machine);
+  const effectiveRole = role === 'none' && machine.machineId !== 'not_joined' && members.length === 0 ? 'owner' : role;
+  const base = {
+    action,
+    role: effectiveRole,
+    member,
+    machineId: machine.machineId,
+    runnerMachineId: team.runnerMachineId,
+  };
+
+  if ((loaded.storage?.mode ?? 'solo') === 'solo' || !team.enabled) return { ...base, allowed: true };
+  if (machine.machineId === 'not_joined') return { ...base, allowed: false, reason: 'not-joined' };
+  if (effectiveRole === 'none') return { ...base, allowed: false, reason: 'unknown-member' };
+  if (isOwnerOnlyAction(action)) {
+    return effectiveRole === 'owner'
+      ? { ...base, allowed: true }
+      : { ...base, allowed: false, reason: 'owner-required' };
+  }
+  return effectiveRole === 'owner' || effectiveRole === 'editor'
+    ? { ...base, allowed: true }
+    : { ...base, allowed: false, reason: 'member-required' };
+}
+
+export function assertTeamPermission(
+  workspaceRootPath: string,
+  input: { action: TeamPermissionAction; machineId?: string } | TeamPermissionAction,
+): TeamPermissionDecision {
+  const decision = evaluateTeamPermission(workspaceRootPath, input);
+  if (!decision.allowed) {
+    throw new Error(`Team permission denied for ${decision.action}: ${decision.reason ?? 'not allowed'}`);
+  }
+  if (decision.role === 'owner' && !decision.member && decision.machineId !== 'not_joined') {
+    const loaded = loadWorkspaceConfig(workspaceRootPath);
+    const machine = loaded ? readExistingMachineIdentity(loaded.id) : null;
+    if (loaded?.team?.enabled && machine && getTeamMembers(loaded.team).length === 0) {
+      ensureMachineTeamMember(workspaceRootPath, loaded, machine, 'owner');
+    }
+  }
+  return decision;
 }
 
 export function ensureWorkspaceTeamFields(config: WorkspaceConfig): WorkspaceConfig {
@@ -494,8 +668,9 @@ export function joinWorkspaceTeam(workspaceRootPath: string, input: { appVersion
     throw new Error('Joining a team requires an enabled shared-folder team workspace.');
   }
   const machine = readOrCreateMachineIdentity(normalized.id, input.displayName);
-  writeTeamConfigMirror(workspaceRootPath, normalized);
-  writeMachineHeartbeat(workspaceRootPath, normalized, machine, { appVersion: input.appVersion, canRunAutomations: true });
+  const joined = ensureMachineTeamMember(workspaceRootPath, normalized, machine, 'editor');
+  writeTeamConfigMirror(workspaceRootPath, joined.config);
+  writeMachineHeartbeat(workspaceRootPath, joined.config, joined.machine, { appVersion: input.appVersion, canRunAutomations: true });
   return getTeamModeStatus(workspaceRootPath, { appVersion: input.appVersion });
 }
 
@@ -634,6 +809,14 @@ export function getTeamModeStatus(workspaceRootPath: string, options: { appVersi
   const storage = loaded.storage ?? defaultSoloStorage();
   const supported = formatVersion <= WORKSPACE_FORMAT_VERSION;
   const joined = machine.machineId !== 'not_joined';
+  const currentMember = getMemberForMachine(team, machine);
+  const members = getTeamMembers(team);
+  const currentRole: WorkspaceTeamRole | 'none' =
+    storage.mode === 'solo' || !team.enabled
+      ? 'owner'
+      : currentMember?.role ?? (joined && members.length === 0 ? 'owner' : 'none');
+  const canManageTeam = currentRole === 'owner';
+  const canEditSharedWork = currentRole === 'owner' || currentRole === 'editor';
   const syncHealth = buildTeamSyncHealth(workspaceRootPath, {
     supported,
     storage,
@@ -657,6 +840,10 @@ export function getTeamModeStatus(workspaceRootPath: string, options: { appVersi
       heartbeat,
       ...runnerStatus,
       joined,
+      currentMember,
+      currentRole,
+      canManageTeam,
+      canEditSharedWork,
       syncHealth,
     };
   }
@@ -674,6 +861,10 @@ export function getTeamModeStatus(workspaceRootPath: string, options: { appVersi
     heartbeat,
     ...runnerStatus,
     joined,
+    currentMember,
+    currentRole,
+    canManageTeam,
+    canEditSharedWork,
     syncHealth,
   };
 }
@@ -686,6 +877,9 @@ export function markWorkspaceAsSharedFolder(
   const machine = readOrCreateMachineIdentity(loaded.id);
   const timestamp = nowIso();
   const previousTeam = loaded.team ?? createDisabledTeamConfig();
+  if (previousTeam.enabled && loaded.storage?.mode === 'shared-folder') {
+    assertTeamPermission(workspaceRootPath, 'team.settings.update');
+  }
   const automationsPolicy = input.makeRunner
     ? 'runner-only'
     : previousTeam.enabled
@@ -696,7 +890,7 @@ export function markWorkspaceAsSharedFolder(
     : previousTeam.enabled
       ? previousTeam.backgroundTriggersEnabled
       : false;
-  const config: WorkspaceConfig = {
+  let config: WorkspaceConfig = {
     ...loaded,
     formatVersion: WORKSPACE_FORMAT_VERSION,
     storage: {
@@ -719,16 +913,20 @@ export function markWorkspaceAsSharedFolder(
       updatedAt: timestamp,
     },
   };
+  const joined = ensureMachineTeamMember(workspaceRootPath, config, machine, 'owner');
+  config = joined.config;
   saveWorkspaceConfig(workspaceRootPath, config);
   writeTeamConfigMirror(workspaceRootPath, config);
-  const heartbeat = writeMachineHeartbeat(workspaceRootPath, config, machine, { appVersion: input.appVersion });
+  const heartbeat = writeMachineHeartbeat(workspaceRootPath, config, joined.machine, { appVersion: input.appVersion });
   const runnerStatus = getRunnerStatusFields(workspaceRootPath, config.team!);
-  const joined = machine.machineId !== 'not_joined';
+  const isJoined = joined.machine.machineId !== 'not_joined';
+  const currentMember = getMemberForMachine(config.team!, joined.machine);
+  const currentRole = currentMember?.role ?? 'none';
   const syncHealth = buildTeamSyncHealth(workspaceRootPath, {
     supported: true,
     storage: config.storage!,
     team: config.team!,
-    machine,
+    machine: joined.machine,
     heartbeat,
     ...runnerStatus,
   });
@@ -740,11 +938,15 @@ export function markWorkspaceAsSharedFolder(
     team: config.team!,
     teamConfigPath: getTeamConfigFile(workspaceRootPath),
     privateMachinePath: getPrivateMachineFile(config.id),
-    heartbeatPath: getTeamHeartbeatFile(workspaceRootPath, machine.machineId),
-    machine,
+    heartbeatPath: getTeamHeartbeatFile(workspaceRootPath, joined.machine.machineId),
+    machine: joined.machine,
     heartbeat,
     ...runnerStatus,
-    joined,
+    joined: isJoined,
+    currentMember,
+    currentRole,
+    canManageTeam: currentRole === 'owner',
+    canEditSharedWork: currentRole === 'owner' || currentRole === 'editor',
     syncHealth,
   };
 }
@@ -758,6 +960,7 @@ export function setRunnerMachine(workspaceRootPath: string, machineId?: string):
     throw new Error('Team runner requires an enabled shared-folder team workspace.');
   }
   const machine = readOrCreateMachineIdentity(loaded.id);
+  assertTeamPermission(workspaceRootPath, 'team.runner.assign');
   const timestamp = nowIso();
   const previousTeam = loaded.team ?? createDisabledTeamConfig();
   const runnerMachineId = machineId ?? machine.machineId;
@@ -790,6 +993,8 @@ export function setRunnerMachine(workspaceRootPath: string, machineId?: string):
   const heartbeat = writeMachineHeartbeat(workspaceRootPath, config, machine);
   const runnerStatus = getRunnerStatusFields(workspaceRootPath, config.team!);
   const joined = machine.machineId !== 'not_joined';
+  const currentMember = getMemberForMachine(config.team!, machine);
+  const currentRole = currentMember?.role ?? 'none';
   const syncHealth = buildTeamSyncHealth(workspaceRootPath, {
     supported: true,
     storage: config.storage ?? defaultSoloStorage(),
@@ -811,6 +1016,10 @@ export function setRunnerMachine(workspaceRootPath: string, machineId?: string):
     heartbeat,
     ...runnerStatus,
     joined,
+    currentMember,
+    currentRole,
+    canManageTeam: currentRole === 'owner',
+    canEditSharedWork: currentRole === 'owner' || currentRole === 'editor',
     syncHealth,
   };
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadContextDoc, upsertContextDoc } from '../workspace-context/index.ts';
@@ -11,6 +11,7 @@ import {
   upsertCommunityContact,
 } from './storage.ts';
 import { ARTIST_COMMUNITY_CONTEXT_SLUG } from './types.ts';
+import { joinWorkspaceTeam, markWorkspaceAsSharedFolder } from '../workspaces/team-mode.ts';
 
 const roots: string[] = [];
 const previousConfigDir = process.env.CRAFT_CONFIG_DIR;
@@ -20,6 +21,16 @@ function tempRoot(): string {
   roots.push(root);
   process.env.CRAFT_CONFIG_DIR = join(root, 'private');
   return root;
+}
+
+function writeWorkspace(root: string): void {
+  writeFileSync(join(root, 'config.json'), JSON.stringify({
+    id: `ws_${Math.random().toString(36).slice(2)}`,
+    name: 'Community Workspace',
+    slug: 'community-workspace',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }, null, 2), 'utf-8');
 }
 
 function jsonFiles(root: string, relativeDir: string): string[] {
@@ -197,5 +208,26 @@ describe('community record storage', () => {
     expect(job.audience.estimatedRecipients).toBe(0);
     expect(job.audience.excludedUnknownConsent).toBe(1);
     expect(job.audience.includedConsentStatuses).toEqual(['opted-in']);
+  });
+
+  test('editor-created broadcast jobs require owner approval', () => {
+    const root = tempRoot();
+    const ownerPrivate = join(root, 'owner-private');
+    const editorPrivate = join(root, 'editor-private');
+    writeWorkspace(root);
+
+    process.env.CRAFT_CONFIG_DIR = ownerPrivate;
+    markWorkspaceAsSharedFolder(root, { makeRunner: true });
+
+    process.env.CRAFT_CONFIG_DIR = editorPrivate;
+    const editorStatus = joinWorkspaceTeam(root);
+    const job = createCommunityEmailJob(root, editorStatus.machine.machineId, {
+      title: 'Editor newsletter',
+      segmentIds: ['general'],
+      purpose: 'newsletter',
+    });
+
+    expect(editorStatus.currentRole).toBe('editor');
+    expect(job.status).toBe('needs-owner-approval');
   });
 });

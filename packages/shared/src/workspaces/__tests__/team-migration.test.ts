@@ -133,6 +133,7 @@ describe('team shared-folder migration', () => {
     expect(migrated?.team?.runnerMachineId).toBe('machine_existing');
     expect(migrated?.team?.automationsPolicy).toBe('runner-only');
     expect(migrated?.team?.backgroundTriggersEnabled).toBe(true);
+    expect(migrated?.team?.members?.[0]?.role).toBe('owner');
   });
 
   it('rejects destinations inside the source workspace', () => {

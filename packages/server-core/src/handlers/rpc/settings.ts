@@ -141,7 +141,12 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     return getCredentialManager().listUserSecrets()
   })
 
-  server.handle(RPC_CHANNELS.secrets.SAVE, async (_ctx, name: string, value: string) => {
+  server.handle(RPC_CHANNELS.secrets.SAVE, async (_ctx, name: string, value: string, workspaceId?: string) => {
+    if (workspaceId) {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+      assertTeamPermission(workspace.rootPath, 'secrets.update')
+    }
     const normalized = normalizeUserSecretName(name)
     if (!isValidUserSecretName(normalized)) {
       return { success: false, error: 'Use ENV_VAR format: uppercase letters, numbers, and underscores.' }
@@ -154,7 +159,12 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     return { success: true }
   })
 
-  server.handle(RPC_CHANNELS.secrets.DELETE, async (_ctx, name: string) => {
+  server.handle(RPC_CHANNELS.secrets.DELETE, async (_ctx, name: string, workspaceId?: string) => {
+    if (workspaceId) {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+      assertTeamPermission(workspace.rootPath, 'secrets.update')
+    }
     const normalized = normalizeUserSecretName(name)
     const success = await getCredentialManager().deleteUserSecret(normalized)
     delete process.env[normalized]
@@ -287,6 +297,8 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     if (!config) {
       throw new Error(`Failed to load workspace config: ${workspaceId}`)
     }
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'team.settings.update')
 
     // Handle 'name' specially - it's a top-level config property, not in defaults
     if (key === 'name') {
@@ -351,6 +363,8 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       throw new Error(`Invalid shared folder provider: ${provider}`)
     }
     const { moveWorkspaceToSharedFolder, writeMovedToTombstone } = await import('@craft-agent/shared/workspaces')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'storage.migrate')
     const result = moveWorkspaceToSharedFolder(workspace.rootPath, input.destinationParentPath.trim(), {
       provider,
       providerLabel: input.providerLabel,
@@ -372,7 +386,8 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
 
   server.handle(RPC_CHANNELS.workspace.TEAM_SET_RUNNER, async (_ctx, workspaceId: string, machineId?: string) => {
     const workspace = getWorkspaceOrThrow(workspaceId)
-    const { setRunnerMachine } = await import('@craft-agent/shared/workspaces')
+    const { assertTeamPermission, setRunnerMachine } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'team.runner.assign')
     return setRunnerMachine(workspace.rootPath, machineId)
   })
 

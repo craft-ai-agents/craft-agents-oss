@@ -7,7 +7,7 @@ Status: core Team Mode foundation implemented; email transport and Git advanced 
 - Solo workspaces continue to work without team metadata.
 - Shared-folder workspaces can store portable team metadata in `config.json` plus the `team/config.json` mirror.
 - Each joined machine has a private identity under the local config directory and a shared heartbeat under `team/machines/`.
-- Team Settings shows storage mode, runner state, join state, sync health, conflict count, and machine heartbeat count.
+- Team Settings shows storage mode, runner state, owner/editor role, join state, sync health, conflict count, and machine heartbeat count.
 - Existing workspaces can be moved into a shared folder with preflight checks, migration receipt, config-last copy, and moved-path tombstone.
 - Team Mode refuses unsafe open states: in-progress migration folders, config-less workspace folders, active migration receipts, and moved tombstones.
 - Shared records use one JSON file per entity with stale-baseline conflicts, clobber detection, tombstone deletes, automatic provider conflicted-copy scanning in Sync Health, and Conflict Inbox.
@@ -15,6 +15,8 @@ Status: core Team Mode foundation implemented; email transport and Git advanced 
 - Runner handoff has a pending state and activates after old-runner acknowledgement, stale old-runner heartbeat, or grace-window expiry.
 - Missed scheduler ticks support `skip` and `run-once`; `run-once` emits a single catch-up tick after subscribers are attached.
 - Non-runner webhook delivery returns/logs a skipped result instead of pretending the event ran.
+- Owner/Editor permissions are enforced for runner assignment, team settings, storage migration, and credential mutations when workspace context is available.
+- Editor-created community broadcast jobs default to `needs-owner-approval`.
 
 ## Not Supported Yet
 
@@ -22,6 +24,7 @@ Status: core Team Mode foundation implemented; email transport and Git advanced 
 - Provider API storage through Google Drive, Dropbox, iCloud, or OneDrive APIs.
 - Git-backed Team Mode. Git remains the planned advanced mode.
 - Real batch email sending. Gmail/ESP transports start in the later email phase.
+- Real approval execution for batch email sending. Draft jobs can require Owner approval now; actual send transport starts in the later email phase.
 - Automatic conflict resolution. Conflicts are surfaced and preserved for manual handling.
 
 ## Required Smoke Before Product Rollout
@@ -36,6 +39,7 @@ Status: core Team Mode foundation implemented; email transport and Git advanced 
 8. Create a provider conflicted-copy file and confirm Sync Health surfaces it without pressing Scan files.
 9. Move workspace old path should show moved tombstone behavior, not allow stale writes.
 10. Confirm no `.env`, credential cache, or private session folders were copied into the shared workspace.
+11. Confirm Editor role cannot assign runner or save connected-account secrets.
 
 ## Current Verification
 
