@@ -16,6 +16,7 @@
 7. **`query sql` 是一等公民**。agent 会写 SQL，只读任意 SQL 是唯一查询入口。
 8. **独立 git repo + Release 分发**（2026-07-02 追加拍板）：feishu-db 从 monorepo 拆出单独私有 repo（全新历史，旧实现历史留 monorepo 考古）；binary 走 GitHub Release 按版本分发，skills 仓库从此不存任何编译产物。scrape-service 本次不动。
 9. **项目更名 `larkdepot`**（2026-07-02 调研后拍板）：GitHub 零撞车；depot（货站）语义覆盖双向——pull 进站、push 发运；binary 同名。同类调研结论：无现成轮子，最近先例是 simonw/airtable-export（仅下行，实现时参考其字段序列化），官方 lark-cli 是底层管道非本地物化，sqlite-sync 是多写端 CRDT 不适用。cron 条目改名随部署原子更新；DB 文件路径不变。
+10. **去业务化 + lark 透传**（2026-07-02 实现完成后用户检出硬编码，追加拍板，**修订决策 2 的"模板进代码"与 §3.1 的预置迁移**）：binary 里不得含任何具体业务数据（token/表名/模板字段——grep 零命中为合格线）。① 预置 8 表的 seed 迁移删除，新装=空 registry，业务表清单走 `register --from seed.toml` 批量导入，seed 文件归业务仓库/部署侧；② 模板从代码常量改为运行时数据：`template add <file.toml>` 注册进 state 库 `_templates` 表并动态建本地表（kind 由 feishu_type 推导，TOML 不写 kind），同名模板拒绝覆盖（模板变更=新名字，不做 ALTER）；③ 新增 `larkdepot lark -- <args>` 薄透传子命令（原样 exec lark-cli，stdout/退出码不包 envelope），agent 单入口；认证本来就复用 lark-cli，明文化。当时"模板进代码评审"是 monorepo 自家工具语境的决策，拆独立通用 repo 后自相矛盾，趁 prod 未部署、版本未发改掉，零兼容负担（迁移数组这一次可以改写——没有任何存量库跑过它，这是唯一合法窗口）。
 
 ## 1. 动机
 
