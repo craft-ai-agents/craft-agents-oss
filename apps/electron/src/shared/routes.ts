@@ -193,6 +193,9 @@ export const routes = {
     /** Agenda board for tasks, jobs, and follow-ups */
     agenda: () => 'agenda' as const,
 
+    /** Fan community, email list, and outreach queue */
+    community: () => 'community' as const,
+
     /** Creator asset vault */
     vault: () => 'vault' as const,
 

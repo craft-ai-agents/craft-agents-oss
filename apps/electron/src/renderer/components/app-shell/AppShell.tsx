@@ -23,6 +23,7 @@ import {
   Globe,
   FolderOpen,
   Calendar,
+  Mail,
   Layers,
   Bot,
   MessageSquare,
@@ -105,6 +106,7 @@ import {
   isAutomationsNavigation,
   isWorkspaceContextNavigation,
   isAgendaNavigation,
+  isCommunityNavigation,
   isVaultNavigation,
   isOutputsNavigation,
   type NavigationState,
@@ -1986,6 +1988,7 @@ function AppShellContent({
     // 3. HQ sections
     result.push({ id: 'nav:calendar', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
     result.push({ id: 'nav:network', type: 'nav', action: () => handleArtistHQNavClick('network') })
+    result.push({ id: 'nav:community', type: 'nav', action: () => navigate(routes.view.community()) })
     result.push({ id: 'nav:vault', type: 'nav', action: () => navigate(routes.view.vault()) })
 
     // 4. Settings
@@ -2142,6 +2145,10 @@ function AppShellContent({
       return 'Agenda'
     }
 
+    if (isCommunityNavigation(navState)) {
+      return 'Community'
+    }
+
     if (isVaultNavigation(navState)) {
       return 'Vault'
     }
@@ -2241,6 +2248,7 @@ function AppShellContent({
     if (isAutomationsNavigation(navState)) return false
     if (isWorkspaceContextNavigation(navState)) return false
     if (isAgendaNavigation(navState)) return false
+    if (isCommunityNavigation(navState)) return false
     if (isVaultNavigation(navState)) return false
     if (isOutputsNavigation(navState)) return false
     if (isSettingsNavigation(navState)) return false
@@ -2339,6 +2347,13 @@ function AppShellContent({
                       icon: Users,
                       variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/network' ? "default" : "ghost",
                       onClick: () => handleArtistHQNavClick('network'),
+                    },
+                    {
+                      id: "nav:community",
+                      title: "Community",
+                      icon: Mail,
+                      variant: isCommunityNavigation(navState) ? "default" : "ghost",
+                      onClick: () => navigate(routes.view.community()),
                     },
                     {
                       id: "nav:vault",

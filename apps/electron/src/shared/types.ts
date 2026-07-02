@@ -1184,6 +1184,11 @@ export interface AgendaNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export interface CommunityNavigationState {
+  navigator: 'community'
+  rightSidebar?: RightSidebarPanel
+}
+
 export interface VaultNavigationState {
   navigator: 'vault'
   rightSidebar?: RightSidebarPanel
@@ -1242,6 +1247,7 @@ export type NavigationState =
   | AutomationsNavigationState
   | WorkspaceContextNavigationState
   | AgendaNavigationState
+  | CommunityNavigationState
   | VaultNavigationState
   | WorkflowsNavigationState
   | WorkflowRunNavigationState
@@ -1280,6 +1286,10 @@ export const isWorkspaceContextNavigation = (
 export const isAgendaNavigation = (
   state: NavigationState
 ): state is AgendaNavigationState => state.navigator === 'agenda'
+
+export const isCommunityNavigation = (
+  state: NavigationState
+): state is CommunityNavigationState => state.navigator === 'community'
 
 export const isVaultNavigation = (
   state: NavigationState
@@ -1341,6 +1351,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'agenda') {
     return 'agenda'
+  }
+  if (state.navigator === 'community') {
+    return 'community'
   }
   if (state.navigator === 'vault') {
     return 'vault'
@@ -1425,6 +1438,7 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   // Handle settings
   if (key === 'workspace-context') return { navigator: 'workspaceContext' }
   if (key === 'agenda') return { navigator: 'agenda' }
+  if (key === 'community') return { navigator: 'community' }
   if (key === 'vault') return { navigator: 'vault' }
 
   // Handle workflows
