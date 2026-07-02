@@ -7,6 +7,7 @@ export interface ArtistProfile {
   artistName?: string
   aliases?: string
   bio?: string
+  themes?: string
   sound?: string
   visualWorld?: string
   brandWords?: string
@@ -88,6 +89,7 @@ export function profileCompletion(profile: ArtistProfile): number {
   const fields: Array<keyof ArtistProfile> = [
     'artistName',
     'bio',
+    'themes',
     'sound',
     'visualWorld',
     'brandWords',
@@ -109,6 +111,7 @@ function normalizeProfile(profile: Partial<ArtistProfile>): ArtistProfile {
     artistName: clean(profile.artistName),
     aliases: clean(profile.aliases),
     bio: clean(profile.bio),
+    themes: clean(profile.themes),
     sound: clean(profile.sound),
     visualWorld: clean(profile.visualWorld),
     brandWords: clean(profile.brandWords),

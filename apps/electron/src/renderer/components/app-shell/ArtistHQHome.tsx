@@ -142,6 +142,7 @@ const emptyProfileDraft: ProfileDraft = {
   artistName: '',
   aliases: '',
   bio: '',
+  themes: '',
   sound: '',
   visualWorld: '',
   brandWords: '',
@@ -1522,6 +1523,13 @@ function ArtistProfileForm({
       <ProfileField label="Bio / story" wide>
         <TextArea value={draft.bio ?? ''} onChange={(bio) => onChange({ ...draft, bio })} placeholder="What is the artist story? What should workers never miss?" />
       </ProfileField>
+      <ProfileField label="Themes / topics" wide>
+        <TextArea
+          value={draft.themes ?? ''}
+          onChange={(themes) => onChange({ ...draft, themes })}
+          placeholder="Topics they write about, recurring ideas, worldview, content lanes, lyrical themes, tensions, scenes, values."
+        />
+      </ProfileField>
       <ProfileField label="Sound">
         <TextArea value={draft.sound ?? ''} onChange={(sound) => onChange({ ...draft, sound })} placeholder="Genre, texture, voice, production, emotional lane" />
       </ProfileField>
@@ -2012,6 +2020,7 @@ function profileToDraft(profile: ArtistProfile): ProfileDraft {
     artistName: profile.artistName ?? '',
     aliases: profile.aliases ?? '',
     bio: profile.bio ?? '',
+    themes: profile.themes ?? '',
     sound: profile.sound ?? '',
     visualWorld: profile.visualWorld ?? '',
     brandWords: profile.brandWords ?? '',
