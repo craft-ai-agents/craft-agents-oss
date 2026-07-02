@@ -15,26 +15,13 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
-import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
-import {
-  ARTIST_COMMUNITY_CONTEXT_SLUG,
-  artistCommunityMetadata,
-  createCommunityContact,
-  createCommunityEmailJob,
-  parseArtistCommunityDocResult,
-  segmentLabel,
-  serializeArtistCommunityBody,
-  type ArtistCommunity,
-  type CommunityContact,
-  type CommunitySegment,
-} from '@/lib/artist-community'
+import type { CommunityContactRecord, CommunitySegment, CommunityState } from '../../../shared/types'
 
 type SegmentFilter = CommunitySegment | 'all'
 type FanDraft = {
   name: string
   email: string
   segment: CommunitySegment
-  source: string
   city: string
   notes: string
   tags: string
@@ -57,7 +44,6 @@ const emptyDraft: FanDraft = {
   name: '',
   email: '',
   segment: 'general',
-  source: '',
   city: '',
   notes: '',
   tags: '',
@@ -66,31 +52,33 @@ const emptyDraft: FanDraft = {
 export function CommunityPage({ workspaceId }: CommunityPageProps) {
   const [activeSegment, setActiveSegment] = React.useState<SegmentFilter>('all')
   const [draft, setDraft] = React.useState<FanDraft>(emptyDraft)
+  const [community, setCommunity] = React.useState<CommunityState | null>(null)
+  const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
-  const { docs, loading, upsert } = useWorkspaceContext(workspaceId)
 
-  const communityResult = React.useMemo(
-    () => parseArtistCommunityDocResult(docs.find((doc) => doc.slug === ARTIST_COMMUNITY_CONTEXT_SLUG)),
-    [docs],
-  )
-  const community = communityResult.community
+  const refreshCommunity = React.useCallback(async () => {
+    setLoading(true)
+    try {
+      setCommunity(await window.electronAPI.getCommunity(workspaceId))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setLoading(false)
+    }
+  }, [workspaceId])
+
+  React.useEffect(() => {
+    void refreshCommunity()
+  }, [refreshCommunity])
+
+  const contacts = community?.contacts.filter((fan) => !fan.deletedAt) ?? []
+  const emailJobs = community?.emailJobs.filter((job) => !job.deletedAt) ?? []
   const visibleFans = React.useMemo(
     () => activeSegment === 'all'
-      ? community.contacts
-      : community.contacts.filter((fan) => fan.segment === activeSegment),
-    [activeSegment, community.contacts],
+      ? contacts
+      : contacts.filter((fan) => fan.segments.includes(activeSegment)),
+    [activeSegment, contacts],
   )
-
-  const saveCommunity = React.useCallback(async (nextCommunity: ArtistCommunity) => {
-    if (!communityResult.ok) {
-      throw new Error(`${communityResult.error} Open Workspace Context to recover it before saving.`)
-    }
-    await upsert({
-      slug: ARTIST_COMMUNITY_CONTEXT_SLUG,
-      metadata: artistCommunityMetadata(),
-      body: serializeArtistCommunityBody(nextCommunity),
-    })
-  }, [communityResult, upsert])
 
   const addFan = React.useCallback(async () => {
     if (!draft.name.trim() || !draft.email.trim()) {
@@ -99,13 +87,17 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
     }
     setSaving(true)
     try {
-      const contact = createCommunityContact(draft)
-      await saveCommunity({
-        version: 1,
-        contacts: [...community.contacts, contact],
-        emailJobs: community.emailJobs,
-        updatedAt: new Date().toISOString(),
+      setCommunity(await window.electronAPI.addCommunityContact(workspaceId, {
+        name: draft.name,
+        email: draft.email,
+        segment: draft.segment,
+        source: 'manual',
+        city: draft.city,
+        notes: draft.notes,
+        tags: draft.tags.split(/[;,]/).map((tag) => tag.trim()).filter(Boolean),
+        consentStatus: 'unknown',
       })
+      )
       setDraft(emptyDraft)
       toast.success('Fan saved to Community')
     } catch (error) {
@@ -113,36 +105,56 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
     } finally {
       setSaving(false)
     }
-  }, [community.contacts, community.emailJobs, draft, saveCommunity])
+  }, [draft, workspaceId])
 
-  const queueEmailJob = React.useCallback(async (audience: string) => {
-    const job = createCommunityEmailJob({
-      title: `${audience} email`,
-      audience,
-      status: 'draft',
-    })
+  const importCsv = React.useCallback(async () => {
     try {
-      await saveCommunity({
-        version: 1,
-        contacts: community.contacts,
-        emailJobs: [job, ...community.emailJobs],
-        updatedAt: new Date().toISOString(),
+      const paths = await window.electronAPI.openFileDialog()
+      const path = paths[0]
+      if (!path) return
+      const csv = await window.electronAPI.readFile(path)
+      setCommunity(await window.electronAPI.importCommunityCsv(workspaceId, {
+        csv,
+        filename: path.split('/').pop(),
+        basis: 'unknown',
       })
+      )
+      toast.success('CSV imported. Unknown-consent contacts are held out of broadcasts.')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     }
-  }, [community.contacts, community.emailJobs, saveCommunity])
+  }, [workspaceId])
 
-  const draftEmail = React.useCallback((audience: string) => {
-    void queueEmailJob(audience)
+  const queueEmailJob = React.useCallback(async (audienceLabel: string, segmentIds: string[]) => {
+    try {
+      setCommunity(await window.electronAPI.createCommunityEmailJob(workspaceId, {
+        title: `${audienceLabel} email`,
+        segmentIds,
+        purpose: 'newsletter',
+        subject: `${audienceLabel} update`,
+        bodyMarkdown: '',
+        transportProvider: 'gmail',
+      })
+      )
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
+  }, [workspaceId])
+
+  const draftEmail = React.useCallback((audience: string, segmentIds: string[]) => {
+    void queueEmailJob(audience, segmentIds)
     navigate(routes.action.newSession({
       name: 'Community email draft',
       input: `Draft a short fan email for ${audience}. Keep it warm, direct, and ready to send through Gmail.`,
     }))
   }, [queueEmailJob])
 
-  const vipCount = community.contacts.filter((fan) => fan.segment === 'vip').length
-  const emailReady = community.contacts.filter((fan) => fan.email.includes('@')).length
+  const selectedSegmentIds = activeSegment === 'all'
+    ? ['vip', 'local', 'buyers', 'street-team', 'general']
+    : [activeSegment]
+  const activeAudience = activeSegment === 'all' ? 'all fans' : `${segmentLabel(activeSegment)} fans`
+  const vipCount = contacts.filter((fan) => fan.segments.includes('vip')).length
+  const emailReady = contacts.filter((fan) => fan.email?.includes('@') && fan.consentStatus === 'opted-in').length
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
@@ -169,7 +181,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
             </button>
             <button
               type="button"
-              onClick={() => toast.info('CSV import is next.')}
+              onClick={() => void importCsv()}
               className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/68 transition-colors hover:bg-white/[0.06]"
             >
               <Upload className="h-3.5 w-3.5" />
@@ -177,7 +189,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
             </button>
             <button
               type="button"
-              onClick={() => draftEmail(activeSegment === 'all' ? 'all fans' : `${segmentLabel(activeSegment)} fans`)}
+              onClick={() => draftEmail(activeAudience, selectedSegmentIds)}
               className="inline-flex h-9 items-center gap-2 rounded-full bg-[#f97316]/85 px-4 text-xs font-medium text-white transition-colors hover:bg-[#f97316]"
             >
               <Sparkles className="h-3.5 w-3.5" />
@@ -187,24 +199,18 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
         </header>
 
         <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <MetricCard label="Fans" value={String(community.contacts.length)} detail={`${vipCount} VIP`} />
-          <MetricCard label="Email Ready" value={String(emailReady)} detail="saved addresses" />
+          <MetricCard label="Fans" value={String(contacts.length)} detail={`${vipCount} VIP`} />
+          <MetricCard label="Email Ready" value={String(emailReady)} detail="opted-in addresses" />
           <MetricCard label="Segments" value="5" detail="VIP, local, buyers, street, general" />
-          <MetricCard label="Queued" value={String(community.emailJobs.length)} detail="email jobs" />
+          <MetricCard label="Queued" value={String(emailJobs.length)} detail="email jobs" />
         </div>
-
-        {!communityResult.ok ? (
-          <div className="mb-4 rounded-[14px] border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100/80">
-            {communityResult.error} Saving is paused so existing community context is not overwritten.
-          </div>
-        ) : null}
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
           <section className="rounded-[18px] border border-white/[0.055] bg-[#0A0A0A]/82 p-3">
             <div className="mb-3 flex flex-col gap-3 border-b border-white/[0.045] pb-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">Fan List</h2>
-                <p className="mt-1 text-xs text-white/32">Email contacts saved into workspace context.</p>
+                <p className="mt-1 text-xs text-white/32">Email contacts saved as team-safe community records.</p>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {segmentFilters.map((segment) => (
@@ -233,7 +239,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
             ) : visibleFans.length ? (
               <div className="space-y-2">
                 {visibleFans.map((fan) => (
-                  <FanRow key={fan.id} fan={fan} onDraft={() => draftEmail(`${fan.name} and similar ${segmentLabel(fan.segment)} fans`)} />
+                  <FanRow key={fan.id} fan={fan} onDraft={() => draftEmail(`${fan.name ?? 'this fan'} and similar fans`, fan.segments)} />
                 ))}
               </div>
             ) : (
@@ -264,7 +270,6 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
                   ))}
                 </select>
                 <Input value={draft.city} placeholder="City" onChange={(city) => setDraft((value) => ({ ...value, city }))} />
-                <Input value={draft.source} placeholder="Source" onChange={(source) => setDraft((value) => ({ ...value, source }))} />
                 <Input value={draft.tags} placeholder="Tags" onChange={(tags) => setDraft((value) => ({ ...value, tags }))} />
                 <textarea
                   value={draft.notes}
@@ -274,7 +279,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
                 />
                 <button
                   type="button"
-                  disabled={saving || !communityResult.ok}
+                  disabled={saving}
                   onClick={() => void addFan()}
                   className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-[10px] bg-[#f97316]/85 text-xs font-medium text-white transition-colors hover:bg-[#f97316] disabled:cursor-wait disabled:opacity-50"
                 >
@@ -290,14 +295,14 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
                   <Send className="h-3.5 w-3.5 text-white/40" />
                   <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">Email Queue</h2>
                 </div>
-                <span className="text-[10px] tabular-nums text-white/28">{community.emailJobs.length}</span>
+                <span className="text-[10px] tabular-nums text-white/28">{emailJobs.length}</span>
               </div>
               <div className="space-y-2">
-                {community.emailJobs.length ? community.emailJobs.map((email) => (
+                {emailJobs.length ? emailJobs.map((email) => (
                   <button
                     key={email.id}
                     type="button"
-                    onClick={() => draftEmail(email.audience)}
+                    onClick={() => draftEmail(email.title, email.audience.segmentIds)}
                     className="group w-full rounded-[13px] border border-white/[0.055] bg-white/[0.025] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -305,7 +310,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
                       <ArrowRight className="h-3.5 w-3.5 text-white/20 transition-colors group-hover:text-white/55" />
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.12em] text-white/28">
-                      <span>{email.audience}</span>
+                      <span>{email.audience.estimatedRecipients} ready</span>
                       <span>{email.status}</span>
                     </div>
                   </button>
@@ -346,17 +351,22 @@ function MetricCard({ label, value, detail }: { label: string; value: string; de
   )
 }
 
-function FanRow({ fan, onDraft }: { fan: CommunityContact; onDraft: () => void }) {
+function segmentLabel(segment: string): string {
+  return segmentFilters.find((item) => item.id === segment)?.label ?? segment
+}
+
+function FanRow({ fan, onDraft }: { fan: CommunityContactRecord; onDraft: () => void }) {
+  const primarySegment = fan.segments[0] ?? 'general'
   return (
     <div className="grid grid-cols-1 gap-3 rounded-[13px] border border-white/[0.045] bg-white/[0.018] px-3 py-3 transition-colors hover:bg-white/[0.035] lg:grid-cols-[minmax(0,1.35fr)_120px_120px_minmax(0,1fr)_120px] lg:items-center">
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-white/78">{fan.name}</p>
-        <p className="mt-1 truncate text-xs text-white/36">{fan.email}</p>
+        <p className="truncate text-sm font-medium text-white/78">{fan.name ?? 'Unnamed fan'}</p>
+        <p className="mt-1 truncate text-xs text-white/36">{fan.email ?? fan.emailHash}</p>
       </div>
-      <Badge>{segmentLabel(fan.segment)}</Badge>
+      <Badge>{segmentLabel(primarySegment)}</Badge>
       <p className="text-xs text-white/44">{fan.city ?? 'No city'}</p>
       <div className="min-w-0">
-        <p className="truncate text-xs text-white/54">{fan.source ?? 'Manual'}</p>
+        <p className="truncate text-xs text-white/54">{fan.source}</p>
         <p className="mt-1 truncate text-[11px] text-white/30">{fan.notes ?? 'No notes yet'}</p>
       </div>
       <button

@@ -30,7 +30,27 @@ export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 import type { SharedFolderProvider, SharedPathOverrides, TeamModeStatus } from '@craft-agent/shared/workspaces';
 import type { TeamSharedFolderMigrationResult } from '@craft-agent/shared/workspaces';
 import type { SharedRecordClobberIssue, SharedRecordConflict } from '@craft-agent/shared/records';
+import type {
+  CommunityContactRecord,
+  CommunityEmailJobRecord,
+  CommunitySegment,
+  CommunityState,
+  CommunitySuppressionRecord,
+  CreateCommunityEmailJobInput,
+  ImportCommunityCsvInput,
+  UpsertCommunityContactInput,
+} from '@craft-agent/shared/community';
 export type { SharedFolderProvider, SharedPathOverrides, TeamModeStatus, TeamSharedFolderMigrationResult };
+export type {
+  CommunityContactRecord,
+  CommunityEmailJobRecord,
+  CommunitySegment,
+  CommunityState,
+  CommunitySuppressionRecord,
+  CreateCommunityEmailJobInput,
+  ImportCommunityCsvInput,
+  UpsertCommunityContactInput,
+};
 
 // Thinking level types
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
@@ -604,6 +624,11 @@ export interface ElectronAPI {
   scanRecordProviderConflicts(workspaceId: string): Promise<SharedRecordConflict[]>
   detectRecordClobbers(workspaceId: string): Promise<SharedRecordClobberIssue[]>
   getSelfEditTarget(workspaceId: string): Promise<SelfEditTargetInfo>
+  getCommunity(workspaceId: string): Promise<CommunityState>
+  addCommunityContact(workspaceId: string, input: UpsertCommunityContactInput): Promise<CommunityState>
+  importCommunityCsv(workspaceId: string, input: Omit<ImportCommunityCsvInput, 'assertedBy'> & { assertedBy?: string }): Promise<CommunityState>
+  createCommunityEmailJob(workspaceId: string, input: CreateCommunityEmailJobInput): Promise<CommunityState>
+  suppressCommunityContact(workspaceId: string, email: string, reason?: CommunitySuppressionRecord['reason']): Promise<CommunityState>
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>

@@ -288,6 +288,13 @@ export const RPC_CHANNELS = {
     SCAN_PROVIDER_CONFLICTS: 'records:conflicts:scanProvider',
     DETECT_CLOBBERS: 'records:clobbers:detect',
   },
+  community: {
+    GET: 'community:get',
+    ADD_CONTACT: 'community:addContact',
+    IMPORT_CSV: 'community:importCsv',
+    CREATE_EMAIL_JOB: 'community:createEmailJob',
+    SUPPRESS: 'community:suppress',
+  },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',
     DEFAULTS_CHANGED: 'permissions:defaultsChanged',

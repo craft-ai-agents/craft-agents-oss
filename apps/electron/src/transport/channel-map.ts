@@ -193,6 +193,13 @@ export const CHANNEL_MAP = {
   detectRecordClobbers: invoke(RPC_CHANNELS.records.DETECT_CLOBBERS),
   getSelfEditTarget: invoke(RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET),
 
+  // Community records
+  getCommunity: invoke(RPC_CHANNELS.community.GET),
+  addCommunityContact: invoke(RPC_CHANNELS.community.ADD_CONTACT),
+  importCommunityCsv: invoke(RPC_CHANNELS.community.IMPORT_CSV),
+  createCommunityEmailJob: invoke(RPC_CHANNELS.community.CREATE_EMAIL_JOB),
+  suppressCommunityContact: invoke(RPC_CHANNELS.community.SUPPRESS),
+
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),
 

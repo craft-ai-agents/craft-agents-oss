@@ -26,6 +26,7 @@
     "./docs": "./src/docs/index.ts",
     "./docs/doc-links": "./src/docs/doc-links.ts",
     "./config/types": "./src/config/types.ts",
+    "./community": "./src/community/index.ts",
     "./credentials": "./src/credentials/index.ts",
     "./deep-research": "./src/deep-research/index.ts",
     "./deep-research/source-profile": "./src/deep-research/source-profile.ts",
