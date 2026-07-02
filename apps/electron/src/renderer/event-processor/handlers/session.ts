@@ -122,12 +122,18 @@ export function handleError(
 ): ProcessResult {
   const { session } = state
 
+  // Drop in-flight streaming assistant messages (#664). These were assembled
+  // from text_delta events on the renderer side and were never persisted to
+  // session.jsonl, so leaving them would create a state that disappears on
+  // reload and would also leak into completion-notification previews.
   // Fail-safe: Mark any running tools as failed
-  const messagesWithFailedTools = session.messages.map(m =>
-    m.role === 'tool' && m.toolResult === undefined && m.toolStatus !== 'completed' && m.toolStatus !== 'error'
-      ? { ...m, toolStatus: 'error' as const, toolResult: 'Error occurred', isError: true }
-      : m
-  )
+  const messagesWithFailedTools = session.messages
+    .filter(m => !(m.role === 'assistant' && m.isStreaming === true))
+    .map(m =>
+      m.role === 'tool' && m.toolResult === undefined && m.toolStatus !== 'completed' && m.toolStatus !== 'error'
+        ? { ...m, toolStatus: 'error' as const, toolResult: 'Error occurred', isError: true }
+        : m
+    )
 
   const errorMessage: Message = {
     id: generateMessageId(),
@@ -159,12 +165,15 @@ export function handleTypedError(
 ): ProcessResult {
   const { session } = state
 
+  // Drop in-flight streaming assistant messages (#664). See handleError above.
   // Fail-safe: Mark any running tools as failed
-  const messagesWithFailedTools = session.messages.map(m =>
-    m.role === 'tool' && m.toolResult === undefined && m.toolStatus !== 'completed' && m.toolStatus !== 'error'
-      ? { ...m, toolStatus: 'error' as const, toolResult: 'Error occurred', isError: true }
-      : m
-  )
+  const messagesWithFailedTools = session.messages
+    .filter(m => !(m.role === 'assistant' && m.isStreaming === true))
+    .map(m =>
+      m.role === 'tool' && m.toolResult === undefined && m.toolStatus !== 'completed' && m.toolStatus !== 'error'
+        ? { ...m, toolStatus: 'error' as const, toolResult: 'Error occurred', isError: true }
+        : m
+    )
 
   const errorMessage: Message = {
     id: generateMessageId(),

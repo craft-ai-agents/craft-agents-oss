@@ -171,7 +171,7 @@ export type SessionEvent =
   | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string; turnId?: string; parentToolUseId?: string; isError?: boolean; timestamp?: number }
   | { type: 'error'; sessionId: string; error: string; timestamp?: number }
   | { type: 'typed_error'; sessionId: string; error: TypedError; timestamp?: number }
-  | { type: 'complete'; sessionId: string; tokenUsage?: Session['tokenUsage']; hasUnread?: boolean }
+  | { type: 'complete'; sessionId: string; tokenUsage?: Session['tokenUsage']; hasUnread?: boolean; reason?: 'complete' | 'interrupted' | 'error' | 'timeout'; didReceiveNewFinalMessage?: boolean }
   | { type: 'interrupted'; sessionId: string; message?: Message; queuedMessages?: string[] }
   | { type: 'status'; sessionId: string; message: string; statusType?: 'compacting' }
   | { type: 'info'; sessionId: string; message: string; statusType?: 'compaction_complete'; level?: 'info' | 'warning' | 'error' | 'success'; timestamp?: number }
