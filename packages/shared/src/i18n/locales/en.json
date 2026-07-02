@@ -951,6 +951,8 @@
   "settings.workspace.defaultWorkingDir": "Default Working Directory",
   "settings.workspace.defaultWorkingDirDesc": "Not set (uses session folder)",
   "settings.workspace.description": "Name, icon, working directory",
+  "settings.team.description": "Shared workspace identity and runner",
+  "settings.team.title": "Team",
   "settings.workspace.enterWorkspaceName": "Enter workspace name...",
   "settings.workspace.failedToSave": "Failed to save {{setting}}",
   "settings.workspace.icon": "Icon",

@@ -12,9 +12,18 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 import { isValidWorkingDirectory } from '../../utils/path-validation'
+import type { SharedFolderProvider } from '@craft-agent/shared/workspaces'
 
 const execFileAsync = promisify(execFile)
 const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
+const SHARED_FOLDER_PROVIDERS = new Set<SharedFolderProvider>([
+  'google-drive',
+  'dropbox',
+  'icloud-drive',
+  'onedrive',
+  'syncthing',
+  'generic-folder',
+])
 
 async function commandExists(command: string): Promise<string | null> {
   if (process.platform !== 'win32') {
@@ -81,6 +90,9 @@ async function getZeroCliStatus() {
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.SETTINGS_GET,
   RPC_CHANNELS.workspace.SETTINGS_UPDATE,
+  RPC_CHANNELS.workspace.TEAM_STATUS_GET,
+  RPC_CHANNELS.workspace.TEAM_ENABLE_IN_PLACE,
+  RPC_CHANNELS.workspace.TEAM_SET_RUNNER,
   RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET,
   RPC_CHANNELS.preferences.READ,
   RPC_CHANNELS.preferences.WRITE,
@@ -286,6 +298,36 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     // Save the config
     saveWorkspaceConfig(workspace.rootPath, config)
     deps.platform.logger.info(`Workspace setting updated: ${key} = ${JSON.stringify(normalizedValue)}`)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_STATUS_GET, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { getTeamModeStatus } = await import('@craft-agent/shared/workspaces')
+    return getTeamModeStatus(workspace.rootPath)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_ENABLE_IN_PLACE, async (_ctx, workspaceId: string, options?: {
+    provider?: SharedFolderProvider
+    providerLabel?: string
+    makeRunner?: boolean
+  }) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const provider = options?.provider ?? 'generic-folder'
+    if (!SHARED_FOLDER_PROVIDERS.has(provider)) {
+      throw new Error(`Invalid shared folder provider: ${provider}`)
+    }
+    const { markWorkspaceAsSharedFolder } = await import('@craft-agent/shared/workspaces')
+    return markWorkspaceAsSharedFolder(workspace.rootPath, {
+      provider,
+      providerLabel: options?.providerLabel,
+      makeRunner: options?.makeRunner,
+    })
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_SET_RUNNER, async (_ctx, workspaceId: string, machineId?: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { setRunnerMachine } = await import('@craft-agent/shared/workspaces')
+    return setRunnerMachine(workspace.rootPath, machineId)
   })
 
   server.handle(RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET, async (_ctx, workspaceId: string) => {

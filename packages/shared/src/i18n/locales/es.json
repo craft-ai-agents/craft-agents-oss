@@ -951,6 +951,8 @@
   "settings.workspace.defaultWorkingDir": "Directorio de trabajo predeterminado",
   "settings.workspace.defaultWorkingDirDesc": "No definido (usa la carpeta de sesión)",
   "settings.workspace.description": "Nombre, ícono, directorio de trabajo",
+  "settings.team.description": "Shared workspace identity and runner",
+  "settings.team.title": "Team",
   "settings.workspace.enterWorkspaceName": "Introduce el nombre del Workspace...",
   "settings.workspace.failedToSave": "No se pudo guardar {{setting}}",
   "settings.workspace.icon": "Icono",

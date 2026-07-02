@@ -1,0 +1,187 @@
+import { useCallback, useEffect, useState } from 'react'
+import { CheckCircle2, RefreshCcw, Users } from 'lucide-react'
+import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
+import { Spinner } from '@craft-agent/ui'
+import { PanelHeader } from '@/components/app-shell/PanelHeader'
+import { HeaderMenu } from '@/components/ui/HeaderMenu'
+import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { SettingsCard, SettingsCardContent, SettingsSection } from '@/components/settings'
+import { useAppShellContext } from '@/context/AppShellContext'
+import { routes } from '@/lib/navigate'
+import type { DetailsPageMeta } from '@/lib/navigation-registry'
+import type { TeamModeStatus } from '../../../shared/types'
+
+export const meta: DetailsPageMeta = {
+  navigator: 'settings',
+  slug: 'team',
+}
+
+function ValueRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-4 py-3 text-[12px]">
+      <div className="min-w-0 text-white/48">{label}</div>
+      <div className="max-w-[55%] truncate font-mono text-white/72" title={value}>{value}</div>
+    </div>
+  )
+}
+
+export default function TeamSettingsPage() {
+  const { t } = useTranslation()
+  const { activeWorkspaceId } = useAppShellContext()
+  const [status, setStatus] = useState<TeamModeStatus | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+
+  const loadStatus = useCallback(async () => {
+    if (!activeWorkspaceId) {
+      setStatus(null)
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      setStatus(await window.electronAPI.getWorkspaceTeamStatus(activeWorkspaceId))
+    } catch (error) {
+      toast.error('Failed to load team settings', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [activeWorkspaceId])
+
+  useEffect(() => {
+    void loadStatus()
+  }, [loadStatus])
+
+  const enableTeamMode = async () => {
+    if (!activeWorkspaceId) return
+    setBusy(true)
+    try {
+      const next = await window.electronAPI.enableWorkspaceTeamMode(activeWorkspaceId, {
+        provider: 'generic-folder',
+        providerLabel: 'Shared folder',
+      })
+      setStatus(next)
+      toast.success('Team metadata initialized')
+    } catch (error) {
+      toast.error('Failed to initialize team metadata', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const setThisMachineAsRunner = async () => {
+    if (!activeWorkspaceId) return
+    setBusy(true)
+    try {
+      const next = await window.electronAPI.setWorkspaceTeamRunner(activeWorkspaceId)
+      setStatus(next)
+      toast.success('This machine is now the team runner')
+    } catch (error) {
+      toast.error('Failed to set team runner', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const unsupported = Boolean(status && !status.supported)
+
+  return (
+    <>
+      <PanelHeader title={t('settings.team.title')} actions={<HeaderMenu route={routes.view.settings('team')} />} />
+      <ScrollArea className="h-full">
+        <div className="settings-content-scroll px-6 py-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-10">
+              <Spinner className="text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="mx-auto max-w-[720px] space-y-6">
+              {unsupported && status && (
+                <SettingsCard>
+                  <SettingsCardContent>
+                    <div className="text-[13px] font-medium text-amber-200">Workspace format needs an app upgrade</div>
+                    <div className="mt-1 text-[12px] leading-5 text-white/45">
+                      This workspace uses format {status.formatVersion}. This app supports format {status.supportedFormatVersion}.
+                    </div>
+                  </SettingsCardContent>
+                </SettingsCard>
+              )}
+
+              <SettingsSection
+                title="Team mode"
+                description="Phase 1 stores portable team metadata and per-machine heartbeats. File syncing itself is still manual/shared-folder based."
+                action={
+                  <Button variant="ghost" size="sm" onClick={() => void loadStatus()} disabled={busy}>
+                    <RefreshCcw className="mr-1.5 h-3.5 w-3.5" />
+                    Refresh
+                  </Button>
+                }
+              >
+                <SettingsCard>
+                  <SettingsCardContent>
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-white/[0.06] text-white/70">
+                          {status?.team.enabled ? <CheckCircle2 className="h-4 w-4" /> : <Users className="h-4 w-4" />}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[13px] font-medium text-white/82">
+                            {status?.team.enabled ? 'Team metadata enabled' : 'Solo workspace'}
+                          </div>
+                          <div className="mt-0.5 text-[12px] text-white/40">
+                            Storage mode: {status?.storage.mode ?? 'solo'}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {!status?.team.enabled && (
+                          <Button size="sm" onClick={() => void enableTeamMode()} disabled={busy || unsupported}>
+                            {busy ? <Spinner className="mr-1.5" /> : null}
+                            Initialize
+                          </Button>
+                        )}
+                        <Button variant="secondary" size="sm" onClick={() => void setThisMachineAsRunner()} disabled={busy || unsupported}>
+                          Make runner
+                        </Button>
+                      </div>
+                    </div>
+                  </SettingsCardContent>
+                </SettingsCard>
+              </SettingsSection>
+
+              {status && (
+                <SettingsSection title="Status">
+                  <SettingsCard>
+                    <ValueRow label="Team revision" value={String(status.team.revision)} />
+                    <ValueRow label="Team ID" value={status.team.teamId} />
+                    <ValueRow label="Runner machine" value={status.team.runnerMachineId || 'None'} />
+                    <ValueRow label="This machine" value={`${status.machine.displayName} (${status.machine.machineId})`} />
+                    <ValueRow label="Heartbeat observed revision" value={String(status.heartbeat.observedTeamRevision)} />
+                  </SettingsCard>
+                </SettingsSection>
+              )}
+
+              {status && (
+                <SettingsSection title="Files">
+                  <SettingsCard>
+                    <ValueRow label="Team config mirror" value={status.teamConfigPath} />
+                    <ValueRow label="Private machine identity" value={status.privateMachinePath} />
+                    <ValueRow label="Shared heartbeat" value={status.heartbeatPath} />
+                  </SettingsCard>
+                </SettingsSection>
+              )}
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+    </>
+  )
+}

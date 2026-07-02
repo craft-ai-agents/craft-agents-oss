@@ -951,6 +951,8 @@
   "settings.workspace.defaultWorkingDir": "Standardarbeitsverzeichnis",
   "settings.workspace.defaultWorkingDirDesc": "Nicht festgelegt (verwendet Sitzungsordner)",
   "settings.workspace.description": "Name, Symbol, Arbeitsverzeichnis",
+  "settings.team.description": "Shared workspace identity and runner",
+  "settings.team.title": "Team",
   "settings.workspace.enterWorkspaceName": "Workspace-Namen eingeben...",
   "settings.workspace.failedToSave": "{{setting}} konnte nicht gespeichert werden",
   "settings.workspace.icon": "Symbol",

@@ -274,6 +274,9 @@ export const RPC_CHANNELS = {
     WRITE_IMAGE: 'workspace:writeImage',
     SETTINGS_GET: 'workspaceSettings:get',
     SETTINGS_UPDATE: 'workspaceSettings:update',
+    TEAM_STATUS_GET: 'workspaceTeam:getStatus',
+    TEAM_ENABLE_IN_PLACE: 'workspaceTeam:enableInPlace',
+    TEAM_SET_RUNNER: 'workspaceTeam:setRunner',
     SELF_EDIT_TARGET_GET: 'workspace:selfEditTarget:get',
   },
   permissions: {

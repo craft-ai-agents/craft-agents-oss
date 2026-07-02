@@ -951,6 +951,8 @@
   "settings.workspace.defaultWorkingDir": "Alapértelmezett munkamappa",
   "settings.workspace.defaultWorkingDirDesc": "Nincs beállítva (a munkamenet mappáját használja)",
   "settings.workspace.description": "Név, ikon, munkamappa",
+  "settings.team.description": "Shared workspace identity and runner",
+  "settings.team.title": "Team",
   "settings.workspace.enterWorkspaceName": "Add meg a munkaterület nevét...",
   "settings.workspace.failedToSave": "{{setting}} mentése sikertelen",
   "settings.workspace.icon": "Ikon",

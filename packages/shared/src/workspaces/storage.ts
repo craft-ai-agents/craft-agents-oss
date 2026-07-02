@@ -30,7 +30,9 @@ import type {
   CreateWorkspaceInput,
   LoadedWorkspace,
   WorkspaceSummary,
+  WorkspaceStorageConfig,
 } from './types.ts';
+import { WORKSPACE_FORMAT_VERSION } from './types.ts';
 
 const CONFIG_DIR = join(homedir(), '.craft-agent');
 const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
@@ -333,9 +335,11 @@ export function createWorkspaceAtPath(
   };
 
   const config: WorkspaceConfig = {
+    formatVersion: WORKSPACE_FORMAT_VERSION,
     id: `ws_${randomUUID().slice(0, 8)}`,
     name,
     slug,
+    storage: { mode: 'solo', portabilityVersion: 1 } satisfies WorkspaceStorageConfig,
     defaults: workspaceDefaults,
     localMcpServers: globalDefaults.workspaceDefaults.localMcpServers,
     createdAt: now,

@@ -10,6 +10,10 @@ export type {
   CreateWorkspaceInput,
   LoadedWorkspace,
   WorkspaceSummary,
+  WorkspaceStorageConfig,
+  WorkspaceStorageMode,
+  SharedFolderProvider,
+  WorkspaceTeamConfig,
 } from './types.ts';
 
 // Storage functions
@@ -40,3 +44,5 @@ export {
   CONFIG_DIR,
   DEFAULT_WORKSPACES_DIR,
 } from './storage.ts';
+
+export * from './team-mode.ts';

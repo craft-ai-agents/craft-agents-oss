@@ -951,6 +951,8 @@
   "settings.workspace.defaultWorkingDir": "默认工作目录",
   "settings.workspace.defaultWorkingDirDesc": "未设置 (使用会话文件夹)",
   "settings.workspace.description": "名称、图标、工作目录",
+  "settings.team.description": "Shared workspace identity and runner",
+  "settings.team.title": "Team",
   "settings.workspace.enterWorkspaceName": "输入 Workspace 名称...",
   "settings.workspace.failedToSave": "无法保存 {{setting}}",
   "settings.workspace.icon": "图标",

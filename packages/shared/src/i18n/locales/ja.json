@@ -951,6 +951,8 @@
   "settings.workspace.defaultWorkingDir": "デフォルト作業ディレクトリ",
   "settings.workspace.defaultWorkingDirDesc": "未設定（セッションフォルダーを使用）",
   "settings.workspace.description": "名前、アイコン、作業ディレクトリ",
+  "settings.team.description": "Shared workspace identity and runner",
+  "settings.team.title": "Team",
   "settings.workspace.enterWorkspaceName": "Workspace名を入力...",
   "settings.workspace.failedToSave": "{{setting}}の保存に失敗しました",
   "settings.workspace.icon": "アイコン",

@@ -28,10 +28,65 @@ export interface LocalMcpConfig {
   enabled: boolean;
 }
 
+export const WORKSPACE_FORMAT_VERSION = 1;
+
+export type WorkspaceStorageMode = 'solo' | 'shared-folder' | 'git';
+
+export type SharedFolderProvider =
+  | 'google-drive'
+  | 'dropbox'
+  | 'icloud-drive'
+  | 'onedrive'
+  | 'syncthing'
+  | 'generic-folder';
+
+export interface SoloWorkspaceStorageConfig {
+  mode: 'solo';
+  portabilityVersion: 1;
+}
+
+export interface SharedFolderWorkspaceStorageConfig {
+  mode: 'shared-folder';
+  portabilityVersion: 1;
+  provider: SharedFolderProvider;
+  providerLabel?: string;
+  sharedRootId: string;
+  enabledAt: string;
+  movedFrom?: string;
+  vaultPolicy: 'copy-into-workspace' | 'allow-external-with-overrides';
+  pathPolicy: 'relative-required';
+}
+
+export interface GitWorkspaceStorageConfig {
+  mode: 'git';
+  portabilityVersion: 1;
+  remoteUrl?: string;
+  branch?: string;
+  vaultPolicy: 'git-lfs' | 'external-media-folder' | 'text-only';
+  pathPolicy: 'relative-required';
+}
+
+export type WorkspaceStorageConfig =
+  | SoloWorkspaceStorageConfig
+  | SharedFolderWorkspaceStorageConfig
+  | GitWorkspaceStorageConfig;
+
+export interface WorkspaceTeamConfig {
+  enabled: boolean;
+  teamId: string;
+  revision: number;
+  runnerMachineId?: string;
+  automationsPolicy: 'runner-only' | 'manual-only';
+  backgroundTriggersEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /**
  * Workspace configuration (stored in config.json)
  */
 export interface WorkspaceConfig {
+  formatVersion?: number;
   id: string;
   name: string;
   slug: string; // Folder name (URL-safe)
@@ -63,6 +118,16 @@ export interface WorkspaceConfig {
    * developer settings when present.
    */
   developer?: DeveloperConfig;
+
+  /**
+   * Local-first storage mode metadata. Missing means legacy solo workspace.
+   */
+  storage?: WorkspaceStorageConfig;
+
+  /**
+   * Team-mode metadata. Generated mirror lives at team/config.json.
+   */
+  team?: WorkspaceTeamConfig;
 
   createdAt: number;
   updatedAt: number;

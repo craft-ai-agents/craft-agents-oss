@@ -27,6 +27,9 @@ import type { PermissionMode } from '@craft-agent/shared/agent/modes';
 export type { PermissionMode };
 export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 
+import type { SharedFolderProvider, TeamModeStatus } from '@craft-agent/shared/workspaces';
+export type { SharedFolderProvider, TeamModeStatus };
+
 // Thinking level types
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
 export type { ThinkingLevel };
@@ -588,6 +591,9 @@ export interface ElectronAPI {
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
+  getWorkspaceTeamStatus(workspaceId: string): Promise<TeamModeStatus>
+  enableWorkspaceTeamMode(workspaceId: string, options?: { provider?: SharedFolderProvider; providerLabel?: string; makeRunner?: boolean }): Promise<TeamModeStatus>
+  setWorkspaceTeamRunner(workspaceId: string, machineId?: string): Promise<TeamModeStatus>
   getSelfEditTarget(workspaceId: string): Promise<SelfEditTargetInfo>
 
   // Folder dialog

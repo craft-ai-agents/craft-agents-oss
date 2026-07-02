@@ -14,6 +14,7 @@ const PRIMARY_ORDER: SettingsSubpage[] = [
   'appearance',
   'app',
   'workspace',
+  'team',
   'permissions',
   'input',
   'labels',

@@ -237,6 +237,7 @@ const SETTINGS_ICONS: Record<SettingsSubpage, string> = {
   appearance: 'Palette',
   input: 'Keyboard',
   workspace: 'Building2',
+  team: 'Users',
   permissions: 'ShieldCheck',
   labels: 'Tag',
   messaging: 'MessageSquare',

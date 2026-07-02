@@ -951,6 +951,8 @@
   "settings.workspace.defaultWorkingDir": "Domyślny katalog roboczy",
   "settings.workspace.defaultWorkingDirDesc": "Nie ustawiono (używa folderu sesji)",
   "settings.workspace.description": "Nazwa, ikona, katalog roboczy",
+  "settings.team.description": "Shared workspace identity and runner",
+  "settings.team.title": "Team",
   "settings.workspace.enterWorkspaceName": "Wprowadź nazwę Workspace...",
   "settings.workspace.failedToSave": "Nie udało się zapisać {{setting}}",
   "settings.workspace.icon": "Ikona",
