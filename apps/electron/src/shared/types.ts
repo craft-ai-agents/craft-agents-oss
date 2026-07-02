@@ -27,9 +27,9 @@ import type { PermissionMode } from '@craft-agent/shared/agent/modes';
 export type { PermissionMode };
 export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 
-import type { SharedFolderProvider, TeamModeStatus } from '@craft-agent/shared/workspaces';
+import type { SharedFolderProvider, SharedPathOverrides, TeamModeStatus } from '@craft-agent/shared/workspaces';
 import type { TeamSharedFolderMigrationResult } from '@craft-agent/shared/workspaces';
-export type { SharedFolderProvider, TeamModeStatus, TeamSharedFolderMigrationResult };
+export type { SharedFolderProvider, SharedPathOverrides, TeamModeStatus, TeamSharedFolderMigrationResult };
 
 // Thinking level types
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
@@ -596,6 +596,9 @@ export interface ElectronAPI {
   enableWorkspaceTeamMode(workspaceId: string, options?: { provider?: SharedFolderProvider; providerLabel?: string; makeRunner?: boolean }): Promise<TeamModeStatus>
   moveWorkspaceToSharedFolder(workspaceId: string, input: { destinationParentPath: string; provider?: SharedFolderProvider; providerLabel?: string; makeRunner?: boolean }): Promise<TeamSharedFolderMigrationResult>
   setWorkspaceTeamRunner(workspaceId: string, machineId?: string): Promise<TeamModeStatus>
+  getWorkspaceTeamPathOverrides(workspaceId: string): Promise<SharedPathOverrides>
+  setWorkspaceTeamPathOverride(workspaceId: string, refId: string, absolutePath: string): Promise<SharedPathOverrides>
+  clearWorkspaceTeamPathOverride(workspaceId: string, refId: string): Promise<SharedPathOverrides>
   getSelfEditTarget(workspaceId: string): Promise<SelfEditTargetInfo>
 
   // Folder dialog

@@ -10,7 +10,7 @@
 
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, rmSync } from 'fs';
 import { homedir } from 'os';
-import { join, basename } from 'path';
+import { join, basename, isAbsolute, relative, resolve } from 'path';
 import { randomUUID } from 'crypto';
 import type {
   FolderSourceConfig,
@@ -31,6 +31,23 @@ import {
   needsIconDownload,
   isIconUrl,
 } from '../utils/icon.ts';
+
+function isPathInside(parentPath: string, candidatePath: string): boolean {
+  const parent = resolve(parentPath);
+  const candidate = resolve(candidatePath);
+  const between = relative(parent, candidate);
+  return between === '' || (!between.startsWith('..') && !isAbsolute(between));
+}
+
+function toPortableLocalSourcePath(basePath: string, localPath: string): string {
+  const absolutePath = isAbsolute(localPath) || localPath.startsWith('~') || localPath.startsWith('$HOME') || localPath.startsWith('${HOME}')
+    ? expandPath(localPath, basePath)
+    : resolve(basePath, localPath);
+  if (isPathInside(basePath, absolutePath)) {
+    return relative(resolve(basePath), absolutePath).replace(/\\/g, '/');
+  }
+  return toPortablePath(absolutePath);
+}
 
 // ============================================================
 // Directory Utilities
@@ -123,7 +140,7 @@ export function markSourceAuthenticated(
   return true;
 }
 
-function saveGlobalSourceConfig(config: FolderSourceConfig): void {
+function saveGlobalSourceConfig(config: FolderSourceConfig): FolderSourceConfig {
   const validation = validateSourceConfig(config);
   if (!validation.valid) {
     const errorMessages = validation.errors.map((e) => `${e.path}: ${e.message}`).join(', ');
@@ -140,11 +157,12 @@ function saveGlobalSourceConfig(config: FolderSourceConfig): void {
   if (storageConfig.type === 'local' && storageConfig.local?.path) {
     storageConfig.local = {
       ...storageConfig.local,
-      path: toPortablePath(storageConfig.local.path),
+      path: toPortableLocalSourcePath(dir, storageConfig.local.path),
     };
   }
 
   writeFileSync(join(dir, 'config.json'), JSON.stringify(storageConfig, null, 2));
+  return storageConfig;
 }
 
 function loadMutableSourceConfig(source: LoadedSource): FolderSourceConfig | null {
@@ -209,7 +227,7 @@ export function markLoadedSourceNeedsReauth(source: LoadedSource, errorMessage: 
 export function saveSourceConfig(
   workspaceRootPath: string,
   config: FolderSourceConfig
-): void {
+): FolderSourceConfig {
   // Validate config before writing
   const validation = validateSourceConfig(config);
   if (!validation.valid) {
@@ -228,11 +246,12 @@ export function saveSourceConfig(
   if (storageConfig.type === 'local' && storageConfig.local?.path) {
     storageConfig.local = {
       ...storageConfig.local,
-      path: toPortablePath(storageConfig.local.path),
+      path: toPortableLocalSourcePath(workspaceRootPath, storageConfig.local.path),
     };
   }
 
   writeFileSync(join(dir, 'config.json'), JSON.stringify(storageConfig, null, 2));
+  return storageConfig;
 }
 
 // ============================================================
@@ -1103,7 +1122,7 @@ export async function createSource(
   }
 
   // Save config first to create the directory
-  saveSourceConfig(workspaceRootPath, config);
+  let storedConfig = saveSourceConfig(workspaceRootPath, config);
 
   // If icon is a URL, download it immediately
   // (watcher will also handle this, but doing it here provides immediate feedback)
@@ -1125,7 +1144,7 @@ export async function createSource(
         if (iconPath) {
           // Store the source URL for reference (not the cached path)
           config.icon = logoUrl;
-          saveSourceConfig(workspaceRootPath, config);
+          storedConfig = saveSourceConfig(workspaceRootPath, config);
         }
       }
     }
@@ -1145,7 +1164,7 @@ export async function createSource(
 `;
   saveSourceGuide(workspaceRootPath, slug, { raw: guideContent });
 
-  return config;
+  return storedConfig;
 }
 
 /**

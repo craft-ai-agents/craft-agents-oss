@@ -278,6 +278,9 @@ export const RPC_CHANNELS = {
     TEAM_ENABLE_IN_PLACE: 'workspaceTeam:enableInPlace',
     TEAM_MOVE_TO_SHARED_FOLDER: 'workspaceTeam:moveToSharedFolder',
     TEAM_SET_RUNNER: 'workspaceTeam:setRunner',
+    TEAM_PATH_OVERRIDES_GET: 'workspaceTeam:pathOverrides:get',
+    TEAM_PATH_OVERRIDE_SET: 'workspaceTeam:pathOverride:set',
+    TEAM_PATH_OVERRIDE_CLEAR: 'workspaceTeam:pathOverride:clear',
     SELF_EDIT_TARGET_GET: 'workspace:selfEditTarget:get',
   },
   permissions: {

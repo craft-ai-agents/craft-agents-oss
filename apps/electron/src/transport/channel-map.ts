@@ -185,6 +185,9 @@ export const CHANNEL_MAP = {
   enableWorkspaceTeamMode: invoke(RPC_CHANNELS.workspace.TEAM_ENABLE_IN_PLACE),
   moveWorkspaceToSharedFolder: invoke(RPC_CHANNELS.workspace.TEAM_MOVE_TO_SHARED_FOLDER),
   setWorkspaceTeamRunner: invoke(RPC_CHANNELS.workspace.TEAM_SET_RUNNER),
+  getWorkspaceTeamPathOverrides: invoke(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDES_GET),
+  setWorkspaceTeamPathOverride: invoke(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_SET),
+  clearWorkspaceTeamPathOverride: invoke(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_CLEAR),
   getSelfEditTarget: invoke(RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET),
 
   // Folder dialog

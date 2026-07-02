@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle2, RefreshCcw, Users } from 'lucide-react'
+import { CheckCircle2, RefreshCcw, Trash2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { Spinner } from '@craft-agent/ui'
@@ -36,6 +36,9 @@ export default function TeamSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [destinationParentPath, setDestinationParentPath] = useState('')
+  const [pathOverrides, setPathOverrides] = useState<Record<string, string>>({})
+  const [overrideRefId, setOverrideRefId] = useState('')
+  const [overridePath, setOverridePath] = useState('')
 
   const loadStatus = useCallback(async () => {
     if (!activeWorkspaceId) {
@@ -45,7 +48,12 @@ export default function TeamSettingsPage() {
     }
     setLoading(true)
     try {
-      setStatus(await window.electronAPI.getWorkspaceTeamStatus(activeWorkspaceId))
+      const [nextStatus, nextOverrides] = await Promise.all([
+        window.electronAPI.getWorkspaceTeamStatus(activeWorkspaceId),
+        window.electronAPI.getWorkspaceTeamPathOverrides(activeWorkspaceId),
+      ])
+      setStatus(nextStatus)
+      setPathOverrides(nextOverrides)
     } catch (error) {
       toast.error('Failed to load team settings', {
         description: error instanceof Error ? error.message : String(error),
@@ -87,6 +95,39 @@ export default function TeamSettingsPage() {
       toast.success('This machine is now the team runner')
     } catch (error) {
       toast.error('Failed to set team runner', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const savePathOverride = async () => {
+    if (!activeWorkspaceId || !overrideRefId.trim() || !overridePath.trim()) return
+    setBusy(true)
+    try {
+      const next = await window.electronAPI.setWorkspaceTeamPathOverride(activeWorkspaceId, overrideRefId.trim(), overridePath.trim())
+      setPathOverrides(next)
+      setOverrideRefId('')
+      setOverridePath('')
+      toast.success('Path override saved')
+    } catch (error) {
+      toast.error('Failed to save path override', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const clearPathOverride = async (refId: string) => {
+    if (!activeWorkspaceId) return
+    setBusy(true)
+    try {
+      setPathOverrides(await window.electronAPI.clearWorkspaceTeamPathOverride(activeWorkspaceId, refId))
+      toast.success('Path override removed')
+    } catch (error) {
+      toast.error('Failed to remove path override', {
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
@@ -224,6 +265,50 @@ export default function TeamSettingsPage() {
                             Move
                           </Button>
                         </div>
+                      </div>
+                    </SettingsCardContent>
+                  </SettingsCard>
+                </SettingsSection>
+              )}
+
+              {status && (
+                <SettingsSection
+                  title="External file overrides"
+                  description="Private paths for files that were linked from another machine instead of copied into the workspace vault."
+                >
+                  <SettingsCard>
+                    <SettingsCardContent>
+                      <div className="grid gap-2 md:grid-cols-[1fr_1.6fr_auto]">
+                        <input
+                          value={overrideRefId}
+                          onChange={(event) => setOverrideRefId(event.target.value)}
+                          placeholder="ref id"
+                          className="h-9 rounded-[10px] border border-white/[0.06] bg-white/[0.025] px-3 text-xs text-white/70 outline-none placeholder:text-white/25"
+                        />
+                        <input
+                          value={overridePath}
+                          onChange={(event) => setOverridePath(event.target.value)}
+                          placeholder="/Users/you/path/to/file"
+                          className="h-9 rounded-[10px] border border-white/[0.06] bg-white/[0.025] px-3 font-mono text-xs text-white/70 outline-none placeholder:text-white/25"
+                        />
+                        <Button size="sm" onClick={() => void savePathOverride()} disabled={busy || !overrideRefId.trim() || !overridePath.trim()}>
+                          Save
+                        </Button>
+                      </div>
+                      <div className="mt-3 divide-y divide-white/[0.06]">
+                        {Object.entries(pathOverrides).length === 0 ? (
+                          <div className="py-2 text-[12px] text-white/38">No external path overrides on this machine.</div>
+                        ) : Object.entries(pathOverrides).map(([refId, path]) => (
+                          <div key={refId} className="flex items-center justify-between gap-3 py-2 text-[12px]">
+                            <div className="min-w-0">
+                              <div className="truncate font-medium text-white/72">{refId}</div>
+                              <div className="truncate font-mono text-white/42" title={path}>{path}</div>
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={() => void clearPathOverride(refId)} disabled={busy} title="Remove override">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ))}
                       </div>
                     </SettingsCardContent>
                   </SettingsCard>

@@ -367,6 +367,27 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     return setRunnerMachine(workspace.rootPath, machineId)
   })
 
+  server.handle(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDES_GET, async (_ctx, workspaceId: string) => {
+    getWorkspaceOrThrow(workspaceId)
+    const { loadSharedPathOverrides } = await import('@craft-agent/shared/workspaces')
+    return loadSharedPathOverrides(workspaceId)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_SET, async (_ctx, workspaceId: string, refId: string, absolutePath: string) => {
+    getWorkspaceOrThrow(workspaceId)
+    if (!refId?.trim()) throw new Error('Path override refId is required.')
+    if (!absolutePath?.trim()) throw new Error('Path override path is required.')
+    const { setSharedPathOverride } = await import('@craft-agent/shared/workspaces')
+    return setSharedPathOverride(workspaceId, refId.trim(), absolutePath.trim())
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_CLEAR, async (_ctx, workspaceId: string, refId: string) => {
+    getWorkspaceOrThrow(workspaceId)
+    if (!refId?.trim()) throw new Error('Path override refId is required.')
+    const { clearSharedPathOverride } = await import('@craft-agent/shared/workspaces')
+    return clearSharedPathOverride(workspaceId, refId.trim())
+  })
+
   server.handle(RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET, async (_ctx, workspaceId: string) => {
     const workspace = getWorkspaceOrThrow(workspaceId)
     const { loadWorkspaceConfig } = await import('@craft-agent/shared/workspaces')

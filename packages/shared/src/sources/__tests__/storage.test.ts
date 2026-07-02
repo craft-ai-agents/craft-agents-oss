@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll, mock } from 'bun:test';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync } from 'fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync } from 'fs';
 import * as os from 'os';
 import { tmpdir } from 'os';
 import { join, resolve, sep } from 'path';
@@ -36,6 +36,8 @@ const {
   getSourcesBySlugs,
   isSourceUsable,
   loadSourceConfig,
+  createSource,
+  saveSourceConfig,
   markLoadedSourceAuthenticated,
   markLoadedSourceNeedsReauth,
   writeGlobalSourcesManifest,
@@ -162,6 +164,43 @@ describe('workspace local source paths', () => {
     writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
 
     expect(loadSourceConfig(ws, 'local-cli')?.local?.path).toBe(join(ws, 'tools/local-cli'));
+  });
+
+  test('saveSourceConfig stores workspace-local absolute paths relative to the workspace root', () => {
+    const ws = makeWorkspace();
+    const toolPath = join(ws, 'tools', 'local-cli');
+    const config: FolderSourceConfig = {
+      id: 'local-cli_test',
+      name: 'Local CLI',
+      slug: 'local-cli',
+      enabled: true,
+      provider: 'custom',
+      type: 'local',
+      local: { path: toolPath, format: 'cli-tool' },
+    };
+
+    saveSourceConfig(ws, config);
+
+    const stored = JSON.parse(readFileSync(join(ws, 'sources', 'local-cli', 'config.json'), 'utf-8')) as FolderSourceConfig;
+    expect(stored.local?.path).toBe('tools/local-cli');
+    expect(loadSourceConfig(ws, 'local-cli')?.local?.path).toBe(toolPath);
+  });
+
+  test('createSource returns the normalized portable local path it persisted', async () => {
+    const ws = makeWorkspace();
+    const toolPath = join(ws, 'tools', 'local-cli');
+
+    const created = await createSource(ws, {
+      name: 'Local CLI',
+      provider: 'custom',
+      type: 'local',
+      icon: '🛠️',
+      local: { path: toolPath, format: 'cli-tool' },
+    });
+    const stored = JSON.parse(readFileSync(join(ws, 'sources', 'local-cli', 'config.json'), 'utf-8')) as FolderSourceConfig;
+
+    expect(created.local?.path).toBe('tools/local-cli');
+    expect(stored.local?.path).toBe('tools/local-cli');
   });
 });
 
