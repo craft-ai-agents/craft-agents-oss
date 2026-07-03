@@ -1,12 +1,14 @@
 ---
 name: scrape-engine
-description: 采购平台采集/爬取技术层。统一用 scrape-engine 访问已接入平台、API、XHR、DOM 页面和反爬站，维护平台接入状态、爬取限制、聚合关系和替代采集源；当需要外部平台库存、价格、产品页、datasheet、替代候选等原始证据时使用。只产出结构化证据，不做采购推荐、供应商判断或可替代结论。
+description: 【已被 browserdepot 取代——平台采集取证请优先用 browserdepot skill】旧版采购平台采集引擎(Python engine.py + adapters)。仅在 browserdepot 未部署到 prod 前作过渡保留。
 metadata:
   short-description: 平台采集引擎
   lang: zh
 ---
 
-# 采购平台采集引擎
+# 采购平台采集引擎（已被 browserdepot 取代）
+
+> ⚠ **本 skill 正被 `browserdepot` 取代**（同职责,接口换成 Rust daemon + CLI,反爬 warmup / 多源 join / 代理 / 重试全固化在引擎里）。新的平台采集取证一律用 `browserdepot` skill;本目录仅保留到 browserdepot 部署到 prod PATH + 迁移验证完成前。以下为旧 `engine.py` 用法,过渡期参考。
 
 本 skill 是**技术取数层**，不是采购业务判断层。它负责维护平台爬取状态、选择采集 adapter、运行 `engine.py`，并把外部平台返回的数据统一成 JSON 证据。
 

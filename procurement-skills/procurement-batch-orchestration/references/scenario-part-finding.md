@@ -4,7 +4,7 @@
 
 ## 子会话 prompt 要点
 
-在 [SKILL.md](../SKILL.md) 第 3 步的子会话 prompt 模板里,`<对应业务 skill>` 填 `procurement-platform-search`(以及它引用的 `scrape-engine`)。子会话按这两个 skill 自己的完整度和超时恢复规则执行——**这里不重复那些规则,它们改了这份配方也不用跟着改**;本节只提醒:批量场景下同样不能因为是子任务就抄近路,判断标准仍然是那两个 skill 自己定义的。
+在 [SKILL.md](../SKILL.md) 第 3 步的子会话 prompt 模板里,`<对应业务 skill>` 填 `procurement-platform-search`(以及它引用的 `browserdepot`)。子会话按这两个 skill 自己的完整度和超时恢复规则执行——**这里不重复那些规则,它们改了这份配方也不用跟着改**;本节只提醒:批量场景下同样不能因为是子任务就抄近路,判断标准仍然是那两个 skill 自己定义的。
 
 ## 汇总表列名
 
