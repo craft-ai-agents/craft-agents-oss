@@ -41,6 +41,13 @@ describe('resolveMarkdownLinkTarget', () => {
     })
   })
 
+  it('decodes percent-encoded bare file paths (#944)', () => {
+    expect(resolveMarkdownLinkTarget('/Users/tester/report%20final.pdf')).toEqual({
+      kind: 'file',
+      path: '/Users/tester/report final.pdf',
+    })
+  })
+
   it('normalizes windows drive-letter file URLs to local paths', () => {
     expect(resolveMarkdownLinkTarget('file:///C:/Users/Tester/Deck.pptx')).toEqual({
       kind: 'file',
@@ -120,6 +127,10 @@ describe('classifyMarkdownLinkTarget', () => {
 
   it('classifies file URLs as file', () => {
     expect(classifyMarkdownLinkTarget('file:///Users/tester/report.xlsx')).toBe('file')
+  })
+
+  it('classifies bare file paths with percent-encoded spaces as file', () => {
+    expect(classifyMarkdownLinkTarget('/Users/tester/My%20Documents/report.xlsx')).toBe('file')
   })
 
   it('classifies https links as url', () => {
