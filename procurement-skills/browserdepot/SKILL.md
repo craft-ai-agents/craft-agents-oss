@@ -16,13 +16,20 @@ metadata:
 
 本 skill 只负责:选源 → 采集 → 返回结构化证据(rows + 每源终态)。**不判断**供应商真假 / 价格优劣 / 是否下单 / 是否可替代 / 库存优先级 / 找料下一步 / 最终采购话术——那些是消费 skill 的事。
 
-## 调用（异步:submit → wait → results）
+## 调用（异步:submit → 分批取 → 补全）
+
+**不要一把 `wait` 等到全部完成再看**——首轮全量 ~8 分钟,用户干等、什么都看不到。引擎是**每个源一完成就落库**,`results` 返回的是**当前快照**(未完成的 job 也能取到已完成那批,`totals.pending` 告诉你还剩几个)。所以走**两段式:先拿快的、立刻给用户,再补慢尾**。
 
 ```bash
-browserdepot submit --parts "<型号>[,<型号2>...]"          # 默认 source_set=direct = 首轮全量直连平台
-browserdepot wait <job_id> --timeout 300                  # 阻塞到全终态
-browserdepot results <job_id> [--fields a,b] [--limit N]  # coverage + 每源 rows/状态
+browserdepot submit --parts "<型号>[,<型号2>...]"          # 默认 source_set=direct = 首轮全量直连平台,返回 {job_id}
+browserdepot wait <job_id> --timeout 40                   # 只等 40s:国内直连 + HTTP/API 源这时基本都到
+browserdepot results <job_id> [--fields a,b] [--limit N]  # ← 先取这批,立刻回话:"已到 N 个源(如下),西方慢源还在跑"
+browserdepot wait <job_id> --timeout 300                  # 仍未 complete 时,后台继续等西方慢尾
+browserdepot results <job_id>                             # 补全,再更新一次(这次才是覆盖口径之准)
 ```
+
+- **先展示、别干等**:第一次 `results` 拿到部分就先呈现给用户(标明"部分结果,尾部仍在采集");`browserdepot status <job_id>`(廉价,只返 done/pending 计数)用来判断是否已 `complete`——complete 了就不必再 `wait`。
+- `wait --timeout N` 是**有界阻塞**(到 N 秒或全终态就返回,不是必须等到底)。西方反爬慢源可给更长 timeout;确需尽快交付时,部分覆盖也能先交(按下方"覆盖口径"注明"仍有源未完成")。
 
 - **首轮必须全量 direct**:`submit` 默认就是 `direct` = 当前全部 enabled/limited 的直连库存/报价平台(不含聚合器 / 替代候选 / reference / dead)。不要手挑"核心平台",不要截取清单。
 - **二轮聚合**:`submit --parts "<型号>" --source-set aggregator`(只 `channel_type=aggregator`)。聚合器重复覆盖多个真实平台,只作二轮补缺 / 交叉验证,**不能替代首轮直连覆盖**。
