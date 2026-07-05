@@ -15,16 +15,21 @@ metadata:
 ## 查
 
     larkdepot schema      # 先看有哪些表、每张表的真实列名(列名=飞书字段名,会漂移,别凭记忆硬编码)
-    larkdepot query sql --sql "SELECT ... WHERE norm(型号)=norm('bav-99')" [--limit N] [--db state]
 
-    # 简单单表浏览也可用 lark-cli 同构语法(flag 语义与 lark-cli 一致,查的是本地缓存、零限流):
+    # 首选:结构化搜索,免写 SQL(flag 语义与 lark-cli 同构,查本地缓存、零限流)
+    larkdepot base +record-search --keyword "MT41K256M16TW-107 IT:P" --search-field 型号   # 省 --table-id = 搜全部缓存表
+    larkdepot base +record-search --table-id 供应商档案 --keyword 继电器 --search-field 优势产品 [--search-field 列]... [--field-id 只回这些列]... [--limit 1-200]
+
+    # 单表浏览/看列
     larkdepot base +record-list --table-id <表名或tbl开头ID> [--limit 1-200] [--offset N]
     larkdepot base +field-list  --table-id <表名或tbl开头ID>
 
-- 复杂查询(跨表 UNION/聚合/变体匹配)用 `query sql`;`norm(列)`:去 `-`/`/`/空格+大写,型号变体匹配必用,NULL 行安全跳过。
-- **SQL 列名一律双引号**:业务表列名常带 `/` 空格 括号(如 `"目标价/价格"`、`"含税/未税"`、`"采购负责人 (人员 )"`),裸写被当除法/语法错;全引号零特例。
-- `--db cache`(默认)查飞书镜像;`--db state` 查本地写回事实源。
-- 多选/人员/附件列存原始 JSON 文本,`json_extract` 拆。
+    # 逃生舱:聚合/JOIN/json_extract 等 record-search 覆盖不了的才写 SQL
+    larkdepot query sql --sql "SELECT COUNT(*) FROM 供应商档案 WHERE \"供应商等级\"='A'" [--limit N] [--db state]
+
+- **查数据首选 `+record-search`**:命中 = norm 变体相等(bav-99 命中 BAV99)或忽略大小写子串,型号匹配与名称模糊一把抓,不用选模式;行自带 `_table` 标注;搜索字段在所有目标表都不存在会报用法错(带 hint),打错字段名不会伪装成"查无此物"。
+- 写 SQL 时(仅逃生舱):**列名一律双引号**(列名常带 `/` 空格 括号,如 `"目标价/价格"`、`"采购负责人 (人员 )"`,裸写被当除法/语法错);`norm(列)` 归一化型号变体,NULL 行安全跳过;多选/人员/附件列存原始 JSON 文本,`json_extract` 拆。
+- `--db cache`(默认)查飞书镜像;`--db state` 查本地写回事实源(仅 query sql)。
 - 输出一律是 larkdepot envelope(行对象数组);`freshness.age_s` 过大时提醒用户缓存偏旧(cron 定期 sync)。
 
 ## 写回与注册
