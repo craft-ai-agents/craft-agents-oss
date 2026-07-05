@@ -363,7 +363,12 @@ const healthServer = await startHealthHttpServer({
 
 const serverProto = instance.protocol === 'wss' ? 'https' : 'http'
 console.log(`CRAFT_SERVER_URL=${instance.protocol}://${instance.host}:${instance.port}`)
-console.log(`CRAFT_SERVER_TOKEN=${instance.token}`)
+// Echo the token only when auto-generated — it's the operator's only way to learn it.
+// When provided via env the operator already has it, and echoing would leak the
+// secret into journald/log aggregators on every boot.
+if (!serverToken) {
+  console.log(`CRAFT_SERVER_TOKEN=${instance.token}`)
+}
 if (webuiHandler) {
   console.log(`CRAFT_WEBUI_URL=${serverProto}://0.0.0.0:${instance.port}`)
 }
