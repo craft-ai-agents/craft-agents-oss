@@ -106,15 +106,19 @@ def _is_inventory_intent(t):
             or ("lark-cli" in t and "base" in t and "+record-" in t))
 
 
-def _is_platform_intent(t, name):
-    return (name in ("websearch", "webfetch")
-            or "browserdepot" in t
-            or "procurement-platform-search" in t)
+def _is_platform_intent(t):
+    """平台 = 真货源渠道。WebSearch/WebFetch 是"认料"(SOP 第 0 步允许在库存前用),
+    不算平台——曾把认料计入平台,产线违规数虚高。"""
+    return "browserdepot" in t or "procurement-platform-search" in t
+
+
+def _is_web_intent(name):
+    return name in ("websearch", "webfetch")
 
 
 def evaluate_session(tool_entries):
-    """code evaluators:错误率 + 库存先行 + SQL 用量。返回扁平属性 dict。"""
-    calls = errors = inv = plat = sql = 0
+    """code evaluators:错误率 + 库存先行 + SQL 用量 + web 层失败。返回扁平属性 dict。"""
+    calls = errors = inv = plat = web = sql = web_errors = 0
     first_inv_i = first_plat_i = -1
     err_tools = {}
     for i, e in enumerate(tool_entries):
@@ -124,18 +128,22 @@ def evaluate_session(tool_entries):
         if e.get("isError"):
             errors += 1
             err_tools[e.get("toolName") or "?"] = err_tools.get(e.get("toolName") or "?", 0) + 1
+            if name in ("websearch", "webfetch"):
+                web_errors += 1
         if _is_inventory_intent(t):
             inv += 1
             if first_inv_i < 0:
                 first_inv_i = i
-        if _is_platform_intent(t, name):
+        if _is_platform_intent(t):
             plat += 1
             if first_plat_i < 0:
                 first_plat_i = i
+        if _is_web_intent(name):
+            web += 1
         if "larkdepot" in t and "query" in t and "sql" in t:
             sql += 1
-    # 保守口径:动了平台/联网搜索、却全程没碰过本地库存 → 违规(库存先行是业务铁律)。
-    # 只查库存不上平台、或两者都没有,都不算违规——不做用户意图猜测。
+    # 违规口径 = 业务 SOP:上了货源平台(browserdepot 等)却全程没查本地库存。
+    # 认料(WebSearch/WebFetch)按 SOP 允许在库存前用,单独计数不算违规。
     violation = plat > 0 and inv == 0
     attrs = {
         "eval.tool_calls": calls,
@@ -143,7 +151,12 @@ def evaluate_session(tool_entries):
         "eval.tool_error_rate": round(errors / calls, 4) if calls else 0.0,
         "eval.inventory_calls": inv,
         "eval.platform_calls": plat,
+        "eval.web_calls": web,
         "eval.sql_calls": sql,
+        # web 层失败(WebSearch/WebFetch isError)——searxng/代理瘫痪的直接信号。
+        # 注意:历史会话里 web 失败被包装成 success(已修:失败必 throw),
+        # 修复上线前的旧 trace 此值恒 0,不代表当时网络层健康。
+        "eval.web_errors": web_errors,
         "eval.violation.platform_without_inventory": violation,
     }
     if err_tools:

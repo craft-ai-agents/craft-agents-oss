@@ -57,15 +57,10 @@ export function createSearchTool(provider: WebSearchProvider): ToolDefinition<ty
         return formatResults(query, provider.name, results);
       } catch (err) {
         const primaryMsg = err instanceof Error ? err.message : String(err);
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `Search failed for "${query}": ${primaryMsg}`,
-            },
-          ],
-          details: { isError: true },
-        };
+        // 必须 throw:SDK 只在工具抛异常时把 tool_execution_end.isError 置真。
+        // 旧版"失败包装成成功返回 + details.isError"导致搜索层瘫痪对 trace 完全
+        // 隐形(生产实测 searxng 全灭数周,286 条失败结果记成 success)。
+        throw new Error(`Search failed for "${query}": ${primaryMsg}`);
       }
     },
   };

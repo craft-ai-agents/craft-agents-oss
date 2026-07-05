@@ -354,10 +354,8 @@ export function createWebFetchTool(
       try {
         await validateUrl(url);
       } catch (err) {
-        return result(
-          `Refused to fetch ${url}: ${err instanceof Error ? err.message : String(err)}`,
-          true,
-        );
+        // 失败必须 throw:SDK 只认异常为 isError,包装成功返回会让失败对 trace 隐形
+        throw new Error(`Refused to fetch ${url}: ${err instanceof Error ? err.message : String(err)}`);
       }
 
       // One deadline for the whole operation. fetch() AND the body read below
@@ -380,17 +378,13 @@ export function createWebFetchTool(
           });
         } catch (err) {
           const timedOut = controller.signal.aborted;
-          return result(
+          throw new Error(
             `Failed to fetch ${url}: ${timedOut ? `timed out after ${FETCH_TIMEOUT_MS / 1000}s` : err instanceof Error ? err.message : String(err)}`,
-            true,
           );
         }
 
         if (!response.ok) {
-          return result(
-            `Failed to fetch ${url}: HTTP ${response.status} ${response.statusText}`,
-            true,
-          );
+          throw new Error(`Failed to fetch ${url}: HTTP ${response.status} ${response.statusText}`);
         }
 
         // Use the final URL after redirects for all output messages
@@ -430,9 +424,8 @@ export function createWebFetchTool(
           return handleText(text, finalUrl);
         } catch (err) {
           const timedOut = controller.signal.aborted;
-          return result(
+          throw new Error(
             `Failed to read ${finalUrl}: ${timedOut ? `body read timed out after ${FETCH_TIMEOUT_MS / 1000}s` : err instanceof Error ? err.message : String(err)}`,
-            true,
           );
         }
       } finally {

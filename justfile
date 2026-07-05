@@ -74,6 +74,12 @@ trace-status:
         -X POST "$PHOENIX_HOST/graphql" \
         -d "{\"query\":\"{ projects { edges { node { name traceCount } } } }\"}"' | head -c 400; echo
 
+# Phoenix 秒开:SSH 隧道直连上海源站(公网走 CF 境外边缘绕地球,重得没法用)。
+# 开着这个命令时浏览器访问 http://localhost:6006 ;Ctrl-C 断开。
+phoenix:
+    @echo "Phoenix → http://localhost:6006  (登录 owner@inotoday.asia;Ctrl-C 断开隧道)"
+    ssh -N craft-server
+
 # 生产 searxng 实测(静默死自检)
 searxng-test:
     ssh craft-server 'curl -s --max-time 25 "http://127.0.0.1:8080/search?q=resistor&format=json"' \

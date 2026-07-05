@@ -222,6 +222,9 @@ function isInventoryLookupTool(tool: ToolEventSummary): boolean {
     )
 }
 
+// 平台 = 真货源渠道。注意:WebSearch/WebFetch 不算平台——业务 SOP 第 0 步
+// 明确要求先上网"认料"(型号背景,≤3 次,不作货源证据),再查内部库存。
+// 把认料计入平台曾造成大面积假违规(回归池 2/3 假红 + 产线 50+ 虚高)。
 function isPlatformSearchTool(tool: ToolEventSummary): boolean {
   if (tool.type !== 'tool_start') return false
   const text = toolIntentText(tool)
@@ -230,8 +233,12 @@ function isPlatformSearchTool(tool: ToolEventSummary): boolean {
     || text.includes('browserdepot')
     || text.includes('scrape-engine')
     || text.includes('engine.py')
-    || toolNameMatches(tool, 'WebSearch')
-    || toolNameMatches(tool, 'WebFetch')
+}
+
+/** 认料工具:联网查型号背景。SOP 允许在库存前用,但限量(maxWebCalls)。 */
+function isWebCognitionTool(tool: ToolEventSummary): boolean {
+  return tool.type === 'tool_start'
+    && (toolNameMatches(tool, 'WebSearch') || toolNameMatches(tool, 'WebFetch'))
 }
 
 function isSupplierShortlistTool(tool: ToolEventSummary): boolean {
@@ -355,6 +362,10 @@ export const traceContractEvaluator = asExperimentEvaluator({
     if (typeof trace.maxToolErrors === 'number' && toolErrorCount > trace.maxToolErrors) {
       failures.push(`too many tool errors: ${toolErrorCount} > ${trace.maxToolErrors}`)
     }
+    const webCallCount = countToolStarts(tools, isWebCognitionTool)
+    if (typeof trace.maxWebCalls === 'number' && webCallCount > trace.maxWebCalls) {
+      failures.push(`too many web cognition calls: ${webCallCount} > ${trace.maxWebCalls}`)
+    }
 
     const passed = failures.length === 0
 
@@ -363,7 +374,7 @@ export const traceContractEvaluator = asExperimentEvaluator({
       passed
         ? 'trace contract satisfied'
         : failures.join('; '),
-      { inventoryIndex, platformIndex, supplierIndex, toolCallCount, bashCallCount, toolErrorCount },
+      { inventoryIndex, platformIndex, supplierIndex, toolCallCount, bashCallCount, toolErrorCount, webCallCount },
     )
   },
 })

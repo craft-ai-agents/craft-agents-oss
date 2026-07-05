@@ -1,6 +1,8 @@
 # 回归池:只收经过归因的真实生产故障。目标通过率 95-100%,发版闸门。
 # 铁律:断言只写行为形状(工具选择/顺序/零错误)和稳定标识(型号),
 # 绝不写易变业务值(价格/库存数/供应商名)——那是拿活数据铸死模具,eval 自己会烂。
+# 口径对齐业务 SOP(AGENTS.md 找料流程):第 0 步允许 WebSearch 认料(≤3 次,
+# 不作货源证据),所以不禁认料、只限量;禁的是"库存前上平台找货"(browserdepot)。
 #
 # 首批三条源自 2026-07-06 生产审计(121 次飞书工具调用,19 错):
 #   norm(NULL) 引擎 bug ×14、斜杠列名裸写 ×4、SQL 通道整体 28% 错误率 → record-search 首选。
@@ -21,23 +23,21 @@
       inventoryFirst: true
       forbidPlatformBeforeInventory: true
       maxToolErrors: 0
-      maxToolCalls: 12
+      maxToolCalls: 14
       maxBashCalls: 8
+      maxWebCalls: 3
     toolCalls:
       requiredSkills:
         - procurement-local-inventory-lookup
       requiredSearchTerms:
         - mt41k
-      forbiddenTools:
-        - WebSearch
-        - WebFetch
     answer:
       requiredTerms:
         - MT41K256M16TW
       mustMentionInternalSource: true
   assertions:
     - type: code
-      criterion: 小写带空格的型号变体必须命中本地库存(norm 归一),全程零工具错误,不碰联网搜索
+      criterion: 小写带空格的型号变体必须命中本地库存(norm 归一),全程零工具错误;认料限量(≤3)、库存前不上平台
 
 - id: reg-20260706-slash-column-price-query
   category: procurement_regression
@@ -55,14 +55,12 @@
       inventoryFirst: true
       forbidPlatformBeforeInventory: true
       maxToolErrors: 0
+      maxWebCalls: 3
     toolCalls:
       requiredSkills:
         - procurement-local-inventory-lookup
       requiredSearchTerms:
         - mt41k256m16tw-107
-      forbiddenTools:
-        - WebSearch
-        - WebFetch
     answer:
       requiredTerms:
         - MT41K256M16TW
@@ -87,6 +85,7 @@
       inventoryFirst: true
       forbidPlatformBeforeInventory: true
       maxToolErrors: 0
+      maxWebCalls: 3
     toolCalls:
       requiredSkills:
         - procurement-local-inventory-lookup
@@ -94,9 +93,6 @@
         - lm358
       forbiddenCommands:
         - query sql
-      forbiddenTools:
-        - WebSearch
-        - WebFetch
     answer:
       requiredTerms:
         - LM358

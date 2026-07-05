@@ -17,6 +17,8 @@ export interface EvalTraceExpected {
   maxBashCalls?: number
   /** 工具错误数上限(回归 case 用 0 断言"这条路径不再炸")。 */
   maxToolErrors?: number
+  /** 认料(WebSearch/WebFetch)次数上限——业务 SOP 第 0 步允许联网认料但限量。 */
+  maxWebCalls?: number
 }
 
 export interface EvalToolCallsExpected {
