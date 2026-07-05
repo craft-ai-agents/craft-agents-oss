@@ -37,10 +37,10 @@ eval-dry:
     cd packages/eval && env $(grep -v '^#' .env.phoenix | xargs) \
       bun run src/cli.ts --runner dry-run --dataset craft-regressions --phoenix-dry-run
 
-# capability 套件(100 case,量能力水位;跑一轮很贵,手动专用)
-eval-capability *ARGS:
+# 替代料标注集(20 case 黄金参考答案)
+eval-substitutes *ARGS:
     cd packages/eval && env $(grep -v '^#' .env.phoenix | xargs) \
-      bun run src/cli.ts --cases cases/procurement.yaml --scenario inventory --dataset craft-capability {{ARGS}}
+      bun run src/cli.ts --cases cases/procurement-substitutes.yaml --scenario substitutes --dataset craft-substitutes {{ARGS}}
 
 # 确保本地 eval workspace 存在(real runner 前置)
 eval-workspace:

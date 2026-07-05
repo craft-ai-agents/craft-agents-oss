@@ -12,8 +12,6 @@
   "scripts": {
     "eval": "bun run src/cli.ts",
     "workspace:ensure": "bun run src/scripts/ensure-eval-workspace.ts",
-    "sample:procurement-base": "bun run src/scripts/sample-procurement-base.ts",
-    "generate:procurement-cases": "bun run src/scripts/generate-procurement-cases.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

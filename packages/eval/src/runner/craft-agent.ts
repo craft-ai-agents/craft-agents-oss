@@ -72,6 +72,8 @@ export interface CraftAgentRunnerOptions {
   workspaceId: string
   permissionMode: PermissionMode
   timeoutMs: number
+  /** 串行跑时给每个 case 的 turn span 打 eval.case.* 标签(进程级 env,并发不安全)。 */
+  tagTurnSpans?: boolean
 }
 
 function collectToolEvent(event: SessionEvent): ToolEventSummary | null {
@@ -153,13 +155,16 @@ export async function runCraftAgentCase(
   ensureHeadlessPlatform()
   ensureProjectSkills(input.skillSlugs)
 
-  // 每个 case 的 agent turn span 都带上 case 标签,craft-eval 项目里按
-  // eval.case.id 一筛即得——治"实验 run 和 agent trace 互相找不到"的散乱。
-  // 依赖 case 串行(cli 对 real runner 钳制 concurrency=1)。
-  process.env.CRAFT_OTEL_EXTRA_ATTRS = JSON.stringify({
-    'eval.case.id': input.id,
-    'eval.case.name': input.name,
-  })
+  // 串行跑时给每个 case 的 turn span 打标签(进程级 env,并发会互相踩)。
+  // 并发跑靠 run 输出的 sessionId ↔ span 的 session.id 属性互相定位。
+  if (options.tagTurnSpans) {
+    process.env.CRAFT_OTEL_EXTRA_ATTRS = JSON.stringify({
+      'eval.case.id': input.id,
+      'eval.case.name': input.name,
+    })
+  } else {
+    delete process.env.CRAFT_OTEL_EXTRA_ATTRS
+  }
 
   // 无人值守:掐掉 ask_user 这类交互工具(经 spawn 链传给子进程)。
   // 否则 agent 以提问收尾,回合挂在 auth_request 上,finalAnswer 永远为空。

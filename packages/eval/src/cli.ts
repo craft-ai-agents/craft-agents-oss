@@ -6,7 +6,8 @@ import { loadEvalCases } from './cases'
 import { getEvaluators, EVALUATOR_SETS } from './evaluators'
 import { runPhoenixEval } from './phoenix'
 
-// 默认 = 回归池(发版闸,小而硬);capability 套件(procurement.yaml 等)显式 --cases 才跑
+// 默认 = 回归池(发版闸,小而硬)。case 只收黄金数据:真实故障沉淀 + 人工标注参考答案,
+// 不收合成/生成的(历史教训:100 条 Base 快照生成 case 随活数据漂移烂掉,已删)。
 const DEFAULT_CASES_FILE = fileURLToPath(new URL('../cases/procurement-regressions.yaml', import.meta.url))
 
 interface CliOptions {
@@ -65,13 +66,10 @@ function parseArgs(args: string[]): CliOptions {
     throw new Error(`Unknown --scenario ${scenario}. Available: ${Object.keys(EVALUATOR_SETS).join(', ')}`)
   }
 
-  // real runner 强制串行:per-case 的 trace 标签走进程级 env(CRAFT_OTEL_EXTRA_ATTRS),
-  // 并发会互相踩;真 agent 并发跑也会互抢本地 larkdepot/浏览器资源。
-  const rawConcurrency = readNumber(args, '--concurrency', 1)
-  const concurrency = runner === 'real' ? 1 : rawConcurrency
-  if (runner === 'real' && rawConcurrency > 1) {
-    console.warn(`--concurrency ${rawConcurrency} ignored for real runner; clamped to 1`)
-  }
+  // real runner 默认并发 3(黄金集小,几分钟出闸)。per-case trace 标签走进程级
+  // env,只在串行(concurrency=1)时打;并发时靠 run 输出的 sessionId ↔ span 的
+  // session.id 属性互相定位,每 case 独立 SessionManager,互不冲突。
+  const concurrency = readNumber(args, '--concurrency', runner === 'real' ? 3 : 1)
 
   return {
     casesFile: resolve(casesFile),
@@ -129,6 +127,7 @@ async function main() {
           workspaceId: options.workspaceId!,
           permissionMode: options.permissionMode,
           timeoutMs: options.timeoutMs,
+          tagTurnSpans: options.concurrency === 1,
         }
       : undefined,
     repetitions: options.repetitions,
