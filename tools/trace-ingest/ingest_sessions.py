@@ -85,6 +85,73 @@ def _load_pi_usages(session_dir):
     return out
 
 
+# ============================================================
+# 产线评分(eval-at-ingest):入库时同步跑 code evaluators,分数挂根 span 属性。
+# 铁律:谓词只看工具的 name + input(agent 的意图),绝不看 result(世界的回声)——
+# 拿 result 判分会把"读过一篇提到 X 的文档"误判成"用了 X"。
+# ============================================================
+
+def _intent_text(e):
+    """工具意图文本:toolName + toolInput,小写。"""
+    name = e.get("toolName") or ""
+    try:
+        inp = json.dumps(e.get("toolInput") or {}, ensure_ascii=False)
+    except (TypeError, ValueError):
+        inp = ""
+    return (name + " " + inp).lower()
+
+
+def _is_inventory_intent(t):
+    return (("larkdepot" in t and ("+record-search" in t or "+record-list" in t or "query" in t))
+            or ("lark-cli" in t and "base" in t and "+record-" in t))
+
+
+def _is_platform_intent(t, name):
+    return (name in ("websearch", "webfetch")
+            or "browserdepot" in t
+            or "procurement-platform-search" in t)
+
+
+def evaluate_session(tool_entries):
+    """code evaluators:错误率 + 库存先行 + SQL 用量。返回扁平属性 dict。"""
+    calls = errors = inv = plat = sql = 0
+    first_inv_i = first_plat_i = -1
+    err_tools = {}
+    for i, e in enumerate(tool_entries):
+        t = _intent_text(e)
+        name = (e.get("toolName") or "").lower()
+        calls += 1
+        if e.get("isError"):
+            errors += 1
+            err_tools[e.get("toolName") or "?"] = err_tools.get(e.get("toolName") or "?", 0) + 1
+        if _is_inventory_intent(t):
+            inv += 1
+            if first_inv_i < 0:
+                first_inv_i = i
+        if _is_platform_intent(t, name):
+            plat += 1
+            if first_plat_i < 0:
+                first_plat_i = i
+        if "larkdepot" in t and "query" in t and "sql" in t:
+            sql += 1
+    # 保守口径:动了平台/联网搜索、却全程没碰过本地库存 → 违规(库存先行是业务铁律)。
+    # 只查库存不上平台、或两者都没有,都不算违规——不做用户意图猜测。
+    violation = plat > 0 and inv == 0
+    attrs = {
+        "eval.tool_calls": calls,
+        "eval.tool_errors": errors,
+        "eval.tool_error_rate": round(errors / calls, 4) if calls else 0.0,
+        "eval.inventory_calls": inv,
+        "eval.platform_calls": plat,
+        "eval.sql_calls": sql,
+        "eval.violation.platform_without_inventory": violation,
+    }
+    if err_tools:
+        attrs["eval.error_tool_names"] = ",".join(
+            f"{k}x{v}" for k, v in sorted(err_tools.items(), key=lambda kv: -kv[1])[:5])
+    return attrs
+
+
 def _openid_from_path(session_dir):
     """多用户布局 .../user-workspaces/<openid>/sessions/<id> → 抽 openid;非多用户返回 ''。"""
     parts = session_dir.replace("\\", "/").split("/")
@@ -139,6 +206,10 @@ def ingest_session(tracer, session_dir):
     root.set_attribute(OIK_SPAN_KIND, "CHAIN")
     root.set_attribute("session.id", os.path.basename(session_dir))
     root.set_attribute("session.name", name)
+    # 产线评分:code evaluators 的结果直接长在 trace 上,Phoenix 里按属性可筛
+    # (如 eval.violation.platform_without_inventory == true / eval.tool_error_rate > 0.2)
+    for k, v in evaluate_session(tool_entries).items():
+        root.set_attribute(k, v)
     openid = _openid_from_path(session_dir)
     if openid:
         root.set_attribute("user.id", openid)

@@ -1,5 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises'
-import { existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SessionManager, setSessionPlatform } from '@craft-agent/server-core/sessions'
@@ -41,6 +41,15 @@ let skillsLinked = false
 // agent 的 skill 扫描只认 SKILL.md,非 skill 文件(AGENTS.md/knowledge-base/scrape-engine)
 // 自动跳过。(生产那边 deploy 是 rsync 到远程机、不能软链;eval 本地可以。)skillSlugs 不再
 // 决定文件,只喂 `[skill:X]` 提示。整进程做一次。
+// eval 沙箱边界:可写业务系统的技能不进 eval workspace。
+// runner 默认 allow-all + 真凭据,一个跑飞的 case 不允许有"写飞书表/发单据/批量写回"
+// 这些武器可拿——回归池全是只读查询,摘掉写入型技能零损失。
+const WRITE_CAPABLE_SKILLS = new Set([
+  'procurement-feishu-table-fill',   // 写飞书表
+  'procurement-doc-export',          // 生成单据 + 发消息
+  'procurement-batch-orchestration', // 批量写回
+])
+
 function ensureProjectSkills(skillSlugs: string[] | undefined): void {
   if (!skillSlugs?.length || skillsLinked) return
 
@@ -48,9 +57,14 @@ function ensureProjectSkills(skillSlugs: string[] | undefined): void {
   const linkPath = join(REPO_ROOT, '.agents', 'skills')
   if (!existsSync(sourceTree)) return
 
-  mkdirSync(dirname(linkPath), { recursive: true }) // 确保 .agents/ 存在
+  // 逐技能软链(排除写入型),非技能共享文件(AGENTS.md/knowledge-base 等)照链——
+  // 真源仍是 procurement-skills/,改动即时生效,与整树软链同样零拷贝。
   rmSync(linkPath, { recursive: true, force: true }) // 去掉旧拷贝目录或旧软链
-  symlinkSync(sourceTree, linkPath)                  // .agents/skills → procurement-skills
+  mkdirSync(linkPath, { recursive: true })
+  for (const entry of readdirSync(sourceTree)) {
+    if (WRITE_CAPABLE_SKILLS.has(entry)) continue
+    symlinkSync(join(sourceTree, entry), join(linkPath, entry))
+  }
   skillsLinked = true
 }
 
@@ -138,6 +152,14 @@ export async function runCraftAgentCase(
   ensureConfigDir()
   ensureHeadlessPlatform()
   ensureProjectSkills(input.skillSlugs)
+
+  // 每个 case 的 agent turn span 都带上 case 标签,craft-eval 项目里按
+  // eval.case.id 一筛即得——治"实验 run 和 agent trace 互相找不到"的散乱。
+  // 依赖 case 串行(cli 对 real runner 钳制 concurrency=1)。
+  process.env.CRAFT_OTEL_EXTRA_ATTRS = JSON.stringify({
+    'eval.case.id': input.id,
+    'eval.case.name': input.name,
+  })
 
   const events: SessionEvent[] = []
   const toolEvents: ToolEventSummary[] = []

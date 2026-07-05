@@ -267,6 +267,21 @@ export class TurnTracer {
       if (ctx.sessionName) attrs['session.name'] = serialize(ctx.sessionName)
     }
 
+    // 宿主注入的额外标签(eval runner 用它给每个 case 的 turn 打 eval.case.id /
+    // eval.experiment,让实验 run 和 agent trace 在 Phoenix 里能互相定位)。
+    // 单进程串行跑 case 时安全;并发宿主自己保证别用这个机制。
+    const extraRaw = process.env.CRAFT_OTEL_EXTRA_ATTRS?.trim()
+    if (extraRaw) {
+      try {
+        const extra = JSON.parse(extraRaw) as Record<string, unknown>
+        for (const [k, v] of Object.entries(extra)) {
+          if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') attrs[k] = v
+        }
+      } catch {
+        // 非法 JSON 静默忽略——telemetry 永不影响业务路径
+      }
+    }
+
     return attrs
   }
 

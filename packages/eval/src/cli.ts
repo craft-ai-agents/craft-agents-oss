@@ -6,7 +6,8 @@ import { loadEvalCases } from './cases'
 import { getEvaluators, EVALUATOR_SETS } from './evaluators'
 import { runPhoenixEval } from './phoenix'
 
-const DEFAULT_CASES_FILE = fileURLToPath(new URL('../cases/procurement-substitutes.yaml', import.meta.url))
+// 默认 = 回归池(发版闸,小而硬);capability 套件(procurement.yaml 等)显式 --cases 才跑
+const DEFAULT_CASES_FILE = fileURLToPath(new URL('../cases/procurement-regressions.yaml', import.meta.url))
 
 interface CliOptions {
   casesFile: string
@@ -59,9 +60,17 @@ function parseArgs(args: string[]): CliOptions {
     ?? process.env.CRAFT_EVAL_CASES
     ?? DEFAULT_CASES_FILE
 
-  const scenario = readArg(args, '--scenario') ?? 'substitutes'
+  const scenario = readArg(args, '--scenario') ?? 'inventory'
   if (!(scenario in EVALUATOR_SETS)) {
     throw new Error(`Unknown --scenario ${scenario}. Available: ${Object.keys(EVALUATOR_SETS).join(', ')}`)
+  }
+
+  // real runner 强制串行:per-case 的 trace 标签走进程级 env(CRAFT_OTEL_EXTRA_ATTRS),
+  // 并发会互相踩;真 agent 并发跑也会互抢本地 larkdepot/浏览器资源。
+  const rawConcurrency = readNumber(args, '--concurrency', 1)
+  const concurrency = runner === 'real' ? 1 : rawConcurrency
+  if (runner === 'real' && rawConcurrency > 1) {
+    console.warn(`--concurrency ${rawConcurrency} ignored for real runner; clamped to 1`)
   }
 
   return {
@@ -78,7 +87,7 @@ function parseArgs(args: string[]): CliOptions {
     permissionMode: (readArg(args, '--permission-mode') ?? process.env.CRAFT_EVAL_PERMISSION_MODE ?? 'allow-all') as PermissionMode,
     timeoutMs: readNumber(args, '--timeout-ms', Number(process.env.CRAFT_EVAL_TIMEOUT_MS ?? 180_000)),
     repetitions: readNumber(args, '--repetitions', 1),
-    concurrency: readNumber(args, '--concurrency', 1),
+    concurrency,
     phoenixDryRun: readPhoenixDryRun(args),
     record: !hasFlag(args, '--no-record'),
   }

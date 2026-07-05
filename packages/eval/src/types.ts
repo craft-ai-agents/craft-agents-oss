@@ -15,6 +15,8 @@ export interface EvalTraceExpected {
   requiresSupplierShortlist?: boolean
   maxToolCalls?: number
   maxBashCalls?: number
+  /** 工具错误数上限(回归 case 用 0 断言"这条路径不再炸")。 */
+  maxToolErrors?: number
 }
 
 export interface EvalToolCallsExpected {
@@ -24,6 +26,8 @@ export interface EvalToolCallsExpected {
   requiredSearchFields?: string[]
   requiredSearchTerms?: string[]
   forbiddenTools?: string[]
+  /** 命令层禁令:任何 tool_start 的 intent 文本含这些子串即违规(如 "query sql")。 */
+  forbiddenCommands?: string[]
 }
 
 export interface EvalAnswerExpected {

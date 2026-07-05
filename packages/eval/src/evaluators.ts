@@ -23,6 +23,24 @@ function toolNameMatches(tool: ToolEventSummary, expected: string): boolean {
   return name.includes(expected.toLowerCase())
 }
 
+/**
+ * 工具"意图"文本:name + input,不含 result。
+ * 铁律:行为判定只看 agent 决定做什么(intent),不看世界回了什么(observation)。
+ * 拿 result 判分的历史后果:读一篇提到 scrape-engine 的文档 = 被判"用了平台搜索";
+ * larkdepot schema 输出列出所有表名 = 被判"查过每张表"。假通过/假失败双向漏。
+ */
+function toolIntentText(tool: ToolEventSummary): string {
+  return [
+    tool.toolName,
+    tool.input ? JSON.stringify(tool.input) : undefined,
+  ].filter(Boolean).join('\n').toLowerCase()
+}
+
+function allToolIntentText(tools: ToolEventSummary[]): string {
+  return tools.filter((tool) => tool.type === 'tool_start').map(toolIntentText).join('\n')
+}
+
+/** 全量文本(含 result)——只许显式解析产出的判分器用(平台覆盖率解析 engine payload)。 */
 function toolText(tool: ToolEventSummary): string {
   return [
     tool.toolName,
@@ -31,14 +49,10 @@ function toolText(tool: ToolEventSummary): string {
   ].filter(Boolean).join('\n').toLowerCase()
 }
 
-function allToolText(tools: ToolEventSummary[]): string {
-  return tools.map(toolText).join('\n')
-}
-
 function engineToolStartTexts(tools: ToolEventSummary[]): string[] {
   return tools
     .filter(isEngineToolStart)
-    .map(toolText)
+    .map(toolIntentText)
 }
 
 function hasExplicitSourceArg(text: string): boolean {
@@ -79,7 +93,7 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
 
 function isEngineToolStart(tool: ToolEventSummary): boolean {
   if (tool.type !== 'tool_start') return false
-  const text = toolText(tool)
+  const text = toolIntentText(tool)
   if (toolNameMatches(tool, 'procurement-platform-search') || toolNameMatches(tool, 'scrape-engine')) {
     return true
   }
@@ -188,8 +202,17 @@ function fieldValues(row: Record<string, unknown>, fields: string[]): string[] {
 }
 
 function isInventoryLookupTool(tool: ToolEventSummary): boolean {
-  const text = toolText(tool)
+  if (tool.type !== 'tool_start') return false
+  const text = toolIntentText(tool)
   return toolNameMatches(tool, 'procurement-local-inventory-lookup')
+    // larkdepot(本地缓存,现行首选):base +record-search/+record-list 或 query sql
+    || (
+      tool.type === 'tool_start'
+      && toolNameMatches(tool, 'Bash')
+      && text.includes('larkdepot')
+      && (text.includes('+record-search') || text.includes('+record-list') || text.includes('query'))
+    )
+    // lark-cli 直查飞书(降级路径)
     || (
       tool.type === 'tool_start'
       && toolNameMatches(tool, 'Bash')
@@ -197,19 +220,14 @@ function isInventoryLookupTool(tool: ToolEventSummary): boolean {
       && text.includes('base')
       && (text.includes('+record-search') || text.includes('+record-list') || text.includes('+record-get'))
     )
-    || (
-      tool.type === 'tool_start'
-      && toolNameMatches(tool, 'Bash')
-      && text.includes('feishu-db')
-      && text.includes('query')
-      && text.includes('--part')
-    )
 }
 
 function isPlatformSearchTool(tool: ToolEventSummary): boolean {
-  const text = toolText(tool)
+  if (tool.type !== 'tool_start') return false
+  const text = toolIntentText(tool)
   return toolNameMatches(tool, 'procurement-platform-search')
     || text.includes('procurement-platform-search')
+    || text.includes('browserdepot')
     || text.includes('scrape-engine')
     || text.includes('engine.py')
     || toolNameMatches(tool, 'WebSearch')
@@ -217,7 +235,8 @@ function isPlatformSearchTool(tool: ToolEventSummary): boolean {
 }
 
 function isSupplierShortlistTool(tool: ToolEventSummary): boolean {
-  const text = toolText(tool)
+  if (tool.type !== 'tool_start') return false
+  const text = toolIntentText(tool)
   return toolNameMatches(tool, 'procurement-supplier-shortlist')
     || text.includes('procurement-supplier-shortlist')
     || text.includes('tblbtumhfior6oss')
@@ -243,12 +262,12 @@ function includesAnyTerm(text: string, terms: string[]): boolean {
 function expectedToolPredicate(expected: string): (tool: ToolEventSummary) => boolean {
   return (tool) => {
     const normalized = expected.toLowerCase()
-    const text = toolText(tool)
+    const text = toolIntentText(tool)
     if (normalized === 'websearch' || normalized === 'webfetch') return toolNameMatches(tool, expected)
     if (normalized === 'procurement-local-inventory-lookup') return isInventoryLookupTool(tool)
     if (normalized === 'procurement-platform-search' || normalized === 'scrape-engine') return isPlatformSearchTool(tool)
     if (normalized === 'procurement-supplier-shortlist') return isSupplierShortlistTool(tool)
-    return toolNameMatches(tool, expected) || text.includes(normalized)
+    return toolNameMatches(tool, expected) || (tool.type === 'tool_start' && text.includes(normalized))
   }
 }
 
@@ -332,6 +351,10 @@ export const traceContractEvaluator = asExperimentEvaluator({
     if (typeof trace.maxBashCalls === 'number' && bashCallCount > trace.maxBashCalls) {
       failures.push(`too many Bash calls: ${bashCallCount} > ${trace.maxBashCalls}`)
     }
+    const toolErrorCount = tools.filter((tool) => tool.type === 'tool_result' && tool.isError).length
+    if (typeof trace.maxToolErrors === 'number' && toolErrorCount > trace.maxToolErrors) {
+      failures.push(`too many tool errors: ${toolErrorCount} > ${trace.maxToolErrors}`)
+    }
 
     const passed = failures.length === 0
 
@@ -340,7 +363,7 @@ export const traceContractEvaluator = asExperimentEvaluator({
       passed
         ? 'trace contract satisfied'
         : failures.join('; '),
-      { inventoryIndex, platformIndex, supplierIndex, toolCallCount, bashCallCount },
+      { inventoryIndex, platformIndex, supplierIndex, toolCallCount, bashCallCount, toolErrorCount },
     )
   },
 })
@@ -357,7 +380,7 @@ export const toolCallContractEvaluator = asExperimentEvaluator({
     }
 
     const tools = output.toolEvents
-    const text = allToolText(tools)
+    const text = allToolIntentText(tools)
     const failures: string[] = []
     const forbiddenHits: string[] = []
 
@@ -378,6 +401,9 @@ export const toolCallContractEvaluator = asExperimentEvaluator({
     }
     for (const forbiddenTool of contract.forbiddenTools ?? []) {
       if (tools.some(expectedToolPredicate(forbiddenTool))) forbiddenHits.push(forbiddenTool)
+    }
+    for (const command of contract.forbiddenCommands ?? []) {
+      if (includesTerm(text, command)) forbiddenHits.push(`cmd:${command}`)
     }
     if (forbiddenHits.length > 0) failures.push(`forbidden tools observed: ${forbiddenHits.join(', ')}`)
 
