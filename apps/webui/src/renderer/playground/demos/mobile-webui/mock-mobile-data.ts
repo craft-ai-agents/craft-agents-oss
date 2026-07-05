@@ -282,7 +282,7 @@ export const MOCK_LLM_CONNECTIONS: LlmConnectionWithStatus[] = [
     name: 'Anthropic',
     providerType: 'anthropic',
     authType: 'api_key',
-    defaultModel: 'claude-opus-4-7',
+    defaultModel: 'claude-opus-4-8',
     isAuthenticated: true,
     createdAt: now() - ONE_DAY,
   },

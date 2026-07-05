@@ -29,7 +29,7 @@ export async function handleSetSessionLabels(
         return errorResponse(
           `Labels rejected:\n${lines.join('\n')}\n\n` +
           `Available label IDs: ${available.join(', ')}.\n` +
-          `Use "id::value" only for labels configured with a valueType (number, date, or string).`
+          `Use "id::value" only for labels configured with a valueType (number, date, string, or link).`
         );
       }
       labels = resolved;

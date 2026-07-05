@@ -128,7 +128,6 @@ export const UpdatePreferencesSchema = z.object({
   city: z.string().optional().describe("The user's city"),
   region: z.string().optional().describe("The user's state/region/province"),
   country: z.string().optional().describe("The user's country"),
-  language: z.string().optional().describe("The user's preferred language for responses"),
   notes: z.string().optional().describe('Additional notes about the user that would be helpful to remember (preferences, context, etc.). Replaces any existing notes.'),
   includeCoAuthoredBy: z.boolean().optional().describe("Whether to include 'Co-Authored-By: Craft Agent' trailer on git commits. Defaults to true."),
 });
@@ -338,7 +337,7 @@ Use this whenever you need the user to decide between concrete choices instead o
 
 **IMPORTANT:** After calling this tool, execution pauses until the user picks. Do not call it again or continue until they respond.`,
 
-  update_user_preferences: `Update stored user preferences. Use this when you learn information about the user that would be helpful to remember for future conversations. This includes their name, timezone, location, preferred language, or any other relevant notes. Only update fields you have confirmed information about - don't guess.`,
+  update_user_preferences: `Update stored user preferences. Use this when you learn information about the user that would be helpful to remember for future conversations. This includes their name, timezone, location, or any other relevant notes. Only update fields you have confirmed information about - don't guess.`,
 
   transform_data: `Transform data files using a script and write structured output for datatable/spreadsheet blocks, or extract HTML content for html-preview blocks.
 

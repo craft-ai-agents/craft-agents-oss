@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/pi-agent-server",
-  "version": "0.10.0",
+  "version": "0.10.5",
   "license": "Apache-2.0",
   "description": "Out-of-process Pi agent server communicating via JSONL over stdio",
   "type": "module",
@@ -9,14 +9,14 @@
     "pi-agent-server": "./dist/index.js"
   },
   "scripts": {
-    "build": "bun build src/index.ts --outdir=dist --target=bun --format=esm --external koffi --external @mariozechner/pi-coding-agent --external @mariozechner/pi-ai --external @mariozechner/pi-ai/* --external @mariozechner/pi-agent-core --external @mariozechner/pi-tui",
+    "build": "bun build src/index.ts --outdir=dist --target=bun --format=esm --external koffi --external @earendil-works/pi-coding-agent --external @earendil-works/pi-ai --external @earendil-works/pi-ai/* --external @earendil-works/pi-agent-core --external @earendil-works/pi-tui",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "validate": "bun run typecheck && bun run build"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "0.73.1",
-    "@mariozechner/pi-agent-core": "0.73.1",
-    "@mariozechner/pi-ai": "0.73.1",
+    "@earendil-works/pi-coding-agent": "0.79.9",
+    "@earendil-works/pi-agent-core": "0.79.9",
+    "@earendil-works/pi-ai": "0.79.9",
     "duck-duck-scrape": "^2.2.7",
     "@sinclair/typebox": "^0.34.0",
     "node-html-parser": "^6.1.0",

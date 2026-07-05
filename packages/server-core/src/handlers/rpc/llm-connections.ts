@@ -156,6 +156,23 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         updates.authType = setup.bedrockAuthMethod
       }
 
+      // Resolved Anthropic OAuth identity (issue #838). Threaded through SETUP so
+      // it persists on both the new-connection path (addLlmConnection) and the
+      // re-auth path (updateLlmConnection) via the shared pendingConnection/updates
+      // flow below. Fail-soft: only stamp when at least one identity block arrived.
+      const oauthIdentity = setup.oauthIdentity
+      if (oauthIdentity?.account || oauthIdentity?.organization) {
+        // Set only fields that are actually present, so `updates` never carries an
+        // explicit `undefined` (matches the guarded-assignment style used above and
+        // keeps the update intent clean). Missing sub-fields are simply not touched;
+        // on re-auth the storage allowlist then preserves any prior value.
+        if (oauthIdentity.account?.uuid) updates.oauthAccountUuid = oauthIdentity.account.uuid
+        if (oauthIdentity.account?.emailAddress) updates.oauthAccountEmail = oauthIdentity.account.emailAddress
+        if (oauthIdentity.organization?.uuid) updates.oauthOrganizationUuid = oauthIdentity.organization.uuid
+        if (oauthIdentity.organization?.name) updates.oauthOrganizationName = oauthIdentity.organization.name
+        updates.oauthProfileVerifiedAt = Date.now()
+      }
+
       const effectiveProviderType = updates.providerType ?? connection.providerType
       if (effectiveProviderType === 'pi') {
         const isBedrockPi = (updates.piAuthProvider ?? connection.piAuthProvider) === 'amazon-bedrock'
@@ -359,7 +376,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   })
 
   server.handle(RPC_CHANNELS.pi.GET_PROVIDER_MODELS, async (_ctx, provider: string) => {
-    const { getModels } = await import('@mariozechner/pi-ai')
+    const { getModels } = await import('@earendil-works/pi-ai')
     try {
       const models = getModels(provider as Parameters<typeof getModels>[0])
       const sorted = [...models].sort((a, b) => b.cost.output - a.cost.output || b.cost.input - a.cost.input)
@@ -746,7 +763,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     error?: string
   }> => {
     try {
-      const { loginGitHubCopilot } = await import('@mariozechner/pi-ai/oauth')
+      const { loginGitHubCopilot } = await import('@earendil-works/pi-ai/oauth')
       const credentialManager = getCredentialManager()
 
       // Cancel any previous in-flight flow
@@ -759,17 +776,14 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       // the critical Copilot token exchange that determines the correct
       // API endpoint for the user's subscription tier (individual/business/enterprise).
       const credentials = await loginGitHubCopilot({
-        onAuth: (url, instructions) => {
-          // Extract user code from instructions (format: "Enter code: XXXX-YYYY")
-          const codeMatch = instructions?.match(/:\s*(\S+)/)
-          const userCode = codeMatch?.[1] ?? ''
+        onDeviceCode: ({ userCode, verificationUri }) => {
           deps.platform.logger?.info(`[GitHub OAuth] Device code: ${userCode}`)
           pushTyped(server, RPC_CHANNELS.copilot.DEVICE_CODE, { to: 'client', clientId: ctx.clientId }, {
             userCode,
-            verificationUri: url,
+            verificationUri,
           })
           // Open GitHub device code page on the client's machine
-          server.invokeClient(ctx.clientId, CLIENT_OPEN_EXTERNAL, url).catch(err => {
+          server.invokeClient(ctx.clientId, CLIENT_OPEN_EXTERNAL, verificationUri).catch(err => {
             deps.platform.logger?.warn(`Failed to open browser for GitHub OAuth: ${err}`)
           })
         },

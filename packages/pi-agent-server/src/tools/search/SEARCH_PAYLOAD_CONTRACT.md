@@ -35,6 +35,6 @@ The backend may reply with either JSON or SSE-like payloads depending on edge be
 
 If search starts failing again (HTTP or parse path):
 1. Verify this payload shape in tests (`providers/chatgpt.test.ts`).
-2. Compare against current upstream SDK behavior (`@mariozechner/pi-ai` codex responses provider).
+2. Compare against current upstream SDK behavior (`@earendil-works/pi-ai` codex responses provider).
 3. Confirm model remains codex-compatible (`gpt-5.x-codex` family).
 4. Inspect error fingerprint in thrown error (`tool/model/stream/tool_choice/text.verbosity`) and parse metadata (`content-type`, compact response snippet).

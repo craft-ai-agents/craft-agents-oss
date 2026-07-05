@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/server-core",
-  "version": "0.10.0",
+  "version": "0.10.5",
   "license": "Apache-2.0",
   "description": "Reusable headless server infrastructure for Craft Agent",
   "type": "module",
@@ -28,7 +28,7 @@
     "@arizeai/phoenix-otel": "^1.0.2",
     "@craft-agent/core": "workspace:*",
     "@craft-agent/shared": "workspace:*",
-    "@mariozechner/pi-ai": "0.73.1",
+    "@earendil-works/pi-ai": "0.79.9",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/exporter-trace-otlp-http": "0.218.0",
     "@opentelemetry/resources": "2.7.1",

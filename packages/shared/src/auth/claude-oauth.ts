@@ -11,6 +11,7 @@ import { randomBytes, createHash } from 'node:crypto'
 import { CLAUDE_OAUTH_CONFIG } from './claude-oauth-config'
 import { openUrl } from '../utils/open-url.ts'
 import { APP_VERSION } from '../version/index.ts'
+import { debug } from '../utils/debug.ts'
 
 // OAuth configuration from shared config
 const CLAUDE_CLIENT_ID = CLAUDE_OAUTH_CONFIG.CLIENT_ID
@@ -20,11 +21,59 @@ const REDIRECT_URI = CLAUDE_OAUTH_CONFIG.REDIRECT_URI
 const OAUTH_SCOPES = CLAUDE_OAUTH_CONFIG.SCOPES
 const STATE_EXPIRY_MS = 10 * 60 * 1000 // 10 minutes
 
-export interface ClaudeTokens {
+/**
+ * Resolved Anthropic identity returned alongside the OAuth tokens (issue #838).
+ * Populated from the token-exchange response when present; entirely optional and
+ * fail-soft — a missing block simply means no identity is surfaced in the UI.
+ */
+export interface ClaudeOAuthIdentity {
+  account?: {
+    uuid?: string
+    emailAddress?: string
+  }
+  organization?: {
+    uuid?: string
+    name?: string
+  }
+}
+
+export interface ClaudeTokens extends ClaudeOAuthIdentity {
   accessToken: string
   refreshToken?: string
   expiresAt?: number
   scopes?: string[]
+}
+
+// One-time guard so the runtime confirmation log (keys only, never values) fires
+// at most once per process — just enough to confirm the response shape on the
+// real `platform.claude.com` endpoint without spamming logs on every re-auth.
+let loggedTokenResponseShape = false
+
+/**
+ * Normalize the raw token-response identity blocks into {@link ClaudeOAuthIdentity}.
+ * Reads `email_address` with an `email` fallback (the exact field name is not
+ * fully confirmed on platform.claude.com — see the one-time keys-only log in
+ * {@link exchangeClaudeCode}). Returns an empty object when neither block is
+ * present, so it spreads cleanly into the token result.
+ */
+export function parseClaudeOAuthIdentity(data: {
+  account?: { uuid?: string; email_address?: string; email?: string }
+  organization?: { uuid?: string; name?: string }
+}): ClaudeOAuthIdentity {
+  const identity: ClaudeOAuthIdentity = {}
+  if (data.account) {
+    identity.account = {
+      uuid: data.account.uuid,
+      emailAddress: data.account.email_address ?? data.account.email,
+    }
+  }
+  if (data.organization) {
+    identity.organization = {
+      uuid: data.organization.uuid,
+      name: data.organization.name,
+    }
+  }
+  return identity
 }
 
 export interface ClaudeOAuthState {
@@ -194,6 +243,20 @@ export async function exchangeClaudeCode(
       refresh_token?: string
       expires_in?: number
       scope?: string
+      // Resolved identity (issue #838). Optional — read defensively.
+      account?: { uuid?: string; email_address?: string; email?: string }
+      organization?: { uuid?: string; name?: string }
+    }
+
+    // Runtime confirmation (issue #838): log the response KEYS ONLY — never
+    // values/secrets — once per process, to confirm `account`/`organization`
+    // are present on platform.claude.com and the exact nested field names
+    // (`email_address` vs `email`). Object.keys never emits secret values.
+    if (!loggedTokenResponseShape) {
+      loggedTokenResponseShape = true
+      debug('[claude-oauth] token response keys: ' + Object.keys(data).join(','))
+      if (data.account) debug('[claude-oauth] account keys: ' + Object.keys(data.account).join(','))
+      if (data.organization) debug('[claude-oauth] organization keys: ' + Object.keys(data.organization).join(','))
     }
 
     // Clear state after successful exchange
@@ -206,6 +269,7 @@ export async function exchangeClaudeCode(
       refreshToken: data.refresh_token,
       expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
       scopes: data.scope ? data.scope.split(' ') : ['user:inference', 'user:profile'],
+      ...parseClaudeOAuthIdentity(data),
     }
   } catch (error) {
     if (error instanceof Error) {

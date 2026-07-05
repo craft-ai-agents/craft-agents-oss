@@ -115,3 +115,47 @@ describe('updateLlmConnection – customEndpoint', () => {
     expect(conn.customEndpoint).toEqual({ api: 'anthropic-messages' })
   })
 })
+
+describe('updateLlmConnection – Anthropic OAuth identity (issue #838)', () => {
+  const identity = {
+    oauthAccountUuid: 'acct-uuid-123',
+    oauthAccountEmail: 'gyula@craft.do',
+    oauthOrganizationUuid: 'org-uuid-456',
+    oauthOrganizationName: 'Craft',
+    oauthProfileVerifiedAt: 1_700_000_000_000,
+  }
+
+  it('persists identity fields when provided in updates', () => {
+    const { runUpdate, readConnection } = setup([
+      makeConnection({ slug: 'claude-max', authType: 'oauth' }),
+    ])
+
+    const ok = runUpdate('claude-max', identity)
+    expect(ok).toBe(true)
+
+    const conn = readConnection('claude-max')
+    expect(conn.oauthAccountUuid).toBe(identity.oauthAccountUuid)
+    expect(conn.oauthAccountEmail).toBe(identity.oauthAccountEmail)
+    expect(conn.oauthOrganizationUuid).toBe(identity.oauthOrganizationUuid)
+    expect(conn.oauthOrganizationName).toBe(identity.oauthOrganizationName)
+    expect(conn.oauthProfileVerifiedAt).toBe(identity.oauthProfileVerifiedAt)
+  })
+
+  it('preserves identity across an unrelated update (the allowlist-rebuild bug guard)', () => {
+    const { runUpdate, readConnection } = setup([
+      makeConnection({ slug: 'claude-max', authType: 'oauth', ...identity }),
+    ])
+
+    // An update that touches none of the identity fields must not drop them.
+    const ok = runUpdate('claude-max', { name: 'Renamed Claude Max' })
+    expect(ok).toBe(true)
+
+    const conn = readConnection('claude-max')
+    expect(conn.name).toBe('Renamed Claude Max')
+    expect(conn.oauthAccountUuid).toBe(identity.oauthAccountUuid)
+    expect(conn.oauthAccountEmail).toBe(identity.oauthAccountEmail)
+    expect(conn.oauthOrganizationUuid).toBe(identity.oauthOrganizationUuid)
+    expect(conn.oauthOrganizationName).toBe(identity.oauthOrganizationName)
+    expect(conn.oauthProfileVerifiedAt).toBe(identity.oauthProfileVerifiedAt)
+  })
+})

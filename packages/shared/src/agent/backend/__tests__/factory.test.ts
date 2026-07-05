@@ -20,6 +20,7 @@ import {
   connectionTypeToProvider,
   connectionAuthTypeToBackendAuthType,
   providerTypeToAgentProvider,
+  resolveModelForProvider,
   resolveSetupTestConnectionHint,
   createBackendFromConnection,
   testBackendConnection,
@@ -337,6 +338,18 @@ describe('phase4 backend abstraction APIs', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('API key is required');
+  });
+});
+
+describe('resolveModelForProvider', () => {
+  it('falls back to the Pi connection default when a normalized stale model is not in the connection list', () => {
+    const connection = {
+      providerType: 'pi',
+      defaultModel: 'pi/claude-opus-4-7',
+      models: ['pi/claude-opus-4-7', 'pi/claude-sonnet-4-6'],
+    } as unknown as LlmConnection;
+
+    expect(resolveModelForProvider('pi', 'pi/claude-opus-4-6', connection)).toBe('pi/claude-opus-4-7');
   });
 });
 

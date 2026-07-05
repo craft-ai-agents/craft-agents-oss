@@ -100,8 +100,9 @@ export interface UserPreferences {
     region?: string;
     country?: string;
   };
-  language?: string;
   notes?: string;
+  /** Internal: mirrors Appearance → Language. Maintained by the main-process i18n IPC handler. */
+  uiLanguage?: string;
   updatedAt?: number;
 }
 

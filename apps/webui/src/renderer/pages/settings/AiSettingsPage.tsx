@@ -18,7 +18,7 @@ import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
 import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2, MessageSquareMore, Zap, Clock, Check } from 'lucide-react'
 import type { CredentialHealthStatus, CredentialHealthIssue } from '../../../shared/types'
-import { Spinner, FullscreenOverlayBase } from '@craft-agent/ui'
+import { Spinner, FullscreenOverlayBase, Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 import { motion, AnimatePresence } from 'motion/react'
@@ -196,9 +196,11 @@ interface ConnectionRowProps {
   onSetMidStreamBehavior: (behavior: MidStreamBehavior) => void
   validationState: ValidationState
   validationError?: string
+  /** True when another OAuth connection resolves to the same Anthropic account (issue #838) */
+  isDuplicateAccount?: boolean
 }
 
-function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
+function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, onSetMidStreamBehavior, validationState, validationError, isDuplicateAccount }: ConnectionRowProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
@@ -279,16 +281,38 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
     return parts.join(' · ')
   }
 
+  // Resolved Anthropic identity (issue #838): render `email · org` independently of
+  // validation state. It cannot live in getDescription() — that short-circuits for
+  // validating/success/error and would hide the identity during those states.
+  const oauthIdentityLine = connection.authType === 'oauth' && connection.oauthAccountEmail
+    ? [connection.oauthAccountEmail, connection.oauthOrganizationName].filter(Boolean).join(' · ')
+    : null
+
   return (
     <SettingsRow
       label={(
-        <div className="flex items-center gap-1">
-          <ConnectionIcon connection={connection} size={14} />
-          <span>{connection.name}</span>
-          {connection.isDefault && (
-            <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
-              {t("common.default")}
-            </span>
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <div className="flex items-center gap-1">
+            <ConnectionIcon connection={connection} size={14} />
+            <span>{connection.name}</span>
+            {connection.isDefault && (
+              <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-background shadow-minimal text-foreground/60">
+                {t("common.default")}
+              </span>
+            )}
+            {isDuplicateAccount && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex items-center" aria-label={t("settings.ai.duplicateAccount")}>
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{t("settings.ai.duplicateAccount")}</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+          {oauthIdentityLine && (
+            <span className="text-xs text-muted-foreground truncate">{oauthIdentityLine}</span>
           )}
         </div>
       )}
@@ -921,6 +945,17 @@ export default function AiSettingsPage() {
     return llmConnections.find(c => c.isDefault)
   }, [llmConnections])
 
+  // Anthropic account UUIDs that resolve from 2+ connections (issue #838).
+  // Surfaces a warning when several Claude connections share one account/quota.
+  const duplicateAccountUuids = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const conn of llmConnections) {
+      const uuid = conn.oauthAccountUuid
+      if (uuid) counts.set(uuid, (counts.get(uuid) ?? 0) + 1)
+    }
+    return new Set([...counts].filter(([, n]) => n > 1).map(([uuid]) => uuid))
+  }, [llmConnections])
+
   const defaultModel = defaultConnection?.defaultModel ?? ''
 
   // App-level default handlers
@@ -1100,6 +1135,7 @@ export default function AiSettingsPage() {
                         onSetMidStreamBehavior={(behavior) => handleSetMidStreamBehavior(conn, behavior)}
                         validationState={validationStates[conn.slug]?.state || 'idle'}
                         validationError={validationStates[conn.slug]?.error}
+                        isDuplicateAccount={!!conn.oauthAccountUuid && duplicateAccountUuids.has(conn.oauthAccountUuid)}
                       />
                     ))
                   )}

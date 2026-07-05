@@ -11,10 +11,11 @@
 
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Trash2, CalendarDays } from 'lucide-react'
+import { Trash2, CalendarDays, ExternalLink } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from './popover'
 import { Calendar } from './calendar'
 import { cn } from '@/lib/utils'
+import { openLabelLink } from '@/lib/open-label-link'
 import { parseDate } from 'chrono-node'
 import { format, parse } from 'date-fns'
 import type { LabelConfig } from '@craft-agent/shared/labels'
@@ -273,7 +274,7 @@ export function LabelValuePopover({
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleKeyDown}
               onBlur={commitValue}
-              placeholder={label.valueType === 'number' ? 'Enter number...' : 'Enter value...'}
+              placeholder={label.valueType === 'number' ? 'Enter number...' : label.valueType === 'link' ? 'Enter URL...' : 'Enter value...'}
               className={cn(
                 'w-full h-7 px-2 text-[13px]',
                 'bg-transparent',
@@ -284,8 +285,26 @@ export function LabelValuePopover({
           </div>
         )}
 
-        {/* Remove action — styled like StyledDropdownMenuItem destructive variant */}
+        {/* Actions — "Open link" (link labels only) shown above Remove */}
         <div className="p-1">
+          {label.valueType === 'link' && value && (
+            <button
+              type="button"
+              onClick={() => {
+                openLabelLink(value)
+                onOpenChange(false)
+              }}
+              className={cn(
+                'w-full flex items-center gap-2 px-2 py-1.5 rounded-[4px]',
+                'text-[13px] text-foreground',
+                'hover:bg-foreground/[0.03] focus:bg-foreground/[0.03]',
+                'transition-colors cursor-pointer outline-none'
+              )}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>{t('common.openLink')}</span>
+            </button>
+          )}
           <button
             ref={removeButtonRef}
             type="button"

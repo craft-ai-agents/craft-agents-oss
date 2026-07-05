@@ -1,6 +1,6 @@
 import { Type } from '@sinclair/typebox';
-import type { AgentToolResult } from '@mariozechner/pi-agent-core';
-import type { ToolDefinition } from '@mariozechner/pi-coding-agent';
+import type { AgentToolResult } from '@earendil-works/pi-agent-core';
+import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import TurndownService from 'turndown';
 import { parse as parseHtml } from 'node-html-parser';
 import { join } from 'node:path';
@@ -390,9 +390,9 @@ export function createWebFetchTool(
         // Use the final URL after redirects for all output messages
         const finalUrl = response.url || url;
 
-        const contentType = (response.headers.get('content-type') || '')
+        const contentType = ((response.headers.get('content-type') || '')
           .toLowerCase()
-          .split(';')[0]
+          .split(';')[0] ?? '')
           .trim();
 
         try {

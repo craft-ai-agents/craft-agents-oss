@@ -9,7 +9,7 @@ import {
   createLsToolDefinition,
   type ToolDefinition,
   type CreateAgentSessionOptions,
-} from '@mariozechner/pi-coding-agent';
+} from '@earendil-works/pi-coding-agent';
 import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { createWebFetchTool } from './tools/web-fetch.ts';
 import type { WebSearchProvider } from './tools/search/types.ts';
