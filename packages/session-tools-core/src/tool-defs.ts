@@ -534,11 +534,22 @@ export interface SessionToolFilterOptions {
  * Callers should use this helper instead of filtering ad hoc so tool visibility
  * stays consistent across Claude, Pi, and session-mcp-server backends.
  */
+/** 需要人在场才有意义的工具——无人值守宿主(eval runner 等)下不提供。 */
+const INTERACTIVE_TOOL_NAMES = new Set(['ask_user']);
+
 export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionToolDef[] {
   const includeDeveloperFeedback = options?.includeDeveloperFeedback ?? true;
+  // 无人值守宿主置 CRAFT_HEADLESS_NO_INTERACTIVE_TOOLS=1(spawn 链自然传递到
+  // pi-agent-server / session-mcp-server 子进程):环境里没有人,能"向人提问"的
+  // 工具就不该被提供——否则 agent 以 ask_user 收尾,回合挂在 auth_request 上
+  // 永远等不到答案(eval 首跑三条全灭于此)。
+  const dropInteractive = process.env.CRAFT_HEADLESS_NO_INTERACTIVE_TOOLS === '1';
 
   return SESSION_TOOL_DEFS.filter(def => {
     if (!includeDeveloperFeedback && def.name === 'send_developer_feedback') {
+      return false;
+    }
+    if (dropInteractive && INTERACTIVE_TOOL_NAMES.has(def.name)) {
       return false;
     }
     return true;

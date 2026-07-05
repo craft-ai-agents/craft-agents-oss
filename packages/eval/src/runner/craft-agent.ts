@@ -161,6 +161,10 @@ export async function runCraftAgentCase(
     'eval.case.name': input.name,
   })
 
+  // 无人值守:掐掉 ask_user 这类交互工具(经 spawn 链传给子进程)。
+  // 否则 agent 以提问收尾,回合挂在 auth_request 上,finalAnswer 永远为空。
+  process.env.CRAFT_HEADLESS_NO_INTERACTIVE_TOOLS = '1'
+
   const events: SessionEvent[] = []
   const toolEvents: ToolEventSummary[] = []
   const manager = new SessionManager()
