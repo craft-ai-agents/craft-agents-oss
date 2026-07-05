@@ -61,7 +61,7 @@ function parseArgs(args: string[]): CliOptions {
     ?? process.env.CRAFT_EVAL_CASES
     ?? DEFAULT_CASES_FILE
 
-  const scenario = readArg(args, '--scenario') ?? 'inventory'
+  const scenario = readArg(args, '--scenario') ?? 'regression'
   if (!(scenario in EVALUATOR_SETS)) {
     throw new Error(`Unknown --scenario ${scenario}. Available: ${Object.keys(EVALUATOR_SETS).join(', ')}`)
   }

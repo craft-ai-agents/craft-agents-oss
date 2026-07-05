@@ -1,15 +1,16 @@
 # 回归池:只收经过归因的真实生产故障。目标通过率 95-100%,发版闸门。
-# 铁律:断言只写行为形状(工具选择/顺序/零错误)和稳定标识(型号),
-# 绝不写易变业务值(价格/库存数/供应商名)——那是拿活数据铸死模具,eval 自己会烂。
-# 口径对齐业务 SOP(AGENTS.md 找料流程):第 0 步允许 WebSearch 认料(≤3 次,
-# 不作货源证据),所以不禁认料、只限量;禁的是"库存前上平台找货"(browserdepot)。
 #
-# 首批三条源自 2026-07-06 生产审计(121 次飞书工具调用,19 错):
-#   norm(NULL) 引擎 bug ×14、斜杠列名裸写 ×4、SQL 通道整体 28% 错误率 → record-search 首选。
+# 判分口径(2026-07-06 重建):真值对账,不判轨迹——
+#   expected.groundTruth.part 是 case 里唯一的业务标识,有没有货/哪些供应商/什么价
+#   由 harness 判分时现场查 larkdepot 计算(与 agent 同一份缓存,活数据漂移不烂 case)。
+#   有货说成没货 = fail;编造名录供应商 = fail;该报的型号/供应商/价格没报 = fail。
+#   工具怎么换、路径怎么走,判分器不感知。
+#
+# 首批三条源自 2026-07-06 生产审计(norm(NULL) ×14、斜杠列 ×4、SQL 通道 28% 错误率)。
 
 - id: reg-20260706-norm-variant-inventory-hit
   category: procurement_regression
-  name: 回归|型号变体写法照样先查中本地库存(norm 归一 + NULL 行安全)
+  name: 回归|型号变体写法照样查中本地库存(norm 归一 + NULL 行安全)
   input: 帮我查一下 mt41k 256m16tw-107 it:p 有没有现货
   metadata:
     source:
@@ -19,30 +20,19 @@
   skillSlugs:
     - procurement-local-inventory-lookup
   expected:
-    trace:
-      inventoryFirst: true
-      forbidPlatformBeforeInventory: true
+    execution:
       maxToolErrors: 0
-      maxToolCalls: 14
-      maxBashCalls: 8
-      maxWebCalls: 3
-    toolCalls:
-      requiredSkills:
-        - procurement-local-inventory-lookup
-      requiredSearchTerms:
-        - mt41k
-    answer:
-      requiredTerms:
-        - MT41K256M16TW
-      mustMentionInternalSource: true
+    groundTruth:
+      part: mt41k 256m16tw-107 it:p
+      minSupplierMentions: 2
   assertions:
     - type: code
-      criterion: 小写带空格的型号变体必须命中本地库存(norm 归一),全程零工具错误;认料限量(≤3)、库存前不上平台
+      criterion: 小写乱空格的变体写法也必须与库存事实对账一致(极性/型号/供应商召回),全程零工具错误
 
 - id: reg-20260706-slash-column-price-query
   category: procurement_regression
-  name: 回归|动态库存表价格查询不再被斜杠列名炸死
-  input: 动态库存表里 MT41K256M16TW-107 IT:P 的价格和供应商是谁?
+  name: 回归|动态库存表价格查询零错误且报出真实价格
+  input: MT41K256M16TW-107 IT:P 本地库存的价格和供应商是谁?
   metadata:
     source:
       failure: 列名 目标价/价格 裸写被当除法(生产 4 次);加引号后又踩 norm(NULL)
@@ -51,52 +41,32 @@
   skillSlugs:
     - procurement-local-inventory-lookup
   expected:
-    trace:
-      inventoryFirst: true
-      forbidPlatformBeforeInventory: true
+    execution:
       maxToolErrors: 0
-      maxWebCalls: 3
-    toolCalls:
-      requiredSkills:
-        - procurement-local-inventory-lookup
-      requiredSearchTerms:
-        - mt41k256m16tw-107
-    answer:
-      requiredTerms:
-        - MT41K256M16TW
-      mustMentionInternalSource: true
+    groundTruth:
+      part: MT41K256M16TW-107 IT:P
+      minSupplierMentions: 1
+      requirePriceMention: true
   assertions:
     - type: code
-      criterion: 查含斜杠列(目标价/价格)的表必须零工具错误拿到数据——列名细节不允许再漏给 agent 踩
+      criterion: 问价 case 必须零工具错误,且答案报出的价格/供应商与库存真值一致
 
-- id: reg-20260706-record-search-first-no-sql
+- id: reg-20260706-simple-lookup-truthful
   category: procurement_regression
-  name: 回归|简单库存查询走 record-search,不写 SQL
+  name: 回归|简单料号查询与库存事实一致(有货报货源,没货如实说)
   input: 查下 LM358 本地有没有货
   metadata:
     source:
-      failure: SQL 通道错误率 28%(列名漂移/引号),flag 通道≈0 → record-search 定为首选
-      fixedBy: larkdepot base +record-search + skill 查区重排(SQL 降级为聚合逃生舱)
+      failure: SQL 通道错误率 28%(列名漂移/引号)→ record-search 定为首选;空结果曾有降级实时重查的浪费
+      fixedBy: larkdepot base +record-search + skill 查区重排
       observedAt: '2026-07-06'
   skillSlugs:
     - procurement-local-inventory-lookup
   expected:
-    trace:
-      inventoryFirst: true
-      forbidPlatformBeforeInventory: true
+    execution:
       maxToolErrors: 0
-      maxWebCalls: 3
-    toolCalls:
-      requiredSkills:
-        - procurement-local-inventory-lookup
-      requiredSearchTerms:
-        - lm358
-      forbiddenCommands:
-        - query sql
-    answer:
-      requiredTerms:
-        - LM358
-      mustMentionInternalSource: true
+    groundTruth:
+      part: LM358
   assertions:
     - type: code
-      criterion: 简单单料号查询必须用 record-search(免 SQL);出现 query sql 即违规
+      criterion: 答案与库存真值对账一致——真值现场计算,有货没货都不许说反,零工具错误

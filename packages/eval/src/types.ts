@@ -8,72 +8,31 @@ export interface EvalAssertion {
   criterion: string
 }
 
-export interface EvalTraceExpected {
-  inventoryFirst?: boolean
-  forbidPlatformBeforeInventory?: boolean
-  requiresPlatformSearch?: boolean
-  requiresSupplierShortlist?: boolean
-  maxToolCalls?: number
-  maxBashCalls?: number
-  /** 工具错误数上限(回归 case 用 0 断言"这条路径不再炸")。 */
+/** 执行健康度断言(零工具名感知)。 */
+export interface EvalExecutionExpected {
+  /** 工具错误数上限;回归池默认 0("这条路径不再炸")。 */
   maxToolErrors?: number
-  /** 认料(WebSearch/WebFetch)次数上限——业务 SOP 第 0 步允许联网认料但限量。 */
-  maxWebCalls?: number
 }
 
-export interface EvalToolCallsExpected {
-  requiredSkills?: string[]
-  requiredTableIds?: string[]
-  requiredTableNames?: string[]
-  requiredSearchFields?: string[]
-  requiredSearchTerms?: string[]
-  forbiddenTools?: string[]
-  /** 命令层禁令:任何 tool_start 的 intent 文本含这些子串即违规(如 "query sql")。 */
-  forbiddenCommands?: string[]
-}
-
-export interface EvalAnswerExpected {
-  requiredTerms?: string[]
-  forbiddenTerms?: string[]
-  mustMentionInternalSource?: boolean
-}
-
-export interface EvalEvidenceExpected {
-  preserveFields?: string[]
-  missingFields?: string[]
-  missingFieldPolicy?: 'explicit_unknown'
-  missingFieldTerms?: string[]
-}
-
-export interface EvalPlatformExpected {
-  sourceIds?: string[]
-  requireAllSources?: boolean
-  allowImplicitAllSources?: boolean
-  minCoverageRatio?: number
-  requireAvailabilityReport?: boolean
-  requiredStatusTerms?: string[]
-  requiredReportFields?: string[]
-  requiredStructuredFields?: string[]
-  precisionSampleSize?: number
+/**
+ * 真值对账断言:判分时 harness 现场查 larkdepot 得地面真值,对账答案。
+ * 只写"查询词"这一个稳定标识——有没有货、哪些供应商、什么价,全部现场计算,
+ * 活数据漂移不烂 case(判分快照与 agent 查询同一份缓存)。
+ */
+export interface EvalGroundTruthExpected {
+  /** 查询词(可以是变体写法,record-search 内建 norm 归一)。 */
+  part: string
+  /** 答案至少报出几家真实供应商(默认 1;自动 min(要求, 真值供应商数))。 */
+  minSupplierMentions?: number
+  /** 要求答案报出至少一个真实价格数字(问价类 case 用)。 */
+  requirePriceMention?: boolean
 }
 
 export interface EvalExpected {
-  trace?: EvalTraceExpected
-  toolCalls?: EvalToolCallsExpected
-  answer?: EvalAnswerExpected
-  evidence?: EvalEvidenceExpected
-  platform?: EvalPlatformExpected
+  execution?: EvalExecutionExpected
+  groundTruth?: EvalGroundTruthExpected
   /** 替代料 labeled 参考答案(closed 集);存进 Phoenix example 的 expected。 */
   substitutes?: SubstitutesExpected
-
-  /**
-   * Legacy flat fields kept so older case files remain runnable.
-   */
-  localInventoryFirst?: boolean
-  forbidPlatformSearch?: boolean
-  requiresPlatformSearch?: boolean
-  requiresSupplierShortlist?: boolean
-  finalAnswerIncludes?: string[]
 }
 
 export interface EvalCase {
