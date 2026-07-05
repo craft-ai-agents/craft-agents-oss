@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { createClient } from '@arizeai/phoenix-client'
 import { createDataset, getDatasetExamples, getDatasetInfo } from '@arizeai/phoenix-client/datasets'
 import { runExperiment } from '@arizeai/phoenix-client/experiments'
@@ -26,25 +27,33 @@ export interface RunPhoenixEvalOptions {
 
 /**
  * dataset 复用语义(治"每跑一次建一个 dataset,列表全是碎片"):
- * - 同名 dataset 存在且 case id 集合完全一致 → 直接复用,零新建。
- * - case 集合变了 → 建 `<name>@YYYY-MM-DD` 新 dataset(显式、可追溯),旧的留作历史。
+ * - 同名 dataset 存在且 case **内容**(input+expected)完全一致 → 直接复用,零新建。
+ *   判据必须是内容哈希而非 id 集合——id 没变、expected 改了的 case 若复用旧集,
+ *   实验会拿旧断言判新行为(第 4 跑实锤翻车过)。
+ * - 内容变了 → 建 `<name>@YYYY-MM-DDTHH-mm` 新 dataset(显式、可追溯),旧的留历史。
  * - 不存在 → 按原名新建。
  */
+function exampleFingerprint(input: unknown, output: unknown): string {
+  return createHash('sha1')
+    .update(JSON.stringify(input) + '\u0000' + JSON.stringify(output))
+    .digest('hex')
+}
+
 async function ensureDataset(
   client: ReturnType<typeof createClient>,
   name: string,
   description: string,
   examples: Example[],
 ): Promise<string> {
-  const wantedIds = new Set(examples.map((e) => String(e.metadata?.id ?? '')))
+  const wanted = new Set(examples.map((e) => exampleFingerprint(e.input, e.output)))
   try {
     const info = await getDatasetInfo({ client, dataset: { datasetName: name } })
     const existing = await getDatasetExamples({ client, dataset: { datasetId: info.id } })
-    const existingIds = new Set(existing.examples.map((e) => String((e.metadata as Record<string, unknown>)?.id ?? '')))
-    const identical = existingIds.size === wantedIds.size && [...wantedIds].every((id) => existingIds.has(id))
+    const existingFps = new Set(existing.examples.map((e) => exampleFingerprint(e.input, e.output)))
+    const identical = existingFps.size === wanted.size && [...wanted].every((fp) => existingFps.has(fp))
     if (identical) return info.id
 
-    const datedName = `${name}@${new Date().toISOString().slice(0, 10)}`
+    const datedName = `${name}@${new Date().toISOString().slice(0, 16).replace(':', '-')}`
     const { datasetId } = await createDataset({ client, name: datedName, description, examples })
     return datasetId
   } catch {

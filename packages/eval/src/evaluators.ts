@@ -228,11 +228,14 @@ function isInventoryLookupTool(tool: ToolEventSummary): boolean {
 function isPlatformSearchTool(tool: ToolEventSummary): boolean {
   if (tool.type !== 'tool_start') return false
   const text = toolIntentText(tool)
+  // 文本分支必须限定 Bash:Read 平台技能文件时 file_path 含关键词,
+  // "读了关于平台的文档"不等于"上了平台"(产线 greeting 会话曾被误判违规)。
   return toolNameMatches(tool, 'procurement-platform-search')
-    || text.includes('procurement-platform-search')
-    || text.includes('browserdepot')
-    || text.includes('scrape-engine')
-    || text.includes('engine.py')
+    || (
+      toolNameMatches(tool, 'Bash')
+      && (text.includes('procurement-platform-search') || text.includes('browserdepot')
+        || text.includes('scrape-engine') || text.includes('engine.py'))
+    )
 }
 
 /** 认料工具:联网查型号背景。SOP 允许在库存前用,但限量(maxWebCalls)。 */

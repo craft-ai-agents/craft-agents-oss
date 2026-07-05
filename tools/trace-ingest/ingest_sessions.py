@@ -101,14 +101,19 @@ def _intent_text(e):
     return (name + " " + inp).lower()
 
 
-def _is_inventory_intent(t):
+def _is_inventory_intent(t, name):
+    """限定 Bash:Read 技能文件的路径含关键词不算"查了库存"。"""
+    if name != "bash":
+        return False
     return (("larkdepot" in t and ("+record-search" in t or "+record-list" in t or "query" in t))
             or ("lark-cli" in t and "base" in t and "+record-" in t))
 
 
-def _is_platform_intent(t):
-    """平台 = 真货源渠道。WebSearch/WebFetch 是"认料"(SOP 第 0 步允许在库存前用),
-    不算平台——曾把认料计入平台,产线违规数虚高。"""
+def _is_platform_intent(t, name):
+    """平台 = 真货源渠道,限定 Bash(Read 平台技能文件 ≠ 上平台)。
+    WebSearch/WebFetch 是"认料"(SOP 第 0 步允许库存前用),不算平台。"""
+    if name != "bash":
+        return False
     return "browserdepot" in t or "procurement-platform-search" in t
 
 
@@ -130,11 +135,11 @@ def evaluate_session(tool_entries):
             err_tools[e.get("toolName") or "?"] = err_tools.get(e.get("toolName") or "?", 0) + 1
             if name in ("websearch", "webfetch"):
                 web_errors += 1
-        if _is_inventory_intent(t):
+        if _is_inventory_intent(t, name):
             inv += 1
             if first_inv_i < 0:
                 first_inv_i = i
-        if _is_platform_intent(t):
+        if _is_platform_intent(t, name):
             plat += 1
             if first_plat_i < 0:
                 first_plat_i = i
