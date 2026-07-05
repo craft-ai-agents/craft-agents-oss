@@ -33,9 +33,23 @@ export interface RunPhoenixEvalOptions {
  * - 内容变了 → 建 `<name>@YYYY-MM-DDTHH-mm` 新 dataset(显式、可追溯),旧的留历史。
  * - 不存在 → 按原名新建。
  */
+/** 键序无关的规范化序列化——Phoenix 返回的 JSON 键序和本地不同,裸 stringify 永不相等,
+ *  会导致每跑都误判"内容变了"而新建 dataset(dataset 3→4 实锤过)。 */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']'
+  if (value && typeof value === 'object') {
+    return '{' + Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => JSON.stringify(k) + ':' + canonical(v))
+      .join(',') + '}'
+  }
+  return JSON.stringify(value)
+}
+
 function exampleFingerprint(input: unknown, output: unknown): string {
   return createHash('sha1')
-    .update(JSON.stringify(input) + '\u0000' + JSON.stringify(output))
+    .update(canonical(input) + '\u0000' + canonical(output))
     .digest('hex')
 }
 
