@@ -9,6 +9,17 @@ search:
   formats:
     - html
     - json
+  # Cap engine suspension at 5min. Defaults suspend CAPTCHA/denied engines for a
+  # DAY — one proxy outage poisons the in-memory error state and search stays
+  # silently dead long after the network recovers (bit us in prod: all engines
+  # suspended for weeks after a dead upstream, fixed only by container restart).
+  suspended_times:
+    SearxEngineAccessDenied: 300
+    SearxEngineCaptcha: 300
+    SearxEngineTooManyRequests: 300
+    cf_SearxEngineCaptcha: 300
+    cf_SearxEngineAccessDenied: 300
+    recaptcha_SearxEngineCaptcha: 300
 server:
   secret_key: "${SEARXNG_SECRET_KEY:-change-me-in-production}"
   bind_address: "0.0.0.0"
@@ -18,7 +29,10 @@ ui:
   static_use_hash: true
 # Disable bot detection — internal Docker network, no abuse risk.
 # Global outgoing proxy — engines reachable only through mihomo from domestic server.
+# mihomo runs natively on the HOST (systemd) since the docker→systemd migration;
+# 172.17.0.1 is the docker bridge gateway. `http://mihomo:7899` would only work
+# if mihomo were a compose service again — it is not.
 outgoing:
   proxies:
     all://:
-      - http://mihomo:7899
+      - http://172.17.0.1:7899
