@@ -214,6 +214,34 @@ def ingest_session(tracer, session_dir):
     return (n_tool, n_err, n_llm)
 
 
+def _load_state(path):
+    if not path or not os.path.exists(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_state(path, state):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def _quiesced(session_dir, quiesce_min):
+    """会话是否已静默(session.jsonl 距上次写入超过 quiesce_min 分钟)。
+    半途会话不灌:trace 一旦推给 Phoenix 就没法增补,只灌"已经结束"的会话。"""
+    import time
+    try:
+        mtime = os.path.getmtime(os.path.join(session_dir, "session.jsonl"))
+    except OSError:
+        return False
+    return (time.time() - mtime) >= quiesce_min * 60
+
+
 def main():
     ap = argparse.ArgumentParser(description="回灌 craft 会话到 Phoenix(OTLP)")
     ap.add_argument("--root", nargs="+",
@@ -224,6 +252,11 @@ def main():
     ap.add_argument("--api-key", default=os.environ.get("PHOENIX_API_KEY", ""),
                     help="开了 PHOENIX_ENABLE_AUTH 时必填(系统 API key);也可走 PHOENIX_API_KEY 环境变量")
     ap.add_argument("--limit", type=int, default=0, help="只灌前 N 个非空会话(0=全部)")
+    ap.add_argument("--state", default="",
+                    help="增量模式:状态文件路径。灌过的会话记档不再重灌(trace 不可增补,"
+                         "只灌静默期已过的完整会话);不给 = 老行为,全量回灌")
+    ap.add_argument("--quiesce-min", type=int, default=30,
+                    help="增量模式下,session.jsonl 最后写入距今超过 N 分钟才算会话结束(默认 30)")
     args = ap.parse_args()
 
     try:
@@ -235,6 +268,19 @@ def main():
     except ImportError:
         sys.exit("缺依赖。用:uv run --with opentelemetry-sdk --with opentelemetry-exporter-otlp-proto-http python3 ...")
 
+    # 增量模式先探活:Phoenix 不在 → 什么都不灌、状态不动(OTLP 导出失败是静默丢,
+    # 靠 force_flush 返回值兜不住,这里前置挡掉最常见的"服务没起"整类)
+    if args.state:
+        import urllib.error
+        import urllib.request
+        base = args.endpoint.split("/v1/")[0]
+        try:
+            urllib.request.urlopen(base, timeout=5)
+        except urllib.error.HTTPError:
+            pass  # 有 HTTP 响应(哪怕 401)= 服务活着
+        except Exception as e:  # noqa: BLE001 — 连接层失败一律视为不可达
+            sys.exit(f"Phoenix 不可达({base}: {e}),本班跳过")
+
     resource = Resource.create({"openinference.project.name": args.project})
     provider = TracerProvider(resource=resource)
     headers = {"authorization": f"Bearer {args.api_key}"} if args.api_key else None
@@ -243,9 +289,21 @@ def main():
     tracer = trace.get_tracer("craft-trace-ingest")
 
     dirs = find_session_dirs(args.root)
+    state = _load_state(args.state) if args.state else {}
+    newly = {}
     tot_sessions = tot_tool = tot_err = tot_llm = 0
+    import time as _time
     for d in dirs:
+        if args.state:
+            if d in state:
+                continue  # 已灌过,不重灌(trace 不可增补)
+            if not _quiesced(d, args.quiesce_min):
+                continue  # 会话可能还在进行,等下一班
         nt, ne, nl = ingest_session(tracer, d)
+        if args.state and (nt or nl):
+            # 只记非空会话;空会话不记档,等它后续有内容且静默后再灌
+            newly[d] = {"ingested_at": _time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "tool": nt, "err": ne, "llm": nl}
         if nt == 0 and nl == 0:
             continue  # 空会话跳过
         tot_sessions += 1
@@ -258,8 +316,16 @@ def main():
         if args.limit and tot_sessions >= args.limit:
             break
 
-    provider.force_flush()
+    flushed = provider.force_flush()
     provider.shutdown()
+    # 导出确认成功才记档:Phoenix 挂了 → 状态不动,下一班整批重来,不丢 trace。
+    if args.state and newly:
+        if flushed:
+            state.update(newly)
+            _save_state(args.state, state)
+        else:
+            print("!! 导出未确认(Phoenix 不可达?),本批不记档,下一班重灌", file=sys.stderr)
+            sys.exit(3)
     rate = f"{100 * (tot_tool - tot_err) / tot_tool:.1f}%" if tot_tool else "n/a"
     print(f"\n灌完:{tot_sessions} 会话 / {tot_tool} 工具调用(成功率 {rate})/ {tot_llm} LLM 回合")
     print(f"看:Phoenix → 项目 {args.project}(端点 {args.endpoint})")
