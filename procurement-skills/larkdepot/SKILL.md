@@ -21,7 +21,8 @@ metadata:
     larkdepot base +record-list --table-id <表名或tbl开头ID> [--limit 1-200] [--offset N]
     larkdepot base +field-list  --table-id <表名或tbl开头ID>
 
-- 复杂查询(跨表 UNION/聚合/变体匹配)用 `query sql`;`norm(列)`:去 `-`/`/`/空格+大写,型号变体匹配必用。
+- 复杂查询(跨表 UNION/聚合/变体匹配)用 `query sql`;`norm(列)`:去 `-`/`/`/空格+大写,型号变体匹配必用,NULL 行安全跳过。
+- **SQL 列名一律双引号**:业务表列名常带 `/` 空格 括号(如 `"目标价/价格"`、`"含税/未税"`、`"采购负责人 (人员 )"`),裸写被当除法/语法错;全引号零特例。
 - `--db cache`(默认)查飞书镜像;`--db state` 查本地写回事实源。
 - 多选/人员/附件列存原始 JSON 文本,`json_extract` 拆。
 - 输出一律是 larkdepot envelope(行对象数组);`freshness.age_s` 过大时提醒用户缓存偏旧(cron 定期 sync)。
