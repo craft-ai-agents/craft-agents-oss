@@ -1090,6 +1090,9 @@ export class SessionManager implements ISessionManager {
    * subprocess can race the resulting `chat` against the still-pending update.
    */
   private agentRefreshLocks: Map<string, Promise<void>> = new Map()
+
+  /** Idle agent sweep timer — armed only when CRAFT_SESSION_IDLE_TIMEOUT_MS > 0. */
+  private idleAgentSweepTimer: NodeJS.Timeout | null = null
   /** Monotonic clock to ensure strictly increasing message timestamps */
   private lastTimestamp = 0
 
@@ -1663,6 +1666,9 @@ export class SessionManager implements ISessionManager {
 
       // Load existing sessions from disk
       this.loadSessionsFromDisk()
+
+      // Reap idle per-session subprocesses (no-op unless the env knob is set)
+      this.startIdleAgentSweep()
 
       // Signal that initialization is complete — IPC handlers waiting on initGate will proceed
       this.initGate.markReady()
@@ -2828,6 +2834,57 @@ export class SessionManager implements ISessionManager {
     managed.backendRuntimeSignature = undefined
     managed.backendRestartSignature = undefined
     unregisterSessionScopedToolCallbacks(sessionId)
+  }
+
+  /**
+   * Idle agent reaper. Each session's agent runtime (Pi subprocess + MCP pool +
+   * pool server) stays alive after its last message so the next turn is instant —
+   * but nothing ever reclaimed it, so a long-running server accumulates one
+   * subprocess per touched session until the box runs out of memory. The sweep
+   * disposes runtimes idle past CRAFT_SESSION_IDLE_TIMEOUT_MS; the next message
+   * rebuilds transparently via getOrCreateAgent's `!managed.agent` branch (the
+   * same path connection-drift restarts already exercise). Unset/0 disables the
+   * sweep, preserving the always-warm behavior for desktop installs.
+   */
+  private startIdleAgentSweep(): void {
+    const idleMs = Number(process.env.CRAFT_SESSION_IDLE_TIMEOUT_MS ?? 0)
+    if (!Number.isFinite(idleMs) || idleMs <= 0) return
+    const sweepEvery = Math.max(60_000, Math.min(idleMs / 2, 5 * 60_000))
+    this.idleAgentSweepTimer = setInterval(() => {
+      this.sweepIdleAgents(idleMs).catch((error) => {
+        sessionLog.warn(`Idle agent sweep failed: ${error instanceof Error ? error.message : error}`)
+      })
+    }, sweepEvery)
+    sessionLog.info(`Idle agent sweep enabled: timeout=${idleMs}ms, sweep every ${sweepEvery}ms`)
+  }
+
+  private async sweepIdleAgents(idleMs: number): Promise<void> {
+    const now = Date.now()
+    for (const managed of this.sessions.values()) {
+      if (!managed.agent) continue
+      // Both gates matter: `managed.isProcessing` flips before getOrCreateAgent
+      // on the send path; `agent.isProcessing()` covers the subprocess side.
+      if (managed.isProcessing || managed.agent.isProcessing()) continue
+      if (now - (managed.lastMessageAt || 0) < idleMs) continue
+      if (this.agentRefreshLocks.has(managed.id)) continue // refresh in flight; next sweep
+      // Same lock discipline as tryRefreshAgentRuntime: the dispose is registered
+      // synchronously, so a concurrent send serializes behind it in
+      // tryRefreshAgentRuntime's inflight-await and then rebuilds from the
+      // `!managed.agent` branch.
+      const work = this.disposeManagedAgentRuntime(managed, 'idle timeout')
+      const tracked = work.then(() => undefined, () => undefined)
+      this.agentRefreshLocks.set(managed.id, tracked)
+      try {
+        await work
+        sessionLog.info(`Reaped idle agent runtime for session ${managed.id} (idle ${Math.round((now - managed.lastMessageAt) / 60_000)}min)`)
+      } catch (error) {
+        sessionLog.warn(`Failed to reap idle agent for ${managed.id}: ${error instanceof Error ? error.message : error}`)
+      } finally {
+        if (this.agentRefreshLocks.get(managed.id) === tracked) {
+          this.agentRefreshLocks.delete(managed.id)
+        }
+      }
+    }
   }
 
   /**
@@ -7624,6 +7681,12 @@ export class SessionManager implements ISessionManager {
     }
     this.deltaFlushTimers.clear()
     this.pendingDeltas.clear()
+
+    // Stop the idle agent sweep
+    if (this.idleAgentSweepTimer) {
+      clearInterval(this.idleAgentSweepTimer)
+      this.idleAgentSweepTimer = null
+    }
 
     // Clear pending credential resolvers (they won't be resolved, but prevents memory leak)
     this.pendingCredentialResolvers.clear()
