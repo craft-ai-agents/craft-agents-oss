@@ -97,11 +97,18 @@ function collectToolEvent(event: SessionEvent): ToolEventSummary | null {
   return null
 }
 
+// 业务 AGENTS.md 要求"结尾必须用 ask_user 出按钮"(飞书采购点选 UX)——
+// 无人值守评测里没人点按钮,该规则必须被显式覆盖,否则模型照章调用已被
+// 摘除的工具,吃一个 not found 错误挂在 maxToolErrors=0 上。
+const HEADLESS_EVAL_PREAMBLE =
+  '【自动评测环境】本会话无人值守:ask_user 等交互工具不可用,忽略"结尾用 ask_user 出选择题"的常规要求;'
+  + '不要询问下一步、不要出选项,直接给出完整、自含的最终答案并结束。'
+
 function buildMessage(input: EvalTaskInput): string {
   const skillMentions = input.skillSlugs?.length
     ? input.skillSlugs.map((slug) => `[skill:${slug}]`).join(' ')
     : undefined
-  return [skillMentions, input.context?.trim(), input.message]
+  return [skillMentions, HEADLESS_EVAL_PREAMBLE, input.context?.trim(), input.message]
     .filter(Boolean)
     .join('\n\n')
 }
