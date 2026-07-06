@@ -18,7 +18,7 @@ metadata:
 
 1. **结构化替代/对比证据**：
 
-   调用 `browserdepot` 取得替代或对比类结构化证据。
+   调用 `component-data` 取得替代或对比类结构化证据。
 
    若报价型号正好在返回的候选/对比证据里，直接读两边封装/引脚/电参数/温度等对比。
 
@@ -26,7 +26,7 @@ metadata:
 
    对两个型号各查一次结构化平台证据，拿厂牌、描述、封装、datasheet、产品页等字段。
 
-3. **datasheet / 原厂页**：上面给了 datasheet 链接，需要细规格（精度/温度/pin 定义）就打开核对。页面打不开/资料缺就记录为阻碍或需补充确认；平台采集细节仍交给 `browserdepot`。需要系统化搜原厂资料时读 [references/search-workflow.md](references/search-workflow.md)。
+3. **datasheet / 原厂页**：上面给了 datasheet 链接，需要细规格（精度/温度/pin 定义）就打开核对。页面打不开/资料缺就记录为阻碍或需补充确认；平台采集细节仍交给 `component-data`。需要系统化搜原厂资料时读 [references/search-workflow.md](references/search-workflow.md)。
 
 按品类锁定**关键规格项**：封装/引脚、核心电参数（电压/电流/精度/容值/阻值/功率/频率/速度）、Memory/接口/协议、温度等级、认证、生命周期。
 
