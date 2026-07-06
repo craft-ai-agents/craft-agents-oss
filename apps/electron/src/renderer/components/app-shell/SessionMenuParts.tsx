@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useTranslation } from "react-i18next"
 import { Check, Globe, Copy, RefreshCw, Link2Off } from 'lucide-react'
 import type { MenuComponents } from '@/components/ui/menu-context'
-import { getStatusIconStyle, type SessionStatusId, type SessionStatus } from '@/config/session-status-config'
+import { getStatusIconStyle, resolveStatusDisplayLabel, resolveLabelDisplayName, type SessionStatusId, type SessionStatus } from '@/config/session-status-config'
 import { sortLabelsForDisplay, type LabelConfig } from '@craft-agent/shared/labels'
 import { LabelIcon } from '@/components/ui/label-icon'
 
@@ -87,7 +87,7 @@ export function StatusMenuItems({
             <span style={getStatusIconStyle(state)}>
               {bareIcon}
             </span>
-            <span className="flex-1">{state.label}</span>
+            <span className="flex-1">{resolveStatusDisplayLabel(state, t)}</span>
           </MenuItem>
         )
       })}
@@ -147,7 +147,7 @@ export function LabelMenuItems({
             <Sub key={label.id}>
               <SubTrigger className="pr-2">
                 <LabelIcon label={label} size="sm" hasChildren />
-                <span className="flex-1">{label.name}</span>
+                <span className="flex-1">{resolveLabelDisplayName(label, t)}</span>
                 {subtreeCount > 0 && (
                   <span className="text-[10px] text-foreground/50 tabular-nums -mr-2.5">
                     {subtreeCount}
@@ -162,7 +162,7 @@ export function LabelMenuItems({
                   }}
                 >
                   <LabelIcon label={label} size="sm" hasChildren />
-                  <span className="flex-1">{label.name}</span>
+                  <span className="flex-1">{resolveLabelDisplayName(label, t)}</span>
                   <span className="w-3.5 ml-4">
                     {isApplied && <Check className="h-3.5 w-3.5 text-foreground" />}
                   </span>
@@ -183,7 +183,7 @@ export function LabelMenuItems({
             }}
           >
             <LabelIcon label={label} size="sm" />
-            <span className="flex-1">{label.name}</span>
+            <span className="flex-1">{resolveLabelDisplayName(label, t)}</span>
             <span className="w-3.5 ml-4">
               {isApplied && <Check className="h-3.5 w-3.5 text-foreground" />}
             </span>

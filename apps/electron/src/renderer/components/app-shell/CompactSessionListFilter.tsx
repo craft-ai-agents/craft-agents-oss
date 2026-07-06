@@ -255,7 +255,7 @@ export function CompactSessionListFilter({
                     icon={state.icon}
                     iconColor={colorize ? state.resolvedColor : undefined}
                     bareIcon
-                    label={state.label}
+                    label={resolveStatusDisplayLabel(state, t)}
                     mode={mode}
                     pinned={isPinned}
                     onTap={() => toggleStatus(state.id)}
@@ -279,10 +279,10 @@ export function CompactSessionListFilter({
                       item.parentPath ? (
                         <>
                           <span className="text-muted-foreground">{item.parentPath}</span>
-                          {item.label}
+                          {resolveLabelDisplayName(item.config, t)}
                         </>
                       ) : (
-                        item.label
+                        resolveLabelDisplayName(item.config, t)
                       )
                     }
                     mode={mode}
@@ -474,11 +474,11 @@ function PinnedSummary({
                   : pinnedStatus.icon}
               </span>
             }
-            label={pinnedStatus.label}
+            label={resolveStatusDisplayLabel(pinnedStatus, t)}
           />
         )}
         {pinnedLabel && (
-          <PinnedChip icon={<LabelIcon label={pinnedLabel} size="lg" />} label={pinnedLabel.name} />
+          <PinnedChip icon={<LabelIcon label={pinnedLabel} size="lg" />} label={resolveLabelDisplayName(pinnedLabel, t)} />
         )}
       </div>
     </div>

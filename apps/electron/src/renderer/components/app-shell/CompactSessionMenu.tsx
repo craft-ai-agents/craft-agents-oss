@@ -69,6 +69,8 @@ import {
   getStateColor,
   getStateIcon,
   getStatusIconStyle,
+  resolveStatusDisplayLabel,
+  resolveLabelDisplayName,
   type SessionStatus,
   type SessionStatusId,
 } from '@/config/session-status-config'
@@ -541,7 +543,7 @@ function StatusPane({
           <Row
             key={state.id}
             icon={<span style={getStatusIconStyle(state)}>{bareStateIcon}</span>}
-            label={state.label}
+            label={resolveStatusDisplayLabel(state, t)}
             radioSelected={activeStateId === state.id}
             onTap={() => onSelect(state.id)}
           />
@@ -573,9 +575,9 @@ function LabelsPane({
             label={item.parentPath ? (
               <>
                 <span className="text-foreground/50">{item.parentPath}</span>
-                {item.label}
+                {resolveLabelDisplayName(item.config, t)}
               </>
-            ) : item.label}
+            ) : resolveLabelDisplayName(item.config, t)}
             radioSelected={isApplied}
             onTap={() => onToggle(item.id)}
           />
