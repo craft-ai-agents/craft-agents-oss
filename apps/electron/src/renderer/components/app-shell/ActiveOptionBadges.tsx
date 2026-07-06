@@ -14,7 +14,7 @@ import { resolveEntityColor } from '@craft-agent/shared/colors'
 import { useTheme } from '@/context/ThemeContext'
 import { useDynamicStack } from '@/hooks/useDynamicStack'
 import type { SessionStatus } from '@/config/session-status-config'
-import { getState } from '@/config/session-status-config'
+import { getState, resolveStatusDisplayLabel } from '@/config/session-status-config'
 import { SessionStatusMenu } from '@/components/ui/session-status-menu'
 import { MetadataBadge } from '@/components/ui/metadata-badge'
 import { openLabelLink } from '@/lib/open-label-link'
@@ -256,6 +256,7 @@ function LabelBadge({
   sessionId?: string
 }) {
   const { isDark } = useTheme()
+  const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
 
   // Auto-open the value popover when this label was just added via # menu
@@ -285,7 +286,7 @@ function LabelBadge({
       sessionId={sessionId}
     >
       <MetadataBadge
-        label={label.name}
+        label={resolveLabelDisplayName(label, t)}
         value={displayValue}
         onValueClick={label.valueType === 'link' && value ? () => openLabelLink(value) : undefined}
         icon={<LabelIcon label={label} size="lg" />}
@@ -333,8 +334,7 @@ function StateBadge({
   const badgeColor = state.resolvedColor || 'var(--foreground)'
   const applyColor = state.iconColorable
 
-  const DEFAULT_STATUS_IDS = new Set(['backlog', 'todo', 'needs-review', 'done', 'cancelled'])
-  const stateLabel = DEFAULT_STATUS_IDS.has(state.id) ? t(`status.${state.id}`, state.label) : state.label
+  const stateLabel = resolveStatusDisplayLabel(state, t)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

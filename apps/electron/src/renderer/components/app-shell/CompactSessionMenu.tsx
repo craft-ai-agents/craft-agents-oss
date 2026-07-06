@@ -69,6 +69,8 @@ import {
   getStateColor,
   getStateIcon,
   getStatusIconStyle,
+  resolveStatusDisplayLabel,
+  resolveLabelDisplayName,
   type SessionStatus,
   type SessionStatusId,
 } from '@/config/session-status-config'
@@ -531,6 +533,7 @@ function StatusPane({
   activeStateId?: SessionStatusId | null
   onSelect: (id: SessionStatusId) => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="flex flex-col">
       {sessionStatuses.map((state) => {
@@ -541,7 +544,7 @@ function StatusPane({
           <Row
             key={state.id}
             icon={<span style={getStatusIconStyle(state)}>{bareStateIcon}</span>}
-            label={state.label}
+            label={resolveStatusDisplayLabel(state, t)}
             radioSelected={activeStateId === state.id}
             onTap={() => onSelect(state.id)}
           />
@@ -560,12 +563,14 @@ function LabelsPane({
   appliedLabelIds: Set<string>
   onToggle: (id: string) => void
 }) {
+  const { t } = useTranslation()
   // The Labels row in RootPane is gated on `hasLabels`, so this pane is only
   // ever entered when items.length > 0 — no empty-state branch needed.
   return (
     <div className="flex flex-col">
       {items.map((item) => {
         const isApplied = appliedLabelIds.has(item.id)
+        const displayName = resolveLabelDisplayName(item.config, t)
         return (
           <Row
             key={item.id}
@@ -573,9 +578,9 @@ function LabelsPane({
             label={item.parentPath ? (
               <>
                 <span className="text-foreground/50">{item.parentPath}</span>
-                {item.label}
+                {displayName}
               </>
-            ) : item.label}
+            ) : displayName}
             radioSelected={isApplied}
             onTap={() => onToggle(item.id)}
           />
