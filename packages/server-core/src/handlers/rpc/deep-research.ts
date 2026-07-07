@@ -32,10 +32,16 @@ function requireRunner(deps: HandlerDeps) {
   return deps.getDeepResearchRunner()
 }
 
+async function assertDeepResearchWrite(workspaceId: string): Promise<void> {
+  const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+  assertTeamPermission(resolveRootPath(workspaceId), 'agent.chat')
+}
+
 export function registerDeepResearchHandlers(server: RpcServer, deps: HandlerDeps): void {
   server.handle(
     RPC_CHANNELS.deepResearch.START,
     async (_ctx, workspaceId: string, input: StartDeepResearchRunInput): Promise<DeepResearchRunSnapshot> => {
+      await assertDeepResearchWrite(workspaceId)
       return requireRunner(deps).start(workspaceId, input)
     },
   )
@@ -57,6 +63,7 @@ export function registerDeepResearchHandlers(server: RpcServer, deps: HandlerDep
   server.handle(
     RPC_CHANNELS.deepResearch.APPROVE,
     async (_ctx, workspaceId: string, runId: string): Promise<DeepResearchRunSnapshot> => {
+      await assertDeepResearchWrite(workspaceId)
       return requireRunner(deps).approvePlan(workspaceId, runId)
     },
   )
@@ -69,6 +76,7 @@ export function registerDeepResearchHandlers(server: RpcServer, deps: HandlerDep
       runId: string,
       input: ReviseDeepResearchPlanInput,
     ): Promise<DeepResearchRunSnapshot> => {
+      await assertDeepResearchWrite(workspaceId)
       return requireRunner(deps).revisePlan(workspaceId, runId, input.feedback)
     },
   )
@@ -76,6 +84,7 @@ export function registerDeepResearchHandlers(server: RpcServer, deps: HandlerDep
   server.handle(
     RPC_CHANNELS.deepResearch.CANCEL,
     async (_ctx, workspaceId: string, runId: string): Promise<DeepResearchRunSnapshot> => {
+      await assertDeepResearchWrite(workspaceId)
       return requireRunner(deps).cancel(workspaceId, runId)
     },
   )
@@ -83,6 +92,7 @@ export function registerDeepResearchHandlers(server: RpcServer, deps: HandlerDep
   server.handle(
     RPC_CHANNELS.deepResearch.DELETE,
     async (_ctx, workspaceId: string, runId: string): Promise<boolean> => {
+      await assertDeepResearchWrite(workspaceId)
       const existing = readDeepResearchRun(resolveRootPath(workspaceId), runId)
       if (existing && existing.state === 'running') {
         throw new Error(`Cannot delete deep research run "${runId}" while it is running. Cancel it first.`)

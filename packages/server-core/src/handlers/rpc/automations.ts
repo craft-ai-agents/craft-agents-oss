@@ -26,6 +26,8 @@ interface AutomationsConfigJson { automations?: Record<string, Record<string, un
 async function withAutomationMatcher(workspaceId: string, eventName: string, matcherIndex: number, mutate: (matchers: Record<string, unknown>[], index: number, config: AutomationsConfigJson, genId: () => string) => void) {
   const workspace = getWorkspaceByNameOrId(workspaceId)
   if (!workspace) throw new Error('Workspace not found')
+  const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+  assertTeamPermission(workspace.rootPath, 'team.settings.update')
 
   await withConfigMutex(workspace.rootPath, async () => {
     const { resolveAutomationsConfigPath, generateShortId } = await import('@craft-agent/shared/automations/resolve-config-path')
@@ -100,6 +102,8 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
   server.handle(RPC_CHANNELS.automations.TEST, async (_ctx, payload: import('@craft-agent/shared/protocol').TestAutomationPayload) => {
     const workspace = getWorkspaceByNameOrId(payload.workspaceId)
     if (!workspace) throw new Error('Workspace not found')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'agent.chat')
 
     const results: import('@craft-agent/shared/protocol').TestAutomationActionResult[] = []
     const { parsePromptReferences } = await import('@craft-agent/shared/automations')
@@ -221,6 +225,8 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
   server.handle(RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE, async (_ctx, workspaceId: string, eventName: string, matcher: Record<string, unknown>) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'team.settings.update')
 
     await withConfigMutex(workspace.rootPath, async () => {
       const { resolveAutomationsConfigPath, generateShortId } = await import('@craft-agent/shared/automations/resolve-config-path')
@@ -320,6 +326,8 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
   server.handle(RPC_CHANNELS.automations.REPLAY, async (_ctx, workspaceId: string, automationId: string, eventName: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'agent.chat')
 
     const { resolveAutomationsConfigPath } = await import('@craft-agent/shared/automations/resolve-config-path')
     const configPath = resolveAutomationsConfigPath(workspace.rootPath)

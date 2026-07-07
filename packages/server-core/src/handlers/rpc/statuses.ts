@@ -23,6 +23,8 @@ export function registerStatusesHandlers(server: RpcServer, _deps: HandlerDeps):
   server.handle(RPC_CHANNELS.statuses.REORDER, async (_ctx, workspaceId: string, orderedIds: string[]) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'files.write')
 
     const { reorderStatuses } = await import('@craft-agent/shared/statuses')
     reorderStatuses(workspace.rootPath, orderedIds)

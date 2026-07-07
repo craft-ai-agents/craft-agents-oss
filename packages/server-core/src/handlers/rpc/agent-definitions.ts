@@ -107,6 +107,8 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
         const workspace = getWorkspaceByNameOrId(payload.activateInWorkspaceId)
         if (workspace) {
           try {
+            const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+            assertTeamPermission(workspace.rootPath, 'team.settings.update')
             setAgentActive(workspace.rootPath, payload.slug, true)
           } catch (err) {
             log.warn(`[agent-definitions] Failed to auto-activate "${payload.slug}" in workspace ${payload.activateInWorkspaceId}:`, err as Error)
@@ -134,6 +136,8 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
     return withAgentDefinitionsLibraryMutex(async () => {
       const workspace = getWorkspaceByNameOrId(workspaceId)
       if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+      assertTeamPermission(workspace.rootPath, 'team.settings.update')
       const manifest = setAgentActive(workspace.rootPath, slug, active)
       broadcastAgentDefinitionsChanged(deps, workspaceId)
       return { active: manifest.active }

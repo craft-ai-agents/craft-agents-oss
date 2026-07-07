@@ -74,6 +74,10 @@ export function registerWorkflowsHandlers(server: RpcServer, deps: HandlerDeps):
       if (payload.activateInWorkspaceId && !activationWorkspace) {
         throw new Error(`Workspace not found: ${payload.activateInWorkspaceId}`)
       }
+      if (activationWorkspace) {
+        const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+        assertTeamPermission(activationWorkspace.rootPath, 'team.settings.update')
+      }
 
       const loaded = writeGlobalWorkflow({
         slug: payload.slug,
@@ -103,6 +107,8 @@ export function registerWorkflowsHandlers(server: RpcServer, deps: HandlerDeps):
     return withLibraryMutex(async () => {
       const workspace = getWorkspaceByNameOrId(workspaceId)
       if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+      assertTeamPermission(workspace.rootPath, 'team.settings.update')
       if (active && !loadGlobalWorkflow(slug)) {
         throw new Error(`Workflow not found: ${slug}`)
       }

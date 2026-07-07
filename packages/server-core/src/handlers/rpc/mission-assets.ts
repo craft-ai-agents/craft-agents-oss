@@ -101,6 +101,8 @@ export function registerMissionAssetsHandlers(server: RpcServer, deps: HandlerDe
     RPC_CHANNELS.missionAssets.IMPORT,
     async (_ctx, workspaceId: string, filePaths: string[], options?: MissionAssetImportOptions): Promise<MissionAssetImportResult> => {
       const rootPath = resolveRootPath(workspaceId)
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+      assertTeamPermission(rootPath, 'files.write')
       return withWorkspaceMutex(rootPath, async () => {
         const result = await importMissionAssetsAsync(rootPath, workspaceId, filePaths, options ?? {})
         mirrorManifestToContext(rootPath, workspaceId, result.manifest, deps)
@@ -111,6 +113,8 @@ export function registerMissionAssetsHandlers(server: RpcServer, deps: HandlerDe
 
   server.handle(RPC_CHANNELS.missionAssets.SCAN, async (_ctx, workspaceId: string): Promise<MissionAssetScanResult> => {
     const rootPath = resolveRootPath(workspaceId)
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(rootPath, 'files.write')
     return withWorkspaceMutex(rootPath, async () => {
       const result = await scanMissionAssetsAsync(rootPath, workspaceId)
       mirrorManifestToContext(rootPath, workspaceId, result.manifest, deps)
@@ -120,6 +124,8 @@ export function registerMissionAssetsHandlers(server: RpcServer, deps: HandlerDe
 
   server.handle(RPC_CHANNELS.missionAssets.OPEN_FOLDER, async (ctx, workspaceId: string): Promise<boolean> => {
     const rootPath = resolveRootPath(workspaceId)
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(rootPath, 'files.write')
     const assetsRoot = getMissionAssetsRoot(rootPath)
     ensureMissionAssetsFolders(rootPath)
     const result = await requestClientOpenPath(server, ctx.clientId, assetsRoot)
