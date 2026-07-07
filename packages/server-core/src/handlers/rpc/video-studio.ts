@@ -60,6 +60,11 @@ function assertLocalWorkspace(workspaceId: string, action: string): void {
   if (workspace?.remoteServer) throw new Error(`${action} is not available for remote workspaces`);
 }
 
+async function assertVideoStudioPermission(workspaceId: string, action: 'files.write' | 'agent.chat'): Promise<void> {
+  const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
+  assertTeamPermission(resolveRootPath(workspaceId), action);
+}
+
 function serviceFor(server: RpcServer): OutputService {
   return new OutputService({
     getWorkspaceRootPath: resolveRootPath,
@@ -236,8 +241,9 @@ function parseJsonOutput(stdout: string, fallback: Record<string, unknown>): unk
   }
 }
 
-function runVideoStudioReport(server: RpcServer, workspaceId: string, outputId: string, command: 'inspect' | 'dry-run'): VideoStudioReportResult {
+async function runVideoStudioReport(server: RpcServer, workspaceId: string, outputId: string, command: 'inspect' | 'dry-run'): Promise<VideoStudioReportResult> {
   assertLocalWorkspace(workspaceId, `${command === 'inspect' ? 'Inspect' : 'Dry-run'} Video Studio project`);
+  await assertVideoStudioPermission(workspaceId, 'files.write');
   const service = serviceFor(server);
   const root = resolveRootPath(workspaceId);
   const output = service.get(workspaceId, outputId);
@@ -298,6 +304,7 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
     RPC_CHANNELS.videoStudio.IMPORT_MEDIA,
     async (ctx, workspaceId: string, outputId: string, options?: { mode?: 'files' | 'folder' }): Promise<VideoStudioImportResult> => {
       assertLocalWorkspace(workspaceId, 'Import Video Studio media');
+      await assertVideoStudioPermission(workspaceId, 'files.write');
       const mode = options?.mode === 'folder' ? 'folder' : 'files';
       const result = await requestClientOpenFileDialog(server, ctx.clientId, {
         properties: mode === 'folder' ? ['openDirectory'] : ['openFile', 'multiSelections'],
@@ -394,6 +401,7 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
     RPC_CHANNELS.videoStudio.EXPORT,
     async (_ctx, workspaceId: string, outputId: string, preset = 'simple-mp4'): Promise<VideoStudioExportResult> => {
       assertLocalWorkspace(workspaceId, 'Export Video Studio project');
+      await assertVideoStudioPermission(workspaceId, 'files.write');
       const service = serviceFor(server);
       const root = resolveRootPath(workspaceId);
       const output = service.get(workspaceId, outputId);
@@ -452,6 +460,7 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
     RPC_CHANNELS.videoStudio.RUN_AGENT,
     async (_ctx, workspaceId: string, outputId: string, prompt: string) => {
       assertLocalWorkspace(workspaceId, 'Run Video Studio agent');
+      await assertVideoStudioPermission(workspaceId, 'agent.chat');
       if (!prompt?.trim()) throw new Error('Agent prompt is required.');
       return {
         ok: true,

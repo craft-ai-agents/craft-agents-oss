@@ -96,6 +96,17 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
 
   server.handle(RPC_CHANNELS.agentDefinitions.UPSERT, async (_ctx, payload: UpsertAgentPayload): Promise<LoadedAgent> => {
     return withAgentDefinitionsLibraryMutex(async () => {
+      const activationWorkspace = payload.activateInWorkspaceId
+        ? getWorkspaceByNameOrId(payload.activateInWorkspaceId)
+        : null
+      if (payload.activateInWorkspaceId && !activationWorkspace) {
+        throw new Error(`Workspace not found: ${payload.activateInWorkspaceId}`)
+      }
+      if (activationWorkspace) {
+        const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+        assertTeamPermission(activationWorkspace.rootPath, 'team.settings.update')
+      }
+
       const loaded = writeGlobalAgent({
         slug: payload.slug,
         metadata: payload.metadata,
@@ -103,16 +114,11 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
       })
 
       // Auto-activate in the originating workspace by default.
-      if (payload.activateInWorkspaceId) {
-        const workspace = getWorkspaceByNameOrId(payload.activateInWorkspaceId)
-        if (workspace) {
-          try {
-            const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
-            assertTeamPermission(workspace.rootPath, 'team.settings.update')
-            setAgentActive(workspace.rootPath, payload.slug, true)
-          } catch (err) {
-            log.warn(`[agent-definitions] Failed to auto-activate "${payload.slug}" in workspace ${payload.activateInWorkspaceId}:`, err as Error)
-          }
+      if (activationWorkspace) {
+        try {
+          setAgentActive(activationWorkspace.rootPath, payload.slug, true)
+        } catch (err) {
+          log.warn(`[agent-definitions] Failed to auto-activate "${payload.slug}" in workspace ${payload.activateInWorkspaceId}:`, err as Error)
         }
       }
 
@@ -126,6 +132,11 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
       // Build the workspace list once — deleteGlobalAgent updates each one's
       // activation manifest in place.
       const workspaces = getWorkspaces()
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+      for (const workspace of workspaces) {
+        if (!readActivatedAgents(workspace.rootPath).active.includes(slug)) continue
+        assertTeamPermission(workspace.rootPath, 'team.settings.update')
+      }
       const ok = deleteGlobalAgent(slug, workspaces.map((w) => w.rootPath))
       if (ok) broadcastAgentDefinitionsChanged(deps, null)
       return ok

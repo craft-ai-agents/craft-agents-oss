@@ -97,6 +97,11 @@ export function registerWorkflowsHandlers(server: RpcServer, deps: HandlerDeps):
   server.handle(RPC_CHANNELS.workflows.DELETE, async (_ctx, slug: string): Promise<boolean> => {
     return withLibraryMutex(async () => {
       const workspaces = getWorkspaces()
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+      for (const workspace of workspaces) {
+        if (!readActivatedWorkflows(workspace.rootPath).active.includes(slug)) continue
+        assertTeamPermission(workspace.rootPath, 'team.settings.update')
+      }
       const ok = deleteGlobalWorkflow(slug, workspaces.map((w) => w.rootPath))
       if (ok) broadcastChanged(deps, null, loadAllGlobalWorkflows())
       return ok

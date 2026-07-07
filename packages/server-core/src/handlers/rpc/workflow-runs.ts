@@ -45,6 +45,11 @@ function requireRunner(deps: HandlerDeps) {
   return deps.getWorkflowRunner()
 }
 
+async function assertWorkflowRunPermission(workspaceId: string, action: 'agent.chat' | 'files.write'): Promise<void> {
+  const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+  assertTeamPermission(resolveRootPath(workspaceId), action)
+}
+
 export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDeps): void {
   server.handle(
     RPC_CHANNELS.workflowRuns.START,
@@ -54,6 +59,7 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
       workflowSlug: string,
       triggerInputs: Record<string, unknown>,
     ): Promise<WorkflowRunSnapshot> => {
+      await assertWorkflowRunPermission(workspaceId, 'agent.chat')
       const workspaceRoot = resolveRootPath(workspaceId)
       if (!readActivatedWorkflows(workspaceRoot).active.includes(workflowSlug)) {
         throw new Error(`Workflow "${workflowSlug}" is not active in this workspace.`)
@@ -82,6 +88,7 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
   server.handle(
     RPC_CHANNELS.workflowRuns.CANCEL,
     async (_ctx, workspaceId: string, runId: string): Promise<WorkflowRunSnapshot> => {
+      await assertWorkflowRunPermission(workspaceId, 'agent.chat')
       const runner = requireRunner(deps)
       return runner.cancel(workspaceId, runId)
     },
@@ -95,6 +102,7 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
       runId: string,
       stepId?: string,
     ): Promise<WorkflowRunSnapshot> => {
+      await assertWorkflowRunPermission(workspaceId, 'agent.chat')
       const workspaceRoot = resolveRootPath(workspaceId)
       const original = readRun(workspaceRoot, runId)
       if (!original) throw new Error(`Workflow run not found: ${runId}`)
@@ -115,6 +123,7 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
   server.handle(
     RPC_CHANNELS.workflowRuns.DELETE,
     async (_ctx, workspaceId: string, runId: string): Promise<boolean> => {
+      await assertWorkflowRunPermission(workspaceId, 'files.write')
       const rootPath = resolveRootPath(workspaceId)
       const existing = readRun(rootPath, runId)
       if (existing && existing.state === 'running') {

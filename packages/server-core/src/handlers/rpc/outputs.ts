@@ -166,6 +166,8 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
     RPC_CHANNELS.outputs.GET_VISUAL_BOARD,
     async (_ctx, workspaceId: string, sessionId: string): Promise<{ output: OutputManifest; board: VisualBoardSnapshot }> => {
       assertLocalWorkspace(workspaceId, 'Get visual board');
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
+      assertTeamPermission(resolveRootPath(workspaceId), 'files.write');
       return serviceFor(server).getOrCreateVisualBoard(workspaceId, sessionId);
     },
   );
