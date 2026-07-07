@@ -49,6 +49,11 @@ export function registerResourcesHandlers(server: RpcServer, deps: HandlerDeps):
     async (_ctx, workspaceId: string, bundle: ResourceBundle, mode: ResourceImportMode) => {
       const workspace = getWorkspaceByNameOrId(workspaceId)
       if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+      assertTeamPermission(workspace.rootPath, 'team.settings.update')
+      if (mode === 'overwrite' && (bundle.resources.sources?.length ?? 0) > 0) {
+        assertTeamPermission(workspace.rootPath, 'secrets.update')
+      }
 
       const { importResources } = await import('@craft-agent/shared/resources')
       const credManager = getCredentialManager()

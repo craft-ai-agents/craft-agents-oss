@@ -428,20 +428,22 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
 
   server.handle(RPC_CHANNELS.records.SCAN_PROVIDER_CONFLICTS, async (_ctx, workspaceId: string) => {
     const workspace = getWorkspaceOrThrow(workspaceId)
-    const [{ getTeamModeStatus }, { scanProviderConflictedCopies }] = await Promise.all([
+    const [{ assertTeamPermission, getTeamModeStatus }, { scanProviderConflictedCopies }] = await Promise.all([
       import('@craft-agent/shared/workspaces'),
       import('@craft-agent/shared/records'),
     ])
+    assertTeamPermission(workspace.rootPath, 'files.write')
     const status = getTeamModeStatus(workspace.rootPath)
     return scanProviderConflictedCopies(workspace.rootPath, { machineId: status.machine.machineId })
   })
 
   server.handle(RPC_CHANNELS.records.DETECT_CLOBBERS, async (_ctx, workspaceId: string) => {
     const workspace = getWorkspaceOrThrow(workspaceId)
-    const [{ getTeamModeStatus }, { detectClobberedWrites }] = await Promise.all([
+    const [{ assertTeamPermission, getTeamModeStatus }, { detectClobberedWrites }] = await Promise.all([
       import('@craft-agent/shared/workspaces'),
       import('@craft-agent/shared/records'),
     ])
+    assertTeamPermission(workspace.rootPath, 'files.write')
     const status = getTeamModeStatus(workspace.rootPath)
     return detectClobberedWrites(workspace.rootPath, status.machine.machineId)
   })

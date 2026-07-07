@@ -22,6 +22,11 @@ function resolveRootPath(workspaceId: string): string {
   return workspace.rootPath;
 }
 
+async function assertNotificationWritePermission(workspaceId: string): Promise<void> {
+  const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
+  assertTeamPermission(resolveRootPath(workspaceId), 'files.write');
+}
+
 function serviceFor(server: RpcServer): NotificationService {
   return new NotificationService({
     getWorkspaceRootPath: resolveRootPath,
@@ -41,6 +46,7 @@ export function registerNotificationsHandlers(server: RpcServer, _deps: HandlerD
   server.handle(
     RPC_CHANNELS.notifications.ACKNOWLEDGE,
     async (_ctx, workspaceId: string, id: string): Promise<NotificationEntry | null> => {
+      await assertNotificationWritePermission(workspaceId);
       return serviceFor(server).acknowledge(workspaceId, id);
     },
   );
@@ -48,6 +54,7 @@ export function registerNotificationsHandlers(server: RpcServer, _deps: HandlerD
   server.handle(
     RPC_CHANNELS.notifications.CLEAR,
     async (_ctx, workspaceId: string, id: string): Promise<boolean> => {
+      await assertNotificationWritePermission(workspaceId);
       return serviceFor(server).clear(workspaceId, id);
     },
   );
@@ -55,6 +62,7 @@ export function registerNotificationsHandlers(server: RpcServer, _deps: HandlerD
   server.handle(
     RPC_CHANNELS.notifications.CLEAR_ALL,
     async (_ctx, workspaceId: string): Promise<number> => {
+      await assertNotificationWritePermission(workspaceId);
       return serviceFor(server).clearAll(workspaceId);
     },
   );
@@ -67,6 +75,7 @@ export function registerNotificationsHandlers(server: RpcServer, _deps: HandlerD
       id: string,
       response: string,
     ): Promise<NotificationEntry | null> => {
+      await assertNotificationWritePermission(workspaceId);
       return serviceFor(server).recordResponse(workspaceId, id, response);
     },
   );

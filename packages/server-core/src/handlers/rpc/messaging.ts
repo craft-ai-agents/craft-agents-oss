@@ -3,12 +3,21 @@
  */
 
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import type { TeamPermissionAction } from '@craft-agent/shared/workspaces'
 import type { RpcServer } from '../../transport/types'
 import type { HandlerDeps } from '../handler-deps'
 
 export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps): void {
   const registry = deps.messagingRegistry
   if (!registry) return
+
+  async function assertWorkspacePermission(workspaceId: string, action: TeamPermissionAction): Promise<void> {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, action)
+  }
 
   server.handle(RPC_CHANNELS.messaging.GET_CONFIG, async (ctx) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
@@ -17,6 +26,7 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
 
   server.handle(RPC_CHANNELS.messaging.UPDATE_CONFIG, async (ctx, config: Record<string, unknown>) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await assertWorkspacePermission(ctx.workspaceId, 'team.settings.update')
     await registry.updateConfig(ctx.workspaceId, config)
     return { success: true }
   })
@@ -27,18 +37,21 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
 
   server.handle(RPC_CHANNELS.messaging.SAVE_TELEGRAM, async (ctx, token: string) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await assertWorkspacePermission(ctx.workspaceId, 'secrets.update')
     await registry.saveTelegramToken(ctx.workspaceId, token)
     return { success: true }
   })
 
   server.handle(RPC_CHANNELS.messaging.DISCONNECT, async (ctx, platform: string) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await assertWorkspacePermission(ctx.workspaceId, 'secrets.update')
     await registry.disconnectPlatform(ctx.workspaceId, platform)
     return { success: true }
   })
 
   server.handle(RPC_CHANNELS.messaging.FORGET, async (ctx, platform: string) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await assertWorkspacePermission(ctx.workspaceId, 'secrets.update')
     await registry.forgetPlatform(ctx.workspaceId, platform)
     return { success: true }
   })
@@ -50,28 +63,33 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
 
   server.handle(RPC_CHANNELS.messaging.GENERATE_CODE, async (ctx, sessionId: string, platform: string) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await assertWorkspacePermission(ctx.workspaceId, 'team.settings.update')
     return registry.generatePairingCode(ctx.workspaceId, sessionId, platform)
   })
 
   server.handle(RPC_CHANNELS.messaging.UNBIND, async (ctx, sessionId: string, platform?: string) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await assertWorkspacePermission(ctx.workspaceId, 'team.settings.update')
     registry.unbindSession(ctx.workspaceId, sessionId, platform)
     return { success: true }
   })
 
   server.handle(RPC_CHANNELS.messaging.UNBIND_BINDING, async (ctx, bindingId: string) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await assertWorkspacePermission(ctx.workspaceId, 'team.settings.update')
     return { success: registry.unbindBinding(ctx.workspaceId, bindingId) }
   })
 
   server.handle(RPC_CHANNELS.messaging.WA_START_CONNECT, async (ctx) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await assertWorkspacePermission(ctx.workspaceId, 'secrets.update')
     await registry.startWhatsAppConnect(ctx.workspaceId)
     return { success: true }
   })
 
   server.handle(RPC_CHANNELS.messaging.WA_SUBMIT_PHONE, async (ctx, phoneNumber: string) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await assertWorkspacePermission(ctx.workspaceId, 'secrets.update')
     await registry.submitWhatsAppPhone(ctx.workspaceId, phoneNumber)
     return { success: true }
   })
