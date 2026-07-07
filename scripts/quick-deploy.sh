@@ -16,6 +16,7 @@
 #   ./scripts/quick-deploy.sh --no-deps  # 跳过服务器 bun install（确定依赖没变、想快一点）
 #   ./scripts/quick-deploy.sh --no-build # 跳过本机构建（改了纯 TS 逻辑）
 #   ./scripts/quick-deploy.sh --allow-dirty  # 明知工作树脏仍部署（带 WIP，慎用）
+#   ./scripts/quick-deploy.sh --allow-branch # 明知当前分支非 main 仍部署（慎用）
 #
 # 正规化（2026-06-17）：单一全量部署路径，skill 跟随整体一起上（不单独部署）。
 #   - 默认**拒绝脏工作树**：全量部署会把整个工作目录推上生产，未提交的 WIP 也会跟着上。
@@ -35,13 +36,14 @@ cd "$ROOT"
 
 # 依赖默认装：依赖变了却忘了装 = 服务器起不来（Cannot find module）。这类崩溃靠默认消除，
 # lockfile 没变时 --frozen-lockfile 是秒级空跑。确定没改依赖想快可 --no-deps。
-DO_BUILD=1; DO_DEPS=1; ALLOW_DIRTY=0
+DO_BUILD=1; DO_DEPS=1; ALLOW_DIRTY=0; ALLOW_BRANCH=0
 for a in "$@"; do
   case "$a" in
     --no-build) DO_BUILD=0 ;;
     --no-deps) DO_DEPS=0 ;;
     --deps) DO_DEPS=1 ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
+    --allow-branch) ALLOW_BRANCH=1 ;;
   esac
 done
 
@@ -56,6 +58,13 @@ if [[ -n "$DIRTY" && "$ALLOW_DIRTY" == 0 ]]; then
 fi
 GIT_SHA="$(git rev-parse --short HEAD)"
 GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+
+# 正规化守卫：只允许从 main 部署，杜绝误把 feature/redesign 分支的半成品全量推上生产。
+if [[ "$GIT_BRANCH" != "main" && "$ALLOW_BRANCH" == 0 ]]; then
+  echo "✋ 当前分支是 $GIT_BRANCH，不是 main，全量部署会把该分支的工作树推上生产。"
+  echo "   先切到 main 再部署；确需从当前分支部署才加 --allow-branch。"
+  exit 1
+fi
 DEPLOY_STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 [[ "$ALLOW_DIRTY" == 1 && -n "$DIRTY" ]] && GIT_SHA="$GIT_SHA-dirty"
 echo "==> 部署 $GIT_BRANCH @ $GIT_SHA（$DEPLOY_STAMP）"
