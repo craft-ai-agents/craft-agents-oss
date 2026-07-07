@@ -1,5 +1,5 @@
 # 迁移后只剩 searxng（自建元搜索）。主服务（craft-server）+ mihomo 均已转原生 systemd：
-#   craft-agent.service、mihomo.service（部署见 scripts/deploy.sh / quick-deploy.sh）。
+#   craft-agent.service、mihomo.service（部署见 scripts/quick-deploy.sh）。
 # 这份只管 searxng 一个容器，发布到宿主回环 127.0.0.1:8080，宿主 cloudflared 不经它。
 # 用法（服务器 /opt/craft-docker/）：docker compose up -d searxng
 services:
