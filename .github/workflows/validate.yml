@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - 'redesign/**'
   workflow_dispatch:
 
 concurrency:
@@ -29,7 +30,7 @@ jobs:
 
       - name: Reject Windows-illegal filenames
         run: |
-          BAD=$(git ls-files | grep -E '[<>:"|?*]' || true)
+          BAD=$(git ls-files -z | tr '\0' '\n' | grep -E '[<>:"|?*]' || true)
           if [ -n "$BAD" ]; then
             echo "::error::Files with characters illegal on Windows:"
             echo "$BAD"
