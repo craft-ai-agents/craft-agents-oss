@@ -413,16 +413,20 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   })
 
   server.handle(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_SET, async (_ctx, workspaceId: string, refId: string, absolutePath: string) => {
-    getWorkspaceOrThrow(workspaceId)
+    const workspace = getWorkspaceOrThrow(workspaceId)
     if (!refId?.trim()) throw new Error('Path override refId is required.')
     if (!absolutePath?.trim()) throw new Error('Path override path is required.')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'files.write')
     const { setSharedPathOverride } = await import('@craft-agent/shared/workspaces')
     return setSharedPathOverride(workspaceId, refId.trim(), absolutePath.trim())
   })
 
   server.handle(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_CLEAR, async (_ctx, workspaceId: string, refId: string) => {
-    getWorkspaceOrThrow(workspaceId)
+    const workspace = getWorkspaceOrThrow(workspaceId)
     if (!refId?.trim()) throw new Error('Path override refId is required.')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'files.write')
     const { clearSharedPathOverride } = await import('@craft-agent/shared/workspaces')
     return clearSharedPathOverride(workspaceId, refId.trim())
   })
