@@ -1,8 +1,9 @@
 import { readFile, writeFile, stat } from 'fs/promises'
 import { join } from 'path'
-import { RPC_CHANNELS, type FileAttachment, type SendMessageOptions, type SessionEvent } from '@craft-agent/shared/protocol'
+import { RPC_CHANNELS, type FileAttachment, type SendMessageOptions, type SessionCommand, type SessionEvent } from '@craft-agent/shared/protocol'
 import type { StoredAttachment } from '@craft-agent/core/types'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import type { TeamPermissionAction } from '@craft-agent/shared/workspaces'
 import { perf } from '@craft-agent/shared/utils'
 import { isValidThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
 
@@ -81,6 +82,46 @@ async function scanSessionDirectory(dirPath: string): Promise<import('@craft-age
   })
 }
 
+function permissionForSessionCommand(command: SessionCommand): TeamPermissionAction | null {
+  switch (command.type) {
+    case 'setPermissionMode':
+    case 'refreshTitle':
+      return 'agent.chat'
+    case 'flag':
+    case 'unflag':
+    case 'archive':
+    case 'unarchive':
+    case 'rename':
+    case 'setSessionStatus':
+    case 'markRead':
+    case 'markUnread':
+    case 'setActiveViewing':
+    case 'setThinkingLevel':
+    case 'updateWorkingDirectory':
+    case 'setSources':
+    case 'setLabels':
+    case 'setConnection':
+    case 'setPendingPlanExecution':
+    case 'markCompactionComplete':
+    case 'markPendingPlanExecutionDispatched':
+    case 'clearPendingPlanExecution':
+    case 'addAnnotation':
+    case 'removeAnnotation':
+    case 'updateAnnotation':
+    case 'shareToViewer':
+    case 'updateShare':
+    case 'revokeShare':
+      return 'files.write'
+    case 'showInFinder':
+    case 'copyPath':
+      return null
+    default: {
+      const _exhaustive: never = command
+      return _exhaustive
+    }
+  }
+}
+
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sessions.GET,
   RPC_CHANNELS.sessions.GET_UNREAD_SUMMARY,
@@ -114,6 +155,19 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   const { sessionManager, platform } = deps
   const log = platform.logger
 
+  async function assertWorkspacePermission(workspaceId: string, action: TeamPermissionAction): Promise<void> {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, action)
+  }
+
+  async function assertSessionPermission(sessionId: string, action: TeamPermissionAction): Promise<void> {
+    const session = sessionManager.getSessions().find((item) => item.id === sessionId)
+    if (!session) throw new Error(`Session not found: ${sessionId}`)
+    await assertWorkspacePermission(session.workspaceId, action)
+  }
+
   // Get all sessions for the calling window's workspace
   // Waits for initialization to complete so sessions are never returned empty during startup
   server.handle(RPC_CHANNELS.sessions.GET, async (ctx) => {
@@ -140,6 +194,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   })
 
   server.handle(RPC_CHANNELS.sessions.MARK_ALL_READ, async (_ctx, workspaceId: string) => {
+    await assertWorkspacePermission(workspaceId, 'files.write')
     return sessionManager.markAllSessionsRead(workspaceId)
   })
 
@@ -153,6 +208,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
 
   // Create a new session
   server.handle(RPC_CHANNELS.sessions.CREATE, async (_ctx, workspaceId: string, options?: import('@craft-agent/shared/protocol').CreateSessionOptions) => {
+    await assertWorkspacePermission(workspaceId, 'files.write')
     const end = perf.start('rpc.createSession', { workspaceId })
     const session = await sessionManager.createSession(workspaceId, options)
     end()
@@ -161,6 +217,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
 
   // Delete a session
   server.handle(RPC_CHANNELS.sessions.DELETE, async (_ctx, sessionId: string) => {
+    await assertSessionPermission(sessionId, 'files.write')
     return sessionManager.deleteSession(sessionId)
   })
 
@@ -178,6 +235,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   //     event stream as today.
   // attachments: FileAttachment[] for Claude (has content), storedAttachments: StoredAttachment[] for persistence (has thumbnailBase64)
   server.handle(RPC_CHANNELS.sessions.SEND_MESSAGE, async (ctx, sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachment[], options?: SendMessageOptions) => {
+    await assertSessionPermission(sessionId, 'agent.chat')
     // Capture the caller's clientId for error routing
     const callerClientId = ctx.clientId
 
@@ -233,16 +291,19 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     captureVersion: string
     reviewTriggerId: string
   }) => {
+    await assertWorkspacePermission(input.workspaceId, 'agent.chat')
     return sessionManager.queueCanvasVisualReview(input)
   })
 
   // Cancel processing
   server.handle(RPC_CHANNELS.sessions.CANCEL, async (_ctx, sessionId: string, silent?: boolean) => {
+    await assertSessionPermission(sessionId, 'agent.chat')
     return sessionManager.cancelProcessing(sessionId, silent)
   })
 
   // Kill background shell
   server.handle(RPC_CHANNELS.sessions.KILL_SHELL, async (_ctx, sessionId: string, shellId: string) => {
+    await assertSessionPermission(sessionId, 'agent.chat')
     return sessionManager.killShell(sessionId, shellId)
   })
 
@@ -260,12 +321,14 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   // Respond to a permission request (bash command approval)
   // Returns true if the response was delivered, false if agent/session is gone
   server.handle(RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION, async (_ctx, sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => {
+    await assertSessionPermission(sessionId, 'agent.chat')
     return sessionManager.respondToPermission(sessionId, requestId, allowed, alwaysAllow)
   })
 
   // Respond to a credential request (secure auth input)
   // Returns true if the response was delivered, false if agent/session is gone
   server.handle(RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL, async (_ctx, sessionId: string, requestId: string, response: import('@craft-agent/shared/protocol').CredentialResponse) => {
+    await assertSessionPermission(sessionId, 'secrets.update')
     return sessionManager.respondToCredential(sessionId, requestId, response)
   })
 
@@ -277,8 +340,11 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(RPC_CHANNELS.sessions.COMMAND, async (
     _ctx,
     sessionId: string,
-    command: import('@craft-agent/shared/protocol').SessionCommand
+    command: SessionCommand
   ) => {
+    const permission = permissionForSessionCommand(command)
+    if (permission) await assertSessionPermission(sessionId, permission)
+
     switch (command.type) {
       case 'flag':
         return sessionManager.flagSession(sessionId)
@@ -493,6 +559,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
 
   // Set session notes (writes to notes.md in session directory)
   server.handle(RPC_CHANNELS.sessions.SET_NOTES, async (_ctx, sessionId: string, content: string) => {
+    await assertSessionPermission(sessionId, 'files.write')
     const sessionPath = sessionManager.getSessionPath(sessionId)
     if (!sessionPath) {
       throw new Error(`Session not found: ${sessionId}`)
@@ -529,6 +596,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     await sessionManager.waitForInit()
     if (!targetWorkspaceId || typeof targetWorkspaceId !== 'string') throw new Error('targetWorkspaceId is required')
     if (mode !== 'move' && mode !== 'fork') throw new Error(`Invalid dispatch mode: ${mode}`)
+    await assertWorkspacePermission(targetWorkspaceId, 'files.write')
 
     return sessionManager.importSession(targetWorkspaceId, bundle as import('@craft-agent/shared/sessions').SessionBundle, mode)
   }
@@ -551,6 +619,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(RPC_CHANNELS.sessions.IMPORT_REMOTE_TRANSFER, async (_ctx, targetWorkspaceId: string, payload: import('@craft-agent/shared/protocol').RemoteSessionTransferPayload) => {
     await sessionManager.waitForInit()
     if (!targetWorkspaceId || typeof targetWorkspaceId !== 'string') throw new Error('targetWorkspaceId is required')
+    await assertWorkspacePermission(targetWorkspaceId, 'files.write')
     return sessionManager.importRemoteSessionTransfer(targetWorkspaceId, payload)
   })
 }
