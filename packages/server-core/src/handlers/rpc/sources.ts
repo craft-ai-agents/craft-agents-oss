@@ -21,6 +21,7 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { syncGoogleAdsCredentialCache } from './google-ads-credential-cache'
 import { syncYouTubeResearchCredentialCache } from './youtube-research-credential-cache'
+import { assertGlobalSourceCredentialPermission } from './team-permission-helpers'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.GET,
@@ -324,10 +325,9 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
 
   server.handle(RPC_CHANNELS.sources.SAVE_GLOBAL_CREDENTIALS, async (_ctx, workspaceId: string, sourceSlug: string, credential: string) => {
     const { getSourceCredentialManager } = await import('@craft-agent/shared/sources')
-    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    assertTeamPermission(workspace.rootPath, 'secrets.update')
+    assertGlobalSourceCredentialPermission(workspaceId, sourceSlug)
 
     const source = loadGlobalSource(sourceSlug)
     if (!source) {
