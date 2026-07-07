@@ -13,6 +13,7 @@ import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 import { isValidWorkingDirectory } from '../../utils/path-validation'
 import type { SharedFolderProvider } from '@craft-agent/shared/workspaces'
+import { assertSessionFilesWritePermission } from './team-permission-helpers'
 
 const execFileAsync = promisify(execFile)
 const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
@@ -228,7 +229,13 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
 
   // Set session-specific model (and optionally connection)
   server.handle(RPC_CHANNELS.sessions.SET_MODEL, async (_ctx, sessionId: string, workspaceId: string, model: string | null, connection?: string) => {
-    await deps.sessionManager.updateSessionModel(sessionId, workspaceId, model, connection)
+    const session = await assertSessionFilesWritePermission(
+      deps.sessionManager,
+      sessionId,
+      workspaceId,
+      'Session model update',
+    )
+    await deps.sessionManager.updateSessionModel(sessionId, session.workspaceId, model, connection)
     deps.platform.logger.info(`Session ${sessionId} model updated to: ${model}${connection ? ` (connection: ${connection})` : ''}`)
   })
 

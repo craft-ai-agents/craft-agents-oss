@@ -33,6 +33,7 @@ mock.module('@craft-agent/shared/workspaces', () => ({
 
 const {
   assertGlobalSourceCredentialPermission,
+  assertSessionFilesWritePermission,
   assertWorkspaceSecretsUpdatePermission,
 } = await import('./team-permission-helpers')
 
@@ -88,5 +89,32 @@ describe('assertWorkspaceSecretsUpdatePermission', () => {
 
     expect(() => assertWorkspaceSecretsUpdatePermission('origin', 'Remote workspace credentials update'))
       .toThrow('Remote workspace credentials update requires secrets.update in workspace origin')
+  })
+})
+
+describe('assertSessionFilesWritePermission', () => {
+  it('requires files.write for the session workspace', async () => {
+    const sessionManager = { getSession: mock(async () => ({ workspaceId: 'origin' })) }
+
+    await expect(assertSessionFilesWritePermission(sessionManager, 's1', 'origin', 'Session model update'))
+      .resolves.toEqual({ workspaceId: 'origin' })
+
+    expect(assertTeamPermission).toHaveBeenCalledWith('/origin', 'files.write')
+  })
+
+  it('rejects workspace mismatch before checking permissions', async () => {
+    const sessionManager = { getSession: mock(async () => ({ workspaceId: 'active' })) }
+
+    await expect(assertSessionFilesWritePermission(sessionManager, 's1', 'origin', 'Session model update'))
+      .rejects.toThrow('Session s1 does not belong to workspace origin')
+    expect(assertTeamPermission).not.toHaveBeenCalled()
+  })
+
+  it('blocks session writes when files.write is denied', async () => {
+    deniedRootPath = '/origin'
+    const sessionManager = { getSession: mock(async () => ({ workspaceId: 'origin' })) }
+
+    await expect(assertSessionFilesWritePermission(sessionManager, 's1', 'origin', 'Session model update'))
+      .rejects.toThrow('Session model update requires files.write in workspace origin')
   })
 })
