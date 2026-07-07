@@ -60,6 +60,10 @@ export async function completeOAuthFlow(opts: {
   if (opts.workspaceId != null) {
     if (flow.workspaceId !== opts.workspaceId) throw new Error('Workspace mismatch')
   }
+  const workspace = getWorkspaceByNameOrId(flow.workspaceId)
+  if (!workspace) throw new Error(`Workspace not found: ${flow.workspaceId}`)
+  const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+  assertTeamPermission(workspace.rootPath, 'secrets.update')
 
   const result = await credManager.exchangeAndStore(
     flow.source,
@@ -126,6 +130,8 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     if (!workspace) {
       throw new Error(`Workspace not found: ${ctx.workspaceId}`)
     }
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'secrets.update')
 
     const [workspaceSource] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
     const source = credentialScope === 'global'
@@ -238,6 +244,8 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     if (!workspace) {
       throw new Error(`Workspace not found: ${ctx.workspaceId}`)
     }
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'secrets.update')
 
     const [source] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
     if (!source) {
