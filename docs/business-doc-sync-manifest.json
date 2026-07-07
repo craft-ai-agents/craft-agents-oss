@@ -2,14 +2,14 @@
   "doc_url": "https://qcnkwaucib13.feishu.cn/docx/UltqdIAnwojpV7x5NQRcRiUWn9g",
   "doc_id": "UltqdIAnwojpV7x5NQRcRiUWn9g",
   "skills": {
-    "procurement-platform-search": "f27f746afea2b134b3a2428bbdf85abf57d4c7b7",
-    "procurement-alternative-search": "f27f746afea2b134b3a2428bbdf85abf57d4c7b7",
+    "procurement-platform-search": "dfc5b416a00664d5e1ccbe42d37f43849a55820b",
+    "procurement-alternative-search": "dfc5b416a00664d5e1ccbe42d37f43849a55820b",
     "procurement-local-inventory-lookup": "c3ff213ce0abb51c5ac67f7812c5475ec96a698a",
     "procurement-supplier-shortlist": "c3ff213ce0abb51c5ac67f7812c5475ec96a698a",
     "procurement-model-info-search": "ac9375a22d3590901d705d86daea569bee16537a",
-    "procurement-part-mismatch-review": "f27f746afea2b134b3a2428bbdf85abf57d4c7b7",
+    "procurement-part-mismatch-review": "dfc5b416a00664d5e1ccbe42d37f43849a55820b",
     "procurement-doc-export": "ac9375a22d3590901d705d86daea569bee16537a",
     "procurement-feishu-table-fill": "ac9375a22d3590901d705d86daea569bee16537a",
-    "procurement-batch-orchestration": "f27f746afea2b134b3a2428bbdf85abf57d4c7b7"
+    "procurement-batch-orchestration": "dfc5b416a00664d5e1ccbe42d37f43849a55820b"
   }
 }

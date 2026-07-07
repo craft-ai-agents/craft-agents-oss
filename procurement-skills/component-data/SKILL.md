@@ -18,7 +18,7 @@ metadata:
 
 ## 调用（同步,一条命令跑全部）
 
-**不像旧 browserdepot 要 submit/wait/results 三步——这里一条命令并发跑完全部源、直接返回。** 每源独立超时隔离,一个死源不拖累整批;全量一轮约 30-60 秒。
+**不像旧 browserdepot 要 submit/wait/results 三步——这里一条命令并发跑完全部源、直接返回。** 每源独立超时隔离,一个死源不拖累整批;全量一轮约 30-60 秒。生产上批次实际由常驻 daemon(`component-data.service`,共享暖浏览器池)执行,多人同时调用会排队而不是挤爆内存;调用方式不变,并发高峰时等待稍长是正常的。
 
 ```bash
 component-data <型号> --json            # 默认 = 全部源一轮并发(官方 API + 直连平台 + 国内聚合)
@@ -67,7 +67,7 @@ component-data <型号>                   # 人类表格(不加 --json)
 
 ## 故障
 
-退出码:`0` = 批次跑完(**单源失败/空不算错**,都在 envelope 里)/ `2` = 用法错(缺型号 / 未知源集 / 未知源名)。批次层不因单源失败返非零。
+退出码:`0` = 批次跑完(**单源失败/空不算错**,都在 envelope 里)/ `1` = daemon 侧终态错误(排队超时 / daemon 重启中,stderr 有 `component-data daemon ...` 说明;稍后重试同一条命令即可,**不是**料的问题)/ `2` = 用法错(缺型号 / 未知源集 / 未知源名)。批次层不因单源失败返非零。
 
 常见 error → hint 已内建(超时 / 缺 ZYTE_API_KEY / 401 credential / 反爬 IP / 代理不可达)。反爬源并发下偶发 error(如 avnet 的 reCAPTCHA-v3 间歇)——是抖动、可重试,**不是无货**。
 
