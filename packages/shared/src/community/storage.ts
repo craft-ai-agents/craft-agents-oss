@@ -343,6 +343,14 @@ export function loadCommunityState(
   return { contacts, emailJobs, suppressions, index, migrated };
 }
 
+export function readCommunityState(workspaceRootPath: string): CommunityState {
+  const contacts = listCommunityContacts(workspaceRootPath);
+  const emailJobs = listCommunityEmailJobs(workspaceRootPath);
+  const suppressions = listCommunitySuppressions(workspaceRootPath);
+  const index = buildCommunityIndex(contacts, emailJobs, suppressions);
+  return { contacts, emailJobs, suppressions, index, migrated: false };
+}
+
 export function migrateLegacyCommunityIfNeeded(workspaceRootPath: string, machineId: string): boolean {
   if (listCommunityContacts(workspaceRootPath).length > 0 || listCommunityEmailJobs(workspaceRootPath).length > 0) return false;
   const legacy = parseLegacyCommunity(workspaceRootPath);

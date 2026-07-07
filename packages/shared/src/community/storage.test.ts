@@ -7,6 +7,7 @@ import {
   createCommunityEmailJob,
   importCommunityCsv,
   loadCommunityState,
+  readCommunityState,
   suppressCommunityContact,
   upsertCommunityContact,
 } from './storage.ts';
@@ -115,6 +116,31 @@ describe('community record storage', () => {
     expect(state.migrated).toBe(false);
     expect(loadContextDoc(root, ARTIST_COMMUNITY_CONTEXT_SLUG)?.body).toBe('Manual notes that do not use the legacy v1 JSON shape.');
     expect(JSON.parse(readFileSync(join(root, 'records/community/index.json'), 'utf-8'))).toMatchObject({ totalContacts: 0 });
+  });
+
+  test('read-only community state does not migrate legacy context or write generated files', () => {
+    const root = tempRoot();
+    upsertContextDoc(root, {
+      slug: ARTIST_COMMUNITY_CONTEXT_SLUG,
+      metadata: { name: 'Artist Community', routing: { mode: 'broadcast' }, enabled: true },
+      body: [
+        '```json',
+        JSON.stringify({
+          version: 1,
+          contacts: [{ id: 'fan-old', name: 'Legacy Fan', email: 'fan@example.com', segment: 'vip' }],
+          emailJobs: [],
+        }),
+        '```',
+      ].join('\n'),
+    });
+
+    const state = readCommunityState(root);
+
+    expect(state.migrated).toBe(false);
+    expect(state.contacts).toHaveLength(0);
+    expect(existsSync(join(root, 'records/community/index.json'))).toBe(false);
+    expect(jsonFiles(root, 'records/community/contacts')).toHaveLength(0);
+    expect(loadContextDoc(root, ARTIST_COMMUNITY_CONTEXT_SLUG)?.body).toContain('"version":1');
   });
 
   test('repeated CSV import upserts by email hash without duplicate contacts', () => {

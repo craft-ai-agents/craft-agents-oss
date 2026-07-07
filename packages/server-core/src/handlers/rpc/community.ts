@@ -30,10 +30,13 @@ function normalizeMachineId(machineId: string): string {
 export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps): void {
   server.handle(RPC_CHANNELS.community.GET, async (_ctx, workspaceId: string) => {
     const workspace = resolveWorkspace(workspaceId)
-    const [{ getTeamModeStatus }, { loadCommunityState }] = await Promise.all([
+    const [{ evaluateTeamPermission, getTeamModeStatus }, { loadCommunityState, readCommunityState }] = await Promise.all([
       import('@craft-agent/shared/workspaces'),
       import('@craft-agent/shared/community'),
     ])
+    if (!evaluateTeamPermission(workspace.rootPath, 'records.write').allowed) {
+      return readCommunityState(workspace.rootPath)
+    }
     const status = getTeamModeStatus(workspace.rootPath)
     return loadCommunityState(workspace.rootPath, normalizeMachineId(status.machine.machineId))
   })

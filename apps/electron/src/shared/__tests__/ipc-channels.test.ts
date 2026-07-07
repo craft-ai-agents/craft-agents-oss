@@ -414,6 +414,7 @@ const EXPECTED_CHANNELS: string[] = [
   "workspaceSettings:update",
   "workspaceTeam:enableInPlace",
   "workspaceTeam:getStatus",
+  "workspaceTeam:join",
   "workspaceTeam:moveToSharedFolder",
   "workspaceTeam:pathOverride:clear",
   "workspaceTeam:pathOverride:set",

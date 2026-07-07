@@ -74,4 +74,3 @@ export interface SharedRecordClobberIssue {
   entry: SharedRecordOplogEntry;
   conflict: SharedRecordConflict;
 }
-

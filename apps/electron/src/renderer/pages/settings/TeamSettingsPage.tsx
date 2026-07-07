@@ -191,6 +191,7 @@ export default function TeamSettingsPage() {
   const needsJoin = Boolean(status?.team.enabled && status.storage.mode === 'shared-folder' && !status.joined)
   const canManageTeam = Boolean(status?.canManageTeam)
   const canMakeRunner = Boolean(status?.team.enabled && status.storage.mode === 'shared-folder' && status.joined && canManageTeam)
+  const wasMovedToSharedFolder = Boolean(status?.storage.mode === 'shared-folder' && status.storage.movedFrom)
   const runnerIsThisMachine = Boolean(status?.team.runnerMachineId && status.team.runnerMachineId === status.machine.machineId)
   const runnerHandoverPending = Boolean(status?.team.runnerHandover?.to && status.team.runnerHandover.to === status.machine.machineId)
   const roleLabel = status?.currentRole === 'owner'
@@ -382,7 +383,7 @@ export default function TeamSettingsPage() {
                 </SettingsSection>
               )}
 
-              {status?.storage.mode !== 'shared-folder' && (
+              {status && !wasMovedToSharedFolder && (
                 <SettingsSection
                   title="Move to shared folder"
                   description="Copies this workspace into a migration folder, writes config last, then updates this app to open the new shared location."
