@@ -3,7 +3,6 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol'
-import type { DeepResearchRunSnapshot } from '@craft-agent/shared/deep-research'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from './DeepResearchRunner.ts'
 
 let workspaceRoot = ''
@@ -63,12 +62,14 @@ describe('DeepResearchRunner', () => {
     })
 
     await waitFor(() => events.some((event) => event.type === 'run.completed'))
-    const completed = [...events].reverse().find((event): event is Extract<DeepResearchRunnerEvent, { type: 'run.completed' }> => (
-      event.type === 'run.completed'
-    ))?.run as DeepResearchRunSnapshot | undefined
+    const completedEvent = [...events].reverse().find((event) => event.type === 'run.completed')
+    if (completedEvent?.type !== 'run.completed') {
+      throw new Error('Expected deep research run to complete')
+    }
+    const completed = completedEvent.run
 
     expect(started.state).toBe('running')
-    expect(completed?.state).toBe('succeeded')
+    expect(completed.state).toBe('succeeded')
     expect(created.map((item) => item.options.permissionMode)).toEqual(['safe', 'safe', 'safe'])
     expect(deleted).toEqual(['dr-sess-1', 'dr-sess-2', 'dr-sess-3'])
   })

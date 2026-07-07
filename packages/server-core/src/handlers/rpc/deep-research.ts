@@ -8,6 +8,7 @@ import {
   type StartDeepResearchRunInput,
 } from '@craft-agent/shared/deep-research'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import type { TeamPermissionAction } from '@craft-agent/shared/workspaces'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
@@ -32,9 +33,9 @@ function requireRunner(deps: HandlerDeps) {
   return deps.getDeepResearchRunner()
 }
 
-async function assertDeepResearchWrite(workspaceId: string): Promise<void> {
+async function assertDeepResearchWrite(workspaceId: string, action: TeamPermissionAction = 'agent.chat'): Promise<void> {
   const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
-  assertTeamPermission(resolveRootPath(workspaceId), 'agent.chat')
+  assertTeamPermission(resolveRootPath(workspaceId), action)
 }
 
 export function registerDeepResearchHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -92,7 +93,7 @@ export function registerDeepResearchHandlers(server: RpcServer, deps: HandlerDep
   server.handle(
     RPC_CHANNELS.deepResearch.DELETE,
     async (_ctx, workspaceId: string, runId: string): Promise<boolean> => {
-      await assertDeepResearchWrite(workspaceId)
+      await assertDeepResearchWrite(workspaceId, 'files.write')
       const existing = readDeepResearchRun(resolveRootPath(workspaceId), runId)
       if (existing && existing.state === 'running') {
         throw new Error(`Cannot delete deep research run "${runId}" while it is running. Cancel it first.`)
