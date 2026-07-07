@@ -14,7 +14,7 @@ const assertTeamPermission = mock((rootPath: string, action: string) => {
   return { allowed: true, action, role: 'owner', machineId: 'machine-1' }
 })
 
-let workspaces: Array<{ id: string; rootPath: string }> = []
+let workspaces: Array<{ id: string; name: string; slug: string; rootPath: string; createdAt: string }> = []
 let manifests: Record<string, string[]> = {}
 let deniedRootPath = ''
 
@@ -31,13 +31,16 @@ mock.module('@craft-agent/shared/workspaces', () => ({
   assertTeamPermission,
 }))
 
-const { assertGlobalSourceCredentialPermission } = await import('./team-permission-helpers')
+const {
+  assertGlobalSourceCredentialPermission,
+  assertWorkspaceSecretsUpdatePermission,
+} = await import('./team-permission-helpers')
 
 beforeEach(() => {
   workspaces = [
-    { id: 'origin', rootPath: '/origin' },
-    { id: 'active', rootPath: '/active' },
-    { id: 'inactive', rootPath: '/inactive' },
+    { id: 'origin', name: 'Origin', slug: 'origin', rootPath: '/origin', createdAt: '2026-07-01T00:00:00.000Z' },
+    { id: 'active', name: 'Active', slug: 'active', rootPath: '/active', createdAt: '2026-07-01T00:00:00.000Z' },
+    { id: 'inactive', name: 'Inactive', slug: 'inactive', rootPath: '/inactive', createdAt: '2026-07-01T00:00:00.000Z' },
   ]
   manifests = {
     '/active': ['github'],
@@ -69,5 +72,21 @@ describe('assertGlobalSourceCredentialPermission', () => {
   it('throws when the origin workspace does not exist', () => {
     expect(() => assertGlobalSourceCredentialPermission('missing', 'github'))
       .toThrow('Workspace not found: missing')
+  })
+})
+
+describe('assertWorkspaceSecretsUpdatePermission', () => {
+  it('returns the workspace after secrets.update passes', () => {
+    const workspace = assertWorkspaceSecretsUpdatePermission('origin', 'Remote workspace credentials update')
+
+    expect(workspace).toMatchObject({ id: 'origin', rootPath: '/origin' })
+    expect(assertTeamPermission).toHaveBeenCalledWith('/origin', 'secrets.update')
+  })
+
+  it('blocks workspace secret updates when secrets.update is denied', () => {
+    deniedRootPath = '/origin'
+
+    expect(() => assertWorkspaceSecretsUpdatePermission('origin', 'Remote workspace credentials update'))
+      .toThrow('Remote workspace credentials update requires secrets.update in workspace origin')
   })
 })

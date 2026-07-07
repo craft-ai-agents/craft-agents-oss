@@ -13,18 +13,26 @@ function assertSecretsUpdateForWorkspace(workspace: WorkspaceRef, context: strin
   }
 }
 
+export function assertWorkspaceSecretsUpdatePermission(workspaceId: string, context: string): WorkspaceRef {
+  const workspace = getWorkspaceByNameOrId(workspaceId)
+  if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+  assertSecretsUpdateForWorkspace(workspace, context)
+  return workspace
+}
+
 export function assertGlobalSourceCredentialPermission(originWorkspaceId: string, sourceSlug: string): void {
-  const originWorkspace = getWorkspaceByNameOrId(originWorkspaceId)
-  if (!originWorkspace) throw new Error(`Workspace not found: ${originWorkspaceId}`)
+  const originWorkspace = assertWorkspaceSecretsUpdatePermission(
+    originWorkspaceId,
+    `Global source credential update for ${sourceSlug}`,
+  )
 
   const checkedRootPaths = new Set<string>()
+  checkedRootPaths.add(originWorkspace.rootPath)
   const check = (workspace: WorkspaceRef): void => {
     if (checkedRootPaths.has(workspace.rootPath)) return
     checkedRootPaths.add(workspace.rootPath)
     assertSecretsUpdateForWorkspace(workspace, `Global source credential update for ${sourceSlug}`)
   }
-
-  check(originWorkspace)
 
   for (const workspace of getWorkspaces()) {
     const activatedSlugs = readGlobalSourcesManifest(workspace.rootPath).activatedSlugs
