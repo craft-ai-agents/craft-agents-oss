@@ -236,6 +236,13 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
       // SECURITY: Validate sessionId to prevent path traversal attacks
       // This must happen before using sessionId in any file path operations
       validateSessionId(sessionId)
+      const session = deps.sessionManager.getSessions().find((item) => item.id === sessionId)
+      if (!session) throw new Error(`Session not found: ${sessionId}`)
+      if (session.workspaceId !== workspaceId) {
+        throw new Error(`Session "${sessionId}" does not belong to workspace "${workspaceId}".`)
+      }
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+      assertTeamPermission(workspaceRootPath, 'files.write')
 
       // Create attachments directory if it doesn't exist
       const attachmentsDir = getSessionAttachmentsPath(workspaceRootPath, sessionId)
