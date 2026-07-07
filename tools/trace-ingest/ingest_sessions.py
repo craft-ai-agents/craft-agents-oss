@@ -114,7 +114,7 @@ def _is_platform_intent(t, name):
     WebSearch/WebFetch 是"认料"(SOP 第 0 步允许库存前用),不算平台。"""
     if name != "bash":
         return False
-    return "browserdepot" in t or "procurement-platform-search" in t
+    return "component-data" in t or "procurement-platform-search" in t
 
 
 def _is_web_intent(name):
@@ -147,7 +147,7 @@ def evaluate_session(tool_entries):
             web += 1
         if "larkdepot" in t and "query" in t and "sql" in t:
             sql += 1
-    # 违规口径 = 业务 SOP:上了货源平台(browserdepot 等)却全程没查本地库存。
+    # 违规口径 = 业务 SOP:上了货源平台(component-data 等)却全程没查本地库存。
     # 认料(WebSearch/WebFetch)按 SOP 允许在库存前用,单独计数不算违规。
     violation = plat > 0 and inv == 0
     attrs = {

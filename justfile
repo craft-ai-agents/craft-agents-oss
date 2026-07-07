@@ -54,7 +54,7 @@ prod-health:
 
 # 服务/内存/子进程一眼看
 prod-status:
-    ssh craft-server 'systemctl is-active craft-agent browserdepot mihomo cloudflared | paste -sd" " -; \
+    ssh craft-server 'systemctl is-active craft-agent mihomo cloudflared | paste -sd" " -; \
       free -h | sed -n 2p; \
       echo "agent children: $(pgrep -cP $(systemctl show -p MainPID --value craft-agent) 2>/dev/null || echo 0)"'
 

@@ -8,7 +8,7 @@ metadata:
 
 # 采购平台采集引擎（已被 component-data 取代）
 
-> ⚠ **本 skill 正被 `browserdepot` 取代**（同职责,接口换成 Rust daemon + CLI,反爬 warmup / 多源 join / 代理 / 重试全固化在引擎里）。新的平台采集取证一律用 `browserdepot` skill;本目录仅保留到 browserdepot 部署到 prod PATH + 迁移验证完成前。以下为旧 `engine.py` 用法,过渡期参考。
+> ⚠ **本 skill 已被 `component-data` 取代**（同职责,接口换成 Rust daemon + CLI,反爬 warmup / 多源 join / 代理 / 重试全固化在引擎里）。新的平台采集取证一律用 `component-data` skill;本目录仅作旧版 `engine.py` 用法存档,不再迭代维护。以下为旧用法参考。
 
 本 skill 是**技术取数层**，不是采购业务判断层。它负责维护平台爬取状态、选择采集 adapter、运行 `engine.py`，并把外部平台返回的数据统一成 JSON 证据。
 

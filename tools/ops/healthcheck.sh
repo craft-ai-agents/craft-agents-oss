@@ -38,7 +38,7 @@ RESULTS=""  # name|status|detail 逐行累积
 check() { RESULTS+="$1|$2|$3"$'\n'; }
 
 # 1. systemd 单元
-for u in craft-agent browserdepot mihomo cloudflared; do
+for u in craft-agent mihomo cloudflared; do
   st=$(systemctl is-active "$u" 2>/dev/null)
   [ "$st" = active ] && check "svc.$u" ok "" || check "svc.$u" fail "systemd=$st"
 done
