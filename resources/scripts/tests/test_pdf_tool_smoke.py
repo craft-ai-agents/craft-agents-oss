@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ._tool_test_harness import REPO_ROOT, build_env, run_tool
+from _tool_test_harness import REPO_ROOT, build_env, run_tool
 
 
 class PdfToolSmokeTests(unittest.TestCase):

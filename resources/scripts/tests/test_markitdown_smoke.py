@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ._tool_test_harness import build_env, run_tool
+from _tool_test_harness import build_env, run_tool
 
 
 class MarkitdownSmokeTests(unittest.TestCase):

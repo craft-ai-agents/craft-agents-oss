@@ -6,7 +6,10 @@ import shutil
 import subprocess
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[5]
+# this file lives at <repo>/resources/scripts/tests/ → repo root is parents[3].
+# (was parents[5] from when it lived under apps/electron/resources/...; the
+# 2026-05 "Feishu-first" refactor moved the dir up two levels but not this index.)
+REPO_ROOT = Path(__file__).resolve().parents[3]
 BIN_DIR = REPO_ROOT / "resources" / "bin"
 SCRIPTS_DIR = REPO_ROOT / "resources" / "scripts"
 
