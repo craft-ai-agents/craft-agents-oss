@@ -214,12 +214,15 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     // Capture the caller's clientId for error routing
     const callerClientId = ctx.clientId
 
-    return await new Promise<{ accepted: true; messageId: string }>((resolve, reject) => {
+    return await new Promise<{ accepted: true; messageId: string; deduped?: boolean }>((resolve, reject) => {
       let acked = false
-      const onAck = (messageId: string) => {
+      // `deduped` is true when the server short-circuited a repeat send carrying
+      // the same options.idempotencyKey: messageId is the prior ack, no new turn
+      // was started. Backward compatible — callers ignoring the field are fine.
+      const onAck = (messageId: string, deduped?: boolean) => {
         if (!acked) {
           acked = true
-          resolve({ accepted: true, messageId })
+          resolve({ accepted: true, messageId, deduped })
         }
       }
 

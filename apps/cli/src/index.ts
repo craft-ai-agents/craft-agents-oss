@@ -22,6 +22,7 @@ export interface CliArgs {
   json: boolean
   tlsCa?: string
   sendTimeout: number
+  askTimeout: number
   command: string
   rest: string[]
   // run-specific flags
@@ -38,6 +39,12 @@ export interface CliArgs {
   model: string
   apiKey: string
   baseUrl: string
+  // ensure-reviewer flags
+  label?: string
+  connection?: string
+  // ask two-layer / dedupe flags
+  correlationId?: string
+  dedupeDir?: string
 }
 
 export function parseArgs(argv: string[]): CliArgs {
@@ -49,6 +56,7 @@ export function parseArgs(argv: string[]): CliArgs {
   let json = false
   let tlsCa: string | undefined
   let sendTimeout = 300_000 // 5 min
+  let askTimeout = 600_000 // 10 min — bounded wall-clock for `ask`
   const rest: string[] = []
   let command = ''
   const sources: string[] = []
@@ -63,6 +71,10 @@ export function parseArgs(argv: string[]): CliArgs {
   let model = ''
   let apiKey = ''
   let baseUrl = ''
+  let label: string | undefined
+  let connection: string | undefined
+  let correlationId: string | undefined
+  let dedupeDir: string | undefined
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
@@ -87,6 +99,9 @@ export function parseArgs(argv: string[]): CliArgs {
         break
       case '--send-timeout':
         sendTimeout = parseInt(args[++i] ?? '300000', 10)
+        break
+      case '--ask-timeout':
+        askTimeout = parseInt(args[++i] ?? '600000', 10)
         break
       case '--source':
         sources.push(args[++i] ?? '')
@@ -126,6 +141,18 @@ export function parseArgs(argv: string[]): CliArgs {
       case '--base-url':
         baseUrl = args[++i] ?? ''
         break
+      case '--label':
+        label = args[++i]
+        break
+      case '--connection':
+        connection = args[++i]
+        break
+      case '--correlation-id':
+        correlationId = args[++i]
+        break
+      case '--dedupe-dir':
+        dedupeDir = args[++i]
+        break
       case '--help':
       case '-h':
         command = 'help'
@@ -154,7 +181,7 @@ export function parseArgs(argv: string[]): CliArgs {
   if (!apiKey) apiKey = process.env.LLM_API_KEY ?? ''
   if (!baseUrl) baseUrl = process.env.LLM_BASE_URL ?? ''
 
-  return { url, token, workspace, timeout, json, tlsCa, sendTimeout, command, rest, sources, mode, outputFormat, noCleanup, noSpinner, verbose, serverEntry, workspaceDir, provider, model, apiKey, baseUrl }
+  return { url, token, workspace, timeout, json, tlsCa, sendTimeout, askTimeout, command, rest, sources, mode, outputFormat, noCleanup, noSpinner, verbose, serverEntry, workspaceDir, provider, model, apiKey, baseUrl, label, connection, correlationId, dedupeDir }
 }
 
 // ---------------------------------------------------------------------------
@@ -179,6 +206,35 @@ async function resolveWorkspace(
     }
   } catch {
     // Fall through — workspace may not be needed
+  }
+  return undefined
+}
+
+/**
+ * Bind the client to a session's workspace so workspace-scoped push events
+ * (e.g. the `complete` broadcast) reach us. When `explicit` is given it wins;
+ * otherwise we read the session and switch to its own workspaceId. Best-effort:
+ * any failure falls through silently — the caller's durable-read fallback still
+ * guarantees correctness, this only protects the fast push path.
+ */
+async function resolveWorkspaceForSession(
+  client: CliRpcClient,
+  sessionId: string,
+  explicit?: string,
+): Promise<string | undefined> {
+  if (explicit) {
+    await client.invoke('window:switchWorkspace', explicit).catch(() => {})
+    return explicit
+  }
+  try {
+    const session = (await client.invoke('sessions:getMessages', sessionId)) as { workspaceId?: string }
+    const id = session?.workspaceId
+    if (id) {
+      await client.invoke('window:switchWorkspace', id).catch(() => {})
+      return id
+    }
+  } catch {
+    // Fall through — push may still arrive, and the durable read is authoritative.
   }
   return undefined
 }
@@ -488,6 +544,296 @@ async function cmdSend(client: CliRpcClient, args: CliArgs): Promise<void> {
   process.exit(exitCode)
 }
 
+/** Extract plain text from an assistant message's content (string or block array). */
+function textOf(msg: { content?: unknown } | undefined): string {
+  if (!msg) return ''
+  const content = msg.content
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content
+      .map((b) => {
+        if (typeof b === 'string') return b
+        if (b && typeof b === 'object' && 'text' in b) return String((b as { text: unknown }).text ?? '')
+        return ''
+      })
+      .join('')
+  }
+  return content == null ? '' : String(content)
+}
+
+/** Last non-intermediate assistant message — the team-spawn coordination-tail fix. */
+function resolveFinalMessage(
+  session: { lastFinalMessageId?: string | null; messages?: AskMessage[] } | undefined,
+): AskMessage | undefined {
+  const messages = session?.messages ?? []
+  const finalId = session?.lastFinalMessageId
+  if (finalId) {
+    const found = messages.find((m) => m.id === finalId)
+    if (found) return found
+  }
+  // Fallback: walk backwards for the last non-intermediate assistant message.
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m.role === 'assistant' && !m.isIntermediate) return m
+  }
+  return undefined
+}
+
+interface AskMessage {
+  id: string
+  role: string
+  content?: unknown
+  isIntermediate?: boolean
+}
+
+interface AskSession {
+  lastFinalMessageId?: string | null
+  messages?: AskMessage[]
+}
+
+/**
+ * Two-layer reply: a small fixed CONTROL HEADER the workflow routes on, plus a
+ * free-form PAYLOAD (the reply text) the channel never inspects.
+ */
+interface AskControlHeader {
+  correlationId?: string
+  sessionId: string
+  messageId: string | null
+  complete: boolean
+  timedOut: boolean
+  success: boolean
+  /** True when the server deduped this send (same idempotencyKey as a prior). */
+  deduped?: boolean
+}
+
+interface AskResult {
+  control: AskControlHeader
+  payload: string
+}
+
+/** URL-safe job filename for a correlation id (one file per correlation id). */
+function dedupeFilePath(dir: string, correlationId: string): string {
+  return `${dir}/${encodeURIComponent(correlationId)}.json`
+}
+
+/**
+ * Fast-path dedupe read: return a cached, done AskResult for this correlation id
+ * if one exists. Best-effort — any read/parse failure returns undefined so we
+ * fall through to a normal send.
+ */
+async function readDedupe(dir: string, correlationId: string): Promise<AskResult | undefined> {
+  try {
+    const file = Bun.file(dedupeFilePath(dir, correlationId))
+    if (!(await file.exists())) return undefined
+    const cached = (await file.json()) as { done?: boolean; control?: AskControlHeader; payload?: string }
+    if (cached?.done && cached.control) {
+      return { control: cached.control, payload: cached.payload ?? '' }
+    }
+  } catch {
+    // Fall through — corrupt/unreadable cache is treated as a cache miss.
+  }
+  return undefined
+}
+
+/** Write the job file marking this correlation id done (idempotent fast path). */
+async function writeDedupe(dir: string, correlationId: string, result: AskResult): Promise<void> {
+  try {
+    const { mkdir } = await import('fs/promises')
+    await mkdir(dir, { recursive: true })
+    await Bun.write(
+      dedupeFilePath(dir, correlationId),
+      JSON.stringify({ done: true, control: result.control, payload: result.payload }, null, 2),
+    )
+  } catch {
+    // Best effort — failing to persist the cache only forfeits the fast path.
+  }
+}
+
+/** Print an AskResult: two-layer JSON in --json mode, else the bare payload. */
+function emitAskResult(result: AskResult, jsonMode: boolean): void {
+  if (jsonMode) {
+    out({ control: result.control, payload: result.payload }, true)
+  } else {
+    out(result.payload, false)
+  }
+}
+
+/**
+ * Generic block-and-wait: send a message, wait for the `complete` push for THIS
+ * session (bounded by --ask-timeout), then do a single durable read via
+ * sessions:getMessages to fetch the authoritative final reply. The push is only
+ * a wake signal — the reply always comes from the durable read, so this can
+ * never hang: the wait loop always exits at the deadline and falls through to
+ * the read. Exits 0 on success, 1 on terminal error or timeout-with-no-reply.
+ */
+async function cmdAsk(client: CliRpcClient, args: CliArgs): Promise<void> {
+  const sessionId = args.rest[0]
+  if (!sessionId) {
+    err('Usage: ask <session-id> <message>')
+    process.exit(1)
+  }
+
+  const message = await readPrompt(args.rest.slice(1), args.rest)
+  if (!message.trim()) {
+    err('No message provided')
+    process.exit(1)
+  }
+
+  // Fast dedupe: when both --dedupe-dir and --correlation-id are set, a previously
+  // completed job short-circuits the send entirely (crash-and-retry is a no-op).
+  if (args.dedupeDir && args.correlationId) {
+    const cached = await readDedupe(args.dedupeDir, args.correlationId)
+    if (cached) {
+      emitAskResult(cached, args.json)
+      client.destroy()
+      process.exit(cached.control.success ? 0 : 1)
+    }
+  }
+
+  await client.connect()
+
+  // Bind the client to the session's workspace so the workspace-scoped `complete`
+  // broadcast reaches us via the push path. Without this the push never arrives and
+  // we degrade to the full --ask-timeout. --workspace overrides the auto-resolve.
+  await resolveWorkspaceForSession(client, sessionId, args.workspace)
+
+  // Baseline: capture the current final message id so we can confirm advancement.
+  const before = (await client.invoke('sessions:getMessages', sessionId)) as AskSession
+  const baselineFinalId = before?.lastFinalMessageId ?? null
+
+  // Attach the listener BEFORE sending so we can't miss the complete push.
+  let completed = false
+  let failed = false
+  // Sliding liveness deadline: each server heartbeat for THIS session pushes the
+  // wait out by another --ask-timeout window, so a long-but-alive turn (e.g. a
+  // 77s team spawn or a long generation) does not hit the cap. Set after send.
+  let livenessDeadline = 0
+  const unsub = client.on('session:event', (event: unknown) => {
+    const ev = event as { type: string; sessionId: string; error?: unknown }
+    if (ev.sessionId !== sessionId) return
+    switch (ev.type) {
+      case 'heartbeat':
+        // Turn is provably alive — extend the bounded wait. The hard ceiling
+        // below still bounds total wall-clock if heartbeats stop.
+        livenessDeadline = Date.now() + args.askTimeout
+        break
+      case 'complete':
+        completed = true
+        break
+      case 'error':
+        if (ev.error) err(String(ev.error))
+        failed = true
+        completed = true
+        break
+      case 'interrupted':
+        completed = true
+        break
+    }
+  })
+
+  // Fire the message — returns immediately while the agent works server-side.
+  // Forward --correlation-id as the server idempotency key so a crash-and-retry
+  // with the same id is deduped at the server (complements the client-side
+  // --dedupe-dir fast path, which short-circuits before we ever connect).
+  const sendResult = (await client.invoke('sessions:sendMessage', sessionId, message,
+    undefined, undefined,
+    args.correlationId ? { idempotencyKey: args.correlationId } : undefined
+  )) as { accepted: true; messageId: string; deduped?: boolean }
+
+  // Server-enforced idempotency: a same-key resend returns synchronously with the
+  // prior messageId and starts NO new turn, so no `complete` push will ever arrive.
+  // Skip the wait loop entirely and resolve the prior final reply via a durable read.
+  if (sendResult.deduped) {
+    unsub()
+    const after = (await client.invoke('sessions:getMessages', sessionId)) as AskSession
+    const final = resolveFinalMessage(after)
+    const result: AskResult = {
+      control: {
+        correlationId: args.correlationId,
+        sessionId,
+        messageId: sendResult.messageId,
+        complete: true,
+        timedOut: false,
+        success: true,
+        deduped: true,
+      },
+      payload: textOf(final),
+    }
+    if (args.dedupeDir && args.correlationId) {
+      await writeDedupe(args.dedupeDir, args.correlationId, result)
+    }
+    emitAskResult(result, args.json)
+    client.destroy()
+    process.exit(0)
+  }
+
+  // Bounded wait — ALWAYS exits at a deadline, never an unbounded await.
+  // Two bounds, whichever fires first:
+  //   1. livenessDeadline — a sliding --ask-timeout window from the last server
+  //      heartbeat (initialized here from the send). A turn that keeps emitting
+  //      heartbeats keeps pushing this out, so legitimately-long turns don't time
+  //      out; if heartbeats STOP, it lapses one --ask-timeout window later.
+  //   2. hardCeiling — an absolute cap so even a misbehaving heartbeat storm
+  //      cannot await forever. Generous multiple of --ask-timeout.
+  const now = Date.now()
+  livenessDeadline = now + args.askTimeout
+  const hardCeiling = now + args.askTimeout * 10
+  while (!completed && Date.now() < livenessDeadline && Date.now() < hardCeiling) {
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  unsub()
+
+  // Durable read — authoritative, runs whether we woke via push or timed out.
+  let after = (await client.invoke('sessions:getMessages', sessionId)) as AskSession
+  let final = resolveFinalMessage(after)
+
+  // Persistence race: complete can fire microseconds before the message lands.
+  // One delayed re-read if the final id hasn't advanced past baseline.
+  if (completed && (final?.id == null || final.id === baselineFinalId)) {
+    await new Promise((r) => setTimeout(r, 500))
+    after = (await client.invoke('sessions:getMessages', sessionId)) as AskSession
+    final = resolveFinalMessage(after)
+  }
+
+  const advanced = final?.id != null && final.id !== baselineFinalId
+
+  if (!completed && !advanced) {
+    err(`ask timeout — no reply within ${args.askTimeout}ms`)
+    client.destroy()
+    process.exit(1)
+  }
+
+  if (!advanced) {
+    err('Completed but no new final message was produced')
+  }
+
+  // success = completed cleanly, not timed out, and a NEW final message advanced
+  // past the baseline (and no terminal error event arrived).
+  const success = completed && !failed && advanced
+  const result: AskResult = {
+    control: {
+      correlationId: args.correlationId,
+      sessionId,
+      messageId: final?.id ?? null,
+      complete: completed,
+      timedOut: !completed,
+      success,
+      ...(sendResult.deduped ? { deduped: true } : {}),
+    },
+    payload: textOf(final),
+  }
+
+  // Persist the job file (mark done) so a same-correlation retry short-circuits.
+  if (args.dedupeDir && args.correlationId) {
+    await writeDedupe(args.dedupeDir, args.correlationId, result)
+  }
+
+  emitAskResult(result, args.json)
+
+  client.destroy()
+  process.exit(failed || !final ? 1 : 0)
+}
+
 interface LocalServer {
   client: CliRpcClient
   stop: () => Promise<void>
@@ -781,6 +1127,125 @@ async function cmdInvoke(client: CliRpcClient, args: CliArgs): Promise<void> {
 
   const result = await client.invoke(channel, ...invokeArgs)
   out(result, args.json)
+}
+
+/** Split a session label entry ("id" or "id::value") into its bare id. */
+function labelEntryId(entry: string): string {
+  const i = entry.indexOf('::')
+  return i === -1 ? entry : entry.slice(0, i)
+}
+
+/** Flatten a label tree (top-level + nested children) into a single list. */
+function flattenLabelTree(labels: Array<{ id: string; name?: string; children?: unknown[] }>): Array<{ id: string; name?: string }> {
+  const out: Array<{ id: string; name?: string }> = []
+  const walk = (list: Array<{ id: string; name?: string; children?: unknown[] }>) => {
+    for (const l of list) {
+      out.push({ id: l.id, name: l.name })
+      if (Array.isArray(l.children)) walk(l.children as typeof list)
+    }
+  }
+  walk(labels)
+  return out
+}
+
+/**
+ * Resolve (or create) a stable MAX-tier reviewer session carrying a label.
+ *
+ * Resolution: find the label by name in the workspace (creating it if absent),
+ * then return the first session whose labels include that label id. If none
+ * exists, CREATE one via the raw sessions:create RPC with model + llmConnection
+ * + thinkingLevel:'max' + permissionMode:'allow-all' + labels:[labelId].
+ *
+ * FAIL-CLOSED: always READ BACK the resolved/created session and assert the tier
+ * (model matches AND thinkingLevel === 'max'). Exits nonzero with a clear message
+ * if the tier is wrong — never silently returns a downgraded session.
+ */
+async function cmdEnsureReviewer(client: CliRpcClient, args: CliArgs): Promise<void> {
+  const labelName = args.label
+  const model = args.model
+  const connection = args.connection
+  if (!labelName || !model || !connection) {
+    err('ensure-reviewer requires --label <name>, --model <id>, and --connection <slug>')
+    process.exit(2)
+  }
+
+  await client.connect()
+  const workspaceId = await resolveWorkspace(client, args.workspace)
+  if (!workspaceId) {
+    err('No workspace available. Use --workspace <id>')
+    process.exit(1)
+  }
+
+  // Resolve the label by name (create it if it doesn't exist yet).
+  const existingLabels = flattenLabelTree(
+    (await client.invoke('labels:list', workspaceId)) as Array<{ id: string; name?: string; children?: unknown[] }>,
+  )
+  let label = existingLabels.find((l) => l.name === labelName || l.id === labelName)
+  if (!label) {
+    label = (await client.invoke('labels:create', workspaceId, { name: labelName })) as { id: string; name?: string }
+  }
+  const labelId = label.id
+
+  // Find an existing session carrying that label.
+  const sessions = (await client.invoke('sessions:get', workspaceId)) as Array<{ id: string; labels?: string[] }>
+  let sessionId = sessions.find((s) => (s.labels ?? []).some((e) => labelEntryId(e) === labelId))?.id
+  let created = false
+
+  if (!sessionId) {
+    // CREATE via the raw RPC — the convenience path silently drops these fields.
+    const session = (await client.invoke('sessions:create', workspaceId, {
+      name: `CC Reviewer — ${model} max`,
+      model,
+      llmConnection: connection,
+      thinkingLevel: 'max',
+      permissionMode: 'allow-all',
+      labels: [labelId],
+    })) as { id?: string }
+    sessionId = session?.id
+    created = true
+    if (!sessionId) {
+      err('sessions:create returned no session id')
+      process.exit(1)
+    }
+  }
+
+  // READ BACK and assert tier — fail-closed.
+  const readback = (await client.invoke('sessions:getMessages', sessionId)) as {
+    id?: string
+    model?: string
+    thinkingLevel?: string
+    llmConnection?: string
+  }
+  const gotModel = readback?.model
+  const gotThinking = readback?.thinkingLevel
+  if (gotModel !== model || gotThinking !== 'max') {
+    err(
+      `tier assertion failed for session ${sessionId}: ` +
+        `expected model=${model} thinkingLevel=max, got model=${gotModel ?? 'undefined'} thinkingLevel=${gotThinking ?? 'undefined'}`,
+    )
+    client.destroy()
+    process.exit(1)
+  }
+
+  if (args.json) {
+    out(
+      {
+        sessionId,
+        created,
+        label: labelName,
+        labelId,
+        model: gotModel,
+        thinkingLevel: gotThinking,
+        llmConnection: readback?.llmConnection ?? connection,
+      },
+      true,
+    )
+  } else {
+    out(sessionId, false)
+  }
+
+  client.destroy()
+  process.exit(0)
 }
 
 async function cmdListen(client: CliRpcClient, args: CliArgs): Promise<void> {
@@ -1929,6 +2394,18 @@ Commands:
   session messages <id>  Print session message history
   session delete <id>    Delete a session
   send <id> <message>    Send message and stream AI response
+  ask <id> <message>     Send, wait for completion push (bounded), print final reply
+                         --ask-timeout <ms>  Bounded wall-clock (default: 600000)
+                         --correlation-id <id>  Tag the --json control header for routing
+                         --dedupe-dir <path>    With --correlation-id: cache the result here;
+                                                a same-id retry short-circuits the send.
+                         --json prints { control: {correlationId, sessionId, messageId,
+                         complete, timedOut, success}, payload: <reply> }
+  ensure-reviewer        Resolve or create a MAX-tier session by label, asserting the
+                         tier on read-back (fail-closed). Prints the sessionId.
+                         --label <name>      (required) label to resolve/create
+                         --model <id>        (required) model id
+                         --connection <slug> (required) LLM connection slug
   cancel <id>            Cancel in-progress processing
   invoke <channel> [...] Raw RPC call with JSON args
   listen <channel>       Subscribe to push events (Ctrl+C to stop)
@@ -2046,9 +2523,15 @@ export async function main(argv: string[] = process.argv): Promise<void> {
       case 'send':
         await cmdSend(client, args)
         break // cmdSend calls process.exit
+      case 'ask':
+        await cmdAsk(client, args)
+        break // cmdAsk calls process.exit
       case 'cancel':
         await cmdCancel(client, args)
         break
+      case 'ensure-reviewer':
+        await cmdEnsureReviewer(client, args)
+        break // cmdEnsureReviewer calls process.exit
       case 'invoke':
         await cmdInvoke(client, args)
         break

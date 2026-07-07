@@ -285,6 +285,10 @@ export interface Message {
   isPending?: boolean;
   // Queued: user message that is waiting to be processed (sent during ongoing response)
   isQueued?: boolean;
+  // Caller-supplied idempotency key (from SendMessageOptions.idempotencyKey).
+  // Stamped onto the persisted user message so the in-memory dedupe map can be
+  // rebuilt from disk after a server restart (see SessionManager hydration).
+  idempotencyKey?: string;
   // Intermediate text (commentary between tool calls, not final response)
   isIntermediate?: boolean;
   // Turn ID: Correlation ID from the API's message.id, groups all messages in an assistant turn
@@ -410,6 +414,9 @@ export interface StoredMessage {
   authWorkspace?: string;
   // Queued: user message that is waiting to be processed (persisted for recovery)
   isQueued?: boolean;
+  // Caller-supplied idempotency key, persisted so the server's dedupe map can be
+  // rebuilt from disk after a restart (see SessionManager hydration).
+  idempotencyKey?: string;
 }
 
 /**
