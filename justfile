@@ -17,13 +17,14 @@ deploy:
 deploy-fast:
     ./scripts/quick-deploy.sh --no-build --no-deps
 
-# ops 脚本部署(healthcheck / trace-ingest → /opt/craft-ops,cron 引用那里,不随 quick-deploy)
+# ops 脚本部署(healthcheck / trace-ingest / backup → /opt/craft-ops,cron 引用那里,不随 quick-deploy)
 deploy-ops:
-    scp -q tools/ops/healthcheck.sh tools/ops/trace-ingest.sh tools/trace-ingest/ingest_sessions.py craft-server:/tmp/
+    scp -q tools/ops/healthcheck.sh tools/ops/trace-ingest.sh tools/ops/backup.sh tools/trace-ingest/ingest_sessions.py craft-server:/tmp/
     ssh craft-server 'sudo install -m 755 -o root -g root /tmp/healthcheck.sh /opt/craft-ops/healthcheck.sh \
       && sudo install -m 755 -o craft -g craft /tmp/trace-ingest.sh /opt/craft-ops/trace-ingest.sh \
+      && sudo install -m 700 -o root -g root /tmp/backup.sh /opt/craft-ops/backup.sh \
       && sudo install -m 644 -o craft -g craft /tmp/ingest_sessions.py /opt/craft-agents/tools/trace-ingest/ingest_sessions.py \
-      && rm -f /tmp/healthcheck.sh /tmp/trace-ingest.sh /tmp/ingest_sessions.py && echo ops-deployed'
+      && rm -f /tmp/healthcheck.sh /tmp/trace-ingest.sh /tmp/backup.sh /tmp/ingest_sessions.py && echo ops-deployed'
 
 # ============ 评测(Phoenix @ https://phoenix.inotoday.asia)============
 
