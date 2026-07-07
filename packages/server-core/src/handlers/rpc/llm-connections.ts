@@ -551,6 +551,8 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       if (!config) {
         return { success: false, error: 'Failed to load workspace config' }
       }
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+      assertTeamPermission(workspace.rootPath, 'team.settings.update')
 
       // Update workspace defaults
       config.defaults = config.defaults || {}

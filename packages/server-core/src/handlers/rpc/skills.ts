@@ -61,6 +61,8 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
   server.handle(RPC_CHANNELS.skills.SET_GLOBAL_ENABLED, async (_ctx, workspaceId: string, skillSlug: string, enabled: boolean) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'team.settings.update')
 
     const {
       listEnabledGlobalSkillSlugs,
@@ -133,6 +135,8 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
   server.handle(RPC_CHANNELS.skills.DELETE, async (_ctx, workspaceId: string, skillSlug: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'files.write')
 
     const { deleteSkill } = await import('@craft-agent/shared/skills')
     deleteSkill(workspace.rootPath, skillSlug)
