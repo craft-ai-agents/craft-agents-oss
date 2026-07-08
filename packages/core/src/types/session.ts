@@ -26,6 +26,8 @@ export interface Session {
   // Inbox/Archive features
   isArchived?: boolean;          // Whether this session is archived
   isFlagged?: boolean;           // Whether this session is flagged
+  isPinned?: boolean;            // Whether this session is pinned to the top of lists
+  pinnedAt?: number;             // Timestamp when session was pinned
   status?: SessionStatus;        // Workflow status (todo, in_progress, needs_review, done, cancelled)
   // Read/unread tracking
   lastReadMessageId?: string;    // ID of the last message the user has read
@@ -55,6 +57,8 @@ export interface SessionMetadata {
   // Inbox/Archive features
   isArchived?: boolean;    // Whether this session is archived
   isFlagged?: boolean;     // Whether this session is flagged
+  isPinned?: boolean;      // Whether this session is pinned to the top of lists
+  pinnedAt?: number;       // Timestamp when session was pinned
   status?: SessionStatus;  // Workflow status
   hidden?: boolean;        // Whether this session is hidden from session list
 }

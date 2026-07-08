@@ -187,6 +187,8 @@ export async function createSession(
     sessionStatus?: SessionConfig['sessionStatus'];
     labels?: string[];
     isFlagged?: boolean;
+    isPinned?: boolean;
+    pinnedAt?: number;
     projectId?: string;
     parentSessionId?: string;
     taskSlug?: string;
@@ -224,6 +226,8 @@ export async function createSession(
     sessionStatus: options?.sessionStatus,
     labels: options?.labels,
     isFlagged: options?.isFlagged,
+    isPinned: options?.isPinned,
+    pinnedAt: options?.pinnedAt,
     projectId: options?.projectId,
     parentSessionId: options?.parentSessionId,
     taskSlug: options?.taskSlug,
@@ -538,6 +542,8 @@ export async function updateSessionMetadata(
   sessionId: string,
   updates: Partial<Pick<SessionConfig,
     | 'isFlagged'
+    | 'isPinned'
+    | 'pinnedAt'
     | 'name'
     | 'sessionStatus'
     | 'labels'
@@ -560,6 +566,8 @@ export async function updateSessionMetadata(
   if (!session) return;
 
   if (updates.isFlagged !== undefined) session.isFlagged = updates.isFlagged;
+  if (updates.isPinned !== undefined) session.isPinned = updates.isPinned;
+  if ('pinnedAt' in updates) session.pinnedAt = updates.pinnedAt;
   if (updates.name !== undefined) session.name = updates.name;
   if (updates.sessionStatus !== undefined) session.sessionStatus = updates.sessionStatus;
   if (updates.labels !== undefined) session.labels = updates.labels;
@@ -592,6 +600,20 @@ export async function flagSession(workspaceRootPath: string, sessionId: string):
  */
 export async function unflagSession(workspaceRootPath: string, sessionId: string): Promise<void> {
   await updateSessionMetadata(workspaceRootPath, sessionId, { isFlagged: false });
+}
+
+/**
+ * Pin a session to the top of session lists
+ */
+export async function pinSession(workspaceRootPath: string, sessionId: string): Promise<void> {
+  await updateSessionMetadata(workspaceRootPath, sessionId, { isPinned: true, pinnedAt: Date.now() });
+}
+
+/**
+ * Unpin a session
+ */
+export async function unpinSession(workspaceRootPath: string, sessionId: string): Promise<void> {
+  await updateSessionMetadata(workspaceRootPath, sessionId, { isPinned: false, pinnedAt: undefined });
 }
 
 /**

@@ -5,6 +5,8 @@ import { toast } from "sonner"
 interface UseSessionActionsOptions {
   onFlag?: (sessionId: string) => void
   onUnflag?: (sessionId: string) => void
+  onPin?: (sessionId: string) => void
+  onUnpin?: (sessionId: string) => void
   onArchive?: (sessionId: string) => void
   onUnarchive?: (sessionId: string) => void
   onDelete: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
@@ -13,6 +15,8 @@ interface UseSessionActionsOptions {
 export function useSessionActions({
   onFlag,
   onUnflag,
+  onPin,
+  onUnpin,
   onArchive,
   onUnarchive,
   onDelete,
@@ -42,6 +46,30 @@ export function useSessionActions({
       } : undefined,
     })
   }, [onFlag, onUnflag, t])
+
+  const handlePinWithToast = useCallback((sessionId: string) => {
+    if (!onPin) return
+    onPin(sessionId)
+    toast(t('toast.sessionPinned'), {
+      description: t('toast.sessionPinnedDesc'),
+      action: onUnpin ? {
+        label: t('toast.undo'),
+        onClick: () => onUnpin(sessionId),
+      } : undefined,
+    })
+  }, [onPin, onUnpin, t])
+
+  const handleUnpinWithToast = useCallback((sessionId: string) => {
+    if (!onUnpin) return
+    onUnpin(sessionId)
+    toast(t('toast.sessionUnpinned'), {
+      description: t('toast.sessionUnpinnedDesc'),
+      action: onPin ? {
+        label: t('toast.undo'),
+        onClick: () => onPin(sessionId),
+      } : undefined,
+    })
+  }, [onPin, onUnpin, t])
 
   const handleArchiveWithToast = useCallback((sessionId: string) => {
     if (!onArchive) return
@@ -80,6 +108,8 @@ export function useSessionActions({
   return {
     handleFlagWithToast,
     handleUnflagWithToast,
+    handlePinWithToast,
+    handleUnpinWithToast,
     handleArchiveWithToast,
     handleUnarchiveWithToast,
     handleDeleteWithToast,

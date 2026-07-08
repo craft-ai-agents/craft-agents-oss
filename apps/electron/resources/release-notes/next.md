@@ -6,6 +6,7 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 - **Label-to-skill binding foundations** — Workspace configs can now store compact label → skill bindings, list bindable skills through metadata-only APIs, and inject compact hidden guidance when matching session labels are active without reading full skill bodies on normal turns.
 - **Label-to-skill settings and portability** — Settings now includes a Label → Skill Bindings page for adding, generating, reviewing, and saving compact bindings, with config validation, docs, and resource export/import support for the workspace binding file.
+- **Pinned chats** — Sessions can now be pinned from chat menus or multi-select actions, keeping important conversations in a dedicated Pinned group above normal date, status, unread, and project groupings.
 
 ## Improvements
 

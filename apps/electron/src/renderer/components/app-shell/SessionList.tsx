@@ -44,6 +44,8 @@ interface SessionListProps {
   onDelete: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
   onFlag?: (sessionId: string) => void
   onUnflag?: (sessionId: string) => void
+  onPin?: (sessionId: string) => void
+  onUnpin?: (sessionId: string) => void
   onArchive?: (sessionId: string) => void
   onUnarchive?: (sessionId: string) => void
   onMarkUnread: (sessionId: string) => void
@@ -121,6 +123,8 @@ export function SessionList({
   onDelete,
   onFlag,
   onUnflag,
+  onPin,
+  onUnpin,
   onArchive,
   onUnarchive,
   onMarkUnread,
@@ -246,6 +250,7 @@ export function SessionList({
     matchingFilterItems,
     otherResultItems,
     exceededSearchLimit,
+    pinnedItems,
     flatItems,
     hasMore,
     collapsedGroupsMeta,
@@ -284,10 +289,32 @@ export function SessionList({
       }
     }
 
-    // flatItems only contains visible (expanded + paginated) items.
-    // collapsedGroupsMeta provides key + count for collapsed groups so we
-    // can insert header-only placeholder groups in the correct position.
+    // flatItems only contains visible ordinary (expanded + paginated) items.
+    // pinnedItems is split before collapse/pagination so pinned sessions stay
+    // visible in their virtual group even when their original group is collapsed.
+    const pinnedRows: SessionListRow[] = pinnedItems.map(item => ({ item }))
     const rows: SessionListRow[] = flatItems.map(item => ({ item }))
+
+    const withPinnedGroup = (groups: EntityListGroup<SessionListRow>[]) => {
+      if (pinnedRows.length === 0) {
+        return {
+          rows: groups.flatMap(g => g.items),
+          groups,
+        }
+      }
+
+      const pinnedGroup: EntityListGroup<SessionListRow> = {
+        key: '__pinned__',
+        label: t('session.pinnedGroup', { count: pinnedRows.length }),
+        items: pinnedRows,
+        collapsible: false,
+      }
+
+      return {
+        rows: [...pinnedRows, ...groups.flatMap(g => g.items)],
+        groups: [pinnedGroup, ...groups],
+      }
+    }
 
     if (groupingMode === 'unread') {
       // Two fixed buckets: unread on top, read below. Within each, items keep
@@ -330,10 +357,7 @@ export function SessionList({
         },
       ]
 
-      return {
-        rows: orderedGroups.flatMap(g => g.items),
-        groups: orderedGroups,
-      }
+      return withPinnedGroup(orderedGroups)
     }
 
     if (groupingMode === 'status') {
@@ -382,10 +406,7 @@ export function SessionList({
         orderedGroups[0].collapsible = false
       }
 
-      return {
-        rows: orderedGroups.flatMap(g => g.items),
-        groups: orderedGroups,
-      }
+      return withPinnedGroup(orderedGroups)
     }
 
     if (groupingMode === 'project') {
@@ -443,10 +464,7 @@ export function SessionList({
         orderedGroups[0].collapsible = false
       }
 
-      return {
-        rows: orderedGroups.flatMap(g => g.items),
-        groups: orderedGroups,
-      }
+      return withPinnedGroup(orderedGroups)
     }
 
     // Default: group by date
@@ -496,30 +514,28 @@ export function SessionList({
       orderedGroups[0].collapsible = false
     }
 
-    return {
-      rows,
-      groups: orderedGroups,
-    }
-  }, [isSearchMode, matchingFilterItems, otherResultItems, flatItems, groupingMode, sessionStatuses, projects, collapsedGroupsMeta, t])
+    return withPinnedGroup(orderedGroups)
+  }, [isSearchMode, matchingFilterItems, otherResultItems, pinnedItems, flatItems, groupingMode, sessionStatuses, projects, collapsedGroupsMeta, t, i18n.resolvedLanguage])
 
   const flatRows = rowData.rows
 
   const collapseAllGroups = useCallback(() => {
+    const ordinaryItems = items.filter(item => item.isPinned !== true)
     if (groupingMode === 'status') {
-      const allKeys = new Set(items.map(item => `status-${getSessionStatus(item)}`))
+      const allKeys = new Set(ordinaryItems.map(item => `status-${getSessionStatus(item)}`))
       setCollapsedGroups(allKeys)
     } else if (groupingMode === 'unread') {
-      const allKeys = new Set(items.map(item => item.hasUnread ? 'unread-yes' : 'unread-no'))
+      const allKeys = new Set(ordinaryItems.map(item => item.hasUnread ? 'unread-yes' : 'unread-no'))
       setCollapsedGroups(allKeys)
     } else if (groupingMode === 'project') {
       const knownProjectIds = new Set((projects ?? []).map(p => p.id))
-      const allKeys = new Set(items.map(item => {
+      const allKeys = new Set(ordinaryItems.map(item => {
         const pid = (item as { projectId?: string }).projectId
         return pid && knownProjectIds.has(pid) ? `project-${pid}` : 'project-__none__'
       }))
       setCollapsedGroups(allKeys)
     } else {
-      const allKeys = new Set(items.map(item =>
+      const allKeys = new Set(ordinaryItems.map(item =>
         startOfDay(new Date(item.lastMessageAt || 0)).toISOString()
       ))
       setCollapsedGroups(allKeys)
@@ -541,10 +557,12 @@ export function SessionList({
   const {
     handleFlagWithToast,
     handleUnflagWithToast,
+    handlePinWithToast,
+    handleUnpinWithToast,
     handleArchiveWithToast,
     handleUnarchiveWithToast,
     handleDeleteWithToast,
-  } = useSessionActions({ onFlag, onUnflag, onArchive, onUnarchive, onDelete })
+  } = useSessionActions({ onFlag, onUnflag, onPin, onUnpin, onArchive, onUnarchive, onDelete })
 
   // --- Focus zone ---
   const { focusZone } = useFocusContext()
@@ -693,6 +711,8 @@ export function SessionList({
     onSessionStatusChange,
     onFlag: onFlag ? handleFlagWithToast : undefined,
     onUnflag: onUnflag ? handleUnflagWithToast : undefined,
+    onPin: onPin ? handlePinWithToast : undefined,
+    onUnpin: onUnpin ? handleUnpinWithToast : undefined,
     onArchive: onArchive ? handleArchiveWithToast : undefined,
     onUnarchive: onUnarchive ? handleUnarchiveWithToast : undefined,
     onMarkUnread,
@@ -719,6 +739,7 @@ export function SessionList({
     handleRenameClick, onSessionStatusChange,
     onFlag, handleFlagWithToast, onUnflag, handleUnflagWithToast,
     onArchive, handleArchiveWithToast, onUnarchive, handleUnarchiveWithToast,
+    onPin, handlePinWithToast, onUnpin, handleUnpinWithToast,
     onMarkUnread, handleDeleteWithToast, onLabelsChange,
     projects, onSetProjectId,
     handleSelectSessionById, handleOpenInNewWindow, setSendToWorkspace, handleFocusZone, handleKeyDown,

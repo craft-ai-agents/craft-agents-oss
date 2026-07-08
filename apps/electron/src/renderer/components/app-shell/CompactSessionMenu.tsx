@@ -39,6 +39,8 @@ import {
   Copy,
   Flag,
   FlagOff,
+  Pin,
+  PinOff,
   FolderOpen,
   Globe,
   Link2Off,
@@ -99,6 +101,8 @@ export interface CompactSessionMenuProps {
   onRename: () => void
   onFlag: () => void
   onUnflag: () => void
+  onPin: () => void
+  onUnpin: () => void
   onArchive: () => void
   onUnarchive: () => void
   onMarkUnread: () => void
@@ -135,6 +139,8 @@ export function CompactSessionMenu({
   onRename,
   onFlag,
   onUnflag,
+  onPin,
+  onUnpin,
   onArchive,
   onUnarchive,
   onMarkUnread,
@@ -174,6 +180,7 @@ export function CompactSessionMenu({
   }, [item.id, setOpen])
 
   const isFlagged = item.isFlagged ?? false
+  const isPinned = item.isPinned ?? false
   const isArchived = item.isArchived ?? false
   const sharedUrl = item.sharedUrl
   const currentSessionStatus = getSessionStatus(item)
@@ -295,6 +302,7 @@ export function CompactSessionMenu({
               labelsCount={sessionLabels.length}
               hasLabels={labels.length > 0}
               isFlagged={isFlagged}
+              isPinned={isPinned}
               isArchived={isArchived}
               hasMessages={_hasMessages}
               hasUnread={_hasUnread}
@@ -307,6 +315,8 @@ export function CompactSessionMenu({
               onOpenLabelsSub={() => setView('labels')}
               onFlag={closeAfter(onFlag)}
               onUnflag={closeAfter(onUnflag)}
+              onPin={closeAfter(onPin)}
+              onUnpin={closeAfter(onUnpin)}
               onArchive={closeAfter(onArchive)}
               onUnarchive={closeAfter(onUnarchive)}
               onMarkUnread={closeAfter(onMarkUnread)}
@@ -368,6 +378,7 @@ interface RootPaneProps {
   labelsCount: number
   hasLabels: boolean
   isFlagged: boolean
+  isPinned: boolean
   isArchived: boolean
   hasMessages: boolean
   hasUnread: boolean
@@ -380,6 +391,8 @@ interface RootPaneProps {
   onOpenLabelsSub: () => void
   onFlag?: () => void
   onUnflag?: () => void
+  onPin?: () => void
+  onUnpin?: () => void
   onArchive?: () => void
   onUnarchive?: () => void
   onMarkUnread?: () => void
@@ -399,6 +412,7 @@ function RootPane({
   labelsCount,
   hasLabels,
   isFlagged,
+  isPinned,
   isArchived,
   hasMessages,
   hasUnread,
@@ -411,6 +425,8 @@ function RootPane({
   onOpenLabelsSub,
   onFlag,
   onUnflag,
+  onPin,
+  onUnpin,
   onArchive,
   onUnarchive,
   onMarkUnread,
@@ -474,6 +490,12 @@ function RootPane({
           chevron
           onTap={onOpenLabelsSub}
         />
+      )}
+
+      {!isPinned ? (
+        <Row icon={<Pin className="h-4 w-4" />} label={t('sessionMenu.pin')} onTap={onPin} />
+      ) : (
+        <Row icon={<PinOff className="h-4 w-4" />} label={t('sessionMenu.unpin')} onTap={onUnpin} />
       )}
 
       {!isFlagged ? (

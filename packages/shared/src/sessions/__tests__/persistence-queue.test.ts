@@ -42,6 +42,7 @@ describe('session persistence header conflict helpers', () => {
       name: 'Local Name',
       labels: ['local'],
       isFlagged: false,
+      isPinned: false,
       sessionStatus: 'todo',
       permissionMode: 'allow-all',
       hasUnread: true,
@@ -54,6 +55,8 @@ describe('session persistence header conflict helpers', () => {
       name: 'Disk Name',
       labels: ['disk'],
       isFlagged: true,
+      isPinned: true,
+      pinnedAt: 1234,
       sessionStatus: 'needs-review',
       permissionMode: 'safe',
       hasUnread: false,
@@ -67,6 +70,8 @@ describe('session persistence header conflict helpers', () => {
     expect(merged.name).toBe('Disk Name')
     expect(merged.labels).toEqual(['disk'])
     expect(merged.isFlagged).toBe(true)
+    expect(merged.isPinned).toBe(true)
+    expect(merged.pinnedAt).toBe(1234)
     expect(merged.sessionStatus).toBe('needs-review')
     expect(merged.permissionMode).toBe('safe')
     expect(merged.hasUnread).toBe(false)

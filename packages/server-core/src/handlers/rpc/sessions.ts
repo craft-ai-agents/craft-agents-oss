@@ -306,6 +306,10 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         return sessionManager.flagSession(sessionId)
       case 'unflag':
         return sessionManager.unflagSession(sessionId)
+      case 'pin':
+        return sessionManager.pinSession(sessionId)
+      case 'unpin':
+        return sessionManager.unpinSession(sessionId)
       case 'archive':
         return sessionManager.archiveSession(sessionId)
       case 'unarchive':

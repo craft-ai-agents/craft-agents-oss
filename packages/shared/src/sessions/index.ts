@@ -50,6 +50,8 @@ export {
   canUpdateSdkCwd,
   flagSession,
   unflagSession,
+  pinSession,
+  unpinSession,
   setSessionStatus,
   setSessionLabels,
   setSessionProjectId,

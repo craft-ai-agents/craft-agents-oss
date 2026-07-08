@@ -13,7 +13,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCallback, useMemo } from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { Archive, Flag, FlagOff, Trash2, Tag, Send } from 'lucide-react'
+import { Archive, Flag, FlagOff, Pin, PinOff, Trash2, Tag, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { useSelectedIds } from '@/hooks/useSession'
@@ -44,6 +44,8 @@ export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = 
     onUnarchiveSession,
     onFlagSession,
     onUnflagSession,
+    onPinSession,
+    onUnpinSession,
     onSessionLabelsChange,
     onDeleteSession,
     workspaces,
@@ -86,9 +88,13 @@ export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = 
     return intersection
   }, [selectedMetas])
 
-  // Check flag state: all flagged, or some/none flagged
+  // Check flag/pin state: all selected sessions share the state or some/none do.
   const allFlagged = useMemo(
     () => selectedMetas.length > 0 && selectedMetas.every(m => m.isFlagged),
+    [selectedMetas]
+  )
+  const allPinned = useMemo(
+    () => selectedMetas.length > 0 && selectedMetas.every(m => m.isPinned),
     [selectedMetas]
   )
 
@@ -126,6 +132,17 @@ export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = 
     selectedIds.forEach(id => onUnflagSession(id))
     toast(`${selectedIds.size} ${selectedIds.size === 1 ? 'session' : 'sessions'} unflagged`)
   }, [selectedIds, onUnflagSession])
+
+  // Batch pin/unpin
+  const handleBatchPin = useCallback(() => {
+    selectedIds.forEach(id => onPinSession(id))
+    toast(`${selectedIds.size} ${selectedIds.size === 1 ? 'session' : 'sessions'} pinned`)
+  }, [selectedIds, onPinSession])
+
+  const handleBatchUnpin = useCallback(() => {
+    selectedIds.forEach(id => onUnpinSession(id))
+    toast(`${selectedIds.size} ${selectedIds.size === 1 ? 'session' : 'sessions'} unpinned`)
+  }, [selectedIds, onUnpinSession])
 
   // Batch archive
   const handleBatchArchive = useCallback(() => {
@@ -215,6 +232,19 @@ export function BatchSessionMenu({ onSendToWorkspace }: BatchSessionMenuProps = 
             />
           </SubContent>
         </Sub>
+      )}
+
+      {/* Pin/Unpin */}
+      {allPinned ? (
+        <MenuItem onClick={handleBatchUnpin}>
+          <PinOff className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sessionMenu.unpinAll")}</span>
+        </MenuItem>
+      ) : (
+        <MenuItem onClick={handleBatchPin}>
+          <Pin className="h-3.5 w-3.5" />
+          <span className="flex-1">{t("sessionMenu.pinAll")}</span>
+        </MenuItem>
       )}
 
       {/* Flag/Unflag */}

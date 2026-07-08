@@ -815,6 +815,10 @@ interface ManagedSession {
   // Session name (user-defined or AI-generated)
   name?: string
   isFlagged: boolean
+  /** Whether this session is pinned to the top of session lists */
+  isPinned?: boolean
+  /** Timestamp when this session was pinned (used for pinned ordering) */
+  pinnedAt?: number
   /** Whether this session is archived */
   isArchived?: boolean
   /** Timestamp when session was archived (for retention policy) */
@@ -1506,6 +1510,17 @@ export class SessionManager implements ISessionManager {
       managed.isFlagged = header.isFlagged ?? false
       this.sendEvent(
         { type: header.isFlagged ? 'session_flagged' : 'session_unflagged', sessionId },
+        managed.workspace.id
+      )
+      changed = true
+    }
+
+    // Pinned
+    if ((managed.isPinned ?? false) !== (header.isPinned ?? false) || managed.pinnedAt !== header.pinnedAt) {
+      managed.isPinned = header.isPinned ?? false
+      managed.pinnedAt = header.pinnedAt
+      this.sendEvent(
+        { type: 'session_metadata_changed', sessionId, changes: { isPinned: managed.isPinned, pinnedAt: managed.pinnedAt } },
         managed.workspace.id
       )
       changed = true
@@ -3136,6 +3151,8 @@ export class SessionManager implements ISessionManager {
       sessionStatus: options?.sessionStatus,
       labels: options?.labels,
       isFlagged: options?.isFlagged,
+      isPinned: options?.isPinned,
+      pinnedAt: options?.pinnedAt,
       projectId: resolvedProjectId,
       parentSessionId: options?.parentSessionId,
       taskSlug: options?.taskSlug,
@@ -4841,6 +4858,39 @@ export class SessionManager implements ISessionManager {
       // Workaround: Bun's fs.watch({ recursive: true }) on Linux doesn't track
       // directories created after the watcher started.
       // https://github.com/oven-sh/bun/issues/15939
+      const watcher = this.configWatchers.get(managed.workspace.rootPath)
+      watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
+    }
+  }
+
+  async pinSession(sessionId: string): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      const pinnedAt = Date.now()
+      managed.isPinned = true
+      managed.pinnedAt = pinnedAt
+      this.setMetadataWriteGuard(managed)
+      // Persist in-memory state directly to avoid race with pending queue writes
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      // Notify all windows for this workspace via generic metadata update
+      this.sendEvent({ type: 'session_metadata_changed', sessionId, changes: { isPinned: true, pinnedAt } }, managed.workspace.id)
+      const watcher = this.configWatchers.get(managed.workspace.rootPath)
+      watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
+    }
+  }
+
+  async unpinSession(sessionId: string): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.isPinned = false
+      managed.pinnedAt = undefined
+      this.setMetadataWriteGuard(managed)
+      // Persist in-memory state directly to avoid race with pending queue writes
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      // Notify all windows for this workspace via generic metadata update
+      this.sendEvent({ type: 'session_metadata_changed', sessionId, changes: { isPinned: false, pinnedAt: undefined } }, managed.workspace.id)
       const watcher = this.configWatchers.get(managed.workspace.rootPath)
       watcher?.notifyFileChange(`sessions/${sessionId}/session.jsonl`)
     }

@@ -518,6 +518,8 @@ function AppShellContent({
     onDeleteSession,
     onFlagSession,
     onUnflagSession,
+    onPinSession,
+    onUnpinSession,
     onArchiveSession,
     onUnarchiveSession,
     onMarkSessionRead,
@@ -3545,6 +3547,8 @@ function AppShellContent({
                   onDelete={handleDeleteSession}
                   onFlag={onFlagSession}
                   onUnflag={onUnflagSession}
+                  onPin={onPinSession}
+                  onUnpin={onUnpinSession}
                   onArchive={onArchiveSession}
                   onUnarchive={onUnarchiveSession}
                   onMarkUnread={onMarkSessionUnread}

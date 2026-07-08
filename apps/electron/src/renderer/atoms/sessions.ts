@@ -26,6 +26,10 @@ export interface SessionMeta {
   lastMessageAt?: number
   isProcessing?: boolean
   isFlagged?: boolean
+  /** Whether this session is pinned to the top of session lists */
+  isPinned?: boolean
+  /** Timestamp when this session was pinned (used for pinned ordering) */
+  pinnedAt?: number
   lastReadMessageId?: string
   workingDirectory?: string
   enabledSourceSlugs?: string[]

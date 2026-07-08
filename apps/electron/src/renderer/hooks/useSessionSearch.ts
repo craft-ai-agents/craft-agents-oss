@@ -77,6 +77,10 @@ export interface UseSessionSearchResult {
   exceededSearchLimit: boolean
 
   // Render-ready outputs
+  /** Pinned items split out before ordinary group collapse/pagination (normal, non-search mode only). */
+  pinnedItems: SessionMeta[]
+  /** Filtered ordinary items before collapse-aware pagination. */
+  filteredItems: SessionMeta[]
   flatItems: SessionMeta[]
   dateGroups: DateGroup[]
   sessionIndexMap: Map<string, number>
@@ -478,16 +482,35 @@ export function useSessionSearch({
     setDisplayLimit(INITIAL_DISPLAY_LIMIT)
   }, [searchQuery])
 
+  const { pinnedItems, ordinaryFilteredItems } = useMemo(() => {
+    if (isSearchMode) {
+      return { pinnedItems: [] as SessionMeta[], ordinaryFilteredItems: searchFilteredItems }
+    }
+
+    const pinned = searchFilteredItems
+      .filter(item => item.isPinned === true)
+      .sort((a, b) => {
+        const pinnedDelta = (b.pinnedAt ?? b.lastMessageAt ?? 0) - (a.pinnedAt ?? a.lastMessageAt ?? 0)
+        if (pinnedDelta !== 0) return pinnedDelta
+        return (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0)
+      })
+    const pinnedIds = new Set(pinned.map(item => item.id))
+    return {
+      pinnedItems: pinned,
+      ordinaryFilteredItems: searchFilteredItems.filter(item => !pinnedIds.has(item.id)),
+    }
+  }, [isSearchMode, searchFilteredItems])
+
   // Collapse-aware pagination: collapsed items are excluded entirely from
   // paginatedItems (and therefore flatItems / keyboard nav). Their counts are
   // returned as collapsedGroupsMeta so the renderer can show header-only groups.
   const { paginatedItems, hasMore, collapsedGroupsMeta } = useMemo(() => {
-    return computeCollapsedPagination(searchFilteredItems, displayLimit, collapsedGroups, groupingMode)
-  }, [searchFilteredItems, displayLimit, collapsedGroups, groupingMode])
+    return computeCollapsedPagination(ordinaryFilteredItems, displayLimit, collapsedGroups, groupingMode)
+  }, [ordinaryFilteredItems, displayLimit, collapsedGroups, groupingMode])
 
   const loadMore = useCallback(() => {
-    setDisplayLimit(prev => Math.min(prev + BATCH_SIZE, searchFilteredItems.length))
-  }, [searchFilteredItems.length])
+    setDisplayLimit(prev => Math.min(prev + BATCH_SIZE, ordinaryFilteredItems.length))
+  }, [ordinaryFilteredItems.length])
 
   // Scroll-based pagination: listen for scroll on the actual ScrollArea viewport
   // (IntersectionObserver with root=null doesn't detect scroll inside Radix ScrollArea)
@@ -534,6 +557,8 @@ export function useSessionSearch({
     matchingFilterItems,
     otherResultItems,
     exceededSearchLimit,
+    pinnedItems,
+    filteredItems: ordinaryFilteredItems,
     flatItems,
     dateGroups,
     sessionIndexMap,

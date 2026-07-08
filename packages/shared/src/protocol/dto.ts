@@ -56,6 +56,10 @@ export interface Session {
   messages: Message[]
   isProcessing: boolean
   isFlagged?: boolean
+  /** Whether this session is pinned to the top of session lists */
+  isPinned?: boolean
+  /** Timestamp when this session was pinned (used for pinned ordering) */
+  pinnedAt?: number
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode
   sessionStatus?: SessionStatus
@@ -145,6 +149,8 @@ export interface CreateSessionOptions {
   sessionStatus?: SessionStatus
   labels?: string[]
   isFlagged?: boolean
+  isPinned?: boolean
+  pinnedAt?: number
   enabledSourceSlugs?: string[]
   /**
    * Message ID to branch from. This is a hard context cutoff:
@@ -410,7 +416,7 @@ export type SessionEvent =
   | { type: 'name_changed'; sessionId: string; name?: string }
   | { type: 'session_model_changed'; sessionId: string; model: string | null }
   | { type: 'session_status_changed'; sessionId: string; sessionStatus: SessionStatus }
-  | { type: 'session_metadata_changed'; sessionId: string; changes: Partial<Pick<Session, 'taskNodeCount' | 'kanbanColumn' | 'taskDraft' | 'taskSlug' | 'projectId'>> }
+  | { type: 'session_metadata_changed'; sessionId: string; changes: Partial<Pick<Session, 'taskNodeCount' | 'kanbanColumn' | 'taskDraft' | 'taskSlug' | 'projectId' | 'isPinned' | 'pinnedAt'>> }
   | { type: 'session_deleted'; sessionId: string }
   | { type: 'session_created'; sessionId: string }
   | { type: 'session_shared'; sessionId: string; sharedUrl: string }
@@ -464,6 +470,8 @@ export type BindableSkillSummary = SkillSummary
 export type SessionCommand =
   | { type: 'flag' }
   | { type: 'unflag' }
+  | { type: 'pin' }
+  | { type: 'unpin' }
   | { type: 'archive' }
   | { type: 'unarchive' }
   | { type: 'rename'; name: string }

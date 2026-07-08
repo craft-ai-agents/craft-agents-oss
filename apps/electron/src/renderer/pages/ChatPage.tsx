@@ -68,6 +68,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     onRenameSession,
     onFlagSession,
     onUnflagSession,
+    onPinSession,
+    onUnpinSession,
     onArchiveSession,
     onUnarchiveSession,
     onSessionStatusChange,
@@ -443,6 +445,14 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     onUnflagSession(sessionId)
   }, [sessionId, onUnflagSession])
 
+  const handlePin = React.useCallback(() => {
+    onPinSession(sessionId)
+  }, [sessionId, onPinSession])
+
+  const handleUnpin = React.useCallback(() => {
+    onUnpinSession(sessionId)
+  }, [sessionId, onUnpinSession])
+
   const handleArchive = React.useCallback(() => {
     onArchiveSession(sessionId)
   }, [sessionId, onArchiveSession])
@@ -653,6 +663,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       onRename={handleRename}
       onFlag={handleFlag}
       onUnflag={handleUnflag}
+      onPin={handlePin}
+      onUnpin={handleUnpin}
       onArchive={handleArchive}
       onUnarchive={handleUnarchive}
       onMarkUnread={handleMarkUnread}
@@ -669,6 +681,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     handleRename,
     handleFlag,
     handleUnflag,
+    handlePin,
+    handleUnpin,
     handleArchive,
     handleUnarchive,
     handleMarkUnread,
@@ -688,6 +702,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       onRename={handleRename}
       onFlag={handleFlag}
       onUnflag={handleUnflag}
+      onPin={handlePin}
+      onUnpin={handleUnpin}
       onArchive={handleArchive}
       onUnarchive={handleUnarchive}
       onMarkUnread={handleMarkUnread}
@@ -706,6 +722,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     handleRename,
     handleFlag,
     handleUnflag,
+    handlePin,
+    handleUnpin,
     handleArchive,
     handleUnarchive,
     handleMarkUnread,
