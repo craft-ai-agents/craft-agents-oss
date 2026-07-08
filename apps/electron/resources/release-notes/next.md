@@ -4,20 +4,8 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Features
 
-- **Label-to-skill binding foundations** — Workspace configs can now store compact label → skill bindings, list bindable skills through metadata-only APIs, and inject compact hidden guidance when matching session labels are active without reading full skill bodies on normal turns.
-- **Label-to-skill settings and portability** — Settings now includes a Label → Skill Bindings page for adding, generating, reviewing, and saving compact bindings, with config validation, docs, and resource export/import support for the workspace binding file.
-- **Pinned chats** — Sessions can now be pinned from chat menus or multi-select actions, keeping important conversations in a dedicated Pinned group above normal date, status, unread, and project groupings.
-
 ## Improvements
 
-- **GitHub Actions release builds for the fork** — The fork now includes an Electron release workflow that can build and upload Linux x64, macOS arm64, and Windows x64 desktop assets to GitHub Releases from version tags, with auto-publishing disabled during local packaging so uploads are controlled by the workflow.
-- **Workflow labels in new workspaces** — New workspaces now include a default Workflow label group with Orchestrator, Subagent, Status, Git, and Worktree labels, so users can adopt label-driven workflows without manually creating the common label vocabulary.
-- **Stronger label-to-skill role activation** — Label-bound skills now announce themselves as active runtime roles, can bootstrap an empty chat's first model call through the standard skill-read prerequisite flow, revoke only prior label-bound role context when labels stop matching, and offer aligned searchable Label/Skill selectors in Settings.
-- **More control over chat response density** — Appearance settings now let users auto-show model activity details only while a turn is running, and choose whether AI responses stay compact or allow the latest response to use full height. User-collapsed active activity details stay collapsed even as the final response message appears.
-
 ## Bug Fixes
-
-- **Linux AppImage installs now appear in application launchers** — The shell installer now registers a per-user desktop entry, extracts the app icon, refreshes desktop metadata, and registers the `craftagents://` handler. Cold-start protocol links are now captured from Linux/Windows launch arguments instead of being dropped when the app was not already running. The generated Linux launcher also handles Wayland/Ozone startup flags and avoids broad process matching when replacing a running app. Packaged builds now stage the Session MCP and Pi agent subprocess bundles before electron-builder runs, so installed Pi-backed sessions can spawn the bundled subprocess instead of failing with a missing `piServerPath`.
-- **Linux dark themes use an opaque app background** — Linux and WebUI builds now avoid macOS-style translucent backdrop assumptions, preventing dark sidebar/theme surfaces from blending against the native window background.
 
 ## Breaking Changes
