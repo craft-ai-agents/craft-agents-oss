@@ -55,7 +55,22 @@ export const RPC_CHANNELS = {
     ABORT: 'transfer:abort',
   },
   tasks: {
+    // Legacy: background-task output (disabled-feature remnant). Kept for back-compat; retire later.
     GET_OUTPUT: 'tasks:getOutput',
+    // Conductor — the Tasks DAG runner.
+    VALIDATE: 'tasks:validate',
+    CREATE: 'tasks:create',
+    GENERATE: 'tasks:generate',
+    // Push: the authored spec (or an error) for an async tasks:generate, keyed by orchestratorSessionId.
+    GENERATED: 'tasks:generated',
+    RUN: 'tasks:run',
+    PAUSE: 'tasks:pause',
+    RESUME: 'tasks:resume',
+    STOP: 'tasks:stop',
+    GET: 'tasks:get',
+    LIST: 'tasks:list',
+    // Storage-backed read of a run's outcome (verdict + per-node output). Survives restart.
+    GET_RESULTS: 'tasks:getResults',
   },
   workspaces: {
     GET: 'workspaces:get',
@@ -384,6 +399,17 @@ export const RPC_CHANNELS = {
   resources: {
     EXPORT: 'resources:export',
     IMPORT: 'resources:import',
+  },
+  projects: {
+    GET: 'projects:get',
+    GET_ONE: 'projects:getOne',
+    CREATE: 'projects:create',
+    UPDATE: 'projects:update',
+    DELETE: 'projects:delete',
+    LIST_ASSETS: 'projects:listAssets',
+    UPLOAD_ASSET: 'projects:uploadAsset',
+    DELETE_ASSET: 'projects:deleteAsset',
+    CHANGED: 'projects:changed',
   },
   messaging: {
     // WhatsApp subprocess → Gateway (subprocess invokes on server)

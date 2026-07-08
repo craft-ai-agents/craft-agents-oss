@@ -323,6 +323,14 @@ export interface SessionToolContext {
   /** List sessions in the workspace with pagination. Injected by backend. */
   listSessions?(options?: ListSessionsOptions): ListSessionsResult;
 
+  /**
+   * List background tasks (running + recently-terminal) for a session from the
+   * main-process registry. Defaults to the current session if no ID given.
+   * Injected by backend (SessionManager). Returns [] in backends that don't
+   * track background tasks.
+   */
+  listBackgroundTasks?(sessionId?: string): BackgroundTaskInfo[];
+
   /** Resolve label display names to IDs against configured labels. Injected by backend. */
   resolveLabels?(labels: string[]): ResolvedLabelsResult;
 
@@ -333,8 +341,13 @@ export interface SessionToolContext {
   // Inter-Session Messaging
   // ============================================================
 
-  /** Send a message to another session. Injected by backend (SessionManager). */
-  sendAgentMessage?(sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>): Promise<void>;
+  /**
+   * Send a message to another session. Injected by backend (SessionManager).
+   * Resolves with how the message was received so the sender can give the model
+   * a truthful ack (delivered immediately vs. queued behind a busy turn) instead
+   * of an unconditional "message sent".
+   */
+  sendAgentMessage?(sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>): Promise<SendAgentMessageResult>;
 
   /**
    * Activate a source in the running session: add to enabledSourceSlugs,
@@ -416,6 +429,12 @@ export interface ResolvedStatusResult {
   resolved: string | null;
   /** All valid status IDs (for error messages) */
   available: string[];
+  /**
+   * Category of the matched status ('open' | 'closed'), when resolved. Lets the
+   * status tool reject agent-driven *closed* transitions (the human owns closure)
+   * while still allowing open ones like `needs-review`.
+   */
+  category?: 'open' | 'closed';
 }
 
 // ============================================================
@@ -461,6 +480,41 @@ export interface ListSessionsResult {
   total: number;
   returned: number;
   sessions: SessionListItem[];
+}
+
+/**
+ * Result of delivering a cross-session message (send_agent_message).
+ * Lets the sender report the truth instead of an unconditional "sent".
+ */
+export interface SendAgentMessageResult {
+  /**
+   * - `delivered`: the target was idle, so it will start processing the message now.
+   * - `queued`: the target was mid-turn; the message is enqueued and will be
+   *   processed after the current turn finishes.
+   */
+  delivery: 'delivered' | 'queued';
+  /** Whether the target session was processing a turn when the message arrived. */
+  targetBusy: boolean;
+}
+
+/**
+ * A background task tracked by the main process (returned by
+ * list_background_tasks). This is the cross-subprocess source of truth: the
+ * SDK's in-subprocess task tools only see tasks launched in the CURRENT
+ * subprocess, so they cannot report a task from a prior turn's (torn-down)
+ * subprocess. `status: 'orphaned'` means the owning turn ended before a terminal
+ * notification arrived — the task most likely died with its subprocess.
+ */
+export interface BackgroundTaskInfo {
+  taskId: string;
+  intent?: string;
+  status: 'running' | 'completed' | 'failed' | 'stopped' | 'orphaned';
+  /** ms timestamp when the task was backgrounded */
+  startTime: number;
+  /** seconds elapsed since start (derived at query time) */
+  elapsedSeconds: number;
+  /** ms timestamp when the task reached a terminal/orphaned status, if any */
+  completedAt?: number;
 }
 
 // ============================================================

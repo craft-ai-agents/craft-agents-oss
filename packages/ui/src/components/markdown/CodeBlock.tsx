@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { codeToHtml, bundledLanguages, type BundledLanguage } from 'shiki'
 import { cn } from '../../lib/utils'
 import { useShikiTheme } from '../../context/ShikiThemeContext'
@@ -62,6 +63,7 @@ function isValidLanguage(lang: string): lang is BundledLanguage {
  * Lazy-loads highlighting and caches results for performance.
  */
 export function CodeBlock({ code, language = 'text', className, mode = 'full', forcedTheme }: CodeBlockProps) {
+  const { t } = useTranslation()
   const [highlighted, setHighlighted] = React.useState<string | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
   const [copied, setCopied] = React.useState(false)
@@ -187,7 +189,7 @@ export function CodeBlock({ code, language = 'text', className, mode = 'full', f
         <button
           onClick={handleCopy}
           className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-          aria-label="Copy code"
+          aria-label={t('common.copyCode')}
         >
           {copied ? (
             <svg className="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">

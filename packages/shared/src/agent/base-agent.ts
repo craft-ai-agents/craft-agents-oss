@@ -97,6 +97,8 @@ export interface SpawnSessionRequest {
   thinkingLevel?: ThinkingLevel;
   labels?: string[];
   workingDirectory?: string;
+  /** Workspace project id to bind the spawned session to */
+  projectId?: string;
   attachments?: Array<{ path: string; name?: string }>;
 }
 
@@ -1275,6 +1277,7 @@ ${formattedMessages}
       workingDirectory: typeof input.workingDirectory === 'string' && input.workingDirectory
         ? expandPath(input.workingDirectory)
         : undefined,
+      projectId: input.projectId as string | undefined,
       attachments: input.attachments as SpawnSessionRequest['attachments'],
     };
 

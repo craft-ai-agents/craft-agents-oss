@@ -28,6 +28,19 @@ export const CHANNEL_MAP = {
   cancelProcessing: invoke(RPC_CHANNELS.sessions.CANCEL),
   killShell: invoke(RPC_CHANNELS.sessions.KILL_SHELL),
   getTaskOutput: invoke(RPC_CHANNELS.tasks.GET_OUTPUT),
+
+  // Tasks (Conductor)
+  validateTask: invoke(RPC_CHANNELS.tasks.VALIDATE),
+  createTask: invoke(RPC_CHANNELS.tasks.CREATE),
+  generateTask: invoke(RPC_CHANNELS.tasks.GENERATE),
+  runTask: invoke(RPC_CHANNELS.tasks.RUN),
+  pauseTask: invoke(RPC_CHANNELS.tasks.PAUSE),
+  resumeTask: invoke(RPC_CHANNELS.tasks.RESUME),
+  stopTask: invoke(RPC_CHANNELS.tasks.STOP),
+  getTask: invoke(RPC_CHANNELS.tasks.GET),
+  listTasks: invoke(RPC_CHANNELS.tasks.LIST),
+  getTaskResults: invoke(RPC_CHANNELS.tasks.GET_RESULTS),
+  onTaskGenerated: listener(RPC_CHANNELS.tasks.GENERATED),
   respondToPermission: invoke(RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION),
   respondToCredential: invoke(RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL),
   sessionCommand: invoke(RPC_CHANNELS.sessions.COMMAND),
@@ -376,6 +389,17 @@ export const CHANNEL_MAP = {
   testLlmConnection: invoke(RPC_CHANNELS.llmConnections.TEST),
   setDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_DEFAULT),
   setWorkspaceDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT),
+
+  // Projects
+  getProjects: invoke(RPC_CHANNELS.projects.GET),
+  getProject: invoke(RPC_CHANNELS.projects.GET_ONE),
+  createProject: invoke(RPC_CHANNELS.projects.CREATE),
+  updateProject: invoke(RPC_CHANNELS.projects.UPDATE),
+  deleteProject: invoke(RPC_CHANNELS.projects.DELETE),
+  listProjectAssets: invoke(RPC_CHANNELS.projects.LIST_ASSETS),
+  uploadProjectAsset: invoke(RPC_CHANNELS.projects.UPLOAD_ASSET),
+  deleteProjectAsset: invoke(RPC_CHANNELS.projects.DELETE_ASSET),
+  onProjectsChanged: listener(RPC_CHANNELS.projects.CHANGED),
 
   // Automations
   getAutomations: invoke(RPC_CHANNELS.automations.GET),

@@ -37,7 +37,7 @@ export interface SessionListRow {
 }
 
 /** Grouping mode for chat list */
-export type ChatGroupingMode = 'date' | 'status' | 'unread'
+export type ChatGroupingMode = 'date' | 'status' | 'unread' | 'project'
 
 interface SessionListProps {
   items: SessionMeta[]
@@ -75,6 +75,10 @@ interface SessionListProps {
   labels?: LabelConfig[]
   /** Callback when session labels are toggled (for labels submenu in SessionMenu) */
   onLabelsChange?: (sessionId: string, labels: string[]) => void
+  /** Workspace projects (for the Projects submenu in SessionMenu) */
+  projects?: Array<{ id: string; slug: string; name: string; color?: string }>
+  /** Callback to bind/unbind a session to a project (null = unbind) */
+  onSetProjectId?: (sessionId: string, projectId: string | null) => void
   /** How to group sessions: 'date' (default) or 'status' */
   groupingMode?: ChatGroupingMode
   /** Workspace ID for content search (optional - if not provided, content search is disabled) */
@@ -133,6 +137,8 @@ export function SessionList({
   evaluateViews,
   labels = [],
   onLabelsChange,
+  projects,
+  onSetProjectId,
   groupingMode = 'date',
   workspaceId,
   statusFilter,
@@ -253,6 +259,7 @@ export function SessionList({
     evaluateViews,
     statusFilter,
     labelFilterMap,
+    labelConfigs: labels,
     collapsedGroups,
     groupingMode,
     scrollViewportRef,
@@ -381,6 +388,67 @@ export function SessionList({
       }
     }
 
+    if (groupingMode === 'project') {
+      // Build groups from visible items, bucketed by projectId.
+      // Sessions without a projectId (or with an unknown projectId) go to the
+      // "no-project" bucket so they're never silently dropped from the list.
+      const projectOrder = new Map<string, number>()
+      ;(projects ?? []).forEach((p, index) => projectOrder.set(p.id, index))
+      const projectNameById = new Map<string, string>()
+      ;(projects ?? []).forEach(p => projectNameById.set(p.id, p.name))
+
+      const groupsByKey = new Map<string, { rows: SessionListRow[], projectId: string | null }>()
+      for (const row of rows) {
+        const rawProjectId = (row.item as { projectId?: string }).projectId
+        const resolvedProjectId = rawProjectId && projectNameById.has(rawProjectId) ? rawProjectId : null
+        const key = resolvedProjectId ? `project-${resolvedProjectId}` : 'project-__none__'
+        if (!groupsByKey.has(key)) groupsByKey.set(key, { rows: [], projectId: resolvedProjectId })
+        groupsByKey.get(key)!.rows.push(row)
+      }
+
+      // Insert collapsed placeholder groups (header-only, items: [])
+      for (const meta of collapsedGroupsMeta) {
+        if (!groupsByKey.has(meta.key)) {
+          const idPart = meta.key.replace('project-', '')
+          const projectId = idPart === '__none__' ? null : idPart
+          groupsByKey.set(meta.key, { rows: [], projectId })
+        }
+      }
+
+      const orderedGroups: EntityListGroup<SessionListRow>[] = []
+      for (const [key, { rows: groupRows, projectId }] of groupsByKey) {
+        groupRows.sort((a, b) => (b.item.lastMessageAt || 0) - (a.item.lastMessageAt || 0))
+        const collapsedMeta = collapsedGroupsMeta.find(m => m.key === key)
+        const label = projectId
+          ? (projectNameById.get(projectId) ?? t('sidebar.unknownProject', { defaultValue: 'Unknown project' }))
+          : t('sidebar.noProject', { defaultValue: 'No project' })
+        orderedGroups.push({
+          key,
+          label,
+          items: groupRows,
+          collapsible: true,
+          ...(collapsedMeta ? { collapsedCount: collapsedMeta.count } : {}),
+        })
+      }
+      orderedGroups.sort((a, b) => {
+        // No-project bucket sinks to the bottom, configured projects in registration order
+        if (a.key === 'project-__none__') return 1
+        if (b.key === 'project-__none__') return -1
+        const aOrder = projectOrder.get(a.key.replace('project-', '')) ?? 999
+        const bOrder = projectOrder.get(b.key.replace('project-', '')) ?? 999
+        return aOrder - bOrder
+      })
+
+      if (orderedGroups.length === 1) {
+        orderedGroups[0].collapsible = false
+      }
+
+      return {
+        rows: orderedGroups.flatMap(g => g.items),
+        groups: orderedGroups,
+      }
+    }
+
     // Default: group by date
     const groupsByKey = new Map<string, EntityListGroup<SessionListRow>>()
     const groupDates = new Map<string, Date>()
@@ -432,7 +500,7 @@ export function SessionList({
       rows,
       groups: orderedGroups,
     }
-  }, [isSearchMode, matchingFilterItems, otherResultItems, flatItems, groupingMode, sessionStatuses, collapsedGroupsMeta, t])
+  }, [isSearchMode, matchingFilterItems, otherResultItems, flatItems, groupingMode, sessionStatuses, projects, collapsedGroupsMeta, t])
 
   const flatRows = rowData.rows
 
@@ -443,13 +511,20 @@ export function SessionList({
     } else if (groupingMode === 'unread') {
       const allKeys = new Set(items.map(item => item.hasUnread ? 'unread-yes' : 'unread-no'))
       setCollapsedGroups(allKeys)
+    } else if (groupingMode === 'project') {
+      const knownProjectIds = new Set((projects ?? []).map(p => p.id))
+      const allKeys = new Set(items.map(item => {
+        const pid = (item as { projectId?: string }).projectId
+        return pid && knownProjectIds.has(pid) ? `project-${pid}` : 'project-__none__'
+      }))
+      setCollapsedGroups(allKeys)
     } else {
       const allKeys = new Set(items.map(item =>
         startOfDay(new Date(item.lastMessageAt || 0)).toISOString()
       ))
       setCollapsedGroups(allKeys)
     }
-  }, [items, groupingMode])
+  }, [items, groupingMode, projects])
   const expandAllGroups = useCallback(() => {
     setCollapsedGroups(new Set())
   }, [])
@@ -623,6 +698,8 @@ export function SessionList({
     onMarkUnread,
     onDelete: handleDeleteWithToast,
     onLabelsChange,
+    projects,
+    onSetProjectId,
     onSelectSessionById: handleSelectSessionById,
     onOpenInNewWindow: handleOpenInNewWindow,
     onSendToWorkspace: (ids: string[]) => setSendToWorkspace(ids),
@@ -643,6 +720,7 @@ export function SessionList({
     onFlag, handleFlagWithToast, onUnflag, handleUnflagWithToast,
     onArchive, handleArchiveWithToast, onUnarchive, handleUnarchiveWithToast,
     onMarkUnread, handleDeleteWithToast, onLabelsChange,
+    projects, onSetProjectId,
     handleSelectSessionById, handleOpenInNewWindow, setSendToWorkspace, handleFocusZone, handleKeyDown,
     sessionStatuses, flatLabels, labels, resolvedSearchQuery,
     focusedSessionId, selectionStore.state.selected, isMultiSelectActive,

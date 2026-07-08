@@ -24,7 +24,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { CrossfadeAvatar } from '@/components/ui/avatar'
+import { WorkspaceAvatar } from '@/components/ui/workspace-avatar'
 import { useWorkspaceIcons } from '@/hooks/useWorkspaceIcon'
 import { cn } from '@/lib/utils'
 import type { Workspace } from '../../../shared/types'
@@ -206,12 +206,12 @@ export function SendToWorkspaceDialog({
                     isDisconnected && 'opacity-50 cursor-not-allowed hover:bg-transparent',
                   )}
                 >
-                  <CrossfadeAvatar
+                  <WorkspaceAvatar
+                    workspaceId={workspace.id}
+                    workspaceName={workspace.name}
                     src={workspaceIconMap.get(workspace.id)}
-                    alt={workspace.name}
                     className="h-5 w-5 rounded-full ring-1 ring-border/50 shrink-0"
-                    fallbackClassName="bg-muted text-[10px] rounded-full"
-                    fallback={workspace.name?.charAt(0) || 'W'}
+                    fallbackClassName="rounded-full"
                   />
                   <span className="flex-1 truncate">{workspace.name}</span>
                   {isDisconnected ? (

@@ -413,6 +413,13 @@ export interface AgentBackend {
   forceAbort(reason: AbortReason): void;
 
   /**
+   * WS2: register a sink for background task events that arrive BETWEEN turns
+   * (when no chat() generator is being consumed) under keep-alive mode. Backends
+   * without a persistent cross-turn query may leave this unimplemented.
+   */
+  setBackgroundEventSink?(sink: ((event: AgentEvent) => void) | null): void;
+
+  /**
    * Interrupt the current turn because control is being handed to the UI.
    *
    * Used for pause points like plan submission and auth requests, where the

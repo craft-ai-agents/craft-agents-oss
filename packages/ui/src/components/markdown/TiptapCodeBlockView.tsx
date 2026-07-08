@@ -215,7 +215,7 @@ function TiptapCodeBlockView({ node, updateAttributes }: TiptapCodeBlockViewProp
             <TiptapHoverActionButton
               active={languageDropdownOpen}
               title={t('editor.codeLanguage')}
-              aria-label="Select code language"
+              aria-label={t('editor.codeLanguage')}
               className="tiptap-code-block-language-trigger"
             >
               <span className="tiptap-code-block-language-label">{languageLabel}</span>
@@ -237,7 +237,7 @@ function TiptapCodeBlockView({ node, updateAttributes }: TiptapCodeBlockViewProp
 
           <div className="max-h-[240px] overflow-y-auto p-1">
             {filteredLanguageOptions.length === 0 ? (
-              <div className="px-2.5 py-2 text-xs text-foreground/50 select-none">No languages found</div>
+              <div className="px-2.5 py-2 text-xs text-foreground/50 select-none">{t('editor.noLanguagesFound')}</div>
             ) : (
               filteredLanguageOptions.map((option, index) => {
                 const isActive = option.value === currentLanguage

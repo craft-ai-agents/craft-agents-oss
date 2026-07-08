@@ -12,6 +12,8 @@ import { BatchSessionMenu } from "./BatchSessionMenu"
 import { CompactSessionMenu } from "./CompactSessionMenu"
 import { SessionStatusIcon } from "./SessionStatusIcon"
 import { SessionBadges } from "./SessionBadges"
+import { SessionProjectColorWrapper } from "./SessionProjectColorWrapper"
+import { useProjectColorTreatment } from "@/hooks/useProjectColorTreatment"
 import { getSessionTitle, getSessionPreviewText, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
 import { useSessionListContext } from "@/context/SessionListContext"
 import { useAppShellContext } from "@/context/AppShellContext"
@@ -76,6 +78,16 @@ export function SessionItem({
   const sessionBindings = messagingBindingsBySession.get(item.id) ?? []
   const hasMessagingBinding = sessionBindings.length > 0
 
+  // Resolve the bound project so the row can show a project-themed stripe /
+  // tint and reveal the project name on hover. Treatment is a user preference
+  // under Appearance.
+  const projectColorTreatment = useProjectColorTreatment()
+  const boundProject = item.projectId
+    ? ctx.projects?.find(p => p.id === item.projectId)
+    : undefined
+  const projectColor = boundProject?.color
+  const projectName = boundProject?.name
+
   const handleClick = (e: React.MouseEvent) => {
     ctx.onFocusZone()
     if (e.button === 2) {
@@ -104,6 +116,7 @@ export function SessionItem({
   }
 
   return (
+    <SessionProjectColorWrapper color={projectColor} treatment={projectColorTreatment}>
     <EntityRow
       className="session-item"
       dataAttributes={{ 'data-session-id': item.id }}
@@ -111,6 +124,10 @@ export function SessionItem({
       separatorClassName="pl-[38px] pr-4"
       isSelected={isSelected}
       isInMultiSelect={isInMultiSelect}
+      // When a project stripe is drawn at the leading edge, suppress EntityRow's
+      // own blue selection bar so they don't stack. The row's background tint
+      // continues to convey "selected".
+      suppressSelectionBar={!!projectColor}
       onMouseDown={handleClick}
       buttonProps={{
         ...itemProps,
@@ -136,6 +153,8 @@ export function SessionItem({
           onSendToWorkspace={ctx.onSendToWorkspace ? () => ctx.onSendToWorkspace!([item.id]) : undefined}
           hasRemoteWorkspaces={hasRemoteWorkspaces}
           onDelete={() => ctx.onDelete(item.id)}
+          projects={ctx.projects}
+          onSetProjectId={ctx.onSetProjectId ? (pid) => ctx.onSetProjectId!(item.id, pid) : undefined}
         />
       }
       contextMenuContent={ctx.isMultiSelectActive && isInMultiSelect ? <BatchSessionMenu /> : undefined}
@@ -194,9 +213,18 @@ export function SessionItem({
       titleClassName={cn("text-[13px]", item.isAsyncOperationOngoing && "animate-shimmer-text")}
       subtitle={previewText}
       titleSuffix={
-        hasMessagingBinding ? (
+        (projectName || hasMessagingBinding) ? (
           <div className="flex items-center gap-1">
-            {sessionBindings.map((binding) => {
+            {projectName && (
+              <span
+                className="text-[11px] text-foreground/40 whitespace-nowrap truncate max-w-[120px] opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                style={projectColor ? { color: projectColor } : undefined}
+                title={projectName}
+              >
+                {projectName}
+              </span>
+            )}
+            {hasMessagingBinding && sessionBindings.map((binding) => {
               const pill = PLATFORM_PILL[binding.platform as 'telegram' | 'whatsapp']
               if (!pill) return null
               return (
@@ -239,5 +267,6 @@ export function SessionItem({
       ) : undefined}
       badges={hasLabels ? <SessionBadges item={item} /> : undefined}
     />
+    </SessionProjectColorWrapper>
   )
 }

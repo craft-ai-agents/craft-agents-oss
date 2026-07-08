@@ -438,3 +438,34 @@ describe('edge cases', () => {
     expect(deriveTurnPhase(turn)).toBe('awaiting')
   })
 })
+
+describe('hidden messages', () => {
+  it('never render as a turn but the assistant reply they trigger still does', () => {
+    resetCounters()
+
+    // A hidden system-generated nudge (e.g. WS2 background-task-completion) followed
+    // by the assistant response it drives.
+    const hiddenNudge: Message = { ...createUserMessage('[background-task-completed] present it'), hidden: true }
+    const reply = createAssistantMessage(false, false, 'turn-reply')
+
+    const turns = groupMessagesByTurn([hiddenNudge, reply])
+
+    // Exactly one turn — the assistant reply. No 'user' turn for the hidden nudge.
+    expect(turns.some(t => t.type === 'user')).toBe(false)
+    const assistantTurns = turns.filter(t => t.type === 'assistant')
+    expect(assistantTurns.length).toBe(1)
+  })
+
+  it('a visible user message still renders normally alongside a hidden one', () => {
+    resetCounters()
+
+    const visible = createUserMessage('real user question')
+    const hidden: Message = { ...createUserMessage('[background-task-completed] hidden'), hidden: true }
+
+    const turns = groupMessagesByTurn([visible, hidden])
+
+    const userTurns = turns.filter(t => t.type === 'user')
+    expect(userTurns.length).toBe(1)
+    expect((userTurns[0] as { message: Message }).message.content).toBe('real user question')
+  })
+})

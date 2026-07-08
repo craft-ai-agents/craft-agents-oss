@@ -6,24 +6,22 @@
  */
 
 import React from 'react'
-import { cn } from '@/lib/utils'
-import { Spinner } from '@craft-agent/ui'
+import { useSetAtom } from 'jotai'
 import { TaskActionMenu, type TerminalOverlayData } from './TaskActionMenu'
+import { backgroundTasksAtomFamily, type BackgroundTask } from '@/atoms/sessions'
 
-export interface BackgroundTask {
-  /** Task or shell ID */
-  id: string
-  /** Task type */
-  type: 'agent' | 'shell'
-  /** Tool use ID for correlation with messages */
-  toolUseId: string
-  /** When the task started */
-  startTime: number
-  /** Elapsed seconds (from progress events) */
-  elapsedSeconds: number
-  /** Task intent/description */
-  intent?: string
-}
+// Re-exported for existing consumers (ActiveOptionBadges, ChatInputZone, TaskActionMenu)
+// so the single definition lives in atoms/sessions.ts.
+export type { BackgroundTask } from '@/atoms/sessions'
+
+/**
+ * How long a terminal/orphaned chip lingers before it is auto-pruned. Terminal
+ * (completed/failed/stopped) chips clear quickly so the bar reflects live work;
+ * orphaned chips linger a bit longer so the user actually notices that a task
+ * died at turn end rather than silently vanishing.
+ */
+const TERMINAL_LINGER_MS = 8_000
+const ORPHANED_LINGER_MS = 20_000
 
 export interface ActiveTasksBarProps {
   /** Active background tasks */
@@ -40,30 +38,35 @@ export interface ActiveTasksBarProps {
   className?: string
 }
 
-/** Format elapsed time in a compact way */
-function formatElapsed(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  if (minutes < 60) {
-    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
-  }
-  const hours = Math.floor(minutes / 60)
-  const remainingMinutes = minutes % 60
-  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
-}
-
-/** Shorten task ID for compact display (show first 8 chars) */
-function shortenId(id: string): string {
-  return id.length > 8 ? `${id.slice(0, 8)}...` : id
-}
-
 /**
  * ActiveTasksBar - Badge-style display of running background tasks
  * Styled to match ActiveOptionBadges for visual consistency
  * Only renders when there are active tasks
  */
 export function ActiveTasksBar({ tasks, sessionId, onKillTask, onInsertMessage, onShowTerminalOverlay, className }: ActiveTasksBarProps) {
+  const setTasks = useSetAtom(backgroundTasksAtomFamily(sessionId))
+
+  // Auto-expiry ticker: prune terminal/orphaned chips after their linger window
+  // so the bar reflects live work and terminal chips don't accumulate. Running
+  // chips are never pruned here — they clear on task_completed or are flipped to
+  // 'orphaned' at turn end (App.tsx handleBackgroundTaskEvent). This is the
+  // reliability backstop that was missing when the bar was first disabled.
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now()
+      setTasks((prev) => {
+        const next = prev.filter((t) => {
+          if (t.status === 'running') return true
+          const age = now - (t.completedAt ?? now)
+          const linger = t.status === 'orphaned' ? ORPHANED_LINGER_MS : TERMINAL_LINGER_MS
+          return age < linger
+        })
+        return next.length === prev.length ? prev : next
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [sessionId, setTasks])
+
   // Don't render if no tasks
   if (tasks.length === 0) return null
 

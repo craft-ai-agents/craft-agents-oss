@@ -9,6 +9,7 @@
 import { loadLabelConfig, saveLabelConfig, isValidLabelId, isValidLabelIdFormat } from './storage.ts';
 import { findLabelById, collectAllIds, getDescendantIds, getLabelDisplayName } from './tree.ts';
 import { extractLabelId, parseLabelEntry, formatLabelEntry } from './values.ts';
+import { findTaskLabel } from './filter.ts';
 import type { LabelConfig, CreateLabelInput, UpdateLabelInput } from './types.ts';
 
 /**
@@ -64,6 +65,59 @@ export function createLabel(
 
   saveLabelConfig(workspaceRootPath, config);
   return label;
+}
+
+/**
+ * Resolve the reserved "Task" ROOT label (a plain boolean label), creating it if
+ * absent. Matches a root label by id 'task' or case-insensitive name — a user's
+ * own root "Task" label is ADOPTED as the parent for task item labels (their
+ * children and tagged sessions are untouched). Only a `valueType: 'number'` root
+ * — the shape the earlier numbered scheme created — is converged to a plain
+ * label; other valueTypes are user-authored and left as-is (item children nest
+ * under a valued root just fine). The resolved slug may differ from the literal
+ * 'task', so callers MUST use the returned id.
+ */
+export function ensureTaskLabel(workspaceRootPath: string): string {
+  const config = loadLabelConfig(workspaceRootPath);
+  const existing = findTaskLabel(config.labels);
+  if (existing) {
+    if (existing.valueType === 'number') {
+      existing.valueType = undefined;
+      saveLabelConfig(workspaceRootPath, config);
+    }
+    return existing.id;
+  }
+  return createLabel(workspaceRootPath, { name: 'Task', color: 'accent' }).id;
+}
+
+/**
+ * Create the per-task ITEM label for a new task: a child of the reserved Task
+ * root named `TASK-<short-title-slug>-<N>`, where N is the next counter across
+ * the root's existing TASK-named children (max trailing number + 1, so deletions
+ * never recycle an id). Only our `TASK-…-<N>` name format feeds the counter — an
+ * adopted user root may carry unrelated children (e.g. "Sprint-2026") that must
+ * not inflate it. One item label tags the task's entire family (orchestrator +
+ * all subtasks), making a single click filter exactly that task. The label's
+ * generated slug id may collide-shift, so callers MUST use the returned id.
+ */
+export function ensureTaskItemLabel(
+  workspaceRootPath: string,
+  title: string
+): { rootId: string; itemId: string; name: string } {
+  const rootId = ensureTaskLabel(workspaceRootPath);
+  const config = loadLabelConfig(workspaceRootPath);
+  const root = findLabelById(config.labels, rootId);
+  const next =
+    1 +
+    (root?.children ?? []).reduce((max, child) => {
+      const m = /^TASK-.*-(\d+)\s*$/i.exec(child.name.trim());
+      return m ? Math.max(max, Number(m[1])) : max;
+    }, 0);
+  // "Short name with dashes": the slugified title, capped to its first few words.
+  const slug = generateLabelSlug(title).split('-').slice(0, 4).join('-') || 'task';
+  const name = `TASK-${slug}-${next}`;
+  const item = createLabel(workspaceRootPath, { name, parentId: rootId, color: 'accent' });
+  return { rootId, itemId: item.id, name };
 }
 
 /**

@@ -95,6 +95,13 @@ export interface CompleteEvent {
   tokenUsage?: Session['tokenUsage']
   /** Explicit unread flag - set by main process based on viewing state */
   hasUnread?: boolean
+  /**
+   * WS2 keep-alive: true when the session's persistent query stays open across
+   * turns (`CRAFT_KEEP_BG_AGENTS_ALIVE`). When set, the turn ending does NOT tear
+   * down background sub-agents — so the chip orphan-backstop must NOT fire on this
+   * `complete`; a real `task_completed` will arrive when the agent actually finishes.
+   */
+  backgroundTasksAlive?: boolean
 }
 
 /**
@@ -141,12 +148,31 @@ export interface LabelsChangedEvent {
 }
 
 /**
+ * Project id changed event (session bound/unbound to a workspace project)
+ */
+export interface ProjectIdChangedEvent {
+  type: 'project_id_changed'
+  sessionId: string
+  projectId: string | null
+}
+
+/**
  * Todo state changed event (external metadata change or agent tool)
  */
 export interface SessionStatusChangedEvent {
   type: 'session_status_changed'
   sessionId: string
   sessionStatus?: string
+}
+
+/**
+ * Session metadata changed event — generic live push for programmatic metadata writes
+ * (taskNodeCount, kanbanColumn) that don't ride the header-signature file-watch path.
+ */
+export interface SessionMetadataChangedEvent {
+  type: 'session_metadata_changed'
+  sessionId: string
+  changes: Partial<Pick<Session, 'taskNodeCount' | 'kanbanColumn' | 'taskDraft' | 'taskSlug' | 'projectId'>>
 }
 
 /**
@@ -341,6 +367,22 @@ export interface TaskBackgroundedEvent {
   taskId: string
   intent?: string
   turnId?: string
+  /** 'workflow' marks a fan-out Workflow launch (many sub-agents); undefined = a single Agent/Task. */
+  kind?: 'workflow'
+  /** Workflow run id (wf_...) — correlates workflow_agent_completed events to this chip. */
+  workflowId?: string
+}
+
+/**
+ * Workflow agent completed - one sub-agent of a running Workflow finished.
+ * Increments the owning workflow chip's completed-agent count.
+ */
+export interface WorkflowAgentCompletedEvent {
+  type: 'workflow_agent_completed'
+  sessionId: string
+  workflowId: string
+  agentId: string
+  turnId?: string
 }
 
 /**
@@ -484,7 +526,9 @@ export type AgentEvent =
   | CredentialRequestEvent
   | SourcesChangedEvent
   | LabelsChangedEvent
+  | ProjectIdChangedEvent
   | SessionStatusChangedEvent
+  | SessionMetadataChangedEvent
   | SessionFlaggedEvent
   | SessionUnflaggedEvent
   | SessionArchivedEvent
@@ -506,6 +550,7 @@ export type AgentEvent =
   | ShellBackgroundedEvent
   | TaskProgressEvent
   | TaskCompletedEvent
+  | WorkflowAgentCompletedEvent
   | UserMessageEvent
   | MessageAnnotationsUpdatedEvent
   | SessionSharedEvent

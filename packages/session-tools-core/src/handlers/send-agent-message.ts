@@ -41,10 +41,22 @@ export async function handleSendAgentMessage(
       args.message,
     ].join('\n');
 
-    await ctx.sendAgentMessage(args.sessionId, wrappedMessage, args.attachments);
+    const result = await ctx.sendAgentMessage(args.sessionId, wrappedMessage, args.attachments);
+
+    // Report the real delivery status instead of an unconditional "sent". A busy
+    // target queues the message behind its current turn; an idle target starts
+    // now. This is what lets the sender avoid guessing (e.g. never invent "the
+    // app restarted") — for actual task status, call list_background_tasks.
+    if (result.delivery === 'queued') {
+      return successResponse(
+        `Message queued for session ${args.sessionId} — it is currently processing another turn. ` +
+          `It will handle your message after the current turn finishes. Do not assume it was read yet; ` +
+          `wait for a reply or query status before concluding anything.`
+      );
+    }
 
     return successResponse(
-      `Message sent to session ${args.sessionId}. The session will process it independently.`
+      `Message delivered to session ${args.sessionId}; it will start processing independently now.`
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

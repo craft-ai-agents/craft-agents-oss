@@ -1,4 +1,4 @@
-import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
+import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessage, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
 // Local type for SDK user message content blocks (text, image, document)
 // Replaces import from @anthropic-ai/sdk/resources — keeps SDK as agent-only dependency
@@ -22,6 +22,7 @@ import {
 } from '../config/llm-connections.ts';
 import type { McpClientPool } from '../mcp/mcp-pool.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
+import { loadProjectById, getProjectAssetsPath, listProjectAssets, getProjectMemoryPath, loadProjectMemory } from '../projects/storage.ts';
 import { DEFAULT_MODEL, isClaudeModel, isAdaptiveThinkingAlwaysOnModel, getDefaultSummarizationModel, getModelContextWindow } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { loadPreferences, formatPreferencesForPrompt, getCoAuthorPreference } from '../config/preferences.ts';
@@ -31,6 +32,7 @@ import { consumeLlmQueryMessages } from './claude-llm-query.ts';
 import { debug } from '../utils/debug.ts';
 import { guardLargeResult } from '../utils/large-response.ts';
 import { SourceActivationDrainController } from './source-activation-drain.ts';
+import { resolveKeepBackgroundTasksAlive, createPushableInputStream, type PushableInputStream } from './backend/claude/persistent-input.ts';
 import {
   getSessionPlansDir,
   getLastPlanFilePath,
@@ -114,7 +116,7 @@ import type { AgentEvent } from '@craft-agent/core/types';
 export type { AgentEvent };
 
 // Stateless tool matching — pure functions for SDK message → AgentEvent conversion
-import { ToolIndex } from './tool-matching.ts';
+import { ToolIndex, parseWorkflowIdFromTranscriptPath } from './tool-matching.ts';
 
 // Claude event adapter — extracts SDK message → AgentEvent conversion into testable class
 import { ClaudeEventAdapter, buildWindowsSkillsDirError as buildWindowsSkillsDirErrorFn } from './backend/claude/event-adapter.ts';
@@ -496,12 +498,167 @@ export class ClaudeAgent extends BaseAgent {
   // Pinned system prompt components (captured on first chat, used for consistency after compaction)
   private pinnedPreferencesPrompt: string | null = null;
   private pinnedIncludeCoAuthoredBy: boolean | null = null;
+  private pinnedProjectContext: import('../projects/types.ts').ProjectPromptContext | null = null;
   // Track if preference drift notification has been shown this session
   private preferencesDriftNotified: boolean = false;
   // Captured stderr from SDK subprocess (for error diagnostics when process exits with code 1)
   private lastStderrOutput: string[] = [];
   /** Pending steer message — injected via additionalContext on next PreToolUse */
   private pendingSteerMessage: string | null = null;
+
+  /**
+   * WS2 keep-alive: when true, use one long-lived streaming-input `query()` per
+   * session so background sub-agents survive across turns (instead of a fresh
+   * per-turn subprocess that tears them down at turn end). Resolved once from
+   * `CRAFT_KEEP_BG_AGENTS_ALIVE` via the shared resolver. Default is ON (opt-out);
+   * set `CRAFT_KEEP_BG_AGENTS_ALIVE=0` to force the per-turn kill-switch path.
+   */
+  private readonly keepBackgroundTasksAlive: boolean = resolveKeepBackgroundTasksAlive();
+
+  // ── WS2 persistent streaming-input query state (flag ON only) ─────────────
+  /** Pushable prompt feeding the one long-lived `query()`; `push()` per turn, `end()` to tear down. */
+  private persistentInput: PushableInputStream<SDKUserMessage> | null = null;
+  /** The sole iterator over the persistent query — owned exclusively by the consumer loop. */
+  private persistentIterator: AsyncIterator<SDKMessage> | null = null;
+  /** AbortController bound to the persistent query for its whole life (hard-kill backstop). */
+  private persistentAbortController: AbortController | null = null;
+  /** True while the single always-on consumer loop is running. */
+  private persistentConsumerActive = false;
+  /** The current turn's SDK-message channel; the consumer routes into it, chatImpl drains it. */
+  private activeTurnChannel: PushableInputStream<SDKMessage> | null = null;
+  /** Sink for background task events that arrive between turns (wired by the session layer). */
+  private onBackgroundEvent: ((event: AgentEvent) => void) | null = null;
+
+  /**
+   * Tear down the persistent query. Idempotent, and the single funnel for ALL
+   * teardown paths (dispose/destroy, auth-fail, recreate-on-change, clearHistory,
+   * consumer exit). Guarantees no subprocess leak: ends the input, returns the
+   * iterator, and — as a hard backstop — aborts the controller (SIGTERM/SIGKILL)
+   * so the subprocess dies even if the graceful close is ignored.
+   */
+  private teardownPersistentQuery(reason: string = 'teardown'): void {
+    if (!this.persistentInput && !this.persistentIterator && !this.persistentAbortController) {
+      return; // already torn down
+    }
+    debug(`[bg-lifecycle] teardownPersistentQuery (${reason})`, { sessionId: this.config.session?.id });
+    try { this.persistentInput?.end(); } catch { /* already ended */ }
+    try { void this.persistentIterator?.return?.(undefined); } catch { /* best-effort */ }
+    try { this.persistentAbortController?.abort(); } catch { /* best-effort hard backstop */ }
+    try { this.activeTurnChannel?.end(); } catch { /* best-effort */ }
+    this.persistentInput = null;
+    this.persistentIterator = null;
+    this.persistentAbortController = null;
+    this.activeTurnChannel = null;
+    this.persistentConsumerActive = false;
+  }
+
+  /**
+   * Begin a turn in persistent streaming-input mode. First call builds the one
+   * long-lived query (with this turn's resume/fork options) + starts the single
+   * consumer; later calls reuse it. Always sets up a fresh per-turn channel and
+   * pushes the user message. Returns the channel stream for chatImpl to drain —
+   * ending that channel at `result` completes the turn WITHOUT closing the real
+   * query (the subprocess, and its background sub-agents, stay alive).
+   */
+  private beginPersistentTurn(prompt: SDKUserMessage, options: Options): AsyncIterable<SDKMessage> {
+    if (!this.persistentInput || !this.currentQuery) {
+      // First turn: create the persistent query + consumer.
+      this.persistentInput = createPushableInputStream<SDKUserMessage>();
+      this.persistentAbortController = this.currentQueryAbortController;
+      this.currentQuery = query({ prompt: this.persistentInput.stream, options });
+      this.persistentIterator = this.currentQuery[Symbol.asyncIterator]();
+      this.startPersistentConsumer();
+    } else {
+      // Subsequent turn: keep redirect()/forceAbort() targeting the LIVE query by
+      // restoring its controller (the per-turn setup created a fresh, unused one).
+      if (this.persistentAbortController) {
+        this.currentQueryAbortController = this.persistentAbortController;
+      }
+    }
+    const channel = createPushableInputStream<SDKMessage>();
+    this.activeTurnChannel = channel;
+    this.persistentInput.push(prompt);
+    return channel.stream;
+  }
+
+  /**
+   * The single always-on consumer — the SOLE caller of the persistent iterator's
+   * `.next()` (so there is never a concurrent `.next()`). Routes each SDK message
+   * to the active turn's channel; on that turn's `result` it ends the channel
+   * (completing chatImpl's for-await without closing the query). Between turns it
+   * forwards background task-completion events via `onBackgroundEvent`, and keeps
+   * draining so the subprocess never stalls on pipe backpressure.
+   */
+  private startPersistentConsumer(): void {
+    if (this.persistentConsumerActive) return;
+    this.persistentConsumerActive = true;
+    const iterator = this.persistentIterator;
+    if (!iterator) {
+      this.persistentConsumerActive = false;
+      return;
+    }
+    void (async () => {
+      try {
+        while (true) {
+          const { done, value } = await iterator.next();
+          if (done) break;
+          const channel = this.activeTurnChannel;
+          if (channel) {
+            channel.push(value);
+            const type = (value as { type?: string } | undefined)?.type;
+            if (type === 'result') {
+              // Turn boundary: detach + end the channel so chatImpl's for-await
+              // completes. Do NOT touch the real iterator — the query lives on.
+              this.activeTurnChannel = null;
+              channel.end();
+            }
+          } else {
+            this.routeBackgroundMessage(value);
+          }
+        }
+      } catch (err) {
+        this.debug(`[bg-lifecycle] persistent consumer error: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        this.teardownPersistentQuery('consumer-exit');
+      }
+    })();
+  }
+
+  /**
+   * Convert a between-turns background SDK message to an AgentEvent and emit it
+   * via `onBackgroundEvent`. Only terminal task notifications are forwarded (the
+   * important signal — completion/failure); progress ticks between turns are
+   * cosmetic (the UI derives elapsed from startTime). Standalone mapper so it
+   * doesn't disturb the turn-scoped event adapter. Mirrors event-adapter.ts:544.
+   */
+  private routeBackgroundMessage(message: SDKMessage): void {
+    const msg = message as unknown as {
+      type?: string;
+      subtype?: string;
+      task_id?: string;
+      status?: string;
+      output_file?: string;
+      summary?: string;
+    };
+    if (msg?.type === 'system' && msg.subtype === 'task_notification' && msg.task_id) {
+      const status: 'completed' | 'failed' | 'stopped' =
+        msg.status === 'failed' || msg.status === 'stopped' ? msg.status : 'completed';
+      this.onBackgroundEvent?.({
+        type: 'task_completed',
+        taskId: msg.task_id,
+        status,
+        ...(msg.output_file ? { outputFile: msg.output_file } : {}),
+        ...(msg.summary ? { summary: msg.summary } : {}),
+      });
+    } else {
+      this.debug(`[bg-lifecycle] dropping unexpected between-turns message: ${msg?.type}/${msg?.subtype ?? ''}`);
+    }
+  }
+
+  /** Wire the between-turns background-event sink (SessionManager forwards to registry/renderer). */
+  setBackgroundEventSink(sink: ((event: AgentEvent) => void) | null): void {
+    this.onBackgroundEvent = sink;
+  }
 
   /**
    * Get the session ID for mode operations.
@@ -516,6 +673,38 @@ export class ClaudeAgent extends BaseAgent {
    */
   private get workspaceRootPath(): string {
     return this.config.workspace.rootPath;
+  }
+
+  /**
+   * Look up the bound project (if any) and return a snapshot for system-prompt injection.
+   * Resolution silently no-ops when the session is unbound or the project no longer exists,
+   * so this never blocks a chat() call.
+   */
+  private resolveProjectContext(): import('../projects/types.ts').ProjectPromptContext | null {
+    const projectId = this.config.session?.projectId;
+    if (!projectId) return null;
+
+    try {
+      const project = loadProjectById(this.workspaceRootPath, projectId);
+      if (!project) return null;
+      const slug = project.config.slug;
+      return {
+        name: project.config.name,
+        description: project.config.description,
+        details: project.config.details,
+        assetsPath: getProjectAssetsPath(this.workspaceRootPath, slug),
+        assets: listProjectAssets(this.workspaceRootPath, slug).map((a) => ({
+          filename: a.filename,
+          mimeType: a.mimeType,
+          sizeBytes: a.sizeBytes,
+        })),
+        memoryPath: getProjectMemoryPath(this.workspaceRootPath, slug),
+        memoryContent: loadProjectMemory(this.workspaceRootPath, slug) ?? undefined,
+      };
+    } catch (error) {
+      debug(`[resolveProjectContext] Failed to load project ${projectId}:`, error);
+      return null;
+    }
   }
 
   // Callback for permission requests - set by application to receive permission prompts
@@ -823,6 +1012,7 @@ export class ClaudeAgent extends BaseAgent {
         // First chat in this session - pin current values
         this.pinnedPreferencesPrompt = currentPreferencesPrompt;
         this.pinnedIncludeCoAuthoredBy = currentCoAuthorPref;
+        this.pinnedProjectContext = this.resolveProjectContext();
         debug('[chat] Pinned system prompt components for session consistency');
       } else {
         // Detect drift: warn user if context has changed since session started
@@ -975,6 +1165,29 @@ export class ClaudeAgent extends BaseAgent {
         // Capture stderr from SDK subprocess for error diagnostics
         // This helps identify why sessions fail with "process exited with code 1"
         stderr: (data: string) => {
+          // The SDK dumps its ENTIRE minified source whenever a hook callback
+          // throws. The common (benign) case is a background sub-agent whose
+          // PreToolUse hook fires *after* the turn's input stream has closed at
+          // turn-end teardown — "Error in hook callback hook_N: … Stream closed"
+          // (a can_use_tool control request on a closed stream). That is the
+          // WS2 background-agent-dies-at-turn-end race: expected until keep-alive
+          // lands, and not actionable. Collapse it to a one-line warning instead
+          // of flooding the log/console with kilobytes of minified bundle.
+          const isHookStreamClosedNoise =
+            data.includes('Error in hook callback') &&
+            (data.includes('Stream closed') ||
+              data.includes('stream closed before response'));
+          if (isHookStreamClosedNoise) {
+            const concise =
+              '[SDK stderr] hook callback raced turn-end teardown (stream closed): a background tool call was cut off when the turn ended. Expected until background keep-alive lands.';
+            debug(concise);
+            console.error(concise);
+            this.lastStderrOutput.push('hook callback: Stream closed (turn-end teardown)');
+            if (this.lastStderrOutput.length > 20) {
+              this.lastStderrOutput.shift();
+            }
+            return;
+          }
           // Log to both debug file AND console for visibility
           debug('[SDK stderr]', data);
           console.error('[SDK stderr]', data);
@@ -1005,7 +1218,8 @@ export class ClaudeAgent extends BaseAgent {
                 this.config.session?.workingDirectory,
                 undefined, // preset
                 undefined, // backendName
-                this.pinnedIncludeCoAuthoredBy ?? undefined
+                this.pinnedIncludeCoAuthoredBy ?? undefined,
+                this.pinnedProjectContext ?? undefined,
               ),
             },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
@@ -1308,6 +1522,19 @@ export class ClaudeAgent extends BaseAgent {
             hooks: [async (input, _toolUseID) => {
               const typedInput = input as { agent_id?: string; agent_transcript_path?: string };
               debug(`[ClaudeAgent] SubagentStop: agent_id=${typedInput.agent_id}, transcript=${typedInput.agent_transcript_path ?? 'none'}`);
+              // If this sub-agent belongs to a running Workflow (its transcript
+              // lives under .../workflows/wf_XXX/), attribute its completion to the
+              // owning workflow chip so the user sees live fan-out progress. The
+              // transcript path is the only place the wf_ id is exposed to us;
+              // ordinary sub-agents live under .../subagents/agent-* and return null.
+              const workflowId = parseWorkflowIdFromTranscriptPath(typedInput.agent_transcript_path);
+              if (workflowId && this.onBackgroundEvent) {
+                this.onBackgroundEvent({
+                  type: 'workflow_agent_completed',
+                  workflowId,
+                  agentId: typedInput.agent_id ?? '',
+                });
+              }
               return { continue: true };
             }],
           }],
@@ -1415,22 +1642,36 @@ This is a branched conversation. All prior messages in this conversation are par
         debug('[chat] Injected SDK-fork branch context hint into first message');
       }
 
-      // Create the query - handle slash commands, binary attachments, or regular messages
-      if (isSlashCommand) {
+      // Create the query - handle slash commands, binary attachments, or regular messages.
+      //
+      // WS2 keep-alive: for non-slash turns, ride ONE persistent streaming-input
+      // query (created on the first turn, reused thereafter) so background
+      // sub-agents survive across turns. chatImpl then drains a per-turn *channel*
+      // (fed by the single consumer) instead of the raw query — ending that channel
+      // at `result` finishes the turn without closing the subprocess. Slash commands
+      // (e.g. /compact) always use the per-turn path (they mutate session state).
+      let turnMessageSource: AsyncIterable<SDKMessage>;
+      if (this.keepBackgroundTasksAlive && !isSlashCommand) {
+        const sdkMessage = this.buildSDKUserMessage(effectiveUserMessage, attachments);
+        turnMessageSource = this.beginPersistentTurn(sdkMessage, optionsWithAbort);
+      } else if (isSlashCommand) {
         // Send slash commands directly to SDK without context wrapping.
         // The SDK processes these as internal commands (e.g., /compact triggers compaction).
         debug(`[chat] Detected SDK slash command: ${trimmedMessage}`);
         this.currentQuery = query({ prompt: trimmedMessage, options: optionsWithAbort });
+        turnMessageSource = this.currentQuery;
       } else if (hasBinaryAttachments) {
         const sdkMessage = this.buildSDKUserMessage(effectiveUserMessage, attachments);
         async function* singleMessage(): AsyncIterable<SDKUserMessage> {
           yield sdkMessage;
         }
         this.currentQuery = query({ prompt: singleMessage(), options: optionsWithAbort });
+        turnMessageSource = this.currentQuery;
       } else {
         // Simple string prompt for text-only messages (may include text file contents)
         const prompt = this.buildTextPrompt(effectiveUserMessage, attachments);
         this.currentQuery = query({ prompt, options: optionsWithAbort });
+        turnMessageSource = this.currentQuery;
       }
 
       // Initialize event adapter for this turn
@@ -1454,7 +1695,9 @@ This is a branched conversation. All prior messages in this conversation are par
       // ends up with orphan `tool_use` IDs that block subsequent sends.
       const sourceActivationDrain = new SourceActivationDrainController('batch-boundary');
       try {
-        for await (const message of this.currentQuery) {
+        // Flag-OFF: `turnMessageSource === this.currentQuery` (unchanged). Flag-ON:
+        // it's the per-turn channel, so breaking/ending here never closes the query.
+        for await (const message of turnMessageSource) {
           // Track if we got any text content from assistant
           if ('type' in message && message.type === 'assistant' && 'message' in message) {
             const assistantMsg = message.message as { content?: unknown[] };
@@ -1682,6 +1925,7 @@ This is a branched conversation. All prior messages in this conversation are par
           this.config.onSdkSessionIdCleared?.();
           this.pinnedPreferencesPrompt = null;
           this.pinnedIncludeCoAuthoredBy = null;
+          this.pinnedProjectContext = null;
           this.preferencesDriftNotified = false;
 
           let retryMessage = userMessage;
@@ -1884,6 +2128,7 @@ This is a branched conversation. All prior messages in this conversation are par
           this.config.onSdkSessionIdCleared?.();
           this.pinnedPreferencesPrompt = null;
           this.pinnedIncludeCoAuthoredBy = null;
+          this.pinnedProjectContext = null;
           this.preferencesDriftNotified = false;
 
           let retryMessage = userMessage;
@@ -2087,6 +2332,7 @@ This is a branched conversation. All prior messages in this conversation are par
           this.config.onSdkSessionIdCleared?.();
           this.pinnedPreferencesPrompt = null;
           this.pinnedIncludeCoAuthoredBy = null;
+          this.pinnedProjectContext = null;
           this.preferencesDriftNotified = false;
 
           let retryMessage = userMessage;
@@ -2131,7 +2377,20 @@ This is a branched conversation. All prior messages in this conversation are par
       // emit complete even on error so application knows we're done
       yield { type: 'complete' };
     } finally {
-      this.currentQuery = null;
+      // [bg-lifecycle] Nulling currentQuery closes the SDK query iterator, which
+      // tears down the per-turn subprocess and any background sub-agents it
+      // launched. This is the teardown point referenced by WS2-step0: background
+      // agents die HERE at turn end, not when a second user message arrives.
+      // WS2: in keep-alive mode the persistent query is kept open across turns —
+      // the per-turn channel already ended at `result`, and teardown happens only
+      // via teardownPersistentQuery() (dispose/auth-fail/recreate/clearHistory).
+      // Flag-OFF path is unchanged: null currentQuery → subprocess teardown.
+      if (this.keepBackgroundTasksAlive && this.persistentInput) {
+        debug(`[bg-lifecycle] chat() turn finished — persistent query kept alive`, { sessionId: this.config.session?.id, sdkSessionId: this.sessionId });
+      } else {
+        debug(`[bg-lifecycle] chat() finally — currentQuery nulled, subprocess torn down`, { sessionId: this.config.session?.id, sdkSessionId: this.sessionId, keepAlive: this.keepBackgroundTasksAlive });
+        this.currentQuery = null;
+      }
 
       // If a steer message was never delivered (no PreToolUse fired), notify the session
       // layer so it can re-queue the message for the next turn.
@@ -2476,6 +2735,7 @@ This is a branched conversation. All prior messages in this conversation are par
     // Clear pinned state so next chat() will capture fresh values
     this.pinnedPreferencesPrompt = null;
     this.pinnedIncludeCoAuthoredBy = null;
+    this.pinnedProjectContext = null;
     this.preferencesDriftNotified = false;
   }
 
@@ -2642,11 +2902,15 @@ This is a branched conversation. All prior messages in this conversation are par
   destroy(): void {
     // Claude-specific cleanup first
     this.currentQueryAbortController?.abort();
+    // WS2: tear down the persistent streaming-input query (if any) so no
+    // subprocess/background sub-agents leak past the agent's lifetime.
+    this.teardownPersistentQuery('destroy');
     this.pendingPermissions.clear();
 
     // Clear pinned system prompt state
     this.pinnedPreferencesPrompt = null;
     this.pinnedIncludeCoAuthoredBy = null;
+    this.pinnedProjectContext = null;
     this.preferencesDriftNotified = false;
 
     // Clear Claude-specific callbacks (not handled by BaseAgent)
@@ -2821,6 +3085,7 @@ This is a branched conversation. All prior messages in this conversation are par
     this.branchFromSdkTurnId = null;
     this.pinnedPreferencesPrompt = null;
     this.pinnedIncludeCoAuthoredBy = null;
+    this.pinnedProjectContext = null;
     this.preferencesDriftNotified = false;
     // Atomic on-disk persistence: clears all four fork fields at once. This
     // supersedes onSdkSessionIdCleared, which only persists sdkSessionId and

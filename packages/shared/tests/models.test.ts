@@ -5,6 +5,9 @@ import { describe, it, expect } from 'bun:test';
 import {
   isClaudeModel,
   getModelShortName,
+  getModelDisplayName,
+  getModelContextWindow,
+  getModelById,
   ANTHROPIC_MODELS,
   getModelIdByShortName,
   normalizeDeprecatedModelId,
@@ -110,5 +113,28 @@ describe('Opus registry', () => {
     expect(normalizeDeprecatedModelId('pi/claude-opus-4-6')).toBe('pi/claude-opus-4-8');
     expect(normalizeDeprecatedModelId('us.anthropic.claude-opus-4-6-v1')).toBe('us.anthropic.claude-opus-4-8');
     expect(normalizeDeprecatedModelId('claude-opus-4-7')).toBe('claude-opus-4-7');
+  });
+});
+
+describe('Sonnet registry', () => {
+  it('includes Sonnet 5 and keeps Sonnet 4.6', () => {
+    const ids = ANTHROPIC_MODELS.map(m => m.id);
+    expect(ids).toContain('claude-sonnet-5');
+    expect(ids).toContain('claude-sonnet-4-6');
+  });
+
+  it('resolves "Sonnet" shortName to Sonnet 5', () => {
+    expect(getModelIdByShortName('Sonnet')).toBe('claude-sonnet-5');
+  });
+
+  it('exposes Sonnet 5 metadata', () => {
+    expect(getModelDisplayName('claude-sonnet-5')).toBe('Sonnet 5');
+    expect(getModelShortName('claude-sonnet-5')).toBe('Sonnet');
+    expect(getModelContextWindow('claude-sonnet-5')).toBe(1_000_000);
+  });
+
+  it('maps Bedrock Sonnet 5 IDs back to the bare ID', () => {
+    expect(getModelById('us.anthropic.claude-sonnet-5')?.id).toBe('claude-sonnet-5');
+    expect(getModelById('anthropic.claude-sonnet-5')?.id).toBe('claude-sonnet-5');
   });
 });

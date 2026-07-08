@@ -106,7 +106,9 @@ function normalizeProportions(stack: PanelStackEntry[]): PanelStackEntry[] {
 }
 
 export function parseSessionIdFromRoute(route: ViewRoute): string | null {
-  const segments = route.split('/')
+  // Strip any query string first — a `?x=y` tail on the last segment would otherwise
+  // leak into the extracted session id and poison every focused-session consumer.
+  const segments = route.split('?')[0].split('/')
   const idx = segments.indexOf('session')
   if (idx >= 0 && idx + 1 < segments.length) {
     return segments[idx + 1]
@@ -118,6 +120,20 @@ export const focusedSessionIdAtom = atom((get) => {
   const route = get(focusedPanelRouteAtom)
   if (!route) return null
   return parseSessionIdFromRoute(route)
+})
+
+/**
+ * Session ids currently on screen across all open panels (the focused panel
+ * plus any split-view siblings). Used to decide whether a session is "in the
+ * background" — a session shown in any panel is not.
+ */
+export const visibleSessionIdsAtom = atom((get) => {
+  const ids = new Set<string>()
+  for (const entry of get(panelStackAtom)) {
+    const id = parseSessionIdFromRoute(entry.route)
+    if (id) ids.add(id)
+  }
+  return ids
 })
 
 export const pushPanelAtom = atom(

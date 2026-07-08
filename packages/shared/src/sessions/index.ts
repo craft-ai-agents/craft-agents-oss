@@ -51,6 +51,9 @@ export {
   flagSession,
   unflagSession,
   setSessionStatus,
+  setSessionLabels,
+  setSessionProjectId,
+  unbindProjectFromSessions,
   // Pending plan execution (Accept & Compact flow)
   setPendingPlanExecution,
   markCompactionComplete,

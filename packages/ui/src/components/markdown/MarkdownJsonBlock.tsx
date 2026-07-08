@@ -13,6 +13,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import JsonView from '@uiw/react-json-view'
 import { vscodeTheme } from '@uiw/react-json-view/vscode'
 import { githubLightTheme } from '@uiw/react-json-view/githubLight'
@@ -119,6 +120,7 @@ export interface MarkdownJsonBlockProps {
 }
 
 export function MarkdownJsonBlock({ code, className }: MarkdownJsonBlockProps) {
+  const { t } = useTranslation()
   const [copied, setCopied] = React.useState(false)
 
   // Try to parse – fall back to syntax-highlighted CodeBlock if invalid JSON
@@ -158,7 +160,7 @@ export function MarkdownJsonBlock({ code, className }: MarkdownJsonBlockProps) {
           <button
             onClick={handleCopy}
             className="opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-            aria-label="Copy JSON"
+            aria-label={t('common.copyJson')}
           >
             {copied ? (
               <Check className="w-3.5 h-3.5 text-success" />

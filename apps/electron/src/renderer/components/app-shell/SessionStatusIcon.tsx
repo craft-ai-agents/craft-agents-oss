@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { SessionStatusMenu } from "@/components/ui/session-status-menu"
@@ -12,6 +13,7 @@ interface SessionStatusIconProps {
 }
 
 export function SessionStatusIcon({ item }: SessionStatusIconProps) {
+  const { t } = useTranslation()
   const ctx = useSessionListContext()
   const [open, setOpen] = useState(false)
   const status = getSessionStatus(item)
@@ -34,7 +36,7 @@ export function SessionStatusIcon({ item }: SessionStatusIconProps) {
           style={getStateIconStyle(status, ctx.sessionStatuses)}
           aria-haspopup="menu"
           aria-expanded={open}
-          aria-label="Change todo state"
+          aria-label={t("status.change")}
           onContextMenu={(e) => {
             e.preventDefault()
             e.stopPropagation()

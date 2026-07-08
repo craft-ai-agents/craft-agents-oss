@@ -87,6 +87,7 @@ const sampleBackgroundTasks: BackgroundTask[] = [
     startTime: Date.now() - 45000, // 45 seconds ago
     elapsedSeconds: 45,
     intent: 'Explore codebase structure',
+    status: 'running',
   },
   {
     id: 'shell-xyz456',
@@ -94,6 +95,7 @@ const sampleBackgroundTasks: BackgroundTask[] = [
     toolUseId: 'tool-2',
     startTime: Date.now() - 154000, // 2m 34s ago
     elapsedSeconds: 154,
+    status: 'running',
   },
 ]
 
@@ -105,6 +107,7 @@ const singleBackgroundTask: BackgroundTask[] = [
     startTime: Date.now() - 23000,
     elapsedSeconds: 23,
     intent: 'Search for TypeScript files',
+    status: 'running',
   },
 ]
 
@@ -116,6 +119,7 @@ const longRunningTasks: BackgroundTask[] = [
     startTime: Date.now() - 3723000, // 1h 2m 3s
     elapsedSeconds: 3723,
     intent: 'Refactor authentication system',
+    status: 'running',
   },
   {
     id: 'shell-long-2',
@@ -123,6 +127,8 @@ const longRunningTasks: BackgroundTask[] = [
     toolUseId: 'tool-long-2',
     startTime: Date.now() - 245000, // 4m 5s
     elapsedSeconds: 245,
+    status: 'orphaned',
+    completedAt: Date.now() - 5000,
   },
   {
     id: 'task-long-3',
@@ -131,6 +137,8 @@ const longRunningTasks: BackgroundTask[] = [
     startTime: Date.now() - 12000, // 12s
     elapsedSeconds: 12,
     intent: 'Run tests',
+    status: 'completed',
+    completedAt: Date.now() - 2000,
   },
 ]
 

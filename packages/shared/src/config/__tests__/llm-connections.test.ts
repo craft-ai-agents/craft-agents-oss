@@ -145,6 +145,15 @@ describe('toBedrockNativeId', () => {
     expect(fromBedrockNativeId('us.anthropic.claude-opus-4-7')).toBe('claude-opus-4-7')
   })
 
+  it('maps Sonnet 5 forward and reverse across regions and base IDs', () => {
+    expect(toBedrockNativeId('claude-sonnet-5')).toBe('us.anthropic.claude-sonnet-5')
+    expect(toBedrockNativeId('claude-sonnet-5', 'eu')).toBe('eu.anthropic.claude-sonnet-5')
+    expect(toBedrockNativeId('anthropic.claude-sonnet-5')).toBe('us.anthropic.claude-sonnet-5')
+    expect(fromBedrockNativeId('us.anthropic.claude-sonnet-5')).toBe('claude-sonnet-5')
+    expect(fromBedrockNativeId('eu.anthropic.claude-sonnet-5')).toBe('claude-sonnet-5')
+    expect(fromBedrockNativeId('global.anthropic.claude-sonnet-5')).toBe('claude-sonnet-5')
+  })
+
   it('normalizes deprecated Opus IDs to Opus 4.8 before mapping', () => {
     expect(toBedrockNativeId('claude-opus-4-6')).toBe('us.anthropic.claude-opus-4-8')
     expect(toBedrockNativeId('anthropic.claude-opus-4-6-v1')).toBe('us.anthropic.claude-opus-4-8')

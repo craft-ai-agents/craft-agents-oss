@@ -94,6 +94,8 @@ export interface PromptBuilderConfig {
   systemPromptPreset?: 'default' | 'mini' | string;
   /** Whether running in headless mode */
   isHeadless?: boolean;
+  /** Optional pre-resolved project snapshot for prompt injection (lets tests pin a value) */
+  project?: import('../../projects/types.ts').ProjectPromptContext;
 }
 
 /**

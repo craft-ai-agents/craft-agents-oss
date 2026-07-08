@@ -358,9 +358,14 @@ export interface GroupTurnsOptions {
  * means final response.
  */
 export function groupMessagesByTurn(messages: Message[], options: GroupTurnsOptions = {}): Turn[] {
+  // Drop hidden messages before grouping. These are system-generated nudges that
+  // must reach the model (they drive a turn) but must never render as a bubble —
+  // e.g. the WS2 background-task-completion nudge that wakes an idle session. The
+  // assistant response they trigger has its own turnId and still renders normally.
+  const visibleMessages = messages.filter(m => !m.hidden)
   // Sort by timestamp for correct chronological order
   // This ensures correct turn grouping even if messages are added out of order during streaming
-  const sortedMessages = [...messages].sort((a, b) => a.timestamp - b.timestamp)
+  const sortedMessages = [...visibleMessages].sort((a, b) => a.timestamp - b.timestamp)
 
   const turns: Turn[] = []
   let currentTurn: AssistantTurn | null = null

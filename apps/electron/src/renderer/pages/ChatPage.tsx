@@ -8,7 +8,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { AlertCircle, Globe, Copy, RefreshCw, Link2Off, Info } from 'lucide-react'
+import { AlertCircle, Globe, Copy, RefreshCw, Link2Off, Info, Pencil } from 'lucide-react'
 import { ChatDisplay, type ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { SessionMenu } from '@/components/app-shell/SessionMenu'
@@ -21,10 +21,11 @@ import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu
 import { StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSeparator } from '@/components/ui/styled-dropdown'
 import { useAppShellContext, usePendingPermission, usePendingCredential, useSessionOptionsFor, useSession as useSessionData } from '@/context/AppShellContext'
 import { rendererPerf } from '@/lib/perf'
-import { routes } from '@/lib/navigate'
+import { navigate, routes } from '@/lib/navigate'
 import { coerceInputText } from '@/lib/input-text'
 import { deriveSessionMessagesLoadState, formatSessionLoadFailure } from '@/lib/session-load'
 import { ensureSessionMessagesLoadedAtom, forceSessionMessagesReloadAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
+import { kanbanEditorTargetAtom } from '@/atoms/kanban'
 import { getSessionTitle } from '@/utils/session'
 // Model resolution: connection.defaultModel (no hardcoded defaults)
 import { resolveEffectiveConnectionSlug, isSessionConnectionUnavailable } from '@config/llm-connections'
@@ -462,6 +463,24 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     onSessionLabelsChange?.(sessionId, newLabels)
   }, [sessionId, onSessionLabelsChange])
 
+  // Task orchestrator sessions (spec-backed, top-level) get an "Edit task" header action
+  // that opens the board's full-pane Task editor prefilled from task.yaml — the same
+  // surface as creation, so goal/acceptance criteria/subtasks can change and the whole
+  // task can be re-run (Save & Run mints a fresh Conductor run).
+  const taskSlug = sessionMeta?.taskSlug
+  const isTaskOrchestrator = !!taskSlug && !sessionMeta?.parentSessionId
+  const setKanbanEditorTarget = useSetAtom(kanbanEditorTargetAtom)
+  const handleEditTask = React.useCallback(() => {
+    if (!taskSlug) return
+    setKanbanEditorTarget({
+      mode: 'edit',
+      sessionId,
+      taskSlug,
+      initialTitle: sessionMeta ? getSessionTitle(sessionMeta) : undefined,
+    })
+    navigate(routes.view.board())
+  }, [taskSlug, sessionId, sessionMeta, setKanbanEditorTarget])
+
   const handleDelete = React.useCallback(async () => {
     await onDeleteSession(sessionId)
   }, [sessionId, onDeleteSession])
@@ -600,7 +619,26 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     )
   }, [isCompactMode, sessionId, session?.sessionFolderPath, sessionMeta])
 
-  const headerActions = isCompactMode ? compactInfoButton : shareButton
+  // Pencil opens the Task editor for orchestrator sessions; rendered before the
+  // share/info action. The slot div has no gap of its own, so compose with one here.
+  const editTaskButton = React.useMemo(() => {
+    if (!isTaskOrchestrator) return undefined
+    return (
+      <PanelHeaderCenterButton
+        icon={<Pencil className="h-4 w-4" />}
+        tooltip={t('kanban.editTask')}
+        onClick={handleEditTask}
+      />
+    )
+  }, [isTaskOrchestrator, handleEditTask, t])
+
+  const primaryHeaderAction = isCompactMode ? compactInfoButton : shareButton
+  const headerActions = editTaskButton ? (
+    <div className="flex items-center gap-1.5">
+      {editTaskButton}
+      {primaryHeaderAction}
+    </div>
+  ) : primaryHeaderAction
 
   // Build title menu content for chat sessions using shared SessionMenu.
   // Desktop uses Radix DropdownMenu via PanelHeader; compact mode uses a

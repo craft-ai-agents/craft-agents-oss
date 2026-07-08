@@ -262,8 +262,19 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.transfer.COMMIT,
   RPC_CHANNELS.transfer.ABORT,
 
-  // tasks — workspace content
+  // tasks — workspace content (Conductor DAG runs on the workspace server)
   RPC_CHANNELS.tasks.GET_OUTPUT,
+  RPC_CHANNELS.tasks.VALIDATE,
+  RPC_CHANNELS.tasks.CREATE,
+  RPC_CHANNELS.tasks.GENERATE,
+  RPC_CHANNELS.tasks.GENERATED,
+  RPC_CHANNELS.tasks.RUN,
+  RPC_CHANNELS.tasks.PAUSE,
+  RPC_CHANNELS.tasks.RESUME,
+  RPC_CHANNELS.tasks.STOP,
+  RPC_CHANNELS.tasks.GET,
+  RPC_CHANNELS.tasks.LIST,
+  RPC_CHANNELS.tasks.GET_RESULTS,
 
   // file — workspace files (not openDialog which is native)
   RPC_CHANNELS.file.READ,
@@ -408,6 +419,17 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.automations.GET_LAST_EXECUTED,
   RPC_CHANNELS.automations.REPLAY,
   RPC_CHANNELS.automations.CHANGED,
+
+  // projects — workspace projects
+  RPC_CHANNELS.projects.GET,
+  RPC_CHANNELS.projects.GET_ONE,
+  RPC_CHANNELS.projects.CREATE,
+  RPC_CHANNELS.projects.UPDATE,
+  RPC_CHANNELS.projects.DELETE,
+  RPC_CHANNELS.projects.LIST_ASSETS,
+  RPC_CHANNELS.projects.UPLOAD_ASSET,
+  RPC_CHANNELS.projects.DELETE_ASSET,
+  RPC_CHANNELS.projects.CHANGED,
 
   // git — workspace filesystem
   RPC_CHANNELS.git.GET_BRANCH,

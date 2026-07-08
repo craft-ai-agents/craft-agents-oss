@@ -127,6 +127,19 @@
     rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 12px 12px 0px,
     rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 24px 24px 0px;
 
+  /* Drag-lift elevation — a card genuinely peeled off the surface. Shared by the
+     Planner's in-place sortable (`--sortable-shadow-active`) and the Kanban's
+     DragOverlay clone (`.shadow-dragging`). Keeps the two leading transparent
+     layers so it matches `--shadow-minimal`'s 5-layer count and the Planner's
+     selected→grabbed `box-shadow` transition stays interpolatable. The ring uses
+     `--foreground-rgb`, which flips per theme, so light/dark are covered for free. */
+  --shadow-dragging:
+    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+    rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+    rgba(var(--foreground-rgb), 0.13) 0px 0px 0px 1px,
+    rgba(0, 0, 0, 0.18) 0px 8px 10px -2px,
+    rgba(0, 0, 0, 0.24) 0px 18px 24px -10px;
+
   /* === MIX VARIANTS (solid interpolation toward background) === */
   /* Use -2, -3, -5, -10, -20, ..., -90, -95 for solid colors (e.g., separators, Explore mode) */
   --foreground-1\.5: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
@@ -602,6 +615,10 @@ html[data-font="inter"] {
 
   .shadow-minimal {
     box-shadow: var(--shadow-minimal);
+  }
+
+  .shadow-dragging {
+    box-shadow: var(--shadow-dragging);
   }
 
   .shadow-middle {

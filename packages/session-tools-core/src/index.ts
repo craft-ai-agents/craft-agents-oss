@@ -130,6 +130,8 @@ export type {
   SessionListItem,
   ListSessionsOptions,
   ListSessionsResult,
+  BackgroundTaskInfo,
+  SendAgentMessageResult,
   ResolvedLabelsResult,
   ResolvedStatusResult,
 } from './context.ts';

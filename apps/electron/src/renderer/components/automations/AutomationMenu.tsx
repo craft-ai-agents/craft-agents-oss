@@ -82,7 +82,7 @@ export function AutomationMenu({
       {onSendToWorkspace && (
         <MenuItem onClick={onSendToWorkspace}>
           <Send className="h-3.5 w-3.5" />
-          <span className="flex-1">Send to Workspace</span>
+          <span className="flex-1">{t('sendToWorkspace.title')}</span>
         </MenuItem>
       )}
 

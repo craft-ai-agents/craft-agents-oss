@@ -7,6 +7,7 @@ import type { RichTextInputHandle } from '@/components/ui/rich-text-input'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import type { StructuredInputState, StructuredResponse, InputMode } from './structured/types'
 import { getStructuredInputMaxHeight } from './structured-height'
+import { BackgroundFinishedChip } from '../BackgroundFinishedChip'
 
 interface InputContainerProps extends Omit<FreeFormInputProps, 'inputRef'> {
   /** Structured input state - when present, shows structured UI instead of freeform */
@@ -284,6 +285,15 @@ export function InputContainer({
           </motion.div>
         </AnimatePresence>
       </motion.div>
+
+      {/* Background-completion chip — floats in the input box's top-right corner.
+       * Self-contained (its own atoms + navigation); renders nothing when idle.
+       * Freeform-only so it never overlaps a structured prompt's header. The outer
+       * wrapper is `relative` and (unlike the visible box) not `overflow-hidden`,
+       * so the chip's soft shadow isn't clipped. */}
+      {mode === 'freeform' && freeFormProps.sessionId && (
+        <BackgroundFinishedChip sessionId={freeFormProps.sessionId} />
+      )}
     </div>
   )
 }

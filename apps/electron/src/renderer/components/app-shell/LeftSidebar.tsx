@@ -37,6 +37,8 @@ export interface SidebarContextMenuConfig {
   onAddSkill?: () => void
   /** Handler for "Add Automation" action - for automations type */
   onAddAutomation?: () => void
+  /** Handler for "Add Project" action - for projects type */
+  onAddProject?: () => void
   /** Source type filter for "Learn More" link - determines which docs page to open */
   sourceType?: 'api' | 'mcp' | 'local'
   /** Handler for "Edit Views" action - for views type */
@@ -244,6 +246,7 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
                         onAddSource={link.contextMenu.onAddSource}
                         onAddSkill={link.contextMenu.onAddSkill}
                         onAddAutomation={link.contextMenu.onAddAutomation}
+                        onAddProject={link.contextMenu.onAddProject}
                         sourceType={link.contextMenu.sourceType}
                         onConfigureViews={link.contextMenu.onConfigureViews}
                         viewId={link.contextMenu.viewId}

@@ -181,6 +181,16 @@ import type {
   Session,
   UnreadSummary,
   CreateSessionOptions,
+  TaskValidationResultDto,
+  TaskCreateRequest,
+  TaskCreateResult,
+  TaskGenerateRequest,
+  TaskGenerateAck,
+  TaskGenerateResult,
+  TaskRunRequest,
+  TaskRunSnapshotDto,
+  TaskGetResult,
+  TaskResultsDto,
   FileAttachment,
   SendMessageOptions,
   SessionEvent,
@@ -231,6 +241,21 @@ export interface ElectronAPI {
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
   getTaskOutput(taskId: string): Promise<string | null>
+
+  // Tasks (Conductor)
+  validateTask(workspaceId: string, yaml: string): Promise<TaskValidationResultDto>
+  createTask(workspaceId: string, req: TaskCreateRequest): Promise<TaskCreateResult>
+  generateTask(workspaceId: string, req: TaskGenerateRequest): Promise<TaskGenerateAck>
+  /** Async generate result (or error), keyed by orchestratorSessionId. Subscribe before/after generateTask. */
+  onTaskGenerated(callback: (workspaceId: string, result: TaskGenerateResult) => void): () => void
+  runTask(workspaceId: string, req: TaskRunRequest): Promise<TaskRunSnapshotDto>
+  pauseTask(workspaceId: string, slug: string, runId: string): Promise<void>
+  resumeTask(workspaceId: string, slug: string, runId: string): Promise<void>
+  stopTask(workspaceId: string, slug: string, runId: string): Promise<void>
+  getTask(workspaceId: string, slug: string, runId?: string): Promise<TaskGetResult>
+  listTasks(workspaceId: string): Promise<string[]>
+  getTaskResults(workspaceId: string, slug: string, runId?: string): Promise<TaskResultsDto>
+
   respondToPermission(sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean, options?: PermissionResponseOptions): Promise<boolean>
   respondToCredential(sessionId: string, requestId: string, response: CredentialResponse): Promise<boolean>
 
@@ -647,6 +672,17 @@ export interface ElectronAPI {
   setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
 
+  // Projects (workspace-scoped)
+  getProjects(workspaceId: string): Promise<unknown>
+  getProject(workspaceId: string, projectIdOrSlug: string): Promise<unknown | null>
+  createProject(workspaceId: string, input: import('@craft-agent/shared/projects/types').CreateProjectInput): Promise<import('@craft-agent/shared/projects/types').ProjectConfig>
+  updateProject(workspaceId: string, projectSlug: string, patch: Partial<Omit<import('@craft-agent/shared/projects/types').ProjectConfig, 'id' | 'slug' | 'createdAt'>>): Promise<import('@craft-agent/shared/projects/types').ProjectConfig>
+  deleteProject(workspaceId: string, projectSlug: string): Promise<void>
+  listProjectAssets(workspaceId: string, projectSlug: string): Promise<unknown>
+  uploadProjectAsset(workspaceId: string, projectSlug: string, input: { filename: string; base64?: string; text?: string; sourcePath?: string }): Promise<import('@craft-agent/shared/projects/types').ProjectAsset>
+  deleteProjectAsset(workspaceId: string, projectSlug: string, filename: string): Promise<void>
+  onProjectsChanged(callback: (workspaceId: string, projects: unknown) => void): () => void
+
   // Automations
   getAutomations(workspaceId: string): Promise<unknown>
 
@@ -804,6 +840,12 @@ export interface SessionsNavigationState {
   filter: SessionFilter
   details: { type: 'session'; sessionId: string } | null
   rightSidebar?: RightSidebarPanel
+  /**
+   * Presentation mode for the sessions navigator. `'board'` renders the Kanban
+   * board (all sessions, grouped into To Do / In Progress / Done columns) in the
+   * content area instead of the list + chat. Absent/`'list'` is the default.
+   */
+  viewMode?: 'list' | 'board'
 }
 
 /**
@@ -865,6 +907,15 @@ export interface AutomationsNavigationState {
 }
 
 /**
+ * Projects navigation state
+ */
+export interface ProjectsNavigationState {
+  navigator: 'projects'
+  details: { type: 'project'; projectSlug: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state
  */
 export type NavigationState =
@@ -873,6 +924,7 @@ export type NavigationState =
   | SettingsNavigationState
   | SkillsNavigationState
   | AutomationsNavigationState
+  | ProjectsNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -893,6 +945,10 @@ export const isSkillsNavigation = (
 export const isAutomationsNavigation = (
   state: NavigationState
 ): state is AutomationsNavigationState => state.navigator === 'automations'
+
+export const isProjectsNavigation = (
+  state: NavigationState
+): state is ProjectsNavigationState => state.navigator === 'projects'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -918,6 +974,12 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `automations/automation/${state.details.automationId}`
     }
     return 'automations'
+  }
+  if (state.navigator === 'projects') {
+    if (state.details?.type === 'project') {
+      return `projects/project/${state.details.projectSlug}`
+    }
+    return 'projects'
   }
   if (state.navigator === 'settings') {
     if (state.subpage === null) return 'settings'
@@ -965,6 +1027,16 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       return { navigator: 'automations', details: { type: 'automation', automationId } }
     }
     return { navigator: 'automations', details: null }
+  }
+
+  // Handle projects
+  if (key === 'projects') return { navigator: 'projects', details: null }
+  if (key.startsWith('projects/project/')) {
+    const projectSlug = key.slice(17)
+    if (projectSlug) {
+      return { navigator: 'projects', details: { type: 'project', projectSlug } }
+    }
+    return { navigator: 'projects', details: null }
   }
 
   // Handle settings

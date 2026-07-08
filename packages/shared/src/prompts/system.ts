@@ -8,8 +8,10 @@ import { PERMISSION_MODE_CONFIG } from '../agent/mode-types.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
 import { APP_VERSION } from '../version/index.ts';
 import { readPluginName } from '../utils/workspace.ts';
+import { formatBytes } from '../utils/binary-detection.ts';
 import { globSync } from 'glob';
 import os from 'os';
+import type { ProjectPromptContext } from '../projects/types.ts';
 
 /** Maximum size of CLAUDE.md file to include (10KB) */
 const MAX_CONTEXT_FILE_SIZE = 10 * 1024;
@@ -350,7 +352,8 @@ export function getSystemPrompt(
   workingDirectory?: string,
   preset?: SystemPromptPreset | string,
   backendName?: string,
-  includeCoAuthoredBy?: boolean
+  includeCoAuthoredBy?: boolean,
+  projectContext?: ProjectPromptContext,
 ): string {
   // Use mini agent prompt for quick edits (pass workspace root for config paths)
   if (preset === 'mini') {
@@ -365,6 +368,9 @@ export function getSystemPrompt(
   // Get project context files for monorepo support (lives in system prompt for persistence across compaction)
   const projectContextFiles = getProjectContextFilesPrompt(workingDirectory);
 
+  // Optional workspace-project context (injected after preferences, before debug+context-files)
+  const projectBlock = projectContext ? formatProjectContextForPrompt(projectContext) : '';
+
   // Fall back to the user's current preference when callers don't pin/pass a value,
   // so forgetting the argument can't silently re-enable the co-author trailer (see #576).
   const resolvedIncludeCoAuthoredBy = includeCoAuthoredBy ?? getCoAuthorPreference();
@@ -373,11 +379,112 @@ export function getSystemPrompt(
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
   const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName, resolvedIncludeCoAuthoredBy);
-  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}`;
+  const fullPrompt = `${basePrompt}${preferences}${projectBlock}${debugContext}${projectContextFiles}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
 
   return fullPrompt;
+}
+
+/**
+ * Format the project-context block injected into the system prompt.
+ *
+ * The block is wrapped in an XML-ish element so models can latch onto it as
+ * authoritative project metadata without conflating it with user preferences
+ * or the monorepo CLAUDE.md context.
+ */
+/** Block tags whose closing form must not appear inside injected body content. */
+const PROJECT_BLOCK_TAGS = ['project_context', 'project_memory', 'project_assets'] as const;
+
+/**
+ * Neutralize a literal closing tag inside injected body content so user- or
+ * asset-authored text can't terminate the surrounding prompt block early.
+ * Surgical: only the specific `</tagName>` sequence is escaped (case- and
+ * whitespace-insensitive), leaving markdown and code in the body intact.
+ */
+function defangBlockTag(content: string, tagName: string): string {
+  const re = new RegExp(`<\\s*/\\s*${tagName}\\s*>`, 'gi');
+  return content.replace(re, `&lt;/${tagName}&gt;`);
+}
+
+/** Defang every project block's closing tag within a body field. */
+function defangProjectBlockTags(content: string): string {
+  return PROJECT_BLOCK_TAGS.reduce((acc, tag) => defangBlockTag(acc, tag), content);
+}
+
+/**
+ * Strip control characters that could truncate or corrupt injected prompt text (NUL, etc.).
+ * Preserves tab/newline/CR so multi-line markdown body fields keep their formatting.
+ */
+function stripDangerousControlChars(content: string): string {
+  // eslint-disable-next-line no-control-regex
+  return content.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+}
+
+/** Sanitize a multi-line body field (description/details/memory) before prompt injection. */
+function sanitizeProjectBodyText(content: string): string {
+  return defangProjectBlockTags(stripDangerousControlChars(content));
+}
+
+/**
+ * Sanitize a single-line label (an asset filename) before prompt injection: strip ALL control
+ * chars — including newlines/tabs, which have no place in a filename and could forge extra
+ * `<project_assets>` list items — and defang block-closing tags so a crafted name can't break
+ * out of the surrounding block. `listProjectAssets` reads real dirents, so a bad name can reach
+ * the prompt regardless of upload-time sanitizing; this is the robust, last-line defense.
+ */
+function sanitizeProjectFilename(name: string): string {
+  // eslint-disable-next-line no-control-regex
+  return defangProjectBlockTags(name.replace(/[\x00-\x1f\x7f]/g, ''));
+}
+
+export function formatProjectContextForPrompt(ctx: ProjectPromptContext): string {
+  // Attribute-safe escape for the project name (it sits inside a quoted attribute).
+  const escapeAttr = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  const lines: string[] = [];
+  lines.push('');
+  lines.push(`<project_context project="${escapeAttr(ctx.name)}">`);
+  if (ctx.description?.trim()) {
+    lines.push(sanitizeProjectBodyText(ctx.description.trim()));
+    lines.push('');
+  }
+  if (ctx.details?.trim()) {
+    lines.push(sanitizeProjectBodyText(ctx.details.trim()));
+    lines.push('');
+  }
+
+  lines.push(`<project_assets_path>${sanitizeProjectBodyText(ctx.assetsPath)}</project_assets_path>`);
+  if (ctx.assets.length > 0) {
+    lines.push('<project_assets>');
+    for (const asset of ctx.assets) {
+      lines.push(`- ${sanitizeProjectFilename(asset.filename)} (${sanitizeProjectBodyText(asset.mimeType)}, ${formatBytes(asset.sizeBytes)})`);
+    }
+    lines.push('</project_assets>');
+  }
+
+  lines.push(`<project_memory_path>${sanitizeProjectBodyText(ctx.memoryPath)}</project_memory_path>`);
+  if (ctx.memoryContent?.trim()) {
+    lines.push('<project_memory>');
+    lines.push(sanitizeProjectBodyText(ctx.memoryContent.trim()));
+    lines.push('</project_memory>');
+  }
+  lines.push('');
+
+  lines.push(`The user has bound this session to the project above.`);
+  if (ctx.assets.length > 0) {
+    lines.push(`<project_assets> lists reference files the user provided. Read a specific file on-demand by`);
+    lines.push(`its absolute path (<project_assets_path> + filename) only when it's relevant — you do not need`);
+    lines.push(`to read them all.`);
+  }
+  lines.push(`<project_memory> is authoritative accumulated knowledge for this project; treat it as`);
+  lines.push(`established context. When you learn something durable (a decision, gotcha, convention, or`);
+  lines.push(`project-specific user preference), record it in MEMORY.md at <project_memory_path> via Write/Edit —`);
+  lines.push(`concise, newest/most-important first, kept under ~5000 tokens.`);
+  lines.push(`</project_context>`);
+  lines.push('');
+  return lines.join('\n');
 }
 
 /**
@@ -864,18 +971,23 @@ Labels come in two shapes:
 If you get a "Labels rejected" error, the reason is per-entry — common causes are an unknown base ID, a value supplied to a boolean label, or a value that doesn't match the declared \`valueType\`.
 
 **Setting status:**
-\`set_session_status\` — changes the session status (e.g., "done", "in_progress"). Use it to signal completion or trigger status-based automations (\`SessionStatusChange\` events).
+\`set_session_status\` — changes the session status (e.g., "in_progress", "needs-review"). Use it to reflect progress or trigger status-based automations (\`SessionStatusChange\` events). Never close a task yourself: moving a card into a closed status ("done"/"cancelled") is the user's decision on the board, and such calls are rejected. When work is ready, set "needs-review" and let the user close it.
 
 **Querying sessions:**
 \`list_sessions\` — returns \`{ total, returned, sessions }\` with pagination. Always use filters (status, label, search) to narrow results. Default limit is 20 sessions.
 - Use \`get_session_info\` for full details on a specific session (list-then-detail pattern).
 - Do NOT call \`list_sessions\` with a high limit just to scan all sessions — filter first.
 
+**Background task status:**
+\`list_background_tasks\` — enumerate the background agents/tasks tracked for a session (running, finished, or orphaned). This is the ONLY reliable way to answer "what is running / what's the status?" — it reads the main-process registry, which tracks tasks across turns. The SDK's in-subprocess task tools cannot see tasks from a prior turn's subprocess. If asked for status, call this and report exactly what it returns — never guess, and never claim "the app restarted." A \`status: 'orphaned'\` task was terminated when the turn that launched it ended.
+
+**Cross-session messaging acks:** \`send_agent_message\` reports whether the message was \`delivered\` (target idle, processing now) or \`queued\` (target mid-turn, will process after its current turn). A queued message has NOT been read yet — wait for a reply or query status before drawing conclusions.
+
 **Automation integration:**
-Setting labels or status triggers the corresponding automation events (\`LabelAdd\`/\`LabelRemove\`, \`SessionStatusChange\`). This enables self-closing workflows:
+Setting labels or status triggers the corresponding automation events (\`LabelAdd\`/\`LabelRemove\`, \`SessionStatusChange\`). This enables hand-off workflows:
 1. Scheduled automation creates a session
 2. Agent completes work
-3. Agent calls \`set_session_status\` with "done" → triggers downstream webhook/notification
+3. Agent calls \`set_session_status\` with "needs-review" → triggers downstream webhook/notification (closing the task into "done"/"cancelled" remains the user's call)
 
 ## Diagrams and Visualization
 

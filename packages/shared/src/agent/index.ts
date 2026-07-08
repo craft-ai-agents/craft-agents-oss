@@ -163,3 +163,10 @@ export {
 
 // Export PowerShell validator root setter (for Electron startup on Windows)
 export { setPowerShellValidatorRoot } from './powershell-validator.ts';
+
+// WS2 keep-alive: shared flag resolver + pushable streaming-input utility.
+export {
+  resolveKeepBackgroundTasksAlive,
+  createPushableInputStream,
+  type PushableInputStream,
+} from './backend/claude/persistent-input.ts';

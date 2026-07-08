@@ -51,9 +51,16 @@ import {
   extractSessionMeta,
   windowWorkspaceIdAtom,
   type SessionMeta,
+  type BackgroundTask,
 } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
+import {
+  showBackgroundFinishedChipAtom,
+  pushBackgroundFinishedAtom,
+} from '@/atoms/background-finished'
+import { visibleSessionIdsAtom } from '@/atoms/panel-stack'
+import { getSessionTitle } from '@/utils/session'
 import { extractBadges } from '@/lib/mentions'
 import { getDefaultStore } from 'jotai'
 import {
@@ -124,18 +131,29 @@ function handleBackgroundTaskEvent(
     const currentTasks = store.get(backgroundTasksAtom)
     const exists = currentTasks.some(t => t.toolUseId === evt.toolUseId)
     if (!exists) {
+      const isWorkflow = evt.kind === 'workflow'
       store.set(backgroundTasksAtom, [
         ...currentTasks,
         {
           id: evt.taskId as string,
-          type: 'agent' as const,
+          type: isWorkflow ? ('workflow' as const) : ('agent' as const),
           toolUseId: evt.toolUseId as string,
           startTime: Date.now(),
           elapsedSeconds: 0,
           intent: evt.intent as string | undefined,
+          status: 'running' as const,
+          ...(isWorkflow ? { workflowId: evt.workflowId as string | undefined, agentsCompleted: 0 } : {}),
         },
       ])
     }
+  } else if (event.type === 'workflow_agent_completed' && 'workflowId' in evt) {
+    // One sub-agent of a running Workflow finished — bump the owning chip's count.
+    const currentTasks = store.get(backgroundTasksAtom)
+    store.set(backgroundTasksAtom, currentTasks.map(t =>
+      t.type === 'workflow' && t.workflowId === evt.workflowId
+        ? { ...t, agentsCompleted: (t.agentsCompleted ?? 0) + 1 }
+        : t
+    ))
   } else if (event.type === 'shell_backgrounded' && 'shellId' in evt && 'toolUseId' in evt) {
     const currentTasks = store.get(backgroundTasksAtom)
     const exists = currentTasks.some(t => t.toolUseId === evt.toolUseId)
@@ -149,6 +167,7 @@ function handleBackgroundTaskEvent(
           startTime: Date.now(),
           elapsedSeconds: 0,
           intent: evt.intent as string | undefined,
+          status: 'running' as const,
         },
       ])
     }
@@ -160,13 +179,31 @@ function handleBackgroundTaskEvent(
         : t
     ))
   } else if (event.type === 'task_completed' && 'taskId' in evt) {
-    // Remove task when background task completes
+    // Transition the chip to a terminal status (keep it visible with a terminal
+    // icon + click-through to output). The ActiveTasksBar auto-expiry ticker
+    // prunes it after a short linger — we no longer remove it instantly, so the
+    // user sees that the task finished rather than the chip just vanishing.
+    const status = (evt.status as BackgroundTask['status']) ?? 'completed'
     const currentTasks = store.get(backgroundTasksAtom)
-    store.set(backgroundTasksAtom, currentTasks.filter(t => t.id !== evt.taskId))
+    store.set(backgroundTasksAtom, currentTasks.map(t =>
+      t.id === evt.taskId
+        ? {
+            ...t,
+            status,
+            completedAt: Date.now(),
+            outputFile: (evt.outputFile as string | undefined) ?? t.outputFile,
+            summary: (evt.summary as string | undefined) ?? t.summary,
+          }
+        : t
+    ))
   } else if (event.type === 'shell_killed' && 'shellId' in evt) {
-    // Remove shell task when KillShell succeeds
+    // Mark shell stopped (lingers briefly, then auto-expires) instead of vanishing.
     const currentTasks = store.get(backgroundTasksAtom)
-    store.set(backgroundTasksAtom, currentTasks.filter(t => t.id !== evt.shellId))
+    store.set(backgroundTasksAtom, currentTasks.map(t =>
+      t.id === evt.shellId
+        ? { ...t, status: 'stopped' as const, completedAt: Date.now() }
+        : t
+    ))
   } else if (event.type === 'tool_result' && 'toolUseId' in evt) {
     // Remove task when it completes - but NOT if this is the initial backgrounding result
     // Background tasks return immediately with agentId/shell_id/backgroundTaskId,
@@ -181,13 +218,30 @@ function handleBackgroundTaskEvent(
       const currentTasks = store.get(backgroundTasksAtom)
       store.set(backgroundTasksAtom, currentTasks.filter(t => t.toolUseId !== evt.toolUseId))
     }
+  } else if (event.type === 'complete' || event.type === 'interrupted' || event.type === 'error') {
+    // Orphan backstop: when the turn ends, any chip still marked 'running' belongs
+    // to a background sub-agent whose per-turn subprocess is being torn down — with
+    // the default (keep-alive OFF) model it has almost certainly died. Flip it to
+    // 'orphaned' (visually distinct, auto-expires) so the bar never shows a false
+    // "running" forever. This is the reliability fix that lets the bar be re-enabled.
+    //
+    // WS2 keep-alive: when the main process reports `backgroundTasksAlive` on the
+    // complete event, the persistent query stays open across turns and the tasks
+    // genuinely survive — so do NOT orphan them here. They stay 'running' until a
+    // real `task_completed` arrives (routed via the between-turns background sink).
+    // Without this guard the chip lies "orphaned" while the agent is still working.
+    if (evt.backgroundTasksAlive === true) {
+      return
+    }
+    const currentTasks = store.get(backgroundTasksAtom)
+    if (currentTasks.some(t => t.status === 'running')) {
+      store.set(backgroundTasksAtom, currentTasks.map(t =>
+        t.status === 'running'
+          ? { ...t, status: 'orphaned' as const, completedAt: Date.now() }
+          : t
+      ))
+    }
   }
-  // Note: We do NOT clear background tasks on complete/error/interrupted
-  // Background tasks should persist and keep running after the turn ends
-  // They are only removed when:
-  // 1. task_completed event arrives (background task finished)
-  // 2. Their tool_result comes back (foreground task finished)
-  // 3. KillShell succeeds (shell_killed event)
 }
 
 function SessionLoadErrorScreen({
@@ -779,7 +833,7 @@ export default function App() {
     // Handoff events signal end of streaming - need to sync back to React state
     // Also includes todo_state_changed so status updates immediately reflect in sidebar
     // async_operation included so shimmer effect on session titles updates in real-time
-    const handoffEventTypes = new Set(['complete', 'error', 'interrupted', 'typed_error', 'session_status_changed', 'session_flagged', 'session_unflagged', 'name_changed', 'labels_changed', 'title_generated', 'async_operation'])
+    const handoffEventTypes = new Set(['complete', 'error', 'interrupted', 'typed_error', 'session_status_changed', 'session_metadata_changed', 'session_flagged', 'session_unflagged', 'name_changed', 'labels_changed', 'project_id_changed', 'title_generated', 'async_operation'])
 
     // Helper to handle side effects (same logic for both paths)
     const handleEffects = (effects: Effect[], sessionId: string, eventType: string) => {
@@ -970,6 +1024,21 @@ export default function App() {
             const rawPreview = lastMessage?.content?.substring(0, 200) || undefined
             const preview = rawPreview ? stripMarkdown(rawPreview).substring(0, 100) || undefined : undefined
             showSessionNotification(updatedSession, preview)
+
+            // In-app complement to the OS notification: when a *background*
+            // session (one not shown in any open panel) finishes, queue a chip
+            // above the chat. The OS notification above is suppressed while the
+            // window is focused, so the chip is the only completion signal then.
+            if (
+              store.get(showBackgroundFinishedChipAtom) &&
+              !store.get(visibleSessionIdsAtom).has(sessionId)
+            ) {
+              store.set(pushBackgroundFinishedAtom, {
+                sessionId,
+                title: getSessionTitle(updatedSession),
+                finishedAt: Date.now(),
+              })
+            }
           }
         }
 

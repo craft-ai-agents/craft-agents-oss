@@ -63,6 +63,12 @@ export interface AppShellContextType {
   labels?: import('@craft-agent/shared/labels').LabelConfig[]
   /** Callback when session labels change */
   onSessionLabelsChange?: (sessionId: string, labels: string[]) => void
+  /**
+   * Open All Sessions scoped to a task: replaces the view's label filter (and project
+   * filter when given) with the task's scope — the same user-clearable header-chip
+   * filters — and selects the session. Used by kanban tile/subtask clicks + post-create.
+   */
+  onJumpToTaskSessions?: (sessionId: string, scope: { labelId: string; projectId?: string }) => void
   /** Enabled permission modes for Shift+Tab cycling */
   enabledModes?: PermissionMode[]
   /** Dynamic todo states from workspace config (provided by AppShell, defaults to empty) */

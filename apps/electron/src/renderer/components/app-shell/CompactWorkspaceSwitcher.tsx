@@ -16,7 +16,7 @@ import {
   DrawerTitle,
   DrawerClose,
 } from "@/components/ui/drawer"
-import { CrossfadeAvatar } from "@/components/ui/avatar"
+import { WorkspaceAvatar } from "@/components/ui/workspace-avatar"
 import { WorkspaceCreationScreen } from "@/components/workspace"
 import { waitForTransportConnected } from '@/lib/transport-wait'
 import { useWorkspaceIcons } from "@/hooks/useWorkspaceIcon"
@@ -180,12 +180,12 @@ export function CompactWorkspaceSwitcher({
             className="titlebar-no-drag ml-1 h-9 flex-1 min-w-0 flex items-center justify-start gap-1 px-3 rounded-[8px] border border-foreground/6 text-sm text-foreground/55 hover:bg-foreground/5 hover:text-foreground transition-colors cursor-pointer data-[state=open]:bg-foreground/5 data-[state=open]:text-foreground"
             aria-label={t('workspace.selectWorkspace')}
           >
-            <CrossfadeAvatar
+            <WorkspaceAvatar
+              workspaceId={selectedWorkspace?.id}
+              workspaceName={selectedWorkspace?.name}
               src={selectedWorkspace ? workspaceIconMap.get(selectedWorkspace.id) : undefined}
-              alt={selectedWorkspace?.name}
               className="h-5 w-5 mr-1.5 rounded-full ring-1 ring-border/50"
-              fallbackClassName="bg-muted text-[11px] rounded-full"
-              fallback={selectedWorkspace?.name?.charAt(0) || 'W'}
+              fallbackClassName="rounded-full text-[11px]"
             />
             <span className="truncate min-w-0 flex-1 text-left">{selectedWorkspace?.name || 'Workspace'}</span>
             {selectedWorkspace?.remoteServer && (
@@ -233,12 +233,12 @@ export function CompactWorkspaceSwitcher({
                     onClick={handleSelect}
                     className="flex-1 min-w-0 flex items-center gap-3 text-left outline-none"
                   >
-                    <CrossfadeAvatar
+                    <WorkspaceAvatar
+                      workspaceId={workspace.id}
+                      workspaceName={workspace.name}
                       src={workspaceIconMap.get(workspace.id)}
-                      alt={workspace.name}
                       className="h-7 w-7 rounded-full ring-1 ring-border/50 shrink-0"
-                      fallbackClassName="bg-muted text-sm rounded-full"
-                      fallback={workspace.name.charAt(0)}
+                      fallbackClassName="rounded-full text-sm"
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 min-w-0">

@@ -15,7 +15,7 @@ import {
   StyledDropdownMenuItem,
   StyledDropdownMenuSeparator,
 } from "@/components/ui/styled-dropdown"
-import { CrossfadeAvatar } from "@/components/ui/avatar"
+import { WorkspaceAvatar } from "@/components/ui/workspace-avatar"
 import { FadingText } from "@/components/ui/fading-text"
 import { WorkspaceCreationScreen } from "@/components/workspace"
 import { waitForTransportConnected } from '@/lib/transport-wait'
@@ -193,12 +193,12 @@ export function WorkspaceSwitcher({
               className="header-icon-btn titlebar-no-drag ml-1 flex-1 min-w-0 flex items-center justify-start gap-0.5 h-[30px] px-3 rounded-[8px] border border-foreground/6 text-[13px] text-foreground/50 hover:bg-foreground/5 hover:text-foreground transition-colors cursor-pointer data-[state=open]:bg-foreground/5 data-[state=open]:text-foreground"
               aria-label={t('workspace.selectWorkspace')}
             >
-              <CrossfadeAvatar
+              <WorkspaceAvatar
+                workspaceId={selectedWorkspace?.id}
+                workspaceName={selectedWorkspace?.name}
                 src={selectedWorkspace ? workspaceIconMap.get(selectedWorkspace.id) : undefined}
-                alt={selectedWorkspace?.name}
                 className="h-4 w-4 mr-1.5 rounded-full ring-1 ring-border/50"
-                fallbackClassName="bg-muted text-[10px] rounded-full"
-                fallback={selectedWorkspace?.name?.charAt(0) || 'W'}
+                fallbackClassName="rounded-full"
               />
               <span className="truncate min-w-0 flex-1 text-left">{selectedWorkspace?.name || 'Workspace'}</span>
               {selectedWorkspace?.remoteServer && (
@@ -219,12 +219,12 @@ export function WorkspaceSwitcher({
               )}
               aria-label={t('workspace.selectWorkspace')}
             >
-              <CrossfadeAvatar
+              <WorkspaceAvatar
+                workspaceId={selectedWorkspace?.id}
+                workspaceName={selectedWorkspace?.name}
                 src={selectedWorkspace ? workspaceIconMap.get(selectedWorkspace.id) : undefined}
-                alt={selectedWorkspace?.name}
                 className="h-4 w-4 rounded-full ring-1 ring-border/50"
-                fallbackClassName="bg-foreground text-background text-[10px] rounded-full"
-                fallback={selectedWorkspace?.name?.charAt(0) || 'W'}
+                fallbackClassName="rounded-full"
               />
               {!isCollapsed && (
                 <>
@@ -271,12 +271,12 @@ export function WorkspaceSwitcher({
                 )}
               >
                 <div className="flex items-center gap-3 font-sans min-w-0 flex-1">
-                  <CrossfadeAvatar
+                  <WorkspaceAvatar
+                    workspaceId={workspace.id}
+                    workspaceName={workspace.name}
                     src={workspaceIconMap.get(workspace.id)}
-                    alt={workspace.name}
                     className="h-5 w-5 rounded-full ring-1 ring-border/50"
-                    fallbackClassName="bg-muted text-xs rounded-full"
-                    fallback={workspace.name.charAt(0)}
+                    fallbackClassName="rounded-full text-xs"
                   />
                   <span className="truncate">{workspace.name}</span>
                   {workspace.remoteServer && (

@@ -37,6 +37,7 @@ export function SessionInfoPopover({
   contentClassName,
   presentation = 'popover',
 }: SessionInfoPopoverProps) {
+  const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
 
   const handleOpenChange = React.useCallback((nextOpen: boolean) => {
@@ -64,7 +65,7 @@ export function SessionInfoPopover({
           }}
         >
           <DrawerHeader className="border-b border-border/50 px-4 py-3 group-data-[vaul-drawer-direction=bottom]/drawer-content:text-left">
-            <DrawerTitle className="text-sm font-medium">Session info</DrawerTitle>
+            <DrawerTitle className="text-sm font-medium">{t('chat.sessionInfo')}</DrawerTitle>
           </DrawerHeader>
           <div className="flex-1 min-h-0 overflow-hidden">
             <SessionInfoPopoverContent sessionId={sessionId} sessionFolderPath={sessionFolderPath} />

@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/server-core",
-  "version": "0.10.11",
+  "version": "0.11.0",
   "license": "Apache-2.0",
   "description": "Reusable headless server infrastructure for Craft Agent",
   "type": "module",
@@ -18,6 +18,7 @@
     "./handlers/rpc": "./src/handlers/rpc/index.ts",
     "./handlers/rpc/*": "./src/handlers/rpc/*.ts",
     "./sessions": "./src/sessions/index.ts",
+    "./tasks": "./src/tasks/index.ts",
     "./webui": "./src/webui/index.ts"
   },
   "scripts": {
@@ -29,7 +30,7 @@
     "jose": "^6.0.0",
     "ws": "^8.19.0",
     "sharp": "0.34.5",
-    "@earendil-works/pi-ai": "0.79.9"
+    "@earendil-works/pi-ai": "0.80.3"
   },
   "devDependencies": {
     "typescript": "^5.8.2",

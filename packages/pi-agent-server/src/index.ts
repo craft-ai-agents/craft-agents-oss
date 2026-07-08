@@ -51,7 +51,7 @@ import type { TextContent as PiTextContent } from '@earendil-works/pi-ai';
 // because bun collapses everything into a single file.
 // pi-ai is deduped (single hoisted copy), so one registration covers both
 // pi-ai and pi-agent-core module scopes.
-import { setBedrockProviderModule } from '@earendil-works/pi-ai';
+import { setBedrockProviderModule } from '@earendil-works/pi-ai/api/bedrock-converse-stream.lazy';
 import { bedrockProviderModule } from '@earendil-works/pi-ai/bedrock-provider';
 setBedrockProviderModule(bedrockProviderModule);
 

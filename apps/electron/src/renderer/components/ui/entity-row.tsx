@@ -75,6 +75,10 @@ export interface EntityRowProps {
   isSelected?: boolean
   /** Multi-select highlight (left accent bar + tinted bg) */
   isInMultiSelect?: boolean
+  /** Suppress the left-edge selection bar (background tint still shows). Used
+   *  when an outer wrapper draws its own accent stripe (e.g. project color) at
+   *  the same leading edge and the two would collide. */
+  suppressSelectionBar?: boolean
   /** Click handler — use onMouseDown for modifier key detection (Session), or onClick for simple cases */
   onMouseDown?: (e: React.MouseEvent) => void
   /** Simple click handler (used when modifier key detection isn't needed) */
@@ -128,6 +132,7 @@ export function EntityRow({
   overlay,
   isSelected = false,
   isInMultiSelect = false,
+  suppressSelectionBar = false,
   onMouseDown,
   onClick,
   showSeparator = false,
@@ -261,8 +266,10 @@ export function EntityRow({
   // Build the inner content (shared between with-context-menu and without)
   const innerContent = (
     <div className="relative group select-none pl-2 mr-2">
-      {/* Selection indicator bar */}
-      {(isSelected || isInMultiSelect) && (
+      {/* Selection indicator bar — suppressed when an outer wrapper draws its
+          own leading stripe (e.g. project color) so they don't stack on top of
+          each other. Background tint on the inner button still indicates selection. */}
+      {(isSelected || isInMultiSelect) && !suppressSelectionBar && (
         <div className="absolute left-0 inset-y-0 w-[2px] bg-accent" />
       )}
 
