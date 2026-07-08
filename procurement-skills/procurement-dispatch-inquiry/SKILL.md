@@ -71,7 +71,7 @@ AI 在紧急调度流程里的角色是**一名采购员**:读需求、接单、
 
 ### 采集源 → 供应商名称/来源 映射(实测已有,优先用)
 
-**供应商名称**:mouser→`Mouser`、digikey→`Digikey`、avnet→`AVNET`、tti→`TTI`、tme→`TME`、verical→`Verical`、element14/newark→`Newark`、chip1stop→`chip1stop`、corestaff→`Corestaff Online日本`、master→`Masterelectronics`、lcsc/szlcsc→`立创商城`、**ickey→`云汉芯城`**、rs_uk/rs_de/rs_fr→`RS-HK`(真实站点写进备注)。表里没有的源走"最接近选项或`无`+备注写真实平台名"。本地库存命中(larkdepot 历史价)写`无`+备注注明"本地库存"。
+**供应商名称**:mouser→`Mouser`、digikey→`Digikey`、avnet→`AVNET`、tti→`TTI`、tme→`TME`、verical→`Verical`、element14/newark→`Newark`、chip1stop→`chip1stop`、corestaff→`Corestaff Online日本`、master→`Masterelectronics`、lcsc/szlcsc→`立创商城`、**ickey→`云汉芯城`**、**jbchip→`京北通宇`**(2026-07-08 用 DD1P030MA1 真实需求验证:jbchip 报价 ¥36.9921 与主库人工记录的"京北通宇"报价精确匹配到小数点后4位)、rs_uk/rs_de/rs_fr→`RS-HK`(真实站点写进备注,**注意这三个源只覆盖英/德/法地区库存,查不到真正 RS-HK 香港仓的东西,是已知盲区,查无很正常不代表型号不存在**)。表里没有的源走"最接近选项或`无`+备注写真实平台名"。本地库存命中(larkdepot 历史价)写`无`+备注注明"本地库存"。
 
 **来源**(3433 行真实分布坐实,不是猜的):`component-data` 查的这批官方/聚合平台,几乎全部落在 `一级平台（自有库存）` 这一类——真实统计 Mouser 228 次、Digikey 138 次、Masterelectronics 143 次、立创商城 42 次(远超它在"搜索引擎自有网站"类目下的 23 次)、云汉芯城 28 次。**所以:AI 采集到的平台报价,来源默认一律填 `一级平台（自有库存）`**,不必逐个判断。`IC网`(752 行,496 个不同中文贸易商名,平均每家 1.5 行——典型广播式个体询价市场)、`专做贸易商`、`淘宝，1688` 这几个选项对应人工贸易商圈广播询价渠道,`component-data` 完全不查这个市场,**AI 基本用不上这几个选项**,不要瞎选。本地库存命中不算外部采购渠道,`来源` 留空或写 `无`。真遇到判断不出的极少数情况才兜底写 `无`。
 
