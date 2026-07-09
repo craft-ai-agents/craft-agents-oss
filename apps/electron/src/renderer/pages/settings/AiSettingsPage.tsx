@@ -1243,6 +1243,7 @@ export default function AiSettingsPage() {
                   onStartOAuth={apiSetupOnboarding.handleStartOAuth}
                   onFinish={handleApiSetupFinish}
                   isWaitingForCode={apiSetupOnboarding.isWaitingForCode}
+                  isProviderOAuthPending={apiSetupOnboarding.isProviderOAuthPending}
                   onSubmitAuthCode={apiSetupOnboarding.handleSubmitAuthCode}
                   onCancelOAuth={apiSetupOnboarding.handleCancelOAuth}
                   copilotDeviceCode={apiSetupOnboarding.copilotDeviceCode}
