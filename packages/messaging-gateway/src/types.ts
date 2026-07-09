@@ -102,6 +102,18 @@ export interface IncomingMessage {
    * the router; surfaces in `IncomingMessage` so access-control can audit.
    */
   senderIsBot?: boolean
+  /**
+   * Discord only: `true` when the message arrived in a DM channel. Undefined
+   * for non-Discord platforms. Used by the router's guild-trigger gate.
+   */
+  isDM?: boolean
+  /**
+   * Discord only: `true` when the bot user was @mentioned in the message.
+   * Undefined for non-Discord platforms. Combined with the binding's
+   * `discordGuildTrigger`, the router decides whether a guild-channel message
+   * routes to the session.
+   */
+  mentionedBot?: boolean
   text: string
   attachments?: IncomingAttachment[]
   replyToMessageId?: string

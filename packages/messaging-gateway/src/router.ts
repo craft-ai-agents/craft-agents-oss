@@ -64,6 +64,25 @@ export class Router {
     const binding = this.bindingStore.findByChannel(msg.platform, msg.channelId, msg.threadId)
 
     if (binding) {
+      // Discord guild-trigger gate: in a bound guild channel, a message that
+      // does not @mention the bot is ignored unless the binding opts into
+      // 'all'. DMs (isDM) always route. Non-Discord platforms leave isDM /
+      // mentionedBot undefined, so this branch is a no-op for them.
+      if (
+        msg.platform === 'discord' &&
+        msg.isDM === false &&
+        msg.mentionedBot !== true &&
+        binding.config.discordGuildTrigger !== 'all'
+      ) {
+        this.log.info('ignoring un-mentioned discord guild message', {
+          event: 'discord_trigger_skipped',
+          channelId: msg.channelId,
+          sessionId: binding.sessionId,
+          bindingId: binding.id,
+        })
+        return
+      }
+
       const verdict = evaluateBindingAccess({
         msg,
         workspaceConfig: this.deps.getWorkspaceConfig(),
