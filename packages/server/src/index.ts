@@ -22,7 +22,8 @@
  *   CRAFT_WEBUI_SECURE_COOKIE  — optional true/false override for the session cookie Secure flag
  *   CRAFT_WEBUI_WS_URL         — optional browser-facing ws:// or wss:// URL returned by /api/config
  *   CRAFT_MESSAGING_WA_WORKER  — absolute path to worker.cjs (default: packages/messaging-whatsapp-worker/dist/worker.cjs)
- *   CRAFT_MESSAGING_NODE_BIN   — Node binary used to spawn the WhatsApp worker (default: node)
+ *   CRAFT_MESSAGING_DISCORD_WORKER — absolute path to worker.cjs (default: packages/messaging-discord-worker/dist/worker.cjs)
+ *   CRAFT_MESSAGING_NODE_BIN   — Node binary used to spawn the WhatsApp/Discord workers (default: node)
  */
 
 import { join } from 'node:path'
@@ -158,6 +159,8 @@ if (webuiEnabled && serverToken) {
 const waWorkerEntry = process.env.CRAFT_MESSAGING_WA_WORKER
   ?? join(bundledAssetsRoot, 'packages', 'messaging-whatsapp-worker', 'dist', 'worker.cjs')
 const waNodeBin = process.env.CRAFT_MESSAGING_NODE_BIN ?? 'node'
+const discordWorkerEntry = process.env.CRAFT_MESSAGING_DISCORD_WORKER
+  ?? join(bundledAssetsRoot, 'packages', 'messaging-discord-worker', 'dist', 'worker.cjs')
 
 // Built inside createHandlerDeps (needs sessionManager), populated with the WS
 // publisher after bootstrapServer resolves.
@@ -217,6 +220,10 @@ const instance = await (async () => {
             workerEntry: waWorkerEntry,
             nodeBin: waNodeBin,
             pairingMode: 'qr',
+          },
+          discord: {
+            workerEntry: discordWorkerEntry,
+            nodeBin: waNodeBin,
           },
         })
         return {

@@ -632,6 +632,19 @@ export function buildWhatsAppWorker(config: BuildConfig): void {
   }
 }
 
+export function buildDiscordWorker(config: BuildConfig): void {
+  const { rootDir } = config;
+  const workerOut = join(rootDir, 'packages', 'messaging-discord-worker', 'dist', 'worker.cjs');
+
+  console.log('Building Discord worker...');
+
+  execSync('bun run build:discord-worker', { cwd: rootDir, stdio: 'inherit', shell: true });
+
+  if (!existsSync(workerOut)) {
+    throw new Error(`Discord worker output not found at ${workerOut}`);
+  }
+}
+
 /**
  * Verify MCP helper servers and Pi agent server are present in packaged resources.
  */

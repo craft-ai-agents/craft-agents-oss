@@ -416,6 +416,8 @@ export const CHANNEL_MAP = {
   saveTelegramToken: invoke(RPC_CHANNELS.messaging.SAVE_TELEGRAM),
   testLarkCredentials: invoke(RPC_CHANNELS.messaging.TEST_LARK),
   saveLarkCredentials: invoke(RPC_CHANNELS.messaging.SAVE_LARK),
+  testDiscordCredentials: invoke(RPC_CHANNELS.messaging.TEST_DISCORD),
+  saveDiscordCredentials: invoke(RPC_CHANNELS.messaging.SAVE_DISCORD),
   disconnectMessagingPlatform: invoke(RPC_CHANNELS.messaging.DISCONNECT),
   forgetMessagingPlatform: invoke(RPC_CHANNELS.messaging.FORGET),
   getMessagingBindings: invoke(RPC_CHANNELS.messaging.GET_BINDINGS),
