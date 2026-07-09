@@ -95,18 +95,32 @@ ssh "$SERVER" "sudo rsync -a --delete \
   --exclude='node_modules/' \
   /tmp/craft-app-sync/ $REMOTE_APP/ && sudo chown -R craft:craft $REMOTE_APP"
 
-echo "==> [3/4] rsync skill 真源 → $REMOTE_SKILLS（排除 AGENTS.md，它走全局指令位置）"
+echo "==> [3/4] rsync skill 真源 → $REMOTE_SKILLS（排除 AGENTS.md；硬切：不部署任何已删除的旧采集栈）"
+# --delete 会清掉远端仍残留的 scrape-engine/ 等已从真源删除的目录
 rsync -az --delete --exclude=__pycache__ --exclude='*.pyc' --exclude='AGENTS.md' \
   --exclude='target/' \
   -e ssh "$SKILLS_SRC/" "$SERVER:/tmp/craft-skills-sync/"
 ssh "$SERVER" "sudo mkdir -p $REMOTE_SKILLS && sudo rsync -a --delete \
   /tmp/craft-skills-sync/ $REMOTE_SKILLS/ && sudo chown -R craft:craft /home/craft/.agents"
+# 烟雾：活路由表与两个 CLI 入口 skill 必须在
+ssh "$SERVER" "test -f $REMOTE_SKILLS/component-data/SKILL.md && test -f $REMOTE_SKILLS/larkdepot/SKILL.md \
+  && test ! -e $REMOTE_SKILLS/scrape-engine \
+  || { echo '✋ skill 部署校验失败: 需要 component-data+larkdepot，且不得残留 scrape-engine'; exit 1; }"
 
 # 业务总则 AGENTS.md → 全局指令位置（CRAFT_CONFIG_DIR/AGENTS.md），注入每个会话的 <global_instructions>
 if [[ -f "$SKILLS_SRC/AGENTS.md" ]]; then
   echo "==> [3.6/4] 部署业务 AGENTS.md → /home/craft/.craft-agent/AGENTS.md"
   scp -q "$SKILLS_SRC/AGENTS.md" "$SERVER:/tmp/craft-agents-md"
   ssh "$SERVER" "sudo cp /tmp/craft-agents-md /home/craft/.craft-agent/AGENTS.md && sudo chown craft:craft /home/craft/.craft-agent/AGENTS.md && rm /tmp/craft-agents-md"
+fi
+
+# 紧急调度 cron 轮询 prompt → dispatch workspace。这个文件此前只活在服务器上，手工 ssh
+# 改，不受版本控制也不过 CI——2026-07-09 SKILL.md 切换写入目标库时它没跟着切，巡检轮询了
+# 三天空表都没人发现。收进仓库后走这条部署路径，CI 的 lint:feishu-targets 才看得见它。
+if [[ -f "$ROOT/deploy/dispatch-automations.json" ]]; then
+  echo "==> [3.7/4] 部署紧急调度 automations.json → dispatch workspace"
+  scp -q "$ROOT/deploy/dispatch-automations.json" "$SERVER:/tmp/dispatch-automations.json"
+  ssh "$SERVER" "sudo install -o craft -g craft -m 644 /tmp/dispatch-automations.json /home/craft/.craft-agent/workspaces/dispatch/automations.json && rm /tmp/dispatch-automations.json"
 fi
 
 if [[ "$DO_DEPS" == 1 ]]; then

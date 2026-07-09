@@ -1,0 +1,19 @@
+{
+  "automations": {
+    "SchedulerTick": [
+      {
+        "id": "d15pa7",
+        "name": "紧急调度询价轮询",
+        "cron": "*/10 * * * *",
+        "timezone": "Asia/Shanghai",
+        "permissionMode": "allow-all",
+        "actions": [
+          {
+            "type": "prompt",
+            "prompt": "紧急调度轮询。第一步只跑这一条命令探测待办(不要先读任何文件):lark-cli base +record-list --base-token LclTbYAOia6es1sdFbacDCgKnld --table-id tbljxle9qkfUO0vV --as user --limit 20 --format json --filter-json (single-quote包裹){\"logic\":\"and\",\"conditions\":[[\"分配状态\",\"intersects\",[\"已分配\"]],[\"报价跟进情况\",\"empty\"],[\"接单状态\",\"!=\",\"已拒绝\"]]}。结果为 0 行就立即结束,只回一句无待办,不读 skill 不做别的。有待办才读 procurement-dispatch-inquiry skill,逐条完成 接单→询价两板斧→按业务口径写回下单包→推进状态,遵守幂等契约。发消息前须经用户确认,交互会话之外的自动巡检跳过 IM 通知。"
+          }
+        ]
+      }
+    ]
+  }
+}

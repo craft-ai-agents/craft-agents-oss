@@ -1,0 +1,34 @@
+{
+  "_comment": "唯一真相登记表：任何出现在 SKILL.md / references / deploy/dispatch-automations.json 里的 Feishu base_token 都必须先在这里登记。role=retired 的 token 出现在 live 合同文件里视为 CI 硬错误——这条就是 2026-07-09 那次事故（automations.json 硬编码库③,SKILL.md 已切库①但巡检没跟着切)的直接复现检测。见 scripts/check-feishu-target-consistency.ts。",
+  "bases": {
+    "LclTbYAOia6es1sdFbacDCgKnld": {
+      "name": "紧急调度3.0 副本",
+      "role": "write_target",
+      "owner_skill": "procurement-dispatch-inquiry",
+      "tables": {
+        "紧急调度需求": "tbljxle9qkfUO0vV",
+        "采购询价表": "tblolbBjo9Jv3NgU"
+      }
+    },
+    "EWoFbgsDxaBA8LsLxWrce74tnPc": {
+      "name": "紧急调度客户需求项目管理表20251011",
+      "role": "reference_only",
+      "owner_skill": "procurement-dispatch-inquiry",
+      "tables": {
+        "客户项目需求管理表": "tblwZsfI8q8Yozx7",
+        "采购询价表": "tblYuFqdhkH23Bqw"
+      }
+    },
+    "W6HXbwhkVaRezKsXMWLcfItjnLh": {
+      "name": "紧急调度3.0-AI-staging",
+      "role": "retired",
+      "owner_skill": "procurement-dispatch-inquiry",
+      "retired_reason": "2026-07-09 订正:曾被误判为架构定案的永久写入目标,实为绕权限坑的临时 +base-copy。库①权限验证正常后已撤回,库③停止使用。"
+    },
+    "FrzDbGwmVa0YkAsd7g6c5pDHnlg": {
+      "name": "AI-采购数据",
+      "role": "write_target",
+      "owner_skill": "procurement-feishu-table-fill"
+    }
+  }
+}
