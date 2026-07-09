@@ -87,7 +87,7 @@ import { type Session, type SessionEvent, type FileAttachment, type SendMessageO
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta, type TokenUsage } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
 import { loadAllSkills, loadSkillBySlug, invalidateSkillsCache, listSkillSummaries, resolveSkillFilePathBySlug, type LoadedSkill, type SkillSummary } from '@craft-agent/shared/skills'
-import { getDefaultLabelSkillBindingsConfig, loadAndValidateLabelSkillBindingsConfig, resolveActiveLabelSkillAnchors, selectLabelSkillBootstrapCandidates, type LabelSkillAnchorResolution, type LabelSkillAnchorState, type LabelSkillBootstrapCandidateSelection, type LabelSkillBootstrapStateEntry } from '@craft-agent/shared/label-skill-bindings'
+import { getDefaultLabelSkillBindingsConfig, loadAndValidateLabelSkillBindingsConfig, normalizeLabelSkillContextEpoch, resolveActiveLabelSkillAnchors, selectLabelSkillBootstrapCandidates, type LabelSkillAnchorResolution, type LabelSkillAnchorState, type LabelSkillBootstrapCandidateSelection, type LabelSkillBootstrapStateEntry } from '@craft-agent/shared/label-skill-bindings'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
@@ -1845,6 +1845,20 @@ export class SessionManager implements ISessionManager {
     this.persistSession(managed)
   }
 
+  private advanceLabelSkillContextEpochAfterCompaction(managed: ManagedSession): void {
+    const previousState = managed.labelSkillAnchorState ?? {}
+    const currentEpoch = normalizeLabelSkillContextEpoch(previousState.contextEpoch)
+    const nextState: LabelSkillAnchorState = {
+      ...previousState,
+      contextEpoch: currentEpoch + 1,
+    }
+    const prev = JSON.stringify(managed.labelSkillAnchorState ?? null)
+    const next = JSON.stringify(nextState)
+    if (prev === next) return
+    managed.labelSkillAnchorState = nextState
+    this.persistSession(managed)
+  }
+
   private getUnpreparedLabelSkillSourceSlugs(managed: ManagedSession, resolution: LabelSkillAnchorResolution | null): string[] {
     const required = resolution?.requiredSourceSlugs ?? []
     if (required.length === 0) return []
@@ -1868,6 +1882,7 @@ export class SessionManager implements ISessionManager {
       activeAnchors: resolution.activeAnchors,
       configHash: resolution.configHash,
       previousState: managed.labelSkillAnchorState,
+      contextEpoch: normalizeLabelSkillContextEpoch(managed.labelSkillAnchorState?.contextEpoch),
       messagesBeforeModelCall: args.messagesBeforeModelCall,
       explicitSkillSlugs: args.explicitSkillSlugs,
       isQueuedReplay: args.isQueuedReplay,
@@ -1990,7 +2005,10 @@ export class SessionManager implements ISessionManager {
     }) => void,
   ): void {
     const previousState = managed.labelSkillAnchorState ?? {}
-    const previousBootstrap = previousState.bootstrap?.configHash === configHash ? previousState.bootstrap : undefined
+    const contextEpoch = normalizeLabelSkillContextEpoch(previousState.contextEpoch)
+    const previousBootstrap = previousState.bootstrap?.configHash === configHash && normalizeLabelSkillContextEpoch(previousState.bootstrap.contextEpoch) === contextEpoch
+      ? previousState.bootstrap
+      : undefined
     const draft = {
       entries: new Map((previousBootstrap?.entries ?? []).map(entry => [entry.bindingId, entry] as const)),
       bootstrappedSkillSlugs: new Set(previousBootstrap?.bootstrappedSkillSlugs ?? []),
@@ -1999,9 +2017,11 @@ export class SessionManager implements ISessionManager {
     mutate(draft)
     const nextState: LabelSkillAnchorState = {
       ...previousState,
+      contextEpoch,
       lastConfigHash: previousState.lastConfigHash ?? configHash,
       bootstrap: {
         configHash,
+        contextEpoch,
         entries: Array.from(draft.entries.values()).sort((a, b) => a.bindingId.localeCompare(b.bindingId)),
         bootstrappedSkillSlugs: Array.from(draft.bootstrappedSkillSlugs).sort(),
         updatedAt,
@@ -8299,7 +8319,8 @@ export class SessionManager implements ISessionManager {
           // not affected by CMD+R during compaction. The frontend reload
           // recovery will see awaitingCompaction=false and trigger execution.
           void markStoredCompactionComplete(managed.workspace.rootPath, sessionId)
-          sessionLog.info(`Session ${sessionId}: compaction complete, marked pending plan ready`)
+          this.advanceLabelSkillContextEpochAfterCompaction(managed)
+          sessionLog.info(`Session ${sessionId}: compaction complete, marked pending plan ready and advanced label-skill context epoch`)
 
           // Emit usage_update so the context count badge refreshes immediately
           // after compaction, without waiting for the next message

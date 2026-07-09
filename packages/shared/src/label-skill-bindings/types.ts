@@ -96,6 +96,8 @@ export interface LabelSkillBootstrapStateEntry {
 
 export interface LabelSkillBootstrapState {
   configHash?: string;
+  /** Session context epoch this bootstrap state belongs to. Missing legacy values are treated as epoch 0. */
+  contextEpoch?: number;
   entries?: LabelSkillBootstrapStateEntry[];
   bootstrappedSkillSlugs?: string[];
   updatedAt?: string;
@@ -103,11 +105,22 @@ export interface LabelSkillBootstrapState {
 }
 
 export interface LabelSkillAnchorState {
+  /** Increments after chat compaction so label-bound skills can be re-bootstrapped into the new context. */
+  contextEpoch?: number;
   lastConfigHash?: string;
   lastActiveBindingIds?: string[];
   lastBlockKind?: 'active' | 'revocation' | 'none';
   lastInjectedAt?: string;
   bootstrap?: LabelSkillBootstrapState;
+}
+
+export interface LabelSkillAnchorSkillRef {
+  slug: string;
+  name?: string;
+  source?: SkillSource;
+  metadataHash?: string;
+  contentHash?: string;
+  requiredSources?: string[];
 }
 
 export interface ResolvedLabelSkillAnchor {
@@ -116,6 +129,8 @@ export interface ResolvedLabelSkillAnchor {
   skillSlug: string;
   skillName?: string;
   skillDescription?: string;
+  /** Display-safe pointer to the bound skill. Never includes local paths or full SKILL.md content. */
+  skillRef: LabelSkillAnchorSkillRef;
   compactInstruction: string;
   requiredSourceSlugs: string[];
 }
@@ -127,6 +142,8 @@ export interface ResolveActiveLabelSkillAnchorsOptions {
   skills?: SkillSummary[];
   workspaceSlug?: string;
   previousState?: LabelSkillAnchorState;
+  /** Current session context epoch. Defaults to previousState.contextEpoch or 0. */
+  contextEpoch?: number;
   maxActiveAnchors?: number;
   maxSerializedBytes?: number;
   now?: Date;
@@ -141,6 +158,8 @@ export interface SelectLabelSkillBootstrapCandidatesOptions {
   activeAnchors: ResolvedLabelSkillAnchor[];
   configHash: string;
   previousState?: LabelSkillAnchorState;
+  /** Current session context epoch. Defaults to previousState.contextEpoch or 0. */
+  contextEpoch?: number;
   messagesBeforeModelCall: Array<{ role: string; isIntermediate?: boolean }>;
   explicitSkillSlugs?: string[];
   isQueuedReplay?: boolean;

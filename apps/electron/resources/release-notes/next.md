@@ -6,6 +6,8 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Improvements
 
+- **Shorter label-to-skill anchors** — Label-bound skills now generate small runtime anchors with safe skill references and explicit re-read guidance instead of long partial skill summaries, and active bindings can re-bootstrap their full `SKILL.md` behavior after chat compaction through the standard skill read flow.
+
 ## Bug Fixes
 
 ## Breaking Changes

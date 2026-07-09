@@ -47,7 +47,7 @@ export const meta: DetailsPageMeta = {
 
 const MAX_ACTIVE_BINDINGS = 8
 const MAX_RUNTIME_PAYLOAD_BYTES = 12_000
-const WARN_COMPACT_INSTRUCTION_CHARS = 4_000
+const WARN_COMPACT_INSTRUCTION_CHARS = 1_200
 const MAX_COMPACT_INSTRUCTION_CHARS = 12_000
 
 interface BindingUiDiagnostic {

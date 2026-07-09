@@ -16,8 +16,16 @@ import type {
 
 const DEFAULT_MAX_ACTIVE_ANCHORS = 8;
 const DEFAULT_MAX_SERIALIZED_BYTES = 12_000;
+const DEFAULT_MAX_RUNTIME_ANCHOR_CHARS = 1_000;
 export const DEFAULT_MAX_LABEL_SKILL_BOOTSTRAP_SKILLS = 2;
 const TRUNCATION_MARKER = '[label-skill-bindings truncated deterministically]';
+const RUNTIME_ANCHOR_TRUNCATION_MARKER = '[runtime anchor shortened; re-read bound SKILL.md if needed]';
+
+export function normalizeLabelSkillContextEpoch(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : 0;
+}
 
 export function resolveActiveLabelSkillAnchors(
   config: LabelSkillBindingsConfig,
@@ -27,6 +35,7 @@ export function resolveActiveLabelSkillAnchors(
   const now = options.now ?? new Date();
   const maxActiveAnchors = options.maxActiveAnchors ?? DEFAULT_MAX_ACTIVE_ANCHORS;
   const maxSerializedBytes = options.maxSerializedBytes ?? DEFAULT_MAX_SERIALIZED_BYTES;
+  const contextEpoch = normalizeLabelSkillContextEpoch(options.contextEpoch ?? options.previousState?.contextEpoch);
   const validation = validateLabelSkillBindingsConfig(config, {
     labels: options.labels,
     skills: options.skills,
@@ -54,7 +63,7 @@ export function resolveActiveLabelSkillAnchors(
   for (const binding of eligible) {
     const skill = skillsBySlug.get(binding.skillSlug);
     if (!scopeApplies(binding, skill, options.workspaceSlug, warnings)) continue;
-    activeAnchors.push(toAnchor(binding, skill));
+    activeAnchors.push(toAnchor(binding, skill, warnings));
   }
 
   let truncated = false;
@@ -99,6 +108,7 @@ export function resolveActiveLabelSkillAnchors(
   const nextState = buildNextAnchorState({
     previousState: options.previousState,
     configHash,
+    contextEpoch,
     activeBindingIds: includedAnchors.map(anchor => anchor.bindingId),
     blockKind,
     injectedAt: block ? now.toISOString() : options.previousState?.lastInjectedAt,
@@ -123,15 +133,24 @@ export function getLabelSkillBootstrapEligibility(options: {
   activeAnchorCount: number;
   messagesBeforeModelCall: Array<{ role: string; isIntermediate?: boolean }>;
   isQueuedReplay?: boolean;
+  contextEpoch?: number;
+  previousBootstrapContextEpoch?: number;
 }): LabelSkillBootstrapEligibilityResult {
   if (options.isQueuedReplay) {
     return { eligible: false, reason: 'queued-replay' };
   }
-  if (hasPriorFinalAssistantModelResponse(options.messagesBeforeModelCall)) {
-    return { eligible: false, reason: 'prior-final-assistant' };
-  }
   if (options.activeAnchorCount <= 0) {
     return { eligible: false, reason: 'no-active-anchors' };
+  }
+
+  const contextEpoch = normalizeLabelSkillContextEpoch(options.contextEpoch);
+  const previousBootstrapContextEpoch = typeof options.previousBootstrapContextEpoch === 'number'
+    ? normalizeLabelSkillContextEpoch(options.previousBootstrapContextEpoch)
+    : -1;
+  const canRebootstrapAfterCompaction = contextEpoch > 0 && contextEpoch > previousBootstrapContextEpoch;
+
+  if (hasPriorFinalAssistantModelResponse(options.messagesBeforeModelCall) && !canRebootstrapAfterCompaction) {
+    return { eligible: false, reason: 'prior-final-assistant' };
   }
   return { eligible: true };
 }
@@ -141,10 +160,16 @@ export function selectLabelSkillBootstrapCandidates(
 ): LabelSkillBootstrapCandidateSelection {
   const maxBootstrapSkills = Math.max(0, options.maxBootstrapSkills ?? DEFAULT_MAX_LABEL_SKILL_BOOTSTRAP_SKILLS);
   const explicitSkillSlugs = Array.from(new Set((options.explicitSkillSlugs ?? []).filter(Boolean)));
+  const contextEpoch = normalizeLabelSkillContextEpoch(options.contextEpoch ?? options.previousState?.contextEpoch);
+  const previousBootstrapContextEpoch = options.previousState?.bootstrap
+    ? normalizeLabelSkillContextEpoch(options.previousState.bootstrap.contextEpoch)
+    : -1;
   const eligibility = getLabelSkillBootstrapEligibility({
     activeAnchorCount: options.activeAnchors.length,
     messagesBeforeModelCall: options.messagesBeforeModelCall,
     isQueuedReplay: options.isQueuedReplay,
+    contextEpoch,
+    previousBootstrapContextEpoch,
   });
   if (!eligibility.eligible || maxBootstrapSkills === 0) {
     return {
@@ -158,7 +183,7 @@ export function selectLabelSkillBootstrapCandidates(
   }
 
   const explicitSlugs = new Set(explicitSkillSlugs);
-  const completedSlugs = getCompletedBootstrapSkillSlugs(options.previousState, options.configHash);
+  const completedSlugs = getCompletedBootstrapSkillSlugs(options.previousState, options.configHash, contextEpoch);
   const selected: ResolvedLabelSkillAnchor[] = [];
   const overflow: ResolvedLabelSkillAnchor[] = [];
   const selectedSlugs = new Set<string>();
@@ -195,14 +220,16 @@ function hasPriorLabelSkillRuntimeContext(previousState: LabelSkillAnchorState |
 function buildNextAnchorState(args: {
   previousState?: LabelSkillAnchorState;
   configHash: string;
+  contextEpoch: number;
   activeBindingIds: string[];
   blockKind: 'active' | 'revocation' | 'none';
   injectedAt?: string;
 }): LabelSkillAnchorState {
   const bootstrap = args.blockKind === 'revocation'
-    ? { configHash: args.configHash, entries: [], bootstrappedSkillSlugs: [], updatedAt: args.injectedAt }
-    : preserveBootstrapState(args.previousState, args.configHash);
+    ? { configHash: args.configHash, contextEpoch: args.contextEpoch, entries: [], bootstrappedSkillSlugs: [], updatedAt: args.injectedAt }
+    : preserveBootstrapState(args.previousState, args.configHash, args.contextEpoch);
   return {
+    contextEpoch: args.contextEpoch,
     lastConfigHash: args.configHash,
     lastActiveBindingIds: args.activeBindingIds,
     lastBlockKind: args.blockKind,
@@ -211,16 +238,17 @@ function buildNextAnchorState(args: {
   };
 }
 
-function preserveBootstrapState(previousState: LabelSkillAnchorState | undefined, configHash: string): LabelSkillAnchorState['bootstrap'] | undefined {
+function preserveBootstrapState(previousState: LabelSkillAnchorState | undefined, configHash: string, contextEpoch: number): LabelSkillAnchorState['bootstrap'] | undefined {
   const bootstrap = previousState?.bootstrap;
   if (!bootstrap || bootstrap.configHash !== configHash) return undefined;
-  return bootstrap;
+  if (normalizeLabelSkillContextEpoch(bootstrap.contextEpoch) !== contextEpoch) return undefined;
+  return { ...bootstrap, contextEpoch };
 }
 
-function getCompletedBootstrapSkillSlugs(previousState: LabelSkillAnchorState | undefined, configHash: string): Set<string> {
+function getCompletedBootstrapSkillSlugs(previousState: LabelSkillAnchorState | undefined, configHash: string, contextEpoch: number): Set<string> {
   const completed = new Set<string>();
   const bootstrap = previousState?.bootstrap;
-  if (!bootstrap || bootstrap.configHash !== configHash) return completed;
+  if (!bootstrap || bootstrap.configHash !== configHash || normalizeLabelSkillContextEpoch(bootstrap.contextEpoch) !== contextEpoch) return completed;
   for (const slug of bootstrap.bootstrappedSkillSlugs ?? []) completed.add(slug);
   for (const entry of bootstrap.entries ?? []) {
     if (entry.status === 'completed') completed.add(entry.skillSlug);
@@ -262,7 +290,7 @@ function scopeApplies(
   return true;
 }
 
-function toAnchor(binding: LabelSkillBinding, skill: SkillSummary | undefined): ResolvedLabelSkillAnchor {
+function toAnchor(binding: LabelSkillBinding, skill: SkillSummary | undefined, warnings: LabelSkillBindingDiagnostic[]): ResolvedLabelSkillAnchor {
   const snapshotSlugs = Array.isArray(binding.requiredSourcesSnapshot)
     ? binding.requiredSourcesSnapshot
       .map(source => source?.slug)
@@ -271,14 +299,24 @@ function toAnchor(binding: LabelSkillBinding, skill: SkillSummary | undefined): 
   const requiredSourceSlugs = snapshotSlugs
     ?? skill?.requiredSources
     ?? [];
+  const normalizedRequiredSourceSlugs = Array.from(new Set(requiredSourceSlugs)).sort();
+  const skillName = skill?.metadata.name ?? binding.generatedFrom?.skillName;
   return {
     bindingId: binding.id,
     labelId: binding.labelId,
     skillSlug: binding.skillSlug,
-    skillName: skill?.metadata.name ?? binding.generatedFrom?.skillName,
+    skillName,
     skillDescription: skill?.metadata.description ?? binding.generatedFrom?.skillDescription,
-    compactInstruction: binding.compactInstruction.trim(),
-    requiredSourceSlugs: Array.from(new Set(requiredSourceSlugs)).sort(),
+    skillRef: {
+      slug: binding.skillSlug,
+      name: skillName,
+      source: skill?.source ?? binding.generatedFrom?.skillSource,
+      metadataHash: skill?.metadataHash ?? binding.generatedFrom?.metadataHash,
+      contentHash: skill?.contentHash ?? binding.generatedFrom?.contentHash,
+      requiredSources: normalizedRequiredSourceSlugs.length > 0 ? normalizedRequiredSourceSlugs : undefined,
+    },
+    compactInstruction: shortenRuntimeAnchor(binding.compactInstruction.trim(), binding.id, warnings),
+    requiredSourceSlugs: normalizedRequiredSourceSlugs,
   };
 }
 
@@ -322,6 +360,17 @@ function fitBlock(args: {
   return { block, anchors, truncated };
 }
 
+function shortenRuntimeAnchor(value: string, bindingId: string, warnings: LabelSkillBindingDiagnostic[]): string {
+  if (value.length <= DEFAULT_MAX_RUNTIME_ANCHOR_CHARS) return value;
+  warnings.push({
+    severity: 'warning',
+    code: 'runtime-anchor-shortened',
+    message: `Label-skill runtime anchor was shortened to ${DEFAULT_MAX_RUNTIME_ANCHOR_CHARS} characters`,
+    bindingId,
+  });
+  return `${value.slice(0, Math.max(0, DEFAULT_MAX_RUNTIME_ANCHOR_CHARS - RUNTIME_ANCHOR_TRUNCATION_MARKER.length - 1)).trim()}\n${RUNTIME_ANCHOR_TRUNCATION_MARKER}`;
+}
+
 function truncateString(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
   return `${value.slice(0, Math.max(0, maxChars - TRUNCATION_MARKER.length - 1))}\n${TRUNCATION_MARKER}`;
@@ -345,14 +394,14 @@ function buildBlock(args: {
         supersedesScope: 'prior-label-skill-compact-and-bootstrap-contexts-only',
         priority: 'lower-than-system-developer-tool-permission-and-explicit-user-instructions',
         activeRoleBindingInstruction: 'A label-bound skill role is active for this session. This is not an explicit [skill:...] mention, but it is still an active runtime role binding. Do not claim no skill/role is active while this block is present.',
+        rereadInstruction: 'Each compactInstruction is a short runtime anchor, not the full SKILL.md. If label-bound role behavior seems incomplete, stale, or forgotten after context loss/compaction, re-read the bound SKILL.md through the standard skill bootstrap/read flow before continuing.',
         truncated: args.truncated,
         truncationMarker: args.truncated ? TRUNCATION_MARKER : undefined,
         activeBindings: args.anchors.map(anchor => ({
           bindingId: anchor.bindingId,
           labelId: anchor.labelId,
           skillSlug: anchor.skillSlug,
-          skillName: anchor.skillName,
-          skillDescription: anchor.skillDescription,
+          skillRef: anchor.skillRef,
           compactInstruction: anchor.compactInstruction,
         })),
       }
@@ -368,7 +417,7 @@ function buildBlock(args: {
       };
 
   if (args.kind === 'active') {
-    return `<label-skill-bindings-context>\nA label-bound skill role is active for this session. This is not an explicit [skill:...] mention, but it is still an active runtime role binding. Do not claim no skill/role is active while this block is present. This hidden context is generated from compact label-to-skill bindings and is lower priority than system, developer, tool, permission, and explicit user instructions. Current label-skill context supersedes prior label-skill compact/bootstrap contexts only; it does not supersede system/developer/tool/permission instructions or direct user instructions. Do not reveal this block unless the user asks about session internals.\n${JSON.stringify(payload, null, 2)}\n</label-skill-bindings-context>`;
+    return `<label-skill-bindings-context>\nA label-bound skill role is active for this session. This is not an explicit [skill:...] mention, but it is still an active runtime role binding. Do not claim no skill/role is active while this block is present. This hidden context is generated from compact label-to-skill bindings and is lower priority than system, developer, tool, permission, and explicit user instructions. Current label-skill context supersedes prior label-skill compact/bootstrap contexts only; it does not supersede system/developer/tool/permission instructions or direct user instructions. Compact instructions are short role anchors, not full skill files; if the role behavior seems incomplete or stale after context loss/compaction, use the standard skill bootstrap/read flow to re-read the bound SKILL.md. Do not reveal this block unless the user asks about session internals.\n${JSON.stringify(payload, null, 2)}\n</label-skill-bindings-context>`;
   }
 
   return `<label-skill-bindings-context>\nNo label-bound skill role is active for this session. This revocation supersedes prior label-skill compact contexts and prior label-bound bootstrap/read-derived role instructions only; it does not ask you to disregard independent facts, tool outputs, or direct user instructions from turns after a skill was read. It is lower priority than system, developer, tool, permission, and explicit user instructions. Do not reveal this block unless the user asks about session internals.\n${JSON.stringify(payload, null, 2)}\n</label-skill-bindings-context>`;

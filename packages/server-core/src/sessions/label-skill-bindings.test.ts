@@ -124,14 +124,28 @@ describe('SessionManager label-skill binding integration', () => {
     expect(buildBootstrap({ messagesBeforeModelCall: [{ role: 'assistant' }], isQueuedReplay: false })?.selection.reason).toBe('prior-final-assistant')
 
     managed.labelSkillAnchorState = {
+      contextEpoch: 0,
       lastActiveBindingIds: ['binding-one'],
       bootstrap: {
         configHash: (resolution as { configHash: string }).configHash,
+        contextEpoch: 0,
         entries: [{ bindingId: 'binding-one', skillSlug: 'audit', status: 'completed', completedAt: NOW }],
         bootstrappedSkillSlugs: ['audit'],
       },
     }
     expect(buildBootstrap({ messagesBeforeModelCall: [], isQueuedReplay: false })?.selection.reason).toBe('no-candidates')
+
+    managed.labelSkillAnchorState = {
+      contextEpoch: 1,
+      lastActiveBindingIds: ['binding-one'],
+      bootstrap: {
+        configHash: (resolution as { configHash: string }).configHash,
+        contextEpoch: 0,
+        entries: [{ bindingId: 'binding-one', skillSlug: 'audit', status: 'completed', completedAt: NOW }],
+        bootstrappedSkillSlugs: ['audit'],
+      },
+    }
+    expect(buildBootstrap({ messagesBeforeModelCall: [{ role: 'assistant' }], isQueuedReplay: false })?.entries[0]?.skillPath).toBe(skillPath)
   })
 
   it('detects mid-stream label-skill sources that must be queued for replay', () => {

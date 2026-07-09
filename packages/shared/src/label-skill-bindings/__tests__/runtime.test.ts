@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import type { SkillSummary } from '../../skills/types.ts';
-import type { LabelSkillBindingsConfig } from '../types.ts';
+import type { LabelSkillBindingsConfig, ResolvedLabelSkillAnchor } from '../types.ts';
 import { loadAndValidateLabelSkillBindingsConfig, saveLabelSkillBindingsConfig, validateLabelSkillBindingsConfig } from '../storage.ts';
 import { getLabelSkillBootstrapEligibility, resolveActiveLabelSkillAnchors, selectLabelSkillBootstrapCandidates } from '../runtime.ts';
 
@@ -42,6 +42,20 @@ function config(overrides: Partial<LabelSkillBindingsConfig['bindings'][number]>
       updatedAt: '2026-07-01T00:00:00.000Z',
       ...overrides,
     }],
+  };
+}
+
+function anchor(overrides: Partial<ResolvedLabelSkillAnchor> = {}): ResolvedLabelSkillAnchor {
+  const skillSlug = overrides.skillSlug ?? 'audit';
+  const requiredSourceSlugs = overrides.requiredSourceSlugs ?? [];
+  return {
+    bindingId: overrides.bindingId ?? 'binding-one',
+    labelId: overrides.labelId ?? 'review',
+    skillSlug,
+    skillName: overrides.skillName ?? skillSlug,
+    skillRef: overrides.skillRef ?? { slug: skillSlug, name: skillSlug, requiredSources: requiredSourceSlugs.length ? requiredSourceSlugs : undefined },
+    compactInstruction: overrides.compactInstruction ?? 'Review the current change carefully.',
+    requiredSourceSlugs,
   };
 }
 
@@ -252,6 +266,12 @@ describe('label-skill-bindings runtime', () => {
     expect(result.block).toContain('Do not claim no skill/role is active while this block is present.');
     expect(result.block).toContain('supersedes prior label-skill compact/bootstrap contexts only');
     expect(result.block).toContain('Review the current change carefully.');
+    expect(result.block).toContain('"skillRef"');
+    expect(result.block).toContain('"metadataHash"');
+    expect(result.block).toContain('"requiredSources"');
+    expect(result.block).toContain('re-read the bound SKILL.md');
+    expect(result.block).not.toContain('skillFilePath');
+    expect(result.block).not.toContain('/private/');
   });
 
   it('ignores session labels whose base label no longer exists and revokes stale context', () => {
@@ -286,6 +306,7 @@ describe('label-skill-bindings runtime', () => {
         lastActiveBindingIds: [],
         bootstrap: {
           configHash: 'old',
+          contextEpoch: 0,
           entries: [{ bindingId: 'binding-one', skillSlug: 'audit', status: 'completed', completedAt: NOW }],
           bootstrappedSkillSlugs: ['audit'],
         },
@@ -313,17 +334,26 @@ describe('label-skill-bindings runtime', () => {
 
     expect(getLabelSkillBootstrapEligibility({
       activeAnchorCount: 1,
+      messagesBeforeModelCall: [{ role: 'user' }, { role: 'assistant' }],
+      contextEpoch: 1,
+      previousBootstrapContextEpoch: 0,
+    })).toEqual({ eligible: true });
+
+    expect(getLabelSkillBootstrapEligibility({
+      activeAnchorCount: 1,
       messagesBeforeModelCall: [{ role: 'user' }],
       isQueuedReplay: true,
+      contextEpoch: 1,
+      previousBootstrapContextEpoch: 0,
     })).toEqual({ eligible: false, reason: 'queued-replay' });
   });
 
   it('selects first-turn bootstrap candidates with explicit-first dedupe, completion suppression, and overflow', () => {
     const anchors = [
-      { bindingId: 'binding-a', labelId: 'review', skillSlug: 'explicit', compactInstruction: 'a', requiredSourceSlugs: [] },
-      { bindingId: 'binding-b', labelId: 'review', skillSlug: 'audit', compactInstruction: 'b', requiredSourceSlugs: [] },
-      { bindingId: 'binding-c', labelId: 'review', skillSlug: 'plan', compactInstruction: 'c', requiredSourceSlugs: [] },
-      { bindingId: 'binding-d', labelId: 'review', skillSlug: 'ship', compactInstruction: 'd', requiredSourceSlugs: [] },
+      anchor({ bindingId: 'binding-a', skillSlug: 'explicit', compactInstruction: 'a' }),
+      anchor({ bindingId: 'binding-b', skillSlug: 'audit', compactInstruction: 'b' }),
+      anchor({ bindingId: 'binding-c', skillSlug: 'plan', compactInstruction: 'c' }),
+      anchor({ bindingId: 'binding-d', skillSlug: 'ship', compactInstruction: 'd' }),
     ];
 
     const selected = selectLabelSkillBootstrapCandidates({
@@ -340,8 +370,10 @@ describe('label-skill-bindings runtime', () => {
       activeAnchors: anchors,
       configHash: 'hash',
       previousState: {
+        contextEpoch: 0,
         bootstrap: {
           configHash: 'hash',
+          contextEpoch: 0,
           entries: [{ bindingId: 'binding-b', skillSlug: 'audit', status: 'completed', completedAt: NOW }],
           bootstrappedSkillSlugs: ['audit'],
         },
@@ -351,6 +383,84 @@ describe('label-skill-bindings runtime', () => {
       maxBootstrapSkills: 2,
     });
     expect(afterCompleted.anchors.map(anchor => anchor.skillSlug)).toEqual(['explicit', 'plan']);
+  });
+
+  it('suppresses same-epoch bootstrap after a prior assistant but reboots after a stale compaction epoch', () => {
+    const anchors = [anchor({ bindingId: 'binding-b', skillSlug: 'audit' })];
+    const previousState = {
+      contextEpoch: 1,
+      bootstrap: {
+        configHash: 'hash',
+        contextEpoch: 1,
+        entries: [{ bindingId: 'binding-b', skillSlug: 'audit', status: 'completed' as const, completedAt: NOW }],
+        bootstrappedSkillSlugs: ['audit'],
+      },
+    };
+
+    const sameEpoch = selectLabelSkillBootstrapCandidates({
+      activeAnchors: anchors,
+      configHash: 'hash',
+      previousState,
+      contextEpoch: 1,
+      messagesBeforeModelCall: [{ role: 'assistant' }],
+      maxBootstrapSkills: 2,
+    });
+    expect(sameEpoch.eligible).toBe(false);
+    expect(sameEpoch.reason).toBe('prior-final-assistant');
+
+    const staleEpoch = selectLabelSkillBootstrapCandidates({
+      activeAnchors: anchors,
+      configHash: 'hash',
+      previousState: { ...previousState, contextEpoch: 2 },
+      contextEpoch: 2,
+      messagesBeforeModelCall: [{ role: 'assistant' }],
+      maxBootstrapSkills: 2,
+    });
+    expect(staleEpoch.eligible).toBe(true);
+    expect(staleEpoch.anchors.map(anchor => anchor.skillSlug)).toEqual(['audit']);
+  });
+
+  it('shortens oversized runtime anchors while preserving skillRef reread guidance', () => {
+    const longInstruction = 'x'.repeat(1_500);
+    const result = resolveActiveLabelSkillAnchors(config({ compactInstruction: longInstruction }), {
+      sessionLabels: ['review'],
+      labels: [{ id: 'review' }],
+      skills: [skill],
+    });
+
+    expect(result.blockKind).toBe('active');
+    expect(result.warnings.some(warning => warning.code === 'runtime-anchor-shortened')).toBe(true);
+    expect(result.block).toContain('[runtime anchor shortened; re-read bound SKILL.md if needed]');
+    expect(result.block).toContain('"skillRef"');
+    expect(result.block).toContain('re-read the bound SKILL.md');
+  });
+
+  it('serializes safe skillRef metadata without skill description, content, or local paths', () => {
+    const result = resolveActiveLabelSkillAnchors(config({
+      generatedFrom: {
+        skillSlug: 'audit',
+        skillName: 'Audit',
+        skillDescription: 'Generated description should not be serialized in the runtime block.',
+        skillSource: 'project',
+        metadataHash,
+        contentHash: 'b'.repeat(64),
+        requiredSources: ['linear'],
+        generatedAt: NOW,
+      },
+    }), {
+      sessionLabels: ['review'],
+      labels: [{ id: 'review' }],
+      skills: [{ ...skill, contentHash: 'c'.repeat(64) }],
+      previousState: undefined,
+    });
+
+    expect(result.blockKind).toBe('active');
+    expect(result.block).toContain('"skillRef"');
+    expect(result.block).toContain('"source": "project"');
+    expect(result.block).toContain('"contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"');
+    expect(result.block).not.toContain('Generated description should not be serialized');
+    expect(result.block).not.toContain('full SKILL.md body');
+    expect(result.block).not.toContain('/private/skill/path');
   });
 
   it('skips project bindings when source fingerprint no longer matches', () => {

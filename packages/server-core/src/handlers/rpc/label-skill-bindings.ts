@@ -20,7 +20,8 @@ import type { HandlerDeps } from '../handler-deps'
 
 const AI_GENERATION_TIMEOUT_MS = 30_000
 const MAX_SKILL_BODY_CHARS_FOR_GENERATION = 24_000
-const MAX_GENERATED_COMPACT_INSTRUCTION_CHARS = 1_800
+const MAX_GENERATED_COMPACT_INSTRUCTION_CHARS = 800
+const MAX_GENERATED_COMPACT_INSTRUCTION_LINES = 12
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.labelSkillBindings.GET,
@@ -110,12 +111,12 @@ export function registerLabelSkillBindingsHandlers(server: RpcServer, deps: Hand
     } catch {
       // Fall through to deterministic fallback. Avoid logging exception details here
       // because provider errors can echo prompt fragments in some SDKs.
-      generationFallbackWarning = 'Mini-model generation failed, possibly because the default connection is unauthenticated or unavailable; used a deterministic local fallback excerpt. Review and edit before saving.'
+      generationFallbackWarning = 'Mini-model generation failed, possibly because the default connection is unauthenticated or unavailable; used a deterministic local fallback anchor. Review and edit before saving.'
     }
 
     if (!compactInstruction) {
-      compactInstruction = buildDeterministicFallbackCompactInstruction(skill.metadata.name, skill.metadata.description, skill.content)
-      warnings.push(generationFallbackWarning ?? 'AI compact-instruction generation was unavailable; used a deterministic local fallback excerpt. Review and edit before saving.')
+      compactInstruction = buildDeterministicFallbackCompactInstruction(skill.metadata.name, skill.metadata.description)
+      warnings.push(generationFallbackWarning ?? 'AI compact-instruction generation was unavailable; used a deterministic local fallback anchor. Review and edit before saving.')
     }
 
     return {
@@ -175,14 +176,14 @@ async function generateCompactInstructionWithMiniCompletion(args: {
   if (!connectionSlug) {
     return {
       compactInstruction: null,
-      warning: 'No default LLM connection is configured; used a deterministic local fallback excerpt. Review and edit before saving.',
+      warning: 'No default LLM connection is configured; used a deterministic local fallback anchor. Review and edit before saving.',
     }
   }
   const connection = getLlmConnection(connectionSlug)
   if (!connection) {
     return {
       compactInstruction: null,
-      warning: `Default LLM connection "${connectionSlug}" was not found; used a deterministic local fallback excerpt. Review and edit before saving.`,
+      warning: `Default LLM connection "${connectionSlug}" was not found; used a deterministic local fallback anchor. Review and edit before saving.`,
     }
   }
 
@@ -212,7 +213,7 @@ async function generateCompactInstructionWithMiniCompletion(args: {
     if (!compactInstruction) {
       return {
         compactInstruction: null,
-        warning: 'Mini-model generation timed out or returned no text; used a deterministic local fallback excerpt. Review and edit before saving.',
+        warning: 'Mini-model generation timed out or returned no text; used a deterministic local fallback anchor. Review and edit before saving.',
       }
     }
     return { compactInstruction }
@@ -232,21 +233,18 @@ function buildCompactInstructionPrompt(args: {
     : args.skillContent
   const requiredSources = args.requiredSources.length ? args.requiredSources.join(', ') : 'none'
   return [
-    'You generate strict compact runtime instructions for Craft Agent label-to-skill role bindings.',
-    'Return only the compact instruction text. Do not use markdown fences, XML tags, JSON, or explanations.',
-    `Limit the result to ${MAX_GENERATED_COMPACT_INSTRUCTION_CHARS} characters.`,
-    'The instruction must preserve the operational role identity and hard behavior constraints of the skill while omitting examples, boilerplate, and setup details that are not needed every turn.',
-    'Do not include local file paths or quote large chunks of the source skill.',
-    'Use this exact sectioned shape, with concise bullet points where helpful:',
-    `Role: ${args.skillName}`,
-    'Identity: You are operating as <role identity derived from the skill> while this label-bound binding is active.',
-    'Primary responsibility: <one concise responsibility>',
-    'Hard rules:',
-    '- If asked about your role/skill while this binding is active, answer according to this active label-bound role; do not claim no skill or role is active.',
-    '- Follow system, developer, tool, permission, and direct user instructions above this compact binding.',
-    'Behavior checklist:',
-    '- <operational check 1>',
-    '- <operational check 2>',
+    'You generate tiny runtime anchors for Craft Agent label-to-skill role bindings.',
+    'Return only the anchor text. Do not use markdown fences, XML tags, JSON, or explanations.',
+    `Limit the result to ${MAX_GENERATED_COMPACT_INSTRUCTION_CHARS} characters and ${MAX_GENERATED_COMPACT_INSTRUCTION_LINES} non-empty lines.`,
+    'This anchor is not a summary of the full skill. It only reminds the model which label-bound role is active and where the full behavior comes from.',
+    'Do not include local file paths, quote chunks of the source skill, or copy long hard-rule lists.',
+    'The anchor must include: active skill name, one-line role purpose, higher-priority-instructions caveat, and reread guidance.',
+    'Use this compact shape:',
+    `Active label-bound skill: ${args.skillName}.`,
+    'Role anchor: <one concise operational responsibility> while this label is active.',
+    'Full behavior source: bound SKILL.md via the standard skill bootstrap/read flow; this anchor is not the full skill.',
+    'If behavior seems incomplete, stale, or forgotten after compaction/context loss, re-read the bound SKILL.md before continuing.',
+    'Higher-priority system, developer, tool, permission, and direct user instructions override this anchor.',
     '',
     `Skill name: ${args.skillName}`,
     `Skill description: ${args.skillDescription}`,
@@ -262,31 +260,32 @@ function sanitizeGeneratedCompactInstruction(value: string | null): string | nul
   let text = value.trim()
   text = text.replace(/^```(?:\w+)?\s*/u, '').replace(/\s*```$/u, '').trim()
   if (!text) return null
+  const lines = text
+    .split(/\r?\n/u)
+    .map(line => line.trimEnd())
+    .filter(line => line.trim().length > 0)
+  if (lines.length > MAX_GENERATED_COMPACT_INSTRUCTION_LINES) {
+    text = lines.slice(0, MAX_GENERATED_COMPACT_INSTRUCTION_LINES).join('\n')
+  } else {
+    text = lines.join('\n')
+  }
   if (text.length > MAX_GENERATED_COMPACT_INSTRUCTION_CHARS) {
     text = `${text.slice(0, MAX_GENERATED_COMPACT_INSTRUCTION_CHARS - 1).trim()}…`
   }
   return text
 }
 
-function buildDeterministicFallbackCompactInstruction(name: string, description: string, body: string): string {
-  const collapsedBody = body
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-  const excerpt = collapsedBody.slice(0, 720)
+function buildDeterministicFallbackCompactInstruction(name: string, description: string): string {
   const instruction = [
-    `Role: ${name}`,
-    `Identity: You are operating as the ${name} role while this label-bound binding is active.`,
-    `Primary responsibility: ${description}`,
-    'Hard rules:',
-    '- Treat this as an active label-bound runtime role, even though it is not an explicit [skill:...] mention.',
-    '- If asked about your role/skill while this binding is active, answer according to this active label-bound role; do not claim no skill or role is active.',
-    '- Follow higher-priority system, developer, tool, permission, and direct user instructions.',
-    'Behavior checklist:',
-    '- Apply the skill intent compactly and operationally on every relevant turn.',
-    `- Use this clipped local fallback guidance as a reminder only: ${excerpt}`,
+    `Active label-bound skill: ${name}.`,
+    `Role anchor: ${description}`,
+    'Full behavior source: bound SKILL.md via the standard skill bootstrap/read flow; this anchor is not the full skill.',
+    'If behavior seems incomplete, stale, or forgotten after compaction/context loss, re-read the bound SKILL.md before continuing.',
+    'Higher-priority system, developer, tool, permission, and direct user instructions override this anchor.',
   ].join('\n').trim()
-  return instruction.length > 1500 ? `${instruction.slice(0, 1490).trim()}…` : instruction
+  return instruction.length > MAX_GENERATED_COMPACT_INSTRUCTION_CHARS
+    ? `${instruction.slice(0, MAX_GENERATED_COMPACT_INSTRUCTION_CHARS - 1).trim()}…`
+    : instruction
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
