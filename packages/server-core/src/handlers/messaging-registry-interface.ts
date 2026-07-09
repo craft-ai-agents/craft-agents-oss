@@ -191,6 +191,19 @@ export interface IMessagingGatewayRegistry {
     domain: 'lark' | 'feishu'
   }): Promise<void>
 
+  /**
+   * Test a Discord bot token by calling `GET /users/@me`. Returns the bot
+   * username on success.
+   */
+  testDiscordCredentials(creds: {
+    token: string
+  }): Promise<{ success: boolean; botName?: string; error?: string }>
+
+  /** Save Discord credentials and (re)initialize the adapter. */
+  saveDiscordCredentials(workspaceId: string, creds: {
+    token: string
+  }): Promise<void>
+
   /** Disable a platform for a workspace, preserving WhatsApp auth state unless forgotten separately. */
   disconnectPlatform(workspaceId: string, platform: string): Promise<void>
 
