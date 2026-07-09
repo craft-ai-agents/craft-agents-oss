@@ -1,0 +1,110 @@
+# Primary CI gate for PRs and main/redesign branches.
+# Branch protection should require: contracts, validate, build
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'redesign/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUN_VERSION: "1.3.10"
+
+jobs:
+  # Fast: agent contracts, skill unit tests, filename hygiene
+  contracts:
+    name: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Contract suite
+        run: bun run validate:contracts
+
+  # Typecheck + shared unit tests + i18n
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Typecheck + unit tests
+        run: bun run validate:dev
+
+      - name: i18n gates
+        run: |
+          bun run lint:i18n:parity
+          bun run lint:i18n:sorted
+          bun run lint:i18n:coverage
+
+  # Same artifacts deploy builds — catch broken bundles before prod
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build subprocess + webui
+        run: bun run build:ci
+
+      - name: Assert webui dist exists
+        run: |
+          test -f apps/webui/dist/index.html
+          test -d packages/pi-agent-server/dist
+          test -d packages/session-mcp-server/dist
+          echo "build artifacts present"
+
+  # Aggregator job for branch protection (single required check name)
+  ci-ok:
+    name: ci-ok
+    runs-on: ubuntu-latest
+    needs: [contracts, validate, build]
+    if: always()
+    steps:
+      - name: All required jobs green
+        run: |
+          echo "contracts=${{ needs.contracts.result }}"
+          echo "validate=${{ needs.validate.result }}"
+          echo "build=${{ needs.build.result }}"
+          test "${{ needs.contracts.result }}" = "success"
+          test "${{ needs.validate.result }}" = "success"
+          test "${{ needs.build.result }}" = "success"

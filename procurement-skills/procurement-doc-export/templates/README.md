@@ -1,19 +1,30 @@
-# 模板放这里
+# 模板目录
 
-业务给的模板（飞书表格导出的 `.xlsx`）放本目录。
-**本目录的 `*.xlsx` 已 `.gitignore`**（含真实客户/财务/合同数据，只在本地/服务器，绝不进公开仓库）。
+业务 Excel 表单模板（空白 + 历史扁平名）。**所有 `*.xlsx` / `*.pdf` 已 gitignore**，只在本地/服务器。
 
-## 当前模板（雅萱提供，已从飞书表格导出）
+填充方式：openpyxl **按单元格坐标**写可变字段（`../scripts/xlsx_common.py` + 各 `render_*.py`），不是 Jinja 占位符。
 
-- `美金请款发票模板PI.xlsx` —— USD 请款发票，**已对接**（见 `../SKILL.md`，渲染器 `../scripts/render_pi.py`）。
-- `INO_SA_日本印诺请款模板.xlsx` —— JPY 請求書（待做）。
-- `INO_SA_应收应付双凯杰对冲结算书模板.xlsx` —— 对冲结算（待做）。
-- `INO_LG_出口报关文件模板.xlsx` / `INO_LG_进口报关文件模板.xlsx` / `INO_LG_不报关出口资料.xlsx` —— 报关那套（重，待做）。
+## 目录布局（2026-07 从三份 zip 收编）
 
-## 这些是 Excel 表单模板，不是占位符模板
+| 族 | 路径 | 脚本 | 分册 |
+|----|------|------|------|
+| 物流/报关 | `shipping-customs/*/blank.xlsx` | `render_shipping.py` | [catalog-shipping-customs](../references/catalog-shipping-customs.md) |
+| 跟单 | `followup/*/blank.xlsx` | `render_followup.py` / `render_jp_invoice.py` | [catalog-followup](../references/catalog-followup.md) |
+| 采购订单 | `purchase-order/*/blank.xlsx` | `render_po.py` | [catalog-purchase-order](../references/catalog-purchase-order.md) |
+| 美金 PI | `美金请款发票模板PI.xlsx` | `render_pi.py` | SKILL.md |
+| 对冲结算 | `INO_SA_应收应付双凯杰对冲结算书模板.xlsx` | `render_hedge.py` | SKILL.md |
 
-贸易/财务单据是**带固定版式 + 合并单元格 + 公式的 Excel 表单**，里面常是“填好的样例”。填充方式是 **openpyxl 按具体单元格坐标写值**（每个模板逐表逐格做字段映射），不是 Jinja `{{占位符}}`。参考 `render_pi.py` 的做法：
-- 抬头/标签/银行块等**固定内容保留不动**；
-- 只写“可变数据”格（客户、料号、数量、单价…）；
-- 公式（金额=单价×数量、合计 SUM）保留，让 Excel 自动算；
-- 货品行数不固定时**插行/删行**，并手动处理**合并单元格随行下移**（openpyxl 的 `insert_rows` 不会自动移合并区，会导致被合并的非锚格写入失效——`render_pi.py` 里 `_insert_rows_keep_merges` 已解决）。
+样本（对照填格，**禁止当输出底稿**）：`../samples/<族>/`。
+
+## 旧扁平名（兼容）
+
+- `INO_LG_不报关出口资料.xlsx` / `INO_LG_出口报关文件模板.xlsx` / `INO_LG_进口报关文件模板.xlsx`
+- `INO_SA_日本印诺请款模板.xlsx` / `INO_SA_应收应付双凯杰对冲结算书模板.xlsx`
+- `美金请款发票模板PI.xlsx`
+
+新路径优先 `*/blank.xlsx`；旧名可逐步 deprecate。
+
+## 规则
+
+- 只复制 blank 再填数；不要用样本文件另存为交付物。
+- 版式/公式/条款锁死；插行处理合并区（`xlsx_common.adjust_item_block`）。

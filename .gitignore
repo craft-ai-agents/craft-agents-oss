@@ -89,9 +89,12 @@ procurement-skills/**/*.pyc
 # Eval runtime symlinks that expose local procurement skills as project skills
 .agents/skills/procurement-*
 
-# procurement-doc-export: 真实业务模板含客户/财务/合同数据，只留本地，绝不进（公开 fork）仓库
-procurement-skills/procurement-doc-export/templates/*.xlsx
-procurement-skills/procurement-doc-export/templates/*.docx
+# procurement-doc-export: 真实业务模板/样本含客户/财务/合同数据，只留本地，绝不进公开仓库
+procurement-skills/procurement-doc-export/templates/**/*.xlsx
+procurement-skills/procurement-doc-export/templates/**/*.docx
+procurement-skills/procurement-doc-export/templates/**/*.xls
+procurement-skills/procurement-doc-export/templates/**/*.pdf
+procurement-skills/procurement-doc-export/samples/
 # 客户抬头对照表含真实客户地址/联系人，同样只留本地
 procurement-skills/procurement-doc-export/customers.json
 

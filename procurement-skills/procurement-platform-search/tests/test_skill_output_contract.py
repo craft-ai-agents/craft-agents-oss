@@ -26,19 +26,23 @@ class PlatformSearchSkillOutputContractTests(unittest.TestCase):
         self.assertIn("结果：无记录 / 有记录 / 用户直接要求外部平台", text)
         self.assertLess(text.index("库存查找情况"), text.index("平台总览表"))
 
-    def test_overview_table_has_one_row_per_direct_platform(self) -> None:
+    def test_overview_table_covers_component_data_envelope_sources(self) -> None:
         text = self.text
-        self.assertIn("每个 `--source-set direct` 平台必须一行", text)
-        self.assertIn("表格平台数必须等于 `--list-source-set direct` 展开的平台数", text)
+        self.assertIn("component-data", text)
+        self.assertIn("sources[]", text)
+        self.assertIn("sources_total", text)
+        self.assertIn("每个源必须一行", text)
 
-    def test_aggregator_stays_after_user_confirmation(self) -> None:
+    def test_status_vocabulary_separates_no_match_from_fetch_failure(self) -> None:
         text = self.text
-        self.assertIn("二轮聚合：未使用，待用户确认", text)
-        self.assertIn("是否继续跑聚合平台补充/交叉验证？ `--source-set aggregator`", text)
-
-    def test_platform_skill_does_not_rank_purchase_recommendations(self) -> None:
-        text = self.text
+        self.assertIn("无匹配", text)
+        self.assertIn("本次未取到", text)
         self.assertIn("不做采购推荐排序", text)
+
+    def test_full_pass_not_core_platform_sample(self) -> None:
+        text = self.text
+        self.assertIn("直接全量跑", text)
+        self.assertNotIn("二轮聚合", text)
 
 
 if __name__ == "__main__":

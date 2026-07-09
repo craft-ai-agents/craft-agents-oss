@@ -1,0 +1,170 @@
+# main 上 CI 全绿 (workflow CI 成功) → 自动部署生产。
+# 无 Environment 审批、无 confirm 口令。闸门 = PR + ci-ok，不是发布人。
+#
+# Secrets: CRAFT_DEPLOY_SSH_KEY, CRAFT_DEPLOY_HOST
+# 可选: CRAFT_DEPLOY_USER (ubuntu), CRAFT_DEPLOY_PORT (22)
+name: Deploy production
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_build:
+        description: "Skip build (skill/TS only)"
+        type: boolean
+        default: false
+      skip_deps:
+        description: "Skip remote bun install"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  BUN_VERSION: "1.3.10"
+
+jobs:
+  guard:
+    name: guard
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    outputs:
+      sha: ${{ steps.tip.outputs.sha }}
+      short: ${{ steps.tip.outputs.short }}
+      stale: ${{ steps.tip.outputs.stale }}
+      skip_build: ${{ steps.flags.outputs.skip_build }}
+      skip_deps: ${{ steps.flags.outputs.skip_deps }}
+    steps:
+      - name: Flags
+        id: flags
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "skip_build=${{ inputs.skip_build }}" >> "$GITHUB_OUTPUT"
+            echo "skip_deps=${{ inputs.skip_deps }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip_build=false" >> "$GITHUB_OUTPUT"
+            echo "skip_deps=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || 'main' }}
+          fetch-depth: 0
+
+      - name: Only tip of main
+        id: tip
+        run: |
+          git fetch origin main --depth=1 2>/dev/null || true
+          SHA=$(git rev-parse HEAD)
+          SHORT=$(git rev-parse --short HEAD)
+          MAIN_SHA=$(git rev-parse origin/main 2>/dev/null || git rev-parse main)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "short=$SHORT" >> "$GITHUB_OUTPUT"
+          echo "deploy candidate=$SHORT main_tip=$(git rev-parse --short "$MAIN_SHA") event=${{ github.event_name }}"
+
+          if [ "$SHA" = "$MAIN_SHA" ]; then
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 连续 push：这次 CI 对应的 SHA 已被更新的 main 超过 → 跳过，等新 CI 部署
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "::warning::CI sha $SHORT behind origin/main; skip stale deploy"
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "::error::workflow_dispatch ref is not tip of main"
+          exit 1
+
+      - name: Secrets present
+        if: steps.tip.outputs.stale != 'true'
+        run: |
+          test -n "${{ secrets.CRAFT_DEPLOY_SSH_KEY }}" || { echo "::error::Missing CRAFT_DEPLOY_SSH_KEY"; exit 1; }
+          test -n "${{ secrets.CRAFT_DEPLOY_HOST }}" || { echo "::error::Missing CRAFT_DEPLOY_HOST"; exit 1; }
+
+  deploy:
+    name: deploy
+    needs: guard
+    if: needs.guard.result == 'success' && needs.guard.outputs.stale != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.CRAFT_DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.CRAFT_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.CRAFT_DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.CRAFT_DEPLOY_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          USER_NAME="${DEPLOY_USER:-ubuntu}"
+          PORT_NUM="${DEPLOY_PORT:-22}"
+          ssh-keyscan -p "$PORT_NUM" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          cat > ~/.ssh/config <<EOF
+          Host craft-deploy
+            HostName $HOST
+            User $USER_NAME
+            Port $PORT_NUM
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking accept-new
+          EOF
+          chmod 600 ~/.ssh/config
+          ssh -o BatchMode=yes craft-deploy 'echo ssh-ok'
+
+      - name: Deploy via quick-deploy
+        env:
+          CRAFT_DEPLOY_SERVER: craft-deploy
+        run: |
+          ARGS=()
+          if [ "${{ needs.guard.outputs.skip_build }}" = "true" ]; then ARGS+=(--no-build); fi
+          if [ "${{ needs.guard.outputs.skip_deps }}" = "true" ]; then ARGS+=(--no-deps); fi
+          # detached HEAD at validated main SHA
+          ./scripts/quick-deploy.sh --allow-branch "${ARGS[@]}"
+
+      - name: Post-deploy health
+        run: |
+          set -e
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://agent.inotoday.asia/ || echo 000)
+          echo "webui http=$CODE"
+          case "$CODE" in 200|302) ;; *) echo "::error::webui unhealthy http=$CODE"; exit 1 ;; esac
+          ssh craft-deploy 'systemctl is-active craft-agent mihomo'
+          ssh craft-deploy 'test -f /home/craft/.agents/skills/component-data/SKILL.md \
+            && test -f /home/craft/.agents/skills/larkdepot/SKILL.md \
+            && test ! -e /home/craft/.agents/skills/scrape-engine'
+          # deploy/dispatch-automations.json 就是 CI 校验过的那份（lint:feishu-targets 已在
+          # contracts job 里挡过 retired token）；这里再确认远端真的是这份，不是手工改漂移的。
+          if [ -f deploy/dispatch-automations.json ]; then
+            REMOTE_AUTOMATIONS=$(ssh craft-deploy 'sudo cat /home/craft/.craft-agent/workspaces/dispatch/automations.json 2>/dev/null || true')
+            LOCAL_AUTOMATIONS=$(cat deploy/dispatch-automations.json)
+            if [ "$REMOTE_AUTOMATIONS" != "$LOCAL_AUTOMATIONS" ]; then
+              echo "::error::deployed dispatch automations.json drifted from deploy/dispatch-automations.json"
+              exit 1
+            fi
+          fi
+          REMOTE_SHA=$(ssh craft-deploy 'cat /opt/craft-agents/DEPLOYED_SHA 2>/dev/null || true')
+          echo "DEPLOYED_SHA=$REMOTE_SHA"
+          echo "deploy healthy @ ${{ needs.guard.outputs.short }}"

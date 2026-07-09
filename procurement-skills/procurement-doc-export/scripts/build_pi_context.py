@@ -76,7 +76,11 @@ def main():
 
     cur = str(g(order_rows[0], "币种")).upper()
     if cur and cur != "USD":
-        sys.exit(f"订单「{args.order}」币种是 {cur}，不是 USD —— 美金 PI 只处理 USD 单；JPY 单请用日本请款請求書模板。")
+        sys.exit(
+            f"订单「{args.order}」币种是 {cur}，不是 USD —— 美金 PI 只处理 USD 单；"
+            f"JPY 单请用日本請求書：scripts/render_jp_invoice.py + templates/followup/jp-ino-invoice/blank.xlsx"
+            f"（见 SKILL.md「已实现：日本請求書」）。"
+        )
 
     # 客户抬头
     cust_full = str(g(order_rows[0], "客户全称"))

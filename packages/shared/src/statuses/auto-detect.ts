@@ -7,14 +7,16 @@
  * messages (apps/webui .../input/task-forms.ts `toMessage`), and also catches
  * hand-typed messages using the same wording.
  *
- * Patterns are mutually exclusive across the five launcher messages. Order is
- * first-match-wins: the broad `找料` phrase is checked last so the more specific
- * task phrases (替代料 / 能不能替代 / 供应商候选 / 生成请款单) win when present.
+ * Order is first-match-wins, and NOT mutually exclusive: the 找替代料 launcher
+ * message ("...和能否替代的结论...") contains both `替代料` and `能否替代`, so
+ * `alternative` must be checked before `compare` or it misclassifies as 型号比对.
+ * The broad `找料` phrase is checked last so the more specific task phrases
+ * (替代料 / 能不能替代 / 供应商候选 / 生成请款单) win when present.
  */
 
 const TASK_PATTERNS: Array<{ id: string; re: RegExp }> = [
-  { id: 'compare', re: /能不能替代|能否替代/ },
   { id: 'alternative', re: /替代料/ },
+  { id: 'compare', re: /能不能替代|能否替代/ },
   { id: 'supplier', re: /供应商候选|补.{0,6}供应商/ },
   { id: 'doc', re: /生成请款单|生成单据|生成.{0,6}发票|开请款/ },
   { id: 'find', re: /帮我找一下|找料/ },

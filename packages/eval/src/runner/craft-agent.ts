@@ -36,11 +36,11 @@ let skillsLinked = false
 // .agents/skills 是指向 procurement-skills 的 SYMLINK —— procurement-skills 是唯一真源。
 // 为什么要这步:agent 扫 .agents/skills/ 加载 skill、SKILL.md 里命令也写死走
 // `.agents/skills/<…>`,但真源在 procurement-skills/,两个路径对不上。软链一次把它们对上:
-// 零拷贝、永不过期(改 procurement-skills/ 立即生效,不会像拷贝那样漂移),而且全部 skill +
-// 它们共享的工具(scrape-engine —— 平台/替代/差异 skill 调的 CLI 引擎)自动在位,跟生产一致。
-// agent 的 skill 扫描只认 SKILL.md,非 skill 文件(AGENTS.md/knowledge-base/scrape-engine)
-// 自动跳过。(生产那边 deploy 是 rsync 到远程机、不能软链;eval 本地可以。)skillSlugs 不再
-// 决定文件,只喂 `[skill:X]` 提示。整进程做一次。
+// 零拷贝、永不过期(改 procurement-skills/ 立即生效,不会像拷贝那样漂移),而且全部 skill 在位。
+// 平台采集/飞书缓存是 PATH 上的外部 CLI(component-data、larkdepot),不靠 monorepo 脚本树。
+// agent 的 skill 扫描只认 SKILL.md,非 skill 文件(AGENTS.md/knowledge-base 等)自动跳过。
+// (生产 deploy 是 rsync 到远程机、不能软链;eval 本地可以。)skillSlugs 不再决定文件,
+// 只喂 `[skill:X]` 提示。整进程做一次。
 // eval 沙箱边界:可写业务系统的技能不进 eval workspace。
 // runner 默认 allow-all + 真凭据,一个跑飞的 case 不允许有"写飞书表/发单据/批量写回"
 // 这些武器可拿——回归池全是只读查询,摘掉写入型技能零损失。

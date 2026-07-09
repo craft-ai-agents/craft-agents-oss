@@ -4,7 +4,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FilesPopoverButton } from '../ActiveOptionBadges'
 import type { FileAttachment } from '../../../../shared/types'
-import { TASK_FORMS, isFormComplete, type TaskForm } from './task-forms'
+import {
+  WORKFLOW_TASK_FORMS,
+  DOC_TASK_FORMS,
+  TASK_FORMS,
+  isFormComplete,
+  resolveFields,
+  type TaskForm,
+} from './task-forms'
 
 interface TaskBarProps {
   /** 复用现有发送入口:提交即当成普通用户消息发出 */
@@ -17,9 +24,8 @@ interface TaskBarProps {
 /**
  * TaskBar — 输入框上方的采购工作流快捷入口。
  *
- * 常驻一排任务按钮;点某按钮在其上方【生成一张表单卡片】(复用权限/凭证卡片观感)。
- * 填好提交 → toMessage() 拼成中文触发消息 → onSubmit() 发出 → 卡片消失。
- * 卡片是输入区控件,不进对话历史。下方自由文本框完全不受影响。
+ * 上行：找料等主流程。下行：每个单据模板独立按钮。
+ * 点按钮 → 表单卡片 → toMessage() → onSubmit()。
  */
 export function TaskBar({ onSubmit, sessionId, sessionFolderPath }: TaskBarProps) {
   const [activeId, setActiveId] = React.useState<string | null>(null)
@@ -32,13 +38,15 @@ export function TaskBar({ onSubmit, sessionId, sessionFolderPath }: TaskBarProps
 
   const openForm = React.useCallback((form: TaskForm) => {
     setActiveId((prev) => {
-      if (prev === form.id) return null // 再点同按钮 = 收起
+      if (prev === form.id) return null
       return form.id
     })
-    // 切到该任务:select 字段预选第一项,使必填 select 初始即有效
     const init: Record<string, string> = {}
-    for (const field of form.fields) {
-      if (field.type === 'select' && field.options?.length) init[field.key] = field.options[0]
+    const fields = form.getFields?.(init) ?? form.fields
+    for (const field of fields) {
+      if (field.type === 'select' && field.options?.length) {
+        init[field.key] = field.options[0]
+      }
     }
     setValues(init)
   }, [])
@@ -52,12 +60,16 @@ export function TaskBar({ onSubmit, sessionId, sessionFolderPath }: TaskBarProps
     setValues((v) => ({ ...v, [key]: value }))
   }, [])
 
+  const visibleFields = activeForm ? resolveFields(activeForm, values) : []
   const complete = activeForm ? isFormComplete(activeForm, values) : false
 
   const handleSubmit = React.useCallback(() => {
     if (!activeForm || !isFormComplete(activeForm, values)) return
     try {
-      onSubmit(activeForm.toMessage(values))
+      // 单据按钮强制挂上 skill，避免 agent 漏选 procurement-doc-export
+      const skillSlugs =
+        activeForm.group === 'doc' ? ['procurement-doc-export'] : undefined
+      onSubmit(activeForm.toMessage(values), undefined, skillSlugs)
       closeForm()
     } catch (err) {
       console.error('[TaskBar] submit failed', err)
@@ -65,15 +77,27 @@ export function TaskBar({ onSubmit, sessionId, sessionFolderPath }: TaskBarProps
     }
   }, [activeForm, values, onSubmit, closeForm])
 
+  const renderButton = (form: TaskForm) => (
+    <Button
+      key={form.id}
+      type="button"
+      variant={activeId === form.id ? 'secondary' : 'outline'}
+      size="sm"
+      className="h-[30px] gap-1.5 px-3 text-[13px] font-medium"
+      onClick={() => openForm(form)}
+    >
+      <form.icon className="h-3.5 w-3.5 shrink-0" />
+      {form.label}
+    </Button>
+  )
+
   return (
     <div className="mb-1.5">
-      {/* 生成的表单卡片 —— 浮在按钮排上方,样式对齐主输入框(中性、非 info 色) */}
       {activeForm && (
         <div
           key={activeId}
           className="mb-1.5 rounded-[12px] border border-border/50 bg-background shadow-middle px-3 py-2.5 space-y-2.5"
         >
-          {/* 标题行 */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
               <activeForm.icon className="h-4 w-4 text-foreground/60" />
@@ -89,11 +113,17 @@ export function TaskBar({ onSubmit, sessionId, sessionFolderPath }: TaskBarProps
             </button>
           </div>
 
-          {/* 字段 */}
           <div className="space-y-1.5">
-            {activeForm.fields.map((field, idx) => (
-              <label key={field.key} className={`flex gap-2.5 text-[13px] ${field.type === 'textarea' ? 'items-start' : 'items-center'}`}>
-                <span className={`w-14 shrink-0 text-muted-foreground ${field.type === 'textarea' ? 'pt-1.5' : ''}`}>{field.label}</span>
+            {visibleFields.map((field, idx) => (
+              <label
+                key={field.key}
+                className={`flex gap-2.5 text-[13px] ${field.type === 'textarea' ? 'items-start' : 'items-center'}`}
+              >
+                <span
+                  className={`w-[5.5rem] shrink-0 text-muted-foreground leading-tight ${field.type === 'textarea' ? 'pt-1.5' : ''}`}
+                >
+                  {field.label}
+                </span>
                 {field.type === 'select' ? (
                   <select
                     className="flex-1 h-8 rounded-[8px] border border-border bg-background px-2.5 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -101,7 +131,9 @@ export function TaskBar({ onSubmit, sessionId, sessionFolderPath }: TaskBarProps
                     onChange={(e) => setField(field.key, e.target.value)}
                   >
                     {(field.options ?? []).map((opt) => (
-                      <option key={opt} value={opt}>{opt}</option>
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
                     ))}
                   </select>
                 ) : field.type === 'textarea' ? (
@@ -137,32 +169,23 @@ export function TaskBar({ onSubmit, sessionId, sessionFolderPath }: TaskBarProps
             ))}
           </div>
 
-          {/* 提交 */}
           <div className="flex justify-end">
-            <Button size="sm" className="h-7 px-4" disabled={!complete} onClick={handleSubmit}>提交</Button>
+            <Button size="sm" className="h-7 px-4" disabled={!complete} onClick={handleSubmit}>
+              提交
+            </Button>
           </div>
         </div>
       )}
 
-      {/* 任务按钮排(左)+ 信息按钮(右)—— 同一行对齐 */}
-      <div className="flex items-center gap-2">
-        <div className="flex flex-1 min-w-0 flex-wrap gap-1.5">
-          {TASK_FORMS.map((form) => (
-            <Button
-              key={form.id}
-              type="button"
-              variant={activeId === form.id ? 'secondary' : 'outline'}
-              size="sm"
-              className="h-[30px] gap-1.5 px-3.5 text-[13px] font-medium"
-              onClick={() => openForm(form)}
-            >
-              <form.icon className="h-4 w-4" />
-              {form.label}
-            </Button>
-          ))}
+      <div className="flex items-start gap-2">
+        <div className="flex flex-1 min-w-0 flex-col gap-1.5">
+          {/* 主流程 */}
+          <div className="flex flex-wrap gap-1.5">{WORKFLOW_TASK_FORMS.map(renderButton)}</div>
+          {/* 单据：每模板一按钮 */}
+          <div className="flex flex-wrap gap-1.5">{DOC_TASK_FORMS.map(renderButton)}</div>
         </div>
         {sessionId && (
-          <div className="shrink-0">
+          <div className="shrink-0 pt-0.5">
             <FilesPopoverButton sessionId={sessionId} sessionFolderPath={sessionFolderPath} />
           </div>
         )}

@@ -1,9 +1,10 @@
 {
   "allowedBashPatterns": [
-    { "pattern": "^(/usr/local/bin/)?cloakbrowser-python\\s+\\S*\\.agents/skills/", "comment": "CloakBrowser 采集/搜索 skill 脚本" },
-    { "pattern": "^python3?\\s+\\S*\\.agents/skills/", "comment": "本地库存/供应商/飞书表格 skill 脚本（python3 stdlib + lark-cli）" },
+    { "pattern": "^(/usr/local/bin/)?component-data\\b", "comment": "平台采集 CLI（唯一平台取证入口）" },
+    { "pattern": "^(/usr/local/bin/)?larkdepot\\b", "comment": "飞书本地缓存/写回 CLI（唯一读库存/档案入口）" },
+    { "pattern": "^(/usr/local/bin/)?cloakbrowser-python\\s+\\S*\\.agents/skills/cloakbrowser/", "comment": "cloakbrowser skill 自带脚本（非平台采集主路径）" },
     { "pattern": "^node\\s+\\S*scripts/validate-swiss-deck\\.mjs", "comment": "PPT skill 校验脚本" },
-    { "pattern": "^lark-cli\\s", "comment": "飞书 lark-cli 表格读写" }
+    { "pattern": "^lark-cli\\s", "comment": "飞书 lark-cli（写 AI 表/降级直查/附件等）" }
   ],
   "allowedWritePaths": ["/tmp/**"]
 }

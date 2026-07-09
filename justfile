@@ -7,10 +7,24 @@ set shell := ["bash", "-cu"]
 default:
     @just --list
 
+# ============ CI（本机）============
+
+# 本地跑完整 CI 镜像(契约 + typecheck + 单测 + i18n + build)
+ci:
+    bun run ci:local
+
+# 快门:契约 + skill 测试(无 typecheck/build)
+ci-fast:
+    bun install --frozen-lockfile && bun run validate:contracts
+
 # ============ 部署 ============
 
-# 全量部署(本机构建 webui + rsync + 服务器装依赖 + 重启 craft-agent)
-deploy:
+# 发版路径:先本机 CI,再全量部署(只允许 main)
+deploy: ci
+    ./scripts/quick-deploy.sh
+
+# 全量部署(跳过本机 CI;你已自行 validate 时用)
+deploy-only:
     ./scripts/quick-deploy.sh
 
 # 快速部署(跳过构建和依赖:纯 TS/skill 改动)

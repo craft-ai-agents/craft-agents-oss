@@ -8,9 +8,7 @@ metadata:
 
 # larkdepot（原 feishu-db）
 
-飞书多维表格本地货站:pull 整表镜像进本地 SQLite(查询零限流),push 把本地写回行推上飞书。**本 skill 是 larkdepot 的唯一操作手册,业务 skill 只引用、不内嵌任何工具细节。**
-
-源码/发版:私有 repo `cunninghamcard-bit/larkdepot`(GitHub Release 分发 musl 静态 binary)。binary 名 `larkdepot`,prod 已在 PATH。
+飞书多维表格本地货站:pull 整表镜像进本地 SQLite(查询零限流),push 把本地写回行推上飞书。**本 skill 是 larkdepot 的唯一操作手册,业务 skill 只引用、不内嵌任何工具细节。** 命令名 `larkdepot`(在 PATH)。
 
 ## 查
 
@@ -37,7 +35,7 @@ metadata:
     larkdepot register "<飞书表URL>" --name 表名 && larkdepot sync   # 纳管人建的新表
     larkdepot state create/write/list + larkdepot push               # 批量结果写回,见配方
 
-binary 零业务常量:表清单/写回模板都是运行时配置(本目录 `config/`),初始化见 setup 配方。
+表清单/写回模板都是运行时配置(本目录 `config/`),初始化见 setup 配方。
 
 ## 业务场景配方(references/)
 

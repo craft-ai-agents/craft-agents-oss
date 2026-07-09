@@ -1,5 +1,7 @@
 # 配方:初始化/部署(一次性)
 
+> **读者**：开发/运维。采购 agent 不读本节做发版。仓库地图与私有仓说明见 monorepo 根目录 `AGENTS.md`。
+
 ## ⓪ 装/升级 binary(私有 repo,GitHub Release 分发 musl 静态 binary)
 
     # 拉指定版本的静态 binary(x86_64 musl,static-pie,无动态依赖,prod 内核 5.15 可跑)
