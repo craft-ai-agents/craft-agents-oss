@@ -27,7 +27,7 @@ import { navigate, routes } from '@/lib/navigate'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { messagingDialogAtom } from '@/atoms/messaging'
 
-export type MessagingPlatform = 'telegram' | 'whatsapp' | 'lark'
+export type MessagingPlatform = 'telegram' | 'whatsapp' | 'lark' | 'discord'
 
 export interface UseMessagingConnectOptions {
   /** Session to bind the pairing code to. */
