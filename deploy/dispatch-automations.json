@@ -2,15 +2,54 @@
   "automations": {
     "SchedulerTick": [
       {
-        "id": "d15pa7",
-        "name": "紧急调度询价轮询",
+        "id": "d15pa7-w0",
+        "name": "紧急调度询价轮询-worker0",
         "cron": "*/10 * * * *",
         "timezone": "Asia/Shanghai",
         "permissionMode": "allow-all",
         "actions": [
           {
             "type": "prompt",
-            "prompt": "紧急调度轮询。第一步只跑这一条命令探测待办(不要先读任何文件):lark-cli base +record-list --base-token LclTbYAOia6es1sdFbacDCgKnld --table-id tbljxle9qkfUO0vV --as user --limit 20 --format json --filter-json (single-quote包裹){\"logic\":\"and\",\"conditions\":[[\"分配状态\",\"intersects\",[\"已分配\"]],[\"报价跟进情况\",\"empty\"],[\"接单状态\",\"!=\",\"已拒绝\"]]}。结果为 0 行就立即结束,只回一句无待办,不读 skill 不做别的。有待办才读 procurement-dispatch-inquiry skill,逐条完成 接单→询价两板斧→按业务口径写回下单包→推进状态,遵守幂等契约。发消息前须经用户确认,交互会话之外的自动巡检跳过 IM 通知。"
+            "prompt": "紧急调度轮询(无人值守 cron,不是交互会话,这是并发 worker 0/4——同一时刻还有 offset 1/2/3 三个同名兄弟 automation 各自独立触发,互不通信,靠各自不同的 --offset 天然分到不同的行,不要为此额外协调)。第一步只跑这一条命令探测待办(不要先读任何文件):lark-cli base +record-list --base-token LclTbYAOia6es1sdFbacDCgKnld --table-id tbljxle9qkfUO0vV --as user --limit 1 --offset 0 --sort-json (single-quote包裹)[{\"field\":\"客户需求日期\",\"desc\":false}] --format json --filter-json (single-quote包裹){\"logic\":\"and\",\"conditions\":[[\"分配状态\",\"intersects\",[\"已分配\"]],[\"报价跟进情况\",\"empty\"],[\"接单状态\",\"==\",\"待接单\"]]}。**只挑`接单状态==待接单`**,不要挑已接单未跟进的行——那些是别的 worker 正在处理或上次异常中断的,不要碰。结果 0 行就立即结束,只回一句无待办,不读 skill 不做别的。有 1 条待办才读 procurement-dispatch-inquiry skill,把这一条从接单到推进状态一次性走完,中途绝不调用 ask_user 或任何等价的'请确认/您想怎么办'——没有人在看这个 session,问了也没人答,只会卡死。遇到需要判断的地方(选项缺失/型号歧义/平台反爬)按 skill 规则自主处理并把理由写进备注或留空,不要停下来问。发消息前须经用户确认这条规则本来就只管 IM 通知,自动巡检本来就跳过 IM 通知。一个 tick 只处理这 1 条,处理完就结束。"
+          }
+        ]
+      },
+      {
+        "id": "d15pa7-w1",
+        "name": "紧急调度询价轮询-worker1",
+        "cron": "*/10 * * * *",
+        "timezone": "Asia/Shanghai",
+        "permissionMode": "allow-all",
+        "actions": [
+          {
+            "type": "prompt",
+            "prompt": "紧急调度轮询(无人值守 cron,不是交互会话,这是并发 worker 1/4——同一时刻还有 offset 0/2/3 三个同名兄弟 automation 各自独立触发,互不通信,靠各自不同的 --offset 天然分到不同的行,不要为此额外协调)。第一步只跑这一条命令探测待办(不要先读任何文件):lark-cli base +record-list --base-token LclTbYAOia6es1sdFbacDCgKnld --table-id tbljxle9qkfUO0vV --as user --limit 1 --offset 1 --sort-json (single-quote包裹)[{\"field\":\"客户需求日期\",\"desc\":false}] --format json --filter-json (single-quote包裹){\"logic\":\"and\",\"conditions\":[[\"分配状态\",\"intersects\",[\"已分配\"]],[\"报价跟进情况\",\"empty\"],[\"接单状态\",\"==\",\"待接单\"]]}。**只挑`接单状态==待接单`**,不要挑已接单未跟进的行——那些是别的 worker 正在处理或上次异常中断的,不要碰。结果 0 行就立即结束,只回一句无待办,不读 skill 不做别的。有 1 条待办才读 procurement-dispatch-inquiry skill,把这一条从接单到推进状态一次性走完,中途绝不调用 ask_user 或任何等价的'请确认/您想怎么办'——没有人在看这个 session,问了也没人答,只会卡死。遇到需要判断的地方(选项缺失/型号歧义/平台反爬)按 skill 规则自主处理并把理由写进备注或留空,不要停下来问。发消息前须经用户确认这条规则本来就只管 IM 通知,自动巡检本来就跳过 IM 通知。一个 tick 只处理这 1 条,处理完就结束。"
+          }
+        ]
+      },
+      {
+        "id": "d15pa7-w2",
+        "name": "紧急调度询价轮询-worker2",
+        "cron": "*/10 * * * *",
+        "timezone": "Asia/Shanghai",
+        "permissionMode": "allow-all",
+        "actions": [
+          {
+            "type": "prompt",
+            "prompt": "紧急调度轮询(无人值守 cron,不是交互会话,这是并发 worker 2/4——同一时刻还有 offset 0/1/3 三个同名兄弟 automation 各自独立触发,互不通信,靠各自不同的 --offset 天然分到不同的行,不要为此额外协调)。第一步只跑这一条命令探测待办(不要先读任何文件):lark-cli base +record-list --base-token LclTbYAOia6es1sdFbacDCgKnld --table-id tbljxle9qkfUO0vV --as user --limit 1 --offset 2 --sort-json (single-quote包裹)[{\"field\":\"客户需求日期\",\"desc\":false}] --format json --filter-json (single-quote包裹){\"logic\":\"and\",\"conditions\":[[\"分配状态\",\"intersects\",[\"已分配\"]],[\"报价跟进情况\",\"empty\"],[\"接单状态\",\"==\",\"待接单\"]]}。**只挑`接单状态==待接单`**,不要挑已接单未跟进的行——那些是别的 worker 正在处理或上次异常中断的,不要碰。结果 0 行就立即结束,只回一句无待办,不读 skill 不做别的。有 1 条待办才读 procurement-dispatch-inquiry skill,把这一条从接单到推进状态一次性走完,中途绝不调用 ask_user 或任何等价的'请确认/您想怎么办'——没有人在看这个 session,问了也没人答,只会卡死。遇到需要判断的地方(选项缺失/型号歧义/平台反爬)按 skill 规则自主处理并把理由写进备注或留空,不要停下来问。发消息前须经用户确认这条规则本来就只管 IM 通知,自动巡检本来就跳过 IM 通知。一个 tick 只处理这 1 条,处理完就结束。"
+          }
+        ]
+      },
+      {
+        "id": "d15pa7-w3",
+        "name": "紧急调度询价轮询-worker3",
+        "cron": "*/10 * * * *",
+        "timezone": "Asia/Shanghai",
+        "permissionMode": "allow-all",
+        "actions": [
+          {
+            "type": "prompt",
+            "prompt": "紧急调度轮询(无人值守 cron,不是交互会话,这是并发 worker 3/4——同一时刻还有 offset 0/1/2 三个同名兄弟 automation 各自独立触发,互不通信,靠各自不同的 --offset 天然分到不同的行,不要为此额外协调)。第一步只跑这一条命令探测待办(不要先读任何文件):lark-cli base +record-list --base-token LclTbYAOia6es1sdFbacDCgKnld --table-id tbljxle9qkfUO0vV --as user --limit 1 --offset 3 --sort-json (single-quote包裹)[{\"field\":\"客户需求日期\",\"desc\":false}] --format json --filter-json (single-quote包裹){\"logic\":\"and\",\"conditions\":[[\"分配状态\",\"intersects\",[\"已分配\"]],[\"报价跟进情况\",\"empty\"],[\"接单状态\",\"==\",\"待接单\"]]}。**只挑`接单状态==待接单`**,不要挑已接单未跟进的行——那些是别的 worker 正在处理或上次异常中断的,不要碰。结果 0 行就立即结束,只回一句无待办,不读 skill 不做别的。有 1 条待办才读 procurement-dispatch-inquiry skill,把这一条从接单到推进状态一次性走完,中途绝不调用 ask_user 或任何等价的'请确认/您想怎么办'——没有人在看这个 session,问了也没人答,只会卡死。遇到需要判断的地方(选项缺失/型号歧义/平台反爬)按 skill 规则自主处理并把理由写进备注或留空,不要停下来问。发消息前须经用户确认这条规则本来就只管 IM 通知,自动巡检本来就跳过 IM 通知。一个 tick 只处理这 1 条,处理完就结束。"
           }
         ]
       }

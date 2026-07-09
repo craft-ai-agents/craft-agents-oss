@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
-"""Mirror recently-assigned demands from 库②(real master, read-only) into
+"""Mirror TODAY's newly-assigned demands from 库②(real master, read-only) into
 库①(write-in base, "紧急调度3.0 副本") so the dispatch-inquiry automation has
 real work to do.
 
+Deliberately narrow: only today's assignments, not a rolling multi-day window.
+库②has years of "已分配" history that was never meant to become 库①backlog —
+an earlier version used a 3-day rolling window (once even run manually with
+--since-days 30), and it silently vacuumed thousands of old already-assigned
+records into 库①, most of them long past being anyone's actual next action.
+库①should hold roughly a day's worth of live queue (~10-20 items), not a
+multi-thousand-row backlog that swamps the per-tick cron automation.
+
 库②stays untouched — this only reads it. Idempotency lives entirely on the
 库①side via the "源需求ID" field (库②record_id) as the larkdepot upsert key,
-so re-running with an overlapping lookback window never creates duplicates.
+so re-running the same day never creates duplicates.
 
 This script NEVER mutates field schema (no auto-adding select options) — an
 earlier version did, using a paginated-but-truncated option list as if it were
@@ -14,7 +22,7 @@ off a select field before anyone noticed. Schema changes are a human-in-the-loop
 action now: a select value with no matching option is left blank and logged,
 not force-added.
 
-Usage: sync-demands.py [--since-days N]  (default 3)
+Usage: sync-demands.py [--since-days N]  (default 0 = today only)
 """
 
 import argparse
@@ -51,13 +59,25 @@ def run(cmd):
     return r.stdout
 
 
-def fetch_source_demands(since_date):
-    """since_date is the first day to include; datetime fields only support the
-    bare > operator (no >=), so the actual cutoff is the day before, exclusive."""
+def fetch_source_demands(target_date):
+    """target_date is the single calendar day to sync (default: today). Bounded
+    on BOTH ends — datetime fields only support bare >/< (no >=/<=). ExactDate(D)
+    is midnight at the start of D, so "> ExactDate(target_date)" already covers
+    every timestamp on target_date itself (anything after 00:00:00) — the lower
+    bound must be target_date, NOT target_date-1 (that would swallow all of the
+    previous day too, since "> midnight of day-1" matches almost the entire
+    previous day). Upper bound target_date+1 excludes the following day.
+
+    Two real off-by-ones happened building this: (1) an open-ended lower-bound-
+    only version that pulled in everything from a cutoff through now regardless
+    of date, and (2) a first "closed range" fix that still used target_date-1 as
+    the lower bound, which silently re-included the entire previous day. Both
+    were caught by directly checking a real record's 客户需求日期 after a sync
+    run rather than trusting the "N 条" candidate count alone."""
     field_ids = []
     for f in list(FIELD_MAP.keys()) + [SRC_ID_FIELD]:
         field_ids += ["--field-id", f]
-    exclusive_before = since_date - datetime.timedelta(days=1)
+    day_after = target_date + datetime.timedelta(days=1)
     out = run([
         "lark-cli", "base", "+record-list",
         "--base-token", B2, "--table-id", DT2, "--as", "user",
@@ -65,7 +85,8 @@ def fetch_source_demands(since_date):
             "logic": "and",
             "conditions": [
                 ["分配状态", "is", "已分配"],
-                ["客户需求日期", ">", f"ExactDate({exclusive_before.isoformat()})"],
+                ["客户需求日期", ">", f"ExactDate({target_date.isoformat()})"],
+                ["客户需求日期", "<", f"ExactDate({day_after.isoformat()})"],
             ],
         }),
         *field_ids,
@@ -105,12 +126,12 @@ def normalize_value(v):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--since-days", type=int, default=3)
+    ap.add_argument("--since-days", type=int, default=0, help="which day to sync: 0=today, 1=yesterday, ...")
     args = ap.parse_args()
 
-    since = datetime.date.today() - datetime.timedelta(days=args.since_days)
-    rows = fetch_source_demands(since)
-    print(f"库②候选(分配状态=已分配,{since.isoformat()}起): {len(rows)} 条", file=sys.stderr)
+    target_date = datetime.date.today() - datetime.timedelta(days=args.since_days)
+    rows = fetch_source_demands(target_date)
+    print(f"库②候选(分配状态=已分配,客户需求日期={target_date.isoformat()}): {len(rows)} 条", file=sys.stderr)
 
     option_cache = {f: full_option_set(f) for f in SELECT_FIELDS}
 
