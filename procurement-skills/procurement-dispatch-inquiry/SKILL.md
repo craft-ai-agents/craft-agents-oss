@@ -10,13 +10,13 @@ metadata:
 
 AI 在紧急调度流程里的角色是**一名采购员**:读需求、接单、询价、把报价行写回、更新跟进状态。**零新表、零 schema 改动**——只消费业务库既有的状态机,只写人类采购也写的字段。
 
-## 目标库(架构定案,非过渡态)
+## 目标库
 
-**读写目标固定是「紧急调度3.0-AI-staging」(下称"写入库"),不是临时 staging、不会切换到别的库。** `base_token=W6HXbwhkVaRezKsXMWLcfItjnLh`,陈昊楠 user 身份为 owner,无权限限制。表 ID:`紧急调度需求=tblUtHNZqbcFtnBl`、`采购询价表=tblgn4QXFdpYn99C`。飞书读写一律 lark-cli `--as user`,命令细节见 `lark-base` skill。
+**读写目标是「紧急调度3.0 副本」(下称"写入库"),真实生产库,不是测试库。** `base_token=LclTbYAOia6es1sdFbacDCgKnld`。表 ID:`紧急调度需求=tbljxle9qkfUO0vV`、`采购询价表=tblolbBjo9Jv3NgU`。飞书读写一律 lark-cli `--as user`,命令细节见 `lark-base` skill。
 
 **业务口径的标准来自另一个库,但那个库不写**:本 skill 的字段契约(行数规则、备注写法、来源判断、含税判断等)全部来自对「紧急调度客户需求项目管理表20251011」(`base_token=EWoFbgsDxaBA8LsLxWrce74tnPc`,真实主库,500+ 行活跃业务数据)3433 行真实数据的挖掘校准——**这个库只读、只参照,不写入、不接自动化**。写入库和参照库是两个独立的 Base,字段结构不完全相同(已逐字段核对过写入库覆盖参照库校准出的全部规则所需字段,17/17 匹配),业务逻辑对齐但数据不互通。
 
-还有第三个库「紧急调度3.0 副本」(`LclTbYAOia6es1sdFbacDCgKnld`)——这是写入库的复制源头,**和本 skill 无关**,不读不写,别混进来。
+> **2026-07-09 架构订正**:此前有一版把写入目标定成「紧急调度3.0-AI-staging」(`W6HXbwhkVaRezKsXMWLcfItjnLh`),理由是「紧急调度3.0 副本」当时查出 Advanced Permission 角色分配踩坑、协作者权限一度失效,于是用 `+base-copy` 复制了一份无权限限制的副本当"永久目标"。事后核实那次权限失效只是移除协作者操作本身造成的临时状态,「紧急调度3.0 副本」本身读写权限正常——所以那份 base-copy 从头到尾就是个不该固化的权宜之计,现已订正回「紧急调度3.0 副本」,`W6HXbwhkVaRezKsXMWLcfItjnLh` 停止使用、不再是任何自动化的目标。
 
 ## 状态机(既有,只消费不发明)
 
@@ -52,7 +52,7 @@ AI 在紧急调度流程里的角色是**一名采购员**:读需求、接单、
 | 字段 | 类型 | 写法 |
 |---|---|---|
 | 关联需求 | link | `[{"id":"rec..."}]`,必填 |
-| 供应商名称 | select | **必须用已有选项**;平台名(Mouser 等)缺选项时,写入库自己拥有 owner 权限,可 `+field-update` 直接加选项 |
+| 供应商名称 | select | **必须用已有选项**;平台名(Mouser 等)缺选项时,可 `+field-update` 直接加选项(2026-07-09 验证过写入库 schema 写权限正常),但选项池是全量 PUT 语义,加选项前必须先用 `+field-search-options` 分页取到完整现有池,绝不能只用 `+field-get` 内嵌的截断列表去拼 PUT——这条踩过真事故 |
 | 供应商报价型号 | text | 平台返回的原始型号,不归一 |
 | 采购价 | number | 数量档最接近需求数量的单价;查无结果时留空,不编 |
 | 币种 | select | USD/JPY/CNY/EUR/HKD/SGD/GBP;写报价源自己的币种 |
@@ -97,7 +97,7 @@ AI 在紧急调度流程里的角色是**一名采购员**:读需求、接单、
 ```bash
 component-data screenshot "<offer_url>" /tmp/<临时文件名>.png   # 复用共享暖浏览器池,不是另起进程
 cd /tmp && lark-cli base +record-upload-attachment \
-  --base-token W6HXbwhkVaRezKsXMWLcfItjnLh --table-id tblgn4QXFdpYn99C \
+  --base-token LclTbYAOia6es1sdFbacDCgKnld --table-id tblolbBjo9Jv3NgU \
   --record-id <larkdepot upsert 返回的 record_id> --field-id 图片 \
   --file ./<临时文件名>.png --as user   # --file 只认相对路径,必须先 cd
 ```
@@ -113,7 +113,7 @@ cd /tmp && lark-cli base +record-upload-attachment \
 **报价行唯一合法写入口**(larkdepot ≥0.2.0):
 
 ```bash
-larkdepot upsert --app W6HXbwhkVaRezKsXMWLcfItjnLh --table tblgn4QXFdpYn99C \
+larkdepot upsert --app LclTbYAOia6es1sdFbacDCgKnld --table tblolbBjo9Jv3NgU \
   --key 关联需求,供应商名称,供应商报价型号 \
   --json '{"关联需求":[{"id":"<需求record_id>"}],"供应商名称":"Mouser","供应商报价型号":"...","采购价":..., ...}'
 ```
@@ -122,7 +122,7 @@ larkdepot upsert --app W6HXbwhkVaRezKsXMWLcfItjnLh --table tblgn4QXFdpYn99C \
 - `关联需求` 用 link 形态 `[{"id":"rec..."}]`;其余字段按上方契约。
 - **查无占位行**没有"供应商报价型号"可用(键字段不能为空),`--key` 改用两个字段:`关联需求,供应商名称`(`供应商名称="无"` 是合法非空值,一个需求只写一条占位,天然幂等):
   ```bash
-  larkdepot upsert --app W6HXbwhkVaRezKsXMWLcfItjnLh --table tblgn4QXFdpYn99C \
+  larkdepot upsert --app LclTbYAOia6es1sdFbacDCgKnld --table tblolbBjo9Jv3NgU \
     --key 关联需求,供应商名称 \
     --json '{"关联需求":[{"id":"<需求record_id>"}],"供应商名称":"无","备注":"mouser/digikey/立创商城均查询过,均无库存或已停产"}'
   ```

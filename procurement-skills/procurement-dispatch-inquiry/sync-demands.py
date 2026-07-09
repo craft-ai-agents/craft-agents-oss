@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """Mirror recently-assigned demands from 库②(real master, read-only) into
-库③(write-in base) so the dispatch-inquiry automation has real work to do.
+库①(write-in base, "紧急调度3.0 副本") so the dispatch-inquiry automation has
+real work to do.
 
 库②stays untouched — this only reads it. Idempotency lives entirely on the
-库③ side via the "源需求ID" field (库②record_id) as the larkdepot upsert key,
+库①side via the "源需求ID" field (库②record_id) as the larkdepot upsert key,
 so re-running with an overlapping lookback window never creates duplicates.
 
 This script NEVER mutates field schema (no auto-adding select options) — an
 earlier version did, using a paginated-but-truncated option list as if it were
 complete, and a full-PUT field-update silently wiped 226 of 277 real options
-off 库③'s 品牌 field before anyone noticed (recovered from 库①'s untouched
-copy). Schema changes are a human-in-the-loop action now: a select value with
-no matching option is left blank and logged, not force-added.
+off a select field before anyone noticed. Schema changes are a human-in-the-loop
+action now: a select value with no matching option is left blank and logged,
+not force-added.
 
 Usage: sync-demands.py [--since-days N]  (default 3)
 """
@@ -24,10 +25,10 @@ import sys
 
 B2 = "EWoFbgsDxaBA8LsLxWrce74tnPc"
 DT2 = "tblwZsfI8q8Yozx7"
-B3 = "W6HXbwhkVaRezKsXMWLcfItjnLh"
-DT3 = "tblUtHNZqbcFtnBl"
+B3 = "LclTbYAOia6es1sdFbacDCgKnld"
+DT3 = "tbljxle9qkfUO0vV"
 
-# 库②字段 -> 库③字段, both are plain text/number/select unless noted.
+# 库②字段 -> 库①字段, both are plain text/number/select unless noted.
 FIELD_MAP = {
     "客户需求型号": "客户需求型号",
     "数量": "数量",
@@ -39,7 +40,7 @@ FIELD_MAP = {
     "客户名称": "客户名称",
     "需求链接": "需求链接",
 }
-SELECT_FIELDS = {"品牌", "单位", "询价性质", "客户名称"}  # 库③侧字段名,值必须已在选项池里
+SELECT_FIELDS = {"品牌", "单位", "询价性质", "客户名称"}  # 库①侧字段名,值必须已在选项池里
 SRC_ID_FIELD = "辅助-记录ID"  # 库②的formula字段,镜像记录自己的record_id
 
 
@@ -132,7 +133,7 @@ def main():
             if v in (None, ""):
                 continue
             if dst_f in SELECT_FIELDS and v not in option_cache[dst_f]:
-                print(f"  [{mpn}] {dst_f}={v!r} 不在选项池里,该字段留空(需要人工去库3手动加选项)",
+                print(f"  [{mpn}] {dst_f}={v!r} 不在选项池里,该字段留空(需要人工去库①手动加选项)",
                       file=sys.stderr)
                 dropped_fields += 1
                 continue
