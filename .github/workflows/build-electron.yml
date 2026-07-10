@@ -1,0 +1,98 @@
+name: Build Electron App
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+concurrency:
+  group: build-electron-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            arch: x64
+            artifact_name: Craft-Agents-x64.exe
+            artifact_glob: apps/electron/release/*.exe
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+            artifact_name: Craft-Agents-arm64.dmg
+            artifact_glob: apps/electron/release/*.dmg
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.platform }}-${{ matrix.arch }})
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.10"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fix nested dependency versions (Windows)
+        if: matrix.platform == 'win'
+        shell: bash
+        run: |
+          # lru-cache v5 for @babel/helper-compilation-targets
+          mkdir -p node_modules/@babel/helper-compilation-targets/node_modules
+          cd node_modules/@babel/helper-compilation-targets/node_modules
+          npm pack lru-cache@5.1.1 2>&1 | tail -1
+          tar xzf lru-cache-5.1.1.tgz && mv package lru-cache && rm lru-cache-5.1.1.tgz
+          # yallist v3 for lru-cache v5
+          npm pack yallist@3.1.1 2>&1 | tail -1
+          tar xzf yallist-3.1.1.tgz && mv package yallist && rm yallist-3.1.1.tgz
+          # magic-string v0.30 for @tailwindcss/node
+          cd ../../../..
+          mkdir -p node_modules/@tailwindcss/node/node_modules
+          cd node_modules/@tailwindcss/node/node_modules
+          npm pack magic-string@0.30.17 2>&1 | tail -1
+          tar xzf magic-string-0.30.17.tgz && mv package magic-string && rm magic-string-0.30.17.tgz
+          # Fix electron path.txt
+          echo "electron.exe" > ../../electron/path.txt
+
+      - name: Build Electron app
+        run: bun run electron:build
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+
+      - name: Package (Windows)
+        if: matrix.platform == 'win'
+        run: cd apps/electron && npx electron-builder --config electron-builder.yml --win --x64
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          CRAFT_DEV_RUNTIME: "1"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package (macOS)
+        if: matrix.platform == 'mac'
+        run: cd apps/electron && npx electron-builder --config electron-builder.yml --mac --arm64
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          CRAFT_DEV_RUNTIME: "1"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: craft-agents-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: error
+          retention-days: 30
