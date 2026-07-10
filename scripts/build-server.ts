@@ -462,6 +462,7 @@ function copyWorkspacePackages(config: ServerBuildConfig): void {
     'session-mcp-server',
     'messaging-gateway',
     'messaging-whatsapp-worker',
+    'messaging-discord-worker',
   ];
 
   for (const pkg of packages) {
@@ -860,6 +861,10 @@ async function main(): Promise<void> {
   // The bundle embeds Baileys + transitive deps; see scripts/build-wa-worker.ts.
   console.log('  Building WhatsApp worker bundle...');
   await $`bun run ${join(rootDir, 'scripts', 'build-wa-worker.ts')}`.cwd(rootDir);
+
+  // Build the Discord worker bundle (discord.js embedded); mirrors WhatsApp.
+  console.log('  Building Discord worker bundle...');
+  await $`bun run ${join(rootDir, 'scripts', 'build-discord-worker.ts')}`.cwd(rootDir);
 
   // Step 5: Assemble resources
   console.log('\n[5/8] Assembling resources...');

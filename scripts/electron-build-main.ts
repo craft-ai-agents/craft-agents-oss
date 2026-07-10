@@ -20,6 +20,9 @@ const PI_AGENT_SERVER_OUTPUT = join(PI_AGENT_SERVER_DIR, "dist/index.js");
 const WA_WORKER_DIR = join(ROOT_DIR, "packages/messaging-whatsapp-worker");
 const WA_WORKER_SOURCE = join(WA_WORKER_DIR, "src/worker.ts");
 const WA_WORKER_OUTPUT = join(WA_WORKER_DIR, "dist/worker.cjs");
+const DISCORD_WORKER_DIR = join(ROOT_DIR, "packages/messaging-discord-worker");
+const DISCORD_WORKER_SOURCE = join(DISCORD_WORKER_DIR, "src/worker.ts");
+const DISCORD_WORKER_OUTPUT = join(DISCORD_WORKER_DIR, "dist/worker.cjs");
 
 // Load .env file if it exists
 function loadEnvFile(): void {
@@ -310,6 +313,36 @@ async function buildWhatsAppWorker(): Promise<void> {
   console.log("✅ WhatsApp worker built successfully");
 }
 
+/**
+ * Build the Discord worker bundle. Delegates to the canonical
+ * `scripts/build-discord-worker.ts` so the packaged path stays in sync with
+ * dev/CI (discord.js bundled into a self-contained worker.cjs).
+ */
+async function buildDiscordWorker(): Promise<void> {
+  if (!existsSync(DISCORD_WORKER_SOURCE)) {
+    console.log("⏭️  Discord worker skipped (package not found)");
+    return;
+  }
+
+  console.log("🎮 Building Discord worker...");
+  const proc = spawn({
+    cmd: ["bun", "run", "scripts/build-discord-worker.ts"],
+    cwd: ROOT_DIR,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    console.error("❌ Discord worker build failed with exit code", exitCode);
+    process.exit(exitCode);
+  }
+  if (!existsSync(DISCORD_WORKER_OUTPUT)) {
+    console.error("❌ Discord worker output not found at", DISCORD_WORKER_OUTPUT);
+    process.exit(1);
+  }
+  console.log("✅ Discord worker built successfully");
+}
+
 async function main(): Promise<void> {
   loadEnvFile();
 
@@ -333,6 +366,9 @@ async function main(): Promise<void> {
 
   // Build WhatsApp worker (Baileys subprocess — optional package)
   await buildWhatsAppWorker();
+
+  // Build Discord worker (discord.js subprocess — optional package)
+  await buildDiscordWorker();
 
   const buildDefines = getBuildDefines();
 

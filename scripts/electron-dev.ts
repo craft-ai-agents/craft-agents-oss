@@ -215,6 +215,22 @@ async function buildWaWorker(): Promise<void> {
   }
 }
 
+// Build the Discord worker bundle (dist/worker.cjs). Mirrors buildWaWorker.
+async function buildDiscordWorker(): Promise<void> {
+  console.log("🎮 Building Discord worker...");
+  const proc = spawn({
+    cmd: ["bun", "run", "scripts/build-discord-worker.ts"],
+    cwd: ROOT_DIR,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    console.error("❌ Discord worker build failed");
+    process.exit(1);
+  }
+}
+
 // Build MCP servers for Codex sessions and Pi agent server (one-time, no watch needed)
 async function buildMcpServers(): Promise<void> {
   console.log("🌉 Building MCP servers and Pi agent server...");
@@ -436,6 +452,9 @@ async function main(): Promise<void> {
 
   // Build WhatsApp worker bundle so the adapter can spawn it on demand
   await buildWaWorker();
+
+  // Build Discord worker bundle so the adapter can spawn it on demand
+  await buildDiscordWorker();
 
   const vitePort = process.env.CRAFT_VITE_PORT || "5173";
   const oauthDefines = getOAuthDefines();

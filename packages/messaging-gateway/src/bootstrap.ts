@@ -45,6 +45,13 @@ export interface MessagingBootstrapOptions {
     nodeBin?: string
     pairingMode?: 'qr' | 'code'
   }
+  /** Optional Discord worker config. Omit to leave Discord unavailable. */
+  discord?: {
+    /** Absolute path to the bundled worker.cjs. */
+    workerEntry: string
+    /** Node binary to spawn (see whatsapp.nodeBin rationale). */
+    nodeBin?: string
+  }
 }
 
 export interface MessagingBootstrapHandle {
@@ -77,6 +84,14 @@ export function createMessagingBootstrap(opts: MessagingBootstrapOptions): Messa
       nodeBin: opts.whatsapp.nodeBin,
       pairingMode: opts.whatsapp.pairingMode ?? 'qr',
     },
+    ...(opts.discord
+      ? {
+          discord: {
+            workerEntry: opts.discord.workerEntry,
+            nodeBin: opts.discord.nodeBin,
+          },
+        }
+      : {}),
     publishEvent: (channel, target, ...args) => {
       publisher?.(channel, target, ...args)
     },

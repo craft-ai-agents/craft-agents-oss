@@ -121,6 +121,9 @@ mac:
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
+    # Discord worker subprocess (self-contained; discord.js bundled in).
+    - from: ../../packages/messaging-discord-worker/dist/worker.cjs
+      to: messaging-discord-worker/worker.cjs
   # Exclude binaries for other platforms
   files:
     - "!**/resources/bin/win32-*/**"
@@ -186,6 +189,9 @@ win:
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
+    # Discord worker subprocess (self-contained; discord.js bundled in).
+    - from: ../../packages/messaging-discord-worker/dist/worker.cjs
+      to: messaging-discord-worker/worker.cjs
 
 nsis:
   oneClick: true
@@ -213,6 +219,9 @@ linux:
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
     - from: ../../packages/messaging-whatsapp-worker/dist/worker.cjs
       to: messaging-whatsapp-worker/worker.cjs
+    # Discord worker subprocess (self-contained; discord.js bundled in).
+    - from: ../../packages/messaging-discord-worker/dist/worker.cjs
+      to: messaging-discord-worker/worker.cjs
   # Exclude binaries for other platforms
   files:
     - "!**/resources/bin/darwin-*/**"

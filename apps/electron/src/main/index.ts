@@ -685,6 +685,14 @@ app.whenReady().then(async () => {
                 : join(process.cwd(), 'packages', 'messaging-whatsapp-worker', 'dist', 'worker.cjs'),
               pairingMode: 'qr',
             },
+            // Discord worker: same embedded-Node spawn model as WhatsApp.
+            // Dev resolves worker.cjs from the monorepo; packaged builds ship
+            // it via extraResources (see apps/electron/electron-builder.yml).
+            discord: {
+              workerEntry: app.isPackaged
+                ? join(process.resourcesPath, 'messaging-discord-worker', 'worker.cjs')
+                : join(process.cwd(), 'packages', 'messaging-discord-worker', 'dist', 'worker.cjs'),
+            },
           })
           return {
             sessionManager: sm,

@@ -9,7 +9,7 @@
 // Platform types
 // ---------------------------------------------------------------------------
 
-export type PlatformType = 'telegram' | 'whatsapp' | 'lark'
+export type PlatformType = 'telegram' | 'whatsapp' | 'lark' | 'discord'
 
 // ---------------------------------------------------------------------------
 // Logger
@@ -70,7 +70,7 @@ export interface AdapterCapabilities {
   inlineButtons: boolean
   maxButtons: number
   maxMessageLength: number
-  markdown: 'v2' | 'whatsapp' | 'lark-post'
+  markdown: 'v2' | 'whatsapp' | 'lark-post' | 'discord'
   webhookSupport: boolean
 }
 
@@ -102,6 +102,18 @@ export interface IncomingMessage {
    * the router; surfaces in `IncomingMessage` so access-control can audit.
    */
   senderIsBot?: boolean
+  /**
+   * Discord only: `true` when the message arrived in a DM channel. Undefined
+   * for non-Discord platforms. Used by the router's guild-trigger gate.
+   */
+  isDM?: boolean
+  /**
+   * Discord only: `true` when the bot user was @mentioned in the message.
+   * Undefined for non-Discord platforms. Combined with the binding's
+   * `discordGuildTrigger`, the router decides whether a guild-channel message
+   * routes to the session.
+   */
+  mentionedBot?: boolean
   text: string
   attachments?: IncomingAttachment[]
   replyToMessageId?: string
@@ -286,6 +298,14 @@ export interface BindingConfig {
    * as a string).
    */
   allowedSenderIds: string[]
+  /**
+   * Discord-only: in a bound guild text channel, decides which messages
+   * route to the session.
+   *  - `'mention'` (default) — only messages that @mention the bot route.
+   *  - `'all'` — every message in the channel routes.
+   * Ignored for DMs (always route) and non-Discord platforms.
+   */
+  discordGuildTrigger: 'mention' | 'all'
 }
 
 export const DEFAULT_BINDING_CONFIG: BindingConfig = {
@@ -296,6 +316,7 @@ export const DEFAULT_BINDING_CONFIG: BindingConfig = {
   editIntervalMs: 3500,
   accessMode: 'inherit',
   allowedSenderIds: [],
+  discordGuildTrigger: 'mention',
 }
 
 export function getDefaultBindingConfig(platform: PlatformType): BindingConfig {
@@ -508,6 +529,9 @@ export interface MessagingConfig {
        *  - `feishu` → open.feishu.cn (China)
        */
       domain?: 'lark' | 'feishu'
+    }
+    discord?: {
+      enabled: boolean
     }
   }
 }

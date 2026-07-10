@@ -233,4 +233,51 @@ describe('Router', () => {
     expect(sessionManager.sendMessage).not.toHaveBeenCalled()
     expect(commands.handle).toHaveBeenCalledTimes(1)
   })
+
+  // -------------------------------------------------------------------------
+  // Discord guild-trigger gate
+  // -------------------------------------------------------------------------
+
+  function makeDiscordRouter(trigger: 'mention' | 'all') {
+    const store = new BindingStore(storeDir)
+    store.bind('ws1', 'sess-D', 'discord', 'dchan', undefined, {
+      accessMode: 'open',
+      discordGuildTrigger: trigger,
+    })
+    const sessionManager = makeFakeSessionManager()
+    const commands = makeFakeCommands()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const router = new Router(sessionManager as any, store, commands as unknown as Commands)
+    return { router, sessionManager, commands }
+  }
+
+  function discordMsg(overrides: Partial<IncomingMessage>): IncomingMessage {
+    return baseMsg({ platform: 'discord', channelId: 'dchan', ...overrides })
+  }
+
+  it('ignores un-mentioned guild messages when trigger is "mention"', async () => {
+    const { router, sessionManager, commands } = makeDiscordRouter('mention')
+    await router.route(makeFakeAdapter(), discordMsg({ isDM: false, mentionedBot: false, text: 'chatter' }))
+    expect(sessionManager.sendMessage).not.toHaveBeenCalled()
+    expect(commands.handle).not.toHaveBeenCalled()
+  })
+
+  it('routes @mentioned guild messages when trigger is "mention"', async () => {
+    const { router, sessionManager } = makeDiscordRouter('mention')
+    await router.route(makeFakeAdapter(), discordMsg({ isDM: false, mentionedBot: true, text: 'hey bot' }))
+    expect(sessionManager.sendMessage).toHaveBeenCalledTimes(1)
+    expect(sessionManager.sendMessage.mock.calls[0]?.[0]).toBe('sess-D')
+  })
+
+  it('routes un-mentioned guild messages when trigger is "all"', async () => {
+    const { router, sessionManager } = makeDiscordRouter('all')
+    await router.route(makeFakeAdapter(), discordMsg({ isDM: false, mentionedBot: false, text: 'anything' }))
+    expect(sessionManager.sendMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('always routes DMs regardless of mention (trigger "mention")', async () => {
+    const { router, sessionManager } = makeDiscordRouter('mention')
+    await router.route(makeFakeAdapter(), discordMsg({ isDM: true, mentionedBot: false, text: 'dm text' }))
+    expect(sessionManager.sendMessage).toHaveBeenCalledTimes(1)
+  })
 })

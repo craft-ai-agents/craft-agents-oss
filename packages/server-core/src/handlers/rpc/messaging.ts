@@ -53,6 +53,22 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
     return { success: true }
   })
 
+  server.handle(RPC_CHANNELS.messaging.TEST_DISCORD, async (
+    _ctx,
+    creds: { token: string },
+  ) => {
+    return registry.testDiscordCredentials(creds)
+  })
+
+  server.handle(RPC_CHANNELS.messaging.SAVE_DISCORD, async (
+    ctx,
+    creds: { token: string },
+  ) => {
+    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    await registry.saveDiscordCredentials(ctx.workspaceId, creds)
+    return { success: true }
+  })
+
   server.handle(RPC_CHANNELS.messaging.DISCONNECT, async (ctx, platform: string) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
     await registry.disconnectPlatform(ctx.workspaceId, platform)
