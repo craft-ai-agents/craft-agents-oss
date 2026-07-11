@@ -10,6 +10,8 @@ final class SessionListViewModel: RPCTransportDelegate {
     var errorMessage: String?
     private(set) var client: RPCClient?
     private(set) var cache: SessionCacheRepository?
+    /// Workspace-defined session categories (statuses), for the picker + labels.
+    private(set) var statuses: [WorkspaceStatus] = []
     /// Workspace the app is connected to; primary source for new-session creation.
     private let connectedWorkspaceId: String?
 
@@ -28,9 +30,36 @@ final class SessionListViewModel: RPCTransportDelegate {
             sessions = try await client.listSessions()
             for session in sessions { try? cache?.upsert(session) }
             await client.transport.addDelegate(self)
+            await loadStatuses()
         } catch {
             errorMessage = "\(error)"
             sessions = (try? cache?.cachedSessions()) ?? []
+        }
+    }
+
+    /// Loads the workspace's session categories (`statuses:list`).
+    func loadStatuses() async {
+        guard let client, let workspaceId = connectedWorkspaceId ?? sessions.first?.workspaceId else { return }
+        statuses = (try? await client.listStatuses(workspaceId: workspaceId)) ?? []
+    }
+
+    /// Human-readable label for a session category id.
+    func statusLabel(for id: String?) -> String? {
+        guard let id else { return nil }
+        return statuses.first(where: { $0.id == id })?.label ?? id
+    }
+
+    /// Changes a session's category (`sessions:command` setSessionStatus) and
+    /// updates it locally.
+    func setSessionStatus(sessionId: String, statusId: String) async {
+        guard let client else { return }
+        do {
+            try await client.setSessionStatus(sessionId: sessionId, status: statusId)
+            if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
+                sessions[index].sessionStatus = statusId
+            }
+        } catch {
+            errorMessage = "\(error)"
         }
     }
 

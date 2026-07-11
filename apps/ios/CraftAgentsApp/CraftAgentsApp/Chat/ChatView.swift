@@ -9,6 +9,7 @@ struct ChatView: View {
     @State private var photoPickerItem: PhotosPickerItem?
     @State private var isShowingNotes = false
     @State private var isShowingFiles = false
+    @State private var isShowingModelPicker = false
     @State private var isShowingFileImporter = false
 
     var body: some View {
@@ -111,15 +112,16 @@ struct ChatView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
+                    Button { isShowingModelPicker = true } label: { Label("Model", systemImage: "cpu") }
                     Menu("Permission mode") {
                         ForEach(PermissionMode.allCases, id: \.self) { mode in
                             Button {
                                 Task { await viewModel.setPermissionMode(mode) }
                             } label: {
                                 if viewModel.permissionMode == mode.rawValue {
-                                    Label(mode.rawValue, systemImage: "checkmark")
+                                    Label(mode.displayName, systemImage: "checkmark")
                                 } else {
-                                    Text(mode.rawValue)
+                                    Text(mode.displayName)
                                 }
                             }
                         }
@@ -134,6 +136,9 @@ struct ChatView: View {
                 }
                 .disabled(viewModel.isOffline)
             }
+        }
+        .sheet(isPresented: $isShowingModelPicker) {
+            ModelPickerView(viewModel: viewModel)
         }
         .sheet(isPresented: $isShowingNotes) {
             SessionNotesView(viewModel: viewModel)

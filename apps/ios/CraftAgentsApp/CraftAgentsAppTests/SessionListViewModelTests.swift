@@ -76,4 +76,11 @@ final class SessionListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.workspaceId(for: "s1"), "session-ws")
         XCTAssertEqual(viewModel.workspaceId(for: "unknown"), "connected-ws")
     }
+
+    func testStatusLabelFallsBackToIdWhenUnknown() {
+        let viewModel = SessionListViewModel(client: nil, cache: nil)
+        // No statuses loaded — unknown id returns itself; nil returns nil.
+        XCTAssertEqual(viewModel.statusLabel(for: "needs-review"), "needs-review")
+        XCTAssertNil(viewModel.statusLabel(for: nil))
+    }
 }

@@ -25,6 +25,21 @@ struct SessionListView: View {
                         }
                         .contextMenu {
                             Button { beginRename(session) } label: { Label("Rename", systemImage: "pencil") }
+                            if !viewModel.statuses.isEmpty {
+                                Menu {
+                                    ForEach(viewModel.statuses) { status in
+                                        Button {
+                                            Task { await viewModel.setSessionStatus(sessionId: session.id, statusId: status.id) }
+                                        } label: {
+                                            if session.sessionStatus == status.id {
+                                                Label(status.label, systemImage: "checkmark")
+                                            } else {
+                                                Text(status.label)
+                                            }
+                                        }
+                                    }
+                                } label: { Label("Category", systemImage: "tag") }
+                            }
                             Button { Task { await viewModel.archiveSession(sessionId: session.id) } } label: {
                                 Label("Archive", systemImage: "archivebox")
                             }
@@ -83,8 +98,8 @@ struct SessionListView: View {
             VStack(alignment: .leading) {
                 Text(session.name ?? session.preview ?? "Untitled session")
                     .font(.headline)
-                if let sessionStatus = session.sessionStatus {
-                    Text(sessionStatus).font(.caption).foregroundStyle(.secondary)
+                if let statusLabel = viewModel.statusLabel(for: session.sessionStatus) {
+                    Text(statusLabel).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

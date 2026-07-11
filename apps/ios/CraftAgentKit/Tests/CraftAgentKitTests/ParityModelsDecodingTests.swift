@@ -144,4 +144,36 @@ final class ParityModelsDecodingTests: XCTestCase {
         XCTAssertEqual(obj["parentId"], .string("root"))
         XCTAssertEqual(obj["valueType"], .string("number"))
     }
+
+    func testPermissionModeDisplayNamesMatchDesktop() {
+        XCTAssertEqual(PermissionMode.safe.displayName, "Explore")
+        XCTAssertEqual(PermissionMode.ask.displayName, "Ask")
+        XCTAssertEqual(PermissionMode.allowAll.displayName, "Execute")
+        XCTAssertEqual(PermissionMode.allowAll.rawValue, "allow-all")
+        XCTAssertEqual(PermissionMode.from(rawId: "allow-all"), .allowAll)
+    }
+
+    func testDecodesLlmConnectionModelsAsStringsOrObjects() throws {
+        let value = JSONValue.array([
+            .object([
+                "slug": .string("anthropic"), "name": .string("Anthropic"),
+                "providerType": .string("anthropic"), "authType": .string("oauth"),
+                "defaultModel": .string("claude-opus-4-8"),
+                "models": .array([
+                    .string("claude-opus-4-8"),
+                    .object(["id": .string("claude-sonnet-4-6"), "name": .string("Sonnet 4.6")]),
+                ]),
+            ]),
+        ])
+        let conns: [LlmConnection] = try value.decoded()
+        let models = conns[0].selectableModels
+        XCTAssertEqual(models.map(\.modelId), ["claude-opus-4-8", "claude-sonnet-4-6"])
+        XCTAssertEqual(models[1].displayName, "Sonnet 4.6")
+        XCTAssertEqual(models[0].displayName, "claude-opus-4-8")
+    }
+
+    func testSelectableModelsIncludesDefaultWhenMissing() throws {
+        let conn = LlmConnection(slug: "c", name: "C", providerType: "p", authType: "a", defaultModel: "m-default", models: [LlmModel(modelId: "m1")])
+        XCTAssertEqual(conn.selectableModels.map(\.modelId), ["m1", "m-default"])
+    }
 }

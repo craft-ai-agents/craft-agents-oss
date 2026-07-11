@@ -18,6 +18,7 @@ final class ChatViewModel: RPCTransportDelegate {
     private(set) var currentModel: String?
     var permissionMode: String?
     private(set) var files: [SessionFile] = []
+    private(set) var availableConnections: [LlmConnection] = []
 
     private let client: RPCClient?
     let sessionId: String
@@ -54,12 +55,19 @@ final class ChatViewModel: RPCTransportDelegate {
     }
 
     /// Switches the session's model (`session:setModel`).
-    func setModel(_ model: String?) async {
+    func setModel(_ model: String?, connection: String? = nil) async {
         guard let client, let workspaceId else { return }
         do {
-            try await client.setModel(sessionId: sessionId, workspaceId: workspaceId, model: model)
+            try await client.setModel(sessionId: sessionId, workspaceId: workspaceId, model: model, connection: connection)
             currentModel = model
         } catch { errorMessage = "\(error)" }
+    }
+
+    /// Loads available model connections for the model picker
+    /// (`LLM_Connection:list`).
+    func loadConnections() async {
+        guard let client else { return }
+        availableConnections = (try? await client.listLlmConnections()) ?? []
     }
 
     /// Switches the session's permission mode (`sessions:command` setPermissionMode).
