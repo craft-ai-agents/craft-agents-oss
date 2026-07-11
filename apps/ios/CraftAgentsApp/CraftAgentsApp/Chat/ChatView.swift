@@ -24,10 +24,7 @@ struct ChatView: View {
                                 if message.role == .tool {
                                     ToolCallCardView(message: message)
                                 } else {
-                                    Text(message.content)
-                                        .padding(10)
-                                        .background(message.role == .user ? Color.blue.opacity(0.15) : Color.gray.opacity(0.15))
-                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    MessageBubble(message: message)
                                         .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
                                 }
                             }
@@ -53,11 +50,16 @@ struct ChatView: View {
                 Text(errorMessage).foregroundStyle(.red).font(.caption).padding(.horizontal)
             }
             if !viewModel.pendingAttachments.isEmpty {
-                Text("\(viewModel.pendingAttachments.count) attachment(s) ready to send")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(viewModel.pendingAttachments.enumerated()), id: \.offset) { index, attachment in
+                            PendingAttachmentChip(attachment: attachment) {
+                                viewModel.pendingAttachments.remove(at: index)
+                            }
+                        }
+                    }
                     .padding(.horizontal)
+                }
             }
             HStack(spacing: 8) {
                 TextField("Message", text: $viewModel.draftText, axis: .vertical)
