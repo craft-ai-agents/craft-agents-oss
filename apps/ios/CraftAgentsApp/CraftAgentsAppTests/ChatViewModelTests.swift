@@ -61,3 +61,10 @@ extension ChatViewModelTests {
         XCTAssertEqual(viewModel.pendingPermissionRequest?.requestId, "req-1")
     }
 }
+
+extension ChatViewModelTests {
+    func testIsOfflineWhenNoClientIsAvailable() {
+        let viewModel = ChatViewModel(client: nil, sessionId: "s1")
+        XCTAssertTrue(viewModel.isOffline)
+    }
+}
