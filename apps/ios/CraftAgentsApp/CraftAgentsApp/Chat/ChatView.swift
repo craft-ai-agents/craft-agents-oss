@@ -34,9 +34,6 @@ struct ChatView: View {
             }
             .disabled(viewModel.isOffline)
             .onChange(of: photoPickerItem) { _, newItem in
-                Image(systemName: "paperclip")
-            }
-            .onChange(of: photoPickerItem) { _, newItem in
                 Task {
                     guard let newItem, let data = try? await newItem.loadTransferable(type: Data.self) else { return }
                     viewModel.pendingAttachments.append(
