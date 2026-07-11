@@ -8,7 +8,7 @@ struct SessionListView: View {
     @State private var isShowingNewSessionSheet = false
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: .constant(.all)) {
             List(viewModel.sessions, selection: $selectedSessionId) { session in
                 VStack(alignment: .leading) {
                     Text(session.name ?? session.preview ?? "Untitled session")
@@ -38,7 +38,9 @@ struct SessionListView: View {
                     }
                 }
             }
-        } detail: {
+        }
+        .navigationSplitViewStyle(.balanced)
+        detail: {
             if let selectedSessionId {
                 ChatView(viewModel: ChatViewModel(client: viewModel.clientForDetail, sessionId: selectedSessionId, cache: viewModel.clientCache))
             } else {

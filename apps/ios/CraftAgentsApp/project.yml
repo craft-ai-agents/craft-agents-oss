@@ -24,6 +24,8 @@ targets:
       properties:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIApplicationSupportsMultipleScenes: true
+        UIRequiresFullScreen: false
   CraftAgentsAppTests:
     type: bundle.unit-test
     platform: iOS
