@@ -8,7 +8,7 @@ import CraftAgentKit
 final class SessionListViewModel: RPCTransportDelegate {
     private(set) var sessions: [Session] = []
     var errorMessage: String?
-    private let client: RPCClient?
+    private(set) var client: RPCClient?
 
     init(client: RPCClient?) {
         self.client = client
@@ -18,7 +18,7 @@ final class SessionListViewModel: RPCTransportDelegate {
         guard let client else { return }
         do {
             sessions = try await client.listSessions()
-            await client.transport.setDelegate(self)
+            await client.transport.addDelegate(self)
         } catch {
             errorMessage = "\(error)"
         }
@@ -59,4 +59,6 @@ final class SessionListViewModel: RPCTransportDelegate {
             }
         }
     }
+
+    var clientForDetail: RPCClient? { client }
 }

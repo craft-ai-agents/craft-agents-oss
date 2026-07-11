@@ -31,11 +31,31 @@ public actor RPCTransport: NSObject {
     private var isExplicitlyDisconnected = false
 
     public private(set) var state: ConnectionState = .idle
-    public weak var delegate: RPCTransportDelegate?
+    private var delegates: [ObjectIdentifier: RPCTransportDelegate] = [:]
 
     public override init() {
         super.init()
         self.session = URLSession(configuration: .default)
+    }
+
+    public func addDelegate(_ delegate: RPCTransportDelegate) {
+        delegates[ObjectIdentifier(delegate)] = delegate
+    }
+
+    public func removeDelegate(_ delegate: RPCTransportDelegate) {
+        delegates.removeValue(forKey: ObjectIdentifier(delegate))
+    }
+
+    private func notifyDelegates(_ body: @escaping (RPCTransportDelegate) async -> Void) {
+        for delegate in delegates.values {
+            Task { await body(delegate) }
+        }
+    }
+
+    /// Test-only hook so `RPCTransportMultiDelegateTests` can exercise
+    /// `notifyDelegates` without a live socket.
+    func dispatchForTesting(_ envelope: MessageEnvelope) async {
+        await handle(envelope)
     }
 
     /// Opens the WebSocket, performs the handshake, and returns once the
@@ -164,7 +184,7 @@ public actor RPCTransport: NSObject {
             if let seq = envelope.seq {
                 lastSeenSeq = max(lastSeenSeq, seq)
             }
-            await delegate?.transport(self, didReceiveEvent: envelope)
+            notifyDelegates { await $0.transport(self, didReceiveEvent: envelope) }
         default:
             break
         }
@@ -244,12 +264,6 @@ public actor RPCTransport: NSObject {
 
     private func updateState(_ newState: ConnectionState) {
         state = newState
-        Task { await delegate?.transport(self, didChangeState: newState) }
-    }
-}
-
-extension RPCTransport {
-    public func setDelegate(_ delegate: RPCTransportDelegate?) {
-        self.delegate = delegate
+        notifyDelegates { await $0.transport(self, didChangeState: newState) }
     }
 }
