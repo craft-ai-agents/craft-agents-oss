@@ -22,3 +22,7 @@ public struct PermissionRequest: Codable, Equatable, Sendable {
     public var requiresSystemPrompt: Bool?
     public var rememberForMinutes: Int?
 }
+
+extension PermissionRequest: Identifiable {
+    public var id: String { requestId }
+}

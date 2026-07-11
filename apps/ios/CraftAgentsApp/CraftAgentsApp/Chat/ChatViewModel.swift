@@ -9,6 +9,7 @@ final class ChatViewModel: RPCTransportDelegate {
     private(set) var messages: [ChatMessage] = []
     var draftText: String = ""
     var errorMessage: String?
+    var pendingPermissionRequest: PermissionRequest?
 
     private let client: RPCClient?
     let sessionId: String
@@ -66,6 +67,9 @@ final class ChatViewModel: RPCTransportDelegate {
             guard let index = messages.firstIndex(where: { $0.toolUseId == toolUseId }) else { return }
             messages[index].toolResult = result
             messages[index].toolStatus = (isError ?? false) ? "error" : "success"
+        case .permissionRequest(let eventSessionId, let request):
+            guard eventSessionId == sessionId else { return }
+            pendingPermissionRequest = request
         default:
             break
         }
@@ -104,5 +108,18 @@ final class ChatViewModel: RPCTransportDelegate {
               let firstArg = envelope.args?.first,
               let event = try? firstArg.decoded() as SessionEvent else { return }
         await MainActor.run { self.apply(event) }
+    }
+
+    func respond(allowed: Bool, alwaysAllow: Bool) async {
+        guard let client, let request = pendingPermissionRequest else { return }
+        do {
+            try await client.respondToPermission(
+                sessionId: sessionId, requestId: request.requestId,
+                allowed: allowed, alwaysAllow: alwaysAllow
+            )
+            pendingPermissionRequest = nil
+        } catch {
+            errorMessage = "\(error)"
+        }
     }
 }
