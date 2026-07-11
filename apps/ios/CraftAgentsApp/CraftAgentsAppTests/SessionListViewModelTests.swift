@@ -83,4 +83,63 @@ final class SessionListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.statusLabel(for: "needs-review"), "needs-review")
         XCTAssertNil(viewModel.statusLabel(for: nil))
     }
+
+    func testVisibleSessionsSearchesNameAndPreviewCaseInsensitively() {
+        let viewModel = SessionListViewModel(client: nil)
+        viewModel.upsert(Session(
+            id: "auth", workspaceId: "w1", workspaceName: "Default",
+            name: "Authentication review", preview: "Inspect login redirects",
+            lastMessageAt: 2, isProcessing: false
+        ))
+        viewModel.upsert(Session(
+            id: "docs", workspaceId: "w1", workspaceName: "Default",
+            name: "Documentation", preview: "Update setup guide",
+            lastMessageAt: 1, isProcessing: false
+        ))
+
+        viewModel.searchText = "LOGIN"
+
+        XCTAssertEqual(viewModel.visibleSessions.map(\.id), ["auth"])
+    }
+
+    func testVisibleSessionsAppliesQuickFilters() {
+        let viewModel = SessionListViewModel(client: nil)
+        viewModel.upsert(Session(
+            id: "unread", workspaceId: "w1", workspaceName: "Default",
+            lastMessageAt: 1, isProcessing: false, hasUnread: true
+        ))
+        viewModel.upsert(Session(
+            id: "running", workspaceId: "w1", workspaceName: "Default",
+            lastMessageAt: 2, isProcessing: true
+        ))
+        viewModel.upsert(Session(
+            id: "flagged", workspaceId: "w1", workspaceName: "Default",
+            lastMessageAt: 3, isProcessing: false, isFlagged: true
+        ))
+
+        viewModel.selectedFilter = .unread
+        XCTAssertEqual(viewModel.visibleSessions.map(\.id), ["unread"])
+
+        viewModel.selectedFilter = .running
+        XCTAssertEqual(viewModel.visibleSessions.map(\.id), ["running"])
+
+        viewModel.selectedFilter = .flagged
+        XCTAssertEqual(viewModel.visibleSessions.map(\.id), ["flagged"])
+    }
+
+    func testLiveEventsUpdateRunningFilterState() {
+        let viewModel = SessionListViewModel(client: nil)
+        viewModel.upsert(Session(
+            id: "s1", workspaceId: "w1", workspaceName: "Default",
+            lastMessageAt: 1, isProcessing: false
+        ))
+        viewModel.selectedFilter = .running
+        XCTAssertTrue(viewModel.visibleSessions.isEmpty)
+
+        viewModel.apply(.textDelta(sessionId: "s1", delta: "Working", turnId: "t1"))
+        XCTAssertEqual(viewModel.visibleSessions.map(\.id), ["s1"])
+
+        viewModel.apply(.complete(sessionId: "s1"))
+        XCTAssertTrue(viewModel.visibleSessions.isEmpty)
+    }
 }

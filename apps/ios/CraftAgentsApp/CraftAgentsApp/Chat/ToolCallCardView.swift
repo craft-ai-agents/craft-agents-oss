@@ -2,8 +2,7 @@
 import SwiftUI
 import CraftAgentKit
 
-/// Renders a tool call as a distinct, monospaced gray card so it reads clearly
-/// as machine activity — visually separate from the assistant's prose body.
+/// Renders machine activity as a compact, expandable timeline card.
 struct ToolCallCardView: View {
     let message: ChatMessage
     @State private var isExpanded = false
@@ -27,24 +26,44 @@ struct ToolCallCardView: View {
             }
             .padding(.top, 6)
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "wrench.and.screwdriver")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(message.toolName ?? "Tool")
-                    .font(.system(.subheadline, design: .monospaced).weight(.semibold))
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(statusColor.opacity(0.12))
+                        .frame(width: 30, height: 30)
+                    Image(systemName: "wrench.and.screwdriver.fill")
+                        .font(.caption)
+                        .foregroundStyle(statusColor)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(message.toolName ?? "Tool")
+                        .font(.subheadline.weight(.semibold))
+                    if let command = commandText {
+                        Text(command)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
                 Spacer(minLength: 4)
-                statusIcon
+                HStack(spacing: 5) {
+                    statusIcon
+                    Text(statusLabel)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .tint(.secondary)
-        .padding(10)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(12)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(statusColor.opacity(message.toolStatus == "running" ? 0.24 : 0.12), lineWidth: 1)
         )
+        .accessibilityElement(children: .combine)
     }
 
     /// The primary tool argument (e.g. a Bash command) if present.
@@ -62,9 +81,25 @@ struct ToolCallCardView: View {
         case "running":
             ProgressView().controlSize(.small)
         case "error":
-            Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+            Image(systemName: "xmark.circle.fill").foregroundStyle(statusColor)
         default:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(statusColor)
+        }
+    }
+
+    private var statusLabel: String {
+        switch message.toolStatus {
+        case "running": "Running"
+        case "error": "Failed"
+        default: "Done"
+        }
+    }
+
+    private var statusColor: Color {
+        switch message.toolStatus {
+        case "running": CraftTheme.accent
+        case "error": .red
+        default: .green
         }
     }
 }

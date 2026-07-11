@@ -26,7 +26,12 @@ final class ChatViewModel: RPCTransportDelegate {
     private var streamingMessageId: String?
     private let cache: SessionCacheRepository?
 
-    init(client: RPCClient?, sessionId: String, cache: SessionCacheRepository? = nil, workspaceId: String? = nil) {
+    init(
+        client: RPCClient?,
+        sessionId: String,
+        cache: SessionCacheRepository? = nil,
+        workspaceId: String? = nil
+    ) {
         self.client = client
         self.sessionId = sessionId
         self.cache = cache

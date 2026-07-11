@@ -6,6 +6,8 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Improvements
 
+- **Native iOS workspace redesign** — Refined server onboarding, added searchable and filterable session rows, introduced document-style assistant responses and richer tool activity cards, surfaced model and permission controls in the composer, improved approval safety, and made the iPad session sidebar visible by default.
+
 ## Bug Fixes
 
 ## Breaking Changes

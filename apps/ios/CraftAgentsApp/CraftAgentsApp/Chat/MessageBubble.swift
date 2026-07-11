@@ -2,14 +2,63 @@
 import SwiftUI
 import CraftAgentKit
 
-/// Renders a single chat message: any image/file attachments followed by the
-/// Markdown-formatted body. User messages are tinted blue; others gray.
+/// Renders user messages as compact bubbles and assistant output as a document
+/// surface, matching the desktop hierarchy without copying its chrome.
 struct MessageBubble: View {
     let message: ChatMessage
 
     private var isUser: Bool { message.role == .user }
 
+    @ViewBuilder
     var body: some View {
+        switch message.role {
+        case .user:
+            content
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(maxWidth: 620, alignment: .trailing)
+                .background(
+                    CraftTheme.accent.opacity(0.13),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                )
+        case .plan:
+            semanticCard(
+                title: "Plan",
+                systemImage: "list.bullet.clipboard",
+                color: .green
+            )
+        case .error:
+            semanticCard(
+                title: "Error",
+                systemImage: "exclamationmark.octagon.fill",
+                color: .red
+            )
+        case .warning:
+            semanticCard(
+                title: "Warning",
+                systemImage: "exclamationmark.triangle.fill",
+                color: .orange
+            )
+        case .status, .info:
+            semanticCard(
+                title: message.role == .status ? "Status" : "Information",
+                systemImage: message.role == .status ? "clock" : "info.circle.fill",
+                color: CraftTheme.accent
+            )
+        case .authRequest:
+            semanticCard(
+                title: "Authentication required",
+                systemImage: "key.fill",
+                color: .orange
+            )
+        default:
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 2)
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 6) {
             if let attachments = message.attachments, !attachments.isEmpty {
                 ForEach(attachments) { attachment in
@@ -20,9 +69,23 @@ struct MessageBubble: View {
                 MarkdownText(markdown: message.content)
             }
         }
-        .padding(10)
-        .background(isUser ? Color.blue.opacity(0.15) : Color.gray.opacity(0.15))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .textSelection(.enabled)
+    }
+
+    private func semanticCard(title: String, systemImage: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(color)
+            content
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(color.opacity(0.18))
+        }
     }
 }
 

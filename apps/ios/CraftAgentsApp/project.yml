@@ -34,3 +34,6 @@ targets:
       - path: CraftAgentsAppTests
     dependencies:
       - target: CraftAgentsApp
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES

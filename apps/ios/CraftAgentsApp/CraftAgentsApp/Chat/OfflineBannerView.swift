@@ -2,14 +2,26 @@ import SwiftUI
 
 struct OfflineBannerView: View {
     var body: some View {
-        HStack {
+        HStack(spacing: 8) {
             Image(systemName: "wifi.slash")
-            Text("Offline — some features are disabled")
-                .font(.caption)
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Offline")
+                    .font(.caption.weight(.semibold))
+                Text("Showing cached messages. Sending and approvals are disabled.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
         }
-        .padding(8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity)
-        .background(Color.yellow.opacity(0.2))
+        .background(Color.orange.opacity(0.09))
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

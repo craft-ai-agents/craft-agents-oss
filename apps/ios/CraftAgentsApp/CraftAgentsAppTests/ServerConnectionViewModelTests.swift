@@ -25,4 +25,25 @@ final class ServerConnectionViewModelTests: XCTestCase {
         let saved = try await store.list()
         XCTAssertEqual(saved.first?.workspaceId, "w1")
     }
+
+    func testNormalizesServerAddressWithoutScheme() {
+        let viewModel = ServerConnectionViewModel(
+            store: ServerConnectionStore(keychain: InMemoryKeychainStore())
+        )
+        viewModel.serverURLText = "agents.example.com:9100"
+
+        XCTAssertEqual(viewModel.validatedServerURL?.absoluteString, "wss://agents.example.com:9100")
+    }
+
+    func testConnectRequiresValidAddressAndToken() {
+        let viewModel = ServerConnectionViewModel(
+            store: ServerConnectionStore(keychain: InMemoryKeychainStore())
+        )
+        viewModel.serverURLText = "https://example.com"
+        viewModel.token = "token"
+        XCTAssertFalse(viewModel.canConnect)
+
+        viewModel.serverURLText = "wss://example.com"
+        XCTAssertTrue(viewModel.canConnect)
+    }
 }

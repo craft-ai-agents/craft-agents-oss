@@ -3,10 +3,39 @@ import Foundation
 import Observation
 import CraftAgentKit
 
+enum SessionListFilter: String, CaseIterable, Identifiable {
+    case all
+    case unread
+    case running
+    case flagged
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .unread: "Unread"
+        case .running: "Running"
+        case .flagged: "Flagged"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .all: "tray.full"
+        case .unread: "circle.fill"
+        case .running: "bolt.fill"
+        case .flagged: "flag.fill"
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class SessionListViewModel: RPCTransportDelegate {
     private(set) var sessions: [Session] = []
+    var searchText = ""
+    var selectedFilter: SessionListFilter = .all
     var errorMessage: String?
     private(set) var client: RPCClient?
     private(set) var cache: SessionCacheRepository?
@@ -15,6 +44,25 @@ final class SessionListViewModel: RPCTransportDelegate {
     private(set) var statuses: [WorkspaceStatus] = []
     /// Workspace the app is connected to; primary source for new-session creation.
     private let connectedWorkspaceId: String?
+
+    var visibleSessions: [Session] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return sessions
+            .filter(matchesSelectedFilter)
+            .filter { session in
+                guard !query.isEmpty else { return true }
+                return [
+                    session.name,
+                    session.preview,
+                    statusLabel(for: session.sessionStatus),
+                    session.workspaceName,
+                    session.model,
+                ]
+                .compactMap { $0 }
+                .contains { $0.localizedCaseInsensitiveContains(query) }
+            }
+            .sorted { $0.lastMessageAt > $1.lastMessageAt }
+    }
 
     init(client: RPCClient?, cache: SessionCacheRepository? = nil, workspaceId: String? = nil) {
         self.client = client
@@ -149,30 +197,72 @@ final class SessionListViewModel: RPCTransportDelegate {
         return await createSession(workspaceId: workspaceId)
     }
 
+    func apply(_ event: SessionEvent) {
+        switch event {
+        case .sessionDeleted(let sessionId):
+            remove(sessionId: sessionId)
+        case .nameChanged(let sessionId, let name):
+            if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
+                sessions[index].name = name
+            }
+        case .sessionStatusChanged(let sessionId, let status):
+            if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
+                sessions[index].sessionStatus = status
+            }
+        case .textDelta(let sessionId, _, _),
+             .toolStart(let sessionId, _, _, _):
+            if let index = sessions.firstIndex(where: { $0.id == sessionId }),
+               !sessions[index].isProcessing {
+                sessions[index].isProcessing = true
+            }
+        case .complete(let sessionId),
+             .errorEvent(let sessionId, _):
+            if let index = sessions.firstIndex(where: { $0.id == sessionId }),
+               sessions[index].isProcessing {
+                sessions[index].isProcessing = false
+            }
+        case .sessionModelChanged(let sessionId, let model):
+            if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
+                sessions[index].model = model
+            }
+        case .permissionModeChanged(let sessionId, let mode):
+            if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
+                sessions[index].permissionMode = mode
+            }
+        case .userMessage(let sessionId, let message, _):
+            if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
+                if !message.content.isEmpty {
+                    sessions[index].preview = message.content
+                }
+                sessions[index].lastMessageAt = message.timestamp
+            }
+        default:
+            break
+        }
+    }
+
     nonisolated func transport(_ transport: RPCTransport, didChangeState state: ConnectionState) async {}
 
     nonisolated func transport(_ transport: RPCTransport, didReceiveEvent envelope: MessageEnvelope) async {
         guard envelope.channel == RPCChannels.Sessions.event,
               let firstArg = envelope.args?.first,
               let event = try? firstArg.decoded() as SessionEvent else { return }
-        await MainActor.run {
-            switch event {
-            case .sessionDeleted(let sessionId):
-                self.remove(sessionId: sessionId)
-            case .nameChanged(let sessionId, let name):
-                if let index = self.sessions.firstIndex(where: { $0.id == sessionId }) {
-                    self.sessions[index].name = name
-                }
-            case .sessionStatusChanged(let sessionId, let status):
-                if let index = self.sessions.firstIndex(where: { $0.id == sessionId }) {
-                    self.sessions[index].sessionStatus = status
-                }
-            default:
-                break
-            }
-        }
+        await MainActor.run { self.apply(event) }
     }
 
     var clientForDetail: RPCClient? { client }
     var clientCache: SessionCacheRepository? { cache }
+
+    private func matchesSelectedFilter(_ session: Session) -> Bool {
+        switch selectedFilter {
+        case .all:
+            true
+        case .unread:
+            session.hasUnread == true
+        case .running:
+            session.isProcessing
+        case .flagged:
+            session.isFlagged == true
+        }
+    }
 }
