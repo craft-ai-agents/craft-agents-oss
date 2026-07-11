@@ -10,11 +10,15 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(viewModel.messages) { message in
-                        Text(message.content)
-                            .padding(10)
-                            .background(message.role == .user ? Color.blue.opacity(0.15) : Color.gray.opacity(0.15))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+                        if message.role == .tool {
+                            ToolCallCardView(message: message)
+                        } else {
+                            Text(message.content)
+                                .padding(10)
+                                .background(message.role == .user ? Color.blue.opacity(0.15) : Color.gray.opacity(0.15))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+                        }
                     }
                 }
                 .padding()

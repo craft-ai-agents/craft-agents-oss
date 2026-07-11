@@ -53,6 +53,19 @@ final class ChatViewModel: RPCTransportDelegate {
         case .errorEvent(let eventSessionId, let error):
             guard eventSessionId == sessionId else { return }
             errorMessage = error
+        case .toolStart(let eventSessionId, let toolName, let toolUseId, let toolInput):
+            guard eventSessionId == sessionId else { return }
+            messages.append(ChatMessage(
+                id: toolUseId, role: .tool, content: "",
+                timestamp: Date().timeIntervalSince1970 * 1000,
+                toolName: toolName, toolUseId: toolUseId, toolInput: toolInput,
+                toolStatus: "running"
+            ))
+        case .toolResult(let eventSessionId, let toolUseId, _, let result, let isError):
+            guard eventSessionId == sessionId else { return }
+            guard let index = messages.firstIndex(where: { $0.toolUseId == toolUseId }) else { return }
+            messages[index].toolResult = result
+            messages[index].toolStatus = (isError ?? false) ? "error" : "success"
         default:
             break
         }

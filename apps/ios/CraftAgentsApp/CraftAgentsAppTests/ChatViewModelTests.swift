@@ -29,3 +29,23 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.messages.isEmpty)
     }
 }
+
+extension ChatViewModelTests {
+    func testToolStartThenToolResultUpdateTheSameMessage() {
+        let viewModel = ChatViewModel(client: nil, sessionId: "s1")
+        viewModel.apply(.toolStart(
+            sessionId: "s1", toolName: "Bash", toolUseId: "tool-1",
+            toolInput: ["command": .string("ls -la")]
+        ))
+        XCTAssertEqual(viewModel.messages.count, 1)
+        XCTAssertEqual(viewModel.messages.first?.toolStatus, "running")
+
+        viewModel.apply(.toolResult(
+            sessionId: "s1", toolUseId: "tool-1", toolName: "Bash",
+            result: "file1.txt\nfile2.txt", isError: false
+        ))
+        XCTAssertEqual(viewModel.messages.count, 1)
+        XCTAssertEqual(viewModel.messages.first?.toolResult, "file1.txt\nfile2.txt")
+        XCTAssertEqual(viewModel.messages.first?.toolStatus, "success")
+    }
+}
