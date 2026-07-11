@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @Bindable var viewModel: ChatViewModel
     @State private var photoPickerItem: PhotosPickerItem?
+    @State private var isShowingPhotoPicker = false
     @State private var isShowingNotes = false
     @State private var isShowingFiles = false
     @State private var isShowingModelPicker = false
@@ -62,7 +63,9 @@ struct ChatView: View {
                 TextField("Message", text: $viewModel.draftText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                 Menu {
-                    PhotosPicker(selection: $photoPickerItem, matching: .images) {
+                    Button {
+                        isShowingPhotoPicker = true
+                    } label: {
                         Label("Photo Library", systemImage: "photo")
                     }
                     Button {
@@ -74,6 +77,7 @@ struct ChatView: View {
                     Image(systemName: "paperclip")
                 }
                 .disabled(viewModel.isOffline)
+                .photosPicker(isPresented: $isShowingPhotoPicker, selection: $photoPickerItem, matching: .images)
                 .onChange(of: photoPickerItem) { _, newItem in
                     Task {
                         guard let newItem, let data = try? await newItem.loadTransferable(type: Data.self) else { return }
