@@ -2,12 +2,14 @@
 import SwiftUI
 import CraftAgentKit
 import PhotosUI
+import UniformTypeIdentifiers
 
 struct ChatView: View {
     @Bindable var viewModel: ChatViewModel
     @State private var photoPickerItem: PhotosPickerItem?
     @State private var isShowingNotes = false
     @State private var isShowingFiles = false
+    @State private var isShowingFileImporter = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -58,7 +60,16 @@ struct ChatView: View {
             HStack(spacing: 8) {
                 TextField("Message", text: $viewModel.draftText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
-                PhotosPicker(selection: $photoPickerItem, matching: .images) {
+                Menu {
+                    PhotosPicker(selection: $photoPickerItem, matching: .images) {
+                        Label("Photo Library", systemImage: "photo")
+                    }
+                    Button {
+                        isShowingFileImporter = true
+                    } label: {
+                        Label("File", systemImage: "doc")
+                    }
+                } label: {
                     Image(systemName: "paperclip")
                 }
                 .disabled(viewModel.isOffline)
@@ -70,6 +81,13 @@ struct ChatView: View {
                         )
                         photoPickerItem = nil
                     }
+                }
+                .fileImporter(
+                    isPresented: $isShowingFileImporter,
+                    allowedContentTypes: [.item],
+                    allowsMultipleSelection: true
+                ) { result in
+                    handleFileImport(result)
                 }
                 if viewModel.isProcessing {
                     Button(role: .destructive) { Task { await viewModel.stop() } } label: {
@@ -147,6 +165,25 @@ struct ChatView: View {
             }
         } else {
             proxy.scrollTo(Self.scrollAnchor, anchor: .bottom)
+        }
+    }
+
+    /// Reads picked documents into fully-populated `FileAttachment`s (the remote
+    /// client must embed the bytes; the server does not have local filesystem
+    /// access to them). Uses security-scoped access for files outside the app
+    /// sandbox.
+    private func handleFileImport(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result else { return }
+        for url in urls {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url) else { continue }
+            let name = url.lastPathComponent
+            let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+                ?? "application/octet-stream"
+            viewModel.pendingAttachments.append(
+                FileAttachment.document(named: name, data: data, mimeType: mimeType)
+            )
         }
     }
 }
