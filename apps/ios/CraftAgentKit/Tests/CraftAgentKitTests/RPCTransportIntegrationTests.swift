@@ -25,7 +25,7 @@ final class RPCTransportIntegrationTests: XCTestCase {
 
         let transport = RPCTransport()
         let delegate = RecordingDelegate()
-        await transport.setDelegate(delegate)
+        await transport.addDelegate(delegate)
 
         try await transport.connect(serverURL: url, token: token, workspaceId: nil)
         let result = try await transport.request(channel: RPCChannels.Sessions.get)

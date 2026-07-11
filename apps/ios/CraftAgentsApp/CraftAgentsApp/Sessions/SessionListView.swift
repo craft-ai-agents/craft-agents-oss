@@ -6,6 +6,7 @@ struct SessionListView: View {
     @Bindable var viewModel: SessionListViewModel
     @State private var selectedSessionId: String?
     @State private var isShowingNewSessionSheet = false
+    @State private var newSessionWorkspaceId: String?
 
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.all)) {
@@ -24,11 +25,16 @@ struct SessionListView: View {
             .task { await viewModel.load() }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("New Session", systemImage: "plus") { isShowingNewSessionSheet = true }
+                    Button("New Session", systemImage: "plus") {
+                        Task {
+                            newSessionWorkspaceId = await viewModel.resolveWorkspaceIdForNewSession()
+                            isShowingNewSessionSheet = true
+                        }
+                    }
                 }
             }
             .sheet(isPresented: $isShowingNewSessionSheet) {
-                if let workspaceId = viewModel.sessions.first?.workspaceId {
+                if let workspaceId = newSessionWorkspaceId {
                     NewSessionSheet(workspaceId: workspaceId) { workspaceId in
                         Task {
                             if let created = await viewModel.createSession(workspaceId: workspaceId) {
@@ -36,11 +42,13 @@ struct SessionListView: View {
                             }
                         }
                     }
+                } else {
+                    Text("No workspace available")
+                        .foregroundStyle(.secondary)
+                        .padding()
                 }
             }
-        }
-        .navigationSplitViewStyle(.balanced)
-        detail: {
+        } detail: {
             if let selectedSessionId {
                 ChatView(viewModel: ChatViewModel(client: viewModel.clientForDetail, sessionId: selectedSessionId, cache: viewModel.clientCache))
             } else {
@@ -48,5 +56,6 @@ struct SessionListView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .navigationSplitViewStyle(.balanced)
     }
 }

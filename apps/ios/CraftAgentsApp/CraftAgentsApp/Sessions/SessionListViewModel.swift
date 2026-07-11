@@ -56,6 +56,12 @@ final class SessionListViewModel: RPCTransportDelegate {
         }
     }
 
+    func resolveWorkspaceIdForNewSession() async -> String? {
+        if let existing = sessions.first?.workspaceId { return existing }
+        guard let client else { return nil }
+        return try? await client.listWorkspaces().first?.id
+    }
+
     nonisolated func transport(_ transport: RPCTransport, didChangeState state: ConnectionState) async {}
 
     nonisolated func transport(_ transport: RPCTransport, didReceiveEvent envelope: MessageEnvelope) async {

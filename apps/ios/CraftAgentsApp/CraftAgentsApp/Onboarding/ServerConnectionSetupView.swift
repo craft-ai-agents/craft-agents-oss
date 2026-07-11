@@ -32,8 +32,12 @@ struct ServerConnectionSetupView: View {
                     ForEach(viewModel.workspaces) { workspace in
                         Button(workspace.name) {
                             Task {
-                                try? await viewModel.saveAndConnect(workspaceId: workspace.id)
-                                onConnected()
+                                do {
+                                    try await viewModel.saveAndConnect(workspaceId: workspace.id)
+                                    onConnected()
+                                } catch {
+                                    viewModel.errorMessage = "Failed to save connection: \(error)"
+                                }
                             }
                         }
                     }
