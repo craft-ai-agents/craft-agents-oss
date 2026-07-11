@@ -3,6 +3,7 @@ import XCTest
 @testable import CraftAgentsApp
 import CraftAgentKit
 
+@MainActor
 final class ServerConnectionViewModelTests: XCTestCase {
     func testSavesConnectionAfterSuccessfulTest() async throws {
         let store = ServerConnectionStore(keychain: InMemoryKeychainStore())

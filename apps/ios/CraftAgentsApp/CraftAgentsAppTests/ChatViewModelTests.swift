@@ -3,6 +3,7 @@ import XCTest
 @testable import CraftAgentsApp
 import CraftAgentKit
 
+@MainActor
 final class ChatViewModelTests: XCTestCase {
     func testAppliesStreamingTextDeltaToLastAssistantMessage() {
         let viewModel = ChatViewModel(client: nil, sessionId: "s1")

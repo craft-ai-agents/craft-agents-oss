@@ -9,7 +9,7 @@ import XCTest
 ///   unset so the rest of the suite still runs in CI without a live server.
 final class RPCTransportIntegrationTests: XCTestCase {
     private final class RecordingDelegate: RPCTransportDelegate {
-        var states: [ConnectionState] = []
+        nonisolated(unsafe) var states: [ConnectionState] = []
         func transport(_ transport: RPCTransport, didChangeState state: ConnectionState) async {
             states.append(state)
         }

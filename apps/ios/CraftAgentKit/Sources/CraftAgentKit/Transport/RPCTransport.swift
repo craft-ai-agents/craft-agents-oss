@@ -54,7 +54,7 @@ public actor RPCTransport: NSObject {
 
     /// Notifies all registered delegates concurrently in unordered fire-and-forget Tasks.
     /// Automatically prunes any boxes whose delegate has been deallocated.
-    private func notifyDelegates(_ body: @escaping (RPCTransportDelegate) async -> Void) {
+    private func notifyDelegates(_ body: @escaping @Sendable (RPCTransportDelegate) async -> Void) {
         // Prune boxes whose delegate has already been deallocated.
         delegateBoxes = delegateBoxes.filter { $0.value.delegate != nil }
         for box in delegateBoxes.values {

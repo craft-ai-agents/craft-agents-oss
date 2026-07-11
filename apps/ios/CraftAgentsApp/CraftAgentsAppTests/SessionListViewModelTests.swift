@@ -3,6 +3,7 @@ import XCTest
 @testable import CraftAgentsApp
 import CraftAgentKit
 
+@MainActor
 final class SessionListViewModelTests: XCTestCase {
     func testAppliesSessionCreatedEventOptimistically() async throws {
         let viewModel = SessionListViewModel(client: nil)

@@ -4,7 +4,7 @@ import XCTest
 
 final class RPCTransportMultiDelegateTests: XCTestCase {
     private final class RecordingDelegate: RPCTransportDelegate {
-        var receivedEventCount = 0
+        nonisolated(unsafe) var receivedEventCount = 0
         func transport(_ transport: RPCTransport, didChangeState state: ConnectionState) async {}
         func transport(_ transport: RPCTransport, didReceiveEvent envelope: MessageEnvelope) async {
             receivedEventCount += 1

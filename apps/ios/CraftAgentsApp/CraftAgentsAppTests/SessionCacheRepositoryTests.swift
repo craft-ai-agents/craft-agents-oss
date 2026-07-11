@@ -4,6 +4,7 @@ import SwiftData
 @testable import CraftAgentsApp
 import CraftAgentKit
 
+@MainActor
 final class SessionCacheRepositoryTests: XCTestCase {
     func testCachesAndReloadsSessionsAndMessages() throws {
         let schema = Schema([CachedSession.self, CachedMessage.self])
