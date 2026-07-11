@@ -15,19 +15,26 @@ final class ChatViewModel: RPCTransportDelegate {
     private let client: RPCClient?
     let sessionId: String
     private var streamingMessageId: String?
+    private let cache: SessionCacheRepository?
 
-    init(client: RPCClient?, sessionId: String) {
+    init(client: RPCClient?, sessionId: String, cache: SessionCacheRepository? = nil) {
         self.client = client
         self.sessionId = sessionId
+        self.cache = cache
     }
 
     func load() async {
-        guard let client else { return }
+        guard let client else {
+            messages = (try? cache?.cachedMessages(sessionId: sessionId)) ?? []
+            return
+        }
         do {
             messages = try await client.getMessages(sessionId: sessionId)
+            for message in messages { try? cache?.upsert(message, sessionId: sessionId) }
             await client.transport.addDelegate(self)
         } catch {
             errorMessage = "\(error)"
+            messages = (try? cache?.cachedMessages(sessionId: sessionId)) ?? []
         }
     }
 
