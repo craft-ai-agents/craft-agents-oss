@@ -13,6 +13,9 @@ public enum SessionEvent: Equatable, Sendable {
     case complete(sessionId: String)
     case status(sessionId: String, message: String)
     case permissionRequest(sessionId: String, request: PermissionRequest)
+    case credentialRequest(sessionId: String, request: CredentialRequest)
+    case permissionModeChanged(sessionId: String, permissionMode: String)
+    case sessionModelChanged(sessionId: String, model: String?)
     case userMessage(sessionId: String, message: ChatMessage, status: String)
     case sessionCreated(sessionId: String)
     case sessionDeleted(sessionId: String)
@@ -25,7 +28,7 @@ extension SessionEvent: Codable {
     private enum CodingKeys: String, CodingKey {
         case type, sessionId, delta, turnId, text, toolName, toolUseId, toolInput
         case result, isError, error, message, statusType, request, status
-        case name, sessionStatus
+        case name, sessionStatus, permissionMode, model
     }
 
     public init(from decoder: Decoder) throws {
@@ -67,6 +70,21 @@ extension SessionEvent: Codable {
             self = .permissionRequest(
                 sessionId: sessionId,
                 request: try container.decode(PermissionRequest.self, forKey: .request)
+            )
+        case "credential_request":
+            self = .credentialRequest(
+                sessionId: sessionId,
+                request: try container.decode(CredentialRequest.self, forKey: .request)
+            )
+        case "permission_mode_changed":
+            self = .permissionModeChanged(
+                sessionId: sessionId,
+                permissionMode: try container.decode(String.self, forKey: .permissionMode)
+            )
+        case "session_model_changed":
+            self = .sessionModelChanged(
+                sessionId: sessionId,
+                model: try container.decodeIfPresent(String.self, forKey: .model)
             )
         case "user_message":
             self = .userMessage(

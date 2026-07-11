@@ -24,6 +24,15 @@ public actor RPCClient {
         return try result.decoded()
     }
 
+    /// Like `call`, but maps a `null` result to `nil` instead of failing to
+    /// decode. Used by channels that legitimately return null (e.g.
+    /// `session:getModel`, `sessions:getPermissionModeState`).
+    func callOptional<T: Decodable>(_ channel: String, args: [JSONValue] = []) async throws -> T? {
+        let result = try await transport.request(channel: channel, args: args)
+        if case .null = result { return nil }
+        return try result.decoded()
+    }
+
     /// Internal helper for requests whose result the caller does not need.
     func callVoid(_ channel: String, args: [JSONValue] = []) async throws {
         _ = try await transport.request(channel: channel, args: args)
