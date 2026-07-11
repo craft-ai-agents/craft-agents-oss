@@ -43,6 +43,19 @@ final class SessionListViewModel: RPCTransportDelegate {
         sessions.removeAll { $0.id == sessionId }
     }
 
+    func createSession(workspaceId: String) async -> Session? {
+        guard let client else { return nil }
+        do {
+            let session = try await client.createSession(workspaceId: workspaceId)
+            upsert(session)
+            try? cache?.upsert(session)
+            return session
+        } catch {
+            errorMessage = "\(error)"
+            return nil
+        }
+    }
+
     nonisolated func transport(_ transport: RPCTransport, didChangeState state: ConnectionState) async {}
 
     nonisolated func transport(_ transport: RPCTransport, didReceiveEvent envelope: MessageEnvelope) async {
