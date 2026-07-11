@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import CraftAgentKit
 
 struct RootView: View {
@@ -9,11 +10,14 @@ struct RootView: View {
     @State private var appClientProvider = AppClientProvider(
         store: ServerConnectionStore(keychain: KeychainStore())
     )
+    private let cache = SessionCacheRepository(
+        modelContainer: try! ModelContainer(for: Schema([CachedSession.self, CachedMessage.self]))
+    )
 
     var body: some View {
         Group {
             if hasSavedConnection {
-                SessionListView(viewModel: SessionListViewModel(client: appClientProvider.client))
+                SessionListView(viewModel: SessionListViewModel(client: appClientProvider.client, cache: cache))
             } else {
                 NavigationStack {
                     ServerConnectionSetupView(viewModel: connectionViewModel) {

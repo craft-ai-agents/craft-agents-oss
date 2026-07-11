@@ -23,7 +23,7 @@ struct SessionListView: View {
             .task { await viewModel.load() }
         } detail: {
             if let selectedSessionId {
-                ChatView(viewModel: ChatViewModel(client: viewModel.clientForDetail, sessionId: selectedSessionId))
+                ChatView(viewModel: ChatViewModel(client: viewModel.clientForDetail, sessionId: selectedSessionId, cache: viewModel.clientCache))
             } else {
                 Text("Select a session")
                     .foregroundStyle(.secondary)

@@ -9,18 +9,25 @@ final class SessionListViewModel: RPCTransportDelegate {
     private(set) var sessions: [Session] = []
     var errorMessage: String?
     private(set) var client: RPCClient?
+    private(set) var cache: SessionCacheRepository?
 
-    init(client: RPCClient?) {
+    init(client: RPCClient?, cache: SessionCacheRepository? = nil) {
         self.client = client
+        self.cache = cache
     }
 
     func load() async {
-        guard let client else { return }
+        guard let client else {
+            sessions = (try? cache?.cachedSessions()) ?? []
+            return
+        }
         do {
             sessions = try await client.listSessions()
+            for session in sessions { try? cache?.upsert(session) }
             await client.transport.addDelegate(self)
         } catch {
             errorMessage = "\(error)"
+            sessions = (try? cache?.cachedSessions()) ?? []
         }
     }
 
@@ -61,4 +68,5 @@ final class SessionListViewModel: RPCTransportDelegate {
     }
 
     var clientForDetail: RPCClient? { client }
+    var clientCache: SessionCacheRepository? { cache }
 }
