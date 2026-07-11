@@ -17,4 +17,36 @@ public struct Session: Codable, Equatable, Identifiable, Sendable {
     public var hasUnread: Bool?
     public var model: String?
     public var messageCount: Int?
+
+    public init(
+        id: String,
+        workspaceId: String,
+        workspaceName: String,
+        name: String? = nil,
+        preview: String? = nil,
+        lastMessageAt: Double,
+        isProcessing: Bool,
+        isFlagged: Bool? = nil,
+        permissionMode: String? = nil,
+        sessionStatus: String? = nil,
+        labels: [String]? = nil,
+        hasUnread: Bool? = nil,
+        model: String? = nil,
+        messageCount: Int? = nil
+    ) {
+        self.id = id
+        self.workspaceId = workspaceId
+        self.workspaceName = workspaceName
+        self.name = name
+        self.preview = preview
+        self.lastMessageAt = lastMessageAt
+        self.isProcessing = isProcessing
+        self.isFlagged = isFlagged
+        self.permissionMode = permissionMode
+        self.sessionStatus = sessionStatus
+        self.labels = labels
+        self.hasUnread = hasUnread
+        self.model = model
+        self.messageCount = messageCount
+    }
 }

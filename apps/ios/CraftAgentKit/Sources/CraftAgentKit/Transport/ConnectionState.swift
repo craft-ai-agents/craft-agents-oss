@@ -15,6 +15,11 @@ public enum ConnectionErrorKind: Equatable, Sendable {
 public struct ConnectionError: Equatable, Sendable {
     public let kind: ConnectionErrorKind
     public let message: String
+
+    public init(kind: ConnectionErrorKind, message: String) {
+        self.kind = kind
+        self.message = message
+    }
 }
 
 public enum ConnectionState: Equatable, Sendable {

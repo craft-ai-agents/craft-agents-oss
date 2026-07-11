@@ -29,4 +29,34 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
     public var parentToolUseId: String?
     public var isError: Bool?
     public var isStreaming: Bool?
+
+    public init(
+        id: String,
+        role: MessageRole,
+        content: String,
+        timestamp: Double,
+        toolName: String? = nil,
+        toolUseId: String? = nil,
+        toolInput: [String: JSONValue]? = nil,
+        toolResult: String? = nil,
+        toolStatus: String? = nil,
+        toolDuration: Double? = nil,
+        parentToolUseId: String? = nil,
+        isError: Bool? = nil,
+        isStreaming: Bool? = nil
+    ) {
+        self.id = id
+        self.role = role
+        self.content = content
+        self.timestamp = timestamp
+        self.toolName = toolName
+        self.toolUseId = toolUseId
+        self.toolInput = toolInput
+        self.toolResult = toolResult
+        self.toolStatus = toolStatus
+        self.toolDuration = toolDuration
+        self.parentToolUseId = parentToolUseId
+        self.isError = isError
+        self.isStreaming = isStreaming
+    }
 }

@@ -11,7 +11,7 @@ public struct KeychainStore: KeychainStoring {
     }
 
     public func save(_ data: Data, forKey key: String) async throws {
-        try? delete(forKey: key)
+        try? await delete(forKey: key)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

@@ -21,6 +21,30 @@ public struct PermissionRequest: Codable, Equatable, Sendable {
     public var impact: String?
     public var requiresSystemPrompt: Bool?
     public var rememberForMinutes: Int?
+
+    public init(
+        requestId: String,
+        toolName: String,
+        command: String? = nil,
+        description: String,
+        type: PermissionRequestType? = nil,
+        appName: String? = nil,
+        reason: String? = nil,
+        impact: String? = nil,
+        requiresSystemPrompt: Bool? = nil,
+        rememberForMinutes: Int? = nil
+    ) {
+        self.requestId = requestId
+        self.toolName = toolName
+        self.command = command
+        self.description = description
+        self.type = type
+        self.appName = appName
+        self.reason = reason
+        self.impact = impact
+        self.requiresSystemPrompt = requiresSystemPrompt
+        self.rememberForMinutes = rememberForMinutes
+    }
 }
 
 extension PermissionRequest: Identifiable {
