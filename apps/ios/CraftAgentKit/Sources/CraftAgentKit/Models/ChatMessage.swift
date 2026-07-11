@@ -29,6 +29,7 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
     public var parentToolUseId: String?
     public var isError: Bool?
     public var isStreaming: Bool?
+    public var attachments: [StoredAttachment]?
 
     public init(
         id: String,
@@ -43,7 +44,8 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
         toolDuration: Double? = nil,
         parentToolUseId: String? = nil,
         isError: Bool? = nil,
-        isStreaming: Bool? = nil
+        isStreaming: Bool? = nil,
+        attachments: [StoredAttachment]? = nil
     ) {
         self.id = id
         self.role = role
@@ -58,5 +60,6 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
         self.parentToolUseId = parentToolUseId
         self.isError = isError
         self.isStreaming = isStreaming
+        self.attachments = attachments
     }
 }
