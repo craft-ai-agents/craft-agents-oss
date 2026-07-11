@@ -170,6 +170,7 @@
     "tailwind-merge": "^3.4.0",
     "tiptap-extension-code-block-shiki": "^1.0.0",
     "tiptap-markdown": "^0.9.0",
+    "undici": "^8.2.0",
     "zod": "^4.0.0"
   }
 }
