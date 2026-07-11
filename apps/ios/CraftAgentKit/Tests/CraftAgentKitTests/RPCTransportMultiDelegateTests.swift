@@ -21,7 +21,21 @@ final class RPCTransportMultiDelegateTests: XCTestCase {
         let envelope = MessageEnvelope(id: "e1", type: .event, channel: RPCChannels.Sessions.event, args: [])
         await transport.dispatchForTesting(envelope)
 
+        // `notifyDelegates` fans out to each delegate in an unordered
+        // fire-and-forget Task, so the counters increment asynchronously after
+        // `dispatchForTesting` returns. Poll instead of asserting immediately.
+        await waitUntil { delegateA.receivedEventCount == 1 && delegateB.receivedEventCount == 1 }
+
         XCTAssertEqual(delegateA.receivedEventCount, 1)
         XCTAssertEqual(delegateB.receivedEventCount, 1)
+    }
+
+    /// Polls `condition` until true or a timeout elapses, yielding between
+    /// checks so background delegate Tasks can run.
+    private func waitUntil(timeout: TimeInterval = 2.0, _ condition: @Sendable () -> Bool) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 5_000_000) // 5ms
+        }
     }
 }
