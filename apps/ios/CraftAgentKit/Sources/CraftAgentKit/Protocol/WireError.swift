@@ -50,9 +50,27 @@ public enum ErrorCode: Equatable, Sendable {
     }
 
     var wireValue: String {
-        for (key, value) in Self.wireMap where value == self { return key }
-        if case .unknown(let raw) = self { return raw }
-        return "HANDLER_ERROR"
+        switch self {
+        case .handlerError: return "HANDLER_ERROR"
+        case .channelNotFound: return "CHANNEL_NOT_FOUND"
+        case .authFailed: return "AUTH_FAILED"
+        case .protocolVersionUnsupported: return "PROTOCOL_VERSION_UNSUPPORTED"
+        case .sessionNotIdle: return "SESSION_NOT_IDLE"
+        case .sessionIdConflict: return "SESSION_ID_CONFLICT"
+        case .artifactNotPortable: return "ARTIFACT_NOT_PORTABLE"
+        case .transferTooLarge: return "TRANSFER_TOO_LARGE"
+        case .transferTimeout: return "TRANSFER_TIMEOUT"
+        case .transferVerificationFailed: return "TRANSFER_VERIFICATION_FAILED"
+        case .requestTimeout: return "REQUEST_TIMEOUT"
+        case .capabilityUnavailable: return "CAPABILITY_UNAVAILABLE"
+        case .clientDisconnected: return "CLIENT_DISCONNECTED"
+        case .clientRequestTimeout: return "CLIENT_REQUEST_TIMEOUT"
+        case .browserNoCapableClient: return "BROWSER_NO_CAPABLE_CLIENT"
+        case .browserInstanceNotOwned: return "BROWSER_INSTANCE_NOT_OWNED"
+        case .browserRemoteUploadNotSupported: return "BROWSER_REMOTE_UPLOAD_NOT_SUPPORTED"
+        case .browserRemoteEvaluateBlocked: return "BROWSER_REMOTE_EVALUATE_BLOCKED"
+        case .unknown(let raw): return raw
+        }
     }
 }
 
