@@ -4,13 +4,19 @@ import CraftAgentKit
 
 struct SessionListView: View {
     @Bindable var viewModel: SessionListViewModel
+    var onReconnect: (() async -> Void)?
+    var onChangeServer: (() -> Void)?
     @State private var selectedSessionId: String?
     @State private var renameTarget: Session?
     @State private var renameText = ""
+    @State private var isReconnecting = false
 
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.all)) {
             List(selection: $selectedSessionId) {
+                if viewModel.isOffline {
+                    offlineSection
+                }
                 ForEach(viewModel.sessions) { session in
                     row(for: session)
                         .tag(session.id)
@@ -102,6 +108,39 @@ struct SessionListView: View {
                     Text(statusLabel).font(.caption).foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var offlineSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Offline — showing cached sessions", systemImage: "wifi.slash")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let error = viewModel.errorMessage {
+                    Text(error).font(.caption2).foregroundStyle(.red)
+                }
+                HStack {
+                    Button {
+                        Task {
+                            isReconnecting = true
+                            await onReconnect?()
+                            isReconnecting = false
+                        }
+                    } label: {
+                        if isReconnecting { ProgressView() } else { Text("Reconnect") }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isReconnecting || onReconnect == nil)
+
+                    if let onChangeServer {
+                        Button("Change Server", action: onChangeServer)
+                            .buttonStyle(.bordered)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
         }
     }
 

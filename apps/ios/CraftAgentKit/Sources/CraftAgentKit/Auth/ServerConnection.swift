@@ -34,12 +34,19 @@ public actor ServerConnectionStore {
 
     public func save(_ connection: ServerConnection) async throws {
         var all = try await list()
-        if let index = all.firstIndex(where: { $0.id == connection.id }) {
-            all[index] = connection
-        } else {
-            all.append(connection)
-        }
+        // Remove any prior entry for the same server URL (or same id) so that
+        // re-logging in updates the connection in place instead of appending a
+        // stale duplicate. Combined with callers reading the *last* entry, this
+        // guarantees the most recently saved connection is the one used and no
+        // dead-token duplicates accumulate.
+        all.removeAll { $0.id == connection.id || $0.url == connection.url }
+        all.append(connection)
         try await keychain.save(try JSONEncoder().encode(all), forKey: Self.storageKey)
+    }
+
+    /// The most recently saved connection (the one a fresh login should use).
+    public func mostRecent() async throws -> ServerConnection? {
+        try await list().last
     }
 
     public func delete(id: UUID) async throws {

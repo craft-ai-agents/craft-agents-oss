@@ -10,6 +10,7 @@ final class SessionListViewModel: RPCTransportDelegate {
     var errorMessage: String?
     private(set) var client: RPCClient?
     private(set) var cache: SessionCacheRepository?
+    var isOffline: Bool { client == nil }
     /// Workspace-defined session categories (statuses), for the picker + labels.
     private(set) var statuses: [WorkspaceStatus] = []
     /// Workspace the app is connected to; primary source for new-session creation.

@@ -16,6 +16,7 @@ final class AppClientProvider {
     /// primary source when creating a new session so the "+" action never has to
     /// guess (fixes "No workspace available").
     private(set) var workspaceId: String?
+    private(set) var lastError: String?
     private let store: ServerConnectionStore
 
     init(store: ServerConnectionStore) {
@@ -23,8 +24,9 @@ final class AppClientProvider {
     }
 
     func connectToSavedServer() async {
-        guard let connection = try? await store.list().first else { return }
+        guard let connection = try? await store.mostRecent() else { return }
         connectionState = .connecting
+        lastError = nil
         workspaceId = connection.workspaceId
         let transport = RPCTransport()
         let client = RPCClient(transport: transport)
@@ -37,6 +39,8 @@ final class AppClientProvider {
             self.client = client
             connectionState = .connected
         } catch {
+            self.client = nil
+            lastError = "\(error)"
             connectionState = .failed(ConnectionError(kind: .network, message: "\(error)"))
         }
     }
