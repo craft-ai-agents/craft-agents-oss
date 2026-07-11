@@ -9,8 +9,34 @@ extension RPCClient {
     }
 
     /// `sessions:getMessages` — takes `sessionId`.
+    ///
+    /// The server returns the **full Session object with an embedded `messages`
+    /// array** (see `packages/server-core/src/handlers/rpc/sessions.ts` — "Get a
+    /// single session with messages"), not a bare array. Decoding the raw result
+    /// as `[ChatMessage]` therefore fails with
+    /// `typeMismatch(Array, found a dictionary instead)`, so we unwrap the
+    /// envelope here and extract `.messages`.
     public func getMessages(sessionId: String) async throws -> [ChatMessage] {
-        try await call(RPCChannels.Sessions.getMessages, args: [.string(sessionId)])
+        let result = try await transport.request(
+            channel: RPCChannels.Sessions.getMessages,
+            args: [.string(sessionId)]
+        )
+        return try RPCClient.decodeMessagesResult(result)
+    }
+
+    /// Extracts the message list from a `sessions:getMessages` result. Exposed as
+    /// an internal static helper so it can be unit-tested without a live socket.
+    /// Treats a `null` result (session not found) as an empty conversation.
+    static func decodeMessagesResult(_ result: JSONValue) throws -> [ChatMessage] {
+        if case .null = result { return [] }
+        let envelope: SessionMessagesEnvelope = try result.decoded()
+        return envelope.messages ?? []
+    }
+
+    /// Minimal decodable view over the server's Session DTO — we only need the
+    /// embedded `messages` array. Extra Session fields are ignored.
+    private struct SessionMessagesEnvelope: Decodable {
+        let messages: [ChatMessage]?
     }
 
     /// `sessions:sendMessage(sessionId, message, attachments?, storedAttachments?, options?)`.
