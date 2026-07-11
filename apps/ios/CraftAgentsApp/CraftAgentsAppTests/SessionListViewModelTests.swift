@@ -24,4 +24,28 @@ final class SessionListViewModelTests: XCTestCase {
         viewModel.remove(sessionId: "s1")
         XCTAssertTrue(viewModel.sessions.isEmpty)
     }
+
+    func testUpsertInsertsNewSessionsAtTheTop() {
+        // Guards the ordering `createSession` (Step 3 below) relies on:
+        // it calls `upsert(_:)` with the just-created session and expects
+        // it to appear first without any extra sorting step.
+        let viewModel = SessionListViewModel(client: nil, cache: nil)
+        let existing = Session(
+            id: "old", workspaceId: "w1", workspaceName: "Default", name: "Old",
+            preview: nil, lastMessageAt: 1, isProcessing: false, isFlagged: nil,
+            permissionMode: nil, sessionStatus: nil, labels: nil, hasUnread: nil,
+            model: nil, messageCount: nil
+        )
+        viewModel.upsert(existing)
+
+        let created = Session(
+            id: "new", workspaceId: "w1", workspaceName: "Default", name: nil,
+            preview: nil, lastMessageAt: 2, isProcessing: false, isFlagged: nil,
+            permissionMode: nil, sessionStatus: nil, labels: nil, hasUnread: nil,
+            model: nil, messageCount: nil
+        )
+        viewModel.upsert(created)
+
+        XCTAssertEqual(viewModel.sessions.map(\.id), ["new", "old"])
+    }
 }
