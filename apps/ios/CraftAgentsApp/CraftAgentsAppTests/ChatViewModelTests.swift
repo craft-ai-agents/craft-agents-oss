@@ -122,4 +122,14 @@ extension ChatViewModelTests {
         viewModel.apply(.sessionModelChanged(sessionId: "s1", model: "claude-opus-4-8"))
         XCTAssertEqual(viewModel.currentModel, "claude-opus-4-8")
     }
+
+    func testEchoedUserMessageWithSameIdDoesNotDuplicateOptimisticOne() {
+        // Simulate an already-shown optimistic user message, then the server's
+        // echoed user_message event with the same id — it must dedupe.
+        let viewModel = ChatViewModel(client: nil, sessionId: "s1")
+        let mine = ChatMessage(id: "server-id-1", role: .user, content: "hi", timestamp: 1)
+        viewModel.apply(.userMessage(sessionId: "s1", message: mine, status: "sent"))
+        viewModel.apply(.userMessage(sessionId: "s1", message: mine, status: "sent"))
+        XCTAssertEqual(viewModel.messages.filter { $0.id == "server-id-1" }.count, 1)
+    }
 }

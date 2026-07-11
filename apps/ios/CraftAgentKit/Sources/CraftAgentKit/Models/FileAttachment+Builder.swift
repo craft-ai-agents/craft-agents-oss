@@ -83,4 +83,19 @@ extension FileAttachment {
     private static let audioExtensions: Set<String> = [
         ".ogg", ".opus", ".mp3", ".m4a", ".aac", ".wav", ".flac", ".weba", ".webm",
     ]
+
+    /// Builds a `StoredAttachment` view of a just-picked `FileAttachment` for
+    /// optimistic local rendering of a sent message — before the server echoes
+    /// the persisted attachment back. For images, the picked base64 is reused as
+    /// the thumbnail so the image renders immediately.
+    public func asStoredAttachment(id: String = UUID().uuidString) -> StoredAttachment {
+        StoredAttachment(
+            id: id,
+            type: type.rawValue,
+            name: name,
+            mimeType: mimeType,
+            size: size,
+            thumbnailBase64: type == .image ? base64 : nil
+        )
+    }
 }

@@ -38,4 +38,21 @@ final class AttachmentDecodingTests: XCTestCase {
         let message: ChatMessage = try value.decoded()
         XCTAssertNil(message.attachments)
     }
+
+    func testImageFileAttachmentConvertsToStoredWithThumbnail() {
+        let bytes = Data("imgbytes".utf8)
+        let file = FileAttachment.image(named: "photo.jpg", data: bytes, mimeType: "image/jpeg")
+        let stored = file.asStoredAttachment(id: "fixed-id")
+        XCTAssertEqual(stored.id, "fixed-id")
+        XCTAssertTrue(stored.isImage)
+        XCTAssertEqual(stored.thumbnailBase64, bytes.base64EncodedString())
+        XCTAssertEqual(stored.name, "photo.jpg")
+    }
+
+    func testNonImageAttachmentConvertsWithoutThumbnail() {
+        let file = FileAttachment.document(named: "notes.txt", data: Data("hi".utf8), mimeType: "text/plain")
+        let stored = file.asStoredAttachment()
+        XCTAssertFalse(stored.isImage)
+        XCTAssertNil(stored.thumbnailBase64)
+    }
 }

@@ -106,7 +106,20 @@ final class ChatViewModel: RPCTransportDelegate {
         pendingAttachments = []
         isProcessing = true
         do {
-            try await client.sendMessage(sessionId: sessionId, text: text, attachments: attachments)
+            let messageId = try await client.sendMessage(sessionId: sessionId, text: text, attachments: attachments)
+            // Optimistically show the sent message (with its images) immediately,
+            // keyed by the server's message id so the echoed `user_message`
+            // event dedupes against it instead of duplicating.
+            let id = messageId ?? UUID().uuidString
+            if !messages.contains(where: { $0.id == id }) {
+                messages.append(ChatMessage(
+                    id: id,
+                    role: .user,
+                    content: text,
+                    timestamp: Date().timeIntervalSince1970 * 1000,
+                    attachments: attachments.isEmpty ? nil : attachments.map { $0.asStoredAttachment() }
+                ))
+            }
         } catch {
             errorMessage = "\(error)"
             isProcessing = false

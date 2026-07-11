@@ -49,21 +49,7 @@ struct ChatView: View {
             if let errorMessage = viewModel.errorMessage {
                 Text(errorMessage).foregroundStyle(.red).font(.caption).padding(.horizontal)
             }
-            if !viewModel.pendingAttachments.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(Array(viewModel.pendingAttachments.enumerated()), id: \.offset) { index, attachment in
-                            PendingAttachmentChip(attachment: attachment) {
-                                viewModel.pendingAttachments.remove(at: index)
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-            }
-            HStack(spacing: 8) {
-                TextField("Message", text: $viewModel.draftText, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
+            HStack(alignment: .bottom, spacing: 8) {
                 Menu {
                     Button {
                         isShowingPhotoPicker = true
@@ -77,6 +63,7 @@ struct ChatView: View {
                     }
                 } label: {
                     Image(systemName: "paperclip")
+                        .padding(.bottom, 6)
                 }
                 .disabled(viewModel.isOffline)
                 .photosPicker(isPresented: $isShowingPhotoPicker, selection: $photoPickerItem, matching: .images)
@@ -96,14 +83,40 @@ struct ChatView: View {
                 ) { result in
                     handleFileImport(result)
                 }
+
+                // Composite input box: pending attachment thumbnails sit inside
+                // the same bordered container as the text field.
+                VStack(alignment: .leading, spacing: 6) {
+                    if !viewModel.pendingAttachments.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(Array(viewModel.pendingAttachments.enumerated()), id: \.offset) { index, attachment in
+                                    PendingAttachmentChip(attachment: attachment) {
+                                        viewModel.pendingAttachments.remove(at: index)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    TextField("Message", text: $viewModel.draftText, axis: .vertical)
+                        .textFieldStyle(.plain)
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.secondary.opacity(0.4), lineWidth: 1)
+                )
+
                 if viewModel.isProcessing {
                     Button(role: .destructive) { Task { await viewModel.stop() } } label: {
                         Image(systemName: "stop.circle.fill")
                     }
                     .disabled(viewModel.isOffline)
+                    .padding(.bottom, 6)
                 } else {
                     Button("Send") { Task { await viewModel.send() } }
                         .disabled((viewModel.draftText.isEmpty && viewModel.pendingAttachments.isEmpty) || viewModel.isOffline)
+                        .padding(.bottom, 6)
                 }
             }
             .padding()

@@ -43,14 +43,23 @@ extension RPCClient {
     /// The iOS client never populates `storedAttachments` (a desktop-only
     /// optimization for referencing already-on-disk files), so that
     /// positional arg is always `.null`.
-    public func sendMessage(sessionId: String, text: String, attachments: [FileAttachment] = []) async throws {
+    ///
+    /// Returns the server-assigned message id (from `{ accepted, messageId }`),
+    /// which the caller can use to optimistically render the sent message and
+    /// dedupe it against the echoed `user_message` event.
+    @discardableResult
+    public func sendMessage(sessionId: String, text: String, attachments: [FileAttachment] = []) async throws -> String? {
         let attachmentsValue: JSONValue = attachments.isEmpty
             ? .null
             : try encodeAsJSONValue(attachments)
-        try await callVoid(
-            RPCChannels.Sessions.sendMessage,
+        let result = try await transport.request(
+            channel: RPCChannels.Sessions.sendMessage,
             args: [.string(sessionId), .string(text), attachmentsValue, .null, .null]
         )
+        if case .object(let obj) = result, case .string(let messageId)? = obj["messageId"] {
+            return messageId
+        }
+        return nil
     }
 
     /// `sessions:create(workspaceId, options?)`. MVP never passes `options`.
