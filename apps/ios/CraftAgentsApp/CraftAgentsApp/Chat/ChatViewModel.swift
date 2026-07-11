@@ -6,6 +6,7 @@ import CraftAgentKit
 @Observable
 @MainActor
 final class ChatViewModel: RPCTransportDelegate {
+    var isOffline: Bool { client == nil }
     private(set) var messages: [ChatMessage] = []
     var draftText: String = ""
     var errorMessage: String?

@@ -9,6 +9,7 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if viewModel.isOffline { OfflineBannerView() }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(viewModel.messages) { message in
@@ -31,6 +32,10 @@ struct ChatView: View {
             PhotosPicker(selection: $photoPickerItem, matching: .images) {
                 Image(systemName: "paperclip")
             }
+            .disabled(viewModel.isOffline)
+            .onChange(of: photoPickerItem) { _, newItem in
+                Image(systemName: "paperclip")
+            }
             .onChange(of: photoPickerItem) { _, newItem in
                 Task {
                     guard let newItem, let data = try? await newItem.loadTransferable(type: Data.self) else { return }
@@ -49,7 +54,7 @@ struct ChatView: View {
                 TextField("Message", text: $viewModel.draftText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                 Button("Send") { Task { await viewModel.send() } }
-                    .disabled(viewModel.draftText.isEmpty && viewModel.pendingAttachments.isEmpty)
+                    .disabled((viewModel.draftText.isEmpty && viewModel.pendingAttachments.isEmpty) || viewModel.isOffline)
             }
             .padding()
         }
