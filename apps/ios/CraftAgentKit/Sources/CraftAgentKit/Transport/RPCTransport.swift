@@ -31,7 +31,13 @@ public actor RPCTransport: NSObject {
     private var isExplicitlyDisconnected = false
 
     public private(set) var state: ConnectionState = .idle
-    private var delegates: [ObjectIdentifier: RPCTransportDelegate] = [:]
+    
+    private final class WeakDelegateBox {
+        weak var delegate: RPCTransportDelegate?
+        init(_ delegate: RPCTransportDelegate) { self.delegate = delegate }
+    }
+    
+    private var delegateBoxes: [ObjectIdentifier: WeakDelegateBox] = [:]
 
     public override init() {
         super.init()
@@ -39,15 +45,20 @@ public actor RPCTransport: NSObject {
     }
 
     public func addDelegate(_ delegate: RPCTransportDelegate) {
-        delegates[ObjectIdentifier(delegate)] = delegate
+        delegateBoxes[ObjectIdentifier(delegate)] = WeakDelegateBox(delegate)
     }
 
     public func removeDelegate(_ delegate: RPCTransportDelegate) {
-        delegates.removeValue(forKey: ObjectIdentifier(delegate))
+        delegateBoxes.removeValue(forKey: ObjectIdentifier(delegate))
     }
 
+    /// Notifies all registered delegates concurrently in unordered fire-and-forget Tasks.
+    /// Automatically prunes any boxes whose delegate has been deallocated.
     private func notifyDelegates(_ body: @escaping (RPCTransportDelegate) async -> Void) {
-        for delegate in delegates.values {
+        // Prune boxes whose delegate has already been deallocated.
+        delegateBoxes = delegateBoxes.filter { $0.value.delegate != nil }
+        for box in delegateBoxes.values {
+            guard let delegate = box.delegate else { continue }
             Task { await body(delegate) }
         }
     }
