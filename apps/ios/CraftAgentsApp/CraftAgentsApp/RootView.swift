@@ -21,7 +21,10 @@ struct RootView: View {
             } else {
                 NavigationStack {
                     ServerConnectionSetupView(viewModel: connectionViewModel) {
-                        hasSavedConnection = true
+                        Task {
+                            await appClientProvider.connectToSavedServer()
+                            hasSavedConnection = true
+                        }
                     }
                 }
             }
