@@ -10,7 +10,7 @@ public struct KeychainStore: KeychainStoring {
         self.service = service
     }
 
-    public func save(_ data: Data, forKey key: String) throws {
+    public func save(_ data: Data, forKey key: String) async throws {
         try? delete(forKey: key)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -25,7 +25,7 @@ public struct KeychainStore: KeychainStoring {
         }
     }
 
-    public func load(forKey key: String) throws -> Data? {
+    public func load(forKey key: String) async throws -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -42,7 +42,7 @@ public struct KeychainStore: KeychainStoring {
         return result as? Data
     }
 
-    public func delete(forKey key: String) throws {
+    public func delete(forKey key: String) async throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

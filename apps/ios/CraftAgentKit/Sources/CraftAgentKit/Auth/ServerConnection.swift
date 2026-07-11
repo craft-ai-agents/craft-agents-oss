@@ -28,7 +28,7 @@ public actor ServerConnectionStore {
     }
 
     public func list() async throws -> [ServerConnection] {
-        guard let data = try keychain.load(forKey: Self.storageKey) else { return [] }
+        guard let data = try await keychain.load(forKey: Self.storageKey) else { return [] }
         return try JSONDecoder().decode([ServerConnection].self, from: data)
     }
 
@@ -39,12 +39,12 @@ public actor ServerConnectionStore {
         } else {
             all.append(connection)
         }
-        try keychain.save(try JSONEncoder().encode(all), forKey: Self.storageKey)
+        try await keychain.save(try JSONEncoder().encode(all), forKey: Self.storageKey)
     }
 
     public func delete(id: UUID) async throws {
         var all = try await list()
         all.removeAll { $0.id == id }
-        try keychain.save(try JSONEncoder().encode(all), forKey: Self.storageKey)
+        try await keychain.save(try JSONEncoder().encode(all), forKey: Self.storageKey)
     }
 }
