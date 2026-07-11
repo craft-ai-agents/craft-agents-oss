@@ -20,8 +20,14 @@ struct RootView: View {
                 SessionListView(
                     viewModel: SessionListViewModel(client: appClientProvider.client, cache: cache, workspaceId: appClientProvider.workspaceId),
                     onReconnect: { await appClientProvider.connectToSavedServer() },
-                    onChangeServer: { hasSavedConnection = false }
+                    onChangeServer: { hasSavedConnection = false },
+                    workspaces: appClientProvider.workspaces,
+                    currentWorkspaceId: appClientProvider.workspaceId,
+                    onSwitchWorkspace: { await appClientProvider.switchWorkspace(to: $0) }
                 )
+                // Give the list a fresh identity per (workspace, connected) state
+                // so switching workspace rebuilds it and reloads sessions.
+                .id("\(appClientProvider.workspaceId ?? "none")-\(appClientProvider.client != nil)")
             } else {
                 NavigationStack {
                     ServerConnectionSetupView(viewModel: connectionViewModel) {

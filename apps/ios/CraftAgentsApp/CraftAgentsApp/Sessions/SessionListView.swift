@@ -6,6 +6,9 @@ struct SessionListView: View {
     @Bindable var viewModel: SessionListViewModel
     var onReconnect: (() async -> Void)?
     var onChangeServer: (() -> Void)?
+    var workspaces: [Workspace] = []
+    var currentWorkspaceId: String?
+    var onSwitchWorkspace: ((String) async -> Void)?
     @State private var selectedSessionId: String?
     @State private var renameTarget: Session?
     @State private var renameText = ""
@@ -59,6 +62,28 @@ struct SessionListView: View {
             .refreshable { await viewModel.load() }
             .task { await viewModel.load() }
             .toolbar {
+                if workspaces.count > 1 {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Menu {
+                            ForEach(workspaces) { workspace in
+                                Button {
+                                    Task { await onSwitchWorkspace?(workspace.id) }
+                                } label: {
+                                    if workspace.id == currentWorkspaceId {
+                                        Label(workspace.name, systemImage: "checkmark")
+                                    } else {
+                                        Text(workspace.name)
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "square.stack.3d.up")
+                                Text(currentWorkspaceName).lineLimit(1)
+                            }
+                        }
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button("New Session", systemImage: "plus") {
                         Task {
@@ -146,6 +171,10 @@ struct SessionListView: View {
 
     private var renameBinding: Binding<Bool> {
         Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })
+    }
+
+    private var currentWorkspaceName: String {
+        workspaces.first(where: { $0.id == currentWorkspaceId })?.name ?? "Workspace"
     }
 
     private func beginRename(_ session: Session) {
