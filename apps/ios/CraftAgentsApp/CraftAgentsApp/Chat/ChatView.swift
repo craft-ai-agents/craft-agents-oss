@@ -36,5 +36,11 @@ struct ChatView: View {
         }
         .task { await viewModel.load() }
         .navigationTitle("Chat")
+        .sheet(item: $viewModel.pendingPermissionRequest) { request in
+            PermissionApprovalSheet(request: request) { allowed, alwaysAllow in
+                Task { await viewModel.respond(allowed: allowed, alwaysAllow: alwaysAllow) }
+            }
+            .presentationDetents([.medium])
+        }
     }
 }

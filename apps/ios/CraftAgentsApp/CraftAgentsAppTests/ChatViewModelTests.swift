@@ -49,3 +49,15 @@ extension ChatViewModelTests {
         XCTAssertEqual(viewModel.messages.first?.toolStatus, "success")
     }
 }
+
+extension ChatViewModelTests {
+    func testPermissionRequestEventSurfacesForApproval() {
+        let viewModel = ChatViewModel(client: nil, sessionId: "s1")
+        let request = PermissionRequest(
+            requestId: "req-1", toolName: "Bash", command: "rm -rf /tmp/x",
+            description: "Delete a temp file"
+        )
+        viewModel.apply(.permissionRequest(sessionId: "s1", request: request))
+        XCTAssertEqual(viewModel.pendingPermissionRequest?.requestId, "req-1")
+    }
+}
