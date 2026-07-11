@@ -91,3 +91,35 @@ extension ChatViewModelTests {
         XCTAssertEqual(viewModel.messages.count, 1)
     }
 }
+
+extension ChatViewModelTests {
+    func testProcessingBecomesTrueOnActivityAndFalseOnComplete() {
+        let viewModel = ChatViewModel(client: nil, sessionId: "s1")
+        XCTAssertFalse(viewModel.isProcessing)
+        viewModel.apply(.textDelta(sessionId: "s1", delta: "Hi", turnId: "t1"))
+        XCTAssertTrue(viewModel.isProcessing)
+        viewModel.apply(.complete(sessionId: "s1"))
+        XCTAssertFalse(viewModel.isProcessing)
+    }
+
+    func testStatusMessageIsSurfacedAndClearedOnComplete() {
+        let viewModel = ChatViewModel(client: nil, sessionId: "s1")
+        viewModel.apply(.status(sessionId: "s1", message: "Compacting…"))
+        XCTAssertEqual(viewModel.statusMessage, "Compacting…")
+        viewModel.apply(.complete(sessionId: "s1"))
+        XCTAssertNil(viewModel.statusMessage)
+    }
+
+    func testCredentialRequestEventSurfacesForInput() {
+        let viewModel = ChatViewModel(client: nil, sessionId: "s1")
+        let request = CredentialRequest(requestId: "c1", sourceName: "GitHub", mode: "api_key")
+        viewModel.apply(.credentialRequest(sessionId: "s1", request: request))
+        XCTAssertEqual(viewModel.pendingCredentialRequest?.requestId, "c1")
+    }
+
+    func testSessionModelChangedUpdatesCurrentModel() {
+        let viewModel = ChatViewModel(client: nil, sessionId: "s1")
+        viewModel.apply(.sessionModelChanged(sessionId: "s1", model: "claude-opus-4-8"))
+        XCTAssertEqual(viewModel.currentModel, "claude-opus-4-8")
+    }
+}

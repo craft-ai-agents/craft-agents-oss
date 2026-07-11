@@ -6,6 +6,8 @@ import PhotosUI
 struct ChatView: View {
     @Bindable var viewModel: ChatViewModel
     @State private var photoPickerItem: PhotosPickerItem?
+    @State private var isShowingNotes = false
+    @State private var isShowingFiles = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,6 +37,14 @@ struct ChatView: View {
                 .onChange(of: viewModel.messages.last?.content) { _, _ in scrollToBottom(proxy) }
                 .onAppear { scrollToBottom(proxy, animated: false) }
             }
+            if let statusMessage = viewModel.statusMessage {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text(statusMessage).font(.caption).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+            }
             if let errorMessage = viewModel.errorMessage {
                 Text(errorMessage).foregroundStyle(.red).font(.caption).padding(.horizontal)
             }
@@ -61,16 +71,67 @@ struct ChatView: View {
                         photoPickerItem = nil
                     }
                 }
-                Button("Send") { Task { await viewModel.send() } }
-                    .disabled((viewModel.draftText.isEmpty && viewModel.pendingAttachments.isEmpty) || viewModel.isOffline)
+                if viewModel.isProcessing {
+                    Button(role: .destructive) { Task { await viewModel.stop() } } label: {
+                        Image(systemName: "stop.circle.fill")
+                    }
+                    .disabled(viewModel.isOffline)
+                } else {
+                    Button("Send") { Task { await viewModel.send() } }
+                        .disabled((viewModel.draftText.isEmpty && viewModel.pendingAttachments.isEmpty) || viewModel.isOffline)
+                }
             }
             .padding()
         }
         .task { await viewModel.load() }
         .navigationTitle("Chat")
+        .toolbar {
+            if let model = viewModel.currentModel {
+                ToolbarItem(placement: .principal) {
+                    Text(model).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Menu("Permission mode") {
+                        ForEach(PermissionMode.allCases, id: \.self) { mode in
+                            Button {
+                                Task { await viewModel.setPermissionMode(mode) }
+                            } label: {
+                                if viewModel.permissionMode == mode.rawValue {
+                                    Label(mode.rawValue, systemImage: "checkmark")
+                                } else {
+                                    Text(mode.rawValue)
+                                }
+                            }
+                        }
+                    }
+                    Button { isShowingNotes = true } label: { Label("Notes", systemImage: "note.text") }
+                    Button {
+                        Task { await viewModel.loadFiles() }
+                        isShowingFiles = true
+                    } label: { Label("Files", systemImage: "folder") }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .disabled(viewModel.isOffline)
+            }
+        }
+        .sheet(isPresented: $isShowingNotes) {
+            SessionNotesView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $isShowingFiles) {
+            SessionFilesView(files: viewModel.files)
+        }
         .sheet(item: $viewModel.pendingPermissionRequest) { request in
             PermissionApprovalSheet(request: request) { allowed, alwaysAllow in
                 Task { await viewModel.respond(allowed: allowed, alwaysAllow: alwaysAllow) }
+            }
+            .presentationDetents([.medium])
+        }
+        .sheet(item: $viewModel.pendingCredentialRequest) { request in
+            CredentialInputSheet(request: request) { response in
+                Task { await viewModel.respondToCredential(response) }
             }
             .presentationDetents([.medium])
         }

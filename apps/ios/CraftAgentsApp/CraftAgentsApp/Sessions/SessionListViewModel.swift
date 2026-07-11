@@ -46,6 +46,47 @@ final class SessionListViewModel: RPCTransportDelegate {
         sessions.removeAll { $0.id == sessionId }
     }
 
+    /// Workspace id for a given session (used when opening its chat detail).
+    func workspaceId(for sessionId: String) -> String? {
+        sessions.first(where: { $0.id == sessionId })?.workspaceId ?? connectedWorkspaceId
+    }
+
+    /// Deletes a session (`sessions:delete`) and removes it locally.
+    func deleteSession(sessionId: String) async {
+        guard let client else { return }
+        do {
+            try await client.deleteSession(sessionId: sessionId)
+            remove(sessionId: sessionId)
+        } catch {
+            errorMessage = "\(error)"
+        }
+    }
+
+    /// Renames a session (`sessions:command` rename) and updates it locally.
+    func renameSession(sessionId: String, name: String) async {
+        guard let client, !name.isEmpty else { return }
+        do {
+            try await client.renameSession(sessionId: sessionId, name: name)
+            if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
+                sessions[index].name = name
+            }
+        } catch {
+            errorMessage = "\(error)"
+        }
+    }
+
+    /// Archives a session (`sessions:command` archive) and removes it from the
+    /// active list.
+    func archiveSession(sessionId: String) async {
+        guard let client else { return }
+        do {
+            try await client.archiveSession(sessionId: sessionId)
+            remove(sessionId: sessionId)
+        } catch {
+            errorMessage = "\(error)"
+        }
+    }
+
     func createSession(workspaceId: String) async -> Session? {
         guard let client else { return nil }
         do {

@@ -65,4 +65,15 @@ final class SessionListViewModelTests: XCTestCase {
         XCTAssertNil(created)
         XCTAssertNotNil(viewModel.errorMessage)
     }
+
+    func testWorkspaceIdForSessionPrefersSessionThenConnection() {
+        let viewModel = SessionListViewModel(client: nil, cache: nil, workspaceId: "connected-ws")
+        let session = Session(
+            id: "s1", workspaceId: "session-ws", workspaceName: "WS",
+            lastMessageAt: 1, isProcessing: false
+        )
+        viewModel.upsert(session)
+        XCTAssertEqual(viewModel.workspaceId(for: "s1"), "session-ws")
+        XCTAssertEqual(viewModel.workspaceId(for: "unknown"), "connected-ws")
+    }
 }

@@ -10,18 +10,65 @@ final class ChatViewModel: RPCTransportDelegate {
     private(set) var messages: [ChatMessage] = []
     var draftText: String = ""
     var errorMessage: String?
+    var statusMessage: String?
     var pendingPermissionRequest: PermissionRequest?
+    var pendingCredentialRequest: CredentialRequest?
     var pendingAttachments: [FileAttachment] = []
+    private(set) var isProcessing: Bool = false
+    private(set) var currentModel: String?
+    var permissionMode: String?
+    private(set) var files: [SessionFile] = []
 
     private let client: RPCClient?
     let sessionId: String
+    let workspaceId: String?
     private var streamingMessageId: String?
     private let cache: SessionCacheRepository?
 
-    init(client: RPCClient?, sessionId: String, cache: SessionCacheRepository? = nil) {
+    init(client: RPCClient?, sessionId: String, cache: SessionCacheRepository? = nil, workspaceId: String? = nil) {
         self.client = client
         self.sessionId = sessionId
         self.cache = cache
+        self.workspaceId = workspaceId
+    }
+
+    // MARK: Notes / files / model / permission mode
+
+    /// Loads notes.md for this session (`sessions:getNotes`).
+    func loadNotes() async -> String {
+        guard let client else { return "" }
+        return (try? await client.getNotes(sessionId: sessionId)) ?? ""
+    }
+
+    /// Persists notes.md (`sessions:setNotes`).
+    func saveNotes(_ content: String) async {
+        guard let client else { return }
+        do { try await client.setNotes(sessionId: sessionId, content: content) }
+        catch { errorMessage = "\(error)" }
+    }
+
+    /// Loads the session file tree (`sessions:getFiles`).
+    func loadFiles() async {
+        guard let client else { return }
+        files = (try? await client.getFiles(sessionId: sessionId)) ?? []
+    }
+
+    /// Switches the session's model (`session:setModel`).
+    func setModel(_ model: String?) async {
+        guard let client, let workspaceId else { return }
+        do {
+            try await client.setModel(sessionId: sessionId, workspaceId: workspaceId, model: model)
+            currentModel = model
+        } catch { errorMessage = "\(error)" }
+    }
+
+    /// Switches the session's permission mode (`sessions:command` setPermissionMode).
+    func setPermissionMode(_ mode: PermissionMode) async {
+        guard let client else { return }
+        do {
+            try await client.setSessionPermissionMode(sessionId: sessionId, mode: mode)
+            permissionMode = mode.rawValue
+        } catch { errorMessage = "\(error)" }
     }
 
     func load() async {
@@ -33,6 +80,10 @@ final class ChatViewModel: RPCTransportDelegate {
             messages = try await client.getMessages(sessionId: sessionId)
             for message in messages { try? cache?.upsert(message, sessionId: sessionId) }
             await client.transport.addDelegate(self)
+            if let workspaceId {
+                currentModel = try? await client.getModel(sessionId: sessionId, workspaceId: workspaceId)
+            }
+            permissionMode = (try? await client.getPermissionModeState(sessionId: sessionId))?.permissionMode
         } catch {
             errorMessage = "\(error)"
             messages = (try? cache?.cachedMessages(sessionId: sessionId)) ?? []
@@ -45,8 +96,32 @@ final class ChatViewModel: RPCTransportDelegate {
         let attachments = pendingAttachments
         draftText = ""
         pendingAttachments = []
+        isProcessing = true
         do {
             try await client.sendMessage(sessionId: sessionId, text: text, attachments: attachments)
+        } catch {
+            errorMessage = "\(error)"
+            isProcessing = false
+        }
+    }
+
+    /// Stops the in-flight generation for this session (`sessions:cancel`).
+    func stop() async {
+        guard let client else { return }
+        do {
+            try await client.cancelProcessing(sessionId: sessionId)
+        } catch {
+            errorMessage = "\(error)"
+        }
+        isProcessing = false
+    }
+
+    /// Replies to a pending credential request (`sessions:respondToCredential`).
+    func respondToCredential(_ response: CredentialResponse) async {
+        guard let client, let request = pendingCredentialRequest else { return }
+        do {
+            try await client.respondToCredential(sessionId: sessionId, requestId: request.requestId, response: response)
+            pendingCredentialRequest = nil
         } catch {
             errorMessage = "\(error)"
         }
@@ -58,15 +133,25 @@ final class ChatViewModel: RPCTransportDelegate {
         switch event {
         case .textDelta(let eventSessionId, let delta, _):
             guard eventSessionId == sessionId else { return }
+            isProcessing = true
             appendStreamingDelta(delta)
         case .textComplete(let eventSessionId, let text):
             guard eventSessionId == sessionId else { return }
             finalizeStreamingMessage(text: text)
+        case .complete(let eventSessionId):
+            guard eventSessionId == sessionId else { return }
+            isProcessing = false
+            statusMessage = nil
+        case .status(let eventSessionId, let message):
+            guard eventSessionId == sessionId else { return }
+            statusMessage = message
         case .errorEvent(let eventSessionId, let error):
             guard eventSessionId == sessionId else { return }
             errorMessage = error
+            isProcessing = false
         case .toolStart(let eventSessionId, let toolName, let toolUseId, let toolInput):
             guard eventSessionId == sessionId else { return }
+            isProcessing = true
             messages.append(ChatMessage(
                 id: toolUseId, role: .tool, content: "",
                 timestamp: Date().timeIntervalSince1970 * 1000,
@@ -81,6 +166,15 @@ final class ChatViewModel: RPCTransportDelegate {
         case .permissionRequest(let eventSessionId, let request):
             guard eventSessionId == sessionId else { return }
             pendingPermissionRequest = request
+        case .credentialRequest(let eventSessionId, let request):
+            guard eventSessionId == sessionId else { return }
+            pendingCredentialRequest = request
+        case .sessionModelChanged(let eventSessionId, let model):
+            guard eventSessionId == sessionId else { return }
+            currentModel = model
+        case .permissionModeChanged(let eventSessionId, let mode):
+            guard eventSessionId == sessionId else { return }
+            permissionMode = mode
         case .userMessage(let eventSessionId, let message, _):
             guard eventSessionId == sessionId else { return }
             // The server echoes the user's own message back as a `user_message`
