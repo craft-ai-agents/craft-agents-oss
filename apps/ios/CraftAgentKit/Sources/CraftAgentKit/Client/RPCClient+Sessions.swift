@@ -41,6 +41,13 @@ extension RPCClient {
     }
 }
 
+extension RPCClient {
+    /// `server:getWorkspaces` — no args.
+    public func listWorkspaces() async throws -> [Workspace] {
+        try await call(RPCChannels.Server.getWorkspaces)
+    }
+}
+
 /// Encodes any `Encodable` value into a `JSONValue` by round-tripping
 /// through `Data` — the inverse of `JSONValue.decoded()`.
 func encodeAsJSONValue<T: Encodable>(_ value: T) throws -> JSONValue {
