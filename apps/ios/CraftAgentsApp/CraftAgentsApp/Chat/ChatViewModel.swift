@@ -10,6 +10,7 @@ final class ChatViewModel: RPCTransportDelegate {
     var draftText: String = ""
     var errorMessage: String?
     var pendingPermissionRequest: PermissionRequest?
+    var pendingAttachments: [FileAttachment] = []
 
     private let client: RPCClient?
     let sessionId: String
@@ -31,11 +32,13 @@ final class ChatViewModel: RPCTransportDelegate {
     }
 
     func send() async {
-        guard let client, !draftText.isEmpty else { return }
+        guard let client, !draftText.isEmpty || !pendingAttachments.isEmpty else { return }
         let text = draftText
+        let attachments = pendingAttachments
         draftText = ""
+        pendingAttachments = []
         do {
-            try await client.sendMessage(sessionId: sessionId, text: text)
+            try await client.sendMessage(sessionId: sessionId, text: text, attachments: attachments)
         } catch {
             errorMessage = "\(error)"
         }
